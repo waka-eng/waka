@@ -19,46 +19,122 @@
  * pushed entry copies the router's own state, `idx` and `key` included, so
  * React Router reads the pop as a move to the location it is already on and
  * does nothing; only this listener acts on it.
+ *
+ * ═══ THE THREE WAYS AN ENTRY OUTLIVES ITS LAYER, AND WHAT HAPPENS TO EACH ══
+ *
+ *   A ROUTER `replace` WHILE THE LAYER IS OPEN wrote the router's state over
+ *   ours and took the tag with it, so closing found nothing to pop and left
+ *   a same-address step behind. `replaceState` carries the tag across now
+ *   while a layer is open — the entry is still the layer's entry. If the
+ *   replace changed the address, closing strips the tag instead of stepping
+ *   back, because stepping back would undo the replace.
+ *
+ *   A NAVIGATION WHILE THE LAYER IS OPEN leaves the tagged entry under the
+ *   new one, where closing cannot reach it. Walking onto such an entry later
+ *   (no layer of that name open) skips it in the direction of travel, read
+ *   from the router's `idx`, so Back never lands on a step that does nothing.
+ *
+ *   A RELOAD leaves the tag in `history.state` with no layer open. Any tag
+ *   present when this module first runs is stale by definition — nothing has
+ *   rendered yet — so it is stripped and the duplicate stepped over.
  */
 import { useEffect, useRef } from 'react';
 
 const TAG = 'wakaLayer';
+const BASE = 'wakaLayerBase';
 /* A close that is about to pop its entry, by layer. Deferred one task so a
    remount in the same tick (StrictMode's double effect, a key change) can
    take the entry over instead of popping it out from under itself. */
 const leaving = new Map<string, number>();
+/** Layers open right now. A tagged entry whose layer is not here is stale. */
+const openLayers = new Set<string>();
 
+type HistoryState = Record<string, unknown> | null;
+const state = (): HistoryState => window.history.state as HistoryState;
 function tagged(layer: string): boolean {
-  const state = window.history.state as Record<string, unknown> | null;
-  return state?.[TAG] === layer;
+  return state()?.[TAG] === layer;
 }
+function strip(value: HistoryState): HistoryState {
+  if (!value) return value;
+  const { [TAG]: _layer, [BASE]: _base, ...rest } = value;
+  return rest;
+}
+const idxOf = (value: HistoryState): number => (typeof value?.idx === 'number' ? value.idx : 0);
+
+let installed = false;
+let lastIdx = 0;
+function install(): void {
+  if (installed || typeof window === 'undefined') return;
+  installed = true;
+  /* A reload: whatever layer this entry belonged to is not open. */
+  if (state()?.[TAG]) {
+    window.history.replaceState(strip(state()), '', window.location.href);
+    window.history.back();
+  }
+  lastIdx = idxOf(state());
+  /* The tag survives a router replace while its layer is open, and every
+     push or replace moves the position the next pop is measured from. */
+  const replace = window.history.replaceState.bind(window.history);
+  const push = window.history.pushState.bind(window.history);
+  window.history.replaceState = (data: unknown, unused: string, url?: string | URL | null) => {
+    const layer = state()?.[TAG];
+    const keep = typeof layer === 'string' && openLayers.has(layer) && data && typeof data === 'object' && !(TAG in data);
+    replace(keep ? { ...(data as object), [TAG]: layer, [BASE]: state()?.[BASE] } : data, unused, url);
+    lastIdx = idxOf(state());
+  };
+  window.history.pushState = (data: unknown, unused: string, url?: string | URL | null) => {
+    push(data, unused, url);
+    lastIdx = idxOf(state());
+  };
+  /* Stepping onto a tag whose layer is closed: keep going the same way. */
+  window.addEventListener('popstate', () => {
+    const now = state();
+    const idx = idxOf(now);
+    const layer = now?.[TAG];
+    /* our entry copies the router's idx, so a tie is a step forward onto it */
+    const forward = idx >= lastIdx;
+    lastIdx = idx;
+    if (typeof layer === 'string' && !openLayers.has(layer)) {
+      window.history.replaceState(strip(now), '', window.location.href);
+      if (forward) window.history.forward(); else window.history.back();
+    }
+  });
+}
+
+/* At import, before anything renders: any tag in history is a reload's. */
+install();
 
 export function useBackCloses(open: boolean, close: () => void, layer: string): void {
   const closeRef = useRef(close);
   closeRef.current = close;
   useEffect(() => {
     if (!open) return;
+    openLayers.add(layer);
     const pending = leaving.get(layer);
     if (pending !== undefined) { window.clearTimeout(pending); leaving.delete(layer); }
     if (!tagged(layer)) {
-      window.history.pushState({ ...(window.history.state as object | null), [TAG]: layer }, '', window.location.href);
+      window.history.pushState({ ...(state() ?? {}), [TAG]: layer, [BASE]: window.location.href }, '', window.location.href);
     }
     let popped = false;
     const onPop = () => {
       if (tagged(layer)) return;
       popped = true;
+      openLayers.delete(layer);
       closeRef.current();
     };
     window.addEventListener('popstate', onPop);
     return () => {
       window.removeEventListener('popstate', onPop);
+      if (popped) return;
       /* closed by something other than Back: take our entry with us, but
          only if it is still the one on top — a navigation since then owns
          the history now, and stepping back would undo it. */
-      if (popped) return;
       leaving.set(layer, window.setTimeout(() => {
         leaving.delete(layer);
-        if (tagged(layer)) window.history.back();
+        openLayers.delete(layer);
+        if (!tagged(layer)) return;
+        if (state()?.[BASE] === window.location.href) window.history.back();
+        else window.history.replaceState(strip(state()), '', window.location.href);
       }, 0));
     };
   }, [open, layer]);

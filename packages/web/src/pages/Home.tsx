@@ -1785,21 +1785,33 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      product linked to the old page after that — the menu passes no items —
      so it was reachable only by an address somebody had saved, and it had
      no bar of its own: a page with no way back. An old link now lands where
-     its claims actually are. The queue arrives after the page does, so the
-     request is held until there is something to review; with nothing
-     waiting, home is the honest answer and the creature says so. */
+     its claims actually are.
+
+     THREE CASES, AND THE REQUEST NEVER OUTLIVES ITS ANSWER. Claims already
+     waiting: review opens now. The queue still loading: the request waits
+     for THAT load to settle and is spent either way — so a queue that turns
+     up later, from some other load, never pops review open unasked. The
+     queue loaded and empty: home is the honest answer, and nothing waits.
+     Only `open` is dropped from the address; the wall you are standing on
+     (yours or your agent's) is kept. */
   const claimsAsked = useRef(false);
+  const [queueLoaded, setQueueLoaded] = useState(false);
+  const queueLoadedRef = useRef(queueLoaded); queueLoadedRef.current = queueLoaded;
+  const queueLoadRef = useRef(0);
+  const toReviewRef = useRef(toReview); toReviewRef.current = toReview;
   const viewOpen = viewNavigation.view?.open ?? null;
   useEffect(() => {
     if (phase !== 'ready' || viewOpen !== 'claims') return;
-    claimsAsked.current = true;
-    viewNavigationRef.current.write({ ...EMPTY_VIEW }, { replace: true });
+    const nav = viewNavigationRef.current;
+    nav.write({ ...(nav.view ?? EMPTY_VIEW), open: null }, { replace: true, query: nav.query });
+    if (toReviewRef.current > 0) { claimsAsked.current = false; setReviewing(true); }
+    else claimsAsked.current = !queueLoadedRef.current;
   }, [phase, viewOpen]);
   useEffect(() => {
-    if (!claimsAsked.current || toReview === 0) return;
+    if (!claimsAsked.current || !queueLoaded) return;
     claimsAsked.current = false;
-    setReviewing(true);
-  }, [toReview]);
+    if (toReview > 0) setReviewing(true);
+  }, [toReview, queueLoaded]);
   /* THE FIRST CARD HAS FOCUS ON THE WAY IN, so ← and → answer it at once —
      the card owns its arrows only while it is focused (see `ClaimSlip`). */
   useEffect(() => {
@@ -2055,13 +2067,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   standingAsAgentRef.current = standingAsAgent;
   useEffect(() => { if (standingAsAgent) setHarvestWhy(null); }, [standingAsAgent]);
   const loadClaims = useCallback(() => {
-    if (standingAsAgent) { setClaimQueue([]); setHarvestQueue([]); return; }
+    if (standingAsAgent) { setClaimQueue([]); setHarvestQueue([]); setQueueLoaded(true); return; }
+    /* Whether the queue on screen is an answer or a load in flight — what an
+       old `?open=claims` link waits on before deciding (see above). */
+    setQueueLoaded(false);
+    const load = ++queueLoadRef.current;
     /* The basket loads beside the claims. A failure is an empty basket:
        nothing here is broken for the person, nothing is being asked. */
-    void listHarvest()
+    const basket = listHarvest()
       .then((rows) => { if (!standingAsAgentRef.current) setHarvestQueue(rows.slice(0, 3)); })
       .catch(() => setHarvestQueue([]));
-    void listClaims({ limit: 8 })
+    const asked = listClaims({ limit: 8 })
       /* ═══ THREE IS A SITTING ═══════════════════════════════════════════
          Not eight, which is what this used to hold. A claim is expensive to
          answer — it asks a person to consult themselves — and the research
@@ -2086,6 +2102,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
          screen: nothing here is broken for the person, there is simply
          nothing being asked. */
       .catch(() => setClaimQueue([]));
+    void Promise.all([basket, asked]).then(() => { if (load === queueLoadRef.current) setQueueLoaded(true); });
   }, [standingAsAgent]);
   useEffect(() => {
     if (phase !== 'ready' || offline) return;

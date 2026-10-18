@@ -26,7 +26,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ReadingPausedNotice } from "../src/components/ReadingPausedNotice";
-import { fetchPrincipleStatus, retryPausedReading } from "../src/lib/api";
+import { ApiError, fetchPrincipleStatus, retryPausedReading } from "../src/lib/api";
 import { useBackCloses } from "../src/lib/back-closes";
 import { useReadingPaused } from "../src/lib/use-reading-paused";
 
@@ -80,6 +80,49 @@ describe("Back closes an open layer", () => {
   });
 });
 
+describe("Back after the history moved under an open layer", () => {
+  function Layer({ open, onClose }: { open: boolean; onClose: () => void }) {
+    useBackCloses(open, onClose, "moved-layer");
+    return null;
+  }
+  const tag = () => (window.history.state as Record<string, unknown> | null)?.wakaLayer;
+  const nextPop = () => new Promise((resolve) => window.addEventListener("popstate", resolve, { once: true }));
+
+  it("keeps its tag through a router replace, and closing still takes the entry with it", async () => {
+    window.history.replaceState({ idx: 3, key: "base" }, "", "/base");
+    render(createElement(Layer, { open: true, onClose: vi.fn() }));
+    /* the router rewrites the entry it is on, with its own state */
+    window.history.replaceState({ idx: 3, key: "rewritten", usr: null }, "", "/base");
+    expect(tag(), "the router's replace wiped the layer's tag").toBe("moved-layer");
+    render(createElement(Layer, { open: false, onClose: vi.fn() }));
+    await act(async () => { await nextPop(); });
+    expect(tag()).toBeUndefined();
+    expect(window.location.pathname).toBe("/base");
+  });
+
+  it("steps over the layer's entry when Back reaches it after a navigation made inside the layer", async () => {
+    window.history.replaceState({ idx: 7, key: "home" }, "", "/home");
+    render(createElement(Layer, { open: true, onClose: vi.fn() }));
+    /* a router push from inside the layer, then the layer closes there */
+    window.history.pushState({ idx: 8, key: "elsewhere" }, "", "/elsewhere");
+    render(createElement(Layer, { open: false, onClose: vi.fn() }));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    await act(async () => { window.history.back(); await nextPop(); await nextPop(); });
+    expect(window.location.pathname).toBe("/home");
+    expect(tag(), "Back stopped on a step that does nothing").toBeUndefined();
+  });
+
+  it("treats a tag found at load as a reload's, and steps over it", async () => {
+    window.history.replaceState({ idx: 1, key: "before" }, "", "/before");
+    window.history.pushState({ idx: 1, key: "before", wakaLayer: "review" }, "", "/before");
+    vi.resetModules();
+    const popped = nextPop();
+    await import("../src/lib/back-closes");
+    await act(async () => { await popped; });
+    expect(tag(), "a reloaded page kept a layer entry with no layer").toBeUndefined();
+  });
+});
+
 describe("a paused reading", () => {
   function Page() {
     const state = useReadingPaused(true);
@@ -98,6 +141,28 @@ describe("a paused reading", () => {
     await settle();
     expect(retryPausedReading).toHaveBeenCalledTimes(1);
     expect(container!.textContent).toBe("");
+  });
+
+  it("stays down beside the principles line when that line already says it failed, so there is one Retry", async () => {
+    vi.mocked(fetchPrincipleStatus).mockResolvedValue({ ...status(true), phase: "failed" });
+    function Home() {
+      const state = useReadingPaused(true);
+      return createElement(ReadingPausedNotice, { state, locale: "en-US", besidePrincipleRead: true });
+    }
+    render(createElement(Home));
+    await settle();
+    expect(container!.textContent, "two failure lines and two Retry buttons for one stall").toBe("");
+  });
+
+  it("says when a retry was refused for coming too soon", async () => {
+    vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(true));
+    vi.mocked(retryPausedReading).mockRejectedValue(new ApiError({ status: 429, message: "soon", code: "reading_retry_throttled" }));
+    render(createElement(Page));
+    await settle();
+    const retry = [...container!.querySelectorAll("button")].find((b) => b.textContent === "Retry")!;
+    await act(async () => { retry.click(); });
+    await settle();
+    expect(container!.textContent).toContain("Give it a few minutes");
   });
 
   it("shows nothing when the reading is fine, or when the status itself cannot be read", async () => {

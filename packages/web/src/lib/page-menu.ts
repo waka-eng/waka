@@ -159,13 +159,10 @@ const VIEWS: ReadonlyArray<{
    */
 }> = [
   { what: "saves", id: "saves", label: "worldMenuField", agentLabel: "worldAgentField" },
-  /* THE RUNG THAT HAD NO DOOR. The data model has always had four layers —
-     inspiration, signal, top of mind, principle — and the signals were
-     reachable only one at a time, in the creature's mouth, on the home
-     screen. That is the right place for ONE of them and the wrong place for a
-     queue; see `ClaimsOverlay`. Second, because that is where it sits on the
-     ladder: between what you kept and what it adds up to. */
-  { what: "claims", id: "claims", label: "worldMenuClaims", agentLabel: "worldAgentClaims" },
+  /* THE CLAIMS RUNG WENT WITH ITS PAGE (2026-10-17). It was the queue's own
+     room, reached by `?open=claims`; claims are answered in review on home
+     now and that address opens review, so a menu row naming a page that no
+     longer exists would be a door painted on a wall. */
   { what: null, id: "top-of-mind", label: "worldMenuTopOfMind", agentLabel: "worldAgentTopOfMind" },
   { what: "principles", id: "principles", label: "worldPrinciplesShortcut", agentLabel: "worldAgentPrinciples" },
 ];
