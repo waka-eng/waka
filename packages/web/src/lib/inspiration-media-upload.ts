@@ -31,7 +31,12 @@ export async function uploadInspirationMedia(input: {
          say `worldComposerUploadFailed` in the reader's language, which also
          covers a draft written before this change. */
       await input.persist(item.id, { uploadError: 'worldComposerUploadFailed' });
-      throw reason;
+      /* AND THE SAVE SAYS THE SAME THING THE TILE DOES. A presigned PUT that
+         never reached the bucket rejects with the browser's own `TypeError`
+         ("Failed to fetch"), not an `ApiError`, so the composer fell through
+         to "could not save" while the tile beside it said the upload failed.
+         Every failure here is an upload failure; the original rides along. */
+      throw Object.assign(new DraftProblem('worldComposerUploadFailed'), { cause: reason });
     }
     await input.persist(item.id, { uploaded, uploadError: undefined });
     input.assertCurrent();

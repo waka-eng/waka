@@ -4,6 +4,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { presignAttachment, uploadToPresignedUrl } from '../src/lib/api';
 import { uploadInspirationMedia } from '../src/lib/inspiration-media-upload';
+import { draftProblem } from '../src/lib/draft-problem';
 import type { InspirationDraftMedia } from '../src/lib/inspiration-draft-store';
 
 vi.mock('../src/lib/api', async original => ({ ...await original<typeof import('../src/lib/api')>(), presignAttachment: vi.fn(), uploadToPresignedUrl: vi.fn() }));
@@ -25,7 +26,7 @@ function fixture() {
 it('preserves completed receipts and all originals when a later file fails, then skips uploaded files', async () => {
   const f = fixture();
   vi.mocked(uploadToPresignedUrl).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('offline'));
-  await expect(f.run()).rejects.toThrow('offline');
+  await expect(f.run()).rejects.toThrow('worldComposerUploadFailed');
   expect(f.media[0]?.uploaded?.key).toBe('objects/first.png');
   expect(f.media[1]?.uploadError, 'a flag the surface says in the reader’s language, never a sentence').toBe('worldComposerUploadFailed');
   expect(f.media.every(row => row.blob?.size === 5)).toBe(true);
@@ -33,6 +34,15 @@ it('preserves completed receipts and all originals when a later file fails, then
   await f.run();
   expect(vi.mocked(presignAttachment).mock.calls.map(call => call[0].filename)).toEqual(['first.png', 'second.png', 'second.png', 'third.png']);
   expect(f.media.every(row => row.uploaded && !row.uploadError)).toBe(true);
+});
+it('says a network failure of the presigned upload as an upload failure, like the tile', async () => {
+  const f = fixture();
+  const network = new TypeError('Failed to fetch');
+  vi.mocked(uploadToPresignedUrl).mockRejectedValueOnce(network);
+  const reason = await f.run().catch((error: unknown) => error);
+  expect(draftProblem(reason, 'worldComposerSaveFailed')).toBe('worldComposerUploadFailed');
+  expect((reason as { cause?: unknown }).cause).toBe(network);
+  expect(f.media[0]?.uploadError).toBe('worldComposerUploadFailed');
 });
 it('an individual retry uploads only the chosen file and cannot save an inspiration itself', async () => {
   const f = fixture(); await f.run([f.media[1]!]);
