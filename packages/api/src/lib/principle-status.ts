@@ -46,7 +46,12 @@ async function latestReadingJob(db: Db, profileId: string) {
  * error, not a pause, and a refusal from last week is history, not news.
  */
 const PAUSE_FRESH_MS = 24 * 60 * 60_000;
-const PROVIDER_REFUSAL = /\b402\b|payment required|insufficient[\s_-]*(credit|credits|funds|quota)/i;
+/* The provider clients (`openrouter-http.ts`, `gemini-http.ts`) throw
+   `formatSafeGeminiError`: "<label> failed: HTTP <status> <statusText>[ providerCode=…]",
+   which the queue records as `last_error`. A refusal is that marker with 402
+   (statusText "Payment Required"), or the provider's own credit code — never
+   a bare "402" that might be a position, a duration or an id. */
+const PROVIDER_REFUSAL = /: HTTP 402(?:\s|$)|providerCode=(?:insufficient_credits|insufficient_quota|payment_required)\b/i;
 function readingPausedFrom(latest: { status: string; lastError: string | null; updatedAt: Date } | null, now = new Date()): boolean {
   return latest?.status === "failed" && PROVIDER_REFUSAL.test(latest.lastError ?? "")
     && now.getTime() - latest.updatedAt.getTime() < PAUSE_FRESH_MS;
