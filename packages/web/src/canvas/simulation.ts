@@ -6616,7 +6616,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           }),
         ),
       };
-      simApiRef.current = null;
       ballsRef.current = null;
       /* a `groupBallsRef.current.clear()` stood here: a room's orbs belonged
          to one run of the loop while the DATA they were built from outlived
