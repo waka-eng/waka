@@ -99,6 +99,7 @@ import type { CreateInspirationRequest } from '../lib/api';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type ApiInspiration, type HarvestReason } from '../lib/api';
 import { inspirationPreview } from '../lib/inspiration-preview';
 import { wordsCanStand } from '../lib/note-words';
+import { markSaved, readDetail, type DetailReadState } from '../lib/detail-reads';
 import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
 import { inspectInspirationPhoto, PHOTO_ACCEPT } from '../lib/inspiration-photo';
@@ -1323,6 +1324,11 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      being rebuilt on every change (the shared saved-words writer below). */
   const panelNowRef = useRef<PanelData | null>(null);
   panelNowRef.current = panel;
+  /* The card's open edit, for the same callbacks (assigned under `useEditing`). */
+  const editingNowRef = useRef<ReturnType<typeof useEditing> | null>(null);
+  /** An archive save landed on words the card is editing with changes of its
+      own: the card asks which to keep. */
+  const [editConflict, setEditConflict] = useState<{ id: string; theirs: string } | null>(null);
   /**
    * A SAVE OR THE TOP OF MIND, BEING MADE INTO A CARD.
    *
@@ -2226,6 +2232,15 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** Per note, how many saves this page has seen — the freshness stamp a
       detail read is checked against when it lands (see `loadDetail`). */
   const savedGenerationRef = useRef<Map<string, number>>(new Map());
+  /** Per note, the newest server `updatedAt` this page has accepted. A row
+      older than it — a read that started before a save and answered after
+      it — never replaces newer words (see `rememberSavedInspiration`). */
+  const newestStampRef = useRef<Map<string, number>>(new Map());
+  /** The four maps `lib/detail-reads.ts` reads and stamps, from their refs. */
+  const detailReadState = (): DetailReadState => ({
+    details: detailsRef.current, pending: detailPendingRef.current,
+    generations: savedGenerationRef.current, stamps: newestStampRef.current,
+  });
   const detailPendingRef = useRef<Map<string, Promise<InspirationDetail | null>>>(new Map());
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
@@ -3255,34 +3270,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const loadDetail = useCallback((id: string): Promise<InspirationDetail | null> => {
     // A remembered original is not a current read: reflections, permissions
     // or the source itself may have changed since the previous opening.
-    const inFlight = detailPendingRef.current.get(id);
-    if (inFlight) return inFlight;
     const active = atWallRef.current;
     const profile = active.kind === 'agent' ? active.id : storageScope?.profileId;
     /* A READ THAT STARTED BEFORE A SAVE IS OLDER THAN THE SAVE (review,
-       2026-10-17: data loss). A warm-up, a pending panel read or a retry
-       could land after the archive or the card stored new words and put the
-       old ones back into the cache and onto the card — and the next edit
-       began from them. Each read carries the save generation it started
-       under; if a save has happened since, the read is dropped and whatever
-       the save left in the cache is the answer. */
-    const generation = savedGenerationRef.current.get(id) ?? 0;
-    const stale = () => (savedGenerationRef.current.get(id) ?? 0) !== generation;
-    const settle = () => { if (detailPendingRef.current.get(id) === p) detailPendingRef.current.delete(id); };
-    const p: Promise<InspirationDetail | null> = loadInspiration(id, profile)
-      .then((row) => {
-        settle();
-        if (stale()) return detailsRef.current.get(id) ?? null;
-        detailsRef.current.set(id, row);
-        return row;
-      })
-      .catch(() => {
-        /* leave it absent: the tap path falls back to the preview */
-        settle();
-        return stale() ? detailsRef.current.get(id) ?? null : null;
-      });
-    detailPendingRef.current.set(id, p);
-    return p;
+       2026-10-17: data loss) — the rule, and why, is `lib/detail-reads.ts`. */
+    return readDetail(detailReadState(), id, (noteId) => loadInspiration(noteId, profile));
   }, []);
   const loadDetailRef = useRef(loadDetail);
   loadDetailRef.current = loadDetail;
@@ -4378,18 +4370,41 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      from the typed words when it did not (a fixture world, which has no
      server). Built here, outside any state updater, so the cache write
      happens once and not on React's whim. */
-  const rememberSavedInspiration = useCallback((id: string, text: string, made?: ApiInspiration) => {
-    /* Every read already in flight for this note is now older than what is
-       stored: bump its generation (see `loadDetail`) and let the next read
-       start fresh rather than join one of them. */
-    savedGenerationRef.current.set(id, (savedGenerationRef.current.get(id) ?? 0) + 1);
-    detailPendingRef.current.delete(id);
+  const rememberSavedInspiration = useCallback((id: string, text: string, made?: ApiInspiration, how: 'write' | 'read' = 'write') => {
+    /* OLDER THAN WHAT IS KNOWN: DROPPED, AND NOTHING BUMPED. A row carries the
+       server's `updatedAt`; one older than the newest this page has accepted
+       is a read that started before a save (the archive's re-read after an
+       upload, say) and must not put the old words back. */
+    const stamp = made?.updatedAt ? Date.parse(made.updatedAt) : NaN;
+    if (Number.isFinite(stamp)) {
+      if (stamp < (newestStampRef.current.get(id) ?? -Infinity)) return;
+      newestStampRef.current.set(id, stamp);
+    }
+    /* A WRITE makes every read already in flight older than what is stored
+       (`markSaved`: the next read starts fresh rather than joining one of
+       them). A read is not a write — it leaves the generation alone. */
+    if (how === 'write') markSaved(detailReadState(), id, made?.updatedAt);
     const whole = made && made.id === id && Array.isArray(made.attachments) ? toInspirationDetail(made) : null;
     const shown = panelNowRef.current?.detail;
     const known = detailsRef.current.get(id) ?? (shown?.id === id ? shown : null);
     const detail = whole ?? (known ? { ...known, text, preview: inspirationPreview(text, known.attachments) } : null);
+    /* (With no row and nothing cached there is nothing to write: an in-flight
+       read is then answered by a fresh read in `loadDetail`, not by null.) */
     if (detail) detailsRef.current.set(id, detail);
-    else detailsRef.current.delete(id);
+    /* ═══ THE CARD MAY BE EDITING THIS NOTE RIGHT NOW ═════════════════════
+       An archive save of a note whose words are open on the card: if the
+       card's draft is still exactly what it opened with, it is moved onto
+       the new words (nothing of the person's is lost); if they have typed,
+       the card asks which words to keep rather than letting either save
+       silently overwrite the other. The card's own keep is not a conflict
+       (it is in flight while this runs). */
+    const held = editingNowRef.current?.open;
+    const holdsThis = held?.kind === 'memory' && (held.id === id || (panelNowRef.current?.id === held.id && shown?.id === id));
+    if (held && holdsThis && !held.saving && !held.saved && detail && detail.text !== held.text) {
+      const openedWith = shown?.text ?? '';
+      if (held.text.trim() === openedWith.trim()) editingNowRef.current?.begin('memory', held.id, detail.text);
+      else setEditConflict({ id: held.id, theirs: detail.text });
+    }
     setInspirations((prev) => prev
       ? prev.map((c) => (c.id === id ? { ...c, preview: inspirationPreview(whole?.text ?? text, c.attachments) } : c))
       : prev);
@@ -4399,6 +4414,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setDetachedInspiration((held) => (held && held.detail?.id === id ? { ...held, detail } : held));
     }
   }, []);
+
+  /* A note brought back from the deleted shelf comes back to the field —
+     the mirror of `onErased` (review, 2026-10-17). */
+  const restoredInspiration = (made: ApiInspiration) => {
+    const detail = toInspirationDetail(made);
+    const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
+    sourceListMutationRef.current += 1;
+    markSaved(detailReadState(), made.id, made.updatedAt);
+    detailsRef.current.set(made.id, detail);
+    if (!known) birthInspiration(made.id, detail.preview, Date.parse(made.createdAt), made.id);
+    setInspirations((previous) => previous?.some((item) => item.id === made.id)
+      ? previous.map((item) => (item.id === made.id ? detail : item))
+      : [...(previous ?? []), detail]);
+  };
+  const restoredInspirationRef = useRef(restoredInspiration);
+  restoredInspirationRef.current = restoredInspiration;
 
   /* TRY AGAIN, for a panel whose full read failed. The same read the effect
      above makes, by the same id rule, landing on the panel only if it is
@@ -6877,6 +6908,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       void loadPersonalReading().then((tom) => absorbBoard(tom)).catch(() => setReadingCheckFailed(true));
     },
   });
+  editingNowRef.current = editing;
+  /* A conflict belongs to the edit it interrupted: any other edit, or none,
+     clears it. */
+  const editingKey = editing.open?.kind === 'memory' ? editing.open.id : null;
+  useEffect(() => { setEditConflict((c) => (c && c.id === editingKey ? c : null)); }, [editingKey]);
   /* A REFUSED PICTURE IS NEWS FOR AS LONG AS THE EDIT IS OPEN, AND NOT ONE
      MOMENT AFTER. `attachTrouble` is written by `attachTo` and shown under the
      editing foot; closing the edit and opening it again is somebody starting
@@ -7088,6 +7124,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (closePanel) setSelectedId(null);
     simApiRef.current?.unborn(visualId);
     bornRef.current = bornRef.current.filter(row => row.id !== visualId && row.sigId !== serverId);
+    /* forgotten as born too, so a restore from the deleted shelf is born again */
+    bornIdsRef.current.delete(serverId);
     inspirationsRef.current = inspirationsRef.current?.filter(row => row.id !== visualId && row.id !== serverId) ?? null;
     setInspirations(rows => rows?.filter(row => row.id !== visualId && row.id !== serverId) ?? rows);
     detailsRef.current.delete(serverId);
@@ -7280,10 +7318,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            2026-10-12: "방 없애"), and with them the only path in this file
            that ever resolved a link to a memory this account does not own. */
         const generation = savedGenerationRef.current.get(desired.inspirationId) ?? 0;
-        detail = await loadInspiration(desired.inspirationId, target.kind === 'agent' ? target.id : storageScope?.profileId, controller.signal);
+        const readProfile = target.kind === 'agent' ? target.id : storageScope?.profileId;
+        detail = await loadInspiration(desired.inspirationId, readProfile, controller.signal);
         if (!current()) return;
-        /* a save landed while this read was out: what it stored wins (see `loadDetail`) */
-        if ((savedGenerationRef.current.get(desired.inspirationId) ?? 0) !== generation) detail = detailsRef.current.get(detail.id) ?? detail;
+        /* a save landed while this read was out: what it stored wins (see
+           `loadDetail`), or — with nothing stored here — a read made now */
+        if ((savedGenerationRef.current.get(desired.inspirationId) ?? 0) !== generation) {
+          detail = detailsRef.current.get(detail.id) ?? await loadInspiration(desired.inspirationId, readProfile, controller.signal);
+          if (!current()) return;
+        }
         ball = makeBall(seedOf(detail, skyRef.current.citations, skyRef.current.signals, skyRef.current.posterSignalIds, skyRef.current.principleSignalIds));
         ball.sigId = detail.id;
         if (!current()) return;
@@ -10180,6 +10223,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               IT IS CARRIED WITH AN ID so that stepping to the next memory with
               a refusal on screen does not re-point the sentence at a card it
               was never about. */}
+          {/* ═══ THE ARCHIVE SAVED THESE WORDS WHILE YOU WERE EDITING THEM ═══
+              Neither save may silently overwrite the other: the person
+              chooses. "Use the saved words" moves the edit onto them; "Keep
+              mine" leaves the draft, and pressing Save will then write it
+              over the archive's words, knowingly. */}
+          {editConflict && editing.open?.kind === "memory" && editing.open.id === editConflict.id && editing.open.id === panelId ? (
+            <p className="jar-panel-warn" role="alert">
+              {say("worldEditConflict")}{" "}
+              <button type="button" className="jar-panel-retry"
+                onClick={() => { editing.begin("memory", editConflict.id, editConflict.theirs); setEditConflict(null); }}>
+                {say("worldEditConflictTheirs")}
+              </button>{" "}
+              <button type="button" className="jar-panel-retry" onClick={() => setEditConflict(null)}>
+                {say("worldEditConflictMine")}
+              </button>
+            </p>
+          ) : null}
           {editing.open?.kind === "memory" && editing.open.id === panelId
             && attachTrouble?.id === (panelBall?.sigId ?? panelId) ? (
             <p className="jar-panel-warn" role="status">{attachTrouble.text}</p>
@@ -11625,14 +11685,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         onNoteOpen={savedNoteChanged}
         /* An archive save or delete reaches the world's cache of read notes,
            so the memory card never edits from words that are not stored. */
-        onSaved={(made) => rememberSavedInspiration(made.id, made.text, made)}
+        onSaved={(made, how) => rememberSavedInspiration(made.id, made.text, made, how)}
+        onRestored={(made) => restoredInspirationRef.current(made)}
         onErased={(id) => {
           /* Gone from the field and the cache like a delete made on the card
              itself — and the card closes only if it is showing this note. */
           const shown = panelNowRef.current;
           const showing = shown?.id === id || shown?.detail?.id === id;
           const visual = shown && showing ? shown.id : id;
-          savedGenerationRef.current.set(id, (savedGenerationRef.current.get(id) ?? 0) + 1);
+          markSaved(detailReadState(), id);
           inspirationRemovedFromView(id, visual, showing);
         }}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}

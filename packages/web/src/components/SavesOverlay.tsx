@@ -93,13 +93,15 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onSaved, onErased, ownArchive = true, shareName = "" }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onSaved, onErased, onRestored, ownArchive = true, shareName = "" }: {
   locale: SupportedLocale;
   /** A note's words were stored, with the server's row. The world behind
       this page caches what it has read of each note, and a later edit there
       starts from that cache — so an archive edit it never heard of was
       overwritten by the next one (review, 2026-10-17). */
-  onSaved?: (row: ApiInspiration) => void;
+  onSaved?: (row: ApiInspiration, how?: "write" | "read") => void;
+  /** A note came back from the deleted shelf, with its server row. */
+  onRestored?: (row: ApiInspiration) => void;
   /** A note was deleted (its server send, after Undo's moment). */
   onErased?: (id: string) => void;
   /** Whether this is the person's own archive. The deleted shelf is theirs
@@ -272,6 +274,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      on that delete, and not on any other way the line appears. */
   const undoButton = useRef<HTMLButtonElement>(null);
   const focusUndoNext = useRef(false);
+  /* An immediate delete (an agent's archive, which has no Undo) hands focus
+     to the list it returns to — its first row, or the search field. */
+  const focusListNext = useRef(false);
   /* Armed delete on an archive with no shelf — see `onErase` below. */
   const [askingErase, setAskingErase] = useState<string | null>(null);
   const [eraseFailed, setEraseFailed] = useState(false);
@@ -417,10 +422,14 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       if (!mounted.current) return;
       setShelf((all) => all.filter((row) => row.id !== item.id));
       void load();
+      /* back in the world behind, too — the mirror of `onErased` */
+      void fetchInspiration(item.id, profileId ? { profile: profileId } : {})
+        .then((row) => { onRestored?.(row); })
+        .catch(() => undefined);
     } catch {
       if (mounted.current) setShelfFailed(true);
     }
-  }, [load]);
+  }, [load, profileId, onRestored]);
 
   const forget = useCallback(async (item: ApiDeletedInspiration) => {
     if (forgetting !== item.id) { setForgetting(item.id); return; }
@@ -718,7 +727,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
          be judged against it (the empty-words rule counts attachments).
          Best effort — the attachment is stored either way. */
       void fetchInspiration(note.id, profileId ? { profile: profileId } : {})
-        .then((row) => { onSaved?.(row); })
+        /* A READ, NOT A WRITE: the world behind accepts it only if no save
+           newer than it has landed (it compares the server's `updatedAt`),
+           and it does not count as a save itself. */
+        .then((row) => { onSaved?.(row, "read"); })
         .catch(() => undefined);
       /* The open note is a snapshot, so it is re-pointed at the row that
          now carries the attachment — otherwise the upload lands, the list
@@ -736,6 +748,13 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      and naming the door it comes through, so `attach` does not try to read
      a sound file as a photograph. */
   const recording = useAudioRecording((clip) => attach(clip, "recording"));
+  /* ONE NOTE'S FAILURE IS NOT ANOTHER'S. Opening a different note clears the
+     last one's upload failure and the recorder's error line. */
+  const clearRecording = recording.clear;
+  useEffect(() => {
+    setAttachFailed(false);
+    clearRecording();
+  }, [open?.id, clearRecording]);
 
   /**
    * ═══ WHETHER THIS NOTE'S SAVE CAN BE PRESSED — ASKED, NOT RESTATED ══════
@@ -841,6 +860,11 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      because that callback closes over the draft. That is the point rather
      than a cost: the bar must hold the CURRENT closer, or pressing
      Inspirations would commit the words as they were when the note opened. */
+  useEffect(() => {
+    if (open || !focusListNext.current) return;
+    focusListNext.current = false;
+    (document.querySelector<HTMLElement>(".waka-list-row") ?? field.current)?.focus();
+  }, [open, rows]);
   useEffect(() => {
     if (!undoable || open || !focusUndoNext.current) return;
     focusUndoNext.current = false;
@@ -1306,6 +1330,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             setTotal((count) => count === null ? count : Math.max(0, count - 1));
             setOpen(null);
             setEraseFailed(false);
+            /* no Undo line on a shelfless archive: focus goes to the list */
+            focusListNext.current = true;
             commitErase({ row: open, at });
           }}
           /* Only a note with words has a card to make. */

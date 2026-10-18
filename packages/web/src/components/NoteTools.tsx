@@ -32,7 +32,7 @@
  * and still saves; it simply cannot take an attachment, which is honest —
  * there is nowhere to put the control.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { AddMenu } from "./AddMenu";
@@ -132,6 +132,13 @@ export function NoteTools(props: {
      the worst kind of bug to find. */
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   useEffect(() => { setSlot(document.getElementById(DOCK_SLOT)); });
+  /* AN ARMED DELETE TAKES FOCUS TO ITS CONFIRMATION. The press that armed
+     it is gone from the bar (the group becomes the question), so focus
+     would otherwise fall to the page; "Delete it anyway" is what a keyboard
+     user is being asked about. */
+  const confirm = useRef<HTMLButtonElement>(null);
+  const armed = Boolean(props.erasePending && props.eraseQuestion);
+  useEffect(() => { if (armed) confirm.current?.focus(); }, [armed, slot]);
   if (!slot) return null;
 
   /* THE WAY OUT OF A NOTE IS ALWAYS IN THE BAR. Delete needs only the
@@ -155,7 +162,10 @@ export function NoteTools(props: {
     return createPortal(
       <>
         <span className="waka-dock-state" role="status">{props.eraseQuestion}</span>
-        {erase}
+        <button ref={confirm} type="button" className="waka-dock-tool waka-dock-tool--erase"
+          aria-label={props.eraseConfirmLabel ?? props.eraseLabel}
+          disabled={props.saving}
+          onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
         <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onCancelErase}>
           {props.cancelEraseLabel}
         </button>

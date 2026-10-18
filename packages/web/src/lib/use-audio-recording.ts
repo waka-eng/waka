@@ -100,5 +100,8 @@ export function useAudioRecording(onRecorded: (file: File) => Promise<void> | vo
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [phase]);
-  return { phase, seconds, error, notice, start, stop, cancel };
+  /** Forget the last error and notice — a line about one note's recording
+      must not follow the person onto the next note. */
+  const clear = useCallback(() => { setError(''); setNotice(''); }, []);
+  return { phase, seconds, error, notice, start, stop, cancel, clear };
 }

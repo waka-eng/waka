@@ -45,6 +45,12 @@ const S = vi.hoisted(() => ({
   hold: null as null | "hold" | "fail",
   held: [] as Array<{ resolve: () => void; reject: () => void }>,
   deleted: [] as string[],
+  /* the archive's re-read after an upload, held so it can land late */
+  heldFetch: null as null | (() => void),
+  holdFetch: false,
+  /* a write whose answer carries no row (as a fixture world's does) */
+  bareWrites: false,
+  shelf: [] as Array<{ id: string; text: string }>,
 }));
 
 const row = (id: string, text: string) => {
@@ -58,11 +64,34 @@ const row = (id: string, text: string) => {
 vi.mock("../src/lib/api", async (original) => ({
   ...await original<typeof import("../src/lib/api")>(),
   ...apiMockFrom(FACTS),
-  deleteInspiration: async (id: string) => { S.deleted.push(id); S.store.delete(id); },
+  deleteInspiration: async (id: string) => {
+    S.deleted.push(id);
+    S.shelf.push({ id, text: S.store.get(id) ?? "" });
+    S.store.delete(id);
+  },
+  listDeletedInspirations: async () => S.shelf.map((item) => ({ id: item.id, text: item.text, kind: "note", hadPhoto: false,
+    createdAt: new Date(Date.UTC(2026, 9, 1)).toISOString(), deletedAt: new Date().toISOString() })),
+  restoreInspiration: async (id: string) => {
+    const item = S.shelf.find((row) => row.id === id)!;
+    S.shelf = S.shelf.filter((row) => row.id !== id);
+    S.store.set(id, item.text);
+  },
+  presignAttachment: async (input: { filename: string }) =>
+    ({ uploadUrl: "https://bucket.test/put", key: `k/${input.filename}`, headers: {}, profileId: VIEWER_ID, expiresAt: "" }),
+  uploadToPresignedUrl: async () => undefined,
+  finalizeAttachment: async () => ({ id: "att-1" }),
+  /* the server row, as of WHEN THE READ WAS ASKED, stamped then */
+  fetchInspiration: (id: string) => {
+    const snapshot = { id, profileId: VIEWER_ID, text: S.store.get(id) ?? "", kind: "note", category: null, source: "app", visibility: "private",
+      createdAt: new Date(Date.UTC(2026, 9, 1)).toISOString(), updatedAt: new Date(Date.now() - 60_000).toISOString(), attachments: [], reflections: [] };
+    if (!S.holdFetch) return Promise.resolve(snapshot);
+    return new Promise((done) => { S.heldFetch = () => done(snapshot); });
+  },
   updateInspiration: async (id: string, input: { text: string }) => {
     S.written.push({ id, text: input.text });
     S.store.set(id, input.text);
     /* the server's row, as the PATCH answers it */
+    if (S.bareWrites) return undefined;
     return { id, profileId: VIEWER_ID, text: input.text, kind: "note", category: null, source: "app", visibility: "private",
       createdAt: new Date(Date.UTC(2026, 9, 1)).toISOString(), updatedAt: new Date().toISOString(), attachments: [], reflections: [] };
   },
@@ -88,7 +117,8 @@ vi.mock("../src/lib/auth-context", async (original) => {
 });
 
 let go: ReturnType<typeof useNavigate>;
-function RouterTools() { go = useNavigate(); useLocation(); return null; }
+let here = "/";
+function RouterTools() { go = useNavigate(); const at = useLocation(); here = at.pathname; return null; }
 
 let world: MountedWorld;
 beforeAll(() => {
@@ -103,6 +133,10 @@ beforeEach(() => {
   S.hold = null;
   S.held.length = 0;
   S.deleted.length = 0;
+  S.heldFetch = null;
+  S.holdFetch = false;
+  S.bareWrites = false;
+  S.shelf = [];
 });
 afterEach(() => world?.unmount());
 
@@ -289,3 +323,84 @@ it("tells an emptied memory card to write something, and offers nothing it canno
   expect(box.placeholder).toBe("Write something to keep this memory.");
   expect(card()!.querySelector<HTMLButtonElement>(".jar-panel-save")!.disabled, "and Save stays dim").toBe(true);
 });
+
+const setText = async (box: HTMLTextAreaElement, text: string) => {
+  const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+  await act(async () => { set.call(box, text); box.dispatchEvent(new Event("input", { bubbles: true })); });
+};
+const archiveSave = async () => {
+  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-tool--keep")!.click());
+  await world.step(4);
+};
+
+it("the archive's re-read after an upload cannot put words older than a later save back", { timeout: 30_000 }, async () => {
+  const NEWER = "something I kept, 2 — saved after the upload's re-read went out.";
+  await openByAddress("own-3");
+  await stepOn(); // own-2 now read into the world's cache
+  await wait(100);
+  await act(async () => { go("/inspirations/own-3"); });
+  await world.step(12);
+  const page = await openInArchive("/inspirations/own-3", "something I kept, 2");
+  /* attach a file: the archive then re-reads the note — held, so it lands late */
+  S.holdFetch = true;
+  const input = [...document.querySelectorAll<HTMLInputElement>('nav.waka-dock input[type="file"]')].find((node) => node.accept.includes("application/pdf"))!;
+  Object.defineProperty(input, "files", { configurable: true, value: [new File(["%PDF-1.7"], "notes.pdf", { type: "application/pdf" })] });
+  await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+  for (let turn = 0; turn < 20 && !S.heldFetch; turn += 1) { await world.step(2); await wait(10); }
+  expect(S.heldFetch, "the archive did not re-read after the upload").not.toBeNull();
+  /* then the words are saved */
+  await setText(page, NEWER);
+  await archiveSave();
+  /* and only now does the re-read — with the words from before — land */
+  await act(async () => S.heldFetch!());
+  await world.step(4);
+  await act(async () => { go("/inspirations/own-3"); });
+  await world.step(12);
+  await wait(100);
+  await stepOn();
+  await wait(100);
+  await world.step(6);
+  await pressWords();
+  expect(editBox()?.value, "the late re-read was older than the save and was dropped").toBe(NEWER);
+});
+
+it("a note brought back from the deleted shelf comes back to the field", { timeout: 30_000 }, async () => {
+  await openByAddress("own-2");
+  const before = world.audit().present;
+  await openInArchive("/inspirations/own-2", "something I kept, 2");
+  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-tool--erase")!.click());
+  await act(async () => { go("/"); });
+  await world.step(12);
+  await wait(50);
+  expect(world.audit().present).toBe(before - 1);
+  await act(async () => { go("/?open=saves"); });
+  for (let turn = 0; turn < 30 && ![...world.container.querySelectorAll("button")].some((b) => b.textContent === "Deleted"); turn += 1) { await world.step(4); await wait(30); }
+  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Deleted")!.click());
+  await world.step(4);
+  await act(async () => world.container.querySelector<HTMLButtonElement>(".waka-shelf-back")!.click());
+  for (let turn = 0; turn < 20 && world.audit().present !== before; turn += 1) { await world.step(4); await wait(20); }
+  expect(world.audit().present, "restored to the field").toBe(before);
+});
+
+/* AN ARCHIVE SAVE NEVER LANDS ON AN OPEN CARD EDIT. Opening the archive
+   ends the card's edit, so the archive's words cannot be overwritten by a
+   card draft that began before them — and the card's next edit starts from
+   them. (Home also guards the case in code — rebase an untouched draft, ask
+   on a changed one — in case another door ever saves while the card is
+   editing; this pins that today no door does.) */
+it("an archive save of a note the card was editing: the edit is closed first, and the next one starts from the archive's words", { timeout: 30_000 }, async () => {
+  const FROM_ARCHIVE = "something I kept, 2 — from the archive.";
+  await openByAddress("own-2");
+  await pressWords();
+  expect(editBox(), "the card's edit is open").not.toBeNull();
+  const path = here;
+  const page = await openInArchive(path, "something I kept, 2");
+  expect(editBox(), "opening the archive closed the card's edit").toBeNull();
+  await setText(page, FROM_ARCHIVE);
+  await archiveSave();
+  await act(async () => { go(path); });
+  await world.step(8);
+  await pressWords();
+  expect(editBox()?.value).toBe(FROM_ARCHIVE);
+});
+

@@ -37,6 +37,9 @@ const state = vi.hoisted(() => ({
   /* whose profile each read, write and delete named */
   profiles: [] as Array<{ act: string; profile?: string }>,
   saved: [] as Array<{ id: string; text: string }>,
+  failUpload: false,
+  /* rows listed after the one under test */
+  more: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("../src/lib/api", async (importOriginal) => ({
@@ -54,13 +57,16 @@ vi.mock("../src/lib/api", async (importOriginal) => ({
   presignAttachment: async (input: { filename: string; contentType: string }) =>
     ({ uploadUrl: "https://bucket.test/put", key: `k/${input.filename}`, headers: {}, profileId: "p", expiresAt: "" }) as never,
   uploadToPresignedUrl: async () => undefined,
-  finalizeAttachment: async () => ({ id: "att-1" }) as never,
+  finalizeAttachment: async () => {
+    if (state.failUpload) throw new Error("upload refused");
+    return { id: "att-1" } as never;
+  },
   fetchInspiration: async (id: string) =>
     ({ id, text: state.text, attachments: [{ id: "att-1", type: "file", name: "notes.pdf", url: "" }], reflections: [] }) as never,
 }));
 vi.mock("../src/lib/data", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/lib/data")>()),
-  loadInspirations: async () => ({ inspirations: [state.row], total: 1, short: false }),
+  loadInspirations: async () => ({ inspirations: [...state.more, state.row], total: 1 + state.more.length, short: false }),
   /* HELD OPEN until the test answers it, so "before the text arrives" is a
      state the test can stand in rather than a race it hopes to lose. */
   loadInspiration: (_id: string, profile?: string) => new Promise((done, fail) => {
@@ -81,6 +87,8 @@ beforeEach(() => {
   state.reads.length = 0;
   state.profiles.length = 0;
   state.saved.length = 0;
+  state.failUpload = false;
+  state.more = [];
   vi.stubGlobal("URL", class extends URL {
     static createObjectURL(): string { return "blob:x"; }
     static revokeObjectURL(): void {}
@@ -242,6 +250,7 @@ it("will not empty a note that has nothing else on it, and says why on the page"
 it("on an agent's archive, writes and deletes name the same profile the read did", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
+    state.more = [{ ...longRow, id: "older-1", preview: "an older note stays" }];
     await openSave(longRow, LONG, { profileId: "agent-7", ownArchive: false });
     await answer(true);
     await type(`${LONG} By the agent.`);
@@ -253,7 +262,9 @@ it("on an agent's archive, writes and deletes name the same profile the read did
     /* an agent's archive asks before it deletes, then sends at once */
     const del = () => slot.querySelector<HTMLButtonElement>(".waka-dock-tool--erase")!;
     await act(async () => del().click());
+    expect(document.activeElement?.getAttribute("aria-label"), "an armed delete puts focus on its confirmation").toBe("Delete it anyway");
     await act(async () => del().click());
+    expect(document.activeElement?.matches(".waka-list-row, .waka-over-search"), "and after it, focus goes to the list it returns to").toBe(true);
     await act(async () => { vi.advanceTimersByTime(10_000); });
     expect(state.profiles.filter((item) => item.act === "delete")).toEqual([{ act: "delete", profile: "agent-7" }]);
   } finally {
@@ -313,4 +324,19 @@ it("tells the world behind it when an attachment lands, with the server's row", 
   await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
   for (let turn = 0; turn < 10 && state.saved.length === 0; turn += 1) await act(async () => { await Promise.resolve(); });
   expect(state.saved).toEqual([{ id: "long-1", text: LONG }]);
+});
+
+it("does not carry one note's upload failure onto the next note opened", async () => {
+  await openSave(longRow, LONG);
+  await answer(true);
+  state.failUpload = true;
+  const input = [...slot.querySelectorAll<HTMLInputElement>('input[type="file"]')].find((node) => node.accept.includes("application/pdf"))!;
+  Object.defineProperty(input, "files", { configurable: true, value: [new File(["%PDF-1.7"], "notes.pdf", { type: "application/pdf" })] });
+  await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+  for (let turn = 0; turn < 10 && !bar(); turn += 1) await act(async () => { await Promise.resolve(); });
+  expect(bar(), "the failure is said on the note it happened to").toContain("upload");
+  await act(async () => closer!());
+  await act(async () => host.querySelector<HTMLButtonElement>(".waka-list-row")!.click());
+  await answer(true);
+  expect(bar(), "and not on the next note opened").toBe("");
 });
