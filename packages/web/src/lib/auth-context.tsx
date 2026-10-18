@@ -438,13 +438,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
    * a person leaving. Evicting there would delete a draft as a consequence of
    * bad wifi.
    *
-   * The two platforms clear at different moments for the same reason they log
-   * out differently. Web wipes local state first and treats the server round
-   * trip as best-effort, so the drafts go with that wipe. Native reports a
-   * failed secure retirement instead of claiming a logout that did not happen,
-   * so it clears only once `apiLogout()` has resolved — a person still signed
-   * in because the keychain write failed must not already have lost what they
-   * were typing.
+   * Both platforms sign out locally first and retire the session with the
+   * server (and, on native, the keychain) in the background, so the drafts go
+   * with the local wipe on both.
    *
    * IT IS AWAITED, because the save box also keeps photographs and voice
    * recordings in IndexedDB and emptying those is a transaction rather than a
@@ -457,40 +453,24 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     const leaving = viewer
       ? { accountId: viewer.account.id, profileId: viewer.profile.id }
       : null;
+    /* LOCAL-FIRST, ON BOTH PLATFORMS, BEFORE ANY AWAIT. The person asked to
+       leave, so this device forgets them now: the auth counter moves (any
+       refresh or write that started before this is discarded when it
+       lands), the viewer, cached hint and session generation go, and so do
+       "unreachable" and "your session ended" — a sign-out is an answer. The
+       server/keychain retirement runs after, in the background: a slow or
+       offline one (native revocations can take many seconds) never holds
+       the UI, and a failure never restores a viewer. */
+    applyViewer(null);
     setSessionExpired(null);
-    /* A sign-out is an answer: the person is signed out on purpose, not
-       cut off. Whatever an earlier dead connection set no longer applies. */
     setServerUnreachable(false);
+    setIsLoading(false);
     loggingOutRef.current = true;
-    const startedAt = authMutationRef.current;
-    try {
-      // Wipe local state FIRST so the UI updates immediately even if the
-      // network call hangs. The server-side cookie clear is a best-effort
-      // follow-up; `apiLogout()` swallows network errors by design.
-      if (isMobileBuild) {
-        // Native invalidation is emitted after durable retirement, before the
-        // server round trip. A failed secure write must not claim successful logout.
-        await apiLogout();
-        /* THE SIGN-OUT CLEARS THE VIEWER ITSELF. It used to rely on the
-           store's expiry event to do it, and that event is (rightly)
-           ignored during a logout — which left a native person signed in
-           after pressing Sign out. Unless a newer sign-in happened while the
-           retirement ran, the viewer, the cached hint and the session
-           generation go now. */
-        if (aliveRef.current && authMutationRef.current === startedAt) applyViewer(null);
-        await clearUnsentDrafts(leaving);
-        return;
-      }
-      applyViewer(null);
-      /* Started before the server round trip and awaited after it, so the
-         asynchronous half of the eviction overlaps the request instead of
-         delaying the cookie clear behind it. */
-      const evicted = clearUnsentDrafts(leaving);
-      await apiLogout();
-      await evicted;
-    } finally {
-      loggingOutRef.current = false;
-    }
+    const evicted = clearUnsentDrafts(leaving);
+    void apiLogout()
+      .catch((err: unknown) => { console.error("[waka] sign-out could not be confirmed with the server:", err); })
+      .finally(() => { loggingOutRef.current = false; });
+    await evicted;
   }, [applyViewer, viewer]);
 
   /* ALSO THE "TRY AGAIN" BEHIND "WE CAN'T REACH WAKA". So a dead connection
