@@ -40,15 +40,16 @@ export class NoteWrites {
   }
 
   /** Resolves `true` once no write of `id` is out — or `false` after
-      `ceilingMs`, so a write that never settles cannot hold a read (and the
-      card waiting on it) forever: the read then fails plainly and offers
-      Try again. A write's own request is bounded too (`updateInspiration`). */
+      `ceilingMs` (pass `Infinity` for no ceiling), so a caller waiting on a
+      slow write can say "Still saving…" instead of sitting silent. Writes
+      themselves are not cut off: an abandoned write that still commits would
+      break the order everything here relies on. */
   idle(id: string, ceilingMs = IDLE_CEILING_MS): Promise<boolean> {
     if (!this.pending(id)) return Promise.resolve(true);
     return new Promise((done) => {
       let finished = false;
       const finish = (ok: boolean) => { if (!finished) { finished = true; done(ok); } };
-      const timer = setTimeout(() => finish(false), ceilingMs);
+      const timer = Number.isFinite(ceilingMs) ? setTimeout(() => finish(false), ceilingMs) : undefined;
       const list = this.waiting.get(id) ?? [];
       list.push(() => { clearTimeout(timer); finish(true); });
       this.waiting.set(id, list);

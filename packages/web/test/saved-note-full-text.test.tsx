@@ -38,6 +38,7 @@ const state = vi.hoisted(() => ({
   profiles: [] as Array<{ act: string; profile?: string }>,
   saved: [] as Array<{ id: string; text: string }>,
   failUpload: false,
+  holdUpload: false,
   /* rows listed after the one under test */
   more: [] as Array<Record<string, unknown>>,
 }));
@@ -58,6 +59,7 @@ vi.mock("../src/lib/api", async (importOriginal) => ({
     ({ uploadUrl: "https://bucket.test/put", key: `k/${input.filename}`, headers: {}, profileId: "p", expiresAt: "" }) as never,
   uploadToPresignedUrl: async () => undefined,
   finalizeAttachment: async () => {
+    if (state.holdUpload) await new Promise(() => {});
     if (state.failUpload) throw new Error("upload refused");
     return { id: "att-1" } as never;
   },
@@ -88,6 +90,7 @@ beforeEach(() => {
   state.profiles.length = 0;
   state.saved.length = 0;
   state.failUpload = false;
+  state.holdUpload = false;
   state.more = [];
   vi.stubGlobal("URL", class extends URL {
     static createObjectURL(): string { return "blob:x"; }
@@ -390,4 +393,25 @@ it("tells the world an attachment landed, so it re-reads through its own stamps"
   for (let turn = 0; turn < 10 && attached.length === 0; turn += 1) await act(async () => { await Promise.resolve(); });
   expect(attached).toEqual(["long-1"]);
   expect(state.saved, "and does not hand it a row of its own").toEqual([]);
+});
+
+/* AN UPLOAD IS ITS NOTE'S (review, 2026-10-17). A clip can finish uploading
+   to the note it was made on after that note is left; the next note opened
+   must not say "Uploading…" or have its tools held by it. */
+it("keeps one note's upload off another note's bar", async () => {
+  state.more = [{ ...longRow, id: "older-1", preview: "an older note" }];
+  await openSave(longRow, LONG);
+  await answer(true);
+  state.holdUpload = true;
+  const input = [...slot.querySelectorAll<HTMLInputElement>('input[type="file"]')].find((node) => node.accept.includes("application/pdf"))!;
+  Object.defineProperty(input, "files", { configurable: true, value: [new File(["%PDF-1.7"], "notes.pdf", { type: "application/pdf" })] });
+  await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+  for (let turn = 0; turn < 10 && bar() !== "Uploading…"; turn += 1) await act(async () => { await Promise.resolve(); });
+  expect(bar(), "the upload is said on its own note").toBe("Uploading…");
+  await act(async () => closer!());
+  const other = [...host.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((b) => (b.textContent ?? "").includes("an older note"))!;
+  await act(async () => other.click());
+  await answer(true);
+  expect(bar(), "and not on the next note").toBe("");
+  expect(slot.querySelector<HTMLButtonElement>('[aria-label="Add photo or file"]')?.disabled, "whose tools it does not hold").toBe(false);
 });

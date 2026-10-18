@@ -1191,8 +1191,23 @@ inspirations) ends that edit; whatever had been typed and not saved is gone, wit
 while pinning that an archive save cannot land on an open card edit (`home-memory-reads.test.tsx`),
 which this behaviour is what guarantees. Not introduced by the P0 branch.
 
-**Follow-up.** Either keep the card's draft across the archive (and let the save-conflict guard in
-`rememberSavedInspiration` do its job), or ask before leaving unsaved words.
+**Follow-up.** Either keep the card's draft across the archive, or ask before leaving unsaved words.
+(The card-vs-archive conflict prompt this once pointed to was removed: the two doors can no longer
+edit one note at once.)
+
+---
+
+### L12. Closing the archive mid-recording loses the recording *(pre-existing)*
+**Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/components/SavesOverlay.tsx` · severity low
+
+**What.** A recording started on a saved note in the archive is lost if the archive itself is closed
+(Close, Escape) while it runs: the overlay unmounts with the recorder, and the clip is never handed
+over. Same on `origin/dev`. Leaving the NOTE (Back, or opening another note) is handled on this
+branch — the recording stops and attaches to the note it was made on — but unmounting the whole
+archive is not.
+
+**Follow-up.** Stop and attach on unmount (the clip needs the upload to outlive the overlay), or
+ask before closing with a recording running.
 
 ---
 

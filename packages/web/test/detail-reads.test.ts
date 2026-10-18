@@ -14,7 +14,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { InspirationDetail } from "../src/lib/data";
-import { markSaved, readDetail, type DetailReadState } from "../src/lib/detail-reads";
+import { markSaved, newerDetail, readDetail, type DetailReadState } from "../src/lib/detail-reads";
 import { IDLE_CEILING_MS, NoteWrites } from "../src/lib/note-writes";
 
 const state = (writes = new NoteWrites()): DetailReadState & { writes: NoteWrites } =>
@@ -96,20 +96,49 @@ describe("a note's detail read", () => {
     expect((await p)?.text).toBe("newer");
   });
 
-  /* A WRITE THAT NEVER SETTLES cannot hold every read of its note forever:
-     after the ceiling the read fails plainly (the card offers Try again). */
-  it("gives up after the writes' ceiling instead of waiting forever", async () => {
+  /* A SLOW WRITE IS NOT A FAILED ONE (review, 2026-10-17). Past the
+     ceiling the read says "still saving" and keeps waiting; it reads — the
+     written words — when the write settles. It never reads while it is out. */
+  it("past the ceiling, says still saving and reads the written words once the write settles", async () => {
     vi.useFakeTimers();
     try {
-      const s = state(), f = heldFetch();
-      s.writes.start("n1"); // never settles
+      const told: string[] = [];
+      const s = { ...state(), onStillSaving: (id: string) => { told.push(id); } }, f = heldFetch();
+      s.writes.start("n1");
       const p = readDetail(s, "n1", f.fetch);
       await vi.advanceTimersByTimeAsync(IDLE_CEILING_MS + 10);
-      expect(await p).toBeNull();
-      expect(f.asked, "and read nothing a write may be replacing").toHaveLength(0);
+      expect(told, "the card was told it is still saving").toEqual(["n1"]);
+      expect(f.asked, "and nothing was read while the write is out").toHaveLength(0);
+      s.writes.settle("n1");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(f.asked).toHaveLength(1);
+      f.asked[0]!.done(row("the written words", 2_000));
+      expect((await p)?.text).toBe("the written words");
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  /* A JOINED READ'S FAILURE IS STILL KNOWN: the address open joins a read
+     the card started, and a 404 must still say "unavailable". */
+  it("records a fetch's failure where a caller that joined it can read it", async () => {
+    const errors = new Map<string, unknown>();
+    const s = { ...state(), errors }, f = heldFetch();
+    const first = readDetail(s, "n1", f.fetch);
+    const joined = readDetail(s, "n1", f.fetch);
+    expect(joined).toBe(first);
+    await tick();
+    f.asked[0]!.fail();
+    expect(await joined).toBeNull();
+    expect((errors.get("n1") as Error).message).toBe("offline");
+  });
+
+  it("never lets a read replace a newer detail already shown", () => {
+    const shown = row("saved while the read was out", 3_000);
+    expect(newerDetail(shown, row("read before it", 2_000))).toBe(shown);
+    const later = row("read after it", 4_000);
+    expect(newerDetail(shown, later)).toBe(later);
+    expect(newerDetail(shown, null), "a failed read keeps what is shown").toBe(shown);
   });
 
   it("fails plainly when nothing went stale", async () => {

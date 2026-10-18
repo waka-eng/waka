@@ -36,6 +36,21 @@ export interface DetailReadState {
   /** Writes of each note still out (`lib/note-writes.ts`). Every read
       waits until there are none. */
   writes?: Pick<NoteWrites, "idle">;
+  /** Told when a read has waited past the ceiling for a note's writes: the
+      write is slow, not failed — the page says "Still saving…" and the read
+      goes on waiting and reads when the writes settle. */
+  onStillSaving?: (id: string) => void;
+  /** The last failure of a fetch for each note, so a caller that JOINED a
+      read in flight can still tell a 404 from a network failure. */
+  errors?: Map<string, unknown>;
+}
+
+/** Of a detail shown now and one just read, the one to show: never an older
+    row over a newer one (a read that finished after a save was applied). */
+export function newerDetail<T extends { updatedMs: number }>(shown: T | null | undefined, read: T | null): T | null {
+  if (!read) return shown ?? null;
+  if (shown && shown.updatedMs > read.updatedMs) return shown;
+  return read;
 }
 
 /** How many times a read that keeps turning out stale is made again before
@@ -60,11 +75,16 @@ export function readDetail(
   if (inFlight) return inFlight;
   const AGAIN = Symbol("read again");
   const settle = () => { if (state.pending.get(id) === p) state.pending.delete(id); };
-  const p: Promise<InspirationDetail | null> = (state.writes ? state.writes.idle(id) : Promise.resolve(true))
-    .then((idle) => {
-      /* the writes never settled within the ceiling: no read of words a
-         write may be replacing — fail plainly (the card offers Try again) */
-      if (!idle) return null;
+  const waitForWrites = async () => {
+    if (!state.writes) return;
+    if (await state.writes.idle(id)) return;
+    /* PAST THE CEILING WITH A WRITE STILL OUT: slow, not failed. Say so,
+       and keep waiting — the read happens when the write settles. */
+    state.onStillSaving?.(id);
+    await state.writes.idle(id, Infinity);
+  };
+  const p: Promise<InspirationDetail | null> = waitForWrites()
+    .then(() => {
       const generation = state.generations.get(id) ?? 0;
       const stale = (row?: InspirationDetail) =>
         (state.generations.get(id) ?? 0) !== generation
@@ -75,7 +95,10 @@ export function readDetail(
           state.details.set(id, row);
           return row;
         },
-        (): null | typeof AGAIN => (stale() ? AGAIN : null),
+        (error: unknown): null | typeof AGAIN => {
+          state.errors?.set(id, error);
+          return stale() ? AGAIN : null;
+        },
       );
     })
     .then((result) => {

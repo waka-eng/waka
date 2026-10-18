@@ -101,7 +101,7 @@ import type { CreateInspirationRequest } from '../lib/api';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type ApiInspiration, type HarvestReason } from '../lib/api';
 import { inspirationPreview } from '../lib/inspiration-preview';
 import { wordsCanStand } from '../lib/note-words';
-import { markSaved, readDetail, type DetailReadState } from '../lib/detail-reads';
+import { markSaved, newerDetail, readDetail, type DetailReadState } from '../lib/detail-reads';
 import { NoteWrites } from '../lib/note-writes';
 import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
@@ -633,6 +633,13 @@ async function loadAgentBundle(
  * one honest degradation — the network failed or took too long, so the
  * preview stands alone and says so.
  */
+/** A detail read landing on the card: taken only if it is not older than
+    what the card already shows (a save applied while it was out wins). */
+function landed(p: PanelData, id: string, detail: InspirationDetail | null): PanelData {
+  const keep = newerDetail(p.detail, detail);
+  return { id, detail: keep, partial: keep === null };
+}
+
 interface PanelData {
   id: string;
   detail: InspirationDetail | null;
@@ -640,7 +647,7 @@ interface PanelData {
   /** The full read is still in flight after the panel gave up waiting for it
       (the two-second rule below). The panel says "Opening this note…" and
       takes the detail when it lands, instead of staying partial forever. */
-  pending?: boolean | 'saving';
+  pending?: boolean | 'saving' | 'still-saving';
   /** A memory with no detail (one kept a moment ago, or a fixture's) whose
       words were just kept locally: what it now says, so the card shows them
       and the next edit starts from them. */
@@ -2249,9 +2256,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       until there are none — the one rule that keeps two doors and a slow
       network from ever showing the words from before a write. */
   const noteWritesRef = useRef(new NoteWrites());
+  /** Each note's last fetch failure, for a caller that joined a read. */
+  const detailErrorsRef = useRef<Map<string, unknown>>(new Map());
   const detailReadState = (): DetailReadState => ({
     details: detailsRef.current, pending: detailPendingRef.current,
     generations: savedGenerationRef.current, stamps: newestStampRef.current, writes: noteWritesRef.current,
+    errors: detailErrorsRef.current,
+    /* a read waiting past the ceiling on a slow write: the card says so */
+    onStillSaving: (id) => setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? { ...p, pending: 'still-saving' } : p)),
   });
   const detailReadStateRef = useRef(detailReadState);
   detailReadStateRef.current = detailReadState;
@@ -4357,7 +4369,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       let gone = false;
       void loadDetail(fetchId).then((detail) => {
         if (gone) return;
-        setPanel((p) => (p && p.id === selectedId ? { id: selectedId, detail, partial: detail === null } : p));
+        setPanel((p) => (p && p.id === selectedId ? landed(p, selectedId, detail) : p));
       });
       return () => { gone = true; };
     }
@@ -4406,7 +4418,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     loadDetail(fetchId).then((detail) => {
       if (cancelled) return;
       if (!done) { show(detail); return; }
-      setPanel((p) => (p && p.id === selectedId ? { id: selectedId, detail, partial: detail === null } : p));
+      setPanel((p) => (p && p.id === selectedId ? landed(p, selectedId, detail) : p));
     });
     return () => {
       done = true;
@@ -4478,8 +4490,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     markSaved(detailReadState(), id);
     void loadDetailRef.current(id).then((detail) => {
       if (!detail) return;
-      setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? { ...p, detail, partial: false, pending: false } : p));
-      setDetachedInspiration((held) => (held && held.detail?.id === id ? { ...held, detail } : held));
+      setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? landed(p, p.id, detail) : p));
+      setDetachedInspiration((held) => (held && held.detail?.id === id ? { ...held, detail: newerDetail(held.detail, detail) } : held));
     });
   };
   const attachedInspirationRef = useRef(attachedInspiration);
@@ -4510,7 +4522,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const fetchId = ballsRef.current?.byId.get(id)?.sigId ?? id;
     setPanel((p) => (p && p.id === id ? { ...p, pending: true } : p));
     void loadDetail(fetchId).then((detail) => {
-      setPanel((p) => (p && p.id === id ? { id, detail, partial: detail === null } : p));
+      setPanel((p) => (p && p.id === id ? landed(p, id, detail) : p));
     });
   }, [panel?.id, loadDetail]);
 
@@ -7160,7 +7172,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (noteWritesRef.current.pending(noteId)) {
         setPanel((p) => (p && p.id === panelId ? { ...p, pending: 'saving' } : p));
         void loadDetailRef.current(noteId).then((detail) => {
-          setPanel((p) => (p && p.id === panelId ? { id: panelId, detail: detail ?? p.detail, partial: detail === null && !p.detail } : p));
+          setPanel((p) => (p && p.id === panelId ? landed(p, panelId, detail) : p));
         });
         return;
       }
@@ -7469,11 +7481,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            editable: the address says it could not open, with Try again. */
         /* the fetch's own failure is kept, so a 404 still says the link is
            unavailable rather than offering a Try again that cannot work */
-        let failure: unknown = null;
+        /* NOT ABORTED WITH THIS NAVIGATION: the read may be shared with
+           the card or the archive (a second ask joins the first), so moving
+           on only ignores its answer. Its failure is read from the shared
+           state, so a JOINED read's 404 still says unavailable. */
+        detailErrorsRef.current.delete(desired.inspirationId);
         const fresh = await readDetail(detailReadState(), desired.inspirationId,
-          (noteId) => loadInspiration(noteId, readProfile, controller.signal).catch((error: unknown) => { failure = error; throw error; }));
+          (noteId) => loadInspiration(noteId, readProfile));
         if (!current()) return;
-        if (!fresh) throw failure ?? new Error('No fresh detail');
+        if (!fresh) throw detailErrorsRef.current.get(desired.inspirationId) ?? new Error('No fresh detail');
         detail = fresh;
         ball = makeBall(seedOf(detail, skyRef.current.citations, skyRef.current.signals, skyRef.current.posterSignalIds, skyRef.current.principleSignalIds));
         ball.sigId = detail.id;
@@ -10183,7 +10199,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               note page uses, so one memory never says two different things
               depending on the door it was opened through. */}
           {panel.pending ? (
-            <p className="jar-panel-note" role="status">{say(panel.pending === 'saving' ? "worldSaving" : "worldNoteOpening")}</p>
+            <p className="jar-panel-note" role="status">{say(panel.pending === 'still-saving' ? "worldStillSaving" : panel.pending === 'saving' ? "worldSaving" : "worldNoteOpening")}</p>
           ) : panel.partial ? (
             <p className="jar-panel-note">
               {say("worldCouldntLoadRest")}{" "}

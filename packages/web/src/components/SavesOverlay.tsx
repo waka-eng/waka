@@ -703,8 +703,14 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
    * with, and holding it until somebody presses back would mean a photo
    * could be lost by closing a tab. The text keeps its own rule.
    */
-  const [attaching, setAttaching] = useState(false);
-  const [attachFailed, setAttachFailed] = useState(false);
+  /* KEYED BY THE NOTE THE UPLOAD BELONGS TO (review, 2026-10-17). A clip
+     can now finish uploading to the note it was recorded on after that note
+     is left, so "Uploading…", the failure line and the disabled tools are
+     that note's — another open note never shows or is disabled by them. */
+  const [attachingFor, setAttachingFor] = useState<string | null>(null);
+  const [attachFailedFor, setAttachFailedFor] = useState<string | null>(null);
+  const attaching = Boolean(open) && attachingFor === open?.id;
+  const attachFailed = Boolean(open) && attachFailedFor === open?.id;
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
      the button that opens it, and that button is in the bar now — see
      `NoteTools`, which owns both. */
@@ -713,8 +719,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        whichever note is open when the recorder hands the clip over. */
     const note = target ?? open;
     if (!note) return;
-    setAttaching(true);
-    setAttachFailed(false);
+    setAttachingFor(note.id);
+    setAttachFailedFor((was) => (was === note.id ? null : was));
     try {
       /* ═══ A PHOTO IS READ BEFORE IT IS SENT; A RECORDING IS NOT A FILE ═══
          This path used to classify from `file.type.startsWith("image/")` and
@@ -791,9 +797,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       if (!mounted.current) return;
       setOpen((card) => (card ? fresh.find((row) => row.id === card.id) ?? card : card));
     } catch {
-      if (mounted.current) setAttachFailed(true);
+      if (mounted.current) setAttachFailedFor(note.id);
     } finally {
-      if (mounted.current) setAttaching(false);
+      if (mounted.current) setAttachingFor((was) => (was === note.id ? null : was));
     }
   }, [load, open, profileId]);
   /* The same recorder the notepad uses, handed a different destination —
@@ -828,7 +834,11 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      last one's upload failure and the recorder's error line. */
   const clearRecording = recording.clear;
   useEffect(() => {
-    setAttachFailed(false);
+    /* an upload failure is said once, on its own note; opening a note
+       (another, or the same one again) starts it clean — the failure is
+       keyed by note (`attachFailedFor`), so a late failure of the note just
+       left still lands on that note, never on this one */
+    setAttachFailedFor(null);
     clearRecording();
   }, [open?.id, clearRecording]);
 

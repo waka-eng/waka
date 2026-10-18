@@ -245,9 +245,6 @@ export async function fetchInspiration(id: string, options: ProfileScoped = {}, 
   return body.inspiration;
 }
 
-/** How long a note's write may go unanswered before it is given up. */
-export const UPDATE_TIMEOUT_MS = 20_000;
-
 /**
  * PATCH /inspirations/:id
  *
@@ -262,24 +259,12 @@ export async function updateInspiration(
      and answers 404 for the agent's own note (review, 2026-10-17). */
   options: ProfileScoped = {},
 ): Promise<ApiInspiration> {
-  /* A WRITE THAT NEVER ANSWERS MUST STILL END (review, 2026-10-17). Every
-     read and editor of the note waits for its writes to settle
-     (`lib/note-writes.ts`); a hung request would hold them forever. After
-     UPDATE_TIMEOUT_MS it is aborted and fails like any other failed save —
-     the words stay, the button stays lit, pressing again retries. */
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), UPDATE_TIMEOUT_MS);
-  try {
-    const body = await patchJson<{ inspiration: ApiInspiration; processing?: ApiInspirationProcessingReceipt }>(
-      apiPath(`/inspirations/${encodeURIComponent(id)}${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
-      input,
-      "Failed to update this capture",
-      controller.signal,
-    );
-    return { ...body.inspiration, ...(body.processing ? { processing: body.processing } : {}) };
-  } finally {
-    clearTimeout(timer);
-  }
+  const body = await patchJson<{ inspiration: ApiInspiration; processing?: ApiInspirationProcessingReceipt }>(
+    apiPath(`/inspirations/${encodeURIComponent(id)}${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
+    input,
+    "Failed to update this capture",
+  );
+  return { ...body.inspiration, ...(body.processing ? { processing: body.processing } : {}) };
 }
 
 /**

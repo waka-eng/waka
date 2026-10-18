@@ -255,10 +255,8 @@ it('preserves the processing receipt after editing saved material', async () => 
   const processing = { id: 'receipt', profileId: 'profile-1', inspirationId: inspiration.id, materialRevision: '4', jobId: 'job', requestVersion: '5' };
   stubFetch(Response.json({ inspiration, processing }));
   await expect(updateInspiration(inspiration.id, { text: inspiration.text })).resolves.toMatchObject({ processing });
-  /* the write carries its own timeout's abort signal (UPDATE_TIMEOUT_MS) */
   expect(fetch).toHaveBeenCalledWith('/api/inspirations/inspiration-1', {
     method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: inspiration.text }),
-    signal: expect.any(AbortSignal),
   });
 });
 
