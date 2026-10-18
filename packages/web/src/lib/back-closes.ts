@@ -95,8 +95,11 @@ function install(): void {
     const top = { ...(data as object), [TAG]: layer, [BASE]: href };
     replace(top, unused, url);
     lastIdx = idxOf(state());
-    /* The address changed: the page entry beneath must change with it. */
-    if (href !== base && !rebase) {
+    /* The address changed: the page entry beneath must change with it. A
+       second replace while the first rebase's pop is still on its way only
+       updates the target, so the rewrite uses the LATEST state and address. */
+    if (rebase) rebase = { page: data as object, top, href };
+    else if (href !== base) {
       rebase = { page: data as object, top, href };
       window.history.back();
     }

@@ -1161,6 +1161,20 @@ room-synthesized words derived from an erased or privatised memory persist in th
 That is the strongest reason not to leave the room-data drop undecided. Resolve then: either
 drop the room tables, or purge room artifacts that cite a deleted or privatised memory.
 
+## Added after review: a reload with a layer open leaves one same-address Back step
+
+**Status:** accepted (2026-10-17), `packages/web/src/lib/back-closes.ts`.
+
+Opening review, settings or info pushes a tagged copy of the page's own entry. Reloading while
+one is open leaves that tagged entry on top of an identical untagged page entry. On load the tag
+is stripped in place, so nothing reopens — but the entry beneath, at the same address, remains:
+the next Back lands on the same page and does nothing visible. Removing it is not possible from
+script without traversing to it, and that entry belongs to the document from before the reload,
+so stepping onto it (the earlier `history.back()` fix) costs a second full page load — worse
+than one dead step. The History API cannot delete or merge entries. Resolve only if the layers
+stop pushing an entry of their own (e.g. become real addresses), or if the Navigation API's
+entry replacement becomes usable across documents.
+
 ---
 
 ## Refuted findings

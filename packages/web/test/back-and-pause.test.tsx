@@ -128,6 +128,21 @@ describe("Back after the history moved under an open layer", () => {
     expect(window.location.pathname, "Back restored the address the replace erased").toBe("/new");
   });
 
+  it("uses the LAST of two quick replaces when it moves the page entry beneath", async () => {
+    window.history.replaceState({ idx: 4, key: "page" }, "", "/first");
+    const close = vi.fn();
+    render(createElement(Layer, { open: true, onClose: close }));
+    window.history.replaceState({ idx: 4, key: "r1", usr: null }, "", "/second");
+    window.history.replaceState({ idx: 4, key: "r2", usr: null }, "", "/third");
+    for (let i = 0; i < 5; i += 1) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(window.location.pathname).toBe("/third");
+    expect(tag()).toBe("moved-layer");
+    await popped();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname, "the page entry kept an earlier replace's address").toBe("/third");
+    expect((window.history.state as Record<string, unknown> | null)?.key).toBe("r2");
+  });
+
   it("treats a tag found at load as a reload's, and strips it in place without stepping back", async () => {
     window.history.replaceState({ idx: 1, key: "before" }, "", "/before");
     window.history.pushState({ idx: 1, key: "before", wakaLayer: "review" }, "", "/before");
