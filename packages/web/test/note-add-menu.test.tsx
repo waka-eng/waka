@@ -146,6 +146,17 @@ it('puts a chosen file on the shelf as a file tile and saves it as type file und
   expect(input.attachments).toEqual([expect.objectContaining({ type: 'file', contentType: 'application/pdf', name: 'Lease.pdf' })]);
 });
 
+/* Audit f2afcbe2 (mob): the menu stayed open over the note after a pick
+   reached the chooser without the row's own press closing it first. */
+it('puts the menu away when a file arrives, however the chooser was reached', async () => {
+  await openNotepad();
+  const plus = world.container.querySelector<HTMLButtonElement>('nav.waka-dock button[aria-haspopup="menu"]')!;
+  await act(async () => plus.click()); await settle();
+  expect(menu(), 'the ＋ did not open its menu').toBeTruthy();
+  await choose(accept => accept.includes('application/pdf'), new File(['%PDF-1.7'], 'A.pdf', { type: 'application/pdf' }));
+  expect(menu(), 'the menu stayed open after a file was picked').toBeNull();
+});
+
 it('an unnamed file is called "File" on its tile and saved with no name at all', async () => {
   await openNotepad();
   await choose(accept => accept.includes('application/pdf'), new File(['%PDF-1.7 a lease'], '', { type: 'application/pdf' }));
