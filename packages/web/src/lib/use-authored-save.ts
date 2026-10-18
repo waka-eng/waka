@@ -22,9 +22,12 @@ export type AuthoredSaveInput = { operation: 'inspiration'; input: CreateInspira
 export type AuthoredSaveIntent = AuthoredSaveInput & { version: 1; accountId: string; profileId: string; requestId: string; createdAt: number; checksum: number; rejected?: boolean; validationMessage?: string;
   /** A person pressed Save for this journal (not only a background re-send).
       Kept ON the entry, so whichever pass sends it reports the press. */
-  pressed?: boolean };
+  pressed?: boolean;
+  /** A send of this journal has already come back not knowing (timeout,
+      network, 5xx, busy). A press of it after that does not hold the composer. */
+  unconfirmed?: boolean };
 export interface AuthoredSaveResult { inspiration: ApiInspiration; reflection: ApiReflection | null; processing?: ApiInspirationProcessingReceipt; recovered: boolean }
-type Phase = 'idle' | 'saving' | 'uncertain' | 'diverged' | 'storage_error' | 'invalid' | 'removed' | 'rejected';
+type Phase = 'idle' | 'saving' | 'uncertain' | 'diverged' | 'storage_error' | 'removed' | 'rejected';
 
 /* ═══ THE CLIENT NEVER DECIDES THAT A SAVE DID NOT LAND (2026-10-17) ══════
    The audit at f2afcbe2 found the composer jammed for good after a save lost
@@ -92,7 +95,8 @@ function validIntent(key: string, prefix: string, scope: ProfileStorageScope, op
     key !== prefix + value.requestId || !Number.isFinite(value.createdAt) || !value.input ||
     typeof value.input.text !== 'string' ||
     value.checksum !== checksum(value)) throw new Error('Unverifiable pending save');
-  if ((value.rejected !== undefined && typeof value.rejected !== 'boolean') || (value.pressed !== undefined && typeof value.pressed !== 'boolean')) throw new Error('Invalid pending save');
+  if ((value.rejected !== undefined && typeof value.rejected !== 'boolean') || (value.pressed !== undefined && typeof value.pressed !== 'boolean') ||
+    (value.unconfirmed !== undefined && typeof value.unconfirmed !== 'boolean')) throw new Error('Invalid pending save');
   if (value.draft && (typeof value.draft.id !== 'string' || !Number.isSafeInteger(value.draft.revision) || value.draft.revision < 1)) throw new Error('Invalid draft reference');
   return value;
 }
@@ -105,6 +109,30 @@ function readIntents(prefix: string, scope: ProfileStorageScope, operation: Auth
     try { intents.push(validIntent(key, prefix, scope, operation, localStorage.getItem(key))); } catch { invalidKeys.push(key); }
   }
   return { intents: intents.sort((a, b) => a.createdAt - b.createdAt || a.requestId.localeCompare(b.requestId)), invalid: invalidKeys.length > 0, invalidKeys };
+}
+/* A LANDED SAVE LEAVES A NOTE FOR OTHER WINDOWS (review). The journal is
+   deleted once a save lands; a window still holding it in memory would
+   otherwise find it simply gone and settle nothing (its composer full, its
+   field without the new item). So the landing window writes a short-lived
+   tombstone first, carrying what `onResolved` needs, and a window whose held
+   journal has vanished reads it and resolves the save itself. */
+const LANDED_KEEP_MS = 10 * 60_000;
+type Landed = { requestId: string; landedAt: number; inspiration: ApiInspiration; processing?: ApiInspirationProcessingReceipt };
+const landedKey = (scope: ProfileStorageScope, requestId: string) => profileStorageKey(scope, `landedSave:${requestId}`)!;
+function readLanded(scope: ProfileStorageScope, requestId: string): Landed | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(landedKey(scope, requestId)) ?? 'null') as Landed | null;
+    return value && value.requestId === requestId && Date.now() - value.landedAt < LANDED_KEEP_MS && value.inspiration?.id ? value : null;
+  } catch { return null; }
+}
+function pruneLanded(scope: ProfileStorageScope) {
+  const head = landedKey(scope, '');
+  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith(head)) continue;
+    try { if (Date.now() - (JSON.parse(localStorage.getItem(key) ?? '{}') as Landed).landedAt >= LANDED_KEEP_MS) localStorage.removeItem(key); }
+    catch { localStorage.removeItem(key); }
+  }
 }
 function persist(prefix: string, intent: AuthoredSaveIntent) {
   const raw = JSON.stringify(intent), key = prefix + intent.requestId;
@@ -138,6 +166,9 @@ export function useAuthoredSave(options: {
   const working = useRef(false), again = useRef(false), againPressed = useRef(false), mounted = useRef(false), epoch = useRef(0);
   const abort = useRef<AbortController | null>(null);
   const failures = useRef(0), backoff = useRef(0);
+  // The journals this window last saw: one that vanishes is looked up in the landed notes.
+  const known = useRef(new Map<string, AuthoredSaveIntent>());
+  const [invalid, setInvalid] = useState(false);
   // Edited words waiting on "Save as new".
   const diverged = useRef<AuthoredSaveInput | null>(null);
 
@@ -172,6 +203,9 @@ export function useAuthoredSave(options: {
       const after = await live.current.onResolved(intent, { inspiration: created, reflection: null, processing: created.processing,
         recovered: created.saveRequest?.replayed === true }, intent.pressed === true);
       if (!owns()) return 'unknown';
+      try { localStorage.setItem(landedKey(at.scope, intent.requestId), JSON.stringify({ requestId: intent.requestId, landedAt: Date.now(), inspiration: created, processing: created.processing } satisfies Landed)); }
+      catch { /* other windows then only miss the note; this one is settled */ }
+      known.current.delete(intent.requestId);
       // Cleanup follows matching-draft settlement; a crash before it only
       // means one more replay of the same id, never a second copy.
       localStorage.removeItem(key + intent.requestId);
@@ -189,6 +223,8 @@ export function useAuthoredSave(options: {
         try { persist(key, { ...intent, rejected: true, validationMessage }); } catch { return 'storage'; }
         return 'refused';
       }
+      // Not known. Recorded on the entry, so a later press does not hold the composer.
+      if (!intent.unconfirmed) { try { persist(key, { ...intent, unconfirmed: true }); } catch { /* the journal as it was is still there */ } }
       return 'unknown';
     } finally { window.clearTimeout(timer); controller.abort(); }
   }, []);
@@ -204,15 +240,36 @@ export function useAuthoredSave(options: {
     let unknown = false, storage = false, removed = false;
     try {
       const tried = new Set<string>();
+      try { pruneLanded(at.scope); } catch { /* best effort */ }
+      let first = true;
       for (;;) {
         let found;
         try { found = readIntents(at.prefix, at.scope, at.operation); } catch { storage = true; break; }
-        if (found.invalid) setPhase('invalid');
+        setInvalid(found.invalid);
+        if (first) {
+          first = false;
+          // A journal this window held that another window landed: settle it here too.
+          const now = new Set(found.intents.map((item) => item.requestId));
+          for (const [id, held] of known.current) {
+            if (now.has(id)) continue;
+            known.current.delete(id);
+            const landed = readLanded(at.scope, id);
+            if (!landed) continue;
+            try { await live.current.onResolved(held, { inspiration: landed.inspiration, reflection: null, processing: landed.processing, recovered: true }, held.pressed === true); }
+            catch { /* its words are still on screen; nothing is lost */ }
+            if (epoch.current !== sequence || !mounted.current) return;
+          }
+        }
+        for (const item of found.intents) known.current.set(item.requestId, item);
         const next = [...found.intents].reverse().find((item) => !item.rejected && !tried.has(item.requestId));
         show(found.intents.at(-1) ?? null);
         if (!next) break;
         tried.add(next.requestId);
-        if (next.requestId === found.intents.at(-1)?.requestId && phaseRef.current !== 'diverged') setPhase('saving');
+        /* ONLY A PRESS OF A NEVER-ANSWERED SAVE HOLDS THE COMPOSER (review):
+           background re-sends — focus, online, backoff — and presses of a
+           save already not confirmed leave the phase as it is. */
+        if (pressed && !next.unconfirmed && next.requestId === found.intents.at(-1)?.requestId && phaseRef.current !== 'diverged') setPhase('saving');
+        else if (phaseRef.current === 'idle') setPhase('uncertain');
         const outcome = await send(next.requestId);
         if (epoch.current !== sequence || !mounted.current) return;
         if (outcome === 'unknown') unknown = true;
@@ -232,7 +289,7 @@ export function useAuthoredSave(options: {
     else if (newest?.rejected) setPhase('rejected');
     else if (left.length) setPhase('uncertain');
     else if (removed) setPhase('removed');
-    else if (phaseRef.current !== 'invalid') setPhase('idle');
+    else setPhase('idle');
     if (!left.length) diverged.current = null;
     if (unknown && left.some((item) => !item.rejected)) {
       // Not known: send again later, backing off; focus, online and Retry send sooner.
@@ -246,13 +303,15 @@ export function useAuthoredSave(options: {
   useEffect(() => {
     mounted.current = true; epoch.current += 1; abort.current?.abort(); working.current = false; again.current = false;
     window.clearTimeout(backoff.current); failures.current = 0; diverged.current = null; againPressed.current = false;
-    show(null); setBusy(false); setPhase('idle'); void pump();
+    show(null); setBusy(false); setPhase('idle'); setInvalid(false); known.current.clear(); void pump();
+    /* This window's own moments only — focus, visibility, online — not every
+       storage write from another window, which would start a send from a
+       window nobody is looking at (review). */
     const wake = () => { void pump(); };
-    const onStorage = (event: StorageEvent) => { if (!event.key || event.key.startsWith(prefix ?? '\0')) void pump(); };
-    window.addEventListener('focus', wake); window.addEventListener('online', wake); document.addEventListener('visibilitychange', wake); window.addEventListener('storage', onStorage);
+    window.addEventListener('focus', wake); window.addEventListener('online', wake); document.addEventListener('visibilitychange', wake);
     return () => {
       mounted.current = false; epoch.current += 1; abort.current?.abort(); working.current = false; window.clearTimeout(backoff.current);
-      window.removeEventListener('focus', wake); window.removeEventListener('online', wake); document.removeEventListener('visibilitychange', wake); window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', wake); window.removeEventListener('online', wake); document.removeEventListener('visibilitychange', wake);
     };
   }, [prefix, options.enabled, pump]);
 
@@ -266,7 +325,7 @@ export function useAuthoredSave(options: {
     const besides = options?.besides === true;
     let found;
     try { found = readIntents(at.prefix, at.scope, at.operation); } catch { setPhase('storage_error'); return false; }
-    if (found.invalid) { setPhase('invalid'); return false; }
+    if (found.invalid) { setInvalid(true); return false; }
     const sum = wordsSum(input);
     /* "Save as new" on words a pending save already carries is that save's
        retry, not a second journal (review): the same id, once. */
@@ -335,7 +394,7 @@ export function useAuthoredSave(options: {
         localStorage.setItem(backup, JSON.stringify({ key, raw: localStorage.getItem(key) }));
         localStorage.removeItem(key);
       }
-      setPhase('idle'); void pump();
+      setInvalid(false); void pump();
     } catch { setPhase('storage_error'); }
   };
   // Stable, so a caller can dismiss from an effect without re-running it each render.
@@ -345,6 +404,6 @@ export function useAuthoredSave(options: {
       ('saving') the composer is held, exactly as it always was (review). */
   const canResave = Boolean(pending && !pending.rejected && (phase === 'uncertain' || phase === 'diverged'));
 
-  return { pending, phase, busy, canResave, saveAsNew, keepEarlier, start, retry: () => pump(true),
+  return { pending, phase, invalid, busy, canResave, saveAsNew, keepEarlier, start, retry: () => pump(true),
     check: () => pump(), editRejected, resetInvalid, dismiss };
 }

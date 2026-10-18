@@ -194,7 +194,7 @@ it('does not submit corrupt pending data; an explicit reset retains uninterprete
   value.input.text = 'Damaged payload';
   localStorage.setItem(key, JSON.stringify(value));
   await remount();
-  expect(latest.phase).toBe('invalid'); expect(createInspiration).toHaveBeenCalledOnce();
+  expect(latest.invalid).toBe(true); expect(createInspiration).toHaveBeenCalledOnce();
   await act(async () => { latest.resetInvalid(); });
   expect(records()).toHaveLength(0);
   const backup = Object.keys(localStorage).find((item) => item.includes(':unrecoveredSave:'))!;
@@ -260,4 +260,46 @@ it('marks the press on the journal itself, so a later background pass reports it
   expect(JSON.parse(localStorage.getItem(records()[0]!)!).pressed).toBe(true);
   await remount();                                         // the background pass sends it
   expect(resolved).toHaveBeenCalledOnce(); expect(resolved.mock.calls[0]![2]).toBe(true);
+});
+
+/* REVIEW ROUND 7. */
+it('background re-sends never hold the composer; only a press of a never-answered save does', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockImplementation(() => new Promise(() => {}));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  expect(JSON.parse(localStorage.getItem(records()[0]!)!).unconfirmed).toBe(true);
+  await remount();                                            // a background pass, still in flight
+  expect(latest.busy).toBe(true); expect(latest.phase).toBe('uncertain'); expect(latest.canResave).toBe(true);
+  await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+  await act(async () => { void latest.retry(); });           // a press of an unconfirmed save
+  expect(latest.phase).toBe('uncertain');
+});
+
+it('a window settles a save another window landed, from the landed note, and storage events alone send nothing', async () => {
+  let landA!: (value: ApiInspiration) => void;
+  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise((resolve) => { landA = resolve; }))
+    .mockRejectedValue(new ApiError({ status: 409, code: 'save_in_progress', message: 'In progress' }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const resolvedB = vi.fn();
+  const hostB = document.createElement('div'); document.body.append(hostB); const rootB = createRoot(hostB);
+  let tabB!: ReturnType<typeof useAuthoredSave>;
+  function ProbeB() { tabB = useAuthoredSave({ scope, operation: 'inspiration', onResolved: resolvedB, onRemoved: removed }); return null; }
+  await act(async () => rootB.render(<ProbeB />));            // B holds the same journal (its own send: "in progress")
+  expect(tabB.pending?.requestId).toBe(latest.pending?.requestId);
+  const sends = vi.mocked(createInspiration).mock.calls.length;
+  await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: records()[0] })); });
+  expect(vi.mocked(createInspiration).mock.calls.length, 'a storage event started a send').toBe(sends);
+  await act(async () => { landA(source); });                 // A's POST lands: journal gone, note left
+  expect(records()).toHaveLength(0);
+  await act(async () => { await tabB.check(); });
+  expect(resolvedB).toHaveBeenCalledOnce();
+  expect(resolvedB.mock.calls[0]![1].inspiration.id).toBe(source.id); expect(resolvedB.mock.calls[0]![2]).toBe(true);
+  await act(async () => rootB.unmount()); hostB.remove();
+});
+
+it('keeps saying an unreadable journal is there, beside a readable pending save', async () => {
+  vi.mocked(createInspiration).mockRejectedValue(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  localStorage.setItem(records()[0]!.replace(/[^:]+$/, '00000000-0000-4000-8000-000000000000'), '{broken');
+  await act(async () => { await latest.retry(); });
+  expect(latest.invalid).toBe(true); expect(latest.phase).toBe('uncertain');
 });
