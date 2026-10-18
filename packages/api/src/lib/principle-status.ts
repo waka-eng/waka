@@ -1,10 +1,9 @@
 import {principleMaterialKey} from './principle-material-key.js';
-import { and, desc, eq, sql } from "drizzle-orm";
-import { backgroundJobs, principles } from "../db/index.js";
+import { and, desc, eq } from "drizzle-orm";
+import { backgroundJobs } from "../db/index.js";
 import { getDb } from "./db.js";
-import { loadPrincipleMaterial, PRINCIPLE_MIN_SIGNALS } from "./principle-generation.js";
-import { groupPrincipleReadable } from "./group-output.js";
-import { enqueueGroupTopOfMindRefresh, enqueueRefreshPrinciples, enqueueTopOfMindRefresh, recoverPendingSignalSupport, wakeCommittedBackgroundJobs } from "./queue.js";
+import { loadPrincipleMaterial } from "./principle-generation.js";
+import { enqueueRefreshPrinciples, enqueueTopOfMindRefresh, recoverPendingSignalSupport, wakeCommittedBackgroundJobs } from "./queue.js";
 import { loadSignalSupportWorkState } from './signal-support-state.js';
 
 type Database = ReturnType<typeof getDb>;
@@ -61,13 +60,10 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
     : job?.status === "failed" ? "failed"
     : job?.status === "succeeded" ? "ready"
     : job ? "processing" : "pending";
-  const withheld = material.groupId ? await db.select({ id: principles.id }).from(principles)
-    .where(and(eq(principles.profileId, profileId), sql`(${groupPrincipleReadable(material.groupId, PRINCIPLE_MIN_SIGNALS)}) IS NOT TRUE`)).limit(1) : [];
   const readingPaused = (await latestReadingJob(db, profileId))?.status === "failed";
   return { phase, eligible: material.eligibility.eligible,
     readingPaused,
     supportPending: support.pending,
-    restricted: withheld.length > 0,
     signalCount: material.eligibility.distinctSignals,
     topOfMindCount: material.eligibility.tomAppearances };
 }
@@ -86,9 +82,7 @@ export async function requestPrincipleRefresh(db: Db, profileId: string, retry =
     const sources = await recoverPendingSignalSupport(tx, profileId);
     if (sources.length) {
       restarted = true;
-      const groupId = sources[0]!.groupId;
-      if (groupId) await enqueueGroupTopOfMindRefresh(sources[0]!.ownerProfileId, groupId, 'manual', tx);
-      else await enqueueTopOfMindRefresh(profileId, 'manual', tx);
+      await enqueueTopOfMindRefresh(profileId, 'manual', tx);
     }
     /* A RETRY ALSO RESTARTS A READING THAT FAILED. Before, it re-enqueued
        principles and pending support only, so "Try again" under a paused
@@ -114,8 +108,10 @@ export async function enqueuePrinciplesAfterReading(tx: Transaction, profileId: 
 
 /** True when an explicit retry reset a failed or stalled principles job. */
 async function enqueueEligiblePrinciples(db: Db, profileId: string, retry: boolean, transaction?: Transaction): Promise<boolean> {
+  // A room mind's material comes back empty from its profile read (room
+  // principles retired with the room engine); never enqueue for one.
   const material = await loadPrincipleMaterial(db, profileId);
-  if (!material.eligibility.eligible) return false;
+  if (material.groupProfile || !material.eligibility.eligible) return false;
   const result = await enqueueRefreshPrinciples(profileId, principleMaterialKey(material), retry, transaction);
   return Boolean(result.restarted);
 }

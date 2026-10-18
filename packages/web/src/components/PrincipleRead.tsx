@@ -4,27 +4,8 @@ import { ApiError } from "../lib/api/http";
 import { t, type SupportedLocale } from "../lib/i18n";
 
 /**
- * Only the selected wall polls. Requests never render another wall's values.
- *
- * ── A ROOM'S PHILOSOPHIES AND VALUES ARE GONE (2026-10-12) ──────────────
- *
- * Founder: "방 없애" — remove rooms.
- *
- * This component answered for two spaces and the room half was the larger
- * one: a `groupId` switched every request onto `/groups/:id/principles`, a
- * `refreshKey` re-read it whenever the room's wall or board was refetched,
- * and `GROUP_READ_TTL_MS` armed a timer that BLANKED the rows after thirty
- * seconds — because a shared read is permission-sensitive and a version
- * number cannot tell you access was revoked. Leaving a room's wall cleared
- * the rows too, so a neighbouring column could never retain another room's
- * last verified wording. There was a whole staged empty state with it: three
- * patterns needed, then a reading, then a candidate, with a progress bar and
- * a sentence per stage, and a restricted branch for a room you could no
- * longer read.
- *
- * It rests on the ruling in `goals/room-timeline.md` (since removed) that
- * every room would grow its own philosophies and values. That is now a ruling about a thing that
- * does not exist. Your own sky is untouched, which is where this started.
+ * Your own principles: the sky's lead line and one status sentence. Only the
+ * active view polls. (Rooms' principles left with rooms, 2026-10-12.)
  */
 /** Ten-second reads while a reading is in progress: five minutes, then stop. */
 const MAX_WAITING_READS = 30;
@@ -138,12 +119,6 @@ export function PrincipleRead({ active, locale, onRead }: {
     : status.signalCount < 3 ? "worldValuesSubSelf"
     : status.topOfMindCount < 1 ? "worldPrinciplesNeedRead"
     : "worldPrinciplesNoCandidate";
-  /* THE ROOM'S WHOLE RENDER WENT FROM HERE: its own eyebrow, its own list
-     (a room's values were listed by this component; your own are drawn by
-     the sky), the staged empty state with its three-pattern progress bar and
-     a lead and a detail sentence per stage, and the restricted branch. What
-     is left is your own sky's lead line and the one status sentence, which
-     is what this file held before rooms ever reached into it. */
   return <>
     {visibleRows.length === 0 ? <p className="jar-values-lead">{t(locale, "worldValuesLeadSelf")}</p> : null}
     {visibleRows.length === 0 || error || status?.phase === "processing" ?

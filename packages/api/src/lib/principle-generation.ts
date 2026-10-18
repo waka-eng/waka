@@ -23,21 +23,18 @@ import { readGenerationRevision, assertGenerationRevision } from "./generation-r
 import { personalEntrySupportCurrent, personalPrincipleSupportCurrent, personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
 import { citationStatementCurrent, evidenceSupportCurrent, loadSignalStatementRevisions } from './signal-support-state.js';
 import {
-  inspirations,
   principles,
   principleSignals,
   signals,
-  signalEvidence,
   topOfMindEntrySignals,
   topOfMindEntries,
   topOfMinds,
   profiles,
-  groupMembers,
   principleGenerationSteps,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
-import { selectIndependentEvidence, type ConfidenceEvidence } from './signal-lifecycle.js';
+import { selectIndependentEvidence } from './signal-lifecycle.js';
 import {loadSignalEvidence} from './review-evidence.js';
 import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput,renderPrincipleDistillContext} from './principle-input.js';
 import {GEMINI_GENERATION_MODEL,parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
@@ -45,8 +42,6 @@ import {principleMaterialKey} from './principle-material-key.js';
 import {principleWork} from './principle-work.js';
 import {OPENROUTER_GENERATION_MODEL} from './openrouter-http.js';
 import { writePrincipleStatementChain } from "./statement-chains.js";
-import { GROUP_INPUT_POLICY } from "./group-inputs.js";
-import { groupEntrySupportCurrent, groupPrincipleReadable, groupSignalReadable, projectGroupEntries } from "./group-output.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
@@ -200,31 +195,15 @@ async function loadCitationEvidence(
   for (const id of signalIds) {
     out.set(id, { signalId: id, evidenceAt: [], tomVersionIds: [] });
   }
-  const [profile] = await db.select({ groupId: profiles.groupId }).from(profiles)
-    .where(eq(profiles.id, profileId)).limit(1);
-
   // Dated by the CAPTURE that witnesses it, not by when the link was noticed
   // — same rule as confidence and selection. The span describes the
   // theme's lifetime in the profile's history; a retroactively cited old save
   // must widen it with its own date, not collapse it to the day of noticing.
-  const evidenceRows = profile?.groupId ? await db
-    .select({ signalId: signalEvidence.signalId, inspirationId: inspirations.id, createdAt: inspirations.createdAt, source: inspirations.source })
-    .from(signalEvidence)
-    .innerJoin(signals, eq(signals.id, signalEvidence.signalId))
-    .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
-    .where(
-      and(eq(signalEvidence.profileId, profileId), inArray(signalEvidence.signalId, signalIds), evidenceSupportCurrent(),
-        ...(profile?.groupId ? [eq(inspirations.visibility, "public"), sql`EXISTS (
-          SELECT 1 FROM group_members m WHERE m.group_id = ${profile.groupId}::uuid
-          AND m.profile_id = ${inspirations.profileId})`] : [])),
-    ) : [];
-  const witnesses=profile?.groupId?new Map<string,ConfidenceEvidence[]>():
-    (await loadSignalEvidence(db,profileId,signalIds)).witnesses;
-  for(const row of evidenceRows){const list=witnesses.get(row.signalId)??[];list.push({createdAt:row.createdAt,source:row.source,
-    lineage:{kind:'inspiration',unitId:row.inspirationId,originIds:[row.inspirationId]}});witnesses.set(row.signalId,list);}
+  // (A room mind's public-member evidence branch retired with the room engine.)
+  const witnesses=(await loadSignalEvidence(db,profileId,signalIds)).witnesses;
   for(const [id,rows] of witnesses)out.get(id)!.evidenceAt=selectIndependentEvidence(rows).map(row=>row.createdAt);
 
-  if(!profile?.groupId){
+  {
     // Metadata only. Personal revisions include authorized reflection/media
     // edits; review material hashes include the answer and referenced sources.
     // Neither a support check timestamp nor an audit version belongs here.
@@ -277,13 +256,10 @@ async function loadCitationEvidence(
     .innerJoin(topOfMinds, eq(topOfMinds.id, topOfMindEntries.topOfMindId))
     .where(
       and(
-        profile?.groupId
-          ? eq(topOfMinds.groupId, profile.groupId)
-          : eq(topOfMinds.profileId, profileId),
+        eq(topOfMinds.profileId, profileId),
         inArray(topOfMindEntrySignals.signalId, signalIds),
         citationStatementCurrent('top_of_mind_entry_signals'),
-        profile?.groupId ? groupEntrySupportCurrent(profile.groupId) : personalEntrySupportCurrent(profileId),
-        ...(profile?.groupId ? [eq(topOfMindEntries.inputPolicy, GROUP_INPUT_POLICY)] : []),
+        personalEntrySupportCurrent(profileId),
       ),
     );
   for (const row of tomRows) {
@@ -321,17 +297,26 @@ export interface PrincipleGenerationDependencies {
   expectedMaterialKey?:string;
 }
 
-/** Room signals must pass the same current-member visibility gate as the wall. */
+/** The profile's own readable active signals and their citation evidence. */
 export async function loadPrincipleMaterial(db: WakaDb | WakaTx, profileId: string) {
-  const [profile] = await db.select({ groupId: profiles.groupId, preferredLocale: profiles.preferredLocale }).from(profiles)
+  const [profile] = await db.select({ preferredLocale: profiles.preferredLocale, type: profiles.type }).from(profiles)
     .where(eq(profiles.id, profileId)).limit(1);
+  /* A room's mind: its principles retired with the room engine. Decided on
+     this same profile read, before any signal or evidence is loaded. */
+  const groupProfile = profile?.type === "group";
+  if (groupProfile) {
+    const evidence = new Map<string, CitationEvidence>();
+    return { activeSignals: [] as Array<{ id: string; statement: string; lastEvidenceAt: Date | null; updatedAt: Date }>,
+      evidence, groupProfile, preferredLocale: profile?.preferredLocale ?? "en-US",
+      eligibility: computeCitationEligibility([], new Date()) };
+  }
   const rows = await db.select({ id: signals.id, statement: signals.statement,
     lastEvidenceAt: signals.lastEvidenceAt, updatedAt: signals.updatedAt })
     .from(signals).where(and(eq(signals.profileId, profileId), eq(signals.status, "active"),
-      ...(profile?.groupId ? [groupSignalReadable(profile.groupId)] : [personalSignalReadable(profileId)])));
+      personalSignalReadable(profileId)));
   const activeSignals = rows;
   const evidence = await loadCitationEvidence(db, profileId, activeSignals.map((row) => row.id));
-  return { activeSignals, evidence, groupId: profile?.groupId ?? null,
+  return { activeSignals, evidence, groupProfile,
     preferredLocale: profile?.preferredLocale ?? "en-US",
     eligibility: computeCitationEligibility([...evidence.values()], new Date()) };
 }
@@ -361,7 +346,7 @@ export async function refreshPrinciplesForProfile(
   // The cheap gate: active signals with their longevity stats. Nearly every
   // night ends here, with zero model calls.
   const material=await loadPrincipleMaterial(db,input.profileId);
-  const { activeSignals, evidence, groupId } = material;
+  const { activeSignals, evidence } = material;
   if(deps.expectedMaterialKey&&deps.expectedMaterialKey!==principleMaterialKey(material))return {...none,status:'superseded'};
   if (activeSignals.length < bar("SIGNALS")) return none;
 
@@ -377,16 +362,14 @@ export async function refreshPrinciplesForProfile(
   const preferredLocale = normalizeSupportedLocale(profileRow?.preferredLocale);
 
   const existing = await db
-    .select({ ...getTableColumns(principles), supportCurrent: groupId
-      ? groupPrincipleReadable(groupId, PRINCIPLE_MIN_SIGNALS) : personalPrincipleSupportCurrent(input.profileId, PRINCIPLE_MIN_SIGNALS) })
+    .select({ ...getTableColumns(principles), supportCurrent: personalPrincipleSupportCurrent(input.profileId, PRINCIPLE_MIN_SIGNALS) })
     .from(principles)
-    .where(and(eq(principles.profileId, input.profileId),
-      ...(groupId ? [eq(principles.inputPolicy, GROUP_INPUT_POLICY)] : []))).orderBy(asc(principles.rank),asc(principles.id));
+    .where(eq(principles.profileId, input.profileId)).orderBy(asc(principles.rank),asc(principles.id));
 
   const [liveTom] = await db
     .select({ id: topOfMinds.id })
     .from(topOfMinds)
-    .where(and(groupId ? eq(topOfMinds.groupId, groupId) : eq(topOfMinds.profileId, input.profileId), eq(topOfMinds.status, "live")))
+    .where(and(eq(topOfMinds.profileId, input.profileId), eq(topOfMinds.status, "live")))
     .limit(1);
   const storedEntries = liveTom
     ? await db
@@ -394,9 +377,7 @@ export async function refreshPrinciplesForProfile(
         .from(topOfMindEntries)
         .where(eq(topOfMindEntries.topOfMindId, liveTom.id))
     : [];
-  const currentEntries = groupId
-    ? (await projectGroupEntries(db, groupId, storedEntries)).entries
-    : (await projectPersonalEntries(db, input.profileId, storedEntries)).entries.filter((entry) => !entry.supportChanged);
+  const currentEntries = (await projectPersonalEntries(db, input.profileId, storedEntries)).entries.filter((entry) => !entry.supportChanged);
 
   const focus=currentEntries.length?await db.select({id:topOfMindEntrySignals.signalId}).from(topOfMindEntrySignals)
     .where(inArray(topOfMindEntrySignals.entryId,currentEntries.map(row=>row.id))):[];
@@ -422,8 +403,7 @@ export async function refreshPrinciplesForProfile(
     })),
     currentEntries: currentEntries.map((row) => ({ body: row.body })),
   },new Set(focus.flatMap(row=>row.id?[row.id]:[])));
-  const [member]=groupId&&!deps.billingProfileId?await db.select({id:groupMembers.profileId}).from(groupMembers).where(eq(groupMembers.groupId,groupId)).orderBy(asc(groupMembers.profileId)).limit(1):[];
-  const billingProfileId=deps.billingProfileId??member?.id??input.profileId;
+  const billingProfileId=deps.billingProfileId??input.profileId;
   const inputHash=createHash('sha256').update(JSON.stringify({profileId:input.profileId,policy:'principle-work-v1',
     provider:provider.name??'injected',models:provider.name==='openrouter'
       ?[process.env.WAKA_MODEL_PRINCIPLES?.trim()||OPENROUTER_GENERATION_MODEL,process.env.WAKA_MODEL_PRINCIPLE_JUDGE?.trim()||OPENROUTER_GENERATION_MODEL]
@@ -549,7 +529,7 @@ export async function refreshPrinciplesForProfile(
           id: mintedId,
           profileId: input.profileId,
           statement: candidate.statement,
-          inputPolicy: groupId ? GROUP_INPUT_POLICY : null,
+          inputPolicy: null,
           type: candidate.type,
           state: "held",
           origin: "minted",
@@ -611,14 +591,13 @@ async function attachCitations(
     await db.update(principleSignals).set({ statementRevision: revisions.get(signalId), principleStatementRevision: parent.revision })
       .where(and(eq(principleSignals.profileId, profileId), eq(principleSignals.principleId, principleId), eq(principleSignals.signalId, signalId)));
   }
-  const [profile] = await db.select({ groupId: profiles.groupId }).from(profiles).where(eq(profiles.id, profileId)).limit(1);
   // A fresh matching candidate supplies current grounding. Retain other
   // current citations; stale ones no longer explain this renewed statement.
   await db.delete(principleSignals).where(and(eq(principleSignals.profileId, profileId), eq(principleSignals.principleId, principleId), sql`
     (coalesce(${principleSignals.principleStatementRevision}, 1) <> ${parent.revision} OR
     NOT EXISTS (SELECT 1 FROM signals WHERE signals.id = ${principleSignals.signalId}
       AND ${citationStatementCurrent('principle_signals')}
-      AND ${profile?.groupId ? groupSignalReadable(profile.groupId) : personalSignalReadable(profileId)}))`));
+      AND ${personalSignalReadable(profileId)}))`));
   const inserted = await db
     .insert(principleSignals)
     .values(signalIds.map((signalId) => ({ profileId, principleId, signalId, statementRevision: revisions.get(signalId), principleStatementRevision: parent.revision })))
@@ -638,13 +617,12 @@ export async function promoteIfDemonstrated(
   principleId: string,
   now: Date,
 ): Promise<boolean> {
-  const [profile] = await db.select({ groupId: profiles.groupId }).from(profiles).where(eq(profiles.id, profileId)).limit(1);
   const cited = await db
     .select({ signalId: principleSignals.signalId })
     .from(principleSignals)
     .innerJoin(signals, eq(signals.id, principleSignals.signalId))
     .where(and(eq(principleSignals.principleId, principleId), eq(signals.status, "active"),
-      citationStatementCurrent('principle_signals'), profile?.groupId ? groupSignalReadable(profile.groupId) : personalSignalReadable(profileId)));
+      citationStatementCurrent('principle_signals'), personalSignalReadable(profileId)));
   const evidence = await loadCitationEvidence(
     db,
     profileId,

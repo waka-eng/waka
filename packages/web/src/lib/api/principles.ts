@@ -39,7 +39,6 @@ export interface ApiPrinciple {
 }
 
 export interface ApiPrincipleStatus {
-  restricted?: boolean;
   supportPending?: boolean;
   phase: "waiting" | "pending" | "processing" | "ready" | "failed";
   /** The latest reading or principles job failed (see `readingPausedFor` in

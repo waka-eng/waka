@@ -188,7 +188,7 @@ export function registerReflectionRoutes(
         }).returning(reflectionSelection);
         if (!row) throw new Error('Failed to create reflection');
         const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: parent.id,
-          reason: "edited", changedSource: "reflection" }, tx);
+          reason: "edited" }, tx);
         return { inspirationId: parent.id, reflectionId: row.id, processing: processing.receipt,
           response: { reflection: serializeReflection(row), processing: processing.receipt } };
       }, (tx, record) => readSavedReflection(tx, target.profileId, record));
@@ -294,7 +294,7 @@ export function registerReflectionRoutes(
       )
       .returning({ id: reflections.id });
       if (row) await requestSignalDerivation({ profileId: target.profileId, inspirationId: idCheck.data,
-        reason: "edited", changedSource: "reflection" }, tx);
+        reason: "edited" }, tx);
       return row;
     });
 

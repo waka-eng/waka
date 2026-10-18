@@ -67,7 +67,6 @@ import { normalizeSupportedLocale } from "../lib/locales.js";
 import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 import { loadPrincipleStatus, ReadingRetryThrottled, requestPrincipleRefresh } from "../lib/principle-status.js";
-import { groupPrincipleReadable, groupSignalReadable } from "../lib/group-output.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -127,13 +126,11 @@ export interface PrincipleView {
 export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise<PrincipleView[]> {
   // One statement owns wording, support, verdict and examples. Besides saving
   // round trips, this cannot stamp old wording with newer citations.
-  const groupId=sql`${profiles.groupId}`;
-  const support=sql<boolean>`CASE WHEN ${profiles.groupId} IS NULL
-    THEN ${personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)}
-    ELSE ${groupPrincipleReadable(groupId,PRINCIPLE_MIN_SIGNALS)} END`;
-  const readable=sql<boolean>`CASE WHEN ${profiles.groupId} IS NULL
-    THEN ${personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)}
-    ELSE ${groupPrincipleReadable(groupId,PRINCIPLE_MIN_SIGNALS)} END`;
+  // Personal and agent profiles only (group_id IS NULL). A room mind's
+  // principles were served by the room engine's predicates, retired with it;
+  // a mind never resolves through this scope, and is refused here regardless.
+  const support=sql<boolean>`(${profiles.groupId} IS NULL AND ${personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)})`;
+  const readable=sql<boolean>`(${profiles.groupId} IS NULL AND ${personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)})`;
   type Citation={id:string;statement:string;current:boolean|null;examples:Array<{text:string;createdAt:string}>;
     reviewExamples:Array<{answerId:string;sessionId:string;preview:string;createdAt:string}>};
   const rows=await db.select({...getTableColumns(principles),supportCurrent:support,
@@ -144,8 +141,7 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
     citations:sql<Citation[]>`COALESCE((SELECT jsonb_agg(c) FROM (
       SELECT ${signals.id} AS id,${signals.statement} AS statement,
         (${citationStatementCurrent('principle_signals')} AND
-          CASE WHEN ${profiles.groupId} IS NULL THEN ${personalSignalReadable(profileId)}
-            ELSE ${groupSignalReadable(groupId)} END
+          ${personalSignalReadable(profileId)}
           AND ${citationBodyCurrent('principle_signals','principles','principle_statement_revision','statement_revision')}) AS current,
         COALESCE((SELECT jsonb_agg(x) FROM (
           SELECT left(i.text,240) AS text,i.created_at AS "createdAt"

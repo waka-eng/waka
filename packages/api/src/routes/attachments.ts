@@ -837,7 +837,7 @@ attachmentsRoutes.post("/", async (c) => {
     const [row] = await tx.insert(attachments).values(rowToInsert).returning(attachmentSelection);
     if (row?.enrichmentStatus === "pending") await enqueueEnrichAttachment(parent.profileId, row.id, parent.id, tx);
     else if (row) await requestSignalDerivation({ profileId: parent.profileId, inspirationId: parent.id,
-      reason: "edited", changedSource: "inspiration" }, tx);
+      reason: "edited" }, tx);
     return { row };
   });
   if ('refused' in finalized && finalized.refused) return c.json({ error: finalized.refused.message, code: finalized.refused.code }, finalized.refused.status);

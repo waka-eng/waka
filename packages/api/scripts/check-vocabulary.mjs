@@ -451,16 +451,6 @@ const ALLOWED = [
       "permission matrix says 'read + capture only' — so the honest fix keeps " +
       "the verb and adds the noun it acts on",
   },
-  {
-    name: "sharedIntoARoomYouAreIn",
-    files: ["src/routes/feedback.ts", "src/routes/feedback.test.ts"],
-    disposition: "rename",
-    to: "sharedIntoAGroupYouAreIn",
-    why:
-      "a field on the input to `mayAnswerSignal`, the extracted permission " +
-      "rule docs/map.md holds up as an example of a rule a test can run. It " +
-      "would be a shame for the example to be the thing carrying the old word",
-  },
 ];
 
 /* Indexed by name for the scan, and by identity for the stale check below. */
