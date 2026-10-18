@@ -13,6 +13,9 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
      unconfirmed, Send stays off, and the watch keeps asking with backoff
      while the panel says it is still waiting. */
   const [behind,setBehind]=useState(false);
+  /* A 401 stops the watch without ending it: "could not check", not
+     "trying again", until Check again (or the session-expired door). */
+  const [stopped,setStopped]=useState(false);
   const deliver=useRef(onConversation);deliver.current=onConversation;
   const alive=useRef(true),mutation=useRef<AbortController|null>(null);
   const delivered=useRef('');
@@ -21,7 +24,7 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;mutation.current?.abort();};},[profileId,id]);
   useEffect(()=>{
     if(!id||!enabled)return;const controller=new AbortController();let timer:number|undefined,polls=0,failures=0,older=0;
-    setWaiting(false);setError(false);setTerminal(null);setBehind(false);
+    setWaiting(false);setError(false);setTerminal(null);setBehind(false);setStopped(false);
     const read=async()=>{
       if(controller.signal.aborted||document.hidden)return;
       const request=new AbortController(),abort=()=>request.abort();controller.signal.addEventListener('abort',abort,{once:true});const deadline=window.setTimeout(abort,15000);
@@ -52,7 +55,10 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
            unconfirmed. Any other 4xx is an error, not an answer: it says so
            at once (with Check again) and keeps to the retry path below. */
         if(reason instanceof ApiError&&(reason.status===404||reason.status===410)){setError(false);setTerminal('gone');return;}
-        if(reason instanceof ApiError&&reason.status===401)return;
+        /* 401: the session-expired flow takes over when the session really
+           ended; this stops asking but still says it could not check (with
+           Check again), so a 401 that brings no door is never silence. */
+        if(reason instanceof ApiError&&reason.status===401){setError(true);setStopped(true);return;}
         if(reason instanceof ApiError&&reason.status>=400&&reason.status<500)failures=Math.max(failures,1);
         if(reason instanceof Error&&(reason.message==='Older reply state'||reason.message==='Older conversation')){
           older+=1;if(older>=2)setBehind(true);
@@ -83,5 +89,5 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
     }catch{if(alive.current)setError(true);}
     finally{window.clearTimeout(deadline);if(alive.current){setBusy(false);check();}}
   };
-  return {state,waiting,error,terminal,behind,busy,check,stop};
+  return {state,waiting,error,terminal,behind,stopped,busy,check,stop};
 }

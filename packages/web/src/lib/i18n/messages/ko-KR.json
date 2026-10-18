@@ -218,6 +218,7 @@
   "worldConversationReadFailed": "대화를 열지 못했어요.",
   "worldConversationRepliesUnavailable": "지금은 답변을 받을 수 없어요. 보낸 메시지는 그대로 저장돼요.",
   "worldConversationReplyCheckFailed": "답변 진행 상황을 확인하지 못했어요. 다시 확인하고 있어요…",
+  "worldConversationReplyCheckStopped": "답변 진행 상황을 확인하지 못했어요.",
   "worldConversationReplyGone": "이 답변을 더 이상 찾을 수 없어요.",
   "worldConversationReplyBehind": "최신 답변을 아직 기다리고 있어요.",
   "worldConversationReload": "대화 다시 불러오기",

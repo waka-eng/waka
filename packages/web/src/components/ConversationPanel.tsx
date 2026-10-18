@@ -513,6 +513,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     : null;
   const replyNotice=reply.terminal==='gone'?'worldConversationReplyGone' as const
     :reply.behind?'worldConversationReplyBehind' as const
+    :reply.stopped?'worldConversationReplyCheckStopped' as const
     :reply.error?'worldConversationReplyCheckFailed' as const
     :reply.state?.retryAfter&&reply.state.phase!=='ready'?'worldConversationReplyLimit' as const
     :reply.state?.phase==='failed'?'worldConversationReplyFailed' as const

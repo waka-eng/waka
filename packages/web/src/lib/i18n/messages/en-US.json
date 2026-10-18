@@ -218,6 +218,7 @@
   "worldConversationReadFailed": "This conversation couldn’t be opened.",
   "worldConversationRepliesUnavailable": "Replies aren’t available right now. Your messages are still saved.",
   "worldConversationReplyCheckFailed": "Couldn’t check reply progress. Trying again…",
+  "worldConversationReplyCheckStopped": "Couldn’t check reply progress.",
   "worldConversationReplyGone": "This reply can’t be found anymore.",
   "worldConversationReplyBehind": "Still waiting for the latest reply.",
   "worldConversationReload": "Reload conversation",

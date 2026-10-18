@@ -374,14 +374,16 @@ it.each([400,403])('treats a %i reply read as an error, not gone: Check again of
   await tick(15000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length).toBeGreaterThan(calls);
 });
-it('leaves a 401 reply read to the session-expired flow: no gone notice, Send off, no more asking',async()=>{
+it('on a 401 reply read stops asking but says it could not check, with Check again, and keeps Send off',async()=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:401,message:'Signed out'}));await mount();await tick(0);
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
   await tick(15000);await tick(15000);
-  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBe(calls);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length,'a 401 kept being polled').toBe(calls);
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
-  expect(host.textContent).not.toContain('Couldn’t check reply progress.');
+  expect(host.textContent,'a 401 left the reply silently unconfirmed').toContain('Couldn’t check reply progress.');
+  expect(host.textContent,'it claims to be retrying while it has stopped').not.toContain('Trying again');
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
   await type('Still there?');
   expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
 });
