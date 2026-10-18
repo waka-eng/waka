@@ -20,7 +20,7 @@ beforeEach(() => {
     locale: 'en-US', public: false, ready: true, fileDraftsAvailable: true, busy: false, error: '', uploadingId: null, inputRef: null,
     save: { phase: 'idle', pending: null, busy: false, start: vi.fn(), retry: vi.fn(), check: vi.fn(), dismiss: vi.fn(), resetInvalid: vi.fn(), editRejected: vi.fn() },
     recording: { phase: 'idle', seconds: 0, error: '', notice: '', start: vi.fn(), stop: vi.fn(), cancel: vi.fn() },
-    onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(), onRemove: vi.fn(), onVisibility: vi.fn(), onClose: vi.fn(), onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(),
+    onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(), onRemove: vi.fn(), onVisibility: vi.fn(), onClose: vi.fn(), onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(), draftConflict: false,
   };
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
@@ -239,6 +239,21 @@ it('retains invalid/extra selections with removal controls and blocks saving unt
   expect(host.querySelectorAll('.jar-tile--wrong')).toHaveLength(1);
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Remove Photo 5.png"]')!.click());
   expect(props.onRemove).toHaveBeenCalledWith('5');
+});
+it('offers a separate draft in Korean when the draft changed in another tab', async () => {
+  /* The offer used to appear only if the error's TEXT contained "another
+     tab" — and errors are said in the reader's language now, so a Korean
+     reader was never offered the way out. It answers a flag. */
+  props.locale = 'ko-KR'; props.media = [];
+  props.error = '다른 탭에서 이 초안이 바뀌었어요. 쓰던 내용은 그대로 남아 있어요.';
+  props.draftConflict = true;
+  await mount();
+  const offer = [...host.querySelectorAll('button')].find(button => button.textContent === '별도 초안으로 보관');
+  expect(offer, 'no way to keep a separate draft').toBeDefined();
+  await act(async () => offer!.click());
+  expect(props.onForkDraft).toHaveBeenCalledOnce();
+  props.draftConflict = false; await mount();
+  expect([...host.querySelectorAll('button')].some(button => button.textContent === '별도 초안으로 보관')).toBe(false);
 });
 it('says a stored file problem and a failed upload in the reader’s language', async () => {
   /* Both are stored on the durable draft as a key or a flag, not a sentence:

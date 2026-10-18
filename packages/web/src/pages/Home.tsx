@@ -9702,7 +9702,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              `openOverHome` writes ONE destination, which is why pressing a
              place from inside the notepad does not need a close first. */
           onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
-          onKeyDown={onMouthKey} onForkDraft={() => { void composerDraft.fork().catch(reason => setMouthNote(String(reason))); }} /> : null}
+          onKeyDown={onMouthKey} onForkDraft={() => { void composerDraft.fork().catch(reason => setMouthNote(say(draftProblem(reason)))); }}
+          draftConflict={composerDraft.error === 'worldDraftChangedElsewhere' || mouthNote === say('worldDraftChangedElsewhere')} /> : null}
       </> : null}
 
       {/* SECTION S IS GONE. The sky — a whole viewport above headquarters

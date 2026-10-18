@@ -256,6 +256,11 @@ export function InspirationComposer(props: {
      the dock, which `way-out.test.ts` is the gate for. */
   onClose: () => void; onSubmit: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
+  /** True when the draft changed in another tab — the one state the "keep as
+      a separate draft" button answers. A flag, not a match on the error's
+      words: those are said in the reader's language, and Korean never
+      contained "another tab". */
+  draftConflict: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement>(null), linkInput = useRef<HTMLInputElement>(null);
   const [addingLink, setAddingLink] = useState(Boolean(props.linkText));
@@ -470,7 +475,7 @@ export function InspirationComposer(props: {
         below is the only way out of the one error that has an action, and a
         button cannot live in a status line. It renders only with that
         error, so it is absent from every normal note. */}
-    {props.error.includes('another tab') ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
+    {props.draftConflict ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
     </div>
     </NotePage>
     {/* THE PILL IN THE BOTTOM-LEFT CORNER IS GONE, AND SO IS THE CORNER.
