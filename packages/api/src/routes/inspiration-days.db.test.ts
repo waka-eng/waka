@@ -10,6 +10,8 @@
  *      sending the whole history to say nothing happened in it.
  *   3. The window is respected — `days=N` cannot reach further back than N.
  *   4. One person's days are never in another's calendar.
+ *   5. A day is the caller's day: grouped in the zone it names as `tz`, and
+ *      the window starts at that zone's midnight of its oldest day.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): the auth middleware only, as every route
  * suite here does — the session is the one thing a test cannot produce by
@@ -159,6 +161,93 @@ describe("how much was kept on each day", () => {
 
     expect(await daysFor(mine)).toHaveLength(1);
     expect(await daysFor(theirs)).toHaveLength(0);
+  });
+
+  it("groups by the caller's own day, not Greenwich's", async () => {
+    /* 20:00 UTC yesterday is 05:00 today in Seoul. Grouped by UTC this save
+       sat on the date before the one a Korean reader made it on. */
+    const person = await seedPerson("zone");
+    await t.sql`
+      INSERT INTO inspirations (profile_id, text, created_at)
+      VALUES (
+        ${person.profileId},
+        'kept at dawn in Seoul',
+        (date_trunc('day', now() AT TIME ZONE 'UTC') - interval '4 hours') AT TIME ZONE 'UTC'
+      )`;
+
+    const [utc] = await daysFor(person, "?tz=UTC");
+    const [seoul] = await daysFor(person, "?tz=Asia%2FSeoul");
+    const nextDay = new Date(Date.parse(`${utc!.day}T00:00:00Z`) + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+    expect(seoul!.day).toBe(nextDay);
+    expect(await daysFor(person)).toEqual([utc]); /* no zone named is UTC */
+  });
+
+  it("falls back to UTC for a zone it does not know, and for one that is not a zone", async () => {
+    const person = await seedPerson("unknown-zone");
+    await keptDaysAgo(person, 1, 1);
+
+    expect(await daysFor(person, "?tz=Mars%2FOlympus_Mons")).toEqual(await daysFor(person));
+    /* and it SAYS it fell back, so the calendar can draw UTC dates to match */
+    const fellBack = await appFor(person).request("/api/inspiration-days?tz=Mars%2FOlympus_Mons");
+    expect(((await fellBack.json()) as { zone: string }).zone).toBe("UTC");
+    const kept = await appFor(person).request("/api/inspiration-days?tz=Asia%2FSeoul");
+    expect(((await kept.json()) as { zone: string }).zone).toBe("Asia/Seoul");
+    for (const probe of ["UTC'%3B--", "a".repeat(65), "%2F%2F"]) {
+      const response = await appFor(person).request(`/api/inspiration-days?tz=${probe}`);
+      expect(response.status, probe).toBe(200);
+      expect(((await response.json()) as { zone: string }).zone, probe).toBe("UTC");
+    }
+  });
+
+  it("says outright whether it fell back to UTC", async () => {
+    const person = await seedPerson("zone-fallback-flag");
+    await keptDaysAgo(person, 1, 1);
+    const reply = async (query: string) =>
+      (await (await appFor(person).request(`/api/inspiration-days${query}`)).json()) as { zone: string; fallback: boolean };
+
+    expect(await reply("")).toMatchObject({ zone: "UTC", fallback: true });
+    expect(await reply("?tz=UTC")).toMatchObject({ zone: "UTC", fallback: false });
+    expect(await reply("?tz=Mars%2FOlympus_Mons")).toMatchObject({ zone: "UTC", fallback: true });
+    expect(await reply("?tz=UTC'%3B--")).toMatchObject({ zone: "UTC", fallback: true });
+    expect(await reply("?tz=Asia%2FSeoul")).toMatchObject({ zone: "Asia/Seoul", fallback: false });
+    /* an old name answered by its new one is NOT a fallback */
+    expect((await reply("?tz=Asia%2FCalcutta")).fallback).toBe(false);
+  });
+
+  it("knows a zone by its old name and by its spelling in another case, and says the one used", async () => {
+    const person = await seedPerson("zone-links");
+    await keptDaysAgo(person, 1, 1);
+    const zoneFor = async (tz: string) =>
+      ((await (await appFor(person).request(`/api/inspiration-days?tz=${encodeURIComponent(tz)}`)).json()) as { zone: string }).zone;
+
+    expect(await zoneFor("Asia/Calcutta")).toMatch(/^Asia\/(Kolkata|Calcutta)$/);
+    expect(await zoneFor("Europe/Kiev")).toMatch(/^Europe\/(Kyiv|Kiev)$/);
+    expect(await zoneFor("America/Buenos_Aires")).toMatch(/^America\/(Argentina\/)?Buenos_Aires$/);
+    expect(await zoneFor("asia/seoul")).toBe("Asia/Seoul");
+  });
+
+  it("starts the window at local midnight of its oldest day", async () => {
+    /* `days=2` is today and yesterday, whole. Measured as 48 hours back from
+       this instant it cut yesterday short at the front and reached into the
+       day before at the back — whichever the clock happened to say. */
+    const person = await seedPerson("midnight");
+    const at = async (offset: string, text: string) => t.sql`
+      INSERT INTO inspirations (profile_id, text, created_at)
+      VALUES (
+        ${person.profileId}, ${text},
+        (date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') - interval '1 day' + ${offset}::interval)
+          AT TIME ZONE 'Asia/Seoul'
+      )`;
+    await at("1 minute", "first minute of yesterday");
+    await at("-1 minute", "last minute of the day before");
+
+    const days = await daysFor(person, "?days=2&tz=Asia%2FSeoul");
+
+    expect(days).toHaveLength(1);
+    expect(days[0]!.kept).toBe(1);
   });
 
   it("refuses a window it cannot serve", async () => {

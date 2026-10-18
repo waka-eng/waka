@@ -37,7 +37,7 @@ import { AuthoredSaveNotice } from './AuthoredSaveNotice';
 import {inspirationWithPendingLink} from '../lib/inspiration-input';
 import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
 import { fileSizeWords } from '../lib/api/file-accept';
-import { formatMessage, t, type SupportedLocale } from '../lib/locales';
+import { formatMessage, isMessageKey, t, type SupportedLocale } from '../lib/locales';
 import { attachmentLabel } from '../lib/attachment-label';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { useAuthoredSave } from '../lib/use-authored-save';
@@ -82,7 +82,7 @@ import type { useAudioRecording } from '../lib/use-audio-recording';
  */
 function MediaTile({
   item, name, disabled, recording, uploading, onRemove, onRetry,
-  removeLabel, retryLabel, playLabel, pauseLabel,
+  removeLabel, retryLabel, playLabel, pauseLabel, uploadFailedLabel, problemLabel,
 }: {
   item: InspirationDraftMedia;
   /** What to call it: its own name, or "Photo" / "File" / "Recording" when
@@ -113,6 +113,11 @@ function MediaTile({
      the same reason: Korean puts the verb last. */
   playLabel: string;
   pauseLabel: string;
+  /** What a failed upload says, already in the reader's language. */
+  uploadFailedLabel: string;
+  /** Why this file cannot be kept (`validationError`), already said in the
+      reader's language; empty when nothing is wrong with it. */
+  problemLabel: string;
 }) {
   const [url, setUrl] = useState('');
   const [failedPreview, setFailedPreview] = useState(false);
@@ -131,7 +136,9 @@ function MediaTile({
      tile never carries two marks. A file the server refused and a file too
      large are both "this one needs attention"; which it is belongs in the
      tooltip, not in a second badge. */
-  const wrong = item.validationError || item.uploadError || '';
+  /* `uploadError` is a flag, said in the reader's language (see
+     `lib/inspiration-media-upload`), never printed as stored. */
+  const wrong = problemLabel || (item.uploadError ? uploadFailedLabel : '');
   const retryable = Boolean(item.uploadError) && !item.validationError && !uploading;
   const clock = seconds === null ? '' :
     `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
@@ -249,6 +256,11 @@ export function InspirationComposer(props: {
      the dock, which `way-out.test.ts` is the gate for. */
   onClose: () => void; onSubmit: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
+  /** True when the draft changed in another tab — the one state the "keep as
+      a separate draft" button answers. A flag, not a match on the error's
+      words: those are said in the reader's language, and Korean never
+      contained "another tab". */
+  draftConflict: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement>(null), linkInput = useRef<HTMLInputElement>(null);
   const [addingLink, setAddingLink] = useState(Boolean(props.linkText));
@@ -423,6 +435,9 @@ export function InspirationComposer(props: {
         retryLabel={formatMessage(props.locale, 'worldComposerRetryFile', { name })}
         playLabel={formatMessage(props.locale, 'worldComposerPlayFile', { name })}
         pauseLabel={formatMessage(props.locale, 'worldComposerPauseFile', { name })}
+        uploadFailedLabel={say('worldComposerUploadFailed')}
+        /* stored as a key; a draft from before that still holds a sentence */
+        problemLabel={!item.validationError ? '' : isMessageKey(item.validationError) ? say(item.validationError) : item.validationError}
         onRemove={() => props.onRemove(item.id)}
         onRetry={() => props.onRetryFile(item.id)} />;
     })}</ul> : null}
@@ -460,7 +475,7 @@ export function InspirationComposer(props: {
         below is the only way out of the one error that has an action, and a
         button cannot live in a status line. It renders only with that
         error, so it is absent from every normal note. */}
-    {props.error.includes('another tab') ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
+    {props.draftConflict ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
     </div>
     </NotePage>
     {/* THE PILL IN THE BOTTOM-LEFT CORNER IS GONE, AND SO IS THE CORNER.

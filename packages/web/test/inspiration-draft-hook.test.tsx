@@ -8,6 +8,7 @@ import { Blob } from 'node:buffer';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useInspirationDraft } from '../src/lib/use-inspiration-draft';
+import { forkDraftAndClear } from '../src/lib/draft-problem';
 import { loadInspirationDraft, writeInspirationDraft } from '../src/lib/inspiration-draft-store';
 
 const scope = { accountId: 'draft-owner', profileId: 'draft-profile' };
@@ -60,6 +61,9 @@ it('offers a separate draft after a competing tab wins without overwriting it', 
     await expect(hook.flush()).rejects.toThrow('another tab');
   });
   expect(hook.draft.text).toBe('My new words');
+  /* a catalogue key, said by the surface in the reader's language — the
+     store's own English never reaches the screen */
+  expect(hook.error).toBe('worldDraftChangedElsewhere');
   await act(async () => hook.fork());
   expect(hook.draft.id).not.toBe(original.id); expect(hook.error).toBe('');
   expect((await loadInspirationDraft(scope, original.id))?.text).toBe('Other tab');
@@ -76,4 +80,38 @@ it('keeps the old clip until an explicit replacement choice and never reuses its
   await act(async () => { hook.setRecordingCandidate(candidate); hook.chooseRecording(true); await hook.flush(); });
   expect(hook.draft.media).toHaveLength(1); expect(hook.draft.media[0]?.id).toBe('new'); expect(hook.draft.media[0]?.uploaded).toBeUndefined();
   expect((await loadInspirationDraft(scope, hook.draft.id))?.recordingCandidate).toBeUndefined();
+});
+
+it('forks once when the separate-draft offer is pressed twice, and the conflict note goes with the fork', async () => {
+  await act(async () => { hook.setText('Shared start'); await hook.flush(); });
+  const original = hook.draft;
+  await writeInspirationDraft(scope, { ...original, revision: original.revision + 1, text: 'Other tab' }, original.revision);
+  await act(async () => { hook.setText('Mine'); await expect(hook.flush()).rejects.toThrow('another tab'); });
+
+  let note = { key: 'worldDraftChangedElsewhere', conflict: true };
+  const press = () => forkDraftAndClear({
+    fork: hook.fork,
+    clearConflict: () => { if (note.conflict) note = { key: '', conflict: false }; },
+    sayProblem: key => { note = { key, conflict: key === 'worldDraftChangedElsewhere' }; },
+  });
+  const minted = vi.spyOn(crypto, 'randomUUID');
+  await act(async () => { const first = press(); const second = press(); await Promise.all([first, second]); });
+
+  expect(hook.draft.id).not.toBe(original.id);
+  expect(minted, 'the second press forked the fork').toHaveBeenCalledTimes(1);
+  minted.mockRestore();
+  expect(note.conflict, 'the conflict outlived the fork, so the offer stayed up').toBe(false);
+  expect(hook.error).toBe('');
+  expect((await loadInspirationDraft(scope, hook.draft.id))?.text).toBe('Mine');
+  expect((await loadInspirationDraft(scope, original.id))?.text).toBe('Other tab');
+});
+
+it('keeps a note that is not the conflict, and says a failed fork', async () => {
+  let note = { key: 'worldComposerUploadFailed', conflict: false };
+  const clearConflict = () => { if (note.conflict) note = { key: '', conflict: false }; };
+  const sayProblem = (key: string) => { note = { key, conflict: key === 'worldDraftChangedElsewhere' }; };
+  await forkDraftAndClear({ fork: async () => undefined, clearConflict, sayProblem });
+  expect(note.key).toBe('worldComposerUploadFailed');
+  await forkDraftAndClear({ fork: async () => { throw new Error('disk'); }, clearConflict, sayProblem });
+  expect(note).toEqual({ key: 'worldDraftKeepFailed', conflict: false });
 });

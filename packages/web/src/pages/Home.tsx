@@ -79,6 +79,8 @@ import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
 import { useInspirationProcessing } from '../lib/use-inspiration-processing';
 import { useAuthoredSave } from '../lib/use-authored-save';
 import { useInspirationDraft } from '../lib/use-inspiration-draft';
+import { useSettingsWrites } from '../lib/use-settings-writes';
+import { DraftProblem, draftProblem, forkDraftAndClear } from '../lib/draft-problem';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { attachmentLabel } from '../lib/attachment-label';
@@ -99,7 +101,7 @@ import type { CreateInspirationRequest } from '../lib/api';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
 import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
-import { inspectInspirationPhoto, PHOTO_ACCEPT } from '../lib/inspiration-photo';
+import { inspectInspirationPhoto, PHOTO_ACCEPT, PhotoRefused } from '../lib/inspiration-photo';
 import { uploadInspirationMedia } from '../lib/inspiration-media-upload';
 import { restoreInspirationDraft, settleInspirationDraft } from '../lib/authored-save-drafts';
 import { AuthoredSaveNotice } from '../components/AuthoredSaveNotice';
@@ -186,7 +188,7 @@ import {
   monthTag,
 } from "../lib/words";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
-import type { MessageKey, SupportedLocale } from "../lib/locales";
+import type { MessageKey } from "../lib/locales";
 
 import {
   fetchPrinciples,
@@ -2127,7 +2129,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   useEffect(() => { if (!mouthOpen && recording.phase !== 'idle') void recording.stop(); }, [mouthOpen, recording.phase, recording.stop]);
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
   /** The one honest line: it did not keep. Never a modal, never a silence. */
-  const [mouthNote, setMouthNote] = useState("");
+  const [mouthNoteState, setMouthNoteState] = useState({ text: "", conflict: false });
+  const mouthNote = mouthNoteState.text;
+  /* A note is plain words unless it was said by `sayMouthProblem` below,
+     which also remembers WHICH problem as a flag — the separate-draft offer
+     answers that flag, never a comparison with translated text. */
+  const setMouthNote = useCallback((text: string) => setMouthNoteState({ text, conflict: false }), []);
   /**
    * WHEN THE MOUTH HAS OUTGROWN THE QUICK LINE.
    *
@@ -2398,47 +2405,34 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     window.addEventListener("popstate", popped);
     return () => window.removeEventListener("popstate", popped);
   }, [commitOpenNote]);
-  const [settingsName, setSettingsName] = useState<string | null>(null);
-  const [settingsBusy, setSettingsBusy] = useState(false);
-  const [settingsFailed, setSettingsFailed] = useState(false);
-  const nameTimer = useRef<number | null>(null);
-  useEffect(() => () => { if (nameTimer.current !== null) window.clearTimeout(nameTimer.current); }, []);
   /* The field shows what you typed while you are typing and the account's
      own name the rest of the time, so another tab renaming you is not
      overwritten by a stale field — and nothing is held here that the
      session does not already own. */
   const accountName = auth?.profile?.name ?? '';
-  /* `preferredLocale` RIDES ALONG BECAUSE THE WRITE IS A REPLACE, not a
-     patch: `UpdateProfileInput` requires both, and sending the name alone
-     would reset the language to whatever the server defaults to. The
-     language control below writes through `updatePreferredLocale`, which is
-     the narrow endpoint for exactly that field. */
+  /* TWO BUSY FLAGS, ONE QUEUE — the ordering rules are `useSettingsWrites`'s
+     and are tested there. One `busy` used to cover both writes and disabled
+     both controls, so the name field went inert the moment its own autosave
+     fired, mid-word. The name write locks nothing (it is only announced as
+     busy); the language write locks only the language.
+     `preferredLocale` RIDES ALONG ON A NAME WRITE BECAUSE THE WRITE IS A
+     REPLACE, not a patch: `UpdateProfileInput` requires both. The hook
+     sends the language wanted at the moment of sending, so a name write
+     queued behind a language change cannot put the old language back. */
+  const settingsWrites = useSettingsWrites({
+    accountName,
+    locale,
+    updateName: (name, preferredLocale) => auth ? auth.updateProfile({ name, preferredLocale }).then(viewer => viewer.profile?.name) : Promise.resolve(undefined),
+    updateLocale: next => auth ? auth.updatePreferredLocale(next) : Promise.resolve(),
+    settleMs: NAME_SETTLE_MS,
+  });
   const settingsCard = auth ? {
-    name: settingsName ?? accountName,
-    busy: settingsBusy,
-    failed: settingsFailed,
-    onName: (value: string) => {
-      setSettingsName(value); setSettingsFailed(false);
-      if (nameTimer.current !== null) window.clearTimeout(nameTimer.current);
-      const trimmed = value.trim();
-      /* AN EMPTY NAME IS NOT A RENAME. The field may be empty while somebody
-         clears it to type a new one; writing that would blank the account
-         between two keystrokes. */
-      if (!trimmed || trimmed === accountName) return;
-      nameTimer.current = window.setTimeout(() => {
-        setSettingsBusy(true);
-        void auth.updateProfile({ name: trimmed, preferredLocale: locale })
-          .then(() => setSettingsName(null))
-          .catch(() => setSettingsFailed(true))
-          .finally(() => setSettingsBusy(false));
-      }, NAME_SETTLE_MS);
-    },
-    onLocale: (next: SupportedLocale) => {
-      setSettingsBusy(true); setSettingsFailed(false);
-      void auth.updatePreferredLocale(next)
-        .catch(() => setSettingsFailed(true))
-        .finally(() => setSettingsBusy(false));
-    },
+    name: settingsWrites.name,
+    nameBusy: settingsWrites.nameBusy,
+    localeBusy: settingsWrites.localeBusy,
+    failed: settingsWrites.failed,
+    onName: settingsWrites.onName,
+    onLocale: settingsWrites.onLocale,
     /* ═══ THE PUBLIC PAGE IS NO LONGER OFFERED ════════════════════════
        Founder: "everything regarding public and private should also not be
        a thing in this new experience."
@@ -2471,6 +2465,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const say = useCallback((key: MessageKey) => t(localeRef.current, key), []);
+  /** Says a draft problem on the composer, and flags the one problem that
+      offers a separate draft: this draft changed in another tab. */
+  const sayMouthProblem = useCallback((key: MessageKey) =>
+    setMouthNoteState({ text: say(key), conflict: key === 'worldDraftChangedElsewhere' }), [say]);
   /* ═══ IT STATES THE FACT; THE ACTION CARRIES THE VERB ═════════════════
      Founder, with "No top of mind formed yet. Add more inspirations." sitting
      above a button reading "Add an inspiration": "it's duplicative."
@@ -3235,8 +3233,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       /* the fixture has no server to ask, and a signed-out visitor has no
          business making three requests that will all 401 */
       if (offlineRef.current) return;
+      /* THE SAME GUARD AS THE FIRST READ AND THE RECOVERED-SAVE READ. A save
+         or a delete made while this list was in flight is not in it, and
+         writing it over the field would drop the new memory or bring back the
+         deleted one until the next refresh. A list that raced a mutation is
+         simply not used — the field already holds the newer truth. */
+      const sourceRead = sourceListMutationRef.current;
       void Promise.allSettled([
         loadInspirations(undefined,{scope:storageScope??undefined}).then((field) => {
+          if (sourceListMutationRef.current !== sourceRead) return;
           setInspirations(field.inspirations);
           setFieldBeyond(beyondOf(field));
         }),
@@ -5232,7 +5237,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   // The immutable, owned intent is durable before anything is sent. A newer
   // draft can be written meanwhile, but cannot replace an unresolved save.
   const uploadDraftFiles = async (media: InspirationDraftMedia[], controller: AbortController, current: () => void) => {
-    if (!storageScope) throw new Error('Sign in before uploading a file.');
+    if (!storageScope) throw new DraftProblem('worldComposerUploadFailed');
     await uploadInspirationMedia({ media, profileId: storageScope.profileId, signal: controller.signal,
       assertCurrent: current, uploading: setUploadingMediaId,
       persist: async (id, update) => {
@@ -5250,7 +5255,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const epoch = ++composerEpoch.current, controller = new AbortController(); uploadController.current = controller;
     const current = () => { if (controller.signal.aborted || composerEpoch.current !== epoch) throw new Error('Save owner changed'); };
     try { await composerDraft.flush(); current(); await uploadDraftFiles([item], controller, current); }
-    catch { if (composerEpoch.current === epoch) setMouthNote('Couldn’t upload this file yet. Your draft is still here.'); }
+    /* Said through the same catalogue as a keep: a draft that changed in
+       another tab is that conflict (and offers a separate draft), not "the
+       upload failed". */
+    catch (reason) { if (composerEpoch.current === epoch) sayMouthProblem(draftProblem(reason, 'worldComposerUploadFailed')); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   };
   /* ═══ WHETHER SAVE CAN BE PRESSED, AND WHAT THE BAR IS SAYING ═════════
@@ -5432,12 +5440,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        Nothing that was standing BEFORE the press can outrank it, because the
        press on the microphone clears `mouthNote` itself. */
     || (dictation.firstTime && dictation.listening ? say('worldComposerDictateCloud') : '')
-    || composerDraft.error || recording.error
+    /* both are catalogue keys, said here in the reader's language */
+    || (composerDraft.error ? say(composerDraft.error) : '') || (recording.error ? say(recording.error) : '')
     || (dictation.error === 'dictation-denied' ? say('worldComposerDictateDenied') : '')
     || (dictation.error === 'dictation-failed' ? say('worldComposerDictateFailed') : '')
     || (!composerDraft.ready ? say('worldComposerOpening') : '')
     || (uploadingMediaId ? say('worldComposerUploading') : '')
-    || (recording.phase === 'idle' ? recording.notice : '');
+    || (recording.phase === 'idle' && recording.notice ? say(recording.notice) : '');
 
   const keepIt = useCallback(async () => {
     let text = draftRef.current.trim();
@@ -5497,14 +5506,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         // An unnamed upload is sent unnamed; its label is the reader's to say.
         const name = item.name ? { name: item.name } : {};
         if (item.type === 'link' && item.url) return { type: 'link', url: item.url, ...name };
-        if (!item.uploaded || item.type === 'link') throw new Error('This attachment has not uploaded yet.');
+        if (!item.uploaded || item.type === 'link') throw new DraftProblem('worldComposerNotUploaded');
         return { type: item.type, ...item.uploaded, ...name };
       });
       for (const { url } of inspirationLinks(text)) {
         if (!url) continue;
         if (!attachments.some(item => item.type === 'link' && item.url === url)) attachments.push({ type: 'link', url });
       }
-      if (attachments.length > 5) throw new Error('Keep up to five attachments in one inspiration.');
+      if (attachments.length > 5) throw new DraftProblem('worldComposerTooManyFiles');
       const reference = await composerDraft.flush(); current();
       /* A FILE DOES NOT NAME A KIND. There is no 'file' kind on the server, and
          a PDF kept with words is still a note — so files are left out of the
@@ -5531,7 +5540,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       },
         ...(reference ? { draft: reference } : {}) });
       if (started) setCharSay('');
-    } catch (reason) { if (composerEpoch.current === epoch) setMouthNote(reason instanceof ApiError ? say('worldComposerUploadFailed') : reason instanceof Error ? reason.message : 'Could not save this inspiration. Your draft is here.'); }
+    } catch (reason) {
+      /* An `ApiError` here is the SAVE refusing (uploads throw their own
+         `DraftProblem('worldComposerUploadFailed')` by now), so it is said as
+         a failed save, not an upload. */
+      if (composerEpoch.current === epoch) sayMouthProblem(draftProblem(reason, 'worldComposerSaveFailed'));
+    }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   }, [inspirationSave.pending, inspirationSave.canResave, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
 
@@ -5556,7 +5570,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     try {
       for (const file of files) {
         try {
-          if (audio && (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/'))) throw new Error('Choose a recording under 25 MB.');
+          /* Each refusal says its own reason — "couldn't keep this" for an
+             empty file, a huge one and a PDF alike told nobody what to do. */
+          if (audio && !file.size) throw new DraftProblem('worldRecordingEmpty');
+          if (audio && file.size > 25 * 1024 * 1024) throw new DraftProblem('worldRecordingFileTooLarge');
+          if (audio && !file.type.startsWith('audio/')) throw new DraftProblem('worldRecordingNotAudio');
           const verdict = door === 'file' ? inspectAttachmentFile(file) : null;
           if (verdict?.kind === 'file') {
             if (epoch !== fileOwnerEpoch.current) return;
@@ -5575,21 +5593,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              reason is said in their language: `FileRefused` carries a code. */
           if (reason instanceof FileRefused) {
             accepted.push({ id: crypto.randomUUID(), type: 'file', ...(file.name ? { name: file.name.slice(0, 255) } : {}), blob: file,
-              validationError: say(reason.reason === 'too_large' ? 'worldAttachTooLarge' : reason.reason === 'empty' ? 'worldPhotoEmpty' : 'worldAttachUnsupported') });
+              /* the KEY, not the sentence: this lands in the durable draft,
+                 and a sentence stored there stays in the language it was
+                 written in. It is said where the tile renders. */
+              validationError: reason.reason === 'too_large' ? 'worldAttachTooLarge' : reason.reason === 'empty' ? 'worldPhotoEmpty' : 'worldAttachUnsupported' });
             continue;
           }
-          const message = reason instanceof Error ? reason.message : 'Couldn’t read this file.';
-          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', ...(file.name ? { name: file.name.slice(0, 255) } : {}), blob: file, validationError: message });
-          else problems.push(`${file.name}: ${message}`);
+          /* A KEY, kept on the draft and said at render (see above). A
+             `PhotoRefused` carries one; `reason.message` used to put that
+             key itself on the tile. */
+          const problem = reason instanceof PhotoRefused ? reason.reason : draftProblem(reason, 'worldAttachUnsupported');
+          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', ...(file.name ? { name: file.name.slice(0, 255) } : {}), blob: file, validationError: problem });
+          else problems.push(`${file.name}: ${say(problem)}`);
         }
       }
       if (epoch !== fileOwnerEpoch.current) return;
       const media = composerDraft.current.current.media;
-      if (audio && media.some(item => item.type === 'audio')) { setMouthNote('Keep one recording in each inspiration.'); return; }
+      if (audio && media.some(item => item.type === 'audio')) { setMouthNote(say('worldRecordingOnlyOne')); return; }
       if (accepted.length && composerDraft.setMedia([...media, ...accepted])) await composerDraft.flush();
       setMouthNote(problems.join(' '));
     } catch (reason) {
-      if (epoch === fileOwnerEpoch.current) setMouthNote(reason instanceof Error ? reason.message : 'Could not keep this draft on your device.');
+      if (epoch === fileOwnerEpoch.current) sayMouthProblem(draftProblem(reason));
     } finally {
       if (epoch === fileOwnerEpoch.current) { checkingFilesCount.current -= 1; setCheckingFiles(checkingFilesCount.current > 0); }
     }
@@ -5597,12 +5621,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   onRecorded.current = async file => {
     const hasRecording = composerDraft.current.current.media.some(item => item.type === 'audio');
     if (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/')) {
-      setMouthNote(hasRecording ? 'Could not keep this recording. Your previous clip is unchanged.' : 'Could not keep this recording. Please try again.'); return;
+      setMouthNote(say(hasRecording ? 'worldRecordingKeepFailedKept' : 'worldRecordingKeepFailed')); return;
     }
     if (!hasRecording) return addInspirationFiles([file], 'audio');
     composerDraft.setRecordingCandidate({ id: crypto.randomUUID(), type: 'audio', name: file.name, blob: file });
     try { await composerDraft.flush(); setMouthNote(''); }
-    catch (reason) { setMouthNote(reason instanceof Error ? reason.message : 'Could not keep this draft on your device.'); }
+    catch (reason) { sayMouthProblem(draftProblem(reason)); }
   };
 
   const onMouthKey = useCallback(
@@ -6244,7 +6268,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    */
   const [forget, setForget] = useState<{
     id: string | null;
-    step: "rest" | "asking" | "going" | "failed";
+    step: "rest" | "asking";
   }>({
     id: null,
     step: "rest",
@@ -7023,7 +7047,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   const inspirationRemovedFromView = useCallback((serverId: string, visualId = serverId) => {
     sourceListMutationRef.current += 1;
-    setSelectedId(null);
+    /* ONLY IF IT IS STILL THE ONE OPEN. A delete is a round trip, and a
+       person who pressed delete on A and stepped to B before it landed was
+       having B's panel closed under them by A's answer. */
+    setSelectedId(current => (current === visualId || current === serverId ? null : current));
     simApiRef.current?.unborn(visualId);
     bornRef.current = bornRef.current.filter(row => row.id !== visualId && row.sigId !== serverId);
     inspirationsRef.current = inspirationsRef.current?.filter(row => row.id !== visualId && row.id !== serverId) ?? null;
@@ -7038,30 +7065,59 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     void readSkyRef.current().catch(() => undefined);
   }, []);
 
+  /* WHICH MEMORIES HAVE A DELETE OUT, by id. One "going" step in `forget`
+     used to stand for all of them: it was reset when the reader stepped to
+     another memory, so stepping back to A while A's delete was out offered
+     Delete again (a second request for the same memory), and the one flag
+     could only ever describe one memory. Tracked per memory, B can be
+     deleted while A's request is out, and A says "Deleting" whenever it is
+     on screen until its own answer lands. */
+  const [deleting, setDeleting] = useState<ReadonlySet<string>>(() => new Set());
+  /* WHICH MEMORIES' LAST DELETE FAILED, by id, for the same reason: a
+     failure kept in `forget` was reset by stepping away, so returning to A
+     no longer said its delete had not gone through. It clears when A's
+     delete is pressed again. */
+  const [deleteFailed, setDeleteFailed] = useState<ReadonlySet<string>>(() => new Set());
   const forgetIt = useCallback(() => {
     simApiRef.current?.acknowledge("let-go");
     const id = panelId;
-    if (!id || forget.step === "going") return;
+    if (!id || deleting.has(id)) return;
+    const without = (current: ReadonlySet<string>) => {
+      if (!current.has(id)) return current;
+      const next = new Set(current); next.delete(id); return next;
+    };
     if (offlineRef.current) {
       /* nothing behind the world to delete from, and pretending otherwise
          would be the one lie the fixture is built to never tell */
       setForget({ id: null, step: "rest" });
       return;
     }
-    setForget({ id, step: "going" });
+    setForget({ id, step: "rest" });
+    setDeleteFailed(without);
+    setDeleting(current => new Set(current).add(id));
+    /* Cleared AFTER the view has been told, in the same handler: cleared
+       first (in a `finally` ahead of the `then`), the memory rendered one
+       frame with Delete offered again before it was removed. */
+    const settled = () => setDeleting(without);
     const serverId = panelBall?.sigId ?? id;
     deleteInspiration(serverId)
       .then(() => {
         inspirationRemovedFromView(serverId, id);
-        setForget({ id: null, step: "rest" });
+        settled();
+        /* `forget` is per memory: if the reader has moved to another one
+           while this was in flight, that one's state is not ours to reset. */
+        setForget(current => (current.id === id ? { id: null, step: "rest" } : current));
       })
       .catch(() => {
         /* IT IS STILL THERE, AND THE WORLD STILL SHOWS IT. Not back to the
            ask: the ask is a sentence about what a signal loses, and nothing
-           about this failure is that. Its own state, its own line. */
-        setForget({ id, step: "failed" });
+           about this failure is that. Its own state, its own line. And only
+           on the memory that failed — written unconditionally, A's failure
+           printed "didn't go through" on whatever B was open by then. */
+        setDeleteFailed(current => new Set(current).add(id));
+        settled();
       });
-  }, [panelId, panelBall, forget.step, inspirationRemovedFromView]);
+  }, [panelId, panelBall, deleting, inspirationRemovedFromView]);
 
   /** Open the answers already on this save. A read, with nothing to write. */
   const openReflections = useCallback(() => {
@@ -8701,7 +8757,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         >
                           ×
                         </button>
-                        {item.uploadError ? <small role="alert">{item.uploadError}</small> : null}
+                        {item.uploadError ? <small role="alert">{say('worldComposerUploadFailed')}</small> : null}
                       </li>
                     ))}
                   </ul>
@@ -8856,7 +8912,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   ) : null}
                   {recording.error || recording.notice ? (
                     <span className="waka-composer-recording-why" role={recording.error ? 'alert' : 'status'}>
-                      {recording.error || recording.notice}
+                      {recording.error ? say(recording.error) : recording.notice ? say(recording.notice) : null}
                     </span>
                   ) : null}
                   {/* WHAT IS NOT IN THIS FOOTER ANY MORE.
@@ -9751,9 +9807,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
           linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
           recordingCandidate={composerDraft.draft.recordingCandidate}
-          onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => setMouthNote(String(reason))); }}
+          onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => sayMouthProblem(draftProblem(reason))); }}
           locale={locale} ready={composerDraft.ready} fileDraftsAvailable={composerDraft.available} busy={preparingInspiration || checkingFiles}
-          uploadingId={uploadingMediaId} error={mouthNote || composerDraft.error}
+          uploadingId={uploadingMediaId} error={mouthNote || (composerDraft.error ? say(composerDraft.error) : '')}
           save={inspirationSave} recording={recording} inputRef={mouthFieldRef}
           onText={(text, caret) => { mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
           onFiles={files => { void addInspirationFiles(files); }}
@@ -9770,7 +9826,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              `openOverHome` writes ONE destination, which is why pressing a
              place from inside the notepad does not need a close first. */
           onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
-          onKeyDown={onMouthKey} onForkDraft={() => { void composerDraft.fork().catch(reason => setMouthNote(String(reason))); }} /> : null}
+          onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
+            clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
+            sayProblem: sayMouthProblem }); }}
+          draftConflict={composerDraft.error === 'worldDraftChangedElsewhere' || mouthNoteState.conflict} /> : null}
       </> : null}
 
       {/* SECTION S IS GONE. The sky — a whole viewport above headquarters
@@ -10205,18 +10264,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       a warning with nothing to warn about is friction wearing
                       a safety costume. A memory a signal stands on opens the
                       ask below instead. */}
-                  {forget.step === "going" ? (
+                  {panelId && deleting.has(panelId) ? (
                     say("worldDeleting")
-                  ) : forget.step === "failed" ? (
-                    /* PROSE, AND IT SAYS WHAT IS TRUE: the memory is still
-                       here. Beside the verb rather than in a sheet, because
-                       nothing happened and nothing needs deciding — pressing
-                       delete again is the whole recovery. */
-                    <span className="jar-panel-warn">
-                      {say("worldDeleteFailed")}
-                    </span>
                   ) : (
                     <>
+                      {panelId && deleteFailed.has(panelId) ? (
+                        /* PROSE, AND IT SAYS WHAT IS TRUE: the memory is still
+                           here. Beside the verb rather than in a sheet, because
+                           nothing happened and nothing needs deciding — pressing
+                           delete again is the whole recovery, so the verb stays
+                           beside it (it was replaced by this line, which left
+                           the recovery it describes with nothing to press). */
+                        <span className="jar-panel-warn" role="alert">
+                          {say("worldDeleteFailed")}
+                        </span>
+                      ) : null}
                       {/* ONE PRESS FROM A THING YOU KEPT TO A CARD OF IT.
                           Only your own, and only when it has words: the card
                           is the words, and a picture alone has nothing for
