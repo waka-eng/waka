@@ -218,8 +218,8 @@ describe("applying explicit support decisions", () => {
     const f = await fixture();
     const legacy = { ...(await review(f, "unresolved")), membershipId: null, restrictedClaimCount: 0 };
     await expect(applySignalSupportReview(t.db as never, legacy)).resolves.toMatchObject({ alreadyApplied: false });
-    const room = { ...(await review(f, "unresolved")), membershipId: f.signalId, restrictedClaimCount: 0 };
-    await expect(applySignalSupportReview(t.db as never, room)).rejects.toThrow();
+    const withMembership = { ...(await review(f, "unresolved")), membershipId: f.signalId, restrictedClaimCount: 0 };
+    await expect(applySignalSupportReview(t.db as never, withMembership)).rejects.toThrow();
   });
 
   it.each([true, false])("bounded discovery cannot undo explicit withdrawal (locked=%s)", async (locked) => {
