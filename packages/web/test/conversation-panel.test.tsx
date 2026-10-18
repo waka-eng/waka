@@ -354,9 +354,17 @@ it('keeps the reply in flight while progress cannot be read, retries on its own,
 /* Only a 404 is terminal: the watch stops, says so, offers a reload, and Send
    comes back. A server answering with a state older than the screen is not an
    answer: Send stays off and the watch keeps asking, saying it is waiting. */
-it('stops on a 404 reply read, says it is gone, offers a reload and frees Send',async()=>{
+it('keeps asking on a 429 reply read — that one is "try later", not gone',async()=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
-  vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:404,message:'Not found'}));await mount();await tick(1000);
+  vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:429,message:'Slow down'}));await mount();await tick(1000);
+  const calls=vi.mocked(fetchConversationReply).mock.calls.length;
+  await tick(15000);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBeGreaterThan(calls);
+  expect(host.textContent).not.toContain('This reply can’t be found anymore.');
+});
+it.each([404,410,403])('stops on a %i reply read, says it is gone, offers a reload and frees Send',async(status)=>{
+  stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
+  vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status,message:'Gone'}));await mount();await tick(1000);
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
   await tick(15000);await tick(15000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'a 404 kept being polled').toBe(calls);
