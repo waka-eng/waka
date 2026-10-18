@@ -161,6 +161,10 @@ async function stepOn(): Promise<void> {
   await world.step(10);
 }
 async function pressWords(): Promise<void> {
+  /* Coming back from the archive re-applies the address on timers; under a
+     loaded full run the card can be a few frames behind (it failed once in
+     CI that way while passing alone). Wait for it, within a bound. */
+  for (let turn = 0; turn < 30 && !words(); turn += 1) { await world.step(4); await wait(30); }
   const p = words();
   if (!p) throw new Error("the card is not showing its words");
   await act(async () => p.click());
