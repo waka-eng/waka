@@ -315,9 +315,11 @@ it("never lands a refresh at rest, only at the next arrival", async () => {
    the world snapped out from under it. So a press ends only on evidence it
    is gone: a lost capture, or a mouse moving with no button held (retro
    review, 2026-10-17). */
-const press = (type: string, init: PointerEventInit = {}) => {
-  const canvas = world.container.querySelector('canvas')!;
-  canvas.dispatchEvent(new window.PointerEvent(type,
+/** The world's root — the element that holds the pointer capture. */
+const worldRoot = () => world.container.querySelector<HTMLElement>('.jar')!;
+const press = (type: string, init: PointerEventInit = {}, at?: Element) => {
+  const target = at ?? world.container.querySelector('canvas')!;
+  target.dispatchEvent(new window.PointerEvent(type,
     { bubbles: true, cancelable: true, pointerId: 11, pointerType: 'mouse', clientX: 640, clientY: 300, button: 0, buttons: 1, ...init }));
 };
 async function heldWithReadingBack() {
@@ -343,10 +345,21 @@ it("keeps a still hold of fifteen seconds held — no drop, no snap, no landing"
 
 it("ends a press whose capture was lost, and lands what waited under it", async () => {
   await heldWithReadingBack();
-  await act(async () => { press('lostpointercapture', { buttons: 0 }); });
+  await act(async () => { press('lostpointercapture', { buttons: 0 }, worldRoot()); });
   await settle();
   expect(simNow().isResting(), 'a lost capture left the press held').toBe(true);
   expect(reading(), 'a lost capture stranded the first load').toBe(AGENT_SAYS);
+});
+
+/* ═══ BUT ONLY THE WORLD'S OWN CAPTURE ═════════════════════════════════════
+   `lostpointercapture` bubbles. A control inside the world letting go of a
+   pointer it captured is not the world losing its press. */
+it("keeps the press held when a descendant, not the root, loses a capture", async () => {
+  await heldWithReadingBack();
+  await act(async () => { press('lostpointercapture', { buttons: 0 }); });
+  await world.step(30);
+  expect(simNow().isResting(), 'a descendant\'s lost capture dropped the world\'s press').toBe(false);
+  expect(reading(), 'the bundle landed under a held press').toBeUndefined();
 });
 
 it("ends a mouse press whose button is already up when it moves", async () => {

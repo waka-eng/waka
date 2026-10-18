@@ -5511,6 +5511,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     };
     /* the capture went without our releasing it: the pointer is gone */
     const onPointerTaken = (e: PointerEvent) => {
+      /* ONLY THE ROOT'S OWN CAPTURE. `lostpointercapture` bubbles, so a
+         control inside the world that captured and released a pointer of
+         its own would otherwise read as the world losing its press. */
+      if (e.target !== root) return;
       if (!gesture.down || e.pointerId !== gesture.ownerId) return;
       dropPress();
       wake();
