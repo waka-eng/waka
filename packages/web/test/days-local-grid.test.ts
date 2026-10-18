@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { formatMessage } from "../src/lib/locales";
 import { numWords } from "../src/lib/words";
-import { buildGrid } from "../src/pages/Days";
+import { buildGrid, groupedInUtc } from "../src/pages/Days";
 
 let savedTz: string | undefined;
 
@@ -84,6 +84,27 @@ describe("the days grid", () => {
     const last = cells[cells.length - 1]!;
     expect(last.key).toBe("2026-10-16");
     expect(last.kept).toBe(2);
-    expect(last.at).toBe(Date.parse("2026-10-16T12:00:00Z"));
+    expect(last.at, "a UTC-date dot jumped to UTC noon, not the reader's").toBe(Date.parse("2026-10-16T12:00:00+09:00"));
+  });
+
+  it("opens the date the dot shows for a reader thirteen hours east, on the UTC fallback", () => {
+    /* Tonga is UTC+13: UTC noon on the 16th is 01:00 on the 17th there, so a
+       press on the 16th's dot used to open the 17th. */
+    process.env.TZ = "Pacific/Tongatapu";
+    const now = new Date("2026-10-16T20:00:00Z");
+    const cells = buildGrid([], now, true);
+    const sixteenth = cells.find((cell) => cell.key === "2026-10-16")!;
+    expect(sixteenth.at).toBe(Date.parse("2026-10-16T12:00:00+13:00"));
+    expect(new Date(sixteenth.at).getDate()).toBe(16);
+  });
+
+  it("treats a request that named no zone as grouped in UTC", () => {
+    expect(groupedInUtc(undefined, "UTC")).toBe(true);
+    expect(groupedInUtc(undefined, "Asia/Seoul")).toBe(true);
+    expect(groupedInUtc("Asia/Seoul", "Asia/Seoul")).toBe(false);
+    expect(groupedInUtc("Asia/Seoul", "UTC")).toBe(true);
+    /* A reader whose zone IS UTC got their own zone back: local dates and UTC
+       dates are the same, and the reply is not a fallback. */
+    expect(groupedInUtc("UTC", "UTC")).toBe(false);
   });
 });

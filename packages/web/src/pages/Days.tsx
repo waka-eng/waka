@@ -86,7 +86,13 @@ export function buildGrid(rows: ApiKeptDay[], now: Date, utc = false): Cell[] {
     const kept = byDay.get(key) ?? 0;
     cells.push({
       key,
-      at: date.getTime(),
+      /* The press lands on the READER'S noon of the date the dot shows, even
+         when the dots are UTC dates: UTC noon is already the next local date
+         for a reader twelve or more hours east of Greenwich, so the dot for
+         the 16th would open the 17th. */
+      at: utc
+        ? new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 12).getTime()
+        : date.getTime(),
       kept,
       /* Square-rooted so the first keep of a day is the biggest step there is.
          Linear made one keep nearly indistinguishable from none on any week
@@ -96,6 +102,16 @@ export function buildGrid(rows: ApiKeptDay[], now: Date, utc = false): Cell[] {
     });
   }
   return cells;
+}
+
+/**
+ * Whether the server's days are UTC dates rather than the reader's. A request
+ * that named no zone (the browser would not say) is grouped in UTC by the
+ * server — so that is UTC, whatever zone the reply names; otherwise it is
+ * UTC exactly when the zone grouped in is not the one asked for.
+ */
+export function groupedInUtc(asked: string | undefined, grouped: string): boolean {
+  return asked === undefined || grouped !== asked;
 }
 
 export function Days(): JSX.Element {
@@ -121,10 +137,11 @@ export function Days(): JSX.Element {
   const load = useCallback(async () => {
     setPhase("loading");
     try {
-      const kept = await listKeptDays({ days: WINDOW_DAYS });
+      const tz = readerTimeZone();
+      const kept = await listKeptDays({ days: WINDOW_DAYS, tz });
       if (!mounted.current) return;
       setRows(kept.days);
-      setUtc(kept.zone !== (readerTimeZone() ?? "UTC"));
+      setUtc(groupedInUtc(tz, kept.zone));
       setPhase("ready");
     } catch {
       if (!mounted.current) return;
