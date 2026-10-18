@@ -5180,10 +5180,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (!newInspirationRequested || !atNow || inField || inSky) return;
     setNewInspirationRequested(false);
     if (mouthOpen) {
+      /* The notepad is already open UNDER whatever overlay asked (the empty
+         archive's "save" in Saves): close the overlay first, or the focus
+         lands in a field nobody can see. */
+      if (viewNavigationRef.current.view?.open) leaveOpen();
       setMouthNote("");
       mouthFieldRef.current?.focus();
     } else openMouth();
-  }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth]);
+  }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth, leaveOpen]);
 
   /** The way out that keeps the words: the page folds, the draft stays. */
   const saveAsDraft = useCallback(() => {
