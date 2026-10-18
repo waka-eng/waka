@@ -603,6 +603,7 @@
   "publicProfileFailedBody": "WAKA couldn’t open this page just now. It may still be there.",
   "worldGroundFailed": "Couldn’t read what your principles grow from.",
   "worldPrinciplesStalled": "This reading is taking longer than it should. Your saves are safe.",
+  "worldPrinciplesRetryTooSoon": "This was tried moments ago. Try again in a bit.",
   "surfaceUnavailableHome": "Go to your WAKA",
   "readingPausedNotice": "Reading is paused — your saves are safe.",
   "readingPausedRetry": "Retry",

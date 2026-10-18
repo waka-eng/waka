@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchPrincipleRead, requestPrincipleRead, type ApiPrinciple, type ApiPrincipleStatus } from "../lib/api/principles";
+import { ApiError } from "../lib/api/http";
 import { t, type SupportedLocale } from "../lib/i18n";
 
 /**
@@ -48,8 +49,15 @@ export function PrincipleRead({ active, locale, onRead }: {
    */
   const [stalled, setStalled] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  /* A retry inside the server's reading cooldown is a 429: it was tried
+     moments ago. That is its own sentence, not the generic failure. */
+  const [throttled, setThrottled] = useState(false);
   const onReadRef = useRef(onRead);
   const retriedAttempt = useRef(0);
+  /* Try again pressed on a STALLED read: the job is stuck, not failed, so
+     the next read must ask the server to re-enqueue it (retry=1) rather
+     than only restarting the poll that already watched it stall. */
+  const retryStalled = useRef(false);
   onReadRef.current = onRead;
   useEffect(() => {
     if (!active) return;
@@ -79,14 +87,25 @@ export function PrincipleRead({ active, locale, onRead }: {
         waitingReads = waiting ? waitingReads + 1 : 0;
         stopped = waitingReads >= MAX_WAITING_READS;
         setStalled(stopped);
+        const asked = attempt > retriedAttempt.current;
+        const stuck = retryStalled.current && (waiting || result.status.phase === 'failed');
+        if (!waiting && result.status.phase !== 'failed') setThrottled(false);
         if (!ensured && ((result.status.eligible && !result.status.supportPending && result.status.phase === 'pending') ||
-          ((result.status.eligible || result.status.supportPending) && result.status.phase === 'failed' && attempt > retriedAttempt.current))) {
-          const retry = attempt > retriedAttempt.current;
+          ((result.status.eligible || result.status.supportPending) && result.status.phase === 'failed' && asked) ||
+          (asked && stuck))) {
           retriedAttempt.current = attempt;
-          await requestPrincipleRead(retry);
+          retryStalled.current = false;
           ensured = true;
-          if (!disposed) setStatus({ ...result.status, phase: result.status.supportPending ? 'pending' : 'processing' });
+          try {
+            await requestPrincipleRead(asked);
+          } catch (error) {
+            if (!(error instanceof ApiError && error.status === 429)) throw error;
+            if (!disposed) setThrottled(true);
+            return;
+          }
+          if (!disposed) { setThrottled(false); setStatus({ ...result.status, phase: result.status.supportPending ? 'pending' : 'processing' }); }
         }
+        retryStalled.current = false;
       } catch {
         consecutiveFailures += 1;
         delay = consecutiveFailures < 3 ? consecutiveFailures * 1_000 : 10_000;
@@ -108,9 +127,10 @@ export function PrincipleRead({ active, locale, onRead }: {
       document.removeEventListener("visibilitychange", onFocus);
     };
   }, [active, locale, attempt]);
-  const error = failed || stalled || status?.phase === "failed";
+  const error = failed || stalled || throttled || status?.phase === "failed";
   const visibleRows = rows;
-  const message = stalled && !failed ? "worldPrinciplesStalled"
+  const message = throttled && !failed ? "worldPrinciplesRetryTooSoon"
+    : stalled && !failed ? "worldPrinciplesStalled"
     : error ? status?.supportPending ? 'worldSupportCheckFailed' : "worldPrinciplesError"
     : !status ? "worldPrinciplesLoading"
     : status.supportPending ? (status.phase === 'processing' ? 'worldSupportChecking' : status.phase === 'pending' ? 'worldSupportQueued' : 'worldSupportNeedsContext')
@@ -129,7 +149,7 @@ export function PrincipleRead({ active, locale, onRead }: {
     {visibleRows.length === 0 || error || status?.phase === "processing" ?
       <p className="jar-values-sub" role={error ? "alert" : status?.phase === "processing" ? "status" : undefined}>
         {t(locale, message)}
-        {error ? <> <button type="button" onClick={() => setAttempt((value) => value + 1)}>
+        {error ? <> <button type="button" onClick={() => { retryStalled.current = stalled; setAttempt((value) => value + 1); }}>
           {t(locale, "worldPrinciplesRetry")}
         </button></> : null}
       </p> : null}

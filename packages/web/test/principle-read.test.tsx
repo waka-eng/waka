@@ -47,6 +47,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PrincipleRead } from "../src/components/PrincipleRead";
 import { fetchPrincipleRead, requestPrincipleRead } from "../src/lib/api/principles";
+import { ApiError } from "../src/lib/api/http";
 
 vi.mock("../src/lib/api/principles", () => ({ fetchPrincipleRead: vi.fn(), requestPrincipleRead: vi.fn() }));
 let host: HTMLDivElement;
@@ -178,6 +179,25 @@ describe("principle read", () => {
     await act(async () => host.querySelector("button")!.click());
     expect(fetchPrincipleRead).toHaveBeenCalledTimes(31);
     expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("asks the server to re-enqueue a stalled read when Try again is pressed, not only to poll again", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "processing" } });
+    vi.mocked(requestPrincipleRead).mockResolvedValue();
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    for (let i = 0; i < 40; i += 1) await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(requestPrincipleRead).not.toHaveBeenCalled();
+    await act(async () => host.querySelector("button")!.click());
+    expect(requestPrincipleRead).toHaveBeenCalledWith(true);
+  });
+
+  it("says a retry was tried moments ago when the server answers 429, not the generic failure", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "failed" } });
+    vi.mocked(requestPrincipleRead).mockRejectedValue(new ApiError({ status: 429, message: "soon", code: "reading_retry_throttled" }));
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    await act(async () => host.querySelector("button")!.click());
+    expect(requestPrincipleRead).toHaveBeenCalledWith(true);
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("This was tried moments ago. Try again in a bit.");
   });
 
   it("stops polling after repeated failures until asked again", async () => {
