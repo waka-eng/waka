@@ -1,5 +1,5 @@
 import {principleMaterialKey} from './principle-material-key.js';
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { backgroundJobs, principles } from "../db/index.js";
 import { getDb } from "./db.js";
 import { loadPrincipleMaterial, PRINCIPLE_MIN_SIGNALS } from "./principle-generation.js";
@@ -16,26 +16,35 @@ type Db = Database | Transaction;
  * IS THE READING STUCK, AS OPPOSED TO SLOW.
  *
  * When the model provider refuses — out of credit is a 402 and the founder's
- * live case — the jobs that write a person's reading fail after their
+ * live case — the job that writes a person's reading fails after its
  * retries, and nothing told the person. Home went on showing the last
- * reading, principles went on saying nothing, and a save sat unread with no
- * sign that anything was wrong or that anything could be done.
+ * reading and a save sat unread with no sign that anything was wrong.
  *
- * The answer is the LATEST of the two jobs that write what a person reads on
- * those pages — the reading and the principles — or a failed signal-support
- * pass, which blocks both. Latest, not any: a failure an hour ago that a
- * later success already repaired is history, not a state.
+ * THE READING JOB ALONE, AND ITS OWN LATEST ROW. The first version took the
+ * latest of the reading AND principles jobs, which was wrong both ways: a
+ * principles job failing for its own reasons (it has its own `phase:
+ * 'failed'` and its own Try again) raised "reading is paused", and a
+ * principles success after a failed reading hid the failure. Each type
+ * answers for itself now; this one is the reading's. Signal support has
+ * its own failed phase too, so it is not folded in here either.
  *
  * Signal derivation is deliberately not here. Each save already reports and
- * retries its own derivation (`/inspirations/:id/processing`), and the retry
- * below could not repair one: it enqueues readings, not derivations.
+ * retries its own derivation (`/inspirations/:id/processing`).
  */
-async function readingPausedFor(db: Db, profileId: string, supportFailed: boolean): Promise<boolean> {
-  if (supportFailed) return true;
-  const [latest] = await db.select({ status: backgroundJobs.status }).from(backgroundJobs)
-    .where(and(eq(backgroundJobs.profileId, profileId), inArray(backgroundJobs.type, ["refresh_top_of_mind", "refresh_principles"])))
+async function latestReadingJob(db: Db, profileId: string) {
+  const [latest] = await db.select({ status: backgroundJobs.status, createdAt: backgroundJobs.createdAt }).from(backgroundJobs)
+    .where(and(eq(backgroundJobs.profileId, profileId), eq(backgroundJobs.type, "refresh_top_of_mind")))
     .orderBy(desc(backgroundJobs.updatedAt)).limit(1);
-  return latest?.status === "failed";
+  return latest ?? null;
+}
+
+/** How soon a failed reading may be retried again: a retry that fails at
+    once (no credit) must not become a button that bills a request per press. */
+export const READING_RETRY_COOLDOWN_MS = 3 * 60_000;
+
+/** A retry asked for inside the cooldown. The route answers 429 with when. */
+export class ReadingRetryThrottled extends Error {
+  constructor(readonly retryAfterSeconds: number) { super("The reading was retried moments ago"); }
 }
 
 export async function loadPrincipleStatus(db: Db, profileId: string) {
@@ -50,7 +59,7 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
     : job ? "processing" : "pending";
   const withheld = material.groupId ? await db.select({ id: principles.id }).from(principles)
     .where(and(eq(principles.profileId, profileId), sql`(${groupPrincipleReadable(material.groupId, PRINCIPLE_MIN_SIGNALS)}) IS NOT TRUE`)).limit(1) : [];
-  const readingPaused = await readingPausedFor(db, profileId, support.failed);
+  const readingPaused = (await latestReadingJob(db, profileId))?.status === "failed";
   return { phase, eligible: material.eligibility.eligible,
     readingPaused,
     supportPending: support.pending,
@@ -59,7 +68,14 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
     topOfMindCount: material.eligibility.tomAppearances };
 }
 
-export async function requestPrincipleRefresh(db: Db, profileId: string, retry = false) {
+export async function requestPrincipleRefresh(db: Db, profileId: string, retry = false, now = new Date()) {
+  if (retry) {
+    const reading = await latestReadingJob(db, profileId);
+    if (reading?.status === "failed") {
+      const wait = reading.createdAt.getTime() + READING_RETRY_COOLDOWN_MS - now.getTime();
+      if (wait > 0) throw new ReadingRetryThrottled(Math.ceil(wait / 1000));
+    }
+  }
   await db.transaction(async (tx) => {
     const sources = await recoverPendingSignalSupport(tx, profileId);
     if (sources.length) {
@@ -73,10 +89,7 @@ export async function requestPrincipleRefresh(db: Db, profileId: string, retry =
        explicit retry, and only when the latest reading job did fail — a
        plain refresh still never buys a synthesis nobody asked for. */
     if (retry && !sources.length) {
-      const [reading] = await tx.select({ status: backgroundJobs.status }).from(backgroundJobs)
-        .where(and(eq(backgroundJobs.profileId, profileId), eq(backgroundJobs.type, "refresh_top_of_mind")))
-        .orderBy(desc(backgroundJobs.updatedAt)).limit(1);
-      if (reading?.status === "failed") await enqueueTopOfMindRefresh(profileId, 'manual', tx);
+      if ((await latestReadingJob(tx, profileId))?.status === "failed") await enqueueTopOfMindRefresh(profileId, 'manual', tx);
     }
     await enqueueEligiblePrinciples(tx, profileId, retry, tx);
   });

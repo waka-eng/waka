@@ -14,6 +14,9 @@ import {writeReviewEvidence} from './review-evidence.js';
 import {BackgroundJobHeldError} from './background-job-hold.js';
 import {postgresBackgroundJobStore,processBackgroundJob} from './queue.js';
 import {getDb} from './db.js';
+import { Hono } from 'hono';
+import { createPrincipleRoutes } from '../routes/principles.js';
+import type { AuthEnv } from './middleware.js';
 import {setDefaultModelProviderForTests} from './model-provider.js';
 import {acceptPrincipleGroundingForFixture} from '../../test/helpers/principle-grounding.js';
 
@@ -413,13 +416,19 @@ describe("principles across personal profiles", () => {
   /* A READING THAT FAILED IS A STATE THE PAGES CAN SHOW. Out of credit (402)
      fails the reading job after its retries; before `readingPaused` the
      status endpoint had no way to say so and the person saw nothing at all.
-     Latest-wins is the half worth pinning: a failure a later success
-     repaired must not keep the notice up. */
-  it('reports a failed reading as paused, and a retry restarts it', async () => {
+     It is the READING job's own latest row: principles failing for their
+     own reasons must not raise it, and principles succeeding must not hide
+     a reading that failed. */
+  const failedReading = (profileId: string, minutesAgo: number) => t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,created_at,updated_at)
+    VALUES(${profileId},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','OpenRouter 402',
+      now()-make_interval(mins => ${minutesAgo}),now()-make_interval(mins => ${minutesAgo}))`;
+  const principlesJob = (profileId: string, status: string) => t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,updated_at)
+    VALUES(${profileId},'refresh_principles',${JSON.stringify({ profileId })}::jsonb,${status}::background_job_status,now())`;
+
+  it('reports a failed reading as paused, and a retry restarts it and clears it', async () => {
     const profileId = await person();
     expect((await loadPrincipleStatus(t.db as never, profileId)).readingPaused).toBe(false);
-    await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,updated_at)
-      VALUES(${profileId},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','OpenRouter 402',now()-interval '1 minute')`;
+    await failedReading(profileId, 10);
     expect((await loadPrincipleStatus(t.db as never, profileId)).readingPaused).toBe(true);
     const after = await requestPrincipleRefresh(t.db as never, profileId, true);
     expect(after.readingPaused).toBe(false);
@@ -427,11 +436,40 @@ describe("principles across personal profiles", () => {
     expect(jobs.map((row) => row.status)).toEqual(['failed', 'pending']);
     /* a plain refresh (no retry) never buys a reading on its own */
     const quiet = await person();
-    await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status) VALUES(${quiet},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed')`;
+    await failedReading(quiet, 10);
     await requestPrincipleRefresh(t.db as never, quiet);
     expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${quiet} AND type='refresh_top_of_mind'`).toHaveLength(1);
-    /* and a later success clears it */
-    await t.sql`UPDATE background_jobs SET status='succeeded', updated_at=now() WHERE profile_id=${profileId} AND status='pending'`;
-    expect((await loadPrincipleStatus(t.db as never, profileId)).readingPaused).toBe(false);
+  });
+
+  it('answers for the reading alone: principles neither raise nor hide it', async () => {
+    const raised = await person();
+    await principlesJob(raised, 'failed');
+    expect((await loadPrincipleStatus(t.db as never, raised)).readingPaused, 'a principles failure said the reading paused').toBe(false);
+    const masked = await person();
+    await failedReading(masked, 10);
+    await principlesJob(masked, 'succeeded');
+    expect((await loadPrincipleStatus(t.db as never, masked)).readingPaused, 'a later principles success hid a failed reading').toBe(true);
+  });
+
+  it('refuses a second retry inside the cooldown, as a 429 the page can say, and refuses agents', async () => {
+    const profileId = await person();
+    const [owner] = await t.sql`SELECT account_id FROM profiles WHERE id=${profileId}`;
+    const app = (type: 'human' | 'agent') => {
+      const routes = new Hono<AuthEnv>();
+      routes.route('/principles', createPrincipleRoutes({ getDatabase: () => t.db as never, authMiddleware: async (c, next) => {
+        c.set('session', { sessionId: randomUUID(), account: { id: owner.account_id, email: 'owner@example.test' },
+          profile: { id: profileId, accountId: owner.account_id, type, name: 'Owner', preferredLocale: 'en-US' } } as never);
+        await next();
+      } }));
+      return routes;
+    };
+    await failedReading(profileId, 1);
+    const early = await app('human').request('/principles/refresh?retry=1', { method: 'POST' });
+    expect(early.status).toBe(429);
+    expect(await early.json()).toMatchObject({ code: 'reading_retry_throttled' });
+    expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`).toHaveLength(1);
+    expect((await app('agent').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(403);
+    await t.sql`UPDATE background_jobs SET created_at=now()-interval '10 minutes' WHERE profile_id=${profileId}`;
+    expect((await app('human').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(202);
   });
 });
