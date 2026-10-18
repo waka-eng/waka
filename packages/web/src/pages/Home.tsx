@@ -120,7 +120,6 @@ import { deleteAccount } from "../lib/api/auth";
 import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
-import { useBackCloses } from "../lib/back-closes";
 import { useOpenClaimsLink } from "../lib/open-claims-link";
 import { ClaimSlip } from "../components/ClaimSlip";
 import { HarvestReasons } from "../components/HarvestReasons";
@@ -1777,10 +1776,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      card's own goodbye (`worldSittingDone`), not on top of a "why not" the
      person is still answering. */
   useEffect(() => { if (reviewing && toReview === 0 && !harvestWhy) setReviewing(false); }, [reviewing, toReview, harvestWhy]);
-  /* REVIEW IS A PLACE BACK CAN LEAVE. It was a state with no history entry,
-     so Back — the phone's edge swipe — left WAKA altogether instead of
-     stepping out of the cards. See `lib/back-closes.ts`. */
-  useBackCloses(reviewing, () => setReviewing(false), 'review');
   /* ═══ /?open=claims IS REVIEW NOW ═══════════════════════════════════════
      The claims page was the queue's own room until 2026-10-15, when review
      became something you step into from home ("Dive into review") and the

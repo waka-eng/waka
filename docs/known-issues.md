@@ -1176,19 +1176,29 @@ room-synthesized words derived from an erased or privatised memory persist in th
 That is the strongest reason not to leave the room-data drop undecided. Resolve then: either
 drop the room tables, or purge room artifacts that cite a deleted or privatised memory.
 
-## Added after review: a reload with a layer open leaves one same-address Back step
+## Layer history under replace/reload
 
-**Status:** accepted (2026-10-17), `packages/web/src/lib/back-closes.ts`.
+**Status:** open follow-up (2026-10-17). `claude/fix-dead-ends` shipped and then withdrew
+`lib/back-closes.ts` (`useBackCloses`), which made Back close review and the settings/info card
+by pushing a tagged same-address history entry. Three review rounds kept finding defects in the
+same mechanism, so it was removed rather than patched again. As on `origin/dev`, **Back with
+review or the settings/info card open leaves the page** (on a phone, the edge swipe leaves
+WAKA). Any reattempt has to answer these open cases before it ships:
 
-Opening review, settings or info pushes a tagged copy of the page's own entry. Reloading while
-one is open leaves that tagged entry on top of an identical untagged page entry. On load the tag
-is stripped in place, so nothing reopens — but the entry beneath, at the same address, remains:
-the next Back lands on the same page and does nothing visible. Removing it is not possible from
-script without traversing to it, and that entry belongs to the document from before the reload,
-so stepping onto it (the earlier `history.back()` fix) costs a second full page load — worse
-than one dead step. The History API cannot delete or merge entries. Resolve only if the layers
-stop pushing an entry of their own (e.g. become real addresses), or if the Navigation API's
-entry replacement becomes usable across documents.
+- **Reload with a layer open.** The pushed entry survives the reload on top of an identical
+  page entry. Stepping back over it crosses into the pre-reload document (a second full load);
+  stripping the tag in place leaves a same-URL Back step that does nothing. The History API
+  cannot delete or merge entries.
+- **Router replace under an open layer.** A `replace` (address cleanup such as dropping
+  `?open=`) rewrites the layer's entry, not the page entry beneath; Back can then restore the
+  pre-replace address. Rebasing it needs an asynchronous silent pop, and a second replace or a
+  push during that pop races it.
+- **Stacked layers.** Review and the corner card can be open together; each pushing its own
+  entry, closing in a different order than opening, or a navigation from inside one, leaves
+  entries no listener owns.
+
+Likely shape of a fix: make the layers real addresses (a query param the router owns) instead
+of raw `history` entries, so Back, replace and reload are the router's ordinary cases.
 
 ---
 

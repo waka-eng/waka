@@ -33,7 +33,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { HowItWorksPanel } from "./HowItWorksPanel";
 import { SettingsPanel, type SettingsPanelProps } from "./SettingsPanel";
-import { useBackCloses } from "../lib/back-closes";
 import { t, type MessageKey, type SupportedLocale } from "../lib/locales";
 
 export interface MenuItem {
@@ -232,9 +231,10 @@ export function Menu({ locale, items, current, label, left, account, settings, o
    * the screen, so "tap outside" means tapping a sliver nobody can see is a
    * target. The mobile audit watched people swipe Back instead — which left
    * the app. So on a coarse pointer the card carries a plain "Close" inside
-   * itself (the corner stays the corner's: no new control lands there), and
-   * on every device Back now closes the card rather than the page
-   * (`useBackCloses`). A fine pointer keeps the card as it was.
+   * itself (the corner stays the corner's: no new control lands there). A
+   * fine pointer keeps the card as it was. (Back closing the card instead of
+   * the page is a follow-up: docs/known-issues.md, "Layer history under
+   * replace/reload".)
    */
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const infoTrigger = useRef<HTMLButtonElement>(null);
@@ -277,8 +277,6 @@ export function Menu({ locale, items, current, label, left, account, settings, o
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [corner]);
-
-  useBackCloses(corner !== null, () => setCorner(null), "corner");
 
   if (hidden) return null;
 
