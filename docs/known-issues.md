@@ -1144,6 +1144,21 @@ deliberately-broken security check. One auditor reported leaving
   concurrent runs.
 - Give each reviewing agent its own worktree or clone.
 
+### L10. A sent chat message or discarded share card can come back after a reload *(open follow-up)*
+**Open** · `packages/web/src/components/ConversationPanel.tsx`, `PrincipleShare.tsx` · severity low
+
+**What.** Chat and share-card drafts are stamped with a writer id minted per mount, and an edit to a
+draft from another writer is forked under a new key so two tabs never overwrite each other. A reload
+is a new mount, so the first keystroke after it forks the restored draft; sending (or discarding)
+the fork clears only the fork's key, and the next reload restores the original — words already
+sent, back in the box.
+
+**Why it is open.** Fixing it needs to tell this tab's own earlier draft from one an open tab still
+holds, and to survive duplicated tabs, staged attachments and retries. Three attempts in the
+`claude/fix-web-bugs` review rounds each traded it for something worse (deleting an open tab's
+draft, dropping attachments on fork, duplicate sends), so it was taken out of that PR. **To be fixed
+in a dedicated PR.**
+
 ---
 
 ## Added after the audit: room-derived text outlives the memory it came from

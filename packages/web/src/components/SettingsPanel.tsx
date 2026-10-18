@@ -97,8 +97,11 @@ export interface SettingsPanelProps {
   name: string;
   onName: (value: string) => void;
   onLocale: (value: SupportedLocale) => void;
-  /** True while a name or language write is in flight. */
-  busy: boolean;
+  /** True while a name write is in flight. Announced, never locking: the
+      write fires while the person may still be typing. */
+  nameBusy: boolean;
+  /** True while a language write is in flight; locks only the language. */
+  localeBusy: boolean;
   /** True when the last write was refused; silence is the success state. */
   failed: boolean;
   onSignOut: () => void;
@@ -186,13 +189,13 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 
       <label className="waka-account-field">
         <span>{say("profileNickname")}</span>
-        <input type="text" value={props.name} disabled={props.busy} autoComplete="name"
+        <input type="text" value={props.name} aria-busy={props.nameBusy} autoComplete="name"
           onChange={(event) => props.onName(event.currentTarget.value)} />
       </label>
 
       <label className="waka-account-field">
         <span>{say("profileLanguageLabel")}</span>
-        <select value={props.locale} disabled={props.busy}
+        <select value={props.locale} disabled={props.localeBusy}
           onChange={(event) => props.onLocale(event.currentTarget.value as SupportedLocale)}>
           {supportedLocales.map((option) => (
             <option key={option.code} value={option.code}>{option.nativeLabel}</option>

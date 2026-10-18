@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { DraftProblem, draftProblem } from './draft-problem';
+import type { MessageKey } from './i18n';
 import { loadInspirationDraft, newInspirationDraft, settleInspirationMediaDraft, writeInspirationDraft,
   type InspirationDraft, type InspirationDraftMedia } from './inspiration-draft-store';
 import { profileStorageKey, readProfileText, writeProfileText, type ProfileStorageScope } from './profile-storage';
 
 /** Failed durable writes stay queued for explicit retry. CAS conflicts never
- * overwrite another tab's words or files. */
+ * overwrite another tab's words or files. `error` is a catalogue key (see
+ * `lib/draft-problem`); empty is the success state. */
 export function useInspirationDraft(scope: ProfileStorageScope | null) {
   const [draft, setDraft] = useState(() => newInspirationDraft(readProfileText(scope, 'draft')));
-  const [ready, setReady] = useState(false), [available, setAvailable] = useState(false), [error, setError] = useState('');
+  const [ready, setReady] = useState(false), [available, setAvailable] = useState(false), [error, setError] = useState<MessageKey | ''>('');
   const live = useRef(draft); live.current = draft;
   const owner = useRef(scope); owner.current = scope;
   const alive = useRef(true), generation = useRef(0), queue = useRef<InspirationDraft[]>([]);
@@ -34,7 +37,7 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
   const pump = useCallback((): Promise<void> => {
     if (running.current) return running.current;
     const scopeAtStart = owner.current, epoch = generation.current;
-    if (!scopeAtStart || !supported.current) return Promise.reject(new Error('File drafts are unavailable on this device.'));
+    if (!scopeAtStart || !supported.current) return Promise.reject(new DraftProblem('worldDraftFilesUnavailable'));
     const work = async () => {
       while (queue.current.length && alive.current && generation.current === epoch) {
         const next = queue.current[0]!;
@@ -45,7 +48,7 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
     };
     running.current = work().then(() => { if (generation.current === epoch) { blocked.current = false; setError(''); } })
       .catch((reason: unknown) => {
-        if (alive.current && generation.current === epoch) { blocked.current = true; setError(reason instanceof Error ? reason.message : 'Could not keep the draft on this device.'); }
+        if (alive.current && generation.current === epoch) { blocked.current = true; setError(draftProblem(reason)); }
         throw reason;
       }).finally(() => { if (generation.current === epoch) running.current = null; });
     return running.current;
@@ -63,13 +66,13 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
   }, [change]);
   const setMedia = useCallback((media: InspirationDraftMedia[]) => {
     change(current => ({ ...current, media }));
-    if (!supported.current) { setError('File drafts are unavailable on this device. Keep this window open.'); return false; }
+    if (!supported.current) { setError('worldDraftFilesUnavailable'); return false; }
     return true;
   }, [change]);
   const setLinkText = useCallback((linkText:string) => {
     if (live.current.linkText === linkText) return;
     change(current=>({...current,linkText}));
-    if (!supported.current) setError('This link cannot be kept on this device yet. Paste it into your note before closing.');
+    if (!supported.current) setError('worldDraftLinkUnavailable');
   },[change]);
   const setRecordingCandidate = useCallback((recordingCandidate: InspirationDraftMedia | null) => {
     change(current => ({ ...current, recordingCandidate }));
@@ -81,14 +84,14 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
   }, [change]);
   const flush = useCallback(async () => {
     if (!supported.current) {
-      if (live.current.media.length || live.current.recordingCandidate || live.current.linkText?.trim()) throw new Error('File drafts are unavailable on this device.');
+      if (live.current.media.length || live.current.recordingCandidate || live.current.linkText?.trim()) throw new DraftProblem('worldDraftFilesUnavailable');
       return null;
     }
     if (!live.current.revision) change(current => current);
     await pump();
     const snapshot = live.current;
     const stored = await loadInspirationDraft(owner.current!, snapshot.id);
-    if (!stored || stored.revision !== snapshot.revision) throw new Error('This draft changed in another tab. Reopen it before saving.');
+    if (!stored || stored.revision !== snapshot.revision) throw new DraftProblem('worldDraftChangedElsewhere');
     return { id: snapshot.id, revision: snapshot.revision };
   }, [change, pump]);
   const settle = useCallback(async (submitted: { id: string; revision: number } | undefined, inspirationId: string) => {
@@ -103,7 +106,10 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
       try { if (key) sessionStorage.setItem(key, next.id); } catch { /* lookup excludes saved tombstones */ }
     }
   }, []);
-  const fork = useCallback(async () => {
+  /* ONE FORK AT A TIME. A second press while the first is out would fork the
+     fork; it waits on the same one instead. */
+  const forking = useRef<Promise<void> | null>(null);
+  const forkOnce = useCallback(async () => {
     if (running.current) await running.current.catch(() => undefined);
     const next = { ...live.current, id: crypto.randomUUID(), revision: 0 };
     queue.current = []; blocked.current = false; live.current = next; setDraft(next);
@@ -111,5 +117,11 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
     try { if (key) sessionStorage.setItem(key, next.id); } catch { /* owner-index recovery */ }
     change(current => current); await pump();
   }, [change, pump]);
+  const fork = useCallback((): Promise<void> => {
+    if (forking.current) return forking.current;
+    const run = forkOnce().finally(() => { if (forking.current === run) forking.current = null; });
+    forking.current = run;
+    return run;
+  }, [forkOnce]);
   return { draft, current: live, ready, available, error, setText, setMedia, setLinkText, setRecordingCandidate, chooseRecording, flush, settle, fork };
 }
