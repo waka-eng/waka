@@ -6201,7 +6201,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    */
   const [forget, setForget] = useState<{
     id: string | null;
-    step: "rest" | "asking" | "going" | "failed";
+    step: "rest" | "asking" | "failed";
   }>({
     id: null,
     step: "rest",
@@ -6998,19 +6998,30 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     void readSkyRef.current().catch(() => undefined);
   }, []);
 
+  /* WHICH MEMORIES HAVE A DELETE OUT, by id. One "going" step in `forget`
+     used to stand for all of them: it was reset when the reader stepped to
+     another memory, so stepping back to A while A's delete was out offered
+     Delete again (a second request for the same memory), and the one flag
+     could only ever describe one memory. Tracked per memory, B can be
+     deleted while A's request is out, and A says "Deleting" whenever it is
+     on screen until its own answer lands. */
+  const [deleting, setDeleting] = useState<ReadonlySet<string>>(() => new Set());
   const forgetIt = useCallback(() => {
     simApiRef.current?.acknowledge("let-go");
     const id = panelId;
-    if (!id || forget.step === "going") return;
+    if (!id || deleting.has(id)) return;
     if (offlineRef.current) {
       /* nothing behind the world to delete from, and pretending otherwise
          would be the one lie the fixture is built to never tell */
       setForget({ id: null, step: "rest" });
       return;
     }
-    setForget({ id, step: "going" });
+    setForget({ id, step: "rest" });
+    setDeleting(current => new Set(current).add(id));
+    const settled = () => setDeleting(current => { const next = new Set(current); next.delete(id); return next; });
     const serverId = panelBall?.sigId ?? id;
     deleteInspiration(serverId)
+      .finally(settled)
       .then(() => {
         inspirationRemovedFromView(serverId, id);
         /* `forget` is per memory: if the reader has moved to another one
@@ -7025,7 +7036,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            printed "didn't go through" on whatever B was open by then. */
         setForget(current => (current.id === id ? { id, step: "failed" } : current));
       });
-  }, [panelId, panelBall, forget.step, inspirationRemovedFromView]);
+  }, [panelId, panelBall, deleting, inspirationRemovedFromView]);
 
   /** Open the answers already on this save. A read, with nothing to write. */
   const openReflections = useCallback(() => {
@@ -10138,7 +10149,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       a warning with nothing to warn about is friction wearing
                       a safety costume. A memory a signal stands on opens the
                       ask below instead. */}
-                  {forget.step === "going" && forget.id === panelId ? (
+                  {panelId && deleting.has(panelId) ? (
                     say("worldDeleting")
                   ) : forget.step === "failed" && forget.id === panelId ? (
                     /* PROSE, AND IT SAYS WHAT IS TRUE: the memory is still
