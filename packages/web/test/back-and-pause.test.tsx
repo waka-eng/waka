@@ -52,8 +52,11 @@ describe("a paused reading", () => {
     await settle();
     expect(container!.textContent).toContain("Reading is paused — your saves are safe.");
     const retry = [...container!.querySelectorAll("button")].find((b) => b.textContent === "Retry")!;
-    await act(async () => { retry.click(); });
-    await settle();
+    vi.useFakeTimers();
+    try {
+      await act(async () => { retry.click(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
+    } finally { vi.useRealTimers(); }
     expect(retryPausedReading).toHaveBeenCalledTimes(1);
     expect(container!.textContent).toBe("");
   });
@@ -69,15 +72,27 @@ describe("a paused reading", () => {
     expect(container!.textContent, "two failure lines and two Retry buttons for one stall").toBe("");
   });
 
-  it("says when a retry was refused for coming too soon", async () => {
+  /* No server cooldown: Retry guards itself, disabled and "Retrying…" until
+     its request answers and for at least three seconds, even when the server
+     refuses at once. */
+  it("holds Retry disabled as Retrying… for at least three seconds, even on an instant refusal", async () => {
     vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(true));
-    vi.mocked(retryPausedReading).mockRejectedValue(new ApiError({ status: 429, message: "soon", code: "reading_retry_throttled" }));
+    vi.mocked(retryPausedReading).mockReset().mockRejectedValue(new ApiError({ status: 502, message: "refused" }));
     render(createElement(Page));
     await settle();
-    const retry = [...container!.querySelectorAll("button")].find((b) => b.textContent === "Retry")!;
-    await act(async () => { retry.click(); });
-    await settle();
-    expect(container!.textContent).toContain("Give it a few minutes");
+    const button = () => container!.querySelector("button")!;
+    vi.useFakeTimers();
+    try {
+      await act(async () => { button().click(); });
+      expect(button().textContent).toBe("Retrying…");
+      expect(button().disabled).toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      expect(button().disabled, "an instant refusal re-armed the button at once").toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_100); });
+    } finally { vi.useRealTimers(); }
+    expect(button().disabled).toBe(false);
+    expect(container!.textContent).toContain("Couldn’t restart it.");
+    expect(retryPausedReading).toHaveBeenCalledTimes(1);
   });
 
   it("shows nothing when the reading is fine, or when the status itself cannot be read", async () => {

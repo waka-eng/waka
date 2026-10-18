@@ -630,13 +630,12 @@
   "publicProfileFailedBody": "WAKA couldn’t open this page just now. It may still be there.",
   "worldGroundFailed": "Couldn’t read what your principles grow from.",
   "worldPrinciplesStillWorking": "Still working — this can take a few minutes. Your saves are safe.",
-  "worldPrinciplesRetryTooSoon": "This was tried moments ago. Try again in a bit.",
+  "worldPrinciplesRetrying": "Retrying…",
   "surfaceUnavailableHome": "Go to your WAKA",
   "readingPausedNotice": "Reading is paused — your saves are safe.",
   "readingPausedRetry": "Retry",
-  "readingPausedRetrying": "Restarting…",
+  "readingPausedRetrying": "Retrying…",
   "readingPausedRetryFailed": "Couldn’t restart it. Try again in a moment.",
   "agentWallHowItFills": "Your agent fills this wall itself: when it signs in to WAKA as your agent, what it saves appears here.",
-  "unreachableAnonymous": "We can’t reach WAKA right now. Check your connection and try again.",
-  "readingPausedRetryThrottled": "It was just retried. Give it a few minutes, then try again."
+  "unreachableAnonymous": "We can’t reach WAKA right now. Check your connection and try again."
 }

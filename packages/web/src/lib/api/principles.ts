@@ -83,21 +83,25 @@ export async function fetchPrincipleStatements(id:string,profileId:string,signal
  */
 let statusInFlight: Promise<ApiPrincipleStatus> | null = null;
 let lastStatus: { status: ApiPrincipleStatus; at: number } | null = null;
-const statusListeners = new Set<(status: ApiPrincipleStatus) => void>();
+/** Where a published status came from: a `poll` (the shared GET) or a
+    `refresh` (the answer to a retry/refresh POST). */
+export type PrincipleStatusSource = "poll" | "refresh";
+const statusListeners = new Set<(status: ApiPrincipleStatus, source: PrincipleStatusSource) => void>();
 /* THE CACHE BELONGS TO ONE SIGNED-IN IDENTITY. A status heard before a
    sign-out, sign-in or switch is somebody else's (or nobody's) reading, so
    an identity change drops both the cached answer and the shared request,
    and an answer that lands after the change is handed to the reader that
    asked for it but never cached or published. */
 onWebSessionChanged(() => { lastStatus = null; statusInFlight = null; });
-function publishStatus(status: ApiPrincipleStatus, session: number): ApiPrincipleStatus {
+function publishStatus(status: ApiPrincipleStatus, session: number, source: PrincipleStatusSource = "poll"): ApiPrincipleStatus {
   if (session !== currentWebSession()) return status;
   lastStatus = { status, at: Date.now() };
-  for (const listener of statusListeners) listener(status);
+  for (const listener of statusListeners) listener(status, source);
   return status;
 }
-/** Hear every status any reader fetched. Returns the unsubscribe. */
-export function onPrincipleStatus(listener: (status: ApiPrincipleStatus) => void): () => void {
+/** Hear every status any reader fetched, with where it came from. Returns
+    the unsubscribe. */
+export function onPrincipleStatus(listener: (status: ApiPrincipleStatus, source: PrincipleStatusSource) => void): () => void {
   statusListeners.add(listener);
   return () => { statusListeners.delete(listener); };
 }
@@ -127,11 +131,12 @@ export async function fetchPrincipleRead(): Promise<{
   return { principles: rows.principles, status };
 }
 
-/** POST /principles/refresh?retry=1 — restarts a failed reading and principles.
-    A 429 (`reading_retry_throttled`) means it was retried moments ago. */
+/** POST /principles/refresh?retry=1 — restarts a failed reading and
+    principles. Its answer is published as a `refresh`, so a reader showing a
+    failure can tell a restart from an ordinary poll. */
 export async function retryPausedReading(): Promise<ApiPrincipleStatus> {
   const session = currentWebSession();
-  return publishStatus((await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status, session);
+  return publishStatus((await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status, session, "refresh");
 }
 
 export async function requestPrincipleRead(retry = false): Promise<void> {

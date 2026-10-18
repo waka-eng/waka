@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchPrincipleRead, onPrincipleStatus, requestPrincipleRead, type ApiPrinciple, type ApiPrincipleStatus } from "../lib/api/principles";
-import { ApiError } from "../lib/api/http";
 import { t, type SupportedLocale } from "../lib/i18n";
+import { RETRY_MIN_MS } from "../lib/settle-at-least";
 
 /**
  * Your own principles: the sky's lead line and one status sentence. Only the
@@ -30,9 +30,11 @@ export function PrincipleRead({ active, locale, onRead }: {
    */
   const [slow, setSlow] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  /* A retry inside the server's reading cooldown is a 429: it was tried
-     moments ago. That is its own sentence, not the generic failure. */
-  const [throttled, setThrottled] = useState(false);
+  /* TRY AGAIN GUARDS ITSELF. The server keeps no retry cooldown, so the
+     button disables and says "Retrying…" from the press until the read it
+     started answers, and for at least `RETRY_MIN_MS`. */
+  const [retrying, setRetrying] = useState(false);
+  const retryingSince = useRef<number | null>(null);
   /* Bumped when a status heard from elsewhere says work started again: the
      poll restarts without that counting as a Try again. */
   const [resume, setResume] = useState(0);
@@ -41,15 +43,15 @@ export function PrincipleRead({ active, locale, onRead }: {
   const retriedAttempt = useRef(0);
   onReadRef.current = onRead;
   /* A RETRY ELSEWHERE IS HEARD HERE. The paused-reading notice's Retry
-     publishes the status it got back; when that says work is moving again,
-     this line drops its failure (or its slow wait) and polls again rather
-     than keep a sentence that is no longer true. */
+     publishes its answer as a `refresh`; when that says work is moving
+     again, this line drops its failure (or its slow wait) and polls again.
+     Poll answers — this component's own included — never resume it. */
   useEffect(() => {
     if (!active) return;
-    return onPrincipleStatus((next) => {
-      if (!stuckRef.current || (next.phase !== "processing" && next.phase !== "pending")) return;
+    return onPrincipleStatus((next, source) => {
+      if (source !== "refresh" || !stuckRef.current || (next.phase !== "processing" && next.phase !== "pending")) return;
       stuckRef.current = false;
-      setStatus(next); setFailed(false); setThrottled(false); setSlow(false);
+      setStatus(next); setFailed(false); setSlow(false);
       setResume((value) => value + 1);
     });
   }, [active]);
@@ -64,6 +66,12 @@ export function PrincipleRead({ active, locale, onRead }: {
     setSlow(false);
     let timer: number | undefined;
     let delay = 60_000;
+    const finishRetry = () => {
+      const since = retryingSince.current;
+      if (since === null) return;
+      retryingSince.current = null;
+      window.setTimeout(() => setRetrying(false), Math.max(0, RETRY_MIN_MS - (Date.now() - since)));
+    };
     const read = async () => {
       if (running || document.hidden) return;
       window.clearTimeout(timer);
@@ -82,19 +90,12 @@ export function PrincipleRead({ active, locale, onRead }: {
         delay = waiting && !longWait ? WAITING_READ_MS : 60_000;
         setSlow(longWait);
         const asked = attempt > retriedAttempt.current;
-        if (!waiting && result.status.phase !== "failed") setThrottled(false);
         if (!ensured && ((result.status.eligible && !result.status.supportPending && result.status.phase === "pending") ||
           ((result.status.eligible || result.status.supportPending) && result.status.phase === "failed" && asked))) {
           retriedAttempt.current = attempt;
           ensured = true;
-          try {
-            await requestPrincipleRead(asked);
-          } catch (error) {
-            if (!(error instanceof ApiError && error.status === 429)) throw error;
-            if (!disposed) setThrottled(true);
-            return;
-          }
-          if (!disposed) { setThrottled(false); setStatus({ ...result.status, phase: result.status.supportPending ? "pending" : "processing" }); }
+          await requestPrincipleRead(asked);
+          if (!disposed) setStatus({ ...result.status, phase: result.status.supportPending ? "pending" : "processing" });
         }
       } catch {
         consecutiveFailures += 1;
@@ -103,6 +104,7 @@ export function PrincipleRead({ active, locale, onRead }: {
         if (!disposed && consecutiveFailures >= 3) setFailed(true);
       } finally {
         running = false;
+        finishRetry();
         if (!disposed && !stopped) timer = window.setTimeout(() => void read(), delay);
       }
     };
@@ -117,11 +119,10 @@ export function PrincipleRead({ active, locale, onRead }: {
       document.removeEventListener("visibilitychange", onFocus);
     };
   }, [active, locale, attempt, resume]);
-  const error = failed || throttled || status?.phase === "failed";
+  const error = failed || status?.phase === "failed";
   stuckRef.current = error || slow;
   const visibleRows = rows;
-  const message = throttled && !failed ? "worldPrinciplesRetryTooSoon"
-    : error ? status?.supportPending ? "worldSupportCheckFailed" : "worldPrinciplesError"
+  const message = error ? status?.supportPending ? "worldSupportCheckFailed" : "worldPrinciplesError"
     : !status ? "worldPrinciplesLoading"
     : status.supportPending ? (status.phase === "processing" ? "worldSupportChecking" : status.phase === "pending" ? "worldSupportQueued" : "worldSupportNeedsContext")
     : slow ? "worldPrinciplesStillWorking"
@@ -131,11 +132,13 @@ export function PrincipleRead({ active, locale, onRead }: {
     : "worldPrinciplesNoCandidate";
   return <>
     {visibleRows.length === 0 ? <p className="jar-values-lead">{t(locale, "worldValuesLeadSelf")}</p> : null}
-    {visibleRows.length === 0 || error || slow || status?.phase === "processing" ?
+    {visibleRows.length === 0 || error || slow || retrying || status?.phase === "processing" ?
       <p className="jar-values-sub" role={error ? "alert" : slow || status?.phase === "processing" ? "status" : undefined}>
         {t(locale, message)}
-        {error ? <> <button type="button" onClick={() => setAttempt((value) => value + 1)}>
-          {t(locale, "worldPrinciplesRetry")}
+        {error || retrying ? <> <button type="button" disabled={retrying} onClick={() => {
+          retryingSince.current = Date.now(); setRetrying(true); setAttempt((value) => value + 1);
+        }}>
+          {t(locale, retrying ? "worldPrinciplesRetrying" : "worldPrinciplesRetry")}
         </button></> : null}
       </p> : null}
   </>;

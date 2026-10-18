@@ -19,7 +19,8 @@
  * and "reading is paused" is a claim about the reading, not the network.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, fetchPrincipleStatus, onPrincipleStatus, recentPrincipleStatus, retryPausedReading, type ApiPrincipleStatus } from './api';
+import { fetchPrincipleStatus, onPrincipleStatus, recentPrincipleStatus, retryPausedReading, type ApiPrincipleStatus } from './api';
+import { settleAtLeast } from './settle-at-least';
 
 /** A status this young is the answer; nobody needs to ask again yet. */
 const FRESH_MS = 15_000;
@@ -27,7 +28,7 @@ const FRESH_MS = 15_000;
 export function useReadingPaused(enabled: boolean) {
   const [status, setStatus] = useState<ApiPrincipleStatus | null>(null);
   const [retrying, setRetrying] = useState(false);
-  const [retryFailed, setRetryFailed] = useState<null | 'failed' | 'throttled'>(null);
+  const [retryFailed, setRetryFailed] = useState<null | 'failed'>(null);
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
@@ -52,11 +53,14 @@ export function useReadingPaused(enabled: boolean) {
     return () => { unsubscribe(); window.removeEventListener('focus', again); };
   }, [enabled, check]);
 
+  /* Retry disables itself and says "Retrying…" until the request answers,
+     and for at least `RETRY_MIN_MS` — the only guard against repeated
+     presses, since the server keeps no cooldown. */
   const retry = useCallback(() => {
     setRetrying(true); setRetryFailed(null);
-    retryPausedReading()
+    settleAtLeast(retryPausedReading())
       .then((next) => { if (alive.current) setStatus(next); })
-      .catch((error: unknown) => { if (alive.current) setRetryFailed(error instanceof ApiError && error.status === 429 ? 'throttled' : 'failed'); })
+      .catch(() => { if (alive.current) setRetryFailed('failed'); })
       .finally(() => { if (alive.current) setRetrying(false); });
   }, []);
 

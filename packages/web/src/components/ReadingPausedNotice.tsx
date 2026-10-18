@@ -24,7 +24,7 @@ export function ReadingPausedNotice({ state, locale, className = 'jar-board-acts
   if (!state.paused || (besidePrincipleRead && state.principlesFailed)) return null;
   return (
     <p className={className} role="status" data-jar-chrome="1">
-      <span>{t(locale, state.retryFailed === 'throttled' ? 'readingPausedRetryThrottled' : state.retryFailed ? 'readingPausedRetryFailed' : 'readingPausedNotice')}</span>
+      <span>{t(locale, state.retryFailed ?'readingPausedRetryFailed' : 'readingPausedNotice')}</span>
       {' '}
       <button className="jar-board-act" type="button" disabled={state.retrying} onClick={state.retry}>
         {t(locale, state.retrying ? 'readingPausedRetrying' : 'readingPausedRetry')}
