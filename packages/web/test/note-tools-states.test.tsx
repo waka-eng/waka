@@ -47,6 +47,11 @@ it("keeps an earlier save failure beside the loading line", async () => {
   expect(await bar({ reading: "Opening…", failed: "That didn’t save." })).toEqual(["Opening…", "That didn’t save."]);
 });
 
+it("keeps Stop in the bar while another note is still loading", async () => {
+  await bar({ reading: "Opening…", recording: { ...idle, phase: "recording", seconds: 12 } as never, stopLabel: "Stop recording" });
+  expect(slot.querySelector('[aria-label="Stop recording"]')?.textContent, "a recording running into the next note's loading can still be stopped").toBe("0:12");
+});
+
 it("keeps Stop in the bar while a delete is armed during a recording", async () => {
   await bar({
     recording: { ...idle, phase: "recording", seconds: 7 } as never,

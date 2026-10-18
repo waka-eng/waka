@@ -1,11 +1,11 @@
 /**
- * ═══ A DETAIL READ OLDER THAN A SAVE NEVER WINS — `lib/detail-reads.ts` ════
+ * ═══ A NOTE'S DETAIL IS READ AFTER ITS WRITES, AND RE-READ IF STALE ═══════
  *
- * Review, 2026-10-17 (rounds 3 and 4). The rule Home's memory card reads
- * through: a read that started before a save, or that answers with a row
- * older than one already accepted, is never cached; the save's cached detail
- * answers instead, and when the save left none, the read is made again —
- * never answered with null.
+ * Review, 2026-10-17 — `lib/detail-reads.ts` with `lib/note-writes.ts`. One
+ * rule: every read waits until no write of the note is out; a read that
+ * turns out stale for any reason (a save while it was out, a row older than
+ * one accepted, a failure after a write began) is made again after the
+ * writes are idle. It never answers with cached words from before a write.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6). Nothing in the product: the fetch is
  * a function the case hands in and answers by hand, because the subject is
@@ -14,117 +14,93 @@
 import { describe, expect, it } from "vitest";
 
 import type { InspirationDetail } from "../src/lib/data";
-import { markSaved, readAfterWrites, readDetail, type DetailReadState } from "../src/lib/detail-reads";
+import { markSaved, readDetail, type DetailReadState } from "../src/lib/detail-reads";
+import { NoteWrites } from "../src/lib/note-writes";
 
-const state = (): DetailReadState => ({ details: new Map(), pending: new Map(), generations: new Map(), stamps: new Map() });
+const state = (writes = new NoteWrites()): DetailReadState & { writes: NoteWrites } =>
+  ({ details: new Map(), pending: new Map(), generations: new Map(), stamps: new Map(), writes });
 const row = (text: string, updatedMs = 1_000): InspirationDetail =>
   ({ id: "n1", text, preview: text, updatedMs, capturedMs: 0, attachments: [], reflections: [] }) as unknown as InspirationDetail;
 
-/** A fetch whose answers the case releases, in order. */
+/** A fetch whose answers the case gives, in order. */
 function heldFetch() {
-  const asked: Array<(value: InspirationDetail) => void> = [];
-  const fetch = () => new Promise<InspirationDetail>((done) => { asked.push(done); });
+  const asked: Array<{ done: (value: InspirationDetail) => void; fail: () => void }> = [];
+  const fetch = () => new Promise<InspirationDetail>((done, fail) => { asked.push({ done, fail: () => fail(new Error("offline")) }); });
   return { fetch, asked };
 }
+const tick = async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
 
 describe("a note's detail read", () => {
   it("is cached when nothing happened while it was out", async () => {
     const s = state(), f = heldFetch();
     const p = readDetail(s, "n1", f.fetch);
-    f.asked[0]!(row("stored"));
+    await tick();
+    f.asked[0]!.done(row("stored"));
     expect((await p)?.text).toBe("stored");
     expect(s.details.get("n1")?.text).toBe("stored");
   });
 
-  it("started before a save, is dropped for the save's cached words", async () => {
+  it("waits for every write of the note — including one queued behind another — then reads the last", async () => {
     const s = state(), f = heldFetch();
+    s.writes.start("n1"); // X is out
+    s.writes.start("n1"); // Y is queued behind it
     const p = readDetail(s, "n1", f.fetch);
-    markSaved(s, "n1");
-    s.details.set("n1", row("saved"));
-    f.asked[0]!(row("before the save"));
-    expect((await p)?.text).toBe("saved");
-    expect(s.details.get("n1")?.text).toBe("saved");
+    await tick();
+    expect(f.asked, "no read while X is out").toHaveLength(0);
+    s.writes.settle("n1"); // X lands
+    await tick();
+    expect(f.asked, "nor while Y is still queued").toHaveLength(0);
+    s.writes.settle("n1"); // Y lands
+    await tick();
+    f.asked[0]!.done(row("Y"));
+    expect((await p)?.text).toBe("Y");
   });
 
-  it("started before a save that left nothing cached, is read again — not answered with null", async () => {
+  it("started before a save, is read again — never answered with the cache", async () => {
     const s = state(), f = heldFetch();
+    s.details.set("n1", row("cached before the save"));
     const p = readDetail(s, "n1", f.fetch);
-    markSaved(s, "n1"); // a save with no row to show for it
-    f.asked[0]!(row("before the save"));
-    await Promise.resolve(); await Promise.resolve();
+    await tick();
+    markSaved(s, "n1");
+    f.asked[0]!.done(row("before the save"));
+    await tick();
     expect(f.asked, "a fresh read went out").toHaveLength(2);
-    f.asked[1]!(row("after the save", 2_000));
+    f.asked[1]!.done(row("after the save", 2_000));
     expect((await p)?.text).toBe("after the save");
-    expect(s.details.get("n1")?.text).toBe("after the save");
   });
 
-  /* A WRITE IN FLIGHT: the card marks its write as it goes out and again
-     when it lands. A read that started between the two read the words from
-     before the write, and is dropped for what the write left. */
-  it("started while a write was in flight, is dropped when the write lands", async () => {
+  it("failing after a write began, is read again once the write lands — and shows the written words", async () => {
     const s = state(), f = heldFetch();
-    markSaved(s, "n1"); // the write goes out
-    const p = readDetail(s, "n1", f.fetch); // a read races it
-    markSaved(s, "n1"); // the write lands…
-    s.details.set("n1", row("written")); // …and leaves its words
-    f.asked[0]!(row("from before the write"));
-    expect((await p)?.text).toBe("written");
-  });
-
-  /* AN ATTACHMENT CHANGES A NOTE WITHOUT CHANGING ITS `updatedAt`, so two
-     reads either side of an upload carry the same stamp. The upload marks
-     the note (Home's `attachedInspiration`), and the read from before it —
-     fewer attachments — cannot replace the one from after. */
-  it("started before an attachment landed, cannot replace the read made after it at the same stamp", async () => {
-    const s = state(), f = heldFetch();
-    const before = readDetail(s, "n1", f.fetch);
-    markSaved(s, "n1"); // the upload landed
-    const after = readDetail(s, "n1", f.fetch);
-    const withFile = { ...row("words", 1_000), attachments: [{ id: "a1", type: "file", label: "notes.pdf" }] } as unknown as InspirationDetail;
-    f.asked[1]!(withFile);
-    expect((await after)?.attachments).toHaveLength(1);
-    f.asked[0]!(row("words", 1_000)); // same stamp, no attachment, lands last
-    expect((await before)?.attachments, "the older read answers with what the newer one cached").toHaveLength(1);
-    expect(s.details.get("n1")?.attachments).toHaveLength(1);
-  });
-
-  /* NOT THE PRE-WRITE CACHE EITHER (review, 2026-10-17). While a write is
-     still out, the cache holds the words from before it; a stale read waits
-     for the write and answers with what the write cached. */
-  it("stale while a write is still out, waits for the write and answers with its words", async () => {
-    const s = state(), f = heldFetch();
-    let land!: () => void;
-    s.writes = new Map([["n1", new Promise<void>((done) => { land = done; })]]);
-    s.details.set("n1", row("before the write"));
     const p = readDetail(s, "n1", f.fetch);
+    await tick();
+    s.writes.start("n1");
     markSaved(s, "n1");
-    f.asked[0]!(row("before the write"));
-    await Promise.resolve(); await Promise.resolve();
-    s.details.set("n1", row("the write's words")); // the write lands and caches its row
-    land();
-    expect((await p)?.text).toBe("the write's words");
+    f.asked[0]!.fail();
+    await tick();
+    expect(f.asked, "no re-read while the write is out").toHaveLength(1);
+    s.writes.settle("n1");
+    await tick();
+    expect(f.asked).toHaveLength(2);
+    f.asked[1]!.done(row("the written words", 2_000));
+    expect((await p)?.text).toBe("the written words");
   });
 
-  it("an archive read waits for a card write in flight before it starts", async () => {
-    const s = state(), f = heldFetch();
-    let land!: () => void;
-    s.writes = new Map([["n1", new Promise<void>((done) => { land = done; })]]);
-    const p = readAfterWrites(s, "n1", f.fetch);
-    await Promise.resolve();
-    expect(f.asked, "no read while the write is out").toHaveLength(0);
-    land();
-    await Promise.resolve(); await Promise.resolve();
-    expect(f.asked).toHaveLength(1);
-    f.asked[0]!(row("after the write", 2_000));
-    expect((await p)?.text).toBe("after the write");
-  });
-
-  it("answering with a row older than one already accepted, is dropped", async () => {
+  it("answering with a row older than one already accepted, is read again", async () => {
     const s = state(), f = heldFetch();
     s.stamps.set("n1", 5_000);
-    s.details.set("n1", row("newer", 5_000));
     const p = readDetail(s, "n1", f.fetch);
-    f.asked[0]!(row("older", 4_000));
+    await tick();
+    f.asked[0]!.done(row("older", 4_000));
+    await tick();
+    f.asked[1]!.done(row("newer", 5_000));
     expect((await p)?.text).toBe("newer");
+  });
+
+  it("fails plainly when nothing went stale", async () => {
+    const s = state(), f = heldFetch();
+    const p = readDetail(s, "n1", f.fetch);
+    await tick();
+    f.asked[0]!.fail();
+    expect(await p).toBeNull();
   });
 });

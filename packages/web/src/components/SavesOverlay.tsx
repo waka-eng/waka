@@ -93,7 +93,7 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onSaved, onErased, onRestored, readFull, onAttached, ownArchive = true, shareName = "" }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onSaved, onErased, onRestored, readFull, onAttached, onWriting, onWriteSettled, ownArchive = true, shareName = "" }: {
   locale: SupportedLocale;
   /** A note's words were stored, with the server's row. The world behind
       this page caches what it has read of each note, and a later edit there
@@ -114,6 +114,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       stale and reads it afresh (its attachments changed without its words,
       so `updatedAt` cannot tell the two reads apart). */
   onAttached?: (id: string) => void;
+  /** A write of a note's words was sent from here, and when it settled —
+      counted with Home's own (`lib/note-writes.ts`). */
+  onWriting?: (id: string) => void;
+  onWriteSettled?: (id: string) => void;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
       works, and the request names the agent's profile. */
@@ -285,8 +289,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      Undo on any re-render behind the archive (review, 2026-10-17). Read
      through a ref, the callbacks are always the latest and never a
      dependency. */
-  const tellHome = useRef({ onSaved, onErased, onRestored, readFull, onAttached });
-  tellHome.current = { onSaved, onErased, onRestored, readFull, onAttached };
+  const tellHome = useRef({ onSaved, onErased, onRestored, readFull, onAttached, onWriting, onWriteSettled });
+  tellHome.current = { onSaved, onErased, onRestored, readFull, onAttached, onWriting, onWriteSettled };
   /* WHERE FOCUS GOES WHEN A DELETE TAKES THE NOTE AWAY. The press that
      deleted it (the bar's trash, or the ⋯ menu's row) unmounts with the
      note, and focus fell to the page; the Undo line is the next thing a
@@ -514,8 +518,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     setSaving(true);
     setSaveFailed(false);
     try {
-      const made = await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
-      if (made) tellHome.current.onSaved?.(made);
+      /* COUNTED WITH HOME'S WRITES (`lib/note-writes.ts`): until this
+         settles, no read of the note and no editor seeded from it starts —
+         the archive can close on this press with the write still out. */
+      tellHome.current.onWriting?.(note.id);
+      let made: ApiInspiration;
+      try {
+        made = await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
+        if (made) tellHome.current.onSaved?.(made);
+      } finally {
+        tellHome.current.onWriteSettled?.(note.id);
+      }
       if (!mounted.current) return;
       /* The list holds what the page loaded, so it has to agree without a
          refetch — otherwise going back reveals the old first line. */
@@ -600,8 +613,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     setSaving(true);
     setSaveFailed(false);
     try {
-      const made = await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
-      if (made) tellHome.current.onSaved?.(made);
+      /* COUNTED WITH HOME'S WRITES (`lib/note-writes.ts`): until this
+         settles, no read of the note and no editor seeded from it starts —
+         the archive can close on this press with the write still out. */
+      tellHome.current.onWriting?.(note.id);
+      let made: ApiInspiration;
+      try {
+        made = await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
+        if (made) tellHome.current.onSaved?.(made);
+      } finally {
+        tellHome.current.onWriteSettled?.(note.id);
+      }
       if (!mounted.current) return;
       /* Both copies, for the reason `leaveNote` gives about the list and the
          reason `attach` gives about the snapshot: the grid behind must not

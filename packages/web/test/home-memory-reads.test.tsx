@@ -52,6 +52,7 @@ const S = vi.hoisted(() => ({
   bareWrites: false,
   shelf: [] as Array<{ id: string; text: string }>,
   holdWrite: false,
+  writtenAt: new Map<string, number>(),
   landWrite: null as null | (() => void),
 }));
 
@@ -59,7 +60,8 @@ const row = (id: string, text: string) => {
   const at = Date.UTC(2026, 9, 1);
   return {
     id, preview: text, text, isPublic: false, kind: "note" as const, source: "app" as const, category: null,
-    capturedMs: at, updatedMs: at, attachments: [], reflectionCount: 0, reflections: [], conversationOrigin: null,
+    /* the server's updatedAt: when it was last written, as a real server's is */
+    capturedMs: at, updatedMs: S.writtenAt.get(id) ?? at, attachments: [], reflectionCount: 0, reflections: [], conversationOrigin: null,
   };
 };
 
@@ -94,10 +96,12 @@ vi.mock("../src/lib/api", async (original) => ({
     /* a write the case holds in flight lands only when it says so */
     if (S.holdWrite) await new Promise<void>((land) => { S.landWrite = land; });
     S.store.set(id, input.text);
+    const writtenAt = Date.now();
+    S.writtenAt.set(id, writtenAt);
     /* the server's row, as the PATCH answers it */
     if (S.bareWrites) return undefined;
     return { id, profileId: VIEWER_ID, text: input.text, kind: "note", category: null, source: "app", visibility: "private",
-      createdAt: new Date(Date.UTC(2026, 9, 1)).toISOString(), updatedAt: new Date().toISOString(), attachments: [], reflections: [] };
+      createdAt: new Date(Date.UTC(2026, 9, 1)).toISOString(), updatedAt: new Date(writtenAt).toISOString(), attachments: [], reflections: [] };
   },
 }));
 vi.mock("../src/lib/data", async (original) => ({
@@ -143,6 +147,7 @@ beforeEach(() => {
   S.shelf = [];
   S.holdWrite = false;
   S.landWrite = null;
+  S.writtenAt = new Map();
 });
 afterEach(() => world?.unmount());
 
@@ -451,4 +456,33 @@ it("a card save in flight, then the archive: the archive opens on the card's wor
   await setText(page(), FROM_ARCHIVE);
   await archiveSave();
   expect(S.store.get("own-2"), "the archive's later save is what is stored").toBe(FROM_ARCHIVE);
+});
+
+/* KEEP, STEP AWAY, COME BACK BEFORE IT LANDS (review, 2026-10-17). The card
+   reopening the note finds the words from before the write in its cache;
+   it must say "Saving…", wait for the write, and open the edit on it. */
+it("reopening a card whose keep is still out shows Saving…, then the kept words", { timeout: 30_000 }, async () => {
+  const KEPT = "something I kept, 4 — kept, still on its way.";
+  await openByAddress("own-5");
+  await stepOn(); // own-4, read into the cache
+  await wait(50);
+  await world.step(6);
+  await pressWords();
+  S.holdWrite = true;
+  await typeAndKeep(KEPT);
+  expect(S.landWrite, "the keep is out").not.toBeNull();
+  const back = [...world.container.querySelectorAll<HTMLElement>(".jar-panel-foot-c button")]
+    .find((b) => /before this one/.test(b.getAttribute("aria-label") ?? ""))!;
+  await act(async () => back.click()); // to own-5
+  await world.step(10);
+  await stepOn(); // and back to own-4 while the keep is out
+  await world.step(6);
+  expect(note(), "the card says the write is still going").toBe("Saving…");
+  await pressWords();
+  expect(editBox(), "no edit seeded from the words the write is replacing").toBeNull();
+  S.holdWrite = false;
+  await act(async () => { S.landWrite!(); });
+  for (let turn = 0; turn < 20 && note() !== ""; turn += 1) { await world.step(2); await wait(20); }
+  await pressWords();
+  expect(editBox()?.value).toBe(KEPT);
 });

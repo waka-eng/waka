@@ -214,6 +214,9 @@ export function NoteTools(props: {
         {props.failed ? (
           <span className="waka-dock-state" role="alert">{props.failed}</span>
         ) : null}
+        {/* a recording started on another note can still be running into
+            this one's loading: its Stop never leaves the bar */}
+        {stopClock}
         {props.readFailed && props.onRetry && props.retryLabel ? (
           <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onRetry}>
             {props.retryLabel}

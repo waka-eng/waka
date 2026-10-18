@@ -133,10 +133,9 @@ export interface EditingDeps {
   /** The memory write announced by `onMemoryWriting` has finished, either
       way — the page's per-note "write in flight" is over. */
   readonly onMemoryWriteSettled?: (id: string) => void;
-  /** A memory write is about to go out. The page marks every read of it
-      already in flight as older than this write (`lib/detail-reads.ts`), so
-      none of them can seed another door's editor with the words from before
-      it. */
+  /** A memory write was queued. The page counts it until it settles
+      (`onMemoryWriteSettled`) and marks every read of the memory already in
+      flight as older than it (`lib/detail-reads.ts`, `lib/note-writes.ts`). */
   readonly onMemoryWriting?: (id: string) => void;
   /** How many attachments the memory being edited holds, for the one rule on
       empty words both doors share (`lib/note-words.ts`): a memory may be
@@ -359,12 +358,13 @@ export function useEditing(deps: EditingDeps): Editing {
     if (held.kind === "memory") {
       const profile = d.memoryProfile?.();
       /* in order behind any earlier write of this memory (dev, #443), named
-         to the profile the card read it with, and announced as it actually
-         goes out so reads already in flight are marked older than it */
-      inOrder(`memory:${held.id}`, () => {
-        d.onMemoryWriting?.(held.id);
-        return updateInspiration(held.id, { text }, profile ? { profile } : {});
-      })
+         to the profile the card read it with — and COUNTED FROM THE MOMENT
+         IT IS QUEUED, not when it reaches the network, so a read or an
+         editor that waits for this note's writes waits for a write still
+         queued behind another (`lib/note-writes.ts`). Uncounted in the
+         `finally` below, either way. */
+      d.onMemoryWriting?.(held.id);
+      inOrder(`memory:${held.id}`, () => updateInspiration(held.id, { text }, profile ? { profile } : {}))
         .then((made) => {
           if (made) d.onInspirationSaved?.(made);
           /* FRESHNESS IS THE PAGE'S VERDICT (review, 2026-10-17). With a

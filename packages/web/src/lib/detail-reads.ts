@@ -14,15 +14,15 @@
  *   - the newest server `updatedAt` this page has accepted for the note — a
  *     row older than it is older than something already shown.
  *
- * A stale answer is never cached. If the save left a detail in the cache,
- * that is the answer; if it did not (a save that came back with no row),
- * the read is made again — a read started now is fresh — rather than
- * answering null and leaving the card with "couldn't load the rest".
+ * And every read first waits until no write of the note is out
+ * (`lib/note-writes.ts`). A stale answer is never cached and never answered
+ * with the cache: the read is made again, after the writes are idle.
  *
  * Kept outside `Home.tsx` so the rule can be tested on its own; Home passes
  * its refs' maps in.
  */
 import type { InspirationDetail } from "./data";
+import type { NoteWrites } from "./note-writes";
 
 export interface DetailReadState {
   /** The cache of full details, by note id. */
@@ -33,40 +33,52 @@ export interface DetailReadState {
   generations: Map<string, number>;
   /** Newest accepted server `updatedAt` (ms), by note id. */
   stamps: Map<string, number>;
-  /** Writes of a note still in flight, by note id: settle when the write
-      has landed (and its words are cached) or failed. */
-  writes?: Map<string, Promise<void>>;
+  /** Writes of each note still out (`lib/note-writes.ts`). Every read
+      waits until there are none. */
+  writes?: Pick<NoteWrites, "idle">;
 }
 
+/** How many times a read that keeps turning out stale is made again before
+    it gives up (answers null, which the card shows as Try again). */
+const RE_READS = 3;
+
+/**
+ * ONE RULE (review, 2026-10-17): a read waits until no write of the note is
+ * out, then reads. If it turns out stale anyway — a save, an upload, or a
+ * write that started while it was out (generation), or a row older than one
+ * already accepted (stamp), including a read that FAILED after such a bump —
+ * it is made again, after the writes are idle. It never answers with cached
+ * words from before a write.
+ */
 export function readDetail(
   state: DetailReadState,
   id: string,
   fetch: (id: string) => Promise<InspirationDetail>,
+  attempt = 0,
 ): Promise<InspirationDetail | null> {
   const inFlight = state.pending.get(id);
   if (inFlight) return inFlight;
-  const generation = state.generations.get(id) ?? 0;
-  const stale = (row?: InspirationDetail) =>
-    (state.generations.get(id) ?? 0) !== generation
-    || (row !== undefined && row.updatedMs < (state.stamps.get(id) ?? -Infinity));
+  const AGAIN = Symbol("read again");
   const settle = () => { if (state.pending.get(id) === p) state.pending.delete(id); };
-  const p: Promise<InspirationDetail | null> = fetch(id)
-    .then((row) => {
-      settle();
-      if (stale(row)) {
-        /* A WRITE STILL IN FLIGHT: the cache holds the words from BEFORE it,
-           so they are not the answer either — wait for the write to land
-           (it caches its own row) and answer with that, or read again. */
-        const writing = state.writes?.get(id);
-        if (writing) return writing.then(() => state.details.get(id) ?? readDetail(state, id, fetch));
-        return state.details.get(id) ?? readDetail(state, id, fetch);
-      }
-      state.details.set(id, row);
-      return row;
+  const p: Promise<InspirationDetail | null> = (state.writes ? state.writes.idle(id) : Promise.resolve())
+    .then(() => {
+      const generation = state.generations.get(id) ?? 0;
+      const stale = (row?: InspirationDetail) =>
+        (state.generations.get(id) ?? 0) !== generation
+        || (row !== undefined && row.updatedMs < (state.stamps.get(id) ?? -Infinity));
+      return fetch(id).then(
+        (row): InspirationDetail | typeof AGAIN => {
+          if (stale(row)) return AGAIN;
+          state.details.set(id, row);
+          return row;
+        },
+        (): null | typeof AGAIN => (stale() ? AGAIN : null),
+      );
     })
-    .catch(() => {
+    .then((result) => {
       settle();
-      return stale() ? state.details.get(id) ?? null : null;
+      if (result !== AGAIN) return result;
+      return attempt < RE_READS ? readDetail(state, id, fetch, attempt + 1) : null;
     });
   state.pending.set(id, p);
   return p;
@@ -78,15 +90,4 @@ export function markSaved(state: DetailReadState, id: string, updatedAt?: string
   state.pending.delete(id);
   const stamp = updatedAt ? Date.parse(updatedAt) : NaN;
   if (Number.isFinite(stamp)) state.stamps.set(id, Math.max(stamp, state.stamps.get(id) ?? -Infinity));
-}
-
-/** A read that must not start until any write of `id` in flight has
-    landed — the archive opening a note the card is saving. */
-export function readAfterWrites(
-  state: DetailReadState,
-  id: string,
-  fetch: (id: string) => Promise<InspirationDetail>,
-): Promise<InspirationDetail | null> {
-  const writing = state.writes?.get(id);
-  return writing ? writing.then(() => readDetail(state, id, fetch)) : readDetail(state, id, fetch);
 }

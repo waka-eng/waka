@@ -101,7 +101,8 @@ import type { CreateInspirationRequest } from '../lib/api';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type ApiInspiration, type HarvestReason } from '../lib/api';
 import { inspirationPreview } from '../lib/inspiration-preview';
 import { wordsCanStand } from '../lib/note-words';
-import { markSaved, readAfterWrites, readDetail, type DetailReadState } from '../lib/detail-reads';
+import { markSaved, readDetail, type DetailReadState } from '../lib/detail-reads';
+import { NoteWrites } from '../lib/note-writes';
 import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
 import { inspectInspirationPhoto, PHOTO_ACCEPT, PhotoRefused } from '../lib/inspiration-photo';
@@ -639,7 +640,11 @@ interface PanelData {
   /** The full read is still in flight after the panel gave up waiting for it
       (the two-second rule below). The panel says "Opening this note…" and
       takes the detail when it lands, instead of staying partial forever. */
-  pending?: boolean;
+  pending?: boolean | 'saving';
+  /** A memory with no detail (one kept a moment ago, or a fixture's) whose
+      words were just kept locally: what it now says, so the card shows them
+      and the next edit starts from them. */
+  keptText?: string;
 }
 
 /**
@@ -2239,16 +2244,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       it — never replaces newer words (see `rememberSavedInspiration`). */
   const newestStampRef = useRef<Map<string, number>>(new Map());
   /** The four maps `lib/detail-reads.ts` reads and stamps, from their refs. */
-  /** Card writes still in flight, by note id, with the way to settle each —
-      the archive waits on these before it reads a note the card is saving,
-      and a stale read waits on them rather than answering with the words
-      from before the write (`lib/detail-reads.ts`). */
-  const writesRef = useRef<Map<string, Promise<void>>>(new Map());
-  const writeSettlersRef = useRef<Map<string, () => void>>(new Map());
+  /** How many card writes of each note are out (`lib/note-writes.ts`).
+      Every read of a note's words, and every editor seeded from them, waits
+      until there are none — the one rule that keeps two doors and a slow
+      network from ever showing the words from before a write. */
+  const noteWritesRef = useRef(new NoteWrites());
   const detailReadState = (): DetailReadState => ({
     details: detailsRef.current, pending: detailPendingRef.current,
-    generations: savedGenerationRef.current, stamps: newestStampRef.current, writes: writesRef.current,
+    generations: savedGenerationRef.current, stamps: newestStampRef.current, writes: noteWritesRef.current,
   });
+  const detailReadStateRef = useRef(detailReadState);
+  detailReadStateRef.current = detailReadState;
   const detailPendingRef = useRef<Map<string, Promise<InspirationDetail | null>>>(new Map());
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
@@ -3316,15 +3322,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, []);
   const loadDetailRef = useRef(loadDetail);
   loadDetailRef.current = loadDetail;
-  /* THE ARCHIVE'S READ: the same stamped read, started only once any card
-     write of the note in flight has landed (review, 2026-10-17). */
-  const readForArchive = (id: string): Promise<InspirationDetail | null> => {
-    const active = atWallRef.current;
-    const profile = active.kind === 'agent' ? active.id : storageScope?.profileId;
-    return readAfterWrites(detailReadState(), id, (noteId) => loadInspiration(noteId, profile));
-  };
-  const readForArchiveRef = useRef(readForArchive);
-  readForArchiveRef.current = readForArchive;
 
   /**
    * THE CREATURE, ASKED. A tap on the companion is a question — "what has
@@ -4350,6 +4347,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        pointerdown): the panel appears in the same commit as the selection —
        no wait at all, and still one single appearance. */
     const cached = detailsRef.current.get(fetchId);
+    /* A WRITE OF THIS MEMORY IS STILL OUT: the cache holds the words from
+       before it. The card opens saying so ("Saving…"), and takes the words
+       read once the write has landed (`lib/note-writes.ts`). */
+    if (cached && noteWritesRef.current.pending(fetchId)) {
+      steppingRef.current = false;
+      setPanel({ id: selectedId, detail: null, partial: true, pending: 'saving' });
+      setPanelOpen(true);
+      let gone = false;
+      void loadDetail(fetchId).then((detail) => {
+        if (gone) return;
+        setPanel((p) => (p && p.id === selectedId ? { id: selectedId, detail, partial: detail === null } : p));
+      });
+      return () => { gone = true; };
+    }
     if (cached) {
       steppingRef.current = false;
       setPanel({ id: selectedId, detail: cached, partial: false });
@@ -4451,6 +4462,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setPanel((p) => (p && (p.id === id || p.detail?.id === id) ? { ...p, detail, partial: false, pending: false } : p));
       /* a memory opened by its address is held beside the field too */
       setDetachedInspiration((held) => (held && held.detail?.id === id ? { ...held, detail } : held));
+    } else {
+      /* NO DETAIL TO PATCH (a fixture keep, or a memory kept a moment ago):
+         the card still shows, and the next edit starts from, the kept words */
+      setPanel((p) => (p && p.id === id && !p.detail ? { ...p, keptText: text } : p));
     }
   }, []);
 
@@ -6971,18 +6986,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        (review, 2026-10-17). The cache gets the same words for the same
        reason: reopening this memory must not read them back stale. */
     onMemoryKept: (id, text, made) => rememberSavedInspiration(id, text, made),
-    onMemoryWriteSettled: (id) => {
-      writeSettlersRef.current.get(id)?.();
-      writeSettlersRef.current.delete(id);
-      writesRef.current.delete(id);
-    },
-    /* a card write going out: every read of this note already in flight is
-       now older than it (`lib/detail-reads.ts`) */
+    onMemoryWriteSettled: (id) => noteWritesRef.current.settle(id),
+    /* a card write QUEUED: counted until it settles, and every read of this
+       note already in flight is now older than it (`lib/detail-reads.ts`) */
     onMemoryWriting: (id) => {
+      noteWritesRef.current.start(id);
       markSaved(detailReadState(), id);
-      if (!writesRef.current.has(id)) {
-        writesRef.current.set(id, new Promise<void>((settle) => { writeSettlersRef.current.set(id, settle); }));
-      }
     },
     /* The one empty-words rule (`lib/note-words.ts`) needs to know what the
        memory holds besides its words. */
@@ -7144,7 +7153,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          `partial` — still opening, or failed — does not know the whole
          text, so the press is not an edit yet. */
       if (!panel || panel.id !== panelId || panel.partial) return;
-      const whole = panel.detail ? panel.detail.text : panelBall?.textPreview;
+      /* A WRITE OF THIS MEMORY IS STILL OUT: no editor seeded from words a
+         write is replacing. The card says "Saving…" and re-reads once the
+         write has landed; the press after that opens the edit. */
+      const noteId = panel.detail?.id ?? panelBall?.sigId ?? panelId;
+      if (noteWritesRef.current.pending(noteId)) {
+        setPanel((p) => (p && p.id === panelId ? { ...p, pending: 'saving' } : p));
+        void loadDetailRef.current(noteId).then((detail) => {
+          setPanel((p) => (p && p.id === panelId ? { id: panelId, detail: detail ?? p.detail, partial: detail === null && !p.detail } : p));
+        });
+        return;
+      }
+      const whole = panel.detail ? panel.detail.text : panel.keptText ?? panelBall?.textPreview;
       if (whole === undefined) return;
       /* THE CARET GOES WHERE THE FINGER WENT. Without this the press lands
          you at the end of a page of text and you scroll back to the sentence
@@ -7441,16 +7461,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            memory it hangs on is shared. Both are gone with rooms (founder,
            2026-10-12: "방 없애"), and with them the only path in this file
            that ever resolved a link to a memory this account does not own. */
-        const generation = savedGenerationRef.current.get(desired.inspirationId) ?? 0;
         const readProfile = target.kind === 'agent' ? target.id : storageScope?.profileId;
-        detail = await loadInspiration(desired.inspirationId, readProfile, controller.signal);
-        if (!current()) return;
-        /* a save landed while this read was out: what it stored wins (see
-           `loadDetail`), or — with nothing stored here — a read made now */
-        if ((savedGenerationRef.current.get(desired.inspirationId) ?? 0) !== generation) {
-          detail = detailsRef.current.get(detail.id) ?? await loadInspiration(desired.inspirationId, readProfile, controller.signal);
+        /* THE SAME RULE AS EVERY OTHER READ (`lib/detail-reads.ts`): after
+           this note's writes, and again if a save landed while it was out. */
+        let tries = 0, generation: number;
+        do {
+          await noteWritesRef.current.idle(desired.inspirationId);
           if (!current()) return;
-        }
+          generation = savedGenerationRef.current.get(desired.inspirationId) ?? 0;
+          detail = await loadInspiration(desired.inspirationId, readProfile, controller.signal);
+          if (!current()) return;
+        } while ((savedGenerationRef.current.get(desired.inspirationId) ?? 0) !== generation && ++tries < 3);
         ball = makeBall(seedOf(detail, skyRef.current.citations, skyRef.current.signals, skyRef.current.posterSignalIds, skyRef.current.principleSignalIds));
         ball.sigId = detail.id;
         if (!current()) return;
@@ -10149,7 +10170,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               onClick={beginPanelEdit}
             >
               {markPassages(
-                panel.detail ? panel.detail.text || panel.detail.preview : panelBall.textPreview,
+                panel.detail ? panel.detail.text || panel.detail.preview : panel.keptText ?? panelBall.textPreview,
                 panelMarks,
               )}
             </p>
@@ -10159,7 +10180,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               note page uses, so one memory never says two different things
               depending on the door it was opened through. */}
           {panel.pending ? (
-            <p className="jar-panel-note" role="status">{say("worldNoteOpening")}</p>
+            <p className="jar-panel-note" role="status">{say(panel.pending === 'saving' ? "worldSaving" : "worldNoteOpening")}</p>
           ) : panel.partial ? (
             <p className="jar-panel-note">
               {say("worldCouldntLoadRest")}{" "}
@@ -11802,7 +11823,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         onRestored={(made) => restoredInspirationRef.current(made)}
         /* the archive reads through the world's stamped reads, so a read
            racing a card save cannot seed its editor with older words */
-        readFull={(id) => readForArchiveRef.current(id)}
+        /* the archive reads through the same rule: after the note's writes */
+        readFull={(id) => loadDetailRef.current(id)}
+        /* and its writes are counted with the card's: no read or editor of
+           the note starts until they settle (`lib/note-writes.ts`) */
+        onWriting={(id) => { noteWritesRef.current.start(id); markSaved(detailReadStateRef.current(), id); }}
+        onWriteSettled={(id) => noteWritesRef.current.settle(id)}
         onAttached={(id) => attachedInspirationRef.current(id)}
         onErased={(id) => {
           /* Gone from the field and the cache like a delete made on the card
