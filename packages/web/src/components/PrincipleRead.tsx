@@ -57,6 +57,8 @@ export function PrincipleRead({ active, locale, onRead }: {
   /* POSTs of this component's own still out, so their published answers are
      not mistaken for a retry from elsewhere. */
   const ownRequests = useRef(0);
+  /* Set by a successful Try again: the next read bypasses a shared GET. */
+  const freshNext = useRef(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const onReadRef = useRef(onRead);
@@ -109,7 +111,12 @@ export function PrincipleRead({ active, locale, onRead }: {
       window.clearTimeout(timer);
       running = true;
       try {
-        const result = await fetchPrincipleRead();
+        /* The first read after a Try again the server took asks afresh: a
+           status GET shared from before the POST would report the failure
+           the POST just answered. */
+        const fresh = freshNext.current;
+        freshNext.current = false;
+        const result = await (fresh ? fetchPrincipleRead({ fresh: true }) : fetchPrincipleRead());
         if (disposed) return;
         setRows(result.principles);
         onReadRef.current?.(result.principles);
@@ -159,6 +166,7 @@ export function PrincipleRead({ active, locale, onRead }: {
         if (!mounted.current) return;
         setFailed(false); setStartFailed(false);
         setStatus((current) => current ? { ...current, phase: current.supportPending ? "pending" : "processing" } : current);
+        freshNext.current = true;
         setResume((value) => value + 1);
       })
       .catch(() => { if (mounted.current) setRetryFailed(true); })

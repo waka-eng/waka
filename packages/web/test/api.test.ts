@@ -843,6 +843,22 @@ describe("the shared principle status across a session change", () => {
     stop();
   });
 
+  it("starts a new status GET for a fresh read even while an older one is in flight", async () => {
+    const { fetchPrincipleStatus } = await import("../src/lib/api/principles");
+    const status = (signalCount: number) => ({ phase: "ready", eligible: true, signalCount, topOfMindCount: 1 });
+    let answerOld!: (response: Response) => void;
+    const fetch = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { answerOld = resolve; }))
+      .mockImplementationOnce(async () => new Response(JSON.stringify({ status: status(5) }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const old = fetchPrincipleStatus();
+    const fresh = await fetchPrincipleStatus({ fresh: true });
+    expect(fetch, "a fresh read joined the GET from before").toHaveBeenCalledTimes(2);
+    expect(fresh.signalCount).toBe(5);
+    answerOld(new Response(JSON.stringify({ status: status(1) }), { status: 200 }));
+    await old;
+  });
+
   it("publishes the status a principles refresh POST answers with, as a refresh", async () => {
     const { requestPrincipleRead, onPrincipleStatus } = await import("../src/lib/api/principles");
     const fetch = vi.fn(async () => new Response(JSON.stringify({ status: { phase: "processing", eligible: true, signalCount: 3, topOfMindCount: 1, readingPaused: false } }), { status: 202 }));

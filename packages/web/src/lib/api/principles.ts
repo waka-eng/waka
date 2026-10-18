@@ -111,8 +111,10 @@ export function recentPrincipleStatus(maxAgeMs: number): ApiPrincipleStatus | nu
 }
 
 /** GET /principles/status — shared while in flight, published when it lands. */
-export function fetchPrincipleStatus(): Promise<ApiPrincipleStatus> {
-  if (statusInFlight) return statusInFlight;
+/** `fresh`: start a new GET even if one is in flight — an answer that left
+    before a POST cannot speak for what the POST just started. */
+export function fetchPrincipleStatus(options: { fresh?: boolean } = {}): Promise<ApiPrincipleStatus> {
+  if (statusInFlight && !options.fresh) return statusInFlight;
   const session = currentWebSession();
   const request: Promise<ApiPrincipleStatus> = getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded")
     .then((body) => publishStatus(body.status, session))
@@ -121,12 +123,12 @@ export function fetchPrincipleStatus(): Promise<ApiPrincipleStatus> {
   return request;
 }
 
-export async function fetchPrincipleRead(): Promise<{
+export async function fetchPrincipleRead(options: { fresh?: boolean } = {}): Promise<{
   principles: ApiPrinciple[]; status: ApiPrincipleStatus;
 }> {
   const [rows, status] = await Promise.all([
     getJson<{ principles: ApiPrinciple[] }>(apiPath("/principles"), "Principles could not be loaded"),
-    fetchPrincipleStatus(),
+    fetchPrincipleStatus(options),
   ]);
   return { principles: rows.principles, status };
 }

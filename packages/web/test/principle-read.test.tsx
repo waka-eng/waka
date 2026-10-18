@@ -182,6 +182,16 @@ describe("principle read", () => {
     expect(host.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it("reads the status afresh after a Try again the server took", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "failed" } });
+    vi.mocked(requestPrincipleRead).mockResolvedValue();
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    expect(fetchPrincipleRead).toHaveBeenLastCalledWith();
+    await act(async () => host.querySelector("button")!.click());
+    await act(async () => vi.advanceTimersByTimeAsync(3_100));
+    expect(fetchPrincipleRead, "the resumed read could join a GET from before the POST").toHaveBeenLastCalledWith({ fresh: true });
+  });
+
   it("retries a failed auto-start on later polls, then after three failures offers Try again", async () => {
     vi.mocked(requestPrincipleRead).mockRejectedValue(new Error("lost"));
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "pending" } });
