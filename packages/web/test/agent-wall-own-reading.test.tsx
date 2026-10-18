@@ -33,7 +33,11 @@ const AGENT_NEWER = vi.hoisted(() => 'A later thought the agent has not pinned.'
 /* A REAL AGENT ('agent-held') for the cases that need its reading to be
    pending, to fail, or to be honestly empty — and the reader's language. */
 const HOLD = vi.hoisted(() => ({
-  on: false, reading: 'hang' as 'hang' | 'fail' | 'empty' | 'board', locale: 'en-US' as 'en-US' | 'ko-KR',
+  on: false, reading: 'hang' as 'hang' | 'fail' | 'empty' | 'board' | 'defer', locale: 'en-US' as 'en-US' | 'ko-KR',
+  /* 'defer': the reading waits until the test says so, through this */
+  release: null as null | (() => void),
+  /* what a deferred reading's pinned lead says when it is released */
+  deferSays: '' as string,
 }));
 
 vi.mock('../src/lib/api/principles', async original => ({
@@ -55,6 +59,10 @@ vi.mock('../src/lib/data', async original => {
     loadTopOfMind: async (profile?: string) =>
       HOLD.on && profile === 'agent-held'
         ? HOLD.reading === 'hang' ? new Promise<never>(() => {})
+          : HOLD.reading === 'defer'
+            ? new Promise<ReturnType<typeof board>>((resolve) => {
+                HOLD.release = () => resolve(board([entry('agent-newer', AGENT_NEWER, false, 1), entry('agent-lead', HOLD.deferSays || AGENT_SAYS, true, 3)]));
+              })
           : HOLD.reading === 'fail' ? Promise.reject(new Error('reading unavailable'))
           : HOLD.reading === 'empty' ? null
           : board([entry('agent-newer', AGENT_NEWER, false, 1), entry('agent-lead', AGENT_SAYS, true, 3)])
@@ -80,7 +88,7 @@ vi.mock('../src/lib/auth-context', async original => {
 let world: MountedWorld;
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
-afterEach(() => { world?.unmount(); vi.useRealTimers(); Object.assign(HOLD, { on: false, reading: 'hang', locale: 'en-US' }); });
+afterEach(() => { world?.unmount(); vi.useRealTimers(); Object.assign(HOLD, { on: false, reading: 'hang', locale: 'en-US', release: null, deferSays: '' }); });
 
 async function settle() {
   for (let turn = 0; turn < 12; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
@@ -172,4 +180,223 @@ it("says an empty agent's resting line in Korean to a Korean reader", async () =
   await settle();
   expect(world.audit().wallKind).toBe('agent');
   expect(bubble()?.querySelector('.jar-char-bubble-reading')?.textContent?.trim()).toBe('아직 아무것도 만들어 내지 못했어요');
+});
+
+/* ═══ A FIRST LOAD THAT FINISHES MID-AIM LANDS WHEN THE AIM ENDS ═══════════
+   Landing waits for rest, and the only rest it used to hear about was an
+   ARRIVAL. Aiming down to the ground and back up stops on the same wall, so
+   `atWall` never changes: the reading that came back mid-aim sat pending and
+   the wall stayed silent over it (retro review of #436, 2026-10-17). */
+type Sim = { toGround(): void; toTop(): void; isResting(): boolean };
+const simNow = () => (window as unknown as { wakaSim: () => Sim | null }).wakaSim()!;
+/** Let every promise the release set off run to the end, WITHOUT a frame:
+    frames only advance through `world.step`, so the camera holds still. */
+const flushFetch = async () => {
+  await act(async () => { for (let i = 0; i < 20; i += 1) await Promise.resolve(); await vi.advanceTimersByTimeAsync(0); });
+};
+const reading = () => bubble()?.querySelector('.jar-char-bubble-reading')?.textContent?.trim();
+async function standOnHeldAgent() {
+  Object.assign(HOLD, { on: true, reading: 'defer' });
+  world = await mountWorld(FACTS); await settle();
+  await act(async () => { face('My agent')!.click(); });
+  await settle();
+  expect(world.audit().wallKind).toBe('agent');
+  expect(bubble(), 'the reading was released before the test released it').toBeNull();
+  expect(HOLD.release, 'the agent\'s reading was never asked for').toBeTruthy();
+}
+
+it("lands an agent's first load that finished while the camera was aiming", async () => {
+  await standOnHeldAgent();
+  /* `simNow()` at every use, never a held handle: a landing REBUILDS the
+     loop, and a handle from before it answers for a world that is gone */
+  await act(async () => { simNow().toGround(); });
+  await world.step(2);
+  expect(simNow().isResting(), 'the aim had already ended — this would test arrival, not rest').toBe(false);
+  /* THE FETCH FINISHES MID-AIM, and is seen to: everything it set off has
+     run, the camera is still aiming, and the reading is NOT on the wall —
+     so what lands it below can only be the aim ending, never the
+     fetch-completion path. */
+  HOLD.release!();
+  await flushFetch();
+  expect(simNow().isResting(), 'the aim ended while the fetch was settling').toBe(false);
+  expect(reading(), 'the bundle landed mid-aim, rebuilding a moving world').toBeUndefined();
+  await settle();
+  await act(async () => { simNow().toTop(); });
+  await settle();
+  expect(world.audit().wallKind, 'the aim crossed walls — this would test arrival, not rest').toBe('agent');
+  expect(reading(), 'a first load that finished mid-aim never landed on the wall it was standing on').toBe(AGENT_SAYS);
+});
+
+/* ═══ AND A ONE-MILLISECOND AIM STILL ENDS IN A REST ═══════════════════════
+   Under reduced motion an aim lasts 1ms: it starts and commits between two
+   frames, so a frame-to-frame "was moving, now still" comparison never saw
+   it move — and never said it stopped. The latch does. */
+it("lands a first load released inside a reduced-motion aim", async () => {
+  const original = window.matchMedia;
+  Object.defineProperty(window, 'matchMedia', { configurable: true, value: (query: string) => ({
+    ...original(query), matches: /prefers-reduced-motion:\s*reduce/.test(query),
+  }) });
+  try {
+    await standOnHeldAgent();
+    await act(async () => { simNow().toGround(); });
+    expect(simNow().isResting(), 'toGround did not start an aim').toBe(false);
+    HOLD.release!();
+    await flushFetch();
+    expect(reading(), 'the bundle landed before the aim ended').toBeUndefined();
+    await world.step(1);
+    expect(simNow().isResting(), 'a reduced-motion aim outlived one frame').toBe(true);
+    await settle();
+    await act(async () => { simNow().toTop(); });
+    await world.step(3);
+    expect(reading(), 'a 1ms aim never reported its rest').toBe(AGENT_SAYS);
+  } finally {
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: original });
+  }
+});
+
+/* ═══ A HELD FINGER IS NOT REST ════════════════════════════════════════════
+   Landing rebuilds the whole simulation, so a first load that came back
+   under a held press landed out from under the finger. It waits for the
+   release (retro review, 2026-10-17). */
+it("holds a first load that finished under a held press until the release", async () => {
+  await standOnHeldAgent();
+  const canvas = world.container.querySelector('canvas')!;
+  const fire = (type: string) => canvas.dispatchEvent(new window.PointerEvent(type,
+    { bubbles: true, cancelable: true, pointerId: 9, clientX: 640, clientY: 300, button: 0, buttons: 1 }));
+  await act(async () => { fire('pointerdown'); });
+  await world.step(2);
+  expect(simNow().isResting(), 'the press did not register as held').toBe(false);
+  HOLD.release!();
+  await flushFetch();
+  await world.step(10);
+  expect(reading(), 'the bundle landed under a held finger').toBeUndefined();
+  await act(async () => { fire('pointercancel'); });
+  await settle();
+  expect(reading(), 'the first load never landed once the press let go').toBe(AGENT_SAYS);
+});
+
+/* ═══ A REFRESH STILL WAITS FOR AN ARRIVAL ═════════════════════════════════
+   Only a FIRST load lands at rest. An agent already on its wall has a
+   reading to stand on, and a refresh landing at every stop would rebuild
+   the world each time you looked down and back. */
+it("never lands a refresh at rest, only at the next arrival", async () => {
+  Object.assign(HOLD, { on: true, reading: 'board' });
+  world = await mountWorld(FACTS); await settle();
+  await world.travelTo(/agent-held/);
+  await settle();
+  expect(reading(), 'the first load did not land').toBe(AGENT_SAYS);
+  const LATER = 'A refreshed thought that must wait for an arrival.';
+  Object.assign(HOLD, { reading: 'defer', deferSays: LATER, release: null });
+  await world.travelTo(/Me/);
+  /* past the refresh throttle, so the next approach refetches */
+  const clockNow = Date.now;
+  Date.now = () => clockNow() + 61_000;
+  try {
+    await world.travelTo(/agent-held/);
+    await settle();
+    expect(HOLD.release, 'the approach did not refresh the agent').toBeTruthy();
+    HOLD.release!();
+    await flushFetch();
+    await act(async () => { simNow().toGround(); });
+    await settle();
+    await act(async () => { simNow().toTop(); });
+    await settle();
+    expect(world.audit().wallKind).toBe('agent');
+    expect(reading(), 'a refresh landed at rest rather than at arrival').toBe(AGENT_SAYS);
+  } finally {
+    Date.now = clockNow;
+  }
+});
+
+/* ═══ A PRESS ENDS ON THE PLATFORM'S WORD, NEVER ON A CLOCK ═══════════════
+   A pointerup the browser swallowed left `down` true, nothing could ever be
+   at rest, and the first load waited under it for the whole session. A
+   timeout fixed that and broke a still hold — a finger held ten seconds had
+   the world snapped out from under it. So a press ends only on evidence it
+   is gone: a lost capture, or a mouse moving with no button held (retro
+   review, 2026-10-17). */
+/** The world's root — the element that holds the pointer capture. */
+const worldRoot = () => world.container.querySelector<HTMLElement>('.jar')!;
+const press = (type: string, init: PointerEventInit = {}, at?: Element) => {
+  const target = at ?? world.container.querySelector('canvas')!;
+  target.dispatchEvent(new window.PointerEvent(type,
+    { bubbles: true, cancelable: true, pointerId: 11, pointerType: 'mouse', clientX: 640, clientY: 300, button: 0, buttons: 1, ...init }));
+};
+async function heldWithReadingBack() {
+  await standOnHeldAgent();
+  await act(async () => { press('pointerdown'); });
+  HOLD.release!();
+  await flushFetch();
+  await world.step(60);
+  expect(reading(), 'the bundle landed under a held press').toBeUndefined();
+}
+
+it("keeps a still hold of fifteen seconds held — no drop, no snap, no landing", async () => {
+  await heldWithReadingBack();
+  const camY = world.audit().camY;
+  await world.step(Math.ceil(15_000 / 16.7));
+  expect(simNow().isResting(), 'a genuine still hold was dropped on a clock').toBe(false);
+  expect(world.audit().camY, 'the world moved under a held finger').toBe(camY);
+  expect(reading(), 'the bundle landed under a held press').toBeUndefined();
+  await act(async () => { press('pointerup', { buttons: 0 }); });
+  await settle();
+  expect(reading(), 'the release did not land the first load').toBe(AGENT_SAYS);
+});
+
+it("ends a press whose capture was lost, and lands what waited under it", async () => {
+  await heldWithReadingBack();
+  await act(async () => { press('lostpointercapture', { buttons: 0 }, worldRoot()); });
+  await settle();
+  expect(simNow().isResting(), 'a lost capture left the press held').toBe(true);
+  expect(reading(), 'a lost capture stranded the first load').toBe(AGENT_SAYS);
+});
+
+/* ═══ BUT ONLY THE WORLD'S OWN CAPTURE ═════════════════════════════════════
+   `lostpointercapture` bubbles. A control inside the world letting go of a
+   pointer it captured is not the world losing its press. */
+it("keeps the press held when a descendant, not the root, loses a capture", async () => {
+  await heldWithReadingBack();
+  await act(async () => { press('lostpointercapture', { buttons: 0 }); });
+  await world.step(30);
+  expect(simNow().isResting(), 'a descendant\'s lost capture dropped the world\'s press').toBe(false);
+  expect(reading(), 'the bundle landed under a held press').toBeUndefined();
+});
+
+it("ends a mouse press whose button is already up when it moves", async () => {
+  await heldWithReadingBack();
+  await act(async () => { press('pointermove', { buttons: 0, clientX: 700 }); });
+  await settle();
+  expect(simNow().isResting(), 'a buttonless hover kept the press held').toBe(true);
+  expect(reading(), 'a lost mouseup stranded the first load').toBe(AGENT_SAYS);
+});
+
+/* ═══ A REBUILD DOES NOT INHERIT A PRESS ═══════════════════════════════════
+   A held press used to be carried into the next build. When a build in
+   between returned early, the finger's pointerup reached no listener, and
+   the next build restored `down` and an owner that never let go: every new
+   touch was refused as a second finger and nothing was at rest again (code
+   review, 2026-10-17). Here a rebuild lands under a held touch whose
+   release never comes; the next touch must still be the world's. */
+it("starts a rebuild with no press held, so the next touch is accepted and rest returns", async () => {
+  Object.assign(HOLD, { on: true, reading: 'board' });
+  world = await mountWorld(FACTS); await settle();
+  const touch = (type: string, pointerId: number) => act(async () => {
+    world.container.querySelector('canvas')!.dispatchEvent(new window.PointerEvent(type,
+      { bubbles: true, cancelable: true, pointerId, pointerType: 'touch', clientX: 640, clientY: 300, button: 0, buttons: type === 'pointerup' ? 0 : 1 }));
+  });
+  await touch('pointerdown', 21);
+  expect(simNow().isResting(), 'the first touch did not register as held').toBe(false);
+  const before = simNow();
+  /* the arrival lands the agent's first load, and landing rebuilds the loop
+     — under a touch whose pointerup never arrives */
+  await world.travelTo(/agent-held/);
+  await settle();
+  expect(reading(), 'the first load did not land, so nothing was rebuilt').toBe(AGENT_SAYS);
+  expect(simNow(), 'the loop was not rebuilt').not.toBe(before);
+  expect(simNow().isResting(), 'the rebuilt loop inherited a press nobody can release').toBe(true);
+  await touch('pointerdown', 22);
+  expect(simNow().isResting(), 'a new touch was refused as a second finger').toBe(false);
+  await touch('pointerup', 22);
+  await settle();
+  expect(simNow().isResting(), 'rest never came back after the new touch').toBe(true);
 });

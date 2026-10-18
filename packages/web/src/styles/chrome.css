@@ -1344,28 +1344,34 @@ body textarea {
    the cascaded value — so the few that are larger restate their own size
    here, at the same strength, after it. Each is the size its own rule
    already gives it; nothing grows, nothing that was above the floor drops
-   to it. A new larger field belongs in this list.
+   to it. A new larger field belongs in this list, and
+   `test/no-focus-zoom.test.ts` holds it both ways: deleting a line here
+   fails, and so does a stylesheet rule that sizes a field at `--t-lead` or
+   above without appearing here.
 
-   AND A FIELD SIZED BY ITS OWN `style=` KEEPS IT. `!important` beats an
-   inline declaration too, so a field whose size is computed in script (a
-   share card's editor sized to its card) is left out of the floor by
-   `:not([style*="font"])` rather than flattened to 16. */
+   NO FIELD IS LET OUT BY ITS `style=`. This used to exempt
+   `:not([style*="font"])`, for a field sized in script — but a substring
+   match also let out any field whose inline style merely named a
+   font-family, a weight or a `--font-*` variable, and every one of those
+   zoomed the page again (retro review of #440, 2026-10-17). No field sets
+   an inline font today; one that ever needs a scripted size above 16
+   restates it here like the rest, and one below 16 is the bug this is for. */
 @media (pointer: coarse) {
-  body .field-input:not([style*="font"]),
-  body input:not([style*="font"]),
-  body select:not([style*="font"]),
-  body textarea:not([style*="font"]) {
+  body .field-input,
+  body input,
+  body select,
+  body textarea {
     font-size: var(--t-input) !important;
   }
-  body .jar-principle-share select:not([style*="font"]),
-  body .jar-principle-share textarea:not([style*="font"]),
-  body .jar-thing-share textarea:not([style*="font"]),
-  body .waka-note-page:not(.waka-over--note .waka-note-page):not([style*="font"]) {
+  body .jar-principle-share select,
+  body .jar-principle-share textarea,
+  body .jar-thing-share textarea,
+  body .waka-note-page:not(.waka-over--note .waka-note-page) {
     font-size: var(--t-lead) !important;
   }
 }
 @media (pointer: coarse) and (max-width: 600px) {
-  body .jar-attachment-transcript textarea:not([style*="font"]) { font-size: var(--t-lead) !important; }
+  body .jar-attachment-transcript textarea { font-size: var(--t-lead) !important; }
 }
 
 /* ---------- one foot, ordered by consequence ----------
