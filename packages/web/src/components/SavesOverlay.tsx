@@ -116,19 +116,25 @@ function onTop(rendered: string | null): string | null {
   return live && typeof live.idx === "number" ? live.usr?.savesNote ?? null : rendered;
 }
 
-function NoteHistory({ openId, onBack }: { openId: string | null; onBack: () => void }) {
+function NoteHistory({ openId, onBack }: { openId: string | null; onBack: () => void | Promise<unknown> }) {
   const location = useLocation(), navigate = useNavigate();
   const marked = (location.state as { savesNote?: string } | null)?.savesNote ?? null;
   const pushed = useRef<string | null>(null), seen = useRef(false);
   const back = useRef(onBack); back.current = onBack;
   const here = useRef(location); here.current = location;
+  const live = useRef(openId); live.current = openId;
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
+  const push = (id: string) => {
+    pushed.current = id; seen.current = false;
+    const at = here.current;
+    navigate(at.pathname + at.search + at.hash, { state: { ...((at.state as object | null) ?? {}), savesNote: id } });
+  };
   // The archive going away ends the leave; a fresh archive starts clear.
   useEffect(() => { archiveLeaving.now = false; return () => { archiveLeaving.now = false; }; }, []);
   useEffect(() => {
     if (openId && pushed.current !== openId && marked !== openId) {
-      pushed.current = openId; seen.current = false;
-      const at = here.current;
-      navigate(at.pathname + at.search + at.hash, { state: { ...((at.state as object | null) ?? {}), savesNote: openId } });
+      push(openId);
     } else if (!openId && pushed.current) {
       const mine = pushed.current;
       pushed.current = null; seen.current = false;
@@ -139,7 +145,17 @@ function NoteHistory({ openId, onBack }: { openId: string | null; onBack: () => 
   useEffect(() => {
     if (!openId || pushed.current !== openId) return;
     if (marked === openId) { seen.current = true; return; }
-    if (seen.current) { pushed.current = null; seen.current = false; back.current(); }
+    if (seen.current) {
+      pushed.current = null; seen.current = false;
+      /* BACK POPPED THE NOTE'S ENTRY BUT THE NOTE MAY NOT CLOSE (review): its
+         words could not be saved, or a save is still in flight. Then the
+         note is still on screen with no entry of its own, and the next Back
+         would skip the list and lose the edit — so the entry goes back. */
+      const id = openId;
+      void Promise.resolve(back.current()).catch(() => undefined).then(() => {
+        if (alive.current && live.current === id && pushed.current === null) push(id);
+      });
+    }
   }, [marked, openId]);
   return null;
 }
@@ -876,7 +892,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        reserve is holding room for nothing, and holding it was the last 60px
        between this page and the one the founder prefers. */
     <div className={`waka-page${open ? " waka-page--note" : ""}`}>
-      {inRouter ? <NoteHistory openId={openId} onBack={() => void leaveNote()} /> : null}
+      {inRouter ? <NoteHistory openId={openId} onBack={() => leaveNote()} /> : null}
       <DialogSurface
         /* ═══ AN OPEN NOTE IS A PAGE, NOT A COLUMN IN THE ARCHIVE ════════
            Founder: "it should go to the same exact UI as when I'm creating
@@ -1219,6 +1235,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           uploading={say("worldComposerUploading")}
           recordLabel={say("worldComposerRecord")}
           stopLabel={say("worldComposerStop")}
+          recordingLabel={say("worldComposerRecordingNow")}
           addLabel={say("worldAddMenu")}
           photoLabel={say("worldAddPhoto")}
           fileLabel={say("worldAddFile")}

@@ -46,7 +46,7 @@
  * the real router history and the real archive all run.
  */
 import { act } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, VIEWER_ID, type MountedWorld } from './helpers/render-home';
@@ -74,8 +74,8 @@ vi.mock('../src/lib/auth-context', async original => {
   return { ...await original<typeof import('../src/lib/auth-context')>(), useOptionalAuth: () => session, useAuth: () => session };
 });
 
-let world: MountedWorld, location: ReturnType<typeof useLocation>;
-function RouterTools() { location = useLocation(); return null; }
+let world: MountedWorld, location: ReturnType<typeof useLocation>, go: ReturnType<typeof useNavigate>;
+function RouterTools() { location = useLocation(); go = useNavigate(); return null; }
 
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => {
@@ -91,9 +91,9 @@ async function settle() {
 
 /** The archive, with its one row open and new words typed over the old. */
 const RETYPED = 'dusk on the hill, and the light went';
-async function openAndRetype(): Promise<void> {
-  world = await mountWorld(FACTS, { routerTools: <RouterTools/> }); await settle();
-  await chooseFromMenu(world.container, 'Inspirations'); await settle();
+async function openAndRetype(cold = false): Promise<void> {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools/>, ...(cold ? { initialEntries: ['/?open=saves'] } : {}) }); await settle();
+  if (!cold) { await chooseFromMenu(world.container, 'Inspirations'); await settle(); }
   const row = world.container.querySelector<HTMLButtonElement>('.waka-list-row');
   expect(row, 'the archive shows no saved row to open').toBeTruthy();
   await act(async () => row!.click()); await settle();
@@ -201,4 +201,35 @@ it('writes nothing when the note was only read', async () => {
   });
   await settle();
   expect(stored()).toEqual([]);
+});
+
+/* Review of the note's own history entry: a cold `?open=saves` link with a
+   note open used to leave the list's entry underneath after Escape, so Back
+   reopened the archive Escape had just closed. */
+it('closes to the world alone from a cold archive link, with no list left to Back into', async () => {
+  await openAndRetype(true);
+  await act(async () => {
+    world.container.querySelector<HTMLTextAreaElement>('textarea.waka-note-page')!
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+  await settle();
+  expect(stored()).toEqual([{ id: 'kept', text: RETYPED }]);
+  expect(new URLSearchParams(location.search).get('open')).toBeNull();
+  await act(async () => { go(-1); }); await settle();
+  expect(new URLSearchParams(location.search).get('open'), 'Back reopened the archive Escape closed').toBeNull();
+});
+
+/* And when Back pops the note's entry but the note cannot close — its words
+   failed to save — the entry comes back, so the next Back still lands on the
+   list and the edit is still on screen to retry. */
+it('puts the note\'s entry back when Back cannot close it because the save failed', async () => {
+  await openAndRetype();
+  vi.mocked(updateInspiration).mockRejectedValue(new Error('Offline'));
+  await act(async () => { go(-1); }); await settle();
+  expect(world.container.querySelector('textarea.waka-note-page'), 'the unsaved note closed').toBeTruthy();
+  expect((location.state as { savesNote?: string } | null)?.savesNote, 'the note has no history entry of its own').toBe('kept');
+  vi.mocked(updateInspiration).mockResolvedValue(undefined as never);
+  await act(async () => { go(-1); }); await settle();
+  expect(world.container.querySelector('textarea.waka-note-page')).toBeNull();
+  expect(new URLSearchParams(location.search).get('open'), 'Back did not stop at the list').toBe('saves');
 });

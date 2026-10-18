@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { EMPTY_VIEW, readViewLocation, viewHref, type ViewLocation } from './view-location';
 
 /** Set while `closeOpen` is putting the whole archive down over an open
     note's entry; read and cleared by SavesOverlay's `NoteHistory`. */
-export const archiveLeaving={now:false};
+export const archiveLeaving:{now:boolean;thenReplace:string|null}={now:false,thenReplace:null};
 interface StoredView { scope: string; query: string; composerFrom?: string;shareFrom?:string;conversationFrom?:string;openFrom?:string }
 /** Router owns browser history; the world owns rendering and restoration. */
 export function useViewNavigation(scope: string | null) {
@@ -12,6 +12,16 @@ export function useViewNavigation(scope: string | null) {
   const href = location.pathname + location.search;
   const view = useMemo(() => readViewLocation(location.pathname, location.search), [href]);
   const own = useRef<string | null>(null);
+  /* THE SECOND HALF OF A COLD-LINK CLOSE (see `closeOpen`): once the step
+     back over the note's entry has landed on the list's, that entry becomes
+     the world — so history holds the closed world alone, as it did before
+     notes had entries of their own. */
+  useEffect(() => {
+    const to = archiveLeaving.thenReplace;
+    if (!to || (location.state as { savesNote?: string } | null)?.savesNote) return;
+    archiveLeaving.thenReplace = null;
+    navigate(to, { replace: true, state: location.state });
+  }, [location.key]);
   const latest = useRef({ location, navigate, scope }); latest.current = { location, navigate, scope };
   const query = (() => {
     const state = location.state as { wakaView?: StoredView } | null;
@@ -91,6 +101,11 @@ export function useViewNavigation(scope: string | null) {
        commit first and would step back a THIRD time (or undo the replace). */
     if(noteOnTop)archiveLeaving.now=true;
     if(stored?.scope===current.scope&&stored.openFrom) current.navigate(noteOnTop?-2:-1);
+    /* A COLD LINK with a note open (review): replacing the note's entry left
+       the list's `?open=saves` underneath, so Back reopened the archive that
+       Escape had just closed. Step back over the note first; the effect above
+       turns the list's entry into the world when it lands. */
+    else if(noteOnTop){archiveLeaving.thenReplace=viewHref({...before,open:null});current.navigate(-1);}
     else current.navigate(viewHref({...before,open:null}),{replace:true});
   },[]);
   /**
