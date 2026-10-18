@@ -123,6 +123,9 @@ export function PrincipleRead({ active, locale, onRead }: {
         /* A read that worked (a focus or visibility read after the poll gave
            up) restarts the poll: `finally` schedules the next one again. */
         stopped = false;
+        /* Work moving (or done) answers any earlier "couldn't retry" or a
+           failed automatic start: those lines are no longer true. */
+        if (result.status.phase === "processing" || result.status.phase === "ready") { setRetryFailed(false); setStartFailed(false); }
         const waiting = result.status.phase === "processing" || result.status.phase === "pending";
         waitingReads = waiting ? waitingReads + 1 : 0;
         const longWait = waitingReads >= MAX_WAITING_READS;

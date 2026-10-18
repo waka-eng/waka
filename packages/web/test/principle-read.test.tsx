@@ -169,6 +169,19 @@ describe("principle read", () => {
     expect(requestPrincipleRead, "a second press did not send its own POST").toHaveBeenCalledTimes(2);
   });
 
+  it("drops Couldn't retry once a later poll reads the work as processing or ready", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "failed" } });
+    vi.mocked(requestPrincipleRead).mockRejectedValue(new Error("lost"));
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    await act(async () => host.querySelector("button")!.click());
+    await act(async () => vi.advanceTimersByTimeAsync(3_100));
+    expect(host.textContent).toContain("Couldn’t retry. Try again.");
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "processing" } });
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(host.textContent, "a stale Couldn't retry outlived the work restarting").not.toContain("Couldn’t retry");
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it("retries a failed auto-start on later polls, then after three failures offers Try again", async () => {
     vi.mocked(requestPrincipleRead).mockRejectedValue(new Error("lost"));
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "pending" } });
