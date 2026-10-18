@@ -537,6 +537,11 @@ const TRAVEL_LEAD_X = 0.21;
  * of dead input, which is exactly what read as "stuck".
  */
 const TRAVEL_MS = 670;
+/** How long a press may go unheard — no move, no release — before it is
+    taken as lost. A stationary held finger sends nothing, so this is long
+    enough that a real hold is never cut, and short enough that a swallowed
+    pointerup cannot hold the world "moving" for the rest of the session. */
+export const LOST_PRESS_MS = 10_000;
 /** Arrival commits inside this distance; the tail is finished by the snap. */
 const TRAVEL_SNAP = 8;
 /**
@@ -681,10 +686,12 @@ type Moment = "touch" | "kept" | "answered" | "arrived" | "shared" | "let-go";
 
 export interface SimApi {
   navigationState: () => { wall: Space; section: 'top' | 'field' | 'sky'; moving: boolean };
-  /** The world is at rest: no trip, no aim, no finger down, no snap owed.
-      The ONE definition — `navigationState().moving` is its negation and the
-      loop's rest edge (`pushRestedRef`) fires on it — so "may this land now"
-      and "it has just stopped" can never disagree. */
+  /** The world is at rest: no trip, no aim, no finger down, no camera ease.
+      The ONE definition the rest edge (`pushRestedRef`) fires on and the
+      first-load landing asks, so "may this land now" and "it has just
+      stopped" can never disagree. Stricter than `navigationState().moving`
+      on purpose: that one answers route restoring and URL recording, which
+      must not stall on a held press. */
   isResting: () => boolean;
   /* `standIn` IS GONE, AND IT WAS THE LAST VERB ON THIS SURFACE WITH NO
      CALLER. It took a member's profile id — or null for your own — and swapped
@@ -919,6 +926,9 @@ export interface FieldAudit {
 export interface Carry {
   cam: unknown;
   trip: unknown;
+  /** a finger held through a rebuild is still held: without it the new loop
+      saw a release that never happened, and called the world at rest */
+  gesture: unknown;
   companion: unknown;
   /** the world has been sized, so a rebuild must not re-stage it */
   primed: boolean;
@@ -1117,7 +1127,7 @@ export interface SimulationOptions {
    * wall the LOOP is resting on: `atWallRef` is React's echo of an arrival
    * and is a render behind the frame that fires this.
    */
-  pushRestedRef: MutableRefObject<(wall: Space) => void>;
+  pushRestedRef: MutableRefObject<(wall: Space, from: SimApi) => void>;
   /* THREE OF THE NINE THINGS THE LOOP ASKED SOMEBODY ELSE TO DO WERE ABOUT
      ROOMS, AND ALL THREE ARE GONE. `loadGroupRef` fetched a room's board and
      ground as travel toward it began; `openGroupMemberRef` opened one
@@ -1564,13 +1574,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       }
     }
 
-    /** THE ONE DEFINITION OF REST. A trip or an aim, and also a finger still
-        down or a snap still owed: a release is followed by the settle onto a
-        section, and nothing is at rest until that has ended too. Mid-drag is
-        moving — a bundle that landed under a held finger rebuilt the world
-        out from under it. */
+    /** The camera is still easing on its own: an uncommitted swipe springing
+        home, or the rubber band pulling `cam.y` back inside its ends. */
+    function cameraEasing() {
+      return cam.xBack || cam.y !== clamp(cam.y, minCamNow(), view.layout.maxCam);
+    }
+    /** THE ONE DEFINITION OF REST. No trip, no aim, no finger down, and no
+        ease still carrying the camera. Mid-drag is moving — a bundle that
+        landed under a held finger rebuilt the world out from under it. */
     function resting() {
-      return !(trip.active || cam.aiming || gesture.down || gesture.snapAt > 0);
+      return !(trip.active || cam.aiming || gesture.down) && !cameraEasing();
     }
     /** LATCHED, NOT SAMPLED. Set wherever motion starts — an aim, a trip, a
         touch — and cleared by the frame that finds the world at rest and
@@ -1755,7 +1768,12 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       /** a held horizontal drag: the companion walks */
       leadOn: false,
       leadTarget: 0,
+      /** When the owning pointer was last heard from, down or move — the
+          clock a LOST release is measured on (see `LOST_PRESS_MS`). */
+      heardAt: 0,
     };
+    /* A HELD FINGER SURVIVES A REBUILD, like the crossing does. See `Carry`. */
+    if (carryRef.current) Object.assign(gesture, carryRef.current.gesture as Partial<typeof gesture>);
 
     /* Dust motes: preallocated, mutated in place, never reallocated. They
        live in SCREEN space (drawn at layout y = y + camY) because they are
@@ -5063,10 +5081,15 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          world at rest after anything moved it — wherever it stopped: an
          arrival, an aim's commit, an aim a touch interrupted, a release that
          needed no snap, a rebuild. With the wall the loop is standing on. */
+      /* A PRESS NOBODY RELEASED. Dragging off the window, a sheet opening
+         over the canvas, a browser that swallowed the pointerup: `down`
+         stayed true, nothing could ever be at rest, and a first load waited
+         under it forever. Ten seconds unheard is a press that has gone. */
+      if (gesture.down && performance.now() - gesture.heardAt > LOST_PRESS_MS) dropPress();
       if (!resting()) movedSinceRest = true;
       else if (movedSinceRest) {
         movedSinceRest = false;
-        pushRestedRef.current(curWall());
+        pushRestedRef.current(curWall(), api);
       }
 
       /* The field drifts continuously, so there is no longer an idle state to
@@ -5260,6 +5283,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            carry the gesture, they just do not get the off-window guarantee */
       }
       gesture.down = true;
+      gesture.heardAt = performance.now();
       movedSinceRest = true;
       gesture.dragging = false;
       gesture.axis = 0;
@@ -5402,6 +5426,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       onHover(e);
       if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
       if (!gesture.down) return;
+      gesture.heardAt = performance.now();
       if (!gesture.dragging && Math.abs(e.clientX - gesture.downX) + Math.abs(e.clientY - gesture.downY) > TAP_SLOP) {
         gesture.dragging = true;
         /* THE GESTURE NO LONGER HAS A SIDEWAYS AXIS. It used to pick between
@@ -5465,8 +5490,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       gesture.axis = 0;
       wake();
     };
-    const onCancel = (e: PointerEvent) => {
-      if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
+    /** End a press that will not be released properly: a cancel, a blur, a
+        hidden tab, or one unheard for `LOST_PRESS_MS`. */
+    function dropPress() {
       if (gesture.dragging || gesture.interruptedSnap) {
         /* cancelled mid-drag, or cancelled on a press that had interrupted a
            move: either way the layout is owed a resting place */
@@ -5477,7 +5503,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       gesture.down = false;
       gesture.dragging = false;
       gesture.axis = 0;
-      releaseOwner(e.pointerId);
+      if (gesture.ownerId !== null) releaseOwner(gesture.ownerId);
+    }
+    const onCancel = (e: PointerEvent) => {
+      if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
+      dropPress();
+    };
+    /* the window lost focus mid-press: its pointerup goes somewhere else */
+    const onBlur = () => {
+      if (gesture.down) dropPress();
+      wake();
     };
     const onWheel = (e: WheelEvent) => {
       // Every reading/writing surface keeps browser scrolling, including at
@@ -5589,6 +5624,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     };
     const onVis = () => {
       if (document.hidden) {
+        if (gesture.down) dropPress();
         clock.running = false;
         cancelAnimationFrame(clock.raf);
       } else {
@@ -5617,6 +5653,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("blur", onBlur);
     root.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKey);
     document.addEventListener("visibilitychange", onVis);
@@ -5744,8 +5781,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       settleInstantly();
     }
 
-    simApiRef.current = {
-      navigationState: () => ({ wall: curWall(), section: cam.y < view.layout.minCam * 0.5 ? 'sky' : cam.y > view.layout.maxCam * 0.5 ? 'field' : 'top', moving: !resting() }),
+    const api: SimApi = {
+      navigationState: () => ({ wall: curWall(), section: cam.y < view.layout.minCam * 0.5 ? 'sky' : cam.y > view.layout.maxCam * 0.5 ? 'field' : 'top', moving: trip.active || cam.aiming }),
       isResting: resting,
       /* the timeline re-hangs under the word, whose width the reading sets */
       hangRail,
@@ -6496,9 +6533,14 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         };
       },
     };
+    simApiRef.current = api;
     wake();
 
     return () => {
+      /* A LOOP THAT HAS GONE IS NOT ASKED ANYTHING. Left in place, a fetch
+         settling between this teardown and the next build — or after the
+         page itself unmounted — read a dead loop's rest and wall. */
+      if (simApiRef.current === api) simApiRef.current = null;
       clock.running = false;
       cancelAnimationFrame(clock.raf);
       ro.disconnect();
@@ -6507,6 +6549,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("blur", onBlur);
       root.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onVis);
@@ -6517,6 +6560,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       carryRef.current = {
         cam: { ...cam },
         trip: { ...trip },
+        gesture: { ...gesture },
         companion: { ...companion },
         primed: view.primed,
         /*
