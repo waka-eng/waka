@@ -5242,7 +5242,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const epoch = ++composerEpoch.current, controller = new AbortController(); uploadController.current = controller;
     const current = () => { if (controller.signal.aborted || composerEpoch.current !== epoch) throw new Error('Save owner changed'); };
     try { await composerDraft.flush(); current(); await uploadDraftFiles([item], controller, current); }
-    catch { if (composerEpoch.current === epoch) setMouthNote(say('worldComposerUploadFailed')); }
+    /* Said through the same catalogue as a keep: a draft that changed in
+       another tab is that conflict (and offers a separate draft), not "the
+       upload failed". */
+    catch (reason) { if (composerEpoch.current === epoch) sayMouthProblem(draftProblem(reason, 'worldComposerUploadFailed')); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   };
   /* ═══ WHETHER SAVE CAN BE PRESSED, AND WHAT THE BAR IS SAYING ═════════
@@ -5520,7 +5523,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         ...(reference ? { draft: reference } : {}) });
       setMomentWhy('');
       setCharSay('');
-    } catch (reason) { if (composerEpoch.current === epoch) sayMouthProblem(reason instanceof ApiError ? 'worldComposerUploadFailed' : draftProblem(reason, 'worldComposerSaveFailed')); }
+    } catch (reason) {
+      /* An `ApiError` here is the SAVE refusing (uploads throw their own
+         `DraftProblem('worldComposerUploadFailed')` by now), so it is said as
+         a failed save, not an upload. */
+      if (composerEpoch.current === epoch) sayMouthProblem(draftProblem(reason, 'worldComposerSaveFailed'));
+    }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   }, [inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
 
