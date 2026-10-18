@@ -6251,7 +6251,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    */
   const [forget, setForget] = useState<{
     id: string | null;
-    step: "rest" | "asking" | "failed";
+    step: "rest" | "asking";
   }>({
     id: null,
     step: "rest",
@@ -7056,10 +7056,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      deleted while A's request is out, and A says "Deleting" whenever it is
      on screen until its own answer lands. */
   const [deleting, setDeleting] = useState<ReadonlySet<string>>(() => new Set());
+  /* WHICH MEMORIES' LAST DELETE FAILED, by id, for the same reason: a
+     failure kept in `forget` was reset by stepping away, so returning to A
+     no longer said its delete had not gone through. It clears when A's
+     delete is pressed again. */
+  const [deleteFailed, setDeleteFailed] = useState<ReadonlySet<string>>(() => new Set());
   const forgetIt = useCallback(() => {
     simApiRef.current?.acknowledge("let-go");
     const id = panelId;
     if (!id || deleting.has(id)) return;
+    const without = (current: ReadonlySet<string>) => {
+      if (!current.has(id)) return current;
+      const next = new Set(current); next.delete(id); return next;
+    };
     if (offlineRef.current) {
       /* nothing behind the world to delete from, and pretending otherwise
          would be the one lie the fixture is built to never tell */
@@ -7067,13 +7076,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       return;
     }
     setForget({ id, step: "rest" });
+    setDeleteFailed(without);
     setDeleting(current => new Set(current).add(id));
-    const settled = () => setDeleting(current => { const next = new Set(current); next.delete(id); return next; });
+    /* Cleared AFTER the view has been told, in the same handler: cleared
+       first (in a `finally` ahead of the `then`), the memory rendered one
+       frame with Delete offered again before it was removed. */
+    const settled = () => setDeleting(without);
     const serverId = panelBall?.sigId ?? id;
     deleteInspiration(serverId)
-      .finally(settled)
       .then(() => {
         inspirationRemovedFromView(serverId, id);
+        settled();
         /* `forget` is per memory: if the reader has moved to another one
            while this was in flight, that one's state is not ours to reset. */
         setForget(current => (current.id === id ? { id: null, step: "rest" } : current));
@@ -7084,7 +7097,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            about this failure is that. Its own state, its own line. And only
            on the memory that failed — written unconditionally, A's failure
            printed "didn't go through" on whatever B was open by then. */
-        setForget(current => (current.id === id ? { id, step: "failed" } : current));
+        setDeleteFailed(current => new Set(current).add(id));
+        settled();
       });
   }, [panelId, panelBall, deleting, inspirationRemovedFromView]);
 
@@ -10205,7 +10219,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     say("worldDeleting")
                   ) : (
                     <>
-                      {forget.step === "failed" && forget.id === panelId ? (
+                      {panelId && deleteFailed.has(panelId) ? (
                         /* PROSE, AND IT SAYS WHAT IS TRUE: the memory is still
                            here. Beside the verb rather than in a sheet, because
                            nothing happened and nothing needs deciding — pressing
