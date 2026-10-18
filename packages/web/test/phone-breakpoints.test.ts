@@ -255,6 +255,31 @@ describe("the four breaks that a browser found and reading did not", () => {
     ).toBe(false);
   });
 
+  /* ═══ AT 350 THE VERBS ABOUT A NOTE FOLD, AND THE STATE GETS A LINE ════
+     Measured 2026-10-17: Back, five 44px tools, Close and two rules need
+     343px of a phone; below that Share and Delete fold into ⋯ rather than
+     any target shrinking. The ⋯ is hidden above 350 (two classes, because
+     `.waka-add` comes later and would show it), its menu hangs from its
+     right edge (centred, it ran off a 320px screen), and under 440 a state
+     line takes its own row instead of being squeezed to ~10px. */
+  it("folds Share and Delete into ⋯ at 350px, anchors its menu right, and gives the state its own line", () => {
+    const css = rules("claims.css");
+    expect(/\.waka-dock-more\.waka-add\s*\{\s*display:\s*none;/.test(css), "the ⋯ shows at full width").toBe(true);
+    expect(
+      /@media \(max-width: 350px\) \{\s*\.waka-dock-roomy\s*\{\s*display:\s*none;\s*\}\s*\.waka-dock-more\.waka-add\s*\{\s*display:\s*inline-flex;/.test(css),
+      "below 350px Share and Delete no longer fold into ⋯ — the row needs 343px at 44px a target",
+    ).toBe(true);
+    expect(
+      /\.waka-add-menu\.waka-more-menu\s*\{[^}]*right:\s*0;[^}]*transform:\s*none;/.test(css),
+      "the ⋯ menu is centred on its button again, which runs it off the right of a 320px phone",
+    ).toBe(true);
+    expect(
+      /\.waka-dock-making:has\(> \.waka-dock-state\)\s*\{[^}]*flex-wrap:\s*wrap;[^}]*\}\s*\.waka-dock-making > \.waka-dock-state\s*\{[^}]*flex:\s*1 0 100%;/.test(css)
+        && /\.waka-dock:has\(\.waka-dock-making > \.waka-dock-state\)\s*\{\s*width:\s*calc\(100vw - var\(--sp-16\)\);/.test(css),
+      "a state line shares the phone row with the tools again and is squeezed to ~10px",
+    ).toBe(true);
+  });
+
   it("keeps the shelves from being crushed to a sliver", () => {
     expect(
       /flex:\s*none/.test(block("claims.css", ".waka-tabs")),

@@ -29,11 +29,12 @@
  * photo, `inspectAttachmentFile` for a file — because only the receiver
  * knows what it is about to do with them.
  */
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useRef } from "react";
 
 import { HomeActionIcon } from "./HomeActionIcon";
 import { PHOTO_ACCEPT } from "../lib/inspiration-photo";
 import { FILE_ACCEPT } from "../lib/api/file-accept";
+import { useDockMenu } from "../lib/use-dock-menu";
 
 export function AddMenu(props: {
   /** The ＋'s name, read in full: it is a glyph with no word beside it. */
@@ -50,53 +51,13 @@ export function AddMenu(props: {
   /** The ＋'s own class: `waka-dock-tool` in the bar, `chat-add` in a chat's own footer. */
   buttonClassName: string;
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const menuId = useId();
-  const wrap = useRef<HTMLSpanElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
+  /* THE KEYBOARD AND POINTER RULES ARE SHARED with the bar's ⋯ menu —
+     focus on open, roving arrows, Escape back to the button, an outside
+     press, a disabled ＋ closing its menu. See `lib/use-dock-menu.ts`. */
+  const menu = useDockMenu(props.disabled);
+  const { open, close } = menu;
   const photos = useRef<HTMLInputElement>(null);
   const files = useRef<HTMLInputElement>(null);
-
-  const close = (refocus = true) => {
-    setOpen(false);
-    if (refocus) button.current?.focus();
-  };
-
-  /* A ＋ that stops being pressable takes its menu with it — a menu still
-     open over a control that is now dim would offer what it cannot do. */
-  useEffect(() => { if (props.disabled) setOpen(false); }, [props.disabled]);
-
-  useEffect(() => {
-    if (!open) return;
-    menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
-    /* A PRESS ANYWHERE ELSE CLOSES IT, and leaves focus where that press
-       put it — returning it to the ＋ would undo the press. Capture phase,
-       so a surface that stops the event on its way down cannot keep the
-       menu open behind it. */
-    const outside = (event: PointerEvent) => {
-      if (wrap.current && event.target instanceof Node && !wrap.current.contains(event.target)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", outside, true);
-    return () => document.removeEventListener("pointerdown", outside, true);
-  }, [open]);
-
-  const onMenuKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      close();
-      return;
-    }
-    if (event.key === "Tab") { setOpen(false); return; }
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Home" && event.key !== "End") return;
-    event.preventDefault();
-    const rows = [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
-    const at = rows.indexOf(document.activeElement as HTMLButtonElement);
-    const next = event.key === "Home" ? 0 : event.key === "End" ? rows.length - 1
-      : (at + (event.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length;
-    rows[next]?.focus();
-  };
 
   /* THE CHOOSER OPENS INSIDE THE PRESS. A file input may only be clicked
      from a person's own gesture, so the row clicks it first and closes the
@@ -104,14 +65,12 @@ export function AddMenu(props: {
   const choose = (input: HTMLInputElement | null) => { input?.click(); close(); };
 
   return (
-    <span ref={wrap} className="waka-add">
-      <button ref={button} type="button" className={props.buttonClassName}
+    <span ref={menu.wrap} className="waka-add">
+      <button {...menu.buttonProps} type="button" className={props.buttonClassName}
         aria-label={props.label} title={props.title}
-        aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
-        disabled={props.disabled}
-        onClick={() => (open ? close() : setOpen(true))}><HomeActionIcon kind="plus" /></button>
+        disabled={props.disabled}><HomeActionIcon kind="plus" /></button>
       {open ? (
-        <div ref={menu} id={menuId} className="waka-add-menu" role="menu" aria-label={props.label} onKeyDown={onMenuKey}>
+        <div {...menu.menuProps} className="waka-add-menu" aria-label={props.label}>
           <button type="button" role="menuitem" className="waka-add-row" onClick={() => choose(photos.current)}>
             <HomeActionIcon kind="photo" /><span>{props.photoLabel}</span>
           </button>

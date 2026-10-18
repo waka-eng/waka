@@ -730,6 +730,49 @@
     display: inline-flex;
   }
 }
+/* THE ⋯'S MENU HANGS FROM ITS RIGHT EDGE. It reuses the ＋'s lifted column,
+   which is centred on its button; the ⋯ sits near the end of the row, so
+   centring ran the menu off the right of a 320px screen. Anchored right and
+   held inside the 16px gutters instead. Two classes so this outranks the
+   base `.waka-add-menu`, which comes later in the sheet. */
+.waka-add-menu.waka-more-menu {
+  left: auto;
+  right: 0;
+  transform: none;
+  max-width: calc(100vw - var(--sp-32));
+}
+/* MEASURED (review, 2026-10-17): with the tools in the row, a state line —
+   "Uploading…", a failed save, a delete question — was left 10-20px at 320
+   and ~9px at 360, which is no sentence at all. On a phone the state takes
+   its own line above the tools inside the bar, so it always has the group's
+   full width (~190px at 320) and the tools keep theirs. Above 440 the bar
+   has room for both on one line. */
+@media (max-width: 440px) {
+  /* ONLY WHILE THERE IS A STATE TO SAY. Wrapping always let the group fold
+     its own tools into a column; with a state line present the group takes
+     the row's remaining width (basis 0, grow) and the line sits above the
+     tools, wrapping to a second line rather than clipping. */
+  /* The dock is fixed and shrink-to-fit, so it is told its width outright —
+     measured, a basis-0 group otherwise sized it to its narrowest column. */
+  .waka-dock:has(.waka-dock-making > .waka-dock-state) {
+    width: calc(100vw - var(--sp-16));
+  }
+  .waka-dock-slot:has(> .waka-dock-making > .waka-dock-state) {
+    flex: 1 1 auto;
+  }
+  .waka-dock-making:has(> .waka-dock-state) {
+    flex: 1 1 0;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .waka-dock-making > .waka-dock-state {
+    order: -1;
+    flex: 1 0 100%;
+    max-width: none;
+    text-align: center;
+    white-space: normal;
+  }
+}
 
 /* The composer and the dock both want the bottom of the screen, and the dock
    is the thing that is always there — so the box sits above it. */

@@ -32,12 +32,13 @@
  * and still saves; it simply cannot take an attachment, which is honest —
  * there is nowhere to put the control.
  */
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { AddMenu } from "./AddMenu";
 import { HomeActionIcon } from "./HomeActionIcon";
 import { supportedRecordingType, type useAudioRecording } from "../lib/use-audio-recording";
+import { useDockMenu } from "../lib/use-dock-menu";
 
 /** The id `Home` gives the dock slot this renders into. */
 export const DOCK_SLOT = "waka-note-tools";
@@ -143,14 +144,25 @@ export function NoteTools(props: {
       disabled={props.saving}
       onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
   );
-  const eraseAsk = props.erasePending && props.eraseQuestion ? (
-    <span className="waka-dock-state" role="status">
-      {props.eraseQuestion}
-      <button type="button" className="waka-dock-undo" onClick={props.onCancelErase}>
-        {props.cancelEraseLabel}
-      </button>
-    </span>
-  ) : null;
+  /* ═══ AN ARMED DELETE IS THE WHOLE BAR FOR ITS MOMENT ═════════════════
+     On an archive with no deleted shelf the first press asks. The question,
+     the confirming press and "Not now" are the only three things in the
+     group until it is answered: with the tools beside it the question was
+     squeezed to ~15px on a 320px phone and "Not now" — a link inside the
+     ellipsizing line — was clipped away (review, 2026-10-17). "Not now" is
+     a real dock item with the 44px floor, outside the status line. */
+  if (props.erasePending && props.eraseQuestion) {
+    return createPortal(
+      <>
+        <span className="waka-dock-state" role="status">{props.eraseQuestion}</span>
+        {erase}
+        <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onCancelErase}>
+          {props.cancelEraseLabel}
+        </button>
+      </>,
+      slot,
+    );
+  }
 
   /* ═══ UNTIL THE NOTE IS READ, THE BAR SAYS THAT — AND KEEPS ITS EXITS ═══
      While the full text is on its way, or after it failed, the making tools
@@ -167,11 +179,11 @@ export function NoteTools(props: {
   if (props.reading || props.readFailed) {
     return createPortal(
       <>
-        {eraseAsk ?? (props.readFailed ? (
+        {props.readFailed ? (
           <span className="waka-dock-state" role="alert">{props.readFailed}</span>
         ) : (
           <span className="waka-dock-state" role="status">{props.reading}</span>
-        ))}
+        )}
         {props.readFailed && props.onRetry && props.retryLabel ? (
           <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onRetry}>
             {props.retryLabel}
@@ -312,7 +324,7 @@ export function NoteTools(props: {
         ]} />
       {/* ONE LINE, THE SAME SLOT THE NOTEPAD'S STATE USES. Founder: "states
           should show and disappear in the bottom bar only." */}
-      {eraseAsk ? eraseAsk : props.failed || props.recording.error ? (
+      {props.failed || props.recording.error ? (
         <span className="waka-dock-state" role="alert">{props.failed || props.recording.error}</span>
       ) : props.attaching ? (
         <span className="waka-dock-state" role="status">{props.uploading}</span>
@@ -333,39 +345,21 @@ function MoreMenu(props: {
   disabled?: boolean;
   rows: Array<{ label: string; icon: "share" | "erase"; act: () => void }>;
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const menuId = useId();
-  const wrap = useRef<HTMLSpanElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (props.disabled) setOpen(false); }, [props.disabled]);
-  useEffect(() => {
-    if (!open) return;
-    /* Into the menu on open, as `AddMenu` does, so Escape and the arrows
-       reach it from the keyboard that opened it. */
-    menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
-    const outside = (event: PointerEvent) => {
-      if (wrap.current && event.target instanceof Node && !wrap.current.contains(event.target)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", outside, true);
-    return () => document.removeEventListener("pointerdown", outside, true);
-  }, [open]);
+  const menu = useDockMenu(props.disabled);
   return (
-    <span ref={wrap} className="waka-add waka-dock-more">
-      <button ref={button} type="button" className="waka-dock-tool" aria-label={props.label}
-        aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
-        disabled={props.disabled} onClick={() => setOpen((was) => !was)}>
+    <span ref={menu.wrap} className="waka-add waka-dock-more">
+      <button {...menu.buttonProps} type="button" className="waka-dock-tool" aria-label={props.label}
+        disabled={props.disabled}>
         <HomeActionIcon kind="more" />
       </button>
-      {open ? (
-        <div ref={menu} id={menuId} className="waka-add-menu" role="menu" aria-label={props.label}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); button.current?.focus(); }
-            if (event.key === "Tab") setOpen(false);
-          }}>
+      {menu.open ? (
+        /* ANCHORED TO THE BUTTON'S RIGHT EDGE, not centred on it like the ＋'s:
+           the ⋯ sits near the end of the row, and centring ran the menu off
+           the right of the screen (`.waka-more-menu`). */
+        <div {...menu.menuProps} className="waka-add-menu waka-more-menu" aria-label={props.label}>
           {props.rows.map((row) => (
             <button key={row.icon} type="button" role="menuitem" className="waka-add-row"
-              onClick={() => { setOpen(false); row.act(); }}>
+              onClick={() => { menu.close(false); row.act(); }}>
               <HomeActionIcon kind={row.icon} /><span>{row.label}</span>
             </button>
           ))}
