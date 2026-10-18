@@ -2416,7 +2416,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const settingsWrites = useSettingsWrites({
     accountName,
     locale,
-    updateName: (name, preferredLocale) => auth ? auth.updateProfile({ name, preferredLocale }) : Promise.resolve(),
+    updateName: (name, preferredLocale) => auth ? auth.updateProfile({ name, preferredLocale }).then(viewer => viewer.profile?.name) : Promise.resolve(undefined),
     updateLocale: next => auth ? auth.updatePreferredLocale(next) : Promise.resolve(),
     settleMs: NAME_SETTLE_MS,
   });

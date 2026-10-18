@@ -8,7 +8,10 @@
  * name left on the account, "busy" cleared by the wrong write, a failure lost
  * or reported by a write that no longer mattered, the old language put back
  * by a rename that carried it, and a name typed back to the original never
- * being written.
+ * being written, a refused language carried by the rename behind it, a
+ * stale remembered name outranking the account, the field waiting on a
+ * session that had not re-applied the new name, and one failure flag
+ * hiding another.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): nothing but the two write functions
  * the hook is handed, which are `vi.fn`s holding their promises open so a
@@ -23,14 +26,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { SupportedLocale } from "../src/lib/locales";
 import { useSettingsWrites, type SettingsWritesInput } from "../src/lib/use-settings-writes";
 
-interface Held { args: unknown[]; resolve: () => void; reject: () => void }
+interface Held { args: unknown[]; resolve: (value?: string) => void; reject: () => void }
 let names: Held[], locales: Held[];
 let hook: ReturnType<typeof useSettingsWrites>;
 let input: SettingsWritesInput;
 let host: HTMLDivElement, root: Root;
 
 const holding = (into: () => Held[]) => (...args: unknown[]) =>
-  new Promise<void>((resolve, reject) => { into().push({ args, resolve, reject: () => reject(new Error("refused")) }); });
+  new Promise<string | undefined>((resolve, reject) => { into().push({ args, resolve: (value?: string) => resolve(value), reject: () => reject(new Error("refused")) }); });
 
 function Harness() { hook = useSettingsWrites(input); return null; }
 const render = () => act(async () => root.render(<Harness />));
@@ -89,4 +92,37 @@ it("writes the old name back when it is typed back while a rename is out", async
   await type("Alice");
   names[0]!.resolve(); await flush();
   expect(names.map(row => row.args[0]), "typing the original back was skipped as no change").toEqual(["Bob", "Alice"]);
+});
+
+it("does not send a refused language with the rename queued behind it", async () => {
+  await act(async () => hook.onLocale("ko-KR" as SupportedLocale));
+  await type("Bob");
+  locales[0]!.reject(); await flush();
+  expect(names[0]!.args, "the rename carried the language that was just refused").toEqual(["Bob", "en-US"]);
+});
+
+it("shows the name the server confirmed, before the session re-applies it", async () => {
+  await type("bob");
+  names[0]!.resolve("Bob"); await flush();
+  expect(hook.name).toBe("Bob");
+});
+
+it("lets the account's name outrank a remembered one once it changes", async () => {
+  /* Renamed to Bob here; another tab then renames the account to Carol.
+     Typing Bob again must write it — "Bob" is no longer the account's. */
+  await type("Bob");
+  names[0]!.resolve(); await flush();
+  input = { ...input, accountName: "Carol" }; await render();
+  await type("Bob");
+  await flush();
+  expect(names.map(row => row.args[0])).toEqual(["Bob", "Bob"]);
+});
+
+it("keeps a rename's failure showing when a language write then succeeds", async () => {
+  await type("Bob");
+  names[0]!.reject(); await flush();
+  expect(hook.failed).toBe(true);
+  await act(async () => hook.onLocale("ko-KR" as SupportedLocale));
+  locales[0]!.resolve(); await flush();
+  expect(hook.failed, "the language's success hid the unresolved rename").toBe(true);
 });

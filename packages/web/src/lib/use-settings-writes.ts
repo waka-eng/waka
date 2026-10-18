@@ -23,7 +23,18 @@
  * it matched `accountName`, which had not updated yet — and the rename then
  * landed, leaving the account on the name the person had just typed away.
  * The comparison is with the last name SENT, so typing back schedules a
- * write back.
+ * write back. "Last sent" is dropped once that write lands — from then on
+ * the name the SERVER CONFIRMED is the comparison and what the field shows,
+ * because the account's name in the session may not have been re-applied
+ * yet — and both are dropped when the account's name changes.
+ *
+ * A REFUSED LANGUAGE IS NOT CARRIED. When a language write fails, the
+ * language wanted goes back to the last one the server accepted INSIDE the
+ * queued task, before the queue moves on — so a rename waiting behind it
+ * cannot send the language that was just refused.
+ *
+ * TWO FAILURE FLAGS. A language write succeeding must not hide a rename
+ * that is still failed, and the other way round.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -33,7 +44,8 @@ export interface SettingsWritesInput {
   accountName: string;
   /** The language the account holds now. */
   locale: SupportedLocale;
-  updateName: (name: string, preferredLocale: SupportedLocale) => Promise<unknown>;
+  /** Writes the name; resolves with the name the server confirmed. */
+  updateName: (name: string, preferredLocale: SupportedLocale) => Promise<string | undefined>;
   updateLocale: (preferredLocale: SupportedLocale) => Promise<unknown>;
   /** How long the field must be still before its name is written. */
   settleMs: number;
@@ -41,21 +53,32 @@ export interface SettingsWritesInput {
 
 export function useSettingsWrites(input: SettingsWritesInput) {
   const [typed, setTyped] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState<string | null>(null);
   const [nameBusy, setNameBusy] = useState(false);
   const [localeBusy, setLocaleBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [nameFailed, setNameFailed] = useState(false);
+  const [localeFailed, setLocaleFailed] = useState(false);
 
   const live = useRef(input);
   live.current = input;
   const chain = useRef<Promise<void>>(Promise.resolve());
   const nameToken = useRef(0), localeToken = useRef(0), localePending = useRef(0);
   const lastSent = useRef<string | null>(null);
+  const confirmedRef = useRef<string | null>(null);
   const wantedLocale = useRef(input.locale);
+  const acceptedLocale = useRef(input.locale);
   /* With no language write out, the language wanted is the one the account
      holds — which another tab may have changed. */
-  if (localePending.current === 0) wantedLocale.current = input.locale;
+  if (localePending.current === 0) wantedLocale.current = acceptedLocale.current = input.locale;
   const timer = useRef<number | null>(null);
   useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
+  /* The account's name moved (this write re-applied, or another tab): it is
+     the truth again, and nothing remembered here outranks it. */
+  useEffect(() => {
+    lastSent.current = null;
+    confirmedRef.current = null;
+    setConfirmed(null);
+  }, [input.accountName]);
 
   /** Run after every write already queued; never rejects the queue itself. */
   const enqueue = useCallback(<T,>(write: () => Promise<T>): Promise<T> => {
@@ -65,13 +88,13 @@ export function useSettingsWrites(input: SettingsWritesInput) {
   }, []);
 
   const onName = useCallback((value: string) => {
-    setTyped(value); setFailed(false);
+    setTyped(value); setNameFailed(false);
     if (timer.current !== null) window.clearTimeout(timer.current);
     const trimmed = value.trim();
     /* AN EMPTY NAME IS NOT A RENAME. The field may be empty while somebody
        clears it to type a new one; writing that would blank the account
        between two keystrokes. */
-    if (!trimmed || trimmed === (lastSent.current ?? live.current.accountName)) return;
+    if (!trimmed || trimmed === (lastSent.current ?? confirmedRef.current ?? live.current.accountName)) return;
     timer.current = window.setTimeout(() => {
       timer.current = null;
       const mine = ++nameToken.current;
@@ -79,15 +102,19 @@ export function useSettingsWrites(input: SettingsWritesInput) {
       setNameBusy(true);
       void enqueue(() => live.current.updateName(trimmed, wantedLocale.current))
         .then(
-          /* Hand the field back to the account's name ONLY if it still holds
-             what was sent: whatever was typed while the write was out stays. */
-          () => { if (mine === nameToken.current) setTyped(current => (current === value ? null : current)); },
-          () => {
+          (serverName) => {
+            const landed = serverName ?? trimmed;
+            if (lastSent.current === trimmed) lastSent.current = null;
+            confirmedRef.current = landed;
             if (mine !== nameToken.current) return;
-            /* the account did not change, so "last sent" is not a fact any
-               more — the next comparison is with the account again */
-            lastSent.current = null;
-            setFailed(true);
+            setConfirmed(landed);
+            /* Hand the field back ONLY if it still holds what was sent:
+               whatever was typed while the write was out stays. */
+            setTyped(current => (current === value ? null : current));
+          },
+          () => {
+            if (lastSent.current === trimmed) lastSent.current = null;
+            if (mine === nameToken.current) setNameFailed(true);
           },
         )
         .finally(() => { if (mine === nameToken.current) setNameBusy(false); });
@@ -98,14 +125,28 @@ export function useSettingsWrites(input: SettingsWritesInput) {
     const mine = ++localeToken.current;
     wantedLocale.current = next;
     localePending.current += 1;
-    setLocaleBusy(true); setFailed(false);
-    void enqueue(() => live.current.updateLocale(next))
-      .then(undefined, () => { if (mine === localeToken.current) setFailed(true); })
+    setLocaleBusy(true); setLocaleFailed(false);
+    void enqueue(() => live.current.updateLocale(next).then(
+      (result) => { acceptedLocale.current = next; return result; },
+      (reason: unknown) => {
+        /* inside the task, so it happens before the queue moves on */
+        if (mine === localeToken.current) wantedLocale.current = acceptedLocale.current;
+        throw reason;
+      },
+    ))
+      .then(undefined, () => { if (mine === localeToken.current) setLocaleFailed(true); })
       .finally(() => {
         localePending.current -= 1;
         if (mine === localeToken.current) setLocaleBusy(false);
       });
   }, [enqueue]);
 
-  return { name: typed ?? input.accountName, nameBusy, localeBusy, failed, onName, onLocale };
+  return {
+    name: typed ?? confirmed ?? input.accountName,
+    nameBusy,
+    localeBusy,
+    failed: nameFailed || localeFailed,
+    onName,
+    onLocale,
+  };
 }
