@@ -19,39 +19,53 @@
  * and "reading is paused" is a claim about the reading, not the network.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchPrincipleStatus, retryPausedReading } from './api';
+import { ApiError, fetchPrincipleStatus, onPrincipleStatus, recentPrincipleStatus, retryPausedReading, type ApiPrincipleStatus } from './api';
+
+/** A status this young is the answer; nobody needs to ask again yet. */
+const FRESH_MS = 15_000;
 
 export function useReadingPaused(enabled: boolean) {
-  const [paused, setPaused] = useState(false);
+  const [status, setStatus] = useState<ApiPrincipleStatus | null>(null);
   const [retrying, setRetrying] = useState(false);
-  const [retryFailed, setRetryFailed] = useState(false);
+  const [retryFailed, setRetryFailed] = useState<null | 'failed' | 'throttled'>(null);
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
+  /* NO REQUEST OF ITS OWN WHEN ONE WAS JUST MADE. `PrincipleRead` reads the
+     same status on the same screen; the shared fetch and the published
+     answers in `lib/api/principles.ts` mean this hook mostly listens. */
   const check = useCallback(() => {
-    const controller = new AbortController();
-    fetchPrincipleStatus(controller.signal)
-      .then((status) => { if (alive.current && !controller.signal.aborted) setPaused(status.readingPaused === true); })
+    const recent = recentPrincipleStatus(FRESH_MS);
+    if (recent) { setStatus(recent); return; }
+    fetchPrincipleStatus()
+      .then((next) => { if (alive.current) setStatus(next); })
       .catch(() => undefined);
-    return controller;
   }, []);
 
   useEffect(() => {
     if (!enabled) return;
     alive.current = true;
-    let controller = check();
-    const again = () => { if (document.hidden) return; controller.abort(); controller = check(); };
+    const unsubscribe = onPrincipleStatus((next) => { if (alive.current) setStatus(next); });
+    check();
+    const again = () => { if (!document.hidden) check(); };
     window.addEventListener('focus', again);
-    return () => { controller.abort(); window.removeEventListener('focus', again); };
+    return () => { unsubscribe(); window.removeEventListener('focus', again); };
   }, [enabled, check]);
 
   const retry = useCallback(() => {
-    setRetrying(true); setRetryFailed(false);
+    setRetrying(true); setRetryFailed(null);
     retryPausedReading()
-      .then((status) => { if (alive.current) setPaused(status.readingPaused === true); })
-      .catch(() => { if (alive.current) setRetryFailed(true); })
+      .then((next) => { if (alive.current) setStatus(next); })
+      .catch((error: unknown) => { if (alive.current) setRetryFailed(error instanceof ApiError && error.status === 429 ? 'throttled' : 'failed'); })
       .finally(() => { if (alive.current) setRetrying(false); });
   }, []);
 
-  return { paused, retrying, retryFailed, retry };
+  return {
+    paused: enabled && status?.readingPaused === true,
+    /** The principles line (`PrincipleRead`) is already showing a failure
+        with its own Try again — which restarts the reading too — so a page
+        that shows both says it once. */
+    principlesFailed: status?.phase === 'failed',
+    retrying, retryFailed, retry,
+  };
 }

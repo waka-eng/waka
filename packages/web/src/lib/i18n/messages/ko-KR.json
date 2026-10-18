@@ -610,5 +610,6 @@
   "readingPausedRetrying": "다시 시작하는 중…",
   "readingPausedRetryFailed": "다시 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
   "agentWallHowItFills": "이 벽은 에이전트가 직접 채워요. 에이전트가 내 에이전트로 WAKA에 로그인해 저장한 것이 여기에 나타나요.",
-  "unreachableAnonymous": "지금 WAKA에 닿지 못했어요. 연결을 확인하고 다시 시도해 주세요."
+  "unreachableAnonymous": "지금 WAKA에 닿지 못했어요. 연결을 확인하고 다시 시도해 주세요.",
+  "readingPausedRetryThrottled": "방금 다시 시도했어요. 몇 분 뒤에 다시 시도해 주세요."
 }

@@ -14,13 +14,17 @@
 import { t, type SupportedLocale } from '../lib/locales';
 import type { useReadingPaused } from '../lib/use-reading-paused';
 
-export function ReadingPausedNotice({ state, locale, className = 'jar-board-acts jar-reading-status' }: {
+export function ReadingPausedNotice({ state, locale, className = 'jar-board-acts jar-reading-status', besidePrincipleRead = false }: {
   state: ReturnType<typeof useReadingPaused>; locale: SupportedLocale; className?: string;
+  /** On a page that also shows `PrincipleRead`: when that line is already
+      saying "could not be updated" with its own Try again, this one stays
+      down, so the person meets one failure and one button, not two. */
+  besidePrincipleRead?: boolean;
 }): JSX.Element | null {
-  if (!state.paused) return null;
+  if (!state.paused || (besidePrincipleRead && state.principlesFailed)) return null;
   return (
     <p className={className} role="status" data-jar-chrome="1">
-      <span>{t(locale, state.retryFailed ? 'readingPausedRetryFailed' : 'readingPausedNotice')}</span>
+      <span>{t(locale, state.retryFailed === 'throttled' ? 'readingPausedRetryThrottled' : state.retryFailed ? 'readingPausedRetryFailed' : 'readingPausedNotice')}</span>
       {' '}
       <button className="jar-board-act" type="button" disabled={state.retrying} onClick={state.retry}>
         {t(locale, state.retrying ? 'readingPausedRetrying' : 'readingPausedRetry')}

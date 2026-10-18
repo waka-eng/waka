@@ -71,24 +71,56 @@ export async function fetchPrincipleStatements(id:string,profileId:string,signal
    first parameter rather than the second, which is the whole change at the
    one call site in `components/PrincipleRead.tsx`. */
 
+/**
+ * ONE STATUS, ONE REQUEST AT A TIME, HEARD BY EVERY READER.
+ *
+ * Two things on home read `/principles/status`: `PrincipleRead` (polling while
+ * a reading is in progress) and the "reading is paused" notice. Asked
+ * separately they doubled every read, and on focus both fired at once. So
+ * the status GET is shared while in flight, and every answer — whoever asked
+ * for it, the refresh's reply included — is published to the listeners
+ * below. A reader that heard an answer recently does not ask again.
+ */
+let statusInFlight: Promise<ApiPrincipleStatus> | null = null;
+let lastStatus: { status: ApiPrincipleStatus; at: number } | null = null;
+const statusListeners = new Set<(status: ApiPrincipleStatus) => void>();
+function publishStatus(status: ApiPrincipleStatus): ApiPrincipleStatus {
+  lastStatus = { status, at: Date.now() };
+  for (const listener of statusListeners) listener(status);
+  return status;
+}
+/** Hear every status any reader fetched. Returns the unsubscribe. */
+export function onPrincipleStatus(listener: (status: ApiPrincipleStatus) => void): () => void {
+  statusListeners.add(listener);
+  return () => { statusListeners.delete(listener); };
+}
+/** The last status anybody heard, if it is younger than `maxAgeMs`. */
+export function recentPrincipleStatus(maxAgeMs: number): ApiPrincipleStatus | null {
+  return lastStatus && Date.now() - lastStatus.at <= maxAgeMs ? lastStatus.status : null;
+}
+
+/** GET /principles/status — shared while in flight, published when it lands. */
+export function fetchPrincipleStatus(): Promise<ApiPrincipleStatus> {
+  statusInFlight ??= getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded")
+    .then((body) => publishStatus(body.status))
+    .finally(() => { statusInFlight = null; });
+  return statusInFlight;
+}
+
 export async function fetchPrincipleRead(): Promise<{
   principles: ApiPrinciple[]; status: ApiPrincipleStatus;
 }> {
-  const [rows, state] = await Promise.all([
+  const [rows, status] = await Promise.all([
     getJson<{ principles: ApiPrinciple[] }>(apiPath("/principles"), "Principles could not be loaded"),
-    getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded"),
+    fetchPrincipleStatus(),
   ]);
-  return { principles: rows.principles, status: state.status };
+  return { principles: rows.principles, status };
 }
 
-/** GET /principles/status alone — what the "reading is paused" notice reads. */
-export async function fetchPrincipleStatus(signal?: AbortSignal): Promise<ApiPrincipleStatus> {
-  return (await getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded", signal)).status;
-}
-
-/** POST /principles/refresh?retry=1 — restarts a failed reading and principles. */
+/** POST /principles/refresh?retry=1 — restarts a failed reading and principles.
+    A 429 (`reading_retry_throttled`) means it was retried moments ago. */
 export async function retryPausedReading(): Promise<ApiPrincipleStatus> {
-  return (await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status;
+  return publishStatus((await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status);
 }
 
 export async function requestPrincipleRead(retry = false): Promise<void> {

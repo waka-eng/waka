@@ -8253,7 +8253,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         with it. */}
                     {here && w.kind === 'self' && !showHomeProcessing && !reflectOpen && !editing.open ? sourceNotice : null}
                     {here && w.kind === "self" && !offline && !readingMessage && !showHomeProcessing ? (
-                      <ReadingPausedNotice state={readingPaused} locale={locale} />
+                      <ReadingPausedNotice state={readingPaused} locale={locale} besidePrincipleRead />
                     ) : null}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
                       <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">
