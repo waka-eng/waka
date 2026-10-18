@@ -5,7 +5,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiError, createInspiration, fetchInspiration, fetchInspirationSaveRequest, type ApiInspiration } from '../src/lib/api';
-import { ANSWER_SETTLE_MS, useAuthoredSave, type AuthoredSaveInput } from '../src/lib/use-authored-save';
+import { ANSWER_SETTLE_MS, POST_WINDOW_MS, useAuthoredSave, type AuthoredSaveInput } from '../src/lib/use-authored-save';
 
 vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(),
   createInspiration: vi.fn(), fetchInspiration: vi.fn(), fetchInspirationSaveRequest: vi.fn(),
@@ -74,6 +74,7 @@ it('resends a missing save once under its own identity on remount, and lands it'
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
   expect(latest.phase).toBe('uncertain');
   const first = vi.mocked(createInspiration).mock.calls[0]![1]?.requestId;
+  await act(async () => { vi.setSystemTime(Date.now() + POST_WINDOW_MS); });
   await remount();
   expect(createInspiration).toHaveBeenCalledTimes(2);
   expect(vi.mocked(createInspiration).mock.calls[1]![1]?.requestId).toBe(first);
@@ -85,6 +86,7 @@ it('keeps the journal and id when the re-send times out — and a late commit is
     .mockImplementationOnce(() => new Promise(() => {}));
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
   const id = latest.pending!.requestId;
+  await act(async () => { vi.setSystemTime(Date.now() + POST_WINDOW_MS); });
   await remount();
   await act(async () => vi.advanceTimersByTimeAsync(15_000));
   expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1); expect(latest.pending?.requestId).toBe(id);
@@ -125,7 +127,7 @@ it('releases only on the app\'s own 500, and only once the settle time has passe
   // Too soon: the rolled-back request might still be visible as in flight.
   await remount();
   expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
-  await act(async () => { vi.setSystemTime(Date.now() + ANSWER_SETTLE_MS); });
+  await act(async () => { vi.setSystemTime(Date.now() + POST_WINDOW_MS); });
   await remount();
   expect(latest.phase).toBe('unsent'); expect(records()).toHaveLength(0); expect(resolved).not.toHaveBeenCalled();
 });
@@ -173,21 +175,67 @@ it('retries the same words with the CURRENT draft revision, so the composer can 
   expect(resolved.mock.calls[0]![0].draft).toEqual({ id: 'draft-1', revision: 4 });
 });
 
-it('lets a caller discard the earlier save explicitly and start from what is on screen now', async () => {
+/* ROUND THREE OF REVIEW. "Save as new" never drops the earlier save; every
+   POST first clears an old "answered" and marks itself in flight on the
+   journal; no tab releases while a POST may still be committing. */
+it('saves as new from what is on screen now, keeping the earlier save and still reconciling it', async () => {
   vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response')).mockResolvedValue(source);
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
   const id = latest.pending!.requestId;
   await act(async () => { latest.start({ ...input, input: { ...input.input, text: 'Edited once' } }); });
   expect(latest.phase).toBe('diverged');
   const now: AuthoredSaveInput = { ...input, input: { ...input.input, text: 'Edited twice, at the press' } };
-  await act(async () => { expect(latest.discardHeld()).toBe(true); });
+  await act(async () => { expect(latest.prepareNew()).toBe(true); });
+  // The earlier journal is still on disk while the new save goes.
+  vi.mocked(createInspiration).mockImplementationOnce(async (payload) => { expect(records()).toHaveLength(2); return { ...source, text: payload.text }; });
   await act(async () => { expect(latest.start(now)).toBe(true); });
-  const last = vi.mocked(createInspiration).mock.calls.at(-1)!;
-  expect(last[0].text).toBe('Edited twice, at the press'); expect(last[1]?.requestId).not.toBe(id);
+  const fresh = vi.mocked(createInspiration).mock.calls.at(-1)!;
+  expect(fresh[0].text).toBe('Edited twice, at the press'); expect(fresh[1]?.requestId).not.toBe(id);
+  // The earlier one is still there, and its words are offered back if it is
+  // definitively found not to have landed.
+  expect(records()).toHaveLength(1);
+  expect(JSON.parse(localStorage.getItem(records()[0]!)!).requestId).toBe(id);
+});
+
+it('offers the words of an earlier save back when it is found not to have landed after "Save as new"', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(appFailure()).mockResolvedValue(source);
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => { latest.start({ ...input, input: { ...input.input, text: 'New words' } }); });
+  await act(async () => { latest.prepareNew(); });
+  await act(async () => { latest.start({ ...input, input: { ...input.input, text: 'New words' } }); });
+  await act(async () => { vi.setSystemTime(Date.now() + POST_WINDOW_MS); });
+  await act(async () => { latest.check(); });
+  expect(latest.phase).toBe('unsent'); expect(latest.unsent?.displaced).toBe(true);
+  expect(latest.unsent?.input.text).toBe(source.text); expect(records()).toHaveLength(0);
+});
+
+it('forgets the edited words it was asking about once the earlier save resolves', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const requestId = latest.pending!.requestId;
+  await act(async () => { latest.start({ ...input, input: { ...input.input, text: 'Edited' } }); });
+  expect(latest.phase).toBe('diverged');
+  vi.mocked(fetchInspirationSaveRequest).mockResolvedValue({ requestId, operation: 'inspiration', inspirationId: source.id, reflectionId: null,
+    processing: { id: 'receipt', profileId: scope.profileId, inspirationId: source.id, materialRevision: '1', jobId: 'job', requestVersion: '1' }, createdAt: source.createdAt });
+  await act(async () => { await latest.keepEarlier(); });
+  expect(resolved).toHaveBeenCalledOnce();
+  await act(async () => { expect(latest.saveAsNew()).toBe(false); });
+  expect(createInspiration).toHaveBeenCalledOnce();
+});
+
+it('clears an old "answered" before sending again, so a later miss cannot release the newer POST', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(appFailure()).mockImplementationOnce(() => new Promise(() => {}));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => { latest.start(input); }); // the same words: sent again, and still running
+  const journal = JSON.parse(localStorage.getItem(records()[0]!)!);
+  expect(journal.answered).toBeUndefined(); expect(journal.inFlightUntil).toBeGreaterThan(Date.now());
+  await act(async () => { vi.setSystemTime(Date.now() + ANSWER_SETTLE_MS); });
+  await remount();
+  expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
 });
 
 it('never releases while another tab may still be committing the same save', async () => {
-  // Tab A's POST is still running; tab B finds the journal and is told "in progress".
+  // Tab A's POST is still running; tab B finds the journal marked in flight.
   vi.mocked(createInspiration).mockImplementationOnce(() => new Promise(() => {})).mockRejectedValue(conflict());
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
   const tabA = latest;
@@ -195,13 +243,18 @@ it('never releases while another tab may still be committing the same save', asy
   let tabB!: ReturnType<typeof useAuthoredSave>;
   function ProbeB() { tabB = useAuthoredSave({ scope, operation: 'inspiration', onResolved: resolved, onRemoved: removed }); return null; }
   await act(async () => rootB.render(<ProbeB />));
-  expect(createInspiration).toHaveBeenCalledTimes(2);
+  // Inside the window B sends nothing and keeps everything.
+  expect(createInspiration).toHaveBeenCalledOnce();
   expect(tabB.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
+  // After it, B's one re-send meets "in progress": still kept, still not released.
+  await act(async () => { vi.setSystemTime(Date.now() + POST_WINDOW_MS); });
+  await act(async () => { tabB.check(); });
   await act(async () => { tabB.check(); });
   expect(tabB.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
   expect(tabA.pending?.requestId).toBe(tabB.pending?.requestId);
   await act(async () => rootB.unmount()); hostB.remove();
 });
+
 it('recovers a committed save by reading its current item, without another POST', async () => {
   vi.mocked(createInspiration).mockRejectedValue(new Error('Lost response'));
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
