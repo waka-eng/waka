@@ -37,24 +37,45 @@ it('exempts no field from the floor by its inline style', () => {
 
 /** The selectors of every `!important` `--t-lead` restatement, by media query:
     a field larger than the floor keeps its size only by being listed here. */
-function restatements(): {all: string[]; byMedia: Map<string, string[]>} {
-  const css = blank(read('chrome.css'));
+function restatements(): Map<string, string[]> {
   const byMedia = new Map<string, string[]>();
-  for (const media of css.matchAll(/@media ([^{]+)\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)) {
-    for (const rule of media[2]!.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      if (!/font-size:\s*var\(--t-lead\)\s*!important/.test(rule[2]!)) continue;
-      const key = media[1]!.trim();
-      byMedia.set(key, [...(byMedia.get(key) ?? []), ...rule[1]!.split(',').map((s) => s.trim())]);
-    }
+  for (const rule of scoped(read('chrome.css'))) {
+    if (!rule.media || !/font-size:\s*var\(--t-lead\)\s*!important/.test(rule.body)) continue;
+    byMedia.set(rule.media, [...(byMedia.get(rule.media) ?? []), ...rule.selector.split(',').map((s) => s.trim())]);
   }
-  return {all: [...byMedia.values()].flat(), byMedia};
+  return byMedia;
+}
+
+/** Every style rule in `css` with the media condition it is under — nested
+    `@media` conditions joined with `and`, whitespace collapsed, null when
+    unconditional. Other at-rules (`@layer`, `@supports`) add no condition. */
+function scoped(css: string): {media: string | null; selector: string; body: string}[] {
+  const text = blank(css);
+  const out: {media: string | null; selector: string; body: string}[] = [];
+  const groups: string[] = [];
+  let head = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i]!;
+    if (c === '{') {
+      const h = head.trim().replace(/\s+/g, ' ');
+      head = '';
+      if (h.startsWith('@')) { groups.push(h); continue; }
+      const end = text.indexOf('}', i);
+      const media = groups.filter((g) => g.startsWith('@media')).map((g) => g.replace(/^@media\s*/, '')).join(' and ');
+      out.push({media: media || null, selector: h, body: text.slice(i + 1, end)});
+      i = end;
+    } else if (c === '}') { groups.pop(); head = ''; }
+    else if (c === ';') head = '';
+    else head += c;
+  }
+  return out;
 }
 
 /* THE LARGER FIELDS ARE A HAND-KEPT LIST, SO THE LIST IS HELD HERE. Delete a
    line from it and that field drops to 16 on a phone — quietly, because the
    floor is still doing exactly what it says. */
 it('restates every larger field at its own size, after the floor', () => {
-  const {byMedia} = restatements();
+  const byMedia = restatements();
   expect(byMedia.get('(pointer: coarse)')).toEqual(expect.arrayContaining([
     'body .jar-principle-share select',
     'body .jar-principle-share textarea',
@@ -129,18 +150,25 @@ it('finds every stylesheet rule that sizes a field above the floor in the restat
   const defs = tokens();
   const above = (size: string) => (largestPx(size, defs) ?? 0) > 16;
   const norm = (sel: string) => sel.replace(/^body\s+/, '').replace(/:not\((?:[^()]|\([^()]*\))*\)/g, '').trim();
-  const listed = new Set(restatements().all.map(norm));
+  const byMedia = restatements();
   const missing: string[] = [];
   for (const f of readdirSync(dir).filter((n) => n.endsWith('.css'))) {
-    for (const rule of blank(read(f)).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      const sizes = rule[2]!.split(';').map((d) => /^\s*(?:font|font-size)\s*:\s*([\s\S]*)$/i.exec(d)?.[1]?.trim()).filter(Boolean) as string[];
+    for (const rule of scoped(read(f))) {
+      /* WHERE IT IS LARGER IS WHERE IT IS RESTATED. A field larger at every
+         width is restated under `(pointer: coarse)` alone; one larger only
+         under a width (or any) condition is restated under that condition
+         too — unconditionally would grow it where it was never large, and
+         under the wrong width would leave it floored where it is. */
+      const want = rule.media ? `(pointer: coarse) and ${rule.media}` : '(pointer: coarse)';
+      const listed = new Set((byMedia.get(want) ?? []).map(norm));
+      const sizes = rule.body.split(';').map((d) => /^\s*(?:font|font-size)\s*:\s*([\s\S]*)$/i.exec(d)?.[1]?.trim()).filter(Boolean) as string[];
       const size = sizes.at(-1);
       if (!size || /!\s*important/.test(size) || !above(size)) continue;
-      for (const sel of rule[1]!.split(',').map((s) => s.trim())) {
+      for (const sel of rule.selector.split(',').map((s) => s.trim())) {
         const last = norm(sel).split(/[\s>+~]+/).filter(Boolean).at(-1) ?? '';
         const isField = /^(input|textarea|select)(?![\w-])/.test(last)
           || [...last.matchAll(/\.([\w-]+)/g)].some((c) => classes.has(c[1]!));
-        if (isField && !listed.has(norm(sel))) missing.push(`${f}: ${sel} { font-size: ${size} }`);
+        if (isField && !listed.has(norm(sel))) missing.push(`${f}: ${sel} { font-size: ${size} } wants a restatement under @media ${want}`);
       }
     }
   }
