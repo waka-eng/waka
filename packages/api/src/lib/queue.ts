@@ -159,6 +159,7 @@ import { loadPendingSignalSupportSources } from './signal-support-state.js';
 import { reviewSignalSupport, SUPPORT_REVIEW_BATCH_SIZE } from './signal-support-review.js';
 import { applySignalSupportReview } from './signal-support-apply.js';
 import { SupportSourceUnavailableError } from './signal-support-review.js';
+import { hasLegacyGroupDestination, withoutLegacyGroupDestination } from './retired-group-work.js';
 import { bindInspirationSupportReading } from './inspiration-processing.js';
 import { getDefaultModelProvider } from "./model-provider.js";
 import { InspirationProcessingUnavailableError, recordInspirationProcessingRequest, recordInspirationReadingResult, type InspirationProcessingReceipt } from "./inspiration-processing.js";
@@ -559,11 +560,10 @@ export async function recoverPendingSignalSupport(db: Pick<ReturnType<typeof get
     await db.execute(sql`UPDATE background_jobs SET status = 'pending', attempts = 0, locked_at = NULL,
       request_version = request_version + 1, run_after = now(), last_error = NULL, result = NULL, rerun_requested = false
       WHERE type::text = 'assess_signal_support' AND status::text = 'failed'
-        AND profile_id = ${source.ownerProfileId}::uuid AND payload->>'inspirationId' = ${source.inspirationId}
-        AND profile_id = ${profileId}::uuid AND payload->>'deriveIntoProfileId' IS NULL
-        AND payload->>'materialRevision' = (SELECT CASE WHEN ${source.ownerProfileId}::uuid = ${profileId}::uuid
-          THEN personal_revision ELSE public_revision END::text FROM inspiration_revisions
-          WHERE inspiration_id = ${source.inspirationId}::uuid AND profile_id = ${source.ownerProfileId}::uuid)`);
+        AND profile_id = ${profileId}::uuid AND payload->>'inspirationId' = ${source.inspirationId}
+        AND ${withoutLegacyGroupDestination(sql`payload`)}
+        AND payload->>'materialRevision' = (SELECT personal_revision::text FROM inspiration_revisions
+          WHERE inspiration_id = ${source.inspirationId}::uuid AND profile_id = ${profileId}::uuid)`);
   }
   return sources;
 }
@@ -967,7 +967,8 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
     if(job.type==='refresh_top_of_mind')await (await import('./review-processing.js')).recordReviewReadingResult(tx,{...publication,jobId:job.id,requestVersion:job.requestVersion.toString()});
     await (await import('./principle-status.js')).enqueuePrinciplesAfterReading(tx, publication.profileId);
   };
-  if (retiredGroupJob(job)) return settleRetiredGroupJob(job);
+  if (job.type === "refresh_group_top_of_mind") return settleRetiredGroupJob(job);
+  if (await retiredGroupJob(job)) return settleRetiredGroupJob(job);
   switch (job.type) {
     case 'assess_signal_support': {
       const payload = parseAssessSignalSupportPayload(job.payload);
@@ -1163,11 +1164,6 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       };
     }
 
-    case "refresh_group_top_of_mind":
-      // Unreachable: retiredGroupJob settles every row of this type above.
-      // The case stays so the switch remains exhaustive over the enum.
-      return settleRetiredGroupJob(job);
-
     case "reembed_signal": {
       const payload = parseReembedSignalPayload(job.payload);
       if (!payload) return dropPoisonPayload(job);
@@ -1184,14 +1180,10 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
 
     case "tend_signal_garden": {
       const [profileRow] = await getDb()
-        .select({ preferredLocale: profiles.preferredLocale, type: profiles.type })
+        .select({ preferredLocale: profiles.preferredLocale })
         .from(profiles)
         .where(eq(profiles.id, job.profileId))
         .limit(1);
-      // A room mind's garden is retired room work (see retiredGroupJob). Read
-      // here, on the row this branch already loads, rather than in a query of
-      // its own for every garden job.
-      if (profileRow?.type === "group") return settleRetiredGroupJob(job);
       const summary = await tendSignalGarden(getDb(), {
         profileId: job.profileId,
         beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
@@ -1229,32 +1221,26 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
  *
  * The enum value `refresh_group_top_of_mind` stays — removing it is an
  * `ALTER TYPE` migration, and the data-dropping phase has not been decided.
- * What counts as room work, all of it shapes only the room engine wrote,
- * recognised from the row alone (no query):
- *   - any `refresh_group_top_of_mind`;
+ * What counts as room work — shapes only the room engine wrote:
+ *   - any `refresh_group_top_of_mind` (settled before this is asked);
  *   - derive/review/assess work landing on a room's mind — the legacy
- *     `deriveIntoProfileId` field, read from the raw payload here and nowhere
- *     else now (the payload types no longer declare it);
+ *     `deriveIntoProfileId` field (`hasLegacyGroupDestination`, the same rule
+ *     the support-state SQL uses), read from the raw payload: the payload
+ *     types no longer declare it;
  *   - principles requested for a profile other than the job's tenant (a
- *     mind's, billed to a member).
- * Two more are settled where their branch already loads the profile row: a
- * garden pass over a group profile (the `tend_signal_garden` case) and
- * principles for a group profile (`refreshPrinciplesForProfile` returns
- * below-bar). Personal and agent jobs never carry these shapes.
+ *     mind's, billed to a member);
+ *   - ANY job whose tenant is a room's mind (a garden pass, the mind's own
+ *     principles, anything else) — one primary-key read of the tenant's
+ *     type, the single tenant check that replaced per-branch ones.
+ * Personal and agent jobs never carry these shapes, so they run unchanged.
  */
-function retiredGroupJob(job: BackgroundJob): boolean {
-  switch (job.type) {
-    case "refresh_group_top_of_mind":
-      return true;
-    case "derive_signals":
-    case "review_signal_support":
-    case "assess_signal_support":
-      return readString(job.payload, "deriveIntoProfileId") !== null;
-    case "refresh_principles":
-      return (readString(job.payload, "profileId") ?? job.profileId) !== job.profileId;
-    default:
-      return false;
-  }
+async function retiredGroupJob(job: BackgroundJob): Promise<boolean> {
+  if ((job.type === "derive_signals" || job.type === "review_signal_support" || job.type === "assess_signal_support") &&
+    hasLegacyGroupDestination(job.payload)) return true;
+  if (job.type === "refresh_principles" && (readString(job.payload, "profileId") ?? job.profileId) !== job.profileId) return true;
+  const [tenant] = await getDb().select({ type: profiles.type }).from(profiles)
+    .where(eq(profiles.id, job.profileId)).limit(1);
+  return tenant?.type === "group";
 }
 
 function settleRetiredGroupJob(job: BackgroundJob): void {
@@ -1308,15 +1294,18 @@ function parseDeriveSignalsPayload(payload: unknown): DeriveSignalsPayload | nul
 
 function parseAssessSignalSupportPayload(payload: unknown): AssessSignalSupportPayload | null {
   const revision = z.string().regex(/^[1-9]\d*$/), hash = z.string().regex(/^[a-f0-9]{64}$/), uuid = z.string().uuid();
+  // `membershipId` left the payload with rooms; rows queued before that carry
+  // `membershipId: null` and still parse (a non-null one was room work).
   const parsed = z.object({ inspirationId: uuid,
     signalIds: z.array(uuid).min(1).max(SUPPORT_REVIEW_BATCH_SIZE), materialRevision: revision,
-    materialHash: hash, membershipId: uuid.nullable(),
+    materialHash: hash, membershipId: z.null().optional(),
     statements: z.array(z.object({ id: uuid, revision, hash }).strict()).min(1).max(SUPPORT_REVIEW_BATCH_SIZE),
   }).strict().safeParse(payload);
   if (!parsed.success || new Set(parsed.data.signalIds).size !== parsed.data.signalIds.length ||
     new Set(parsed.data.statements.map((item) => item.id)).size !== parsed.data.signalIds.length ||
     parsed.data.statements.some((item) => !parsed.data.signalIds.includes(item.id))) return null;
-  return parsed.data;
+  const { membershipId: _legacy, ...current } = parsed.data;
+  return current;
 }
 
 function parseRefreshTopOfMindPayload(payload: unknown): RefreshTopOfMindPayload | null {

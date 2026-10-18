@@ -4,6 +4,7 @@ import { inArray, sql } from 'drizzle-orm';
 import { signals } from '../db/index.js';
 import type { getDb } from './db.js';
 import { BackgroundJobHeldError } from './background-job-hold.js';
+import { withoutLegacyGroupDestination } from './retired-group-work.js';
 
 const column = (table: string, name: string) => sql`${sql.identifier(table)}.${sql.identifier(name)}`;
 
@@ -60,7 +61,7 @@ export async function loadSignalSupportWorkState(db: Pick<ReturnType<typeof getD
     WHERE j.type::text IN ('review_signal_support', 'assess_signal_support', 'derive_signals')
       -- A legacy room job (deriveIntoProfileId set) never counts as the
       -- owner's own work; the worker settles it unrun.
-      AND j.profile_id = p.id AND j.payload->>'deriveIntoProfileId' IS NULL
+      AND j.profile_id = p.id AND ${withoutLegacyGroupDestination(sql`j.payload`)}
       AND i.profile_id = p.id`);
   const pendingIds = new Set(sources.map((source) => source.inspirationId));
   const relevant = jobs.filter((job) => pendingIds.has(job.inspirationId) ||

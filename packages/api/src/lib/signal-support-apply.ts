@@ -16,8 +16,8 @@ const uuid = z.string().uuid();
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const reportSchema = z.object({
   reviewId: uuid, policy: z.literal(SIGNAL_SUPPORT_REVIEW_POLICY), status: z.literal("current"),
-  profileId: uuid, ownerProfileId: uuid, membershipId: uuid.nullable(), inspirationId: uuid,
-  claimsHash: hash, calls: z.number().int().min(0).max(10), restrictedClaimCount: z.number().int().min(0),
+  profileId: uuid, ownerProfileId: uuid, inspirationId: uuid,
+  claimsHash: hash, calls: z.number().int().min(0).max(10),
   signalIds: z.array(uuid).min(1).max(SUPPORT_REVIEW_BATCH_SIZE).optional(),
   material: z.object({ scope: z.enum(["personal", "public"]),
     revision: z.string().regex(/^[1-9]\d*$/).optional(),
@@ -54,7 +54,6 @@ export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
       return { alreadyApplied: true, withdrawn: [] as string[], restored: [] as string[], jobId: null as string | null };
     }
 
-    if (report.membershipId !== null) throw new Error("Unexpected support review membership");
     const material = await loadInspirationMaterial(tx, report.ownerProfileId, report.inspirationId, report.material.scope, true);
     if (!material || material.identity.hash !== report.material.hash ||
       (report.material.revision !== undefined && material.identity.revision !== report.material.revision)) throw new Error("Support review material changed");
@@ -69,15 +68,14 @@ export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
     const current = (await loadSupportClaims(tx, report.profileId, report.ownerProfileId, report.inspirationId))
       .filter((claim) => !selected || selected.has(claim.signalId));
     if (supportClaimsHash(current) !== report.claimsHash) throw new Error("Support review claims changed");
-    const allowed = current;
-    if (allowed.length !== report.items.length) throw new Error("Support review claim coverage mismatch");
+    if (current.length !== report.items.length) throw new Error("Support review claim coverage mismatch");
     const sources = new Set(supportReviewSources(material).map((row) => row.id));
     const withdrawn: string[] = [];
     const restored: string[] = [];
     const now = new Date();
     await deps.beforeCommit?.(tx);
     for (const item of report.items) {
-      const claim = allowed.find((row) => row.signalId === item.signalId);
+      const claim = current.find((row) => row.signalId === item.signalId);
       if (!claim || hashEmbeddingInput(claim.statement) !== item.statementHash) throw new Error("Support review statement changed");
       if (item.sourceIds.some((id) => !sources.has(id)) ||
         (item.verdict === "supported" && !item.sourceIds.length) ||

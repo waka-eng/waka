@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { getDb } from './db.js';
 import type { EnqueueResult } from './queue.js';
+import { withoutLegacyGroupDestination } from './retired-group-work.js';
 import { inspirationRevisions, type InspirationEmbeddingScope, type BackgroundJobResult } from '../db/index.js';
 import { parseTopOfMindRefreshResult } from './top-of-mind-refresh-status.js';
 
@@ -192,7 +193,7 @@ export async function recordInspirationProcessingRequest(tx: Transaction, input:
       AND j.payload->>'inspirationId' = i.id::text
       -- Personal destination only: a room mind (deriveIntoProfileId) was
       -- the other branch, retired with the room engine.
-      AND ${input.profileId}::uuid = i.profile_id AND j.payload->>'deriveIntoProfileId' IS NULL
+      AND ${input.profileId}::uuid = i.profile_id AND ${withoutLegacyGroupDestination(sql`j.payload`)}
     ON CONFLICT (profile_id, inspiration_id, derivation_job_id, derivation_request_version)
       DO UPDATE SET material_revision = inspiration_processing.material_revision
       WHERE inspiration_processing.material_revision = EXCLUDED.material_revision

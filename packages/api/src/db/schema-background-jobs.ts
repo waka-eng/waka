@@ -88,7 +88,6 @@ export interface AssessSignalSupportPayload {
   signalIds: string[];
   materialRevision: string;
   materialHash: string;
-  membershipId: string | null;
   statements: Array<{ id: string; revision: string; hash: string }>;
 }
 

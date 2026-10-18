@@ -21,7 +21,7 @@ export async function ensureSupportBatchCoverage(db: Database, input: {
 }) {
   // Personal coverage only: room destinations retired with the room engine.
   const destination = input.ownerProfileId;
-  const claims = await loadSupportClaims(db, destination, input.ownerProfileId, input.inspirationId);
+  const claims = await loadSupportClaims(db, destination, destination, input.inspirationId);
   if (claims.length <= SUPPORT_REVIEW_BATCH_SIZE) return;
   const report = await reviewSignalSupport(db, { ...input, maxCalls: 0, reuseCurrentAssessments: true });
   if (report.status !== 'current') throw new Error('Support inputs changed before planning');
@@ -46,11 +46,14 @@ export async function ensureSupportBatchCoverage(db: Database, input: {
       const payload: AssessSignalSupportPayload = {
         inspirationId: input.inspirationId,
         signalIds: batch.map((claim) => claim.signalId), materialRevision: report.material.revision!, materialHash: report.material.hash,
-        membershipId: report.membershipId,
         statements: batch.map((claim) => ({ id: claim.signalId, revision: claim.statementRevision, hash: hashEmbeddingInput(claim.statement) })),
       };
+      // HASH INPUT PINNED: keys were hashed with `membershipId: null` in this
+      // position before rooms retired. Keeping it keeps existing batch keys,
+      // so a failed batch is still found and a finished one is not re-bought.
+      const { statements, ...head } = payload;
       const key = `assess_signal_support:${hashEmbeddingInput(JSON.stringify({ policy: SIGNAL_SUPPORT_REVIEW_POLICY,
-        owner: input.ownerProfileId, destination, ...payload }))}`;
+        owner: input.ownerProfileId, destination, ...head, membershipId: null, statements }))}`;
       const [job] = await tx.execute<{ status: string }>(sql`SELECT status::text FROM background_jobs
         WHERE idempotency_key = ${key} AND profile_id = ${input.ownerProfileId}::uuid`);
       if (job?.status === 'failed') { failed = true; continue; }
@@ -68,8 +71,7 @@ export async function supportBatchInputsCurrent(db: Database, ownerProfileId: st
     maxCalls: 0, signalIds: payload.signalIds,
     provider: { assessSignalSupport: async () => { throw new Error('Input verification makes no model call'); } },
   });
-  if (report.status !== 'current' || report.material.revision !== payload.materialRevision || report.material.hash !== payload.materialHash ||
-    report.membershipId !== payload.membershipId) return false;
+  if (report.status !== 'current' || report.material.revision !== payload.materialRevision || report.material.hash !== payload.materialHash) return false;
   return payload.statements.length === payload.signalIds.length && payload.statements.every((statement) =>
     claims.some((claim) => claim.signalId === statement.id && claim.statementRevision === statement.revision && hashEmbeddingInput(claim.statement) === statement.hash));
 }

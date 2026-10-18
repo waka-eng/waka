@@ -423,7 +423,6 @@ export async function deriveSignalsForInspiration(
       }
       const applied = await applyCandidates(tx, {
         profileId,
-        inputPolicy: undefined,
         evidenceOwnerProfileId: inspiration.profileId,
         inspirationId: inspiration.id,
         candidates: embedded,

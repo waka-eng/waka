@@ -299,7 +299,7 @@ export interface PrincipleGenerationDependencies {
 
 /** The profile's own readable active signals and their citation evidence. */
 export async function loadPrincipleMaterial(db: WakaDb | WakaTx, profileId: string) {
-  const [profile] = await db.select({ preferredLocale: profiles.preferredLocale, type: profiles.type }).from(profiles)
+  const [profile] = await db.select({ preferredLocale: profiles.preferredLocale }).from(profiles)
     .where(eq(profiles.id, profileId)).limit(1);
   const rows = await db.select({ id: signals.id, statement: signals.statement,
     lastEvidenceAt: signals.lastEvidenceAt, updatedAt: signals.updatedAt })
@@ -308,8 +308,6 @@ export async function loadPrincipleMaterial(db: WakaDb | WakaTx, profileId: stri
   const activeSignals = rows;
   const evidence = await loadCitationEvidence(db, profileId, activeSignals.map((row) => row.id));
   return { activeSignals, evidence,
-    /** A room mind: its principles retired with the room engine. */
-    groupProfile: profile?.type === "group",
     preferredLocale: profile?.preferredLocale ?? "en-US",
     eligibility: computeCitationEligibility([...evidence.values()], new Date()) };
 }
@@ -340,7 +338,6 @@ export async function refreshPrinciplesForProfile(
   // night ends here, with zero model calls.
   const material=await loadPrincipleMaterial(db,input.profileId);
   const { activeSignals, evidence } = material;
-  if (material.groupProfile) return none;
   if(deps.expectedMaterialKey&&deps.expectedMaterialKey!==principleMaterialKey(material))return {...none,status:'superseded'};
   if (activeSignals.length < bar("SIGNALS")) return none;
 
