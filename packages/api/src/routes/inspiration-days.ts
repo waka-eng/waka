@@ -18,9 +18,9 @@
  * shifted into a count per Seoul date (a day's saves straddle two UTC dates),
  * so a Korean evening's keeps were drawn on the day before. The caller now
  * sends its IANA zone as `tz` and the grouping happens there. Absent, or a
- * name Postgres does not know, it is UTC — a calendar a few hours off is
- * better than one that will not load. A string that is not even shaped like a
- * zone name is refused, since nothing that sends it is a browser.
+ * name Postgres does not know, or a string not even shaped like a zone name,
+ * it is UTC — a calendar a few hours off is better than one that will not
+ * load, and the reply says which zone it used so the calendar can match.
  */
 import { Hono, type MiddlewareHandler } from "hono";
 import { sql } from "drizzle-orm";
@@ -44,16 +44,43 @@ const daysQuerySchema = z
       .pipe(z.number().int().min(1).max(MAX_DAYS))
       .optional(),
     profile: z.string().uuid("profile must be a uuid").optional(),
-    /* Shaped like `Area/City[/Sub]`, `UTC` or `Etc/GMT+9`. The value is bound
-       as a parameter either way; the shape check is so a typo or a probe is a
-       400 rather than a Postgres error. */
-    tz: z
-      .string()
-      .max(64)
-      .regex(/^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){0,2}$/, "tz must be an IANA zone name")
-      .optional(),
+    /* Read as any string: a zone that is not shaped like one is UTC, never a
+       400 — see `zoneShaped`. */
+    tz: z.string().optional(),
   })
   .strict();
+
+/* Shaped like `Area/City[/Sub]`, `UTC` or `Etc/GMT+9`. The value is bound as a
+   parameter either way; the shape check keeps a typo or a probe from reaching
+   Postgres at all, and it falls back to UTC like any unknown zone — a
+   calendar that will not load because of its zone is worse than one in UTC. */
+const ZONE_SHAPE = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){0,2}$/;
+export function zoneShaped(tz: string | undefined): string | undefined {
+  return tz !== undefined && tz.length <= 64 && ZONE_SHAPE.test(tz) ? tz : undefined;
+}
+
+/**
+ * OLD NAMES FOR THE SAME PLACE. Browsers still send some zones by the name
+ * they had before the IANA database renamed them, and a server's tzdata may
+ * hold only one of the two. Each pair is tried both ways: the current name
+ * first, then the old one, so either copy of the database answers.
+ */
+const ZONE_LINKS: Record<string, string> = {
+  "Asia/Calcutta": "Asia/Kolkata",
+  "Europe/Kiev": "Europe/Kyiv",
+  "Asia/Saigon": "Asia/Ho_Chi_Minh",
+  "Asia/Katmandu": "Asia/Kathmandu",
+  "Asia/Rangoon": "Asia/Yangon",
+  "America/Buenos_Aires": "America/Argentina/Buenos_Aires",
+};
+const ZONE_LINKS_BACK = Object.fromEntries(Object.entries(ZONE_LINKS).map(([old, now]) => [now, old]));
+
+/** The names to try for a zone, in order: its current name, then its old one. */
+export function zoneCandidates(tz: string): string[] {
+  const current = ZONE_LINKS[tz] ?? tz;
+  const old = ZONE_LINKS_BACK[current];
+  return old && old !== current ? [current, old] : [current];
+}
 
 /**
  * The zone to group by: the one asked for if POSTGRES knows it, else UTC.
@@ -69,22 +96,27 @@ const daysQuerySchema = z
  * bounded and simply starts over when full: the names real browsers send are
  * a few hundred, and a stream of invented ones must not grow it without end.
  */
-const KNOWN_ZONES = new Map<string, boolean>();
+const KNOWN_ZONES = new Map<string, string | null>();
 const KNOWN_ZONES_MAX = 512;
 
 async function groupingZone(db: ReturnType<typeof getDb>, tz: string | undefined): Promise<string> {
   if (!tz || tz === "UTC") return "UTC";
   let known = KNOWN_ZONES.get(tz);
   if (known === undefined) {
-    const rows = await db.execute<{ known: number }>(
-      sql`SELECT 1 AS known FROM pg_timezone_names WHERE name = ${tz} LIMIT 1`,
-    );
-    const list = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows) ?? [];
-    known = list.length > 0;
+    known = null;
+    for (const name of zoneCandidates(tz)) {
+      /* The exact name first; a name that differs only in case is the same
+         zone, and the one Postgres spells is the one used and said back. */
+      const rows = await db.execute<{ name: string }>(sql`
+        SELECT name FROM pg_timezone_names WHERE lower(name) = lower(${name})
+        ORDER BY (name = ${name}) DESC LIMIT 1`);
+      const list = ((Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows) ?? []) as Array<{ name: string }>;
+      if (list[0]) { known = list[0].name; break; }
+    }
     if (KNOWN_ZONES.size >= KNOWN_ZONES_MAX) KNOWN_ZONES.clear();
     KNOWN_ZONES.set(tz, known);
   }
-  return known ? tz : "UTC";
+  return known ?? "UTC";
 }
 
 export interface KeptDay {
@@ -126,7 +158,7 @@ export function createInspirationDaysRoutes(deps: DaysRouteDependencies = {}): H
     if (!scope.ok) return c.json(scope.body, scope.status);
 
     const days = parsed.data.days ?? DEFAULT_DAYS;
-    const zone = await groupingZone(db, parsed.data.tz);
+    const zone = await groupingZone(db, zoneShaped(parsed.data.tz));
     const rows = await db.execute<{ day: string; kept: number }>(sql`
       SELECT to_char(date_trunc('day', created_at AT TIME ZONE ${zone}::text), 'YYYY-MM-DD') AS day,
              count(*)::int AS kept

@@ -108,3 +108,15 @@ describe("the days grid", () => {
     expect(groupedInUtc("UTC", "UTC")).toBe(false);
   });
 });
+
+describe("the zone the calendar asks for", () => {
+  it("is sent only when it is shaped like a zone name", async () => {
+    const { zoneToSend } = await import("../src/lib/api/inspiration-days");
+    expect(zoneToSend("Asia/Seoul")).toBe("Asia/Seoul");
+    expect(zoneToSend("America/Argentina/Buenos_Aires")).toBe("America/Argentina/Buenos_Aires");
+    expect(zoneToSend("Etc/GMT+9")).toBe("Etc/GMT+9");
+    expect(zoneToSend("UTC'; --")).toBeUndefined();
+    expect(zoneToSend("a".repeat(65))).toBeUndefined();
+    expect(zoneToSend(undefined)).toBeUndefined();
+  });
+});

@@ -185,7 +185,7 @@ describe("how much was kept on each day", () => {
     expect(await daysFor(person)).toEqual([utc]); /* no zone named is UTC */
   });
 
-  it("falls back to UTC for a zone it does not know, and refuses one that is not a zone", async () => {
+  it("falls back to UTC for a zone it does not know, and for one that is not a zone", async () => {
     const person = await seedPerson("unknown-zone");
     await keptDaysAgo(person, 1, 1);
 
@@ -195,8 +195,23 @@ describe("how much was kept on each day", () => {
     expect(((await fellBack.json()) as { zone: string }).zone).toBe("UTC");
     const kept = await appFor(person).request("/api/inspiration-days?tz=Asia%2FSeoul");
     expect(((await kept.json()) as { zone: string }).zone).toBe("Asia/Seoul");
-    const response = await appFor(person).request("/api/inspiration-days?tz=UTC'%3B--");
-    expect(response.status).toBe(400);
+    for (const probe of ["UTC'%3B--", "a".repeat(65), "%2F%2F"]) {
+      const response = await appFor(person).request(`/api/inspiration-days?tz=${probe}`);
+      expect(response.status, probe).toBe(200);
+      expect(((await response.json()) as { zone: string }).zone, probe).toBe("UTC");
+    }
+  });
+
+  it("knows a zone by its old name and by its spelling in another case, and says the one used", async () => {
+    const person = await seedPerson("zone-links");
+    await keptDaysAgo(person, 1, 1);
+    const zoneFor = async (tz: string) =>
+      ((await (await appFor(person).request(`/api/inspiration-days?tz=${encodeURIComponent(tz)}`)).json()) as { zone: string }).zone;
+
+    expect(await zoneFor("Asia/Calcutta")).toMatch(/^Asia\/(Kolkata|Calcutta)$/);
+    expect(await zoneFor("Europe/Kiev")).toMatch(/^Europe\/(Kyiv|Kiev)$/);
+    expect(await zoneFor("America/Buenos_Aires")).toMatch(/^America\/(Argentina\/)?Buenos_Aires$/);
+    expect(await zoneFor("asia/seoul")).toBe("Asia/Seoul");
   });
 
   it("starts the window at local midnight of its oldest day", async () => {

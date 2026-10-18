@@ -29,11 +29,19 @@ export interface ListKeptDaysRequest extends ProfileScoped {
   tz?: string;
 }
 
+/** The server's own shape for a zone name (`routes/inspiration-days.ts`). A
+    zone not shaped like one is not sent: the server would only fall back to
+    UTC for it, and the request is cleaner without it. */
+const ZONE_SHAPE = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){0,2}$/;
+export function zoneToSend(tz: string | undefined): string | undefined {
+  return tz !== undefined && tz.length <= 64 && ZONE_SHAPE.test(tz) ? tz : undefined;
+}
+
 /** GET /inspiration-days — how much was kept on each day, oldest first. */
 export async function listKeptDays(request: ListKeptDaysRequest = {}): Promise<KeptDays> {
   const params = new URLSearchParams();
   if (request.days !== undefined) params.set("days", String(request.days));
-  const tz = request.tz ?? readerTimeZone();
+  const tz = zoneToSend(request.tz ?? readerTimeZone());
   if (tz) params.set("tz", tz);
   if (request.profile) params.set("profile", request.profile);
   const query = params.toString();
