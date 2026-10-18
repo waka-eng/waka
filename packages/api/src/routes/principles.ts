@@ -66,7 +66,7 @@ import {
 import { normalizeSupportedLocale } from "../lib/locales.js";
 import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
-import { loadPrincipleStatus, ReadingRetryThrottled, requestPrincipleRefresh } from "../lib/principle-status.js";
+import { loadPrincipleStatus, requestPrincipleRefresh } from "../lib/principle-status.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -322,20 +322,12 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
 
   /* A PERSON'S ACT, NOT AN AGENT'S. Restarting a failed reading spends model
      calls on the account, which is a decision `humanSessionsOnly` already
-     reserves for the person elsewhere. A retry inside the cooldown is a 429
-     with `retryAfterSeconds`, which the page turns into words. */
+     reserves for the person elsewhere. */
   routes.post("/refresh", humanSessionsOnly, async (c) => {
     // Generation may only be requested for the session's own profile.
     const profileId = c.get("session").profile.id;
-    try {
-      const status = await requestPrincipleRefresh(getDatabase(), profileId, c.req.query("retry") === "1");
-      return c.json({ status }, 202);
-    } catch (error) {
-      if (!(error instanceof ReadingRetryThrottled)) throw error;
-      c.header("Retry-After", String(error.retryAfterSeconds));
-      return c.json({ error: "The reading was retried moments ago. Try again in a few minutes.",
-        code: "reading_retry_throttled", retryAfterSeconds: error.retryAfterSeconds }, 429);
-    }
+    const status = await requestPrincipleRefresh(getDatabase(), profileId, c.req.query("retry") === "1");
+    return c.json({ status }, 202);
   });
 
   routes.delete("/:principleId/disputes/:disputeId", async (c) => {

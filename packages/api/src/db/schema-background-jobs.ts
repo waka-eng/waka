@@ -94,9 +94,6 @@ export interface AssessSignalSupportPayload {
 export interface RefreshTopOfMindPayload {
   /** Why the artifact is being reconsidered — recorded on the new version. */
   reason: "signals_changed" | "manual";
-  /** Enqueued by a person's explicit Retry of a failed reading. Only such a
-      job, once failed, starts the retry cooldown (`lib/principle-status.ts`). */
-  retry?: true;
 }
 
 export interface RefreshGroupTopOfMindPayload {

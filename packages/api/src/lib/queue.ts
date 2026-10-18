@@ -584,14 +584,13 @@ export async function enqueueTopOfMindRefresh(
   profileId: string,
   reason: RefreshTopOfMindPayload["reason"],
   transaction?: Pick<ReturnType<typeof getDb>, "execute">,
-  options: { retry?: boolean } = {},
 ): Promise<EnqueueResult> {
   if (reason === 'manual' && !transaction) {
-    const result = await getDb().transaction((tx) => enqueueTopOfMindRefresh(profileId, reason, tx, options));
+    const result = await getDb().transaction((tx) => enqueueTopOfMindRefresh(profileId, reason, tx));
     await wakeCommittedBackgroundJobs([{id:result.jobId,profileId,requestVersion:result.requestVersion.toString()}]); return result;
   }
   if (reason === 'manual' && transaction) await recoverPendingSignalSupport(transaction, profileId);
-  const payload: RefreshTopOfMindPayload = options.retry ? { reason, retry: true } : { reason };
+  const payload: RefreshTopOfMindPayload = { reason };
   const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
     INSERT INTO background_jobs (profile_id, type, payload, max_attempts)
     VALUES (

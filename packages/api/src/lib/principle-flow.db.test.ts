@@ -419,8 +419,8 @@ describe("principles across personal profiles", () => {
      It is the READING job's own latest row: principles failing for their
      own reasons must not raise it, and principles succeeding must not hide
      a reading that failed. */
-  const failedReading = (profileId: string, minutesAgo: number, byRetry = false) => t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,created_at,updated_at)
-    VALUES(${profileId},'refresh_top_of_mind',${JSON.stringify(byRetry ? { reason: 'manual', retry: true } : { reason: 'manual' })}::jsonb,'failed','OpenRouter 402',
+  const failedReading = (profileId: string, minutesAgo: number) => t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,last_error,created_at,updated_at)
+    VALUES(${profileId},'refresh_top_of_mind',${JSON.stringify({ reason: 'manual' })}::jsonb,'failed','OpenRouter 402',
       now()-make_interval(mins => ${minutesAgo}),now()-make_interval(mins => ${minutesAgo}))`;
   const principlesJob = (profileId: string, status: string) => t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,updated_at)
     VALUES(${profileId},'refresh_principles',${JSON.stringify({ profileId })}::jsonb,${status}::background_job_status,now())`;
@@ -451,7 +451,9 @@ describe("principles across personal profiles", () => {
     expect((await loadPrincipleStatus(t.db as never, masked)).readingPaused, 'a later principles success hid a failed reading').toBe(true);
   });
 
-  it('refuses a second retry inside the cooldown, as a 429 the page can say, and refuses agents', async () => {
+  /* NO SERVER COOLDOWN: a retry right after a retry's failure goes through
+     (the client's disabled button is the guard). Agents are still refused. */
+  it('takes a retry straight after a failed retry, and refuses agents', async () => {
     const profileId = await person();
     const [owner] = await t.sql`SELECT account_id FROM profiles WHERE id=${profileId}`;
     const app = (type: 'human' | 'agent') => {
@@ -463,51 +465,25 @@ describe("principles across personal profiles", () => {
       } }));
       return routes;
     };
-    await failedReading(profileId, 1, true);
-    const early = await app('human').request('/principles/refresh?retry=1', { method: 'POST' });
-    expect(early.status).toBe(429);
-    expect(await early.json()).toMatchObject({ code: 'reading_retry_throttled' });
-    expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`).toHaveLength(1);
-    expect((await app('agent').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(403);
-    /* the cooldown runs from when the retry's job was CREATED, whatever its
-       status: a retry still pending or running throttles a second press */
-    await t.sql`UPDATE background_jobs SET status='pending', updated_at=now()-interval '30 minutes' WHERE profile_id=${profileId}`;
-    expect((await app('human').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(429);
-    await t.sql`UPDATE background_jobs SET status='failed', created_at=now()-interval '10 minutes' WHERE profile_id=${profileId}`;
-    expect((await app('human').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(202);
-  });
-
-  it('lets the first Retry after an automatic failure through, and marks the job it enqueues as a retry', async () => {
-    const profileId = await person();
     await failedReading(profileId, 1);
-    await requestPrincipleRefresh(t.db as never, profileId, true);
-    const jobs = await t.sql`SELECT status, payload FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind' ORDER BY updated_at`;
-    expect(jobs.map((row) => row.status), 'an automatic failure started a cooldown').toEqual(['failed', 'pending']);
-    expect(jobs[1]!.payload).toMatchObject({ reason: 'manual', retry: true });
+    expect((await app('agent').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(403);
+    expect((await app('human').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(202);
+    await t.sql`UPDATE background_jobs SET status='failed' WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`;
+    const again = await app('human').request('/principles/refresh?retry=1', { method: 'POST' });
+    expect(again.status, 'a second press was throttled server-side').toBe(202);
+    expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`).toHaveLength(3);
   });
 
-  it('answers 202, not 429, when a retry inside the cooldown started new principles work', async () => {
-    const profileId = await person();
-    await material(profileId, [profileId]);
-    await failedReading(profileId, 1, true);
-    const status = await requestPrincipleRefresh(t.db as never, profileId, true);
-    expect(status.phase).toBe('processing');
-    expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_principles'`).toHaveLength(1);
-    expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`,
-      'the throttled reading ran again').toHaveLength(1);
-  });
-
-  it('still restarts failed principles inside the reading cooldown, without re-running the reading', async () => {
+  it('restarts failed principles together with a failed reading on one retry', async () => {
     const profileId = await person();
     await material(profileId, [profileId]);
     await requestPrincipleRefresh(t.db as never, profileId);
     await t.sql`UPDATE background_jobs SET status='failed' WHERE profile_id=${profileId} AND type='refresh_principles'`;
-    await failedReading(profileId, 1, true);
+    await failedReading(profileId, 1);
     const status = await requestPrincipleRefresh(t.db as never, profileId, true);
-    expect(status.phase, 'the cooldown blocked the principles retry').not.toBe('failed');
+    expect(status.phase).not.toBe('failed');
     expect((await t.sql`SELECT status FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_principles'`)[0]!.status).toBe('pending');
-    expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`,
-      'the throttled reading ran again').toHaveLength(1);
+    expect(status.readingPaused).toBe(false);
   });
 
   /* NO STALL RESET. A retry restarts only a FAILED principles job; a pending
