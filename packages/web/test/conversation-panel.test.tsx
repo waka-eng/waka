@@ -171,6 +171,17 @@ it('says when the list read fails and nothing else can tell whether replies are 
   expect(host.textContent).toContain('WAKA can’t be reached right now.');
   expect([...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent)).toContain('Try again');
 });
+/* Round 7: the list read's failure never replaces a more specific sentence. */
+it('keeps the conversation\'s own failure when the list read fails after it',async()=>{
+  let failList!:(reason:unknown)=>void;
+  vi.mocked(listConversations).mockImplementation(()=>new Promise((_,reject)=>{failList=reject;}));
+  vi.mocked(fetchConversation).mockRejectedValue(new Error('Unavailable'));
+  await mount();
+  expect(host.textContent).toContain('This conversation couldn’t be opened.');
+  await act(async()=>{failList(new Error('Offline'));});
+  expect(host.textContent).toContain('This conversation couldn’t be opened.');
+  expect(host.textContent).not.toContain('WAKA can’t be reached right now.');
+});
 /* Review round 3: a journalled message is never "Not sent" because a
    pre-flight failed — an earlier send under its id may have landed. */
 it('calls a pending message "not confirmed", never "not sent", when the pre-flight fails',async()=>{

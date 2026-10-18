@@ -329,7 +329,10 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      ON (review): left silent, `generationEnabled` stayed null and Send stayed
      "loading" with no way on. A conversation read that lands sets it and
      clears this; otherwise the notice offers Try again. */
-  const loadHistory=(owner=lifecycle.current)=>{void refreshList(owner).catch(()=>{if(mine(owner)&&generationRef.current===null)setError(say('worldConversationUnreachable'));});};
+  /* ...and never over a more specific sentence, nor once the conversation has
+     loaded since (its own read answers the question): `setError` is given a
+     function that keeps any error already standing. */
+  const loadHistory=(owner=lifecycle.current)=>{void refreshList(owner).catch(()=>{if(mine(owner)&&generationRef.current===null&&!conversationRef.current)setError(current=>current??say('worldConversationUnreachable'));});};
   const refresh=async()=>{
     const owner=lifecycle.current;
     setLoading(true);setError(null);setUnsent(false);

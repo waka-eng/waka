@@ -48,3 +48,11 @@ it("does nothing, and is spent, when the landing is not the archive or came too 
   expect(where.search, "a stale arming rewrote the location").toBe("?open=saves");
   expect(archiveLeaving.thenReplace).toBeNull();
 });
+
+it("ends the leave with its arming, so a later note may pop its own entry again (round 7)", async () => {
+  await act(async () => root.render(<MemoryRouter initialEntries={["/?open=saves"]}><Probe /></MemoryRouter>));
+  archiveLeaving.now = true;
+  archiveLeaving.thenReplace = { to: "/", from: where.key, at: Date.now() - 60_000 };
+  await act(async () => { go("/?open=saves"); });
+  expect(archiveLeaving.now).toBe(false);
+});

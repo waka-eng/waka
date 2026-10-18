@@ -25,7 +25,8 @@ export function useViewNavigation(scope: string | null) {
   useEffect(() => {
     const armed = archiveLeaving.thenReplace;
     if (!armed || location.key === armed.from) return;
-    archiveLeaving.thenReplace = null;
+    // Spent or expired, the leave it belonged to is over too: the note may pop its own entry again.
+    archiveLeaving.thenReplace = null; archiveLeaving.now = false;
     if (Date.now() - armed.at > THEN_REPLACE_MS || (location.state as { savesNote?: string } | null)?.savesNote) return;
     if (!new URLSearchParams(location.search).get('open')) return;
     navigate(armed.to, { replace: true, state: location.state });
