@@ -11,11 +11,11 @@ import { t, type SupportedLocale } from "../lib/i18n";
     `packages/api/src/lib/queue.ts`), mirrored: a principles job unchanged
     this long is one an explicit retry resets. Held equal to the server's by
     `principle-stall-threshold.test.ts` in the API package. */
-export const PRINCIPLES_SERVER_STALL_MS = 4 * 60_000;
+const PRINCIPLES_SERVER_STALL_MS = 4 * 60_000;
 /** The page calls a read stalled only a minute PAST the server's threshold,
     so its Try again on a stall always lands on a job the server agrees is
     stalled, and the retry actually resets it. */
-export const PRINCIPLES_STALL_MARGIN_MS = 60_000;
+const PRINCIPLES_STALL_MARGIN_MS = 60_000;
 const WAITING_READ_MS = 10_000;
 /** Ten-second reads while a reading is in progress, then stop (five minutes). */
 const MAX_WAITING_READS = Math.ceil((PRINCIPLES_SERVER_STALL_MS + PRINCIPLES_STALL_MARGIN_MS) / WAITING_READ_MS);
