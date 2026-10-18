@@ -86,7 +86,15 @@ export function PrincipleRead({ active, locale, onRead }: {
       document.removeEventListener("visibilitychange", onFocus);
     };
   }, [active, locale, attempt]);
-  const error = failed || status?.phase === "failed";
+  /* A FAILED BACKGROUND READ IS NOT THE PERSON'S FAILURE (audit f2afcbe2,
+     desk/78). The server's re-read of principles runs on its own; when it
+     failed, opening a principle showed "Principles could not be updated. Try
+     again" over principles that were all there and fine, with nobody having
+     asked for an update. It is said when it is the reason the page is empty,
+     or after this person's own "Try again" (`attempt`) — never as news
+     about a job they did not start. A read that cannot reach the server at
+     all (`failed`) is still said: then what is on screen may be stale. */
+  const error = failed || (status?.phase === "failed" && (rows.length === 0 || attempt > 0));
   const visibleRows = rows;
   const message = error ? status?.supportPending ? 'worldSupportCheckFailed' : "worldPrinciplesError"
     : !status ? "worldPrinciplesLoading"
@@ -106,7 +114,7 @@ export function PrincipleRead({ active, locale, onRead }: {
     {visibleRows.length === 0 || error || status?.phase === "processing" ?
       <p className="jar-values-sub" role={error ? "alert" : status?.phase === "processing" ? "status" : undefined}>
         {t(locale, message)}
-        {error ? <> <button type="button" onClick={() => setAttempt((value) => value + 1)}>
+        {error ? <> <button type="button" className="jar-values-retry" onClick={() => setAttempt((value) => value + 1)}>
           {t(locale, "worldPrinciplesRetry")}
         </button></> : null}
       </p> : null}

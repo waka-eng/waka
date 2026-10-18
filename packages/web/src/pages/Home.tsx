@@ -10810,8 +10810,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           `reviewEntry.label` — is gone with the fold, and `useReviewEntry`
           with it, so dev's relabelling of that button had nothing left to
           relabel. */}
-      {phase==='ready'&&(inField||inSky||!atNow)?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
-        <HomeActionIcon kind="capture"/> {say('worldCaptureInspiration')}</button>:null}
+      {/* THE "CAPTURE INSPIRATION" PILL WENT (audit f2afcbe2, desk/78). It
+          stood over the bar in the field, the sky and a wound-back wall,
+          directly above the bar's own "Inspiration", which opens the same
+          notepad: two controls for one act, one of them the loudest shape on
+          the screen. The bar is the one place this act lives now. */}
       {/* AND SO IS FIND. Founder ruling, long since applied everywhere
           else: "find is just it should be a search bar on the your
           inspirations page instead." It survived here for the same reason the
