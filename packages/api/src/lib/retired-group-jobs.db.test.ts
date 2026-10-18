@@ -9,10 +9,11 @@ import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.
    ALTER TYPE is a migration).
 
    Every handler a room-shaped row could otherwise reach is replaced by a
-   recorder, so both directions are observed directly: a room row is settled
-   BY the retirement path (its id appears in the settle log) and reaches no
-   handler; a personal or agent row of the same type reaches its handler and
-   is never settled as room work. */
+   recorder, so both directions are observed as behaviour: a room row ends
+   succeeded — by the bulk sweep (with its `last_error` note) or by the
+   in-handler guard (claimed, settled, no note) — and reaches no handler; a
+   personal or agent row of the same type reaches its handler and is never
+   touched by either. */
 const reached = vi.hoisted(() => [] as Array<{ handler: string; profileId?: string; inspirationId?: string }>);
 vi.mock("./principle-generation.js", async (original) => ({
   ...(await original<typeof import("./principle-generation.js")>()),
@@ -47,26 +48,27 @@ vi.mock("./signal-support-batches.js", async (original) => ({
 }));
 
 import { sql } from "drizzle-orm";
-import { runBackgroundJobWorker } from "./queue.js";
+import { RETIRED_GROUP_JOB_NOTE, runBackgroundJobWorker, settleRetiredGroupBacklog } from "./queue.js";
 import { hasLegacyGroupDestination, withoutLegacyGroupDestination } from "./retired-group-work.js";
 
 let t: TestDatabase;
 let seq = 0;
-let settled: string[] = [];
 
 beforeAll(async () => {
   t = await createTestDatabase();
   const url = new URL(process.env.DB_CONNECTION_URL!);
   url.searchParams.set("options", `-c search_path=${t.schemaName}`);
   process.env.DB_CONNECTION_URL = url.toString();
+  // The worker sweeps the backlog once per process, before its first drain.
+  // Spend that once here, on an empty queue, so each case below chooses its
+  // path explicitly: the sweep by calling it, the guard by draining.
+  await t.truncateAll();
+  await runBackgroundJobWorker({ limit: 1 });
 });
 beforeEach(async () => {
   await t.truncateAll();
   reached.length = 0;
-  settled = [];
-  vi.spyOn(console, "info").mockImplementation((message: unknown, detail: unknown) => {
-    if (typeof message === "string" && message.includes("settling retired")) settled.push((detail as { jobId: string }).jobId);
-  });
+  vi.spyOn(console, "info").mockImplementation(() => {});
 });
 afterEach(() => { vi.restoreAllMocks(); });
 afterAll(async () => { await t?.cleanup(); });
@@ -96,7 +98,7 @@ const assessPayload = (inspirationId: string, signalId: string, extra: Record<st
   statements: [{ id: signalId, revision: "1", hash: HASH }], ...extra,
 });
 
-it("settles every queued room-shaped job through the retirement path, reaching no handler", async () => {
+it("the backlog sweep settles every queued room-shaped job, reaching no handler", async () => {
   const legacy = await legacyGroup();
   const ids = [
     await enqueue(legacy.memberId, "refresh_group_top_of_mind", { groupId: legacy.groupId, reason: "shares_changed" }),
@@ -111,15 +113,37 @@ it("settles every queued room-shaped job through the retirement path, reaching n
     await enqueue(legacy.mindId, "refresh_top_of_mind", { reason: "signals_changed" }),
   ];
 
-  const result = await drain();
+  // a live lease is its worker's; a stale one is the sweep's
+  const live = await enqueue(legacy.mindId, "tend_signal_garden", {});
+  await t.sql`UPDATE background_jobs SET status = 'running', locked_at = now() WHERE id = ${live}`;
+  const stale = await enqueue(legacy.mindId, "tend_signal_garden", {});
+  await t.sql`UPDATE background_jobs SET status = 'running', locked_at = now() - interval '1 day' WHERE id = ${stale}`;
 
-  expect(result).toMatchObject({ claimed: ids.length, succeeded: ids.length, failed: 0, retried: 0 });
-  expect([...settled].sort()).toEqual([...ids].sort());
+  expect(await settleRetiredGroupBacklog(t.db as never)).toBe(ids.length + 1);
+
+  const rows = await t.sql`SELECT id, status::text, last_error FROM background_jobs`;
+  for (const row of rows.filter((row) => row.id !== live)) {
+    expect(row).toMatchObject({ status: "succeeded", last_error: RETIRED_GROUP_JOB_NOTE });
+  }
+  expect(rows.find((row) => row.id === live)).toMatchObject({ status: "running", last_error: null });
+  expect(await drain()).toMatchObject({ claimed: 0 });
   expect(reached).toEqual([]);
+});
+
+it("the in-handler guard settles room rows the sweep has not seen, with no query and no handler", async () => {
+  const legacy = await legacyGroup();
+  const ids = [
+    await enqueue(legacy.memberId, "refresh_group_top_of_mind", { groupId: legacy.groupId, reason: "manual" }),
+    await enqueue(legacy.memberId, "derive_signals", { inspirationId: legacy.sourceId, reason: "edited", deriveIntoProfileId: legacy.mindId }),
+    // a mind's id in another case still names another profile
+    await enqueue(legacy.memberId, "refresh_principles", { profileId: legacy.mindId.toUpperCase() }),
+  ];
+
+  expect(await drain()).toMatchObject({ claimed: ids.length, succeeded: ids.length, failed: 0, retried: 0 });
   for (const row of await t.sql`SELECT status::text, attempts, last_error FROM background_jobs`) {
     expect(row).toMatchObject({ status: "succeeded", attempts: 1, last_error: null });
   }
-  expect(await t.sql`SELECT id FROM top_of_minds`).toHaveLength(0);
+  expect(reached).toEqual([]);
 });
 
 it("never settles a personal or agent job of the same types as room work", async () => {
@@ -152,9 +176,13 @@ it("never settles a personal or agent job of the same types as room work", async
     );
   }
 
+  // the member's own principles, named in upper case, are still their own
+  await t.sql`UPDATE background_jobs SET payload = jsonb_build_object('profileId', upper(profile_id::text))
+    WHERE type = 'refresh_principles' AND profile_id = ${legacy.memberId}`;
+  expect(await settleRetiredGroupBacklog(t.db as never)).toBe(0);
   await drain();
 
-  expect(settled).toEqual([]);
+  expect(await t.sql`SELECT id FROM background_jobs WHERE last_error = ${RETIRED_GROUP_JOB_NOTE}`).toHaveLength(0);
   const key = (row: (typeof reached)[number]) => JSON.stringify([row.handler, row.profileId ?? null, row.inspirationId ?? null]);
   expect(reached.map(key).sort()).toEqual(expected.map(key).sort());
 });
@@ -163,6 +191,8 @@ it("the worker's room test and the SQL filter agree on every destination shape",
   const shapes: Array<Record<string, unknown>> = [
     {}, { deriveIntoProfileId: null }, { deriveIntoProfileId: "" }, { deriveIntoProfileId: "  \t" },
     { deriveIntoProfileId: "1f0e4c1e-0000-4000-8000-000000000000" }, { deriveIntoProfileId: 7 },
+    // not ASCII whitespace on either side, so a destination on both
+    { deriveIntoProfileId: "\u00a0" }, { deriveIntoProfileId: " \u00a0 " },
   ];
   for (const payload of shapes) {
     const [row] = await t.db.execute<{ own: boolean }>(
