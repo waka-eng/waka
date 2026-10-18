@@ -5183,8 +5183,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       /* The notepad is already open UNDER whatever overlay asked (the empty
          archive's "save" in Saves): close the overlay first, or the focus
          lands in a field nobody can see. */
-      if (viewNavigationRef.current.view?.open) leaveOpen();
-      setMouthNote("");
+      if (viewNavigationRef.current.view?.open) {
+        /* …and keep what is already written there: the overlay's "save"
+           asks for the notepad, not for a blank one. */
+        leaveOpen();
+      } else setMouthNote("");
       mouthFieldRef.current?.focus();
     } else openMouth();
   }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth, leaveOpen]);

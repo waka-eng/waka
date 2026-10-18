@@ -13,7 +13,7 @@
  * `helpers/canvas-stub` and `helpers/render-home` replace drawing and time.
  */
 import { act } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, VIEWER_ID, type MountedWorld } from './helpers/render-home';
@@ -27,8 +27,8 @@ vi.mock('../src/lib/auth-context', async (original) => {
   return { ...await original<typeof import('../src/lib/auth-context')>(), useOptionalAuth: () => session, useAuth: () => session };
 });
 
-let world: MountedWorld, location: ReturnType<typeof useLocation>;
-function RouterTools() { location = useLocation(); return null; }
+let world: MountedWorld, location: ReturnType<typeof useLocation>, go: ReturnType<typeof useNavigate>;
+function RouterTools() { location = useLocation(); go = useNavigate(); return null; }
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
 afterEach(() => { world?.unmount(); vi.useRealTimers(); });
@@ -46,4 +46,22 @@ it('closes Saves before focusing the open note when the empty archive offers the
   expect(new URLSearchParams(location.search).get('open'), 'Saves stayed over the note it focused').toBeNull();
   expect(world.container.querySelector('.waka-over-new')).toBeNull();
   expect(document.activeElement, 'the note was not focused').toBe(world.container.querySelector('textarea.jar-composer-text'));
+});
+
+it('keeps what is already written in the open note when that save button focuses it', async () => {
+  world = await mountWorld(FACTS, { initialEntries: ['/?compose=1'], routerTools: <RouterTools /> }); await settle();
+  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
+  expect(field, 'the note did not open').toBeTruthy();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'half a thought');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle();
+  await act(async () => { go('/?compose=1&open=saves'); }); await settle();
+  const first = world.container.querySelector<HTMLButtonElement>('.waka-over-new');
+  expect(first, 'the empty archive offered no first save').toBeTruthy();
+  await act(async () => first!.click()); await settle();
+  expect(new URLSearchParams(location.search).get('open')).toBeNull();
+  expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value,
+    'the save button threw the draft away').toBe('half a thought');
 });
