@@ -75,6 +75,26 @@ describe("a paused reading", () => {
   /* No server cooldown: Retry guards itself, disabled and "Retrying…" until
      its request answers and for at least three seconds, even when the server
      refuses at once. */
+  it("gives a hung Retry 20 seconds, then shows the failure line with Retry enabled", async () => {
+    vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(true));
+    vi.mocked(retryPausedReading).mockReset().mockImplementation((signal?: AbortSignal) => new Promise((_, reject) => {
+      signal?.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")));
+    }));
+    render(createElement(Page));
+    await settle();
+    const button = () => container!.querySelector("button")!;
+    vi.useFakeTimers();
+    try {
+      await act(async () => { button().click(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+      expect(button().disabled, "the retry gave up before its deadline").toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_100); });
+    } finally { vi.useRealTimers(); }
+    expect(button().disabled, "a hung retry left Retry disabled").toBe(false);
+    expect(container!.textContent).toContain("Couldn’t restart it.");
+    expect(vi.mocked(retryPausedReading).mock.calls[0]![0]).toBeInstanceOf(AbortSignal);
+  });
+
   it("holds Retry disabled as Retrying… for at least three seconds, even on an instant refusal", async () => {
     vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(true));
     vi.mocked(retryPausedReading).mockReset().mockRejectedValue(new ApiError({ status: 502, message: "refused" }));

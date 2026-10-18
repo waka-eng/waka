@@ -134,9 +134,9 @@ export async function fetchPrincipleRead(): Promise<{
 /** POST /principles/refresh?retry=1 — restarts a failed reading and
     principles. Its answer is published as a `refresh`, so a reader showing a
     failure can tell a restart from an ordinary poll. */
-export async function retryPausedReading(): Promise<ApiPrincipleStatus> {
+export async function retryPausedReading(signal?: AbortSignal): Promise<ApiPrincipleStatus> {
   const session = currentWebSession();
-  return publishStatus((await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status, session, "refresh");
+  return publishStatus((await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted", signal)).status, session, "refresh");
 }
 
 /** POST /principles/refresh — its answer is published as a `refresh`, so the

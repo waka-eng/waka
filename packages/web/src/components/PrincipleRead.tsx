@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchPrincipleRead, onPrincipleStatus, requestPrincipleRead, type ApiPrinciple, type ApiPrincipleStatus } from "../lib/api/principles";
 import { t, type SupportedLocale } from "../lib/i18n";
-import { settleAtLeast } from "../lib/settle-at-least";
+import { settleAtLeast, withPostDeadline } from "../lib/settle-at-least";
 
 /**
  * Your own principles: the sky's lead line and one status sentence. Only the
@@ -20,17 +20,13 @@ const WAITING_READ_MS = 10_000;
 const MAX_WAITING_READS = 30;
 /** Failed reads in a row before the poll stops and waits for Try again. */
 const MAX_FAILED_READS = 6;
-/** Every POST from here gives up after this long (a hung request must not
-    leave a button disabled forever). */
-const POST_DEADLINE_MS = 20_000;
 /** Automatic starts for missing work before the line offers Try again. */
 const MAX_AUTO_STARTS = 3;
 
-/** One POST /principles/refresh with the client deadline. */
-async function postWithDeadline(retry: boolean): Promise<void> {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(new DOMException("Request timed out", "TimeoutError")), POST_DEADLINE_MS);
-  try { await requestPrincipleRead(retry, controller.signal); } finally { window.clearTimeout(timer); }
+/** One POST /principles/refresh with the shared 20s client deadline (the
+    paused-reading notice's Retry uses the same one). */
+function postWithDeadline(retry: boolean): Promise<void> {
+  return withPostDeadline((signal) => requestPrincipleRead(retry, signal));
 }
 
 export function PrincipleRead({ active, locale, onRead }: {

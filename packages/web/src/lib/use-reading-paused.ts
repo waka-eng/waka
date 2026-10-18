@@ -20,7 +20,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchPrincipleStatus, onPrincipleStatus, recentPrincipleStatus, retryPausedReading, type ApiPrincipleStatus } from './api';
-import { settleAtLeast } from './settle-at-least';
+import { settleAtLeast, withPostDeadline } from './settle-at-least';
 
 /** A status this young is the answer; nobody needs to ask again yet. */
 const FRESH_MS = 15_000;
@@ -58,7 +58,7 @@ export function useReadingPaused(enabled: boolean) {
      presses, since the server keeps no cooldown. */
   const retry = useCallback(() => {
     setRetrying(true); setRetryFailed(null);
-    settleAtLeast(retryPausedReading())
+    settleAtLeast(withPostDeadline((signal) => retryPausedReading(signal)))
       .then((next) => { if (alive.current) setStatus(next); })
       .catch(() => { if (alive.current) setRetryFailed('failed'); })
       .finally(() => { if (alive.current) setRetrying(false); });
