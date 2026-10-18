@@ -119,6 +119,7 @@ import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { useBackCloses } from "../lib/back-closes";
+import { useOpenClaimsLink } from "../lib/open-claims-link";
 import { ClaimSlip } from "../components/ClaimSlip";
 import { HarvestReasons } from "../components/HarvestReasons";
 import { AgentPick } from "../components/AgentPick";
@@ -1794,24 +1795,19 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      queue loaded and empty: home is the honest answer, and nothing waits.
      Only `open` is dropped from the address; the wall you are standing on
      (yours or your agent's) is kept. */
-  const claimsAsked = useRef(false);
   const [queueLoaded, setQueueLoaded] = useState(false);
-  const queueLoadedRef = useRef(queueLoaded); queueLoadedRef.current = queueLoaded;
   const queueLoadRef = useRef(0);
-  const toReviewRef = useRef(toReview); toReviewRef.current = toReview;
   const viewOpen = viewNavigation.view?.open ?? null;
-  useEffect(() => {
-    if (phase !== 'ready' || viewOpen !== 'claims') return;
-    const nav = viewNavigationRef.current;
-    nav.write({ ...(nav.view ?? EMPTY_VIEW), open: null }, { replace: true, query: nav.query });
-    if (toReviewRef.current > 0) { claimsAsked.current = false; setReviewing(true); }
-    else claimsAsked.current = !queueLoadedRef.current;
-  }, [phase, viewOpen]);
-  useEffect(() => {
-    if (!claimsAsked.current || !queueLoaded) return;
-    claimsAsked.current = false;
-    if (toReview > 0) setReviewing(true);
-  }, [toReview, queueLoaded]);
+  /* The rules (and the fourth case, offline: the link is dropped) live in
+     `lib/open-claims-link.ts`. */
+  useOpenClaimsLink({
+    ready: phase === 'ready', asked: viewOpen === 'claims', offline, queueLoaded, toReview,
+    consume: () => {
+      const nav = viewNavigationRef.current;
+      nav.write({ ...(nav.view ?? EMPTY_VIEW), open: null }, { replace: true, query: nav.query });
+    },
+    openReview: () => setReviewing(true),
+  });
   /* THE FIRST CARD HAS FOCUS ON THE WAY IN, so ← and → answer it at once —
      the card owns its arrows only while it is focused (see `ClaimSlip`). */
   useEffect(() => {
