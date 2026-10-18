@@ -261,8 +261,9 @@ In this order. The first three are 2,524 lines together; the first five are
    things the canvas draws. Its header is also the clearest short statement in
    the repo of the world-words rule: `field`, `sky` and `headquarters` are words
    for *where a layer is drawn* and may not be type or function names.
-6. **`packages/web/src/pages/Home.tsx`** (11,820 lines) — read the file header
-   and the `SimApi` interface (~line 839), then stop. The header is the
+6. **`packages/web/src/pages/Home.tsx`** (11,827 lines) — read the file header
+   and the `SimApi` interface, which now lives beside the loop in
+   `packages/web/src/canvas/simulation.ts` (~line 687), then stop. The header is the
    product's design brief; `SimApi` is the boundary between React and the
    canvas, which React calls into and the canvas never calls back through. Do
    not attempt this file linearly; open it with a symbol in hand.
