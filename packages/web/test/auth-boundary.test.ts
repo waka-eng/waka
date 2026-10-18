@@ -42,6 +42,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RequireAuth } from "../src/components/RequireAuth";
 import {
+  ApiError,
   deleteAccount,
   fetchCurrentViewer,
   login,
@@ -354,7 +355,7 @@ describe("auth boundary", () => {
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it("does not treat a cached viewer as authenticated when initial /auth/me fails, nor wipe the stored hint", async () => {
+  it("does not treat a cached viewer as authenticated when initial /auth/me fails", async () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedViewer));
     vi.mocked(fetchCurrentViewer).mockRejectedValue(new Error("server unavailable"));
 
@@ -362,7 +363,17 @@ describe("auth boundary", () => {
 
     expect(container.textContent).toContain("Sign in to return to what you kept.");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
-    expect(window.localStorage.getItem(STORAGE_KEY), "an unanswered check is not a sign-out: only a definitive no clears the hint").not.toBeNull();
+    expect(window.localStorage.getItem(STORAGE_KEY), "a thrown error is not 'unreachable': the hint is cleared").toBeNull();
+  });
+
+  /* Only "we never got an answer" (status 0) keeps the stored hint; a 5xx is
+     an answer that proves nothing about the session, and clears it. */
+  it.each([[0, false], [503, true]] as const)("on a startup /auth/me failure with status %i, clears the stored hint: %s", async (status, cleared) => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedViewer));
+    vi.mocked(fetchCurrentViewer).mockRejectedValue(new ApiError({ status, message: "failed" }));
+    const container = await renderAuthRoutes({ initialPath: "/" });
+    expect(container.textContent).not.toContain("PROTECTED HOME DATA");
+    expect(window.localStorage.getItem(STORAGE_KEY) === null).toBe(cleared);
   });
 
   it.each(["refresh", "profile", "preferences"])("does not restore a signed-out account from an older %s response", async (operation) => {

@@ -377,7 +377,10 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         // anonymous door).
         if (cancelled || !aliveRef.current) return;
         if (authMutationRef.current === initialAuthMutation) {
-          applyViewer(null, { countAsAuthMutation: false, keepCachedHint: true });
+          /* Only "we never got an answer" (status 0) keeps the hint; a 5xx
+             or a thrown error is not evidence the session is fine either,
+             and those clear it as before. */
+          applyViewer(null, { countAsAuthMutation: false, keepCachedHint: err instanceof ApiError && err.status === 0 });
         }
       } finally {
         if (!cancelled && aliveRef.current) setIsLoading(false);
