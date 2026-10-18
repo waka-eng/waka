@@ -5,7 +5,7 @@ import {fetchConversation,fetchConversationReply,stopConversationReply,type ApiC
 /** Reads resume work; only an explicit stop mutates it. */
 export function useConversationReply(profileId:string,id:string|null,enabled:boolean,revision:number,onConversation:(row:ApiConversation)=>void,messageWindowStart?:number){
   const [stored,setStored]=useState<ConversationReplyState|null>(null),[serial,setSerial]=useState(0),[waiting,setWaiting]=useState(false),[error,setError]=useState(false),[busy,setBusy]=useState(false);
-  /* ONLY A PERMANENT 4xx ENDS THE WATCH ('gone': the conversation or its reply no
+  /* ONLY A 404 OR 410 ENDS THE WATCH ('gone': the conversation or its reply no
      longer exists), so the panel says so, offers a reload and frees Send. */
   const [terminal,setTerminal]=useState<'gone'|null>(null);
   /* A server answering with a state OLDER than the one on screen (a lagging
@@ -42,9 +42,14 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
         }
       }catch(reason){
         if(controller.signal.aborted)return;
-        /* A permanent 4xx (404, 410, 403…) will answer the same way forever;
-           408 and 429 are "try later", so they stay on the retry path. */
-        if(reason instanceof ApiError&&reason.status>=400&&reason.status<500&&reason.status!==408&&reason.status!==429){setError(false);setTerminal('gone');return;}
+        /* 404 and 410 mean the reply is gone: terminal. A 401 belongs to the
+           session-expired flow (the transport has already raised it): stop
+           asking, show nothing of our own, and Send stays off with the reply
+           unconfirmed. Any other 4xx is an error, not an answer: it says so
+           at once (with Check again) and keeps to the retry path below. */
+        if(reason instanceof ApiError&&(reason.status===404||reason.status===410)){setError(false);setTerminal('gone');return;}
+        if(reason instanceof ApiError&&reason.status===401)return;
+        if(reason instanceof ApiError&&reason.status>=400&&reason.status<500)failures=Math.max(failures,1);
         if(reason instanceof Error&&(reason.message==='Older reply state'||reason.message==='Older conversation')){
           older+=1;if(older>=2)setBehind(true);
           timer=window.setTimeout(()=>void read(),Math.min(15000,1000*2**(older-1)));return;

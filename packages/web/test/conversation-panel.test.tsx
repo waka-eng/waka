@@ -362,7 +362,30 @@ it('keeps asking on a 429 reply read — that one is "try later", not gone',asyn
   expect(vi.mocked(fetchConversationReply).mock.calls.length).toBeGreaterThan(calls);
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
 });
-it.each([404,410,403])('stops on a %i reply read, says it is gone, offers a reload and frees Send',async(status)=>{
+it.each([400,403])('treats a %i reply read as an error, not gone: Check again offered, Send off, still asking',async(status)=>{
+  stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
+  vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status,message:'Bad'}));await mount();await tick(0);
+  expect(host.textContent).toContain('Couldn’t check reply progress.');
+  expect(host.textContent).not.toContain('This reply can’t be found anymore.');
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  await type('Still there?');
+  expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
+  const calls=vi.mocked(fetchConversationReply).mock.calls.length;
+  await tick(15000);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBeGreaterThan(calls);
+});
+it('leaves a 401 reply read to the session-expired flow: no gone notice, Send off, no more asking',async()=>{
+  stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
+  vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:401,message:'Signed out'}));await mount();await tick(0);
+  const calls=vi.mocked(fetchConversationReply).mock.calls.length;
+  await tick(15000);await tick(15000);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBe(calls);
+  expect(host.textContent).not.toContain('This reply can’t be found anymore.');
+  expect(host.textContent).not.toContain('Couldn’t check reply progress.');
+  await type('Still there?');
+  expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
+});
+it.each([404,410])('stops on a %i reply read, says it is gone, offers a reload and frees Send',async(status)=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status,message:'Gone'}));await mount();await tick(1000);
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
