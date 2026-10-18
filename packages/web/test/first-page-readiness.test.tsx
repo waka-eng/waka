@@ -108,3 +108,29 @@ it('labels loading on a cold field link instead of presenting the unfinished fie
   expect(world.audit().present).toBe(0);
   expect(world.container.querySelector('.jar-first-capture-hint')?.textContent).toBe(FIRST_CAPTURE_HINT);
 });
+
+/* ═══ A REBUILD UNDER A PRESS SETTLES WHAT THE PRESS OWED ══════════════════
+   The rest of the archive arriving rebuilds the loop, and the rebuild does
+   not carry a held press (see `Carry`). A press that interrupted an aim left
+   the camera between two sections, and only its release would have sent it
+   home — so the teardown pays that debt before the camera is carried, or the
+   rebuilt world re-anchors against its own unsized first layout and lands
+   wherever that says (code review, 2026-10-17). */
+it('sends the camera to the section a held press owed when the archive lands under it',async()=>{
+  world=await mountWorld(facts);
+  await act(async()=>progress.first!({inspirations:[source],total:2,short:true}));
+  await world.step(30);
+  const sim=()=>(window as unknown as {wakaSim:()=>{toGround():void;isResting():boolean}|null}).wakaSim()!;
+  await act(async()=>sim().toGround());
+  await world.step(4);
+  await act(async()=>{world.container.querySelector('canvas')!.dispatchEvent(new window.PointerEvent('pointerdown',
+    {bubbles:true,cancelable:true,pointerId:31,pointerType:'touch',clientX:640,clientY:300,button:0,buttons:1}));});
+  const {camY:stopped,fieldRest}=world.audit();
+  expect(stopped>0&&stopped<fieldRest/2,`the press did not stop the camera in the upper half (${stopped} of ${fieldRest})`).toBe(true);
+  const before=sim();
+  await act(async()=>progress.finish!({inspirations:[source,{...source,id:'source-two',preview:'A second source'}],total:2,short:false}));
+  await world.step(60);
+  expect(sim(),'the archive landing did not rebuild the loop').not.toBe(before);
+  expect(world.audit().camY,'the rebuilt camera did not go to the section the press owed').toBe(0);
+  expect(sim().isResting()).toBe(true);
+});
