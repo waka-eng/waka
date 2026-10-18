@@ -103,9 +103,11 @@ export function PrincipleRead({ active, locale, onRead }: {
         if (!ensured && ((result.status.eligible && !result.status.supportPending && result.status.phase === "pending") ||
           ((result.status.eligible || result.status.supportPending) && result.status.phase === "failed" && asked))) {
           retriedAttempt.current = attempt;
-          ensured = true;
           ownRequest.current = true;
           try { await requestPrincipleRead(asked); } finally { ownRequest.current = false; }
+          /* Only a start that the server took counts: a failed POST is sent
+             again on the next poll (it throws into the catch below first). */
+          ensured = true;
           if (!disposed) setStatus({ ...result.status, phase: result.status.supportPending ? "pending" : "processing" });
         }
       } catch {

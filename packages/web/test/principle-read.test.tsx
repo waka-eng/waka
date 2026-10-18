@@ -145,6 +145,17 @@ describe("principle read", () => {
     expect(fetchPrincipleRead).toHaveBeenCalledTimes(4);
   });
 
+  it("sends the auto-start again on the next poll when the first POST failed", async () => {
+    vi.mocked(requestPrincipleRead).mockRejectedValueOnce(new Error("lost")).mockResolvedValue();
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "pending" } });
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(requestPrincipleRead, "a failed start was taken as done").toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(requestPrincipleRead, "a start the server took was sent again").toHaveBeenCalledTimes(2);
+  });
+
   it("queues missing work once and displays completion without a page reload", async () => {
     vi.mocked(requestPrincipleRead).mockResolvedValue();
     vi.mocked(fetchPrincipleRead).mockResolvedValueOnce({ principles: [], status: { ...ready, phase: "pending" } })
