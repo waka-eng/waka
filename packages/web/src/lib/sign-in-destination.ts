@@ -56,9 +56,14 @@ export function safeInAppPath(value: unknown): string | null {
  * doesn't start with "/" so a malicious referrer cannot steer the user to
  * an external site after they sign in.
  */
-export function resolveRedirect(location: Location): string {
-  const state = location.state as { from?: unknown } | null;
-  const from = safeInAppPath(state?.from);
+export function resolveRedirect(location: Location, signedInAccountId?: string | null): string {
+  const state = location.state as { from?: unknown; expiredFor?: unknown } | null;
+  /* A `from` written because a session EXPIRED belongs to the account whose
+     session it was (`expiredFor`). Anybody else signing in at that door —
+     or a destination asked for before we know who (the Google button) —
+     goes home rather than onto the previous person's page. */
+  const foreign = Boolean(state && "expiredFor" in state && state.expiredFor !== signedInAccountId);
+  const from = foreign ? null : safeInAppPath(state?.from);
   if (from) return from;
   const queryReturnTo = new URLSearchParams(location.search).get("returnTo");
   const returnTo = safeInAppPath(queryReturnTo);

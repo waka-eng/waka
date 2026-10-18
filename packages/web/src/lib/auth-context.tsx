@@ -197,7 +197,9 @@ export interface AuthContextValue {
    * in again. Unsent drafts are NOT cleared on this path: only `logout`
    * evicts them, because only `logout` is somebody choosing to leave.
    */
-  sessionExpired: { from: string } | null;
+  /** `accountId` is the account whose session ended (null if unknown): only
+      that account signing in again is sent back to `from`. */
+  sessionExpired: { from: string; accountId: string | null } | null;
   /** The signed-in account, or null when anonymous. */
   account: ApiAccount | null;
   /** The profile this session acts as, or null when anonymous. */
@@ -305,7 +307,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
   /** See `AuthContextValue.serverUnreachable`. Says nothing about access. */
   const [serverUnreachable, setServerUnreachable] = useState(false);
-  const [sessionExpired, setSessionExpired] = useState<{ from: string } | null>(null);
+  const [sessionExpired, setSessionExpired] = useState<{ from: string; accountId: string | null } | null>(null);
   const [unreachableWasSignedIn, setUnreachableWasSignedIn] = useState(false);
   const viewerRef = useRef(viewer);
   viewerRef.current = viewer;
@@ -316,7 +318,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
          credential store itself, which already implies there was one. */
       if (!isMobileBuild && !viewerRef.current) return;
       const at = window.location;
-      setSessionExpired({ from: `${at.pathname}${at.search}${at.hash}` });
+      setSessionExpired({ from: `${at.pathname}${at.search}${at.hash}`, accountId: viewerRef.current?.account.id ?? null });
       applyViewer(null); setServerUnreachable(false); setIsLoading(false);
     };
     window.addEventListener(SESSION_EXPIRED_EVENT, expired);

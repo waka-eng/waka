@@ -26,7 +26,7 @@
  */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LoadingHome } from "../src/components/LoadingHome";
@@ -164,6 +164,44 @@ describe("a session that ends mid-flow", () => {
     await act(async () => { answerLate(new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 })); await late; });
     await act(async () => { await Promise.resolve(); });
     expect(text(), "a 401 from before the new sign-in signed the person out again").toContain("protected");
+  });
+
+  it("sends a different account signing in at the expired door home, not to the last person's page", async () => {
+    window.history.replaceState(null, "", "/chat/thread-1");
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(VIEWER);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const Where = () => createElement("output", null, `at:${useLocation().pathname}`);
+    await act(async () => {
+      root!.render(createElement(MemoryRouter, { initialEntries: ["/chat/thread-1"] },
+        createElement(AuthProvider, null,
+          createElement(Routes, null,
+            createElement(Route, { path: "/login", element: createElement(LoginPage) }),
+            createElement(Route, { path: "*", element: createElement(RequireAuth, null, createElement(Where)) }),
+          ))));
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(text()).toContain("at:/chat/thread-1");
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 })));
+    await act(async () => { await fetchInspiration("inspiration-1").catch(() => undefined); });
+    await act(async () => { await Promise.resolve(); });
+    expect(text()).toContain("You were signed out.");
+
+    const OTHER: ApiViewer = { account: { ...VIEWER.account, id: "account-2", email: "bo@example.com" },
+      profile: { ...VIEWER.profile, id: "profile-2", accountId: "account-2", name: "Bo" } };
+    vi.mocked(login).mockResolvedValue(OTHER);
+    const email = container!.querySelector<HTMLInputElement>('input[type="email"]')!;
+    const password = container!.querySelector<HTMLInputElement>('input[type="password"]')!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(email, "bo@example.com"); email.dispatchEvent(new Event("input", { bubbles: true }));
+      setValue.call(password, "correct horse battery"); password.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { email.form!.requestSubmit(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(text(), "another account was sent onto the expired session's page").toBe("at:/");
   });
 
   it("does not treat a wrong password or an anonymous /auth/me as an expiry", async () => {
