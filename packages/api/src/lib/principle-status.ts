@@ -32,14 +32,18 @@ type Db = Database | Transaction;
  * retries its own derivation (`/inspirations/:id/processing`).
  */
 async function latestReadingJob(db: Db, profileId: string) {
-  const [latest] = await db.select({ status: backgroundJobs.status, createdAt: backgroundJobs.createdAt }).from(backgroundJobs)
+  const [latest] = await db.select({ status: backgroundJobs.status, updatedAt: backgroundJobs.updatedAt }).from(backgroundJobs)
     .where(and(eq(backgroundJobs.profileId, profileId), eq(backgroundJobs.type, "refresh_top_of_mind")))
     .orderBy(desc(backgroundJobs.updatedAt)).limit(1);
   return latest ?? null;
 }
 
 /** How soon a failed reading may be retried again: a retry that fails at
-    once (no credit) must not become a button that bills a request per press. */
+    once (no credit) must not become a button that bills a request per press.
+    Measured from when the job FAILED (`updatedAt`), not when it was first
+    enqueued — a job that ran its retries for ten minutes failed just now.
+    It throttles the reading job only: failed or stalled principles behind
+    the same Try again are still restarted inside it. */
 export const READING_RETRY_COOLDOWN_MS = 3 * 60_000;
 
 /** A retry asked for inside the cooldown. The route answers 429 with when. */
@@ -69,16 +73,19 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
 }
 
 export async function requestPrincipleRefresh(db: Db, profileId: string, retry = false, now = new Date()) {
+  let throttledSeconds = 0;
   if (retry) {
     const reading = await latestReadingJob(db, profileId);
     if (reading?.status === "failed") {
-      const wait = reading.createdAt.getTime() + READING_RETRY_COOLDOWN_MS - now.getTime();
-      if (wait > 0) throw new ReadingRetryThrottled(Math.ceil(wait / 1000));
+      const wait = reading.updatedAt.getTime() + READING_RETRY_COOLDOWN_MS - now.getTime();
+      if (wait > 0) throttledSeconds = Math.ceil(wait / 1000);
     }
   }
+  let restarted = false;
   await db.transaction(async (tx) => {
     const sources = await recoverPendingSignalSupport(tx, profileId);
     if (sources.length) {
+      restarted = true;
       const groupId = sources[0]!.groupId;
       if (groupId) await enqueueGroupTopOfMindRefresh(sources[0]!.ownerProfileId, groupId, 'manual', tx);
       else await enqueueTopOfMindRefresh(profileId, 'manual', tx);
@@ -88,12 +95,14 @@ export async function requestPrincipleRefresh(db: Db, profileId: string, retry =
        reading asked for the one job that was not the problem. Only on an
        explicit retry, and only when the latest reading job did fail — a
        plain refresh still never buys a synthesis nobody asked for. */
-    if (retry && !sources.length) {
+    if (retry && !sources.length && !throttledSeconds) {
       if ((await latestReadingJob(tx, profileId))?.status === "failed") await enqueueTopOfMindRefresh(profileId, 'manual', tx);
     }
-    await enqueueEligiblePrinciples(tx, profileId, retry, tx);
+    if (await enqueueEligiblePrinciples(tx, profileId, retry, tx)) restarted = true;
   });
   await wakeCommittedBackgroundJobs();
+  /* Inside the cooldown with nothing else to restart: say so, as a 429. */
+  if (throttledSeconds && !restarted) throw new ReadingRetryThrottled(throttledSeconds);
   return loadPrincipleStatus(db, profileId);
 }
 
@@ -103,9 +112,10 @@ export async function enqueuePrinciplesAfterReading(tx: Transaction, profileId: 
   await enqueueEligiblePrinciples(tx, profileId, false, tx);
 }
 
-async function enqueueEligiblePrinciples(db: Db, profileId: string, retry: boolean, transaction?: Transaction) {
+/** True when an explicit retry reset a failed or stalled principles job. */
+async function enqueueEligiblePrinciples(db: Db, profileId: string, retry: boolean, transaction?: Transaction): Promise<boolean> {
   const material = await loadPrincipleMaterial(db, profileId);
-  if (material.eligibility.eligible) {
-    await enqueueRefreshPrinciples(profileId, principleMaterialKey(material), retry, transaction);
-  }
+  if (!material.eligibility.eligible) return false;
+  const result = await enqueueRefreshPrinciples(profileId, principleMaterialKey(material), retry, transaction);
+  return Boolean(result.restarted);
 }

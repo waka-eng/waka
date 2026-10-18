@@ -469,7 +469,44 @@ describe("principles across personal profiles", () => {
     expect(await early.json()).toMatchObject({ code: 'reading_retry_throttled' });
     expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`).toHaveLength(1);
     expect((await app('agent').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(403);
-    await t.sql`UPDATE background_jobs SET created_at=now()-interval '10 minutes' WHERE profile_id=${profileId}`;
+    /* the cooldown runs from when the job FAILED: enqueued long ago but
+       failed just now is still inside it */
+    await t.sql`UPDATE background_jobs SET created_at=now()-interval '30 minutes' WHERE profile_id=${profileId}`;
+    expect((await app('human').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(429);
+    await t.sql`UPDATE background_jobs SET updated_at=now()-interval '10 minutes' WHERE profile_id=${profileId}`;
     expect((await app('human').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(202);
+  });
+
+  it('still restarts failed principles inside the reading cooldown, without re-running the reading', async () => {
+    const profileId = await person();
+    await material(profileId, [profileId]);
+    await requestPrincipleRefresh(t.db as never, profileId);
+    await t.sql`UPDATE background_jobs SET status='failed' WHERE profile_id=${profileId} AND type='refresh_principles'`;
+    await failedReading(profileId, 1);
+    const status = await requestPrincipleRefresh(t.db as never, profileId, true);
+    expect(status.phase, 'the cooldown blocked the principles retry').not.toBe('failed');
+    expect((await t.sql`SELECT status FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_principles'`)[0]!.status).toBe('pending');
+    expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`,
+      'the throttled reading ran again').toHaveLength(1);
+  });
+
+  it('re-enqueues a stalled principles job on an explicit retry, and leaves a fresh one alone', async () => {
+    const profileId = await person();
+    await material(profileId, [profileId]);
+    await requestPrincipleRefresh(t.db as never, profileId);
+    const jobs = () => t.sql`SELECT status, locked_at, request_version::text AS v FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_principles'`;
+    await t.sql`UPDATE background_jobs SET status='running', locked_at=now(), attempts=1, updated_at=now() WHERE profile_id=${profileId} AND type='refresh_principles'`;
+    const [fresh] = await jobs();
+    await requestPrincipleRefresh(t.db as never, profileId, true);
+    expect((await jobs())[0]!.v, 'a job still running was reset').toBe(fresh!.v);
+    await t.sql`UPDATE background_jobs SET updated_at=now()-interval '10 minutes', locked_at=now()-interval '10 minutes' WHERE profile_id=${profileId} AND type='refresh_principles'`;
+    await requestPrincipleRefresh(t.db as never, profileId, true);
+    const [after] = await jobs();
+    expect(after!.status).toBe('pending');
+    expect(after!.locked_at).toBeNull();
+    /* a plain refresh never resets one */
+    await t.sql`UPDATE background_jobs SET status='running', updated_at=now()-interval '10 minutes' WHERE profile_id=${profileId} AND type='refresh_principles'`;
+    await requestPrincipleRefresh(t.db as never, profileId);
+    expect((await jobs())[0]!.status).toBe('running');
   });
 });
