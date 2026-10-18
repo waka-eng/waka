@@ -21,7 +21,7 @@ const nativeShare=vi.fn(),nativeCanShare=vi.fn(),close=vi.fn();
 const priorShare=Object.getOwnPropertyDescriptor(navigator,'share'),priorCanShare=Object.getOwnPropertyDescriptor(navigator,'canShare');
 let root:Root,host:HTMLDivElement;
 beforeEach(()=>{
-  vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});localStorage.clear();sessionStorage.clear();
+  vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});localStorage.clear();
   (globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
   vi.mocked(fetchPrinciples).mockResolvedValue([structuredClone(source)]);
   vi.mocked(renderShareCard).mockImplementation(async content=>({blob:new Blob([content.items.map(item=>item.text).join('\n')],{type:'image/png'}),width:1080,height:1080,fallbackFont:false}));
@@ -57,40 +57,9 @@ it('edits only the card and never renders private evidence or the hidden name',a
   expect(readPrincipleArtifactDrafts(scope,id)[0].value.entries[0].originalStatement).toBe(source.statement);
 });
 it('restores a closed draft and forks its next edit without overwriting the earlier writer',async()=>{
-  /* the earlier writer is ANOTHER TAB: another `sessionStorage`, where the
-     writer id lives (`lib/tab-writer`) */
-  await mount();await type('Keep these card words');await act(async()=>root.unmount());sessionStorage.clear();root=createRoot(host);await mount();
+  await mount();await type('Keep these card words');await act(async()=>root.unmount());root=createRoot(host);await mount();
   expect(host.querySelector('textarea')!.value).toBe('Keep these card words');await type('A new draft of these words');
   expect(readPrincipleArtifactDrafts(scope,id).map(row=>row.value.entries[0].text).sort()).toEqual(['A new draft of these words','Keep these card words']);
-});
-it('does not restore a discarded card on the next reload',async()=>{
-  /* A reload is the SAME tab, so it keeps writing its own draft in place.
-     It used to fork it under a new key, and discarding the fork left the
-     earlier revision on disk for the next open to restore. */
-  await mount();await type('Keep these card words');await act(async()=>root.unmount());root=createRoot(host);await mount();
-  await type('A new draft of these words');
-  vi.spyOn(window,'confirm').mockReturnValue(true);
-  await act(async()=>button('Discard draft').click());
-  expect(readPrincipleArtifactDrafts(scope,id),'the reloaded draft is still on disk').toEqual([]);
-  await act(async()=>root.unmount());root=createRoot(host);await mount();
-  expect(host.querySelector('textarea')!.value).toBe(source.statement);
-});
-it('leaves another open tab’s card draft alone when this tab discards',async()=>{
-  await mount();await type('Card words in the other tab');await act(async()=>root.unmount());sessionStorage.clear();root=createRoot(host);await mount();
-  await type('Card words in this tab');
-  vi.spyOn(window,'confirm').mockReturnValue(true);
-  await act(async()=>button('Discard draft').click());
-  expect(readPrincipleArtifactDrafts(scope,id).map(row=>row.value.entries[0].text)).toEqual(['Card words in the other tab']);
-});
-it('forks to a writer of its own when a duplicated tab writes the same card draft',async()=>{
-  await mount();await type('Card words in the original');
-  const [row]=readPrincipleArtifactDrafts(scope,id);
-  const sharedWriter=sessionStorage.getItem('waka:draftWriter');
-  localStorage.setItem(row!.key,JSON.stringify({...row!.value,entries:row!.value.entries.map(entry=>({...entry,text:'Card words in the duplicate'})),updatedAt:row!.value.updatedAt+1}));
-  await type('Card words in the original, more');
-  expect(host.textContent,'the conflict was reported as broken storage').not.toContain('couldn’t keep the draft');
-  expect(sessionStorage.getItem('waka:draftWriter')).not.toBe(sharedWriter);
-  expect(readPrincipleArtifactDrafts(scope,id).map(item=>item.value.entries[0].text).sort()).toEqual(['Card words in the duplicate','Card words in the original, more']);
 });
 it('never enables export from a late preview of earlier wording',async()=>{
   let resolve!:(value:Awaited<ReturnType<typeof renderShareCard>>)=>void;

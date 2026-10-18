@@ -2,21 +2,17 @@ import {useEffect,useMemo,useRef,useState} from 'react';
 import {fetchPrinciples,fetchPrincipleStatements,type ApiPrinciple,type ApiPrincipleStatements} from '../lib/api';
 import type {ProfileStorageScope} from '../lib/profile-storage';
 import {ArtifactLayoutError,renderShareCard,type PrincipleArtifactContent} from '../lib/principle-artifact';
-import {ShareDraftConflict,readPrincipleArtifactDrafts,storePrincipleArtifactDraft,clearPrincipleArtifactDraft,recoverPrincipleArtifactDrafts,type PrincipleArtifactDraft,type StoredPrincipleArtifactDraft} from '../lib/principle-artifact-drafts';
+import {readPrincipleArtifactDrafts,storePrincipleArtifactDraft,clearPrincipleArtifactDraft,recoverPrincipleArtifactDrafts,type PrincipleArtifactDraft,type StoredPrincipleArtifactDraft} from '../lib/principle-artifact-drafts';
 import {formatMessage,t,type SupportedLocale} from '../lib/locales';
 import {dateStamp} from '../lib/words';
 import {DialogSurface} from './DialogSurface';
 import {ShareLooks} from './ShareLooks';
 import {SHARE_NOTICE_KEY,useShareImage} from '../lib/use-share-image';
-import {newTabWriterId,tabWriterId} from '../lib/tab-writer';
 
 export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:ProfileStorageScope;id:string;name:string;locale:SupportedLocale;onClose:()=>void;onChoose:(id:string)=>void}){
   const [rows,setRows]=useState<ApiPrinciple[]|null>(null),[loadFailed,setLoadFailed]=useState(false),[attempt,setAttempt]=useState(0);
   const [draft,setDraft]=useState<StoredPrincipleArtifactDraft|null>(null),[drafts,setDrafts]=useState<StoredPrincipleArtifactDraft[]>([]),[storageFailed,setStorageFailed]=useState(false);
-  /* This tab's writer id, read once (see `lib/tab-writer`): a reload keeps
-     writing its own card draft in place; another tab still forks. */
-  const [tabWriter]=useState(tabWriterId);
-  const current=useRef<StoredPrincipleArtifactDraft|null>(null),writer=useRef(tabWriter);
+  const current=useRef<StoredPrincipleArtifactDraft|null>(null),writer=useRef(crypto.randomUUID());
   const [preview,setPreview]=useState<{key:string;url:string;blob:Blob;fallbackFont:boolean;words:string}|null>(null),[renderError,setRenderError]=useState<string|null>(null);
   const [renderAttempt,setRenderAttempt]=useState(0);
   const [editingWords,setEditingWords]=useState(false),[customizing,setCustomizing]=useState(false);
@@ -91,16 +87,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
     let next={...value,updatedAt:Date.now()},previous=current.current;
     if(next.writer!==writer.current){next={...next,id:crypto.randomUUID(),writer:writer.current};previous=null;}
     try{const saved=storePrincipleArtifactDraft(scope,id,next,previous??undefined);useDraft(saved);setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
-    catch(reason){
-      /* ANOTHER TAB WROTE THIS KEY — one sharing this tab's writer id, which
-         only a duplicated tab does (`lib/tab-writer`). Not broken storage:
-         take a writer of our own and fork the card to a new key. */
-      if(reason instanceof ShareDraftConflict){
-        writer.current=newTabWriterId();const forked={...next,id:crypto.randomUUID(),writer:writer.current};
-        try{const saved=storePrincipleArtifactDraft(scope,id,forked);useDraft(saved);setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);return;}catch{/* really broken */}
-      }
-      useDraft({...previous??{key:'',raw:''},value:next});setStorageFailed(true);
-    }
+    catch{useDraft({...previous??{key:'',raw:''},value:next});setStorageFailed(true);}
   };
   const change=draft?.value.mode==='change';
   useEffect(()=>{if(change)setCustomizing(true);},[change]);
