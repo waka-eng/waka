@@ -7452,9 +7452,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 setPhase("loading");
                 retryFieldRef.current?.();
                 /* The same failure usually took the sky and the agent
-                   roster with it; one Try again asks for all three. */
+                   roster with it, and the reading; one Try again asks for
+                   all four. */
                 void readSkyRef.current().catch(() => undefined);
                 void loadAgentRoster().then(({ roster }) => setAgentRoster(roster)).catch(() => undefined);
+                retryReadingLoadRef.current();
               } },
               ...(auth?.isAuthenticated ? [{ label: say("signOut"), onClick: () => {
                 void auth.logout().then(() => navigate("/login", { replace: true })).catch(() => undefined);

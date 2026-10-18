@@ -34,12 +34,12 @@ vi.mock("../src/lib/data", async (original) => {
       if (state.archiveDown) throw new ApiError({ status: 0, message: "unreachable" });
       return (honest.loadInspirations as (...a: unknown[]) => unknown)(...args);
     },
-    loadSignals: vi.fn(async () => []) };
+    loadSignals: vi.fn(async () => []), loadTopOfMind: vi.fn(async () => null) };
 });
 vi.mock("../src/lib/api", async (original) => ({ ...await original<typeof import("../src/lib/api")>(), ...apiMockFrom(facts), fetchProfiles: vi.fn(async () => []) }));
 vi.mock("../src/lib/auth-context", async (original) => ({ ...await original<typeof import("../src/lib/auth-context")>(),
   useOptionalAuth: () => ({ status: "authenticated", isAuthenticated: false, account: { id: "owner", email: "owner@example.test" }, profile: { id: "profile-viewer", name: "Owner", type: "human" }, profiles: [] }) }));
-import { loadSignals } from "../src/lib/data";
+import { loadSignals, loadTopOfMind } from "../src/lib/data";
 import { fetchProfiles } from "../src/lib/api";
 
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
@@ -55,11 +55,13 @@ it("re-reads the field, the sky and the agent roster on one Try again", async ()
     expect(host.textContent).toContain("Your home didn’t load.");
     const sky = vi.mocked(loadSignals).mock.calls.length;
     const roster = vi.mocked(fetchProfiles).mock.calls.length;
+    const reading = vi.mocked(loadTopOfMind).mock.calls.length;
     state.archiveDown = false;
     const retry = [...host.querySelectorAll("button")].find((button) => button.textContent === "Try again")!;
     await act(async () => retry.click());
     expect(vi.mocked(loadSignals).mock.calls.length, "Try again left the sky as the failure left it").toBeGreaterThan(sky);
     expect(vi.mocked(fetchProfiles).mock.calls.length, "Try again left the agent roster as the failure left it").toBeGreaterThan(roster);
+    expect(vi.mocked(loadTopOfMind).mock.calls.length, "Try again left the reading as the failure left it").toBeGreaterThan(reading);
   } finally {
     act(() => root.unmount()); host.remove(); error.mockRestore();
   }
