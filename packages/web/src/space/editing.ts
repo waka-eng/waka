@@ -187,6 +187,23 @@ export function useEditing(deps: EditingDeps): Editing {
      answer to the first would stamp the second `saved` before its own write
      had landed. Each keep takes a number; only the newest one's answer acts. */
   const keepToken = useRef(0);
+  /* ONE WRITE PER THING AT A TIME. The token above decides whose answer may
+     stamp `saved`, but not what the server ends with: keep X, reopen, keep Y
+     and both PATCHes are out — X could land after Y on the server, and X's
+     success would write X's words onto the card. Each thing's writes wait for
+     the one before them, so the last words kept are the last words sent, and
+     the card's preview is written in that same order. */
+  const writeChain = useRef(new Map<string, Promise<unknown>>());
+  const inOrder = useCallback(<T,>(key: string, write: () => Promise<T>): Promise<T> => {
+    const before = writeChain.current.get(key) ?? Promise.resolve();
+    const mine = before.catch(() => undefined).then(write);
+    const tail = mine.catch(() => undefined);
+    writeChain.current.set(key, tail);
+    void tail.then(() => {
+      if (writeChain.current.get(key) === tail) writeChain.current.delete(key);
+    });
+    return mine;
+  }, []);
   const put = useCallback((next: OpenEdit | null) => {
     heldRef.current = next;
     setOpen(next);
@@ -300,7 +317,7 @@ export function useEditing(deps: EditingDeps): Editing {
     };
     if (d.offline.current) return done();
     if (held.kind === "memory") {
-      updateInspiration(held.id, { text })
+      inOrder(`memory:${held.id}`, () => updateInspiration(held.id, { text }))
         .then((made) => {
           if (made) d.onInspirationSaved?.(made);
           d.setInspirations((prev) =>
@@ -318,7 +335,7 @@ export function useEditing(deps: EditingDeps): Editing {
         })
         .catch(fail);
     } else if (held.kind === "signal") {
-      updateSignal(held.id, { statement: text })
+      inOrder(`signal:${held.id}`, () => updateSignal(held.id, { statement: text }))
         .then(() => {
           d.setSignals((prev) =>
             prev
@@ -330,7 +347,7 @@ export function useEditing(deps: EditingDeps): Editing {
         .catch(fail);
     } else {
       const finish = d.beginReadingMutation?.() ?? (() => {});
-      updateTopOfMindEntry(held.id, { body: text })
+      inOrder(`entry:${held.id}`, () => updateTopOfMindEntry(held.id, { body: text }))
         .then(() => {
           finish();
           d.onEntrySaved?.();
@@ -342,7 +359,7 @@ export function useEditing(deps: EditingDeps): Editing {
         })
         .catch((error) => { finish(); fail(error); }).finally(finish);
     }
-  }, [put]);
+  }, [put, inOrder]);
 
   /* Rebuilt only when the words change, which is the one thing a reader of the
      act can see. The four callbacks never change identity, so this is also the

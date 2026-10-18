@@ -21,14 +21,16 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const WRITE = vi.hoisted(() => ({
   settle: null as null | { resolve: () => void; reject: (error: unknown) => void },
   all: [] as Array<{ resolve: () => void; reject: (error: unknown) => void }>,
+  sent: [] as string[],
 }));
 
 vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
   return {
     ...actual,
-    updateInspiration: () =>
+    updateInspiration: (_id: string, body: { text: string }) =>
       new Promise((resolve, reject) => {
+        WRITE.sent.push(body.text);
         WRITE.settle = { resolve: () => resolve(null), reject };
         WRITE.all.push(WRITE.settle);
       }),
@@ -42,10 +44,15 @@ let editing: Editing;
 let host: HTMLDivElement;
 let root: Root;
 
+type Card = { id: string; preview: string };
+let cards: Card[] = [];
+
 const deps: EditingDeps = {
   offline: { current: false } as MutableRefObject<boolean>,
   details: { current: new Map() } as EditingDeps["details"],
-  setInspirations: () => undefined,
+  setInspirations: ((next: unknown) => {
+    cards = typeof next === "function" ? (next as (prev: Card[]) => Card[])(cards) : (next as Card[]);
+  }) as EditingDeps["setInspirations"],
   setSignals: () => undefined,
   setNotes: () => undefined,
   setTopOfMind: () => undefined,
@@ -62,6 +69,8 @@ function Harness() {
 beforeEach(async () => {
   WRITE.settle = null;
   WRITE.all = [];
+  WRITE.sent = [];
+  cards = [{ id: "a", preview: "old words" }];
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement("div");
   document.body.append(host);
@@ -111,11 +120,45 @@ it("ignores an earlier keep's late answer to the same words, and applies the new
   await act(async () => editing.leave());
   await act(async () => editing.begin("memory", "a", "second words"));
   await act(async () => editing.keep());
-  const [first, second] = WRITE.all;
 
-  await act(async () => first!.resolve());
+  await act(async () => WRITE.all[0]!.resolve());
   expect(editing.open, "the first keep's answer stamped the second").toMatchObject({ text: "second words", saving: true, saved: false });
 
-  await act(async () => second!.resolve());
+  await act(async () => WRITE.all[1]!.resolve());
   expect(editing.open).toMatchObject({ text: "second words", saving: false, saved: true });
+});
+
+it("sends a second keep of the same memory only after the first has landed, so the last words kept win", async () => {
+  /* Keep X, reopen, keep Y. Two PATCHes in flight could land on the server
+     in either order, and X's success used to write X onto the card after Y.
+     The second write waits for the first, so the server and the card both
+     end on Y. */
+  await act(async () => editing.begin("memory", "a", "X"));
+  await act(async () => editing.keep());
+  await act(async () => editing.leave());
+  await act(async () => editing.begin("memory", "a", "Y"));
+  await act(async () => editing.keep());
+  expect(WRITE.sent, "Y went out while X was still in flight").toEqual(["X"]);
+
+  await act(async () => WRITE.all[0]!.resolve());
+  expect(WRITE.sent).toEqual(["X", "Y"]);
+  await act(async () => WRITE.all[1]!.resolve());
+
+  expect(cards.find((c) => c.id === "a")?.preview).toBe("Y");
+  expect(WRITE.sent.at(-1)).toBe("Y");
+});
+
+it("still sends the newer keep when the older one fails", async () => {
+  await act(async () => editing.begin("memory", "a", "X"));
+  await act(async () => editing.keep());
+  await act(async () => editing.leave());
+  await act(async () => editing.begin("memory", "a", "Y"));
+  await act(async () => editing.keep());
+
+  await act(async () => WRITE.all[0]!.reject(new ApiError({ status: 500, message: "boom" })));
+  expect(WRITE.sent).toEqual(["X", "Y"]);
+  await act(async () => WRITE.all[1]!.resolve());
+
+  expect(cards.find((c) => c.id === "a")?.preview).toBe("Y");
+  expect(editing.open).toMatchObject({ text: "Y", saved: true });
 });
