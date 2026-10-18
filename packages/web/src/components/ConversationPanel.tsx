@@ -177,6 +177,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const lifecycle=useRef(new AbortController()),draftRef=useRef<Draft|null>(null),working=useRef(false);
   const conversationRef=useRef<ApiConversation|null>(initial),writer=useRef(crypto.randomUUID()),receipt=useRef<StoredConversationDraft>();
   const [generationEnabled,setGenerationEnabled]=useState<boolean|null>(initial?.generationEnabled??null);
+  const generationRef=useRef(generationEnabled);generationRef.current=generationEnabled;
   const root=useRef<HTMLElement>(null),body=useRef<HTMLDivElement>(null),editor=useRef<HTMLTextAreaElement>(null),nearBottom=useRef(true);
   const restoredScroll=useRef<{top:number;nearBottom:boolean;messageWindowStart?:number}|null>(null),scrollKey=profileStorageKey(scope,`conversationScroll:${journal}`)!;
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
@@ -324,7 +325,11 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
    */
   const mine=(owner:AbortController)=>!owner.signal.aborted;
   const refreshList=async(owner=lifecycle.current)=>{const next=await run(signal=>listConversations(scope.profileId,signal));if(mine(owner)&&!id)setGenerationEnabled(next.generationEnabled);};
-  const loadHistory=(owner=lifecycle.current)=>{void refreshList(owner).catch(()=>undefined);};
+  /* A FAILED LIST READ IS SAID WHEN NOTHING ELSE CAN SAY WHETHER REPLIES ARE
+     ON (review): left silent, `generationEnabled` stayed null and Send stayed
+     "loading" with no way on. A conversation read that lands sets it and
+     clears this; otherwise the notice offers Try again. */
+  const loadHistory=(owner=lifecycle.current)=>{void refreshList(owner).catch(()=>{if(mine(owner)&&generationRef.current===null)setError(say('worldConversationUnreachable'));});};
   const refresh=async()=>{
     const owner=lifecycle.current;
     setLoading(true);setError(null);setUnsent(false);

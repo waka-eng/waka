@@ -162,6 +162,15 @@ it('reconciles a lost save response with a read, without resending',async()=>{
   expect(host.querySelector('textarea')!.value).toBe('Keep my exact thought');expect(host.textContent).toContain('Couldn’t confirm this message.');
   await click('Check saved messages');expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(stored.messages).toHaveLength(1);expect(host.querySelector('textarea')!.value).toBe('');
 });
+/* Review round 6: a failed list read on an open conversation used to be
+   swallowed, leaving "are replies on?" unknown and Send "loading" for good. */
+it('says when the list read fails and nothing else can tell whether replies are on',async()=>{
+  vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
+  vi.mocked(fetchConversation).mockImplementation(()=>new Promise(()=>{}));
+  await mount();
+  expect(host.textContent).toContain('WAKA can’t be reached right now.');
+  expect([...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent)).toContain('Try again');
+});
 /* Review round 3: a journalled message is never "Not sent" because a
    pre-flight failed — an earlier send under its id may have landed. */
 it('calls a pending message "not confirmed", never "not sent", when the pre-flight fails',async()=>{
