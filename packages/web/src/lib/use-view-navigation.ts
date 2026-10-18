@@ -4,7 +4,9 @@ import { EMPTY_VIEW, readViewLocation, viewHref, type ViewLocation } from './vie
 
 /** Set while `closeOpen` is putting the whole archive down over an open
     note's entry; read and cleared by SavesOverlay's `NoteHistory`. */
-export const archiveLeaving:{now:boolean;thenReplace:string|null}={now:false,thenReplace:null};
+export const archiveLeaving:{now:boolean;thenReplace:{to:string;from:string;at:number}|null}={now:false,thenReplace:null};
+/** How long a pending cold-link replace may wait for its own step back. */
+const THEN_REPLACE_MS = 2_000;
 interface StoredView { scope: string; query: string; composerFrom?: string;shareFrom?:string;conversationFrom?:string;openFrom?:string }
 /** Router owns browser history; the world owns rendering and restoration. */
 export function useViewNavigation(scope: string | null) {
@@ -16,11 +18,17 @@ export function useViewNavigation(scope: string | null) {
      back over the note's entry has landed on the list's, that entry becomes
      the world — so history holds the closed world alone, as it did before
      notes had entries of their own. */
+  /* ONE STEP, ONCE (review): the replace is for the landing of the step back
+     it was armed with, and nothing later. Whatever the next location is, the
+     arming is spent; it acts only if that landing is the list's entry (no
+     note mark) and came within a moment of the press. */
   useEffect(() => {
-    const to = archiveLeaving.thenReplace;
-    if (!to || (location.state as { savesNote?: string } | null)?.savesNote) return;
+    const armed = archiveLeaving.thenReplace;
+    if (!armed || location.key === armed.from) return;
     archiveLeaving.thenReplace = null;
-    navigate(to, { replace: true, state: location.state });
+    if (Date.now() - armed.at > THEN_REPLACE_MS || (location.state as { savesNote?: string } | null)?.savesNote) return;
+    if (!new URLSearchParams(location.search).get('open')) return;
+    navigate(armed.to, { replace: true, state: location.state });
   }, [location.key]);
   const latest = useRef({ location, navigate, scope }); latest.current = { location, navigate, scope };
   const query = (() => {
@@ -105,7 +113,7 @@ export function useViewNavigation(scope: string | null) {
        the list's `?open=saves` underneath, so Back reopened the archive that
        Escape had just closed. Step back over the note first; the effect above
        turns the list's entry into the world when it lands. */
-    else if(noteOnTop){archiveLeaving.thenReplace=viewHref({...before,open:null});current.navigate(-1);}
+    else if(noteOnTop){archiveLeaving.thenReplace={to:viewHref({...before,open:null}),from:current.location.key,at:Date.now()};current.navigate(-1);}
     else current.navigate(viewHref({...before,open:null}),{replace:true});
   },[]);
   /**
