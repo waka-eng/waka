@@ -105,6 +105,7 @@ import { inspectInspirationPhoto, PHOTO_ACCEPT, PhotoRefused } from '../lib/insp
 import { uploadInspirationMedia } from '../lib/inspiration-media-upload';
 import { restoreInspirationDraft, settleInspirationDraft } from '../lib/authored-save-drafts';
 import { AuthoredSaveNotice } from '../components/AuthoredSaveNotice';
+import { LiveWord } from '../components/LiveWord';
 import { acceptsReadingSnapshot } from "../lib/reading-snapshot";
 import { DAY_MS } from "../lib/num";
 import { GRAIN_PX, GRAIN_TILE } from "../canvas/sprites";
@@ -5356,7 +5357,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const keepReadiness: KeepReadiness = {
     hasWords: composerHasWords,
     ready: composerDraft.ready,
-    saving: (Boolean(inspirationSave.pending) && !inspirationSave.canResave) || inspirationSave.busy || preparingInspiration,
+    saving: ((Boolean(inspirationSave.pending) || inspirationSave.busy) && !inspirationSave.canResave) || preparingInspiration,
     uploading: checkingFiles || Boolean(uploadingMediaId),
     /* DICTATING COUNTS AS RECORDING for the purpose of keeping: a sentence
        half-spoken is the same unfinished state as a clip half-recorded, and
@@ -5448,7 +5449,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     || (uploadingMediaId ? say('worldComposerUploading') : '')
     || (recording.phase === 'idle' && recording.notice ? say(recording.notice) : '');
 
-  const keepIt = useCallback(async () => {
+  /** `besides`: "Save as new" — this one press saves beside a pending save. */
+  const keepIt = useCallback(async (options?: { besides?: boolean }) => {
     let text = draftRef.current.trim();
     const initialMedia = composerDraft.current.current.media;
     const pendingLink=composerDraft.current.current.linkText??'';
@@ -5538,7 +5540,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const started = inspirationSave.start({ operation: 'inspiration', input: { text, kind, source: 'app',
         ...(attachments.length ? { attachments } : {}), ...(reflections ? { reflections } : {}),
       },
-        ...(reference ? { draft: reference } : {}) });
+        ...(reference ? { draft: reference } : {}) }, options);
       if (started) setCharSay('');
     } catch (reason) {
       /* An `ApiError` here is the SAVE refusing (uploads throw their own
@@ -8906,8 +8908,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       running number is a control you have to trust rather
                       than one you can watch. */}
                   {recording.phase === 'recording' ? (
-                    <span className="waka-composer-recording" role="status">
-                      {formatMessage(locale, 'worldComposerRecordingFor', { seconds: recording.seconds })}
+                    /* THE RUNNING COUNT IS FOR EYES (review): inside a live
+                       region it was read out every second. "Recording" is
+                       announced once, by a region that mounts empty. */
+                    <span className="waka-composer-recording">
+                      <span aria-hidden="true">{formatMessage(locale, 'worldComposerRecordingFor', { seconds: recording.seconds })}</span>
+                      <LiveWord text={say('worldComposerRecordingNow')} />
                     </span>
                   ) : null}
                   {recording.error || recording.notice ? (
@@ -9777,7 +9783,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 gone, right?" It is not: answering claims is a different
                 branch of this same ternary and nothing in this change
                 touches it. */}
-            {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} onResave={() => { void keepIt(); }} /> : null}
+            {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} onResave={() => { void keepIt({ besides: true }); }} /> : null}
             {/* ONE THING FROM ONE MOUTH. The narration ("you kept two memories
                 today") stacked under the claim, so the creature was reporting
                 the weather and asking you a question in the same breath — a
@@ -9825,7 +9831,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              called this since. The lesson lives where it still applies:
              `openOverHome` writes ONE destination, which is why pressing a
              place from inside the notepad does not need a close first. */
-          onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
+          onClose={saveAsDraft} onSubmit={() => { void keepIt(); }} onSaveAsNew={() => { void keepIt({ besides: true }); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
             sayProblem: sayMouthProblem }); }}
@@ -11474,7 +11480,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                      second. The disclosure and a one-word "Recording" are
                      the live part; the clock is for eyes and is hidden. */
                   <span className="waka-dock-state waka-dock-state--live">
-                    <span role="status">{composerState}{recording.phase !== 'idle' && !composerState ? <span className="sr-only">{say('worldComposerRecordingNow')}</span> : null}</span>
+                    {/* Shown for eyes; said by `LiveWord`, which mounts empty
+                        and fills a beat later so the words are announced. */}
+                    {composerState ? <span aria-hidden="true">{composerState}</span> : null}
+                    <LiveWord text={composerState || (recording.phase !== 'idle' ? say('worldComposerRecordingNow') : '')} />
                     {recording.phase !== 'idle' ? <>
                       <span aria-hidden="true">{Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}</span>
                       <button type="button" className="waka-dock-undo" disabled={recording.phase === 'finishing'}

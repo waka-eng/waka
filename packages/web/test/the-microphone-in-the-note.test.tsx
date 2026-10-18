@@ -123,7 +123,9 @@ async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
 /** The one transient line the bar shows while a note is open. */
-const bar = () => world.container.querySelector('.waka-dock-state')?.textContent ?? '';
+/** What the bar SHOWS — its screen-reader twin (`LiveWord`, sr-only) says the same words once. */
+const bar = () => [...(world.container.querySelector('.waka-dock-state')?.childNodes ?? [])]
+  .filter((node) => !(node instanceof HTMLElement && node.classList.contains('sr-only'))).map((node) => node.textContent).join('');
 const field = () => world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
 /** The notepad's own slot in the dock: the microphone, then Stop. */
 const mic = () => world.container.querySelector<HTMLButtonElement>('.waka-dock-tool')!;
@@ -273,7 +275,9 @@ it('keeps Stop in the microphone\'s own seat and the disclosure whole, off the r
   expect(mic()).toBe(first);
   expect(mic().classList.contains('waka-dock-tool--live')).toBe(true);
   const caption = world.container.querySelector('.waka-dock-state--live');
-  expect(caption?.textContent).toBe('Your browser sends speech to its own service to turn it into text.');
+  expect(caption?.querySelector('[aria-hidden="true"]')?.textContent).toBe('Your browser sends speech to its own service to turn it into text.');
+  await settle();
+  expect(caption?.querySelector('[role="status"]')?.textContent, 'the disclosure is not announced').toBe('Your browser sends speech to its own service to turn it into text.');
   await act(async () => mic().click()); await settle();
   expect(engine().started).toBe(false); expect(mic().classList.contains('waka-dock-tool--live')).toBe(false);
 });

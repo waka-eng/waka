@@ -74,6 +74,10 @@ describe("the recording clock is never read out every second (review of #11)", (
         expect(attributes).not.toContain("role=");
       }
       expect(source).not.toMatch(/waka-dock-state--live" role="status"/);
+      // The composer foot's "Recording · Ns" too (review round 5).
+      expect(source).not.toMatch(/role="status">\s*\{formatMessage\(locale, 'worldComposerRecordingFor'/);
+      const counts = [...source.matchAll(/<span([^>]*)>\{formatMessage\(locale, 'worldComposerRecordingFor'/g)];
+      for (const [, attributes] of counts) expect(attributes).toContain('aria-hidden="true"');
     });
   }
 });

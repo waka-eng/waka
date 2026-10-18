@@ -37,6 +37,7 @@ import { createPortal } from "react-dom";
 
 import { AddMenu } from "./AddMenu";
 import { HomeActionIcon } from "./HomeActionIcon";
+import { LiveWord } from "./LiveWord";
 import { supportedRecordingType, type useAudioRecording } from "../lib/use-audio-recording";
 
 /** The id `Home` gives the dock slot this renders into. */
@@ -145,7 +146,7 @@ export function NoteTools(props: {
             {/* The clock is for eyes (aria-hidden); a live region would read
                 it out every second. "Recording" is announced once. */}
             <span className="waka-dock-state waka-dock-state--live">
-              <span role="status" className="sr-only">{props.recordingLabel}</span>
+              <LiveWord text={props.recordingLabel} />
               <span aria-hidden="true">{Math.floor(props.recording.seconds / 60)}:{String(props.recording.seconds % 60).padStart(2, "0")}</span>
             </span>
           </>
