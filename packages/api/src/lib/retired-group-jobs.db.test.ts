@@ -10,8 +10,10 @@ import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.
 
    Every handler a room-shaped row could otherwise reach is replaced by a
    recorder, so both directions are observed as behaviour: a room row is
-   claimed, settled succeeded on its first attempt with no error, and reaches
-   no handler; a personal or agent row of the same type reaches its handler.
+   settled succeeded at the head of the queue WITHOUT being claimed (no
+   attempt, no `started_at`, so nothing on the model budget's meter) and
+   reaches no handler; a personal or agent row of the same type reaches its
+   handler.
    Rows are inserted after the worker module loaded and drained like any
    other, so nothing here depends on a startup pass. */
 const reached = vi.hoisted(() => [] as Array<{ handler: string; profileId?: string; inspirationId?: string }>);
@@ -52,7 +54,8 @@ vi.mock("./signal-support-batches.js", async (original) => ({
 
 import { sql } from "drizzle-orm";
 import { runBackgroundJobWorker } from "./queue.js";
-import { hasLegacyGroupDestination, withoutLegacyGroupDestination } from "./retired-group-work.js";
+import { hasLegacyGroupDestination, isRetiredGroupWork, retiredGroupWork, withoutLegacyGroupDestination } from "./retired-group-work.js";
+import { MODEL_BUDGET_JOBS_PER_ACCOUNT } from "./model-budget.js";
 
 let t: TestDatabase;
 let seq = 0;
@@ -96,7 +99,7 @@ const assessPayload = (inspirationId: string, signalId: string, extra: Record<st
   statements: [{ id: signalId, revision: "1", hash: HASH }], ...extra,
 });
 
-it("settles every claimed room-shaped job unrun, reaching no handler", async () => {
+it("settles every room-shaped job at the head, unclaimed, reaching no handler", async () => {
   const legacy = await legacyGroup();
   // a queue that has already drained once: the guard is per claim, not per process
   await drain();
@@ -116,9 +119,9 @@ it("settles every claimed room-shaped job unrun, reaching no handler", async () 
     await enqueue(legacy.mindId, "refresh_top_of_mind", { reason: "signals_changed" }),
   ];
 
-  expect(await drain()).toMatchObject({ claimed: ids.length, succeeded: ids.length, failed: 0, retried: 0 });
-  for (const row of await t.sql`SELECT status::text, attempts, last_error FROM background_jobs`) {
-    expect(row).toMatchObject({ status: "succeeded", attempts: 1, last_error: null });
+  expect(await drain()).toMatchObject({ claimed: 0, succeeded: ids.length, failed: 0, retried: 0, deferred: 0 });
+  for (const row of await t.sql`SELECT status::text, attempts, started_at, last_error FROM background_jobs`) {
+    expect(row).toMatchObject({ status: "succeeded", attempts: 0, started_at: null, last_error: null });
   }
   expect(reached).toEqual([]);
   expect(await t.sql`SELECT id FROM top_of_minds`).toHaveLength(0);
@@ -179,5 +182,72 @@ it("the worker's room test and the SQL filter agree on every destination shape",
     const [row] = await t.db.execute<{ own: boolean }>(
       sql`SELECT ${withoutLegacyGroupDestination(sql`${JSON.stringify(payload)}::jsonb`)} AS own`);
     expect(row!.own, JSON.stringify(payload)).toBe(!hasLegacyGroupDestination(payload));
+  }
+});
+
+it("room work neither spends nor is blocked by the model budget", async () => {
+  const legacy = await legacyGroup();
+  const recent = new Date(Date.now() - 60_000).toISOString();
+  async function started(profileId: string, type: string, payload: Record<string, unknown>, count: number) {
+    for (let i = 0; i < count; i++) {
+      await t.sql`INSERT INTO background_jobs (profile_id, type, payload, status, started_at)
+        VALUES (${profileId}, ${type}::background_job_type, ${JSON.stringify(payload)}::jsonb, 'succeeded', ${recent})`;
+    }
+  }
+  // One start short of the cap with personal work, and room work that ran in
+  // the window before the retirement: the room starts must not be counted.
+  await started(legacy.memberId, "tend_signal_garden", {}, MODEL_BUDGET_JOBS_PER_ACCOUNT - 1);
+  await started(legacy.memberId, "refresh_group_top_of_mind", { groupId: legacy.groupId, reason: "manual" }, 5);
+  const retired = [
+    await enqueue(legacy.memberId, "refresh_group_top_of_mind", { groupId: legacy.groupId, reason: "shares_changed" }),
+    await enqueue(legacy.memberId, "derive_signals", { inspirationId: legacy.sourceId, reason: "created", deriveIntoProfileId: legacy.mindId }),
+    await enqueue(legacy.memberId, "refresh_principles", { profileId: legacy.mindId }),
+  ];
+  const personal = await enqueue(legacy.memberId, "refresh_principles", { profileId: legacy.memberId });
+
+  expect(await drain()).toMatchObject({ claimed: 1, succeeded: retired.length + 1, deferred: 0 });
+  expect(reached).toEqual([{ handler: "refresh_principles", profileId: legacy.memberId }]);
+  for (const id of retired) {
+    expect((await t.sql`SELECT status::text, attempts, started_at FROM background_jobs WHERE id = ${id}`)[0])
+      .toMatchObject({ status: "succeeded", attempts: 0, started_at: null });
+  }
+  expect((await t.sql`SELECT status::text FROM background_jobs WHERE id = ${personal}`)[0]!.status).toBe("succeeded");
+
+  // Now at the cap: the personal job is deferred, the room rows still settle
+  // where they stand and are not pushed back with the account's backlog.
+  reached.length = 0;
+  const later = await enqueue(legacy.memberId, "refresh_principles", { profileId: legacy.memberId });
+  const retiredLater = await enqueue(legacy.memberId, "refresh_group_top_of_mind", { groupId: legacy.groupId, reason: "manual" });
+  expect(await drain()).toMatchObject({ claimed: 0, succeeded: 1, deferred: 1 });
+  expect(reached).toEqual([]);
+  expect((await t.sql`SELECT status::text FROM background_jobs WHERE id = ${retiredLater}`)[0]!.status).toBe("succeeded");
+  const [deferred] = await t.sql`SELECT status::text, run_after FROM background_jobs WHERE id = ${later}`;
+  expect(deferred!.status).toBe("pending");
+  expect(new Date(deferred!.run_after as string).getTime()).toBeGreaterThan(Date.now());
+});
+
+it("the worker's rule and the queue's SQL agree on what is retired room work", async () => {
+  const legacy = await legacyGroup();
+  const tenant = legacy.memberId;
+  const cases: Array<{ type: string; profileId: string; payload: Record<string, unknown> }> = [
+    { type: "refresh_group_top_of_mind", profileId: tenant, payload: {} },
+    { type: "tend_signal_garden", profileId: legacy.mindId, payload: {} },
+    { type: "tend_signal_garden", profileId: tenant, payload: {} },
+    { type: "derive_signals", profileId: tenant, payload: { deriveIntoProfileId: legacy.mindId } },
+    { type: "derive_signals", profileId: tenant, payload: { deriveIntoProfileId: " \t" } },
+    { type: "refresh_top_of_mind", profileId: tenant, payload: { deriveIntoProfileId: legacy.mindId } },
+    { type: "refresh_principles", profileId: tenant, payload: {} },
+    { type: "refresh_principles", profileId: tenant, payload: { profileId: 7 } },
+    { type: "refresh_principles", profileId: tenant, payload: { profileId: "   " } },
+    { type: "refresh_principles", profileId: tenant, payload: { profileId: ` ${tenant.toUpperCase()}\n` } },
+    { type: "refresh_principles", profileId: tenant, payload: { profileId: legacy.mindId } },
+    { type: "refresh_principles", profileId: tenant, payload: { profileId: `\u00a0${tenant}` } },
+  ];
+  for (const job of cases) {
+    const id = await enqueue(job.profileId, job.type, job.payload);
+    const [row] = await t.db.execute<{ retired: boolean; group: boolean }>(sql`SELECT ${retiredGroupWork(sql`job`)} AS retired,
+      EXISTS (SELECT 1 FROM profiles p WHERE p.id = job.profile_id AND p.type::text = 'group') AS "group"
+      FROM background_jobs job WHERE job.id = ${id}::uuid`);
+    expect(row!.retired, JSON.stringify(job)).toBe(isRetiredGroupWork({ ...job, tenantIsGroup: row!.group }));
   }
 });

@@ -159,7 +159,7 @@ import { loadPendingSignalSupportSources } from './signal-support-state.js';
 import { reviewSignalSupport, SUPPORT_REVIEW_BATCH_SIZE } from './signal-support-review.js';
 import { applySignalSupportReview } from './signal-support-apply.js';
 import { SupportSourceUnavailableError } from './signal-support-review.js';
-import { hasLegacyGroupDestination, withoutLegacyGroupDestination } from './retired-group-work.js';
+import { isRetiredGroupWork, retiredGroupWork, withoutLegacyGroupDestination } from './retired-group-work.js';
 import { bindInspirationSupportReading } from './inspiration-processing.js';
 import { getDefaultModelProvider } from "./model-provider.js";
 import { InspirationProcessingUnavailableError, recordInspirationProcessingRequest, recordInspirationReadingResult, type InspirationProcessingReceipt } from "./inspiration-processing.js";
@@ -258,6 +258,8 @@ export interface DrainBackgroundJobsResult {
 export interface RunnableJobHead {
   jobId: string;
   accountId: string;
+  /** Retired room work: settled at the head, before any budget decision. */
+  retired?: boolean;
   /**
    * True when this head is a `running` row being reclaimed from a worker that
    * died rather than a `pending` row waiting its turn.
@@ -298,6 +300,9 @@ export interface BackgroundJobStore {
   usageForAccount(accountId: string, since: Date): Promise<AccountModelUsage>;
   /** Push this account's due, unstarted work out to `until`. Returns rows moved. */
   deferAccountBacklog(input: DeferAccountBacklogInput): Promise<number>;
+  /** Settle a retired room-work head without claiming it. Optional so
+   * in-memory stores need not model room work. */
+  settleRetiredGroupWork?(jobId: string, now: Date): Promise<boolean>;
   markSucceeded(job: BackgroundJob, result: BackgroundJobResult | null): Promise<boolean>;
   markFailedOrPending(
     job: BackgroundJob,
@@ -852,6 +857,17 @@ export async function drainBackgroundJobs(
     const head = overdueBefore?await store.headOfQueue(now,overdueBefore):await store.headOfQueue(now);
     if (!head) break;
 
+    // Retired room work never meets the budget: settled where it stands,
+    // unclaimed and uncounted (see the retirement note in this file).
+    if (head.retired && store.settleRetiredGroupWork) {
+      processed += 1;
+      if (await store.settleRetiredGroupWork(head.jobId, now)) {
+        result.succeeded += 1;
+        console.info("[background-jobs] settling retired room job without running it", { jobId: head.jobId });
+      }
+      continue;
+    }
+
     if (!head.reclaimed) {
       const usage = await store.usageForAccount(head.accountId, modelBudgetWindowStart(now));
       const verdict = assessModelBudget(usage, now);
@@ -972,6 +988,7 @@ export type ClaimedBackgroundJob = BackgroundJob & {
 };
 
 export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<BackgroundJobResult | void> {
+  if (isRetiredGroupWork(job)) return settleRetiredGroupJob(job);
   if(job.type==='refresh_top_of_mind'&&readingWakeContext.getStore())rememberReadingWake({id:job.id,profileId:job.profileId,requestVersion:job.requestVersion.toString()});
   const claimed=coerceNullableDate(job.lockedAt)?.getTime();
   if(claimed!==undefined)recordPerformanceStage('queue_wait',job.type,claimed-Math.max(coerceDate(job.runAfter).getTime(),coerceDate(job.createdAt).getTime()));
@@ -980,8 +997,6 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
     if(job.type==='refresh_top_of_mind')await (await import('./review-processing.js')).recordReviewReadingResult(tx,{...publication,jobId:job.id,requestVersion:job.requestVersion.toString()});
     await (await import('./principle-status.js')).enqueuePrinciplesAfterReading(tx, publication.profileId);
   };
-  if (job.type === "refresh_group_top_of_mind") return settleRetiredGroupJob(job);
-  if (retiredGroupJob(job)) return settleRetiredGroupJob(job);
   switch (job.type) {
     case 'assess_signal_support': {
       const payload = parseAssessSignalSupportPayload(job.payload);
@@ -1212,6 +1227,10 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
       return;
     }
 
+    case "refresh_group_top_of_mind":
+      // Exhaustiveness only: isRetiredGroupWork settled every such row above.
+      throw new Error("refresh_group_top_of_mind reached dispatch past the retirement rule");
+
     default: {
       // Exhaustive over the enum: adding a job type without a branch is a
       // compile error rather than a runtime surprise on a Friday.
@@ -1229,34 +1248,23 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
  * still sitting in dev and prod `background_jobs`, and a worker meeting one
  * must neither run it nor throw: running it would keep regenerating rooms
  * nobody can see, and throwing would burn three attempts and leave a `failed`
- * row for every room. So each is marked done with no work.
+ * row for every room, or spend an account's model budget. So each is marked
+ * done with no work.
  *
- * The guard cannot be escaped: the CLAIM itself returns `tenantIsGroup` (a
- * scalar subquery on the tenant's profile in the same UPDATE ... RETURNING,
- * no extra round trip), so every claimed job owned by a room's mind is
- * settled before dispatch, whatever its type and whenever it was enqueued.
- * The rest are shapes readable from the row itself:
- *   - any `refresh_group_top_of_mind`;
- *   - derive/review/assess work landing on a room's mind — the legacy
- *     `deriveIntoProfileId` field (`retired-group-work.ts`, the same rule the
- *     support-state SQL uses);
- *   - principles requested for another profile (a mind's, billed to a
- *     member): only a non-blank STRING `profileId` that differs from the
- *     tenant, compared case-insensitively. Anything else names no one, and
- *     the handler runs for the tenant — the same rule it applies.
+ * One rule decides it — `isRetiredGroupWork` / `retiredGroupWork` in
+ * `retired-group-work.ts`, JS and SQL twins — applied in three places:
+ *   - at the HEAD of the queue, before the budget is consulted: a retired
+ *     head is settled in place (`settleRetiredGroupWork`) without being
+ *     claimed, so it never stamps `started_at`, never counts as a model
+ *     start, and is never deferred by or for an over-budget account;
+ *   - in the budget meter and the budget deferral, which exclude it;
+ *   - at dispatch, for any row that is claimed anyway (a race with another
+ *     worker's head): the claim returns `tenantIsGroup` in the same UPDATE,
+ *     so even a mind-owned row is settled before any handler runs.
  * The enum value `refresh_group_top_of_mind` stays — removing it is an
  * `ALTER TYPE` migration, and the data-dropping phase has not been decided.
  * Personal and agent jobs never carry these shapes, so they run unchanged.
  */
-function retiredGroupJob(job: ClaimedBackgroundJob): boolean {
-  if (job.tenantIsGroup === true) return true;
-  if ((job.type === "derive_signals" || job.type === "review_signal_support" || job.type === "assess_signal_support") &&
-    hasLegacyGroupDestination(job.payload)) return true;
-  if (job.type !== "refresh_principles") return false;
-  const named = readString(job.payload, "profileId");
-  return named !== null && named.toLowerCase() !== job.profileId.toLowerCase();
-}
-
 function settleRetiredGroupJob(job: BackgroundJob): void {
   console.info("[background-jobs] settling retired room job without running it", {
     jobId: job.id,
@@ -1446,9 +1454,11 @@ async function readBackgroundJobQueueHead(now: Date,overdueBefore?:Date): Promis
     SELECT
       fair.id AS "jobId",
       profile.account_id AS "accountId",
-      fair.reclaimed AS "reclaimed"
+      fair.reclaimed AS "reclaimed",
+      ${retiredGroupWork(sql`headjob`)} AS "retired"
     FROM (${rankedRunnableJobs(nowIso,overdueBefore?.toISOString())}) AS fair
     JOIN profiles AS profile ON profile.id = fair.profile_id
+    JOIN background_jobs AS headjob ON headjob.id = fair.id
     ${RUNNABLE_JOB_ORDER}
     LIMIT 1
   `);
@@ -1474,6 +1484,7 @@ async function readAccountModelUsage(
       count(*)::int AS started,min(meter.started_at) AS oldest
     FROM (
       SELECT job.profile_id,job.started_at FROM background_jobs job WHERE job.type::text NOT IN ('derive_review_answer','generate_conversation_reply')
+        AND NOT ${retiredGroupWork(sql`job`)}
       UNION ALL SELECT r.profile_id,r.started_at FROM review_model_runs r
       UNION ALL SELECT c.profile_id,c.dispatched_at FROM conversation_reply_requests c WHERE c.dispatched_at IS NOT NULL
     ) meter JOIN profiles AS profile ON profile.id=meter.profile_id
@@ -1534,6 +1545,8 @@ async function deferAccountBacklogForBudget(
         AND profile.account_id = ${input.accountId}::uuid
         AND job.status = 'pending'::background_job_status
         AND job.run_after <= ${input.now.toISOString()}::timestamptz
+        -- retired room work is settled at the head, never pushed back
+        AND NOT ${retiredGroupWork(sql`job`)}
       RETURNING job.id
     )
     SELECT count(*)::int AS deferred FROM moved
@@ -1541,6 +1554,25 @@ async function deferAccountBacklogForBudget(
 
   const [row] = rows as unknown as Array<{ deferred: number | string }>;
   return Number(row?.deferred ?? 0);
+}
+
+/**
+ * Settle a retired head in place (see the retirement note at retiredGroupWork
+ * use in processBackgroundJob). Not a claim: no attempt, no `started_at`, so
+ * nothing reaches the model budget's meter. Rechecks both the runnable and
+ * the retired predicate on the row it updates.
+ */
+async function settleRetiredGroupWorkInPlace(jobId: string, now: Date): Promise<boolean> {
+  const nowIso = now.toISOString();
+  const rows = await getDb().execute(sql`
+    UPDATE background_jobs AS job
+    SET status = 'succeeded'::background_job_status, locked_at = NULL, rerun_requested = false,
+      updated_at = ${nowIso}::timestamptz
+    WHERE job.id = ${jobId}::uuid
+      AND ${runnableBackgroundJobPredicate(nowIso, undefined, 'job')}
+      AND ${retiredGroupWork(sql`job`)}
+    RETURNING job.id`);
+  return (rows as unknown as unknown[]).length > 0;
 }
 
 /**
@@ -1764,6 +1796,7 @@ export const postgresBackgroundJobStore: BackgroundJobStore = {
   claimNext: claimNextBackgroundJob,
   usageForAccount: readAccountModelUsage,
   deferAccountBacklog: deferAccountBacklogForBudget,
+  settleRetiredGroupWork: settleRetiredGroupWorkInPlace,
   markSucceeded: markJobSucceeded,
   markFailedOrPending: markJobFailedOrPending,
   holdJob: holdBackgroundJob,

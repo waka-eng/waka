@@ -11,6 +11,7 @@ import { writeSignalEmbedding } from "./signal-embeddings.js";
 import { acquireSignalDerivationLock, applyCandidates } from "./signal-match-or-mint.js";
 import type { ModelProvider } from "./model-provider.js";
 import type { SignalSupportAssessmentInput } from "./model-provider.js";
+import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 
 let t: TestDatabase;
 let sequence = 0;
@@ -216,8 +217,27 @@ describe("applying explicit support decisions", () => {
        `restrictedClaimCount: 0`. They still apply; a membership is room
        work and is refused by the schema. */
     const f = await fixture();
-    const legacy = { ...(await review(f, "unresolved")), membershipId: null, restrictedClaimCount: 0 };
+    const report = await review(f, "unresolved");
+    const legacy = { ...report, membershipId: null, restrictedClaimCount: 0 };
     await expect(applySignalSupportReview(t.db as never, legacy)).resolves.toMatchObject({ alreadyApplied: false });
+
+    /* ITS HASH IS THE ONE IT HAD BEFORE. origin/dev hashed the parsed report
+       in its schema's key order, with the two legacy keys in their places;
+       written out here by hand in exactly that order. Replaying the file is
+       then recognised as already applied rather than refused as a reused
+       identity. */
+    const m = report.material;
+    const before = { reviewId: report.reviewId, policy: report.policy, status: report.status,
+      profileId: report.profileId, ownerProfileId: report.ownerProfileId, membershipId: null,
+      inspirationId: report.inspirationId, claimsHash: report.claimsHash, calls: report.calls, restrictedClaimCount: 0,
+      ...(report.signalIds ? { signalIds: report.signalIds } : {}),
+      material: { scope: m.scope, revision: m.revision, policy: m.policy, hash: m.hash,
+        sources: m.sources.map(({ kind, id, hash }) => ({ kind, id, hash })) },
+      items: report.items.map(({ signalId, statementHash, verdict, sourceIds, issue }) =>
+        ({ signalId, statementHash, verdict, sourceIds, issue })) };
+    const [stored] = await t.sql`SELECT DISTINCT review_hash FROM signal_support_reviews WHERE review_id = ${report.reviewId}`;
+    expect(stored!.review_hash).toBe(hashEmbeddingInput(JSON.stringify(before)));
+    await expect(applySignalSupportReview(t.db as never, legacy)).resolves.toMatchObject({ alreadyApplied: true });
     const withMembership = { ...(await review(f, "unresolved")), membershipId: f.signalId, restrictedClaimCount: 0 };
     await expect(applySignalSupportReview(t.db as never, withMembership)).rejects.toThrow();
   });
