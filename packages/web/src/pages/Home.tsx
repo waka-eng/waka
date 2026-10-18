@@ -1326,6 +1326,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      until its content is whole, and it stays mounted through its fade-out. */
   const [panel, setPanel] = useState<PanelData | null>(null);
   const panelNowRef = useRef<PanelData | null>(null);
+  /** The panel's current read request (see `retryPanelDetail`). */
+  const panelReadTokenRef = useRef(0);
   panelNowRef.current = panel;
   /**
    * A SAVE OR THE TOP OF MIND, BEING MADE INTO A CARD.
@@ -4293,6 +4295,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [panel?.id]);
 
   useEffect(() => {
+    /* another memory (or none) is selected: every read still out for the
+       last one is no longer the panel's (see `retryPanelDetail`) */
+    panelReadTokenRef.current += 1;
     if (!selectedId) {
       setPanelOpen(false);
       if (!hasPanelRef.current) return undefined;
@@ -4376,12 +4381,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
     };
     /* the network is not allowed to hold a reading hostage: at two seconds
        the panel appears partial — "Couldn't load the rest", with Try again —
-       and a late answer, if one comes, still lands on it. */
+       and from then on THIS read's answer is ignored (dev's rule): Try again
+       is the way on, and a late first answer could otherwise land over a
+       retry's or over words just kept. */
     const timer = window.setTimeout(() => show(null), 2000);
     loadDetail(fetchId).then((detail) => {
       if (cancelled) return;
-      if (!done) { show(detail); return; }
-      setPanel((p) => (p && p.id === selectedId ? { id: selectedId, detail, partial: detail === null } : p));
+      show(detail);
     });
     return () => {
       done = true;
@@ -4396,6 +4402,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const retryPanelDetail = useCallback(() => {
     const id = panel?.id;
     if (!id) return;
+    /* ONE CURRENT REQUEST PER PANEL. Each Try again takes a new token; a
+       save (`onMemoryKept`) or selecting another memory moves the token on,
+       so an outstanding read's answer is applied only while it is still the
+       latest thing asked of this panel. */
+    const token = ++panelReadTokenRef.current;
     const fetchId = ballsRef.current?.byId.get(id)?.sigId ?? id;
     setPanel((p) => (p && p.id === id ? { ...p, pending: true } : p));
     /* A FRESH REQUEST, NOT THE ONE THAT HUNG: `loadDetail` shares a read in
@@ -4410,9 +4421,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
       give(null);
     }, RETRY_READ_LIMIT_MS));
     void Promise.race([read, limit]).then((detail) => {
-      /* a failed retry keeps what is shown and says so — never replaces a
-         detail on screen with nothing */
-      setPanel((p) => (p && p.id === id ? { id, detail: detail ?? p.detail, partial: detail === null } : p));
+      if (panelReadTokenRef.current !== token) return;
+      /* a failed retry never takes away a full detail already on the card,
+         nor calls it partial: the failure line is only for a card that does
+         not have the full text */
+      setPanel((p) => {
+        if (!p || p.id !== id) return p;
+        if (detail) return { id, detail, partial: false };
+        return p.detail ? { ...p, pending: false, partial: false } : { ...p, pending: false, partial: true };
+      });
     });
   }, [panel?.id, loadDetail]);
 
@@ -6883,6 +6900,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
        back, or the typed words (a fixture world) — rather than the words from
        before the edit. */
     onMemoryKept: (id, text, made) => {
+      /* the kept words are now the newest thing this card knows: any read
+         still out (a Try again) is older than them */
+      panelReadTokenRef.current += 1;
       const fresh = made && made.id === id && Array.isArray(made.attachments) ? toInspirationDetail(made) : null;
       setPanel((p) => {
         if (!p || (p.id !== id && p.detail?.id !== id)) return p;

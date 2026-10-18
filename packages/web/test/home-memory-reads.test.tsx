@@ -194,7 +194,7 @@ async function typeAndKeep(text: string): Promise<void> {
   await world.step(4);
 }
 
-it("a slow full read: Couldn't load the rest and no edit at two seconds, then the late answer lands", { timeout: 30_000 }, async () => {
+it("a slow full read: Couldn't load the rest and no edit at two seconds; Try again opens it", { timeout: 30_000 }, async () => {
   await openByAddress("own-5");
   S.hold = "hold";
   await stepOn();
@@ -204,9 +204,15 @@ it("a slow full read: Couldn't load the rest and no edit at two seconds, then th
   await pressWords();
   expect(editBox(), "an edit is never seeded from the preview").toBeNull();
 
+  /* the first read's late answer is ignored once the fallback has fired
+     (dev's rule) — Try again is the way on */
   await act(async () => S.held.at(-1)!.resolve());
   await world.step(6);
-  expect(note(), "the late read landed on the card").toBe("");
+  expect(note(), "a late first answer does not land").toContain("Couldn’t load the rest.");
+  S.hold = null;
+  await act(async () => card()!.querySelector<HTMLButtonElement>(".jar-panel-retry")!.click());
+  for (let turn = 0; turn < 10 && note() !== ""; turn += 1) { await world.step(2); await wait(10); }
+  expect(note(), "Try again brought the full text").toBe("");
   /* INSIDE THE TAP: no network between the press and the editor, so a
      phone raises its keyboard and the caret lands where the finger did */
   await act(async () => words()!.click());
@@ -318,4 +324,52 @@ it("opening a memory by its address when no fresh read can be had opens no edita
   for (let turn = 0; turn < 15; turn += 1) { await world.step(10); await wait(60); }
   expect(card(), "no card opened on words it could not read").toBeNull();
   expect(editBox()).toBeNull();
+});
+
+/* ONE CURRENT REQUEST PER PANEL (review, 2026-10-18). Once Try again has
+   brought the words, the first read's late answer — older, or failed — is
+   never applied over them. */
+async function partialThenRetry(): Promise<{ first: (typeof S.held)[number] }> {
+  await openByAddress("own-5");
+  S.hold = "hold";
+  await stepOn();
+  await wait(2300);
+  await world.step(4);
+  const first = S.held.at(-1)!;
+  S.store.set("own-4", "something I kept, 4 — as the retry read it.");
+  await act(async () => card()!.querySelector<HTMLButtonElement>(".jar-panel-retry")!.click());
+  await world.step(4);
+  await act(async () => S.held.at(-1)!.resolve());
+  await world.step(6);
+  expect(words()?.textContent).toContain("as the retry read it");
+  return { first };
+}
+
+it("a late first answer after a successful Try again is ignored", { timeout: 30_000 }, async () => {
+  const { first } = await partialThenRetry();
+  await act(async () => first.resolve()); // the words from before
+  await world.step(6);
+  expect(words()?.textContent, "the retry's words stay").toContain("as the retry read it");
+});
+
+it("a failure arriving after the full text is on the card leaves it editable, with no failure line", { timeout: 30_000 }, async () => {
+  const { first } = await partialThenRetry();
+  await act(async () => first.reject());
+  await world.step(6);
+  expect(note(), "no Couldn't load the rest over a full card").toBe("");
+  await act(async () => words()!.click());
+  expect(editBox()?.value).toBe("something I kept, 4 — as the retry read it.");
+});
+
+it("a save between Try again and a late answer: the kept words stay and seed the next edit", { timeout: 30_000 }, async () => {
+  const KEPT = "something I kept, 4 — kept on the card.";
+  const { first } = await partialThenRetry();
+  S.hold = null;
+  await act(async () => words()!.click());
+  await typeAndKeep(KEPT);
+  await act(async () => first.resolve()); // older than the save
+  await world.step(6);
+  expect(words()?.textContent, "the kept words stay").toContain("kept on the card");
+  await act(async () => words()!.click());
+  expect(editBox()?.value, "and seed the next edit").toBe(KEPT);
 });
