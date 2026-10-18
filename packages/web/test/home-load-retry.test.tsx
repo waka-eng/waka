@@ -12,7 +12,9 @@
  * with `fetchProfiles` a spy, the roster's seam. `lib/fixture/offline-home`
  * answers null, as it does in every build but dev, so the failure screen is
  * what renders rather than the dev fixture. `lib/auth-context` states the
- * owner. `helpers/canvas-stub` replaces drawing and time.
+ * owner. `helpers/canvas-stub` replaces drawing and time; `helpers/render-home`
+ * supplies the two mock factories (not `mountWorld`, which refuses a page
+ * that is not the real world, and this one is the failure screen).
  */
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
