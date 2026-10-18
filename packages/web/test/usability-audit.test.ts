@@ -60,6 +60,21 @@ describe("no share sheet has the bar painted over its footer (#9)", () => {
   });
 });
 
+describe("every small control takes a 44px press (#18)", () => {
+  it("each named control carries a hit box at least 44 on each side", () => {
+    const css = sheet("claims.css");
+    for (const control of [".waka-dock-undo", ".jar-tile-x", ".waka-drawer-items button", ".chat-with-choice", ".chat-send", ".jar-harvest-skip", ".waka-held-open"]) {
+      const box = rules(css, (s) => s === `${control}::after`).map(([, b]) => b).join("\n");
+      expect(box, control).toMatch(/width:\s*max\(100%,\s*44px\)/);
+      expect(box, control).toMatch(/height:\s*max\(100%,\s*44px\)/);
+    }
+  });
+  it("the saves search input fills its 44px row", () => {
+    const input = rules(sheet("claims.css"), (s) => s === ".waka-over-search").map(([, b]) => b).join("\n");
+    expect(input).toMatch(/align-self:\s*stretch/);
+  });
+});
+
 describe("a phone turned sideways keeps its chrome out of the notch (#15)", () => {
   /* Headless Chromium cannot emulate a notch, so env() is checked where it
      has to be read: nothing in the product read the left/right insets. */
