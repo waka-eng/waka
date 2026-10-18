@@ -51,6 +51,8 @@ export function NoteTools(props: {
   uploading: string;
   recordLabel: string;
   stopLabel: string;
+  /** Announced once when a recording starts; the clock itself is not read out. */
+  recordingLabel: string;
   /** The ＋'s name, and its two rows: "Add photo" and "Add file". */
   addLabel: string;
   photoLabel: string;
@@ -139,8 +141,11 @@ export function NoteTools(props: {
               aria-label={props.stopLabel}
               disabled={props.recording.phase === "finishing"}
               onClick={() => void props.recording.stop()}><HomeActionIcon kind="stop" /></button>
-            <span className="waka-dock-state waka-dock-state--live" role="status">
-              {Math.floor(props.recording.seconds / 60)}:{String(props.recording.seconds % 60).padStart(2, "0")}
+            {/* The clock is for eyes (aria-hidden); a live region would read
+                it out every second. "Recording" is announced once. */}
+            <span className="waka-dock-state waka-dock-state--live">
+              <span role="status" className="sr-only">{props.recordingLabel}</span>
+              <span aria-hidden="true">{Math.floor(props.recording.seconds / 60)}:{String(props.recording.seconds % 60).padStart(2, "0")}</span>
             </span>
           </>
         )

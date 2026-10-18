@@ -5197,7 +5197,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     });
   };
   const retryDraftFile = async (id: string) => {
-    if (preparingInspirationRef.current || inspirationSave.pending || inspirationSave.busy || checkingFilesCount.current || recording.phase !== 'idle') return;
+    if (preparingInspirationRef.current || (inspirationSave.pending && !inspirationSave.canResave) || inspirationSave.busy || checkingFilesCount.current || recording.phase !== 'idle') return;
     const item = composerDraft.current.current.media.find(row => row.id === id);
     if (!item?.blob || item.uploaded) return;
     preparingInspirationRef.current = true; setPreparingInspiration(true); setMouthNote('');
@@ -5302,7 +5302,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const keepReadiness: KeepReadiness = {
     hasWords: composerHasWords,
     ready: composerDraft.ready,
-    saving: Boolean(inspirationSave.pending) || inspirationSave.busy || preparingInspiration,
+    saving: (Boolean(inspirationSave.pending) && !inspirationSave.canResave) || inspirationSave.busy || preparingInspiration,
     uploading: checkingFiles || Boolean(uploadingMediaId),
     /* DICTATING COUNTS AS RECORDING for the purpose of keeping: a sentence
        half-spoken is the same unfinished state as a clip half-recorded, and
@@ -5483,7 +5483,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setCharSay('');
     } catch (reason) { if (composerEpoch.current === epoch) setMouthNote(reason instanceof ApiError ? say('worldComposerUploadFailed') : reason instanceof Error ? reason.message : 'Could not save this inspiration. Your draft is here.'); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
-  }, [inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
+  }, [inspirationSave.pending, inspirationSave.canResave, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
 
   /* ═══ THREE DOORS INTO ONE DRAFT ═══════════════════════════════════════
      'photo' is the chooser, the drop and the paste: every file is sniffed.
@@ -11357,10 +11357,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     the bar's (it sits on it and leaves with it), it wraps
                     instead of truncating, and nothing in the row moves. */}
                 {dictation.listening || recording.phase !== 'idle' ? (
-                  <span className="waka-dock-state waka-dock-state--live" role="status">
-                    {composerState ? <span>{composerState}</span> : null}
+                  /* THE CLOCK IS NOT A LIVE REGION (review): inside
+                     `role="status"` a screen reader re-announced it every
+                     second. The disclosure and a one-word "Recording" are
+                     the live part; the clock is for eyes and is hidden. */
+                  <span className="waka-dock-state waka-dock-state--live">
+                    <span role="status">{composerState}{recording.phase !== 'idle' && !composerState ? <span className="sr-only">{say('worldComposerRecordingNow')}</span> : null}</span>
                     {recording.phase !== 'idle' ? <>
-                      <span>{Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}</span>
+                      <span aria-hidden="true">{Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}</span>
                       <button type="button" className="waka-dock-undo" disabled={recording.phase === 'finishing'}
                         onClick={() => void recording.cancel()}>{say('worldComposerCancelRecording')}</button>
                     </> : null}

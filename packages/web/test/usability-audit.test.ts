@@ -60,6 +60,24 @@ describe("no share sheet has the bar painted over its footer (#9)", () => {
   });
 });
 
+describe("the recording clock is never read out every second (review of #11)", () => {
+  /* jsdom cannot run a MediaRecorder in the world, so the markup is read:
+     every place the per-second clock is printed is `aria-hidden`, and no live
+     region wraps it. */
+  for (const file of ["pages/Home.tsx", "components/NoteTools.tsx"]) {
+    it(file, () => {
+      const source = readFileSync(resolve(STYLES, "..", file), "utf8");
+      const clocks = [...source.matchAll(/<span([^>]*)>\{Math\.floor\((?:props\.)?recording\.seconds \/ 60\)\}/g)];
+      expect(clocks.length).toBeGreaterThan(0);
+      for (const [, attributes] of clocks) {
+        expect(attributes).toContain('aria-hidden="true"');
+        expect(attributes).not.toContain("role=");
+      }
+      expect(source).not.toMatch(/waka-dock-state--live" role="status"/);
+    });
+  }
+});
+
 describe("every small control takes a 44px press (#18)", () => {
   it("each named control carries a hit box at least 44 on each side", () => {
     const css = sheet("claims.css");
