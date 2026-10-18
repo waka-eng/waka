@@ -5123,6 +5123,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       await composerDraft.settle(intent.draft, result.inspiration.id);
       const remaining = preserveNewer ? composerDraft.current.current.text : settleInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
       draftRef.current = remaining; setDraft(remaining); setMouthNote('');
+      // The why belonged to this save; it goes with it, once it has landed.
+      if (!preserveNewer) setMomentWhy('');
       const made = result.inspiration, detail = toInspirationDetail(made);
       const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
       const revision = ++sourceListMutationRef.current;
@@ -5475,12 +5477,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const reflections = why
         ? [{ question: say('worldMomentAsk'), answer: why }]
         : undefined;
-      inspirationSave.start({ operation: 'inspiration', input: { text, kind, source: 'app',
+      /* THE WHY STAYS UNTIL THE SAVE HAS LANDED (review). Clearing it at the
+         press lost it whenever the save was refused, unconfirmed or asked a
+         question back — and a retry then carried different words from the
+         held save (no reflection), so the same note looked "edited" and
+         asked instead of retrying. It is cleared in `onResolved`. */
+      const started = inspirationSave.start({ operation: 'inspiration', input: { text, kind, source: 'app',
         ...(attachments.length ? { attachments } : {}), ...(reflections ? { reflections } : {}),
       },
         ...(reference ? { draft: reference } : {}) });
-      setMomentWhy('');
-      setCharSay('');
+      if (started) setCharSay('');
     } catch (reason) { if (composerEpoch.current === epoch) setMouthNote(reason instanceof ApiError ? say('worldComposerUploadFailed') : reason instanceof Error ? reason.message : 'Could not save this inspiration. Your draft is here.'); }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   }, [inspirationSave.pending, inspirationSave.canResave, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
@@ -7108,6 +7114,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setReflectOpen(false); setSelectedId(null);
     simApiRef.current?.goToWall(0); simApiRef.current?.toTop(); setPosterAsk(true);
   });
+  /* "THAT SAVE DIDN'T GO THROUGH" LASTS AS LONG AS ITS WORDS (review). The
+     reading and processing notices below wait for the save phase to be idle,
+     so an 'unsent' left standing silenced them for the rest of the visit.
+     Once the composer holds nothing — the words were saved again, cleared or
+     thrown away — there is nothing left for it to be about. */
+  const saveDismiss = inspirationSave.dismiss;
+  useEffect(() => {
+    if (inspirationSave.phase === 'unsent' && !draft.trim() && !inputMedia.length) saveDismiss();
+  }, [inspirationSave.phase, draft, inputMedia.length, saveDismiss]);
   const sourceNotice = !offline && !readingRefresh.busy && inspirationSave.phase === 'idle' ? <InspirationProcessingNotice
     processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
   const showHomeProcessing = Boolean(sourceProcessing.active && sourceProcessing.phase !== 'idle' && !offline && !readingRefresh.busy &&
@@ -9671,7 +9686,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 gone, right?" It is not: answering claims is a different
                 branch of this same ternary and nothing in this change
                 touches it. */}
-            {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
+            {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} onResave={() => { void keepIt(); }} /> : null}
             {/* ONE THING FROM ONE MOUTH. The narration ("you kept two memories
                 today") stacked under the claim, so the creature was reporting
                 the weather and asking you a question in the same breath — a

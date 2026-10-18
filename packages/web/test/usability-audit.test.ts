@@ -78,6 +78,23 @@ describe("the recording clock is never read out every second (review of #11)", (
   }
 });
 
+describe("Home keeps a save's why until it lands, and lets 'unsent' go (review round 2)", () => {
+  /* The world-level path needs a photo moment with the notepad closed, which
+     the jsdom world cannot stage; the wiring is read instead. */
+  const home = () => readFileSync(resolve(STYLES, "..", "pages/Home.tsx"), "utf8");
+  it("the why is cleared only in onResolved, after the save has landed", () => {
+    const source = home();
+    const clears = [...source.matchAll(/setMomentWhy\(''\)/g)].map((m) => m.index!);
+    expect(clears).toHaveLength(1);
+    const resolvedAt = source.indexOf("onResolved: async (intent, result, initiated) =>");
+    expect(clears[0]! > resolvedAt && clears[0]! - resolvedAt < 2_000).toBe(true);
+    expect(source).toMatch(/const started = inspirationSave\.start\(/);
+  });
+  it("an 'unsent' notice is dismissed once the composer holds nothing", () => {
+    expect(home()).toMatch(/inspirationSave\.phase === 'unsent' && !draft\.trim\(\) && !inputMedia\.length\) saveDismiss\(\)/);
+  });
+});
+
 describe("every small control takes a 44px press (#18)", () => {
   it("each named control carries a hit box at least 44 on each side", () => {
     const css = sheet("claims.css");
