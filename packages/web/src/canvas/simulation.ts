@@ -681,6 +681,13 @@ type Moment = "touch" | "kept" | "answered" | "arrived" | "shared" | "let-go";
 
 export interface SimApi {
   navigationState: () => { wall: Space; section: 'top' | 'field' | 'sky'; moving: boolean };
+  /** The world is at rest: no trip, no aim, no finger down, no camera ease.
+      The ONE definition the rest edge (`pushRestedRef`) fires on and the
+      first-load landing asks, so "may this land now" and "it has just
+      stopped" can never disagree. Stricter than `navigationState().moving`
+      on purpose: that one answers route restoring and URL recording, which
+      must not stall on a held press. */
+  isResting: () => boolean;
   /* `standIn` IS GONE, AND IT WAS THE LAST VERB ON THIS SURFACE WITH NO
      CALLER. It took a member's profile id — or null for your own — and swapped
      whose memories were standing on the ground in front of you, without moving
@@ -914,6 +921,14 @@ export interface FieldAudit {
 export interface Carry {
   cam: unknown;
   trip: unknown;
+  /* A HELD PRESS IS NOT CARRIED. It was, so a rebuild under a finger would
+     not read as a release — but a build that returned early (no data yet)
+     tore the listeners down, the finger's pointerup went nowhere, and the
+     next build restored `down` and an owner that would never let go: every
+     new touch was refused as a second finger and nothing was ever at rest
+     again (code review, 2026-10-17). A press belongs to the listeners that
+     heard it; a rebuild starts with none, and the finger's release, if it
+     comes, finds nothing held and is ignored. */
   companion: unknown;
   /** the world has been sized, so a rebuild must not re-stage it */
   primed: boolean;
@@ -1101,6 +1116,18 @@ export interface SimulationOptions {
   panelArrowRef: MutableRefObject<(dir: -1 | 1) => boolean>;
   /** The camera came to rest on a wall — the loop's opinion, pushed to React. */
   pushArrivedRef: MutableRefObject<(wall: Space) => void>;
+  /**
+   * The world came to REST — the loop's own moving/still edge, pushed to
+   * React. Arrival is one kind of rest, but not the only one: an aim up to
+   * the top or down to the ground ends on the SAME wall, and nothing about
+   * it changes `atWall`. A first-load bundle that finished while the camera
+   * was aiming waited for an arrival that never came, and the wall stayed
+   * empty over a reading the server had returned (retro review of #436,
+   * 2026-10-17). This is the moment it may land instead. It carries the
+   * wall the LOOP is resting on: `atWallRef` is React's echo of an arrival
+   * and is a render behind the frame that fires this.
+   */
+  pushRestedRef: MutableRefObject<(wall: Space, from: SimApi) => void>;
   /* THREE OF THE NINE THINGS THE LOOP ASKED SOMEBODY ELSE TO DO WERE ABOUT
      ROOMS, AND ALL THREE ARE GONE. `loadGroupRef` fetched a room's board and
      ground as travel toward it began; `openGroupMemberRef` opened one
@@ -1209,6 +1236,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     panelArrowRef,
     parkedRef,
     pushArrivedRef,
+    pushRestedRef,
     sayLineRef,
     sayLineKeyRef,
     selectedIdRef,
@@ -1545,6 +1573,27 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         cam.aiming = false;
       }
     }
+
+    /** The camera is still easing on its own: an uncommitted swipe springing
+        home, or the rubber band pulling `cam.y` back inside its ends. */
+    function cameraEasing() {
+      return cam.xBack || cam.y !== clamp(cam.y, minCamNow(), view.layout.maxCam);
+    }
+    /** THE ONE DEFINITION OF REST. No trip, no aim, no finger down, and no
+        ease still carrying the camera. Mid-drag is moving — a bundle that
+        landed under a held finger rebuilt the world out from under it. */
+    function resting() {
+      return !(trip.active || cam.aiming || gesture.down) && !cameraEasing();
+    }
+    /** LATCHED, NOT SAMPLED. Set wherever motion starts — an aim, a trip, a
+        touch — and cleared by the frame that finds the world at rest and
+        says so. A frame-to-frame comparison missed any motion that started
+        and ended between two frames (a reduced-motion aim lasts 1ms), and so
+        missed the very rest it was there to report. It starts TRUE: a
+        (re)build that comes up at rest says so on its first frame, which is
+        also what rescues a crossing a rebuild stranded mid-flight (the
+        restore above stops it without an arrival). */
+    let movedSinceRest = true;
 
     /** Which one-time hints have already been said, so they are said once. */
     const hinted = {
@@ -3419,6 +3468,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       cam.aimFrom = cam.y;
       cam.aimT0 = performance.now();
       cam.aiming = true;
+      movedSinceRest = true;
       wake();
     }
 
@@ -5022,6 +5072,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       draw(now);
       syncDom();
 
+      /* THE REST EDGE, said once per stop, on the first frame that finds the
+         world at rest after anything moved it — wherever it stopped: an
+         arrival, an aim's commit, an aim a touch interrupted, a release that
+         needed no snap, a rebuild. With the wall the loop is standing on. */
+      if (!resting()) movedSinceRest = true;
+      else if (movedSinceRest) {
+        movedSinceRest = false;
+        pushRestedRef.current(curWall(), api);
+      }
+
       /* The field drifts continuously, so there is no longer an idle state to
          fall into while it is visible: the loop rests only when the document
          is hidden (handled in onVis) or when reduced motion has parked every
@@ -5213,6 +5273,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            carry the gesture, they just do not get the off-window guarantee */
       }
       gesture.down = true;
+      movedSinceRest = true;
       gesture.dragging = false;
       gesture.axis = 0;
       gesture.downX = e.clientX;
@@ -5354,6 +5415,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       onHover(e);
       if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
       if (!gesture.down) return;
+      /* THE BUTTON IS ALREADY UP. A mouse or pen that moves with no button
+         held has been released somewhere this page never heard — off the
+         window, under a sheet. That is the platform saying the press is over,
+         so it ends here rather than holding the world "moving" until the
+         next click. (A touch has no hover: its moves always carry the press.) */
+      if (e.pointerType !== "touch" && e.buttons === 0) {
+        dropPress();
+        wake();
+        return;
+      }
       if (!gesture.dragging && Math.abs(e.clientX - gesture.downX) + Math.abs(e.clientY - gesture.downY) > TAP_SLOP) {
         gesture.dragging = true;
         /* THE GESTURE NO LONGER HAS A SIDEWAYS AXIS. It used to pick between
@@ -5417,8 +5488,11 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       gesture.axis = 0;
       wake();
     };
-    const onCancel = (e: PointerEvent) => {
-      if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
+    /** End a press the platform says is gone without a pointerup: a cancel,
+        a lost capture, a blur, a hidden tab, or a buttonless move. NEVER on
+        a clock — a finger held still sends nothing at all, and a timeout
+        once snapped the world out from under a genuine ten-second hold. */
+    function dropPress() {
       if (gesture.dragging || gesture.interruptedSnap) {
         /* cancelled mid-drag, or cancelled on a press that had interrupted a
            move: either way the layout is owed a resting place */
@@ -5429,7 +5503,26 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       gesture.down = false;
       gesture.dragging = false;
       gesture.axis = 0;
-      releaseOwner(e.pointerId);
+      if (gesture.ownerId !== null) releaseOwner(gesture.ownerId);
+    }
+    const onCancel = (e: PointerEvent) => {
+      if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
+      dropPress();
+    };
+    /* the capture went without our releasing it: the pointer is gone */
+    const onPointerTaken = (e: PointerEvent) => {
+      /* ONLY THE ROOT'S OWN CAPTURE. `lostpointercapture` bubbles, so a
+         control inside the world that captured and released a pointer of
+         its own would otherwise read as the world losing its press. */
+      if (e.target !== root) return;
+      if (!gesture.down || e.pointerId !== gesture.ownerId) return;
+      dropPress();
+      wake();
+    };
+    /* the window lost focus mid-press: its pointerup goes somewhere else */
+    const onBlur = () => {
+      if (gesture.down) dropPress();
+      wake();
     };
     const onWheel = (e: WheelEvent) => {
       // Every reading/writing surface keeps browser scrolling, including at
@@ -5541,6 +5634,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     };
     const onVis = () => {
       if (document.hidden) {
+        if (gesture.down) dropPress();
         clock.running = false;
         cancelAnimationFrame(clock.raf);
       } else {
@@ -5569,6 +5663,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("blur", onBlur);
+    root.addEventListener("lostpointercapture", onPointerTaken);
     root.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKey);
     document.addEventListener("visibilitychange", onVis);
@@ -5696,8 +5792,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       settleInstantly();
     }
 
-    simApiRef.current = {
+    const api: SimApi = {
       navigationState: () => ({ wall: curWall(), section: cam.y < view.layout.minCam * 0.5 ? 'sky' : cam.y > view.layout.maxCam * 0.5 ? 'field' : 'top', moving: trip.active || cam.aiming }),
+      isResting: resting,
       /* the timeline re-hangs under the word, whose width the reading sets */
       hangRail,
       /* `standIn` IS GONE. It swapped whose ground you were standing on
@@ -6298,6 +6395,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             return;
           }
           trip.active = true;
+          movedSinceRest = true;
           const span = Math.abs(dest - trip.col);
           trip.ms = travelSpanMs(span);
           trip.at = performance.now();
@@ -6446,9 +6544,25 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         };
       },
     };
+    simApiRef.current = api;
     wake();
 
     return () => {
+      /* A LOOP THAT HAS GONE IS NOT ASKED ANYTHING. Left in place, a fetch
+         settling between this teardown and the next build — or after the
+         page itself unmounted — read a dead loop's rest and wall. */
+      if (simApiRef.current === api) simApiRef.current = null;
+      /* AND THE PRESS IT WAS HOLDING IS SETTLED, NOT JUST FORGOTTEN. The next
+         build starts with no press (see `Carry`), so whatever that press owed
+         the layout is paid here, BEFORE the camera is carried: a drag, or a
+         press that interrupted an aim, leaves the camera between sections,
+         and only the release puts it back on one. `dropPress` aims it at the
+         nearest section and lets the capture go, so the carried camera is
+         already on its way home and the rebuilt world never rests between
+         two places. (Its `wake()` asks for a frame this teardown cancels
+         just below.) */
+      if (gesture.down) dropPress();
+      else if (gesture.ownerId !== null) releaseOwner(gesture.ownerId);
       clock.running = false;
       cancelAnimationFrame(clock.raf);
       ro.disconnect();
@@ -6457,6 +6571,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("blur", onBlur);
+      root.removeEventListener("lostpointercapture", onPointerTaken);
       root.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onVis);
@@ -6500,7 +6616,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           }),
         ),
       };
-      simApiRef.current = null;
       ballsRef.current = null;
       /* a `groupBallsRef.current.clear()` stood here: a room's orbs belonged
          to one run of the loop while the DATA they were built from outlived

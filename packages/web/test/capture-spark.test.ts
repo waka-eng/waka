@@ -18,7 +18,9 @@ const SPARK=/jar-capture-shortcut|jar-spark-(core|rays)|jar-mouth-rest/;
 it('runs no keyframe animation on the capture shortcut or its spark',()=>{
   const spark=[...rules(css),...rules(read('home.css'))].filter(r=>SPARK.test(r.selector));
   expect(spark.length).toBeGreaterThan(5);
-  const animated=spark.filter(r=>/(^|[;\s])animation(-name)?\s*:\s*(?!none)/.test(r.body)).map(r=>r.selector);
+  /* the lookahead owns the whitespace: `:\s*(?!none)` let the \s* give back
+     the space before `none`, so `animation: none` read as animated */
+  const animated=spark.filter(r=>/(^|[;\s])animation(-name)?\s*:(?!\s*none)/.test(r.body)).map(r=>r.selector);
   expect(animated).toEqual([]);
   expect(css).toContain('.jar .jar-capture-shortcut { inset:auto; transform:none; }');
 });
