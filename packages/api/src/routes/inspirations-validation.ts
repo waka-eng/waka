@@ -139,10 +139,15 @@ export type CreateInspirationInput = z.infer<typeof createInspirationSchema>;
 
 export const updateInspirationSchema = z
   .object({
+    /* EMPTY IS ALLOWED HERE AND DECIDED IN THE ROUTE (2026-10-17). A save
+       may be created with no words when it carries an attachment, so clearing
+       the words of such a save is a real edit — refusing it in the schema
+       made the editor drop it silently. Whether "" is acceptable depends on
+       the row (does it still hold an attachment?), which only the handler
+       can see; it answers the same "Inspiration text is required" when not. */
     text: z
       .string()
       .trim()
-      .min(1, "Inspiration text is required")
       .max(MAX_TEXT_CHARS, "Inspiration text is too long")
       .optional(),
     // Nullable so a caller can clear a value it previously set; omitting the

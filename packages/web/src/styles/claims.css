@@ -635,6 +635,160 @@
   gap: var(--sp-6);
 }
 
+/* ═══ EVERY BAR FITS A 320px PHONE, AND CLOSE IS NEVER THE ONE CUT ════════
+   P0, 2026-10-17: on a 360px phone the open-save bar's contents measured
+   387px inside a 328px dock, and the dock had no overflow rule — so the row
+   simply ran past the screen's edge and Close, being last, was the part that
+   went (the new-inspiration bar did the same). Three changes, in order of
+   how much they are relied on:
+
+   1. NOTHING SHRINKS BUT THE STATE LINE. Words and glyphs are `flex: none`
+      so a crowded row can never squeeze a control below its tap target;
+      the one thing allowed to give is `.waka-dock-state`, which already
+      ellipsizes, and the slot and the making group that hold it (min-width
+      0, or a flex child refuses to shrink below its content).
+
+   2. ON A PHONE THE ROW TIGHTENS. The dock takes 8px gutters instead of 16,
+      its gaps go and labels pad 8 instead of 16 — which fits the five-tool
+      row at full 44px slots down to ~343px. Below that, nothing is made
+      smaller: Share and Delete fold into one ⋯ overflow (`NoteTools`), so
+      every act left in the row keeps its 44x44 target. (A first pass
+      narrowed the glyph slots to 40/36px instead; review, 2026-10-17: that
+      put every act under the floor beside a one-press Delete.)
+
+   3. CLOSE IS PINNED LAST AND NEVER SHRINKS — the guarantee the founder's
+      Law 2 asks of every surface (one visible way out, one press). */
+.waka-dock-item,
+.waka-dock-tool,
+.waka-dock-sep {
+  flex: none;
+}
+.waka-dock-slot,
+.waka-dock-making {
+  min-width: 0;
+}
+.waka-dock-state {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* MEASURED (Playwright, touch, 2026-10-17): the open-save row is 387px wide
+   at the desktop spacing, against a dock of 100vw - 32 — so it overflowed at
+   every width below 419px (328px of dock at 360, 288 at 320; Close at
+   x 342-403 on a 320px screen). Tightened, the same row is 327px. 440, not
+   419, so a longer translated label still lands inside. */
+@media (max-width: 440px) {
+  .waka-dock {
+    gap: 0;
+    max-width: calc(100vw - var(--sp-16));
+    padding: var(--sp-4);
+  }
+  .waka-dock-slot,
+  .waka-dock-making {
+    gap: 0;
+  }
+  .waka-dock-item {
+    min-width: var(--waka-corner);
+    padding: 0 var(--sp-8);
+  }
+  .waka-dock-tool--wide {
+    padding: 0 var(--sp-8);
+  }
+  .waka-dock-sep {
+    margin: 0 var(--sp-2);
+  }
+  .waka-dock-state {
+    padding-inline: var(--sp-4);
+  }
+}
+/* THE TWO VERBS ABOUT A NOTE, AND THEIR FOLDED COPY. Both are rendered;
+   the width chooses. `display: contents` keeps the inline pair as direct
+   members of the row, so they space and shrink exactly as before. */
+.waka-dock-roomy {
+  display: contents;
+}
+/* Two classes on purpose: the overflow also wears `.waka-add` (its menu's
+   positioning), whose `display: inline-flex` comes later in this sheet and
+   would otherwise win and show both shapes at once. */
+.waka-dock-more.waka-add {
+  display: none;
+}
+/* TRY AGAIN, beside the failed-read sentence rather than inside it: a dock
+   item with the 44px floor, in the ink a press is drawn in. */
+.waka-dock-retry {
+  color: var(--ink);
+  text-decoration: underline;
+}
+/* MEASURED: tightened with 44px glyph slots, the open-save row is 327px; the
+   dock is 100vw - 16, so it fits down to 343px. Below 350 Share and Delete
+   fold into ⋯ — the row becomes Back, Record, ＋, Save, ⋯, Close: 283px at
+   44px each (measured at 320: inside a 304px dock). */
+@media (max-width: 350px) {
+  .waka-dock-roomy {
+    display: none;
+  }
+  .waka-dock-more.waka-add {
+    display: inline-flex;
+  }
+}
+/* MEASURED WHILE RECORDING (review, 2026-10-17): the mic becomes a clock,
+   an auto-width tool — 44px at "0:07", wider once it reads "12:34" — and
+   the unfolded row has only 17px to spare at 360 (327 of a 344px dock), so a
+   long recording could push Close off at 351-360px. While a clock is in the
+   row the fold reaches up to 400px. Playwright, fake microphone, at
+   351/355/360/380/400: ⋯ shown, Close inside (355: x 270-315); at 401/414
+   the five tools return and Close is still inside. */
+@media (max-width: 400px) {
+  .waka-dock-making:has(.waka-dock-tool--wide) .waka-dock-roomy {
+    display: none;
+  }
+  .waka-dock-making:has(.waka-dock-tool--wide) .waka-dock-more.waka-add {
+    display: inline-flex;
+  }
+}
+/* THE ⋯'S MENU HANGS FROM ITS RIGHT EDGE. It reuses the ＋'s lifted column,
+   which is centred on its button; the ⋯ sits near the end of the row, so
+   centring ran the menu off the right of a 320px screen. Anchored right and
+   held inside the 16px gutters instead. Two classes so this outranks the
+   base `.waka-add-menu`, which comes later in the sheet. */
+.waka-add-menu.waka-more-menu {
+  left: auto;
+  right: 0;
+  transform: none;
+  max-width: calc(100vw - var(--sp-32));
+}
+/* MEASURED (review, 2026-10-17): with the tools in the row, a state line —
+   "Uploading…", a failed save, a delete question — was left 10-20px at 320
+   and ~9px at 360, which is no sentence at all. On a phone the state takes
+   its own line above the tools inside the bar, so it always has the group's
+   full width (~190px at 320) and the tools keep theirs. Above 440 the bar
+   has room for both on one line. */
+@media (max-width: 440px) {
+  /* ONLY WHILE THERE IS A STATE TO SAY. Wrapping always let the group fold
+     its own tools into a column; with a state line present the group takes
+     the row's remaining width (basis 0, grow) and the line sits above the
+     tools, wrapping to a second line rather than clipping. */
+  /* The dock is fixed and shrink-to-fit, so it is told its width outright —
+     measured, a basis-0 group otherwise sized it to its narrowest column. */
+  .waka-dock:has(.waka-dock-making > .waka-dock-state) {
+    width: calc(100vw - var(--sp-16));
+  }
+  .waka-dock-slot:has(> .waka-dock-making > .waka-dock-state) {
+    flex: 1 1 auto;
+  }
+  .waka-dock-making:has(> .waka-dock-state) {
+    flex: 1 1 0;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .waka-dock-making > .waka-dock-state {
+    order: -1;
+    flex: 1 0 100%;
+    max-width: none;
+    text-align: center;
+    white-space: normal;
+  }
+}
+
 /* The composer and the dock both want the bottom of the screen, and the dock
    is the thing that is always there — so the box sits above it. */
 .waka-dock ~ * .jar-mouth-slot,

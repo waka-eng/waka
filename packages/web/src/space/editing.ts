@@ -84,6 +84,8 @@ import {
   type TopOfMind,
 } from "../lib/data";
 import type { Adopted, JarNote } from "./top-of-mind/board";
+import { wordsCanStand } from "../lib/note-words";
+import { inspirationPreview } from "../lib/inspiration-preview";
 
 /** Which layer's words are open. The three are one gesture, not three. */
 export type EditKind = "memory" | "signal" | "entry";
@@ -125,6 +127,17 @@ export interface OpenEdit {
  */
 export interface EditingDeps {
   readonly onInspirationSaved?: (inspiration: ApiInspiration) => void;
+  /** A memory's words were kept (with the server's row when there was one):
+      the page shows them on the card. */
+  readonly onMemoryKept?: (id: string, text: string, made?: ApiInspiration) => void;
+  /** How many attachments the memory being edited holds, for the one rule on
+      empty words both doors share (`lib/note-words.ts`): a memory may be
+      left wordless only beside an attachment. Absent means none. */
+  readonly memoryAttachmentCount?: (id: string) => number;
+  /** Whose memory this is, for the write: the same profile the card was read
+      with (an agent's wall reads with `?profile=`), or the write lands on the
+      signed-in human and misses. */
+  readonly memoryProfile?: () => string | undefined;
   readonly reloadReading?: () => Promise<void>;
   readonly onEntrySaved?: () => void;
   readonly beginReadingMutation?: () => () => void;
@@ -244,7 +257,11 @@ export function useEditing(deps: EditingDeps): Editing {
     const held = heldRef.current;
     if (!held || held.saving) return;
     const text = held.text.trim();
-    if (text === "") return;
+    /* EMPTY WORDS: a memory beside an attachment may be wordless (the create
+       rule); anything else with no words has nothing to keep. */
+    if (held.kind === "memory"
+      ? !wordsCanStand(text, depsRef.current.memoryAttachmentCount?.(held.id) ?? 0)
+      : text === "") return;
     const d = depsRef.current;
     put({ ...held, saving: true });
     const token = ++keepToken.current;
@@ -315,15 +332,26 @@ export function useEditing(deps: EditingDeps): Editing {
           });
       }
     };
-    if (d.offline.current) return done();
+    if (d.offline.current) {
+      /* a fixture memory is kept locally — and the card shows the kept words */
+      if (held.kind === "memory") {
+        d.setInspirations((prev) =>
+          prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: inspirationPreview(text, c.attachments) } : c)) : prev,
+        );
+        d.onMemoryKept?.(held.id, text);
+      }
+      return done();
+    }
     if (held.kind === "memory") {
-      inOrder(`memory:${held.id}`, () => updateInspiration(held.id, { text }))
+      const profile = d.memoryProfile?.();
+      inOrder(`memory:${held.id}`, () => updateInspiration(held.id, { text }, profile ? { profile } : {}))
         .then((made) => {
           if (made) d.onInspirationSaved?.(made);
           d.setInspirations((prev) =>
-            prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
+            prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: inspirationPreview(text, c.attachments) } : c)) : prev,
           );
           d.details.current.delete(held.id);
+          d.onMemoryKept?.(held.id, text, made ?? undefined);
           /* THE CARD STAYS OPEN. This deselected the memory on success, which
              closed the whole card in the same breath the `saved` beat was
              trying to hold it — so the founder's ruling ("just keep it
