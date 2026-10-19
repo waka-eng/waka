@@ -11213,7 +11213,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
           WORDS, NOT ICONS. The reference uses a five-icon bar; this product
           has one typeface and no icon set, and inventing one for the dock
           would be a second meaning channel arriving through the back. Four
-          short words in the register this product already labels things in. */}
+          short words in the register this product already labels things in.
+
+          (2026-10-18: the words stay, and the two that make a new one now
+          carry a glyph IN FRONT of them. Founder: "add + icon in front of
+          Inspiration, and chat icon in front of Chat." Drawn from the set
+          the bar's tools already use, so it is not a second icon set.) */}
       {/* THE DOCK STANDS ON AN OPEN CHAT TOO. It was hidden there and shown
           on every other destination — including an open inspiration, which is
           the same depth of the same gesture — so reading one conversation was
@@ -11421,7 +11426,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   ? say('worldBackToAll')
                   : making === 'talk' && item.id === 'talk'
                     ? say('worldAllChats')
-                    : say(item.label)}
+                    /* A GLYPH IN FRONT OF THE TWO WORDS THAT MAKE A NEW ONE.
+                       Founder, 2026-10-18: "add + icon in front of
+                       Inspiration, and chat icon in front of Chat at bottom
+                       bar." Only on the plain words: "N inspirations" and
+                       "All chats" open a list, not a new one, so a plus
+                       there would name the wrong act (Law 1). The glyph is
+                       decoration (aria-hidden) and the word stays the
+                       button's whole accessible name. */
+                    : item.id === 'inspiration' || item.id === 'talk'
+                      ? <><HomeActionIcon kind={item.id === 'inspiration' ? 'plus' : 'chat'} className="waka-dock-item-icon"/>{say(item.label)}</>
+                      : say(item.label)}
             </button>
             {/* ═══ THREE GROUPS, AND A RULE BETWEEN EACH ═══════════════════
                 Founder, 2026-10-15: "the first item is always either ... all
