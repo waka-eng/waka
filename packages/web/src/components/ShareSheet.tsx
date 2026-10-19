@@ -80,7 +80,7 @@ export function touchEditorScale(shownPx: number, floorPx: number): number {
 const BLANK_LAYOUT: ShareCardLayout = {
   width: 1080, height: 1080,
   bubble: { x: 112, y: 240, w: 856, h: 520, radius: 49, fill: "#d7cdbb" },
-  text: { x: 153, y: 271, w: 774, size: 34, leading: 18.85 / 13, weight: 400, family: 'Jost, Pretendard, "Apple SD Gothic Neo", sans-serif', ink: "#11131a", align: "center" },
+  text: { x: 153, y: 271, w: 774, size: 36, leading: 18.85 / 13, weight: 400, family: 'Jost, Pretendard, "Apple SD Gothic Neo", sans-serif', ink: "#11131a", align: "center" },
   edit: { x: 112, y: 240, w: 856, h: 520, padTop: 31, padX: 41, padBottom: 26, radiusTop: 49, radiusBottom: 49, rotation: 0, origin: { x: 540, y: 500 } },
 };
 

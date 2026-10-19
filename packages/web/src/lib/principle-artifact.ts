@@ -106,6 +106,13 @@ export function wrapArtifactText(text:string,maxWidth:number,measure:(value:stri
  */
 const SHARE_MARK='WAKA';
 
+/** The share card's words are this much larger than first measured
+ * (founder, 2026-10-18: "make the font very slightly bigger"). */
+const WORD_SCALE=13.75/13;
+/** The top of mind's words on the home measure: 13px on 18.85px lines on the
+ * home screen, here WORD_SCALE larger. */
+const HOME_WORD_SIZE=13*WORD_SCALE,HOME_WORD_LINE=18.85*WORD_SCALE;
+
 /** How crooked a kept note is held up, in radians (see the note's drawing). */
 const NOTE_TILT=-0.026;
 
@@ -221,7 +228,12 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   const inset=held?112:margin;
   const pad=held?64:56;
   let bubbleW=width-inset*2;const textW=bubbleW-pad*2;
-  const sizeMax=held?48:66,sizeMin=held?28:36,leading=spoken?18.85/13:held?1.42:1.32;
+  /* ═══ VERY SLIGHTLY BIGGER WORDS ═════════════════════════════════════
+     Founder, 2026-10-18: "make the font very slightly bigger." Every kind's
+     words are WORD_SCALE (~6%) larger: the held and principle fits start and
+     stop that much higher, and the top of mind's home measure is 13.75px on
+     lines scaled with it (below). */
+  const sizeMax=held?51:70,sizeMin=held?30:38,leading=spoken?HOME_WORD_LINE/HOME_WORD_SIZE:held?1.42:1.32;
   const photo=content.photo&&content.photo.width>0&&content.photo.height>0?content.photo:null;
   const photoH=photo?Math.round(Math.min((bubbleBottomMax-bubbleTop)*0.42,textW*photo.height/photo.width)):0;
   const photoSpace=photo?photoH+36:0;
@@ -240,7 +252,11 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
        wide. One factor `k` carries every one of those onto the card, so
        the line breaks, the bubble's proportions and the creature's size
        beside it are the home screen's, only larger. */
-    const H={bubbleMax:352,wrap:320,size:13,line:18.85,frame:12,frameLine:18,padTop:12,padX:16,padBottom:10,gap:6,tail:6,toBody:26,body:107};
+    /* The words are WORD_SCALE larger than the home screen's 13px; the
+       bubble is sized to them, as on the home screen, so it grows with them
+       (taller, or wider up to its 352), and the creature keeps the home
+       screen's size beside a bubble of the same width. */
+    const H={bubbleMax:352,wrap:320,size:HOME_WORD_SIZE,line:HOME_WORD_LINE,frame:12,frameLine:18,padTop:12,padX:16,padBottom:10,gap:6,tail:6,toBody:26,body:107};
     ctx.font=`400 ${H.size}px ${family}`;
     const homeItems=content.items.map(item=>({...item,lines:wrapArtifactText(item.text,H.wrap,value=>ctx.measureText(value).width)}));
     const homeWidest=Math.max(...homeItems.flatMap(item=>item.lines.map(line=>ctx.measureText(line).width)));
