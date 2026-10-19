@@ -221,7 +221,6 @@
   "worldConversationReplyCheckStopped": "답변 진행 상황을 확인하지 못했어요.",
   "worldConversationReplyGone": "이 답변을 더 이상 찾을 수 없어요.",
   "worldConversationReplyBehind": "최신 답변을 아직 기다리고 있어요.",
-  "worldConversationReload": "대화 다시 불러오기",
   "worldConversationReplyFailed": "답변을 마치지 못했어요. 메시지는 저장돼 있어요.",
   "worldConversationReplyLimit": "지금은 답변이 밀려 있어요. 몇 분 뒤에 다시 시도해 주세요.",
   "worldConversationReplyStopped": "중지했어요. 메시지는 저장돼 있어요.",

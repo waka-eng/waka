@@ -500,6 +500,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
    * eight `||`s were not.
    */
   const whyNoSend = storageFailed ? 'worldConversationDraftFailed' as const
+    /* GONE (404/410) IS GONE: never a Send onto a deleted conversation. The
+       notice offers a new chat instead. */
+    : reply.terminal === 'gone' ? 'worldConversationReplyGone' as const
     : focusFailed ? 'worldPrincipleUnavailable' as const
     : full ? 'worldConversationFull' as const
     : loading||generationEnabled===null ? 'worldChatLoading' as const
@@ -753,7 +756,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             out. Both stop polling on purpose; neither may stop the person.
             This reads the reply's progress again — it does not ask for a new
             reply, so it is not one of the regeneration buttons that went. */}
-        {generationEnabled&&reply.terminal?<button type="button" className="chat-recheck" disabled={loading} onClick={()=>{void refresh();reply.check();}}>{say('worldConversationReload')}</button>
+        {generationEnabled&&reply.terminal?<button type="button" className="chat-recheck" onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button>
           :generationEnabled&&(reply.error||reply.waiting||reply.behind)?<button type="button" className="chat-recheck" onClick={()=>reply.check()}>{say('worldReadingCheckAgain')}</button>:null}
         {/* AND WHEN REPLIES ARE NOT CONNECTED AT ALL, THE SURFACE SAYS SO.
             Every notice above is gated behind `generationEnabled`, correctly

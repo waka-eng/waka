@@ -387,7 +387,7 @@ it('on a 401 reply read stops asking but says it could not check, with Check aga
   await type('Still there?');
   expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
 });
-it.each([404,410])('stops on a %i reply read, says it is gone, offers a reload and frees Send',async(status)=>{
+it.each([404,410])('stops on a %i reply read, says it is gone, keeps Send off and offers a new chat',async(status)=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status,message:'Gone'}));await mount();await tick(1000);
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
@@ -397,8 +397,12 @@ it.each([404,410])('stops on a %i reply read, says it is gone, offers a reload a
   expect(host.textContent).not.toContain('Trying again');
   await type('Still there?');
   const send=[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
-  expect(send.disabled).toBe(false);
-  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Reload conversation')).toBe(true);
+  expect(send.disabled,'Send went back on onto a deleted conversation').toBe(true);
+  const fresh=[...host.querySelectorAll<HTMLButtonElement>('button.chat-recheck')].find(b=>b.textContent==='New chat');
+  expect(fresh,'a gone conversation offered no way on').toBeTruthy();
+  vi.mocked(choose).mockClear();
+  await act(async()=>fresh!.click());
+  expect(choose).toHaveBeenCalledWith(null);
 });
 it('keeps Send off when a newer reply state arrives but its conversation read is still older',async()=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};

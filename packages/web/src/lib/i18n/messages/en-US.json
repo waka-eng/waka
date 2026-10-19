@@ -221,7 +221,6 @@
   "worldConversationReplyCheckStopped": "Couldn’t check reply progress.",
   "worldConversationReplyGone": "This reply can’t be found anymore.",
   "worldConversationReplyBehind": "Still waiting for the latest reply.",
-  "worldConversationReload": "Reload conversation",
   "worldConversationReplyFailed": "The reply couldn’t be finished. Your message is saved.",
   "worldConversationReplyLimit": "Replies are busy right now. Try again in a few minutes.",
   "worldConversationReplyStopped": "Stopped. Your message is saved.",
