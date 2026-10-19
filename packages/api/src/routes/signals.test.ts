@@ -415,6 +415,51 @@ describe("DELETE /api/signals/:signalId", () => {
   });
 });
 
+describe("the top-of-mind refresh after a curation verb", () => {
+  /* On Lambda the function freezes once the response is returned, so an
+     enqueue still in flight then is lost. The response must wait for it. */
+  it.each(["dismiss", "restore", "delete"] as const)("is enqueued before the %s response returns", async (verb) => {
+    let enqueued = false;
+    const requestRefresh = vi.fn(() => new Promise<never>((resolve) => setTimeout(() => {
+      enqueued = true;
+      resolve({ jobId: "job-1", requestVersion: "1", created: true } as never);
+    }, 25)));
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => serveDb() as any,
+        dismissSignal: vi.fn(async () => ({ id: signalId }) as any),
+        restoreSignal: vi.fn(async () => ({ id: signalId }) as any),
+        deleteSignal: vi.fn(async () => true),
+        requestRefresh,
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
+      }),
+    );
+    const response = verb === "delete"
+      ? await app.request(`/api/signals/${signalId}`, { method: "DELETE" })
+      : await app.request(`/api/signals/${signalId}/${verb}`, { method: "POST" });
+    expect(response.status).toBe(200);
+    expect(requestRefresh).toHaveBeenCalledWith(humanProfileId, "signals_changed");
+    expect(enqueued, "the enqueue finished before the response").toBe(true);
+  });
+
+  it("still answers when the enqueue fails — the curation itself committed", async () => {
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => serveDb() as any,
+        deleteSignal: vi.fn(async () => true),
+        requestRefresh: vi.fn(async () => { throw new Error("queue down"); }),
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
+      }),
+    );
+    const response = await app.request(`/api/signals/${signalId}`, { method: "DELETE" });
+    expect(response.status).toBe(200);
+  });
+});
+
 describe("the retired share verb", () => {
   /**
    * A statement no longer reaches a room by being handed to it. The founder

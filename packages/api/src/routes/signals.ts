@@ -990,9 +990,11 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
    * top of mind is re-synthesised in the background. Best-effort on purpose:
    * the edit itself has already committed, and a failed enqueue is a stale
    * board on the next refresh, not a lost edit. The debounce absorbs a burst.
+   * Awaited before responding: Lambda freezes the function once the response
+   * returns, and an enqueue still in flight then is simply lost.
    */
-  const scheduleRefresh = (profileId: string): void => {
-    void requestRefresh(profileId, "signals_changed").catch((err: unknown) => {
+  const scheduleRefresh = async (profileId: string): Promise<void> => {
+    await requestRefresh(profileId, "signals_changed").catch((err: unknown) => {
       console.warn("[signals] top-of-mind refresh enqueue failed", {
         profileId,
         error: err instanceof Error ? err.message : String(err),
@@ -1169,7 +1171,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     });
     if (!signal) return c.json({ error: "Signal not found" }, 404);
 
-    scheduleRefresh(scope.profileId);
+    await scheduleRefresh(scope.profileId);
     return c.json({ signal }, 200);
   });
 
@@ -1272,7 +1274,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     });
     if (!signal) return c.json({ error: "Signal not found" }, 404);
 
-    scheduleRefresh(scope.profileId);
+    await scheduleRefresh(scope.profileId);
     return c.json({ signal }, 200);
   });
 
@@ -1309,7 +1311,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     });
     if (!signal) return c.json({ error: "Signal not found" }, 404);
 
-    scheduleRefresh(scope.profileId);
+    await scheduleRefresh(scope.profileId);
     return c.json({ signal }, 200);
   });
 
@@ -1348,7 +1350,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     // The artifact may cite the signal just removed; re-synthesise so an entry
     // is not left resting on a citation that no longer resolves. Principles
     // were reconciled inside the delete itself.
-    scheduleRefresh(scope.profileId);
+    await scheduleRefresh(scope.profileId);
     return c.json({ deleted: true }, 200);
   });
 
