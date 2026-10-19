@@ -14,7 +14,7 @@
 import { t, type SupportedLocale } from '../lib/locales';
 import type { useReadingPaused } from '../lib/use-reading-paused';
 
-export function ReadingPausedNotice({ state, locale, className = 'jar-board-acts jar-reading-status', besidePrincipleRead = false, canRetry = true }: {
+export function ReadingPausedNotice({ state, locale, className = 'jar-board-acts jar-reading-status', besidePrincipleRead = false, canRetry = false }: {
   state: ReturnType<typeof useReadingPaused>; locale: SupportedLocale; className?: string;
   /** On a page that also shows `PrincipleRead`: when that line is already
       saying "could not be updated" with its own Try again, this one stays

@@ -54,6 +54,7 @@ import { readProfileText, writeProfileText } from "../lib/profile-storage";
 import { fetchPrinciples, type ApiPrinciple } from "../lib/api";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { monthTag, numWords } from "../lib/words";
+import { useOptionalAuth } from "../lib/auth-context";
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -162,6 +163,8 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
      attribution left, so on an agent's wall none of them may say "your". */
   const agent = whose === "agent";
   const readingPaused = useReadingPaused(!agent);
+  /* Retry restarts a reading on the account: a person's call, not an agent session's. */
+  const sessionType = useOptionalAuth()?.profile?.type;
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
   /**
    * THE FIRST ONE IS MET, ONCE.
@@ -306,7 +309,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
             laid" — over work nothing was doing. Own principles only: the
             retry restarts the session's own reading and cannot speak for an
             agent's. */}
-        {!agent ? <ReadingPausedNotice state={readingPaused} locale={locale} className="waka-over-status" /> : null}
+        {!agent ? <ReadingPausedNotice state={readingPaused} locale={locale} className="waka-over-status" canRetry={sessionType !== "agent"} /> : null}
         {phase === "loading" ? (
           <p className="waka-over-status" role="status">
             {say("worldPrinciplesLoading")}

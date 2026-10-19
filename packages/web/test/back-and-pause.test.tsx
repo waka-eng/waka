@@ -41,7 +41,7 @@ const settle = () => act(async () => { await new Promise((resolve) => setTimeout
 describe("a paused reading", () => {
   function Page() {
     const state = useReadingPaused(true);
-    return createElement(ReadingPausedNotice, { state, locale: "en-US" });
+    return createElement(ReadingPausedNotice, { state, locale: "en-US", canRetry: true });
   }
   const status = (readingPaused: boolean) => ({ phase: "ready" as const, eligible: true, signalCount: 3, topOfMindCount: 1, readingPaused });
 
@@ -102,11 +102,11 @@ describe("a paused reading", () => {
     expect(container!.textContent).toBe("");
   });
 
-  it("shows an agent session the notice without the Retry (restarting is a person's call)", async () => {
+  it("shows the notice without Retry unless the caller says this is a person (canRetry defaults off)", async () => {
     vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
     function AgentPage() {
       const state = useReadingPaused(true);
-      return createElement(ReadingPausedNotice, { state, locale: "en-US", canRetry: false });
+      return createElement(ReadingPausedNotice, { state, locale: "en-US" });
     }
     render(createElement(AgentPage));
     await settle();
