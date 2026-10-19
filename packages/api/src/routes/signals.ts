@@ -59,6 +59,7 @@ import { lockSignalStatementSources, requestSignalStatementWork } from '../lib/s
 import { evidenceSupportCurrent } from '../lib/signal-support-state.js';
 import {loadSignalEvidence,reviewEvidenceCurrent} from '../lib/review-evidence.js';
 import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
+import { requestPrincipleRefresh } from "../lib/principle-status.js";
 import {
   computeSignalConfidence,
   selectIndependentEvidence,
@@ -886,11 +887,27 @@ export async function deleteProfileSignal(
     .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
     .returning({ id: signals.id });
   if (deleted.length === 0) return false;
-  await reconcilePrinciplesAfterSignalLoss(db, {
-    profileId: input.profileId,
-    signalIds: [input.signalId],
-    principleIds: citing.map((row) => row.principleId),
-  });
+  try {
+    await reconcilePrinciplesAfterSignalLoss(db, {
+      profileId: input.profileId,
+      signalIds: [input.signalId],
+      principleIds: citing.map((row) => row.principleId),
+    });
+  } catch (err) {
+    /* The delete has committed and stands. The profile's normal principles
+       refresh re-checks every principle against current support, so it is
+       the fallback — best-effort too, and never a failed delete. */
+    console.warn("[signals] principles reconcile after delete failed; requesting a refresh", {
+      profileId: input.profileId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    await requestPrincipleRefresh(db, input.profileId).catch((refreshErr: unknown) => {
+      console.warn("[signals] principles refresh fallback failed", {
+        profileId: input.profileId,
+        error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+      });
+    });
+  }
   return true;
 }
 
