@@ -100,7 +100,7 @@ it('settles a lease that expired after its final attempt as failed instead of le
   const status=async(id:string)=>(await t.sql`SELECT status,attempts,last_error FROM background_jobs WHERE id=${id}`)[0];
   expect(await status(dead.id)).toMatchObject({status:'failed',attempts:3});
   expect((await status(dead.id))!.last_error).toMatch(/lease expired/i);
-  expect(await status(rerun.id),'a rerun requested meanwhile still runs').toMatchObject({status:'succeeded',attempts:1});
+  expect(await status(rerun.id),'a requested rerun never resurrects a poison job').toMatchObject({status:'failed',attempts:3});
   expect(await status(live.id),'an unexpired lease is untouched').toMatchObject({status:'running',attempts:3});
-  expect(processor).toHaveBeenCalledOnce();
+  expect(processor).not.toHaveBeenCalled();
 });

@@ -1402,18 +1402,15 @@ function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string,
 }
 
 /** A lease that expired after the job's final attempt is settled as `failed`
- * (visible and re-runnable), exactly as the worker's own failure path would
- * have left it. A rerun requested meanwhile returns it to pending with a fresh
- * attempt budget, also as that path does. */
+ * (visible and re-runnable) — always, even when a rerun was requested while it
+ * ran: a job that crashed its worker on every attempt is never handed a fresh
+ * attempt budget here. New work reaches it only through a later enqueue. */
 async function settleExhaustedBackgroundLeases(now: Date): Promise<number> {
   const nowIso = now.toISOString();
   const rows = await getDb().execute(sql`
     UPDATE background_jobs AS job
-    SET status = CASE WHEN job.rerun_requested THEN 'pending'::background_job_status ELSE 'failed'::background_job_status END,
-        locked_at = CASE WHEN job.rerun_requested THEN NULL ELSE job.locked_at END,
-        run_after = CASE WHEN job.rerun_requested THEN ${nowIso}::timestamptz ELSE job.run_after END,
-        last_error = CASE WHEN job.rerun_requested THEN NULL ELSE 'Lease expired after the final attempt' END,
-        attempts = CASE WHEN job.rerun_requested THEN 0 ELSE job.attempts END,
+    SET status = 'failed'::background_job_status,
+        last_error = 'Lease expired after the final attempt',
         rerun_requested = false,
         result = NULL,
         updated_at = ${nowIso}::timestamptz
