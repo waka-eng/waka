@@ -842,6 +842,25 @@ describe("the shared principle status across a session change", () => {
     stop();
   });
 
+  it("never lets a GET sent before a retry POST overwrite the POST's answer when it lands late", async () => {
+    const { fetchPrincipleStatus, retryPausedReading, recentPrincipleStatus, onPrincipleStatus } = await import("../src/lib/api/principles");
+    const status = (phase: string) => ({ phase, eligible: true, signalCount: 3, topOfMindCount: 1, readingPaused: phase === "failed" });
+    let answerGet!: (response: Response) => void;
+    const fetch = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { answerGet = resolve; }))
+      .mockImplementationOnce(async () => new Response(JSON.stringify({ status: status("processing") }), { status: 202 }));
+    vi.stubGlobal("fetch", fetch);
+    const heard: string[] = [];
+    const stop = onPrincipleStatus((value) => heard.push(value.phase));
+    const before = fetchPrincipleStatus();
+    await retryPausedReading();
+    answerGet(new Response(JSON.stringify({ status: status("failed") }), { status: 200 }));
+    expect((await before).phase, "the caller still gets its own answer").toBe("failed");
+    stop();
+    expect(heard, "the stale GET was published after the POST").toEqual(["processing"]);
+    expect(recentPrincipleStatus(60_000)?.phase, "the stale GET overwrote the cache").toBe("processing");
+  });
+
   it("starts a new status GET for a fresh read even while an older one is in flight", async () => {
     const { fetchPrincipleStatus } = await import("../src/lib/api/principles");
     const status = (signalCount: number) => ({ phase: "ready", eligible: true, signalCount, topOfMindCount: 1 });

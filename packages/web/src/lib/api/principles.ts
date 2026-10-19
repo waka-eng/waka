@@ -95,7 +95,14 @@ const statusListeners = new Set<(status: ApiPrincipleStatus, source: PrincipleSt
    auth layer itself is not involved. */
 let identity: string | null = null;
 let session = 0;
-const currentSession = () => session;
+/* ORDER BY WHEN A REQUEST LEFT, NOT WHEN IT LANDED. Every status request
+   takes a ticket as it starts; an answer whose request started before the
+   last one published is stale (a GET sent before a retry POST must not
+   overwrite the POST's answer, or the cache, when it lands late). */
+let requestSeq = 0;
+let publishedSeq = 0;
+type Ticket = { session: number; seq: number };
+const currentSession = (): Ticket => ({ session, seq: ++requestSeq });
 /** Name the identity the readers are reading for; a change drops the cache. */
 export function principleStatusFor(next: string | null): void {
   if (next === identity) return;
@@ -104,8 +111,9 @@ export function principleStatusFor(next: string | null): void {
   lastStatus = null;
   statusInFlight = null;
 }
-function publishStatus(status: ApiPrincipleStatus, asked: number, source: PrincipleStatusSource = "poll"): ApiPrincipleStatus {
-  if (asked !== currentSession()) return status;
+function publishStatus(status: ApiPrincipleStatus, asked: Ticket, source: PrincipleStatusSource = "poll"): ApiPrincipleStatus {
+  if (asked.session !== session || asked.seq < publishedSeq) return status;
+  publishedSeq = asked.seq;
   lastStatus = { status, at: Date.now() };
   for (const listener of statusListeners) listener(status, source);
   return status;
