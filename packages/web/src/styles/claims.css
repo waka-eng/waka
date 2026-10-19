@@ -6414,9 +6414,15 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
   animation: waka-cross-cards-in 320ms ease-out 1980ms forwards;
 }
 
+/* The press comes back WITH THE REVEAL'S END, not the walk's (review): the
+   walk's class stays until 2580ms, and a card already shown at 2300 must
+   already take its press. `pointer-events` is discrete, so it is held at
+   `none` to 99% and switched on at the last frame; a card overrides the
+   page's own `pointer-events: none` on `.waka-over`. */
 @keyframes waka-cross-cards-in {
-  from { visibility: visible; opacity: 0; transform: translateY(8px); }
-  to { visibility: visible; opacity: 1; transform: none; }
+  from { visibility: visible; pointer-events: none; opacity: 0; transform: translateY(8px); }
+  99% { pointer-events: none; }
+  to { visibility: visible; pointer-events: auto; opacity: 1; transform: none; }
 }
 
 /* Out: the contents go first, so the walk home is the creature and the sky. */
@@ -6449,9 +6455,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
     animation: none;
     opacity: 1;
   }
+  /* Nothing held back under reduced motion: seen, and pressable, at once. */
   .waka-page--crossing-in .waka-held,
   .waka-page--crossing-in .waka-ground-card {
     visibility: visible;
+    pointer-events: auto;
   }
 }
 

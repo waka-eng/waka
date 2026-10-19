@@ -169,6 +169,12 @@ describe("the principles creature never stands between a press and a card", () =
     expect(cards).toMatch(/visibility:\s*hidden/);
     expect(cards).toMatch(/pointer-events:\s*none/);
     expect(css).toMatch(/@keyframes waka-cross-cards-in\s*\{\s*from\s*\{\s*visibility:\s*visible/);
+    // The press returns with the reveal's last frame, not the walk's end (review).
+    expect(css).toMatch(/@keyframes waka-cross-cards-in[\s\S]*?99%\s*\{\s*pointer-events:\s*none;\s*\}\s*to\s*\{[^}]*pointer-events:\s*auto/);
+    // And under reduced motion nothing is held back at all.
+    const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/g;
+    const blocks = [...css.matchAll(reduced)].map((m) => m[1]!).filter((b) => b.includes(".waka-page--crossing-in .waka-held"));
+    expect(blocks.some((b) => /visibility:\s*visible;\s*pointer-events:\s*auto/.test(b))).toBe(true);
   });
   it("an iOS-keyboard page drops its full-height floor, so the inline height holds (review)", () => {
     const keyboard = rules(sheet("claims.css"), (s) => s === ".waka-page[data-keyboard]").map(([, b]) => b).join("\n");
