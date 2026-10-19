@@ -185,4 +185,29 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
        `home-navigation.test.tsx`). */
     expect(barShape(world!.container)).toEqual(['↩', '│', 'Close']);
   });
+
+  /* THE GLYPHS IN FRONT OF THE TWO WORDS (founder, 2026-10-18: "add + icon in
+     front of Inspiration, and chat icon in front of Chat at bottom bar").
+     Decorative: hidden from assistive tech, so each row's name is still its
+     word alone, and only on the two words that make a new one, never on
+     "All chats", which opens a list. */
+  it('draws a plus before Inspiration and a chat bubble before Chat, hidden, names unchanged', async () => {
+    world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+    expect(barShape(world!.container)).toEqual(['Inspiration', 'Chat']);
+    for (const [name, kind] of [['Inspiration', 'plus'], ['Chat', 'chat']] as const) {
+      const button = row(name);
+      expect(button, `no bar row reads ${name}`).toBeTruthy();
+      const glyphs = button!.querySelectorAll('svg');
+      expect(glyphs.length, `${name} carries no single glyph`).toBe(1);
+      const glyph = glyphs[0]!;
+      expect(glyph.getAttribute('data-home-action-icon')).toBe(kind);
+      expect(glyph.getAttribute('aria-hidden')).toBe('true');
+      expect(glyph.getAttribute('focusable')).toBe('false');
+      expect(glyph.classList.contains('waka-dock-item-icon')).toBe(true);
+      expect(button!.firstElementChild, `the ${kind} glyph is not in front of ${name}`).toBe(glyph);
+      expect(button!.hasAttribute('aria-label'), `${name} gained an aria-label over its word`).toBe(false);
+    }
+    await act(async () => row('Chat')!.click()); await settle();
+    expect(row('All chats')?.querySelector('svg'), 'All chats wears the new-chat glyph').toBeNull();
+  });
 });
