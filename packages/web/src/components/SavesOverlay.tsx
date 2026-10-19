@@ -93,14 +93,12 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true, shareName = "" }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true }: {
   locale: SupportedLocale;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
       works, and the request names the agent's profile. */
   ownArchive?: boolean;
-  /** The name a share card may sign with, when the person leaves it on. */
-  shareName?: string;
   /** Whose archive. The caller already knows whose world is on screen; this
       surface should never work it out a second way and risk disagreeing. */
   profileId?: string | null;
@@ -1674,7 +1672,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           <p className="waka-over-undo" role="alert">{say("worldDeleteFailed")}</p>
         ) : null}
       </DialogSurface>
-      {shareOf ? <ShareSheet target={shareOf} name={shareName} locale={locale} onClose={() => setShareOf(null)} /> : null}
+      {shareOf ? <ShareSheet target={shareOf} locale={locale} onClose={() => setShareOf(null)} /> : null}
     </div>
   );
 }

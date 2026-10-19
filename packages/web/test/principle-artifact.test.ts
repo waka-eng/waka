@@ -2,7 +2,7 @@
  * an explicit deterministic width function; real canvas output is checked
  * in the browser. No source or network state is replaced. */
 import {expect,it} from 'vitest';
-import {wrapArtifactText} from '../src/lib/principle-artifact';
+import {fitSizes,wrapArtifactText} from '../src/lib/principle-artifact';
 it('preserves Korean, explicit paragraphs and complete emoji graphemes',()=>{
   const segmenter=new Intl.Segmenter(undefined,{granularity:'grapheme'});
   const measure=(value:string)=>Array.from(segmenter.segment(value)).length;
@@ -15,4 +15,16 @@ it('preserves Korean, explicit paragraphs and complete emoji graphemes',()=>{
 it('breaks a long word without silently dropping any characters',()=>{
   const value='a'.repeat(300);const lines=wrapArtifactText(value,20,text=>text.length);
   expect(lines.join('')).toBe(value);expect(lines.every(line=>line.length<=20)).toBe(true);
+});
+/* THE BUMP NEVER RAISES A FLOOR (founder, 2026-10-18, "very slightly bigger"):
+   the fits start ~6% higher and still reach the floors they reached before,
+   so nothing that fitted stops fitting. */
+it('starts the fits higher and still ends them on the old floors',()=>{
+  const principle=fitSizes('principle'),held=fitSizes('held');
+  expect(principle[0]).toBe(70);expect(principle.at(-1)).toBe(36);expect(principle).toContain(66);
+  expect(held[0]).toBe(51);expect(held.at(-1)).toBe(28);
+  for(const sizes of [principle,held]){
+    expect([...sizes].sort((a,b)=>b-a)).toEqual(sizes);
+    for(let i=1;i<sizes.length;i++)expect(sizes[i-1]!-sizes[i]!).toBeLessThanOrEqual(2);
+  }
 });

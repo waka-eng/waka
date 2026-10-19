@@ -11862,7 +11862,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         id={viewNavigation.view.principleId} name={auth?.profile?.name??''} locale={locale} onClose={viewNavigation.closeShare}
         onChoose={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true},{replace:true})}/>:null}
       {thingShare ? (
-        <ShareSheet target={thingShare} name={auth?.profile?.name ?? ''} locale={locale} onClose={() => setThingShare(null)} />
+        <ShareSheet target={thingShare} locale={locale} onClose={() => setThingShare(null)} />
       ) : null}
 
       {/* THE THREE THINGS YOU HOLD UP IN FRONT OF THE WORLD.
@@ -11913,7 +11913,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         onNewSave={startNewInspiration}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
-        ownArchive={atWall.kind!=='agent'} shareName={auth?.profile?.name ?? ''}
+        ownArchive={atWall.kind!=='agent'}
         title={say(atWall.kind==='agent'?'worldAgentField':'worldMenuField')}
         focus={savesFocus} onClearFocus={() => setSavesFocus(null)}
         /* THE SWITCH IS IN THE CORNER, AND IT ALWAYS WAS. Founder: "if the
