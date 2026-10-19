@@ -12,6 +12,7 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {useAuth} from '../src/lib/auth-context';
 import {useRef} from 'react';
 import {ConversationPanel} from '../src/components/ConversationPanel';
+import {storeConversationDraft} from '../src/lib/conversation-drafts';
 import {createConversation,fetchConversation,fetchConversationReply,listConversations,type ApiConversation} from '../src/lib/api/conversations';
 const owner=vi.hoisted(()=>({account:'owner',profile:'profile'}));
 const withAgent=vi.hoisted(()=>({value:null as {id:string;name:string}|null}));
@@ -119,19 +120,48 @@ it('asks nobody to choose when there is no agent, and starts an ordinary chat', 
   expect(vi.mocked(createConversation).mock.calls[0]![5]).toBeUndefined();
 });
 
-/* Review: Send after a failed first read waits for the list; if who the chat
-   is with changed meanwhile (here the agent arrives), the press was for the
-   old company — nothing goes, and the next press uses who is there now. */
-it('sends nothing when who the chat is with changed during the pre-flight read, and uses the current company after', async()=>{
+/* Review: Send after a failed first read waits for the list. For a chat with
+   "Me" the agent plays no part, so its arriving meanwhile holds nothing: the
+   words go, and the read's "can't be reached" notice goes with them. */
+it('sends a "Me" chat even when the agent changed during the pre-flight read, and drops the stale notice', async()=>{
   vi.mocked(listConversations).mockRejectedValueOnce(new Error('Offline'));
   await render();
+  expect(host.textContent).toContain('WAKA can’t be reached right now.');
   let answer!:(value:Awaited<ReturnType<typeof listConversations>>)=>void;
   vi.mocked(listConversations).mockImplementationOnce(()=>new Promise(resolve=>{answer=resolve;}));
-  await ask('What do we each think?');                          // pre-flight in flight
+  await ask('Just me');                                         // pre-flight in flight
   withAgent.value={id:'3f6c1a52-8d0e-4b7a-9c21-5e4f7a8b9c0d',name:'Demo Agent'};
   await render();                                               // the agent arrives meanwhile
   await act(async()=>{answer({profileId:'profile',conversations:[],generationEnabled:true});});
-  expect(createConversation).not.toHaveBeenCalled();
-  await send();
   expect(createConversation).toHaveBeenCalledOnce();
+  expect(vi.mocked(createConversation).mock.calls[0]![5]).toBeUndefined();
+  expect(host.textContent).not.toContain('WAKA can’t be reached right now.');
+});
+
+/* Review: for a chat with "Both", a different agent mid-flight is a different
+   company — the press holds, quietly: the words stay, Send stays on, and no
+   stale "can't be reached" is left saying the wrong thing. The next press
+   goes with the agent there now. */
+it('holds a "Both" send when the agent changed during the pre-flight read, keeping the words and Send', async()=>{
+  const first='3f6c1a52-8d0e-4b7a-9c21-5e4f7a8b9c0d',second='7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
+  withAgent.value={id:first,name:'Demo Agent'};
+  /* "Both" was picked last visit and is still in the draft: the choices hide
+     while the first read is out, so a restored draft is how a "Both" chat
+     meets a failed first read. */
+  storeConversationDraft({accountId:'owner',profileId:'profile'},'new:general',{id:'5b0c9d8e-7f6a-4b5c-9d8e-7f6a5b4c3d2e',writer:'6c1d0e9f-8a7b-4c6d-8e9f-0a1b2c3d4e5f',updatedAt:1,content:'What do we each think?',revision:0,pending:false,talkWith:'both'});
+  vi.mocked(listConversations).mockRejectedValueOnce(new Error('Offline'));
+  await render();
+  expect(host.textContent).toContain('WAKA can’t be reached right now.');
+  let answer!:(value:Awaited<ReturnType<typeof listConversations>>)=>void;
+  vi.mocked(listConversations).mockImplementationOnce(()=>new Promise(resolve=>{answer=resolve;}));
+  await send();                                                 // pre-flight in flight
+  withAgent.value={id:second,name:'Other Agent'};
+  await render();                                               // a different agent meanwhile
+  await act(async()=>{answer({profileId:'profile',conversations:[],generationEnabled:true});});
+  expect(createConversation).not.toHaveBeenCalled();
+  expect(host.textContent).not.toContain('WAKA can’t be reached right now.');
+  expect(host.querySelector('textarea')!.value).toBe('What do we each think?');
+  expect(host.querySelector<HTMLButtonElement>('.chat-send')!.disabled).toBe(false);
+  await send();
+  expect(vi.mocked(createConversation).mock.calls[0]![5]).toEqual({perspective:'both',agentId:second});
 });

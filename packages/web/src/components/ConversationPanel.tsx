@@ -422,11 +422,17 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
          begun, a reply started, a reload begun — or who the chat is with
          changed. The press was for the draft as it stood; anything else is
          not what the person sent. State read through `guards`, not this
-         render's stale closure. */
+         render's stale closure.
+         The read answered, so its "can't be reached" notice is no longer true
+         and goes (review); a "Not sent" stays, because it still is. If a
+         guard then holds the send, the words stay and Send stays on — a
+         quiet hold, nothing misleading. The agent counts
+         only when the chat uses it: for "mine" its identity changes nothing. */
+      setError(current=>current===say('worldConversationUnreachable')?null:current);
       const g=guards.current,now=draftRef.current;
       if(now!==pressed||!now||!now.content.trim()&&!now.attachments?.length||uploadsRef.current.length||working.current||
         g.loading||g.awaitingReply||g.storageFailed||g.focusFailed||(id&&!g.conversation)||
-        g.talkWith!==pressedWith.talkWith||g.agent?.id!==pressedWith.agent)return;
+        g.talkWith!==pressedWith.talkWith||(pressedWith.talkWith!=='mine'&&g.agent?.id!==pressedWith.agent))return;
     }
     if(!draftRef.current)return;
     // Who the chat is with, as it stands now (equal to the press, by the check above).
