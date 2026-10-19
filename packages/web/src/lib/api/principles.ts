@@ -70,102 +70,33 @@ export async function fetchPrincipleStatements(id:string,profileId:string,signal
    first parameter rather than the second, which is the whole change at the
    one call site in `components/PrincipleRead.tsx`. */
 
-/**
- * ONE STATUS, ONE REQUEST AT A TIME, HEARD BY EVERY READER.
- *
- * Two things on home read `/principles/status`: `PrincipleRead` (polling while
- * a reading is in progress) and the "reading is paused" notice. Asked
- * separately they doubled every read, and on focus both fired at once. So
- * the status GET is shared while in flight, and every answer — whoever asked
- * for it, the refresh's reply included — is published to the listeners
- * below. A reader that heard an answer recently does not ask again.
- */
-let statusInFlight: Promise<ApiPrincipleStatus> | null = null;
-let lastStatus: { status: ApiPrincipleStatus; at: number } | null = null;
-/** Where a published status came from: a `poll` (the shared GET) or a
-    `refresh` (the answer to a retry/refresh POST). */
-export type PrincipleStatusSource = "poll" | "refresh";
-const statusListeners = new Set<(status: ApiPrincipleStatus, source: PrincipleStatusSource) => void>();
-/* THE CACHE BELONGS TO ONE SIGNED-IN IDENTITY. A status heard before a
-   sign-out, sign-in or switch is somebody else's (or nobody's) reading, so
-   an identity change drops both the cached answer and the shared request,
-   and an answer that lands after the change is handed to the reader that
-   asked for it but never cached or published. The readers say whose page
-   they are on (`principleStatusFor`, from the profile they render for); the
-   auth layer itself is not involved. */
-let identity: string | null = null;
-let session = 0;
-/* ORDER BY WHEN A REQUEST LEFT, NOT WHEN IT LANDED. Every status request
-   takes a ticket as it starts; an answer whose request started before the
-   last one published is stale (a GET sent before a retry POST must not
-   overwrite the POST's answer, or the cache, when it lands late). */
-let requestSeq = 0;
-let publishedSeq = 0;
-type Ticket = { session: number; seq: number };
-const currentSession = (): Ticket => ({ session, seq: ++requestSeq });
-/** Name the identity the readers are reading for; a change drops the cache. */
-export function principleStatusFor(next: string | null): void {
-  if (next === identity) return;
-  identity = next;
-  session += 1;
-  lastStatus = null;
-  statusInFlight = null;
-}
-function publishStatus(status: ApiPrincipleStatus, asked: Ticket, source: PrincipleStatusSource = "poll"): ApiPrincipleStatus {
-  if (asked.session !== session || asked.seq < publishedSeq) return status;
-  publishedSeq = asked.seq;
-  lastStatus = { status, at: Date.now() };
-  for (const listener of statusListeners) listener(status, source);
-  return status;
-}
-/** Hear every status any reader fetched, with where it came from. Returns
-    the unsubscribe. */
-export function onPrincipleStatus(listener: (status: ApiPrincipleStatus, source: PrincipleStatusSource) => void): () => void {
-  statusListeners.add(listener);
-  return () => { statusListeners.delete(listener); };
-}
-/** The last status anybody heard, if it is younger than `maxAgeMs`. */
-export function recentPrincipleStatus(maxAgeMs: number): ApiPrincipleStatus | null {
-  return lastStatus && Date.now() - lastStatus.at <= maxAgeMs ? lastStatus.status : null;
+/* NO SHARED STATUS CACHE. Each reader of `/principles/status` makes its own
+   GET, as on dev: a shared in-flight request with published answers was
+   tried here and every ordering it allowed (a GET sent before a retry
+   landing after it, an answer from before a sign-out) needed its own rule. */
+
+/** GET /principles/status. */
+export async function fetchPrincipleStatus(): Promise<ApiPrincipleStatus> {
+  return (await getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded")).status;
 }
 
-/** GET /principles/status — shared while in flight, published when it lands. */
-/** `fresh`: start a new GET even if one is in flight — an answer that left
-    before a POST cannot speak for what the POST just started. */
-export function fetchPrincipleStatus(options: { fresh?: boolean } = {}): Promise<ApiPrincipleStatus> {
-  if (statusInFlight && !options.fresh) return statusInFlight;
-  const asked = currentSession();
-  const request: Promise<ApiPrincipleStatus> = getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded")
-    .then((body) => publishStatus(body.status, asked))
-    .finally(() => { if (statusInFlight === request) statusInFlight = null; });
-  statusInFlight = request;
-  return request;
-}
-
-export async function fetchPrincipleRead(options: { fresh?: boolean } = {}): Promise<{
+export async function fetchPrincipleRead(): Promise<{
   principles: ApiPrinciple[]; status: ApiPrincipleStatus;
 }> {
   const [rows, status] = await Promise.all([
     getJson<{ principles: ApiPrinciple[] }>(apiPath("/principles"), "Principles could not be loaded"),
-    fetchPrincipleStatus(options),
+    fetchPrincipleStatus(),
   ]);
   return { principles: rows.principles, status };
 }
 
-/** POST /principles/refresh?retry=1 — restarts a failed reading and
-    principles. Its answer is published as a `refresh`, so a reader showing a
-    failure can tell a restart from an ordinary poll. */
-export async function retryPausedReading(signal?: AbortSignal): Promise<ApiPrincipleStatus> {
-  const asked = currentSession();
-  return publishStatus((await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted", signal)).status, asked, "refresh");
+/** POST /principles/refresh?retry=1 — restarts a failed reading and principles. */
+export async function retryPausedReading(): Promise<ApiPrincipleStatus> {
+  return (await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status;
 }
 
-/** POST /principles/refresh — its answer is published as a `refresh`, so the
-    paused-reading notice hears the restart without asking again. */
-export async function requestPrincipleRead(retry = false, signal?: AbortSignal): Promise<void> {
-  const asked = currentSession();
-  const body = await postJson<{ status?: ApiPrincipleStatus }>(apiPath(`/principles/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started", signal);
-  if (body?.status) publishStatus(body.status, asked, "refresh");
+export async function requestPrincipleRead(retry = false): Promise<void> {
+  await postJson(apiPath(`/principles/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started");
 }
 
 /** GET /principles — the acting profile's ranked set. */

@@ -27,7 +27,7 @@ export function ReadingPausedNotice({ state, locale, className = 'jar-board-acts
       <span>{t(locale, state.retryFailed ?'readingPausedRetryFailed' : 'readingPausedNotice')}</span>
       {' '}
       <button className="jar-board-act" type="button" disabled={state.retrying} onClick={state.retry}>
-        {t(locale, state.retrying ? 'readingPausedRetrying' : 'readingPausedRetry')}
+        {t(locale, state.stillTrying ? 'worldStillTrying' : state.retrying ? 'readingPausedRetrying' : 'readingPausedRetry')}
       </button>
     </p>
   );

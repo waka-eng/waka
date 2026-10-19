@@ -17,14 +17,3 @@ export function settleAtLeast<T>(work: Promise<T>, ms = RETRY_MIN_MS): Promise<T
     throw result.reason;
   });
 }
-
-/** How long a retry/refresh POST may take before it counts as failed: a hung
-    request must not leave a Retry button disabled forever. */
-const POST_DEADLINE_MS = 20_000;
-
-/** Runs `run` with an AbortSignal that fires after `POST_DEADLINE_MS`. */
-export async function withPostDeadline<T>(run: (signal: AbortSignal) => Promise<T>, ms = POST_DEADLINE_MS): Promise<T> {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), ms);
-  try { return await run(controller.signal); } finally { window.clearTimeout(timer); }
-}

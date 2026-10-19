@@ -12,76 +12,77 @@
  * is when a person who walked away would come back to check. It does not
  * poll: a paused reading stays paused until somebody (or the server's own
  * recovery) restarts it, and asking every few seconds would only spend
- * requests to learn the same thing.
+ * requests to learn the same thing. It makes its own GET each time; there is
+ * no status shared with other readers.
  *
  * A FAILED CHECK IS NOT A PAUSE. If the status itself cannot be read the
  * notice stays down — the page has its own failure state for a dead server,
  * and "reading is paused" is a claim about the reading, not the network.
+ *
+ * RETRY. One POST per press, never aborted by the client. The button is
+ * disabled while it is out (at least `RETRY_MIN_MS`), and after 20 seconds
+ * with no answer it says "Still trying…" — the request is still allowed to
+ * answer, and when it does the real result shows. A retry the server took
+ * hides the notice at once and checks again with one fresh GET a few seconds
+ * later (and on focus), which is what decides whether it comes back. There is
+ * no merging of answers: the latest GET is the state.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchPrincipleStatus, onPrincipleStatus, principleStatusFor, recentPrincipleStatus, retryPausedReading, type ApiPrincipleStatus } from './api';
-import { useOptionalAuth } from './auth-context';
-import { settleAtLeast, withPostDeadline } from './settle-at-least';
+import { fetchPrincipleStatus, retryPausedReading, type ApiPrincipleStatus } from './api';
+import { settleAtLeast } from './settle-at-least';
 
-/** A status this young is the answer; nobody needs to ask again yet. */
-const FRESH_MS = 15_000;
+/** After a retry the server took, how long before asking again. */
+const RECHECK_AFTER_RETRY_MS = 5_000;
+/** How long a retry may go unanswered before the button says so. */
+const STILL_TRYING_AFTER_MS = 20_000;
 
 export function useReadingPaused(enabled: boolean) {
-  /* Whose status this is: a different person drops the shared cache. */
-  const who = useOptionalAuth()?.profile?.id ?? null;
-  principleStatusFor(who);
   const [status, setStatus] = useState<ApiPrincipleStatus | null>(null);
-  const [statusFor, setStatusFor] = useState(who);
-  if (statusFor !== who) { setStatusFor(who); setStatus(null); }
   const [retrying, setRetrying] = useState(false);
+  const [stillTrying, setStillTrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState<null | 'failed'>(null);
+  /* A retry the server took hides the notice until the next check says. */
+  const [restarted, setRestarted] = useState(false);
   const alive = useRef(true);
-  const heard = useRef(0);
+  /* Only the latest check may set the state. */
+  const checkSeq = useRef(0);
   useEffect(() => () => { alive.current = false; }, []);
 
-  /* NO REQUEST OF ITS OWN WHEN ONE WAS JUST MADE. `PrincipleRead` reads the
-     same status on the same screen; the shared fetch and the published
-     answers in `lib/api/principles.ts` mean this hook mostly listens. */
   const check = useCallback(() => {
-    const recent = recentPrincipleStatus(FRESH_MS);
-    if (recent) { setStatus(recent); return; }
+    const seq = ++checkSeq.current;
     fetchPrincipleStatus()
-      .then((next) => { if (alive.current) setStatus(next); })
+      .then((next) => { if (alive.current && seq === checkSeq.current) { setStatus(next); setRestarted(false); } })
       .catch(() => undefined);
   }, []);
 
   useEffect(() => {
     if (!enabled) return;
     alive.current = true;
-    const unsubscribe = onPrincipleStatus((next) => { heard.current += 1; if (alive.current) setStatus(next); });
     check();
     const again = () => { if (!document.hidden) check(); };
     window.addEventListener('focus', again);
-    return () => { unsubscribe(); window.removeEventListener('focus', again); };
-  }, [enabled, check, who]);
+    return () => { window.removeEventListener('focus', again); };
+  }, [enabled, check]);
 
-  /* Retry disables itself and says "Retrying…" until the request answers,
-     and for at least `RETRY_MIN_MS` — the only guard against repeated
-     presses, since the server keeps no cooldown. */
   const retry = useCallback(() => {
-    setRetrying(true); setRetryFailed(null);
-    /* AFTER THE 3s HOLD, THE POST'S ANSWER APPLIES ONLY IF NOTHING NEWER WAS
-       HEARD WHILE IT WAITED: a poll or another reader's answer published
-       during the hold is fresher than the POST's, and must not be put back
-       under it. (`heard` counts every status the broadcast delivered.) */
-    let heardAtAnswer = -1;
-    settleAtLeast(withPostDeadline((signal) => retryPausedReading(signal)).then((next) => { heardAtAnswer = heard.current; return next; }))
-      .then((next) => { if (alive.current && heard.current === heardAtAnswer) setStatus(next); })
+    setRetrying(true); setRetryFailed(null); setStillTrying(false);
+    const slow = window.setTimeout(() => { if (alive.current) setStillTrying(true); }, STILL_TRYING_AFTER_MS);
+    settleAtLeast(retryPausedReading())
+      .then(() => {
+        if (!alive.current) return;
+        setRestarted(true);
+        window.setTimeout(() => { if (alive.current) check(); }, RECHECK_AFTER_RETRY_MS);
+      })
       .catch(() => { if (alive.current) setRetryFailed('failed'); })
-      .finally(() => { if (alive.current) setRetrying(false); });
-  }, []);
+      .finally(() => { window.clearTimeout(slow); if (alive.current) { setRetrying(false); setStillTrying(false); } });
+  }, [check]);
 
   return {
-    paused: enabled && status?.readingPaused === true,
+    paused: enabled && !restarted && status?.readingPaused === true,
     /** The principles line (`PrincipleRead`) is already showing a failure
         with its own Try again — which restarts the reading too — so a page
         that shows both says it once. */
     principlesFailed: status?.phase === 'failed',
-    retrying, retryFailed, retry,
+    retrying, stillTrying, retryFailed, retry,
   };
 }

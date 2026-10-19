@@ -818,74 +818,17 @@ describe("the read deadline", () => {
   });
 });
 
-describe("the shared principle status across a session change", () => {
-  it("drops the cached status and ignores an in-flight answer from the session before", async () => {
-    const { fetchPrincipleStatus, recentPrincipleStatus, onPrincipleStatus, principleStatusFor } = await import("../src/lib/api/principles");
-    const status = (signalCount: number) => ({ phase: "ready", eligible: true, signalCount, topOfMindCount: 1 });
-    let answer!: (response: Response) => void;
-    const fetch = vi.fn()
-      .mockImplementationOnce(() => new Promise<Response>((resolve) => { answer = resolve; }))
-      .mockImplementationOnce(async () => new Response(JSON.stringify({ status: status(9) }), { status: 200 }));
-    vi.stubGlobal("fetch", fetch);
-    const heard: number[] = [];
-    const stop = onPrincipleStatus((value) => heard.push(value.signalCount));
-    const old = fetchPrincipleStatus();
-    principleStatusFor("someone-else");
-    expect(recentPrincipleStatus(60_000), "a status outlived the sign-out").toBeNull();
-    const fresh = await fetchPrincipleStatus();
-    expect(fetch, "the new session joined the old session's request").toHaveBeenCalledTimes(2);
-    expect(fresh.signalCount).toBe(9);
-    answer(new Response(JSON.stringify({ status: status(3) }), { status: 200 }));
-    await old;
-    expect(recentPrincipleStatus(60_000)?.signalCount, "the old session's answer overwrote the new one").toBe(9);
-    expect(heard).toEqual([9]);
-    stop();
-  });
-
-  it("never lets a GET sent before a retry POST overwrite the POST's answer when it lands late", async () => {
-    const { fetchPrincipleStatus, retryPausedReading, recentPrincipleStatus, onPrincipleStatus } = await import("../src/lib/api/principles");
-    const status = (phase: string) => ({ phase, eligible: true, signalCount: 3, topOfMindCount: 1, readingPaused: phase === "failed" });
-    let answerGet!: (response: Response) => void;
-    const fetch = vi.fn()
-      .mockImplementationOnce(() => new Promise<Response>((resolve) => { answerGet = resolve; }))
-      .mockImplementationOnce(async () => new Response(JSON.stringify({ status: status("processing") }), { status: 202 }));
-    vi.stubGlobal("fetch", fetch);
-    const heard: string[] = [];
-    const stop = onPrincipleStatus((value) => heard.push(value.phase));
-    const before = fetchPrincipleStatus();
-    await retryPausedReading();
-    answerGet(new Response(JSON.stringify({ status: status("failed") }), { status: 200 }));
-    expect((await before).phase, "the caller still gets its own answer").toBe("failed");
-    stop();
-    expect(heard, "the stale GET was published after the POST").toEqual(["processing"]);
-    expect(recentPrincipleStatus(60_000)?.phase, "the stale GET overwrote the cache").toBe("processing");
-  });
-
-  it("starts a new status GET for a fresh read even while an older one is in flight", async () => {
+describe("the principles status", () => {
+  /* No shared cache: each reader's GET is its own request and its own answer. */
+  it("makes its own GET every time, with no answer shared between readers", async () => {
     const { fetchPrincipleStatus } = await import("../src/lib/api/principles");
     const status = (signalCount: number) => ({ phase: "ready", eligible: true, signalCount, topOfMindCount: 1 });
-    let answerOld!: (response: Response) => void;
     const fetch = vi.fn()
-      .mockImplementationOnce(() => new Promise<Response>((resolve) => { answerOld = resolve; }))
-      .mockImplementationOnce(async () => new Response(JSON.stringify({ status: status(5) }), { status: 200 }));
+      .mockImplementationOnce(async () => new Response(JSON.stringify({ status: status(1) }), { status: 200 }))
+      .mockImplementationOnce(async () => new Response(JSON.stringify({ status: status(2) }), { status: 200 }));
     vi.stubGlobal("fetch", fetch);
-    const old = fetchPrincipleStatus();
-    const fresh = await fetchPrincipleStatus({ fresh: true });
-    expect(fetch, "a fresh read joined the GET from before").toHaveBeenCalledTimes(2);
-    expect(fresh.signalCount).toBe(5);
-    answerOld(new Response(JSON.stringify({ status: status(1) }), { status: 200 }));
-    await old;
-  });
-
-  it("publishes the status a principles refresh POST answers with, as a refresh", async () => {
-    const { requestPrincipleRead, onPrincipleStatus } = await import("../src/lib/api/principles");
-    const fetch = vi.fn(async () => new Response(JSON.stringify({ status: { phase: "processing", eligible: true, signalCount: 3, topOfMindCount: 1, readingPaused: false } }), { status: 202 }));
-    vi.stubGlobal("fetch", fetch);
-    const heard: Array<[string, string]> = [];
-    const stop = onPrincipleStatus((value, source) => heard.push([value.phase, source]));
-    await requestPrincipleRead(true);
-    stop();
-    expect(fetch.mock.calls[0]![0]).toBe("/api/principles/refresh?retry=1");
-    expect(heard, "the paused notice never heard the restart").toEqual([["processing", "refresh"]]);
+    const [first, second] = await Promise.all([fetchPrincipleStatus(), fetchPrincipleStatus()]);
+    expect(fetch, "two readers shared one request").toHaveBeenCalledTimes(2);
+    expect([first.signalCount, second.signalCount]).toEqual([1, 2]);
   });
 });

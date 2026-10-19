@@ -632,6 +632,7 @@
   "worldGroundFailed": "원칙이 자라는 바탕을 읽지 못했어요.",
   "worldPrinciplesStillWorking": "아직 읽고 있어요. 몇 분 걸릴 수 있어요. 저장한 것은 안전해요.",
   "worldPrinciplesRetrying": "다시 시도하는 중…",
+  "worldStillTrying": "아직 시도하는 중…",
   "worldPrinciplesRetryFailed": "다시 시도하지 못했어요. 다시 눌러 주세요.",
   "surfaceUnavailableHome": "나의 WAKA로 가기",
   "readingPausedNotice": "읽기가 잠시 멈췄어요 — 저장한 것은 안전해요.",

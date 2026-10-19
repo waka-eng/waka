@@ -11,9 +11,7 @@
  * WHAT THIS MOCKS, AND WHY (gate G6): `lib/api`'s `fetchPrincipleStatus` and
  * `retryPausedReading`, the layer directly beneath the hook, so a case can
  * say "the reading failed" and then "the retry worked" without a server. The
- * hook, the component, the locale catalog and React are real. One case also
- * stubs the global `fetch` so the real `lib/api/principles` can publish a
- * newer status while a Retry holds.
+ * hook, the component, the locale catalog and React are real.
  */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -63,25 +61,24 @@ describe("a paused reading", () => {
     expect(container!.textContent).toBe("");
   });
 
-  it("keeps a status heard during the Retry hold over the POST's older answer", async () => {
-    vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(true));
-    vi.mocked(retryPausedReading).mockReset().mockResolvedValue(status(false));
+  /* A retry the server took hides the notice at once, and one fresh GET a
+     few seconds later decides whether it comes back — no answer merging. */
+  it("hides the notice after a retry the server took, and lets one fresh GET 5s later decide", async () => {
+    vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
+    vi.mocked(retryPausedReading).mockReset().mockResolvedValue(status(true));
     render(createElement(Page));
     await settle();
-    const { principleStatusFor } = await vi.importActual<typeof import("../src/lib/api/principles")>("../src/lib/api/principles");
+    const gets = vi.mocked(fetchPrincipleStatus).mock.calls.length;
     vi.useFakeTimers();
     try {
       await act(async () => { container!.querySelector("button")!.click(); });
-      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
-      /* another reader publishes a newer answer while the button holds */
-      const { requestPrincipleRead } = await vi.importActual<typeof import("../src/lib/api/principles")>("../src/lib/api/principles");
-      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: status(true) }), { status: 202 })));
-      await act(async () => { await requestPrincipleRead(); });
-      await act(async () => { await vi.advanceTimersByTimeAsync(2_500); });
-    } finally { vi.useRealTimers(); vi.unstubAllGlobals(); }
-    expect(container!.textContent, "the POST's answer was put back over a newer one").toContain("Reading is paused");
-    /* drop the status this case published into the shared cache */
-    principleStatusFor("after-hold-case"); principleStatusFor(null);
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
+      expect(container!.textContent, "the notice stayed up after the retry was taken").toBe("");
+      expect(vi.mocked(fetchPrincipleStatus).mock.calls.length).toBe(gets);
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    } finally { vi.useRealTimers(); }
+    expect(vi.mocked(fetchPrincipleStatus).mock.calls.length, "no fresh GET after the retry").toBe(gets + 1);
+    expect(container!.textContent, "the fresh GET said still paused and the notice did not return").toContain("Reading is paused");
   });
 
   it("stays down beside the principles line when that line already says it failed, so there is one Retry", async () => {
@@ -98,24 +95,24 @@ describe("a paused reading", () => {
   /* No server cooldown: Retry guards itself, disabled and "Retrying…" until
      its request answers and for at least three seconds, even when the server
      refuses at once. */
-  it("gives a hung Retry 20 seconds, then shows the failure line with Retry enabled", async () => {
-    vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(true));
-    vi.mocked(retryPausedReading).mockReset().mockImplementation((signal?: AbortSignal) => new Promise((_, reject) => {
-      signal?.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")));
-    }));
+  it("never aborts a slow Retry: Still trying… after 20s, then the real answer", async () => {
+    vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
+    let answer!: (value: ReturnType<typeof status>) => void;
+    vi.mocked(retryPausedReading).mockReset().mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
     render(createElement(Page));
     await settle();
-    const button = () => container!.querySelector("button")!;
+    const button = () => container!.querySelector("button");
     vi.useFakeTimers();
     try {
-      await act(async () => { button().click(); });
-      await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
-      expect(button().disabled, "the retry gave up before its deadline").toBe(true);
-      await act(async () => { await vi.advanceTimersByTimeAsync(5_100); });
+      await act(async () => { button()!.click(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_100); });
+      expect(button()?.textContent).toBe("Still trying…");
+      expect(button()?.disabled).toBe(true);
+      expect(vi.mocked(retryPausedReading).mock.calls[0], "the retry was given an abort signal").toEqual([]);
+      await act(async () => { answer(status(false)); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     } finally { vi.useRealTimers(); }
-    expect(button().disabled, "a hung retry left Retry disabled").toBe(false);
-    expect(container!.textContent).toContain("Couldn’t restart it.");
-    expect(vi.mocked(retryPausedReading).mock.calls[0]![0]).toBeInstanceOf(AbortSignal);
+    expect(container!.textContent, "the late answer was not shown").toBe("");
   });
 
   it("holds Retry disabled as Retrying… for at least three seconds, even on an instant refusal", async () => {
