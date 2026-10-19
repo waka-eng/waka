@@ -1246,17 +1246,6 @@ before review's own Escape (which ends the sitting), and another handler already
 `preventDefault` on Escape, so a bubble-phase listener that respects `defaultPrevented` never
 fired. Resolve by deciding which layer owns Escape while both are up, in one place.
 
-## Principles Try again restarting failed jobs (follow-up)
-
-**Status:** open follow-up (2026-10-18). `components/PrincipleRead.tsx` is back to `origin/dev`:
-its Try again re-reads, and asks for a retry only the way dev does. A Try again that itself
-restarts failed principles (one POST per press), a stalled-read "still working" line, and a poll
-that never gives up were built here and withdrawn after repeated review findings in the same
-area. Open cases: a failed or hung retry POST (re-sent automatically, or leaving the button
-disabled); a status GET sent before a retry landing after it; a read that stalls for minutes with
-no way on; and polling that stops after repeated failures. The paused-reading notice's Retry
-(`useReadingPaused`) is the one place that still sends `POST /principles/refresh?retry=1`.
-
 ## Session expiry return path and signed-in hint (follow-up)
 
 **Status:** open follow-up (2026-10-18). `claude/fix-dead-ends` reworked sign-in, sign-out,
