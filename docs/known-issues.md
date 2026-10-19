@@ -1330,48 +1330,34 @@ of raw `history` entries, so Back, replace and reload are the router's ordinary 
 
 ## Save recovery redesign (follow-up PR)
 
-**Status:** open, deliberately not fixed in `claude/fix-usability`. The save journal, request-id
-handling and composer locking on that branch are exactly `origin/dev`'s (`use-authored-save.ts`,
-`AuthoredSaveNotice.tsx`, the save parts of `InspirationComposer.tsx` and `Home.tsx`, and their
-tests). Seven review rounds on a rewrite kept finding new duplicate-save races, so the rewrite was
-cut and the problem is written down here, to be designed once.
+**Status:** partly fixed in `claude/followup-save-recovery`; design in `docs/plans/save-recovery.md`.
 
-**The defect (usability audit at f2afcbe2).** A save that loses its network after the journal is
-written leaves Save disabled on "Uploading…" with "Couldn't confirm the save" under it: every load
-reads `GET /inspirations/save-requests/:id`, gets 404 `save_not_found`, keeps the journal, and the
-composer stays locked. Retry (same id) is the only way out; reloading or reconnecting does not
-re-send.
+**Fixed there.** The composer no longer jams after a save loses its network (usability audit at
+f2afcbe2): mount, focus, `online`, storage events and Retry re-POST the journal read from disk under
+its original id, which the server dedupes (idempotent on (profile, request id); a concurrent same-id
+POST gets 409 `save_in_progress` and is retried on the next event). A journal leaves disk only when
+its id lands, is refused (400, or 409 `save_request_conflict`, which now offers the words back), is
+removed (410) or is discarded — never on 404, 5xx or a timeout, so gateway-vs-app 5xx and "not found
+is not did not land" no longer need answers. Two tabs re-sending the same id make one inspiration;
+a tab whose journal another tab settled reads it once and lets go. Background sends no longer
+report a press (`initiated`).
 
-**What any design has to answer** — each case below broke at least one attempt:
+**Still open** — each case below broke at least one earlier attempt:
 
-- **Gateway timeouts vs the app's own 500.** A 502/503/504, an HTML page or a bodyless 500 may sit in
-  front of a POST that still commits; only a JSON-bodied 500 from our API (a caught, rolled-back
-  failure) says anything about the write. A client that treats any 5xx followed by a 404 as "did not
-  land" can release a journal whose POST then commits — and the next save makes a second copy.
-- **"Not found" is not "did not land".** A status read races an in-flight POST (another tab, or this
-  tab before a reload). Any release on 404 needs a rule for "a POST under this id may still be
-  committing", and that rule must survive reloads and work across tabs.
-- **Cross-tab journals.** Two tabs may hold the same journal. Re-POSTing the same id is safe (the
-  server is idempotent on (profile, request id) and answers a concurrent POST with 409
-  `save_in_progress`), but a tab must not start a NEW journal for words another live tab is already
-  saving, must not adopt a journal while its owner is still open, and must not write back over a
-  newer write (re-read before every write-back). Storage events and shared "landed" notes were
-  tried and produced new races; landed notes also held words past sign-out.
-- **409 `save_request_conflict`.** The id was already used for different content: that request can
-  never land as written. It is a refusal, not "busy".
-- **"Save as new" while a save is pending.** Edited words must not silently become a second copy, and
-  choosing "new" must not drop the earlier unconfirmed save; each id must land once. Pressing it on
-  words the pending save already carries is that save's retry.
+- **Cross-tab write-backs.** A tab must not write back (acknowledged / rejected marks) over a newer
+  write from another tab; nothing re-reads before those write-backs yet.
+- **No discard for an uncertain save.** A journal the server keeps failing (5xx forever) holds the
+  composer until it lands; there is Retry but no "Discard".
+- **"Save as new" while a save is pending.** Not offered (Save stays disabled while a journal is
+  pending). Any future version: edited words must not silently become a second copy, choosing "new"
+  must not drop the earlier unconfirmed save, and each id must land once.
 - **The why (photo reflections).** `keepIt` clears `momentWhy` at the press; if the save is then
-  refused or unconfirmed, the why is lost, and a retry carries different input (no reflection) from
-  the held journal, so the same note looks edited. It should clear only once the save lands, and
-  must not ride a second save once a held one with the same why lands.
+  refused, "Edit" restores the text only and the why is lost. It should clear only once the save
+  lands, and must not ride a second save once a held one with the same why lands.
 - **Same words, current draft revision.** A retry from a draft touched since must resolve against the
   current revision, or the composer is not settled when the save lands.
-- **Acknowledging a press (`initiated`).** Whether a person pressed Save is per window; a background
-  or adopted send must not report a press, and a press queued behind a background send must keep it.
-- **410 `saved_item_removed`.** The id points at a deleted item: settle the draft via `onRemoved`; no
-  other window should be left holding it.
+- **A press queued behind a background send** is dropped (Retry is hidden while busy) rather than
+  kept.
 - **Sign-out.** `pendingSave:` and `unrecoveredSave:` are account+profile scoped and are kept across
   sign-out by design (`draft-eviction.ts`) so an unsent save is not lost; anything new that holds
   words must be added to that decision deliberately.
