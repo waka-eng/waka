@@ -519,14 +519,16 @@ const extractedStatementsSchema = z.object({
     .array(
       z.object({
         statement: z.string(),
-        reason: z.string().optional(),
-        quote: z.string().optional(),
+        /* nullish, not optional: a provider may send null for a field it
+           leaves empty, and that reply is valid — only a wrong shape fails */
+        reason: z.string().nullish(),
+        quote: z.string().nullish(),
         relatedEvidence: z
           .array(z.object({ inspirationId: z.string(), quote: z.string() }))
-          .optional(),
+          .nullish(),
       }),
     )
-    .optional(),
+    .nullish(),
   category: z.string().nullish(),
 });
 

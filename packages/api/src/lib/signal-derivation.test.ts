@@ -252,6 +252,17 @@ describe("parseSignalCandidates — a malformed payload is not an empty answer",
     expect(() => parseSignalCandidates(payload)).toThrow("signal extraction");
   });
 
+  it("parses a valid reply whose optional fields are null", () => {
+    const result = parseSignalCandidates({
+      statements: [{ statement: "I keep commitments small.", reason: null, quote: null, relatedEvidence: null }],
+      category: null,
+    });
+    expect(result.statements).toEqual([
+      { statement: "I keep commitments small.", reason: undefined, quote: undefined, relatedEvidence: undefined },
+    ]);
+    expect(parseSignalCandidates({ statements: null, category: null })).toEqual({ statements: [], category: null });
+  });
+
   it("still returns a genuinely empty answer as no candidates", () => {
     expect(parseSignalCandidates({ statements: [], category: null })).toEqual({ statements: [], category: null });
   });
