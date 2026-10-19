@@ -8,8 +8,8 @@
  *
  *   THE WEB READ DEADLINE. Web reads were a bare `fetch`, so a server that
  *   accepted the connection and then said nothing kept every waiting screen
- *   waiting. `apiFetch` now gives web reads 20s to start answering and a
- *   longer ceiling for a body already arriving.
+ *   waiting. `apiFetch` now gives web reads 20s to start answering (auth
+ *   endpoints exempt); the body then reads with no deadline, as on dev.
  *
  *   THE LOADING SCREEN'S FAILURE FACE. A failed load said "Loading" forever.
  *
@@ -73,15 +73,47 @@ describe("the web read deadline", () => {
     return new Response(stream, { status: 200, headers: { "Content-Type": "application/json" } });
   }
 
-  it("ends a body that never finishes as a failed read, after the long body ceiling", async () => {
+  it("ends a read whose server never starts answering at 20s", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("fetch", vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")));
+      })));
+      const { apiFetch } = await import("../src/lib/api/transport");
+      const reading = apiFetch("/api/inspirations");
+      const settled = expect(reading, "a server that never answered kept the read open").rejects.toBeDefined();
+      await vi.advanceTimersByTimeAsync(20_000);
+      await settled;
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("puts no deadline on a body once headers are in, as on dev", async () => {
     vi.useFakeTimers();
     try {
       vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => stalledBody(init)));
       const { apiFetch } = await import("../src/lib/api/transport");
-      const reading = apiFetch("/api/inspirations");
-      const settled = expect(reading, "a stalled body never ended").rejects.toBeDefined();
-      await vi.advanceTimersByTimeAsync(120_000);
-      await settled;
+      const response = await apiFetch("/api/inspirations");
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(vi.getTimerCount(), "a body deadline is still armed").toBe(0);
+      expect(response.status).toBe(200);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("exempts the auth endpoints: /auth/me waits as on dev, so a slow server never signs anyone out", async () => {
+    vi.useFakeTimers();
+    try {
+      let answer!: (response: Response) => void;
+      const fetch = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
+        answer = resolve;
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")));
+      }));
+      vi.stubGlobal("fetch", fetch);
+      const { apiFetch } = await import("../src/lib/api/transport");
+      const asked = apiFetch("/api/auth/me");
+      await vi.advanceTimersByTimeAsync(60_000);
+      answer(new Response('{"account":null}', { status: 200 }));
+      expect((await asked).status, "/auth/me was cut off by the read deadline").toBe(200);
+      expect((fetch.mock.calls[0]![1] as RequestInit | undefined)?.signal).toBeUndefined();
     } finally { vi.useRealTimers(); }
   });
 
@@ -106,18 +138,18 @@ describe("the web read deadline", () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it("releases its timer and the caller's abort listener once the body is in", async () => {
+  it("releases its timer once headers are in, and the caller's abort still reaches the read", async () => {
     vi.useFakeTimers();
     try {
-      vi.stubGlobal("fetch", vi.fn(async () => new Response('{"ok":true}', { status: 200 })));
+      const fetch = vi.fn(async () => new Response('{"ok":true}', { status: 200 }));
+      vi.stubGlobal("fetch", fetch);
       const { apiFetch } = await import("../src/lib/api/transport");
       const controller = new AbortController();
-      const added = vi.spyOn(controller.signal, "addEventListener");
-      const removed = vi.spyOn(controller.signal, "removeEventListener");
       const response = await apiFetch("/api/inspirations", { signal: controller.signal });
       expect(await response.json()).toEqual({ ok: true });
-      expect(vi.getTimerCount(), "the 20s deadline outlived its request").toBe(0);
-      expect(removed.mock.calls.map((call) => call[1])).toEqual(added.mock.calls.map((call) => call[1]));
+      expect(vi.getTimerCount(), "the 20s deadline outlived its headers").toBe(0);
+      controller.abort();
+      expect((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].signal?.aborted, "the caller's abort no longer reaches the read").toBe(true);
     } finally { vi.useRealTimers(); }
   });
 

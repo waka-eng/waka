@@ -15,33 +15,35 @@ export const nativeSession = new NativeSession({
  * a bare `fetch`, and a browser waits for a server that accepted the
  * connection and then said nothing for as long as the socket stays open, so
  * every screen waiting on a read waited with it, with no "Try again" for a
- * request that had not yet failed. Web READS now get the same 20s to start
- * answering (time to first byte) and a much longer ceiling for a body that is
- * already arriving. Writes are untouched: one that has been sent may already
- * be committing. A stall ends as a thrown network error, never a quiet empty
- * success. 401s pass through exactly as before.
+ * request that had not yet failed. Web READS now get the same 20s for the
+ * server to START answering (time to response headers); the body then reads
+ * as on dev, with no deadline, so a slow but progressing download is never
+ * cut off. Writes are untouched (one that has been sent may already be
+ * committing), and so is every auth endpoint: `/auth/me` waits as on dev, so
+ * a slow server can never turn a valid session into "signed out". 401s pass
+ * through exactly as before.
  */
 const READ_FIRST_BYTE_MS = 20_000;
-const READ_BODY_MS = 120_000;
+function isAuthEndpoint(url: string): boolean {
+  try { return new URL(url, window.location.href).pathname.startsWith('/api/auth/'); } catch { return false; }
+}
 async function webRead(url: string, init: RequestInit): Promise<Response> {
   const method = (init.method ?? 'GET').toUpperCase();
-  if (method !== 'GET' && method !== 'HEAD') return fetch(url, init);
+  if ((method !== 'GET' && method !== 'HEAD') || isAuthEndpoint(url)) return fetch(url, init);
   const controller = new AbortController();
   const abort = () => controller.abort(init.signal?.reason);
   if (init.signal?.aborted) abort();
   else init.signal?.addEventListener('abort', abort, { once: true });
-  const timedOut = () => controller.abort(new DOMException('Request timed out', 'TimeoutError'));
-  let timeout = setTimeout(timedOut, READ_FIRST_BYTE_MS);
+  const timeout = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), READ_FIRST_BYTE_MS);
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
-    clearTimeout(timeout);
-    timeout = setTimeout(timedOut, READ_BODY_MS);
-    const empty = method === 'HEAD' || response.status === 204 || response.status === 205 || response.status === 304;
-    const body = empty ? null : await response.arrayBuffer();
-    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
-  } finally {
-    clearTimeout(timeout);
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
     init.signal?.removeEventListener('abort', abort);
+    throw err;
+  } finally {
+    /* only the time-to-headers deadline ends here; the caller's own abort
+       stays wired so it can still cancel the body read that follows */
+    clearTimeout(timeout);
   }
 }
 

@@ -808,7 +808,7 @@ describe("the read deadline", () => {
         init.signal?.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")));
       }));
       vi.stubGlobal("fetch", fetch);
-      const reading = fetchCurrentViewer();
+      const reading = fetchInspirationPage({ profile: "profile-1" });
       const settled = expect(reading).rejects.toMatchObject({ status: 0 });
       await vi.advanceTimersByTimeAsync(20_000);
       await settled;
