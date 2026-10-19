@@ -1788,9 +1788,9 @@ button.jar-tile-face,
 .jar-thing-share .jar-share-inline:focus { outline:none; background:var(--share-fill); color:var(--share-ink); caret-color:var(--share-ink); overflow:hidden; box-shadow:none; }
 /* After a failed draw the card under the field is stale, so the field shows
    its own words on the bubble until the card draws again; before any card
-   has drawn, it sits on a blank night. */
+   has drawn, it sits on the page's own ground. */
 .jar-thing-share .jar-share-inline--live { background:var(--share-fill); color:var(--share-ink); caret-color:var(--share-ink); }
-.jar-share-card--blank { background:#070d16; }
+.jar-share-card--blank { background:var(--w-ground); }
 .jar-share-hint-line { display:flex; justify-content:center; align-items:center; gap:var(--sp-8); margin:0; min-height:var(--sp-24); text-align:center; }
 .jar-share-hint-line .jar-share-link { min-height:0; padding:0; font-size:var(--t-meta); }
 .jar-thing-share footer { border-top:0; padding-top:0; justify-content:center; }
