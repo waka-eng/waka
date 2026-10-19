@@ -12,17 +12,17 @@
  * matters here is what the sheet ASKS the renderer for. `lib/api` is mocked
  * for `fetchAttachmentUrl`, the seam a photo is read through. `URL` supplies
  * blob handles, `navigator` a share sheet and a clipboard, `ClipboardItem`
- * the clipboard's image wrapper, and `fetch` the photo's bytes.
- * Everything else — the editing, the actions — is real.
+ * the clipboard's image wrapper, and `fetch` the photo's bytes. For the
+ * touch-screen editor, `matchMedia` stands in for a coarse pointer,
+ * `getComputedStyle` for the size the stylesheet's 16px floor gives the
+ * field, and `getBoundingClientRect` for the card's shown width — jsdom has
+ * no pointer, applies no stylesheet and lays nothing out; the floor itself
+ * is read off chrome.css. Everything else — the editing, the actions — is
+ * real.
  *
  * Founder, 2026-10-16: one design (the first, dark and square), unsigned,
  * no looks row and no name switch; the words edited in the bubble itself
  * rather than in a box under the card; a plain × to close; two plain icons.
- *
- * The touch-screen editor is checked two ways: `window.matchMedia` and
- * `getComputedStyle` are stubbed to stand in for a phone (the floor the
- * stylesheet gives the field) and the card's measured width, and the floor
- * itself is read off chrome.css, since jsdom applies no stylesheet.
  */
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";

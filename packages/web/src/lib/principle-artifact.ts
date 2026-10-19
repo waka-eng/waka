@@ -247,8 +247,8 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
        and its visible top ~0.17 of the box down (measured on this renderer). */
     const homeBeing=H.body/0.855;
     const homeGroupH=homeBubbleH+H.tail+H.toBody+homeBeing*0.8;
-    const room={top:margin+proofSpace,bottom:height-margin-40};
-    const k=Math.min(2.6,(width-margin*2)/homeW,(room.bottom-room.top)/homeGroupH);
+    const space={top:margin+proofSpace,bottom:height-margin-40};
+    const k=Math.min(2.6,(width-margin*2)/homeW,(space.bottom-space.top)/homeGroupH);
     if(k<1.2)throw new ArtifactLayoutError('too_long');
     const size=H.size*k;
     selected={size,height:lineCount*H.line*k,items:homeItems};
@@ -275,8 +275,8 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
     /* The home group — bubble, tail, gap, creature — centred in the room
        between the date line and the mark. */
     const k=said.s,groupH=bubbleH+(6+26)*k+being*(0.8-0.17);
-    const roomTop=margin+proofSpace,roomBottom=height-margin-40;
-    bubbleY=Math.round(roomTop+Math.max(0,(roomBottom-roomTop-groupH)/2));
+    const spaceTop=margin+proofSpace,spaceBottom=height-margin-40;
+    bubbleY=Math.round(spaceTop+Math.max(0,(spaceBottom-spaceTop-groupH)/2));
     beingTop=Math.round(bubbleY+bubbleH+(6+26)*k-being*0.17);
   }else{
     const free=Math.max(0,bubbleBottomMax-bubbleH-bubbleTop);
