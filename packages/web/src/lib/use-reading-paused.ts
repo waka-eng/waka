@@ -11,9 +11,12 @@
  * ONE RULE: THE LATEST GET IS THE STATE. It asks once when enabled, on focus,
  * and — only while the reading is paused — every 30 seconds. A failed GET
  * changes nothing (a notice that was showing stays). Retry is one POST; when
- * it succeeds, one fresh GET decides what shows. Every Retry bumps a counter,
- * and a GET that started before the latest Retry is ignored when it lands, so
- * an answer from before the restart can never overwrite one from after it.
+ * it succeeds, one fresh GET decides what shows. A Retry bumps a counter when
+ * it is pressed and again when its POST answers, and a GET that started under
+ * an older value is ignored when it lands, so an answer from before the
+ * restart — or sent while the restart was still out — can never overwrite the
+ * one after it. The counter lives at module level, so a Retry pressed on Home
+ * also invalidates a GET in flight in the principles overlay, and back.
  *
  * A FAILED CHECK IS NOT A PAUSE. If the status cannot be read the notice does
  * not appear because of it — "reading is paused" is a claim about the
@@ -32,20 +35,22 @@ const PAUSED_RECHECK_MS = 30_000;
 /** How long a retry may go unanswered before the button says so. */
 const STILL_TRYING_AFTER_MS = 20_000;
 
+/* Shared by every mounted `useReadingPaused`: a GET that started under an
+   older value is stale. */
+let retryCounter = 0;
+
 export function useReadingPaused(enabled: boolean) {
   const [status, setStatus] = useState<ApiPrincipleStatus | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [stillTrying, setStillTrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState<null | 'failed'>(null);
   const alive = useRef(true);
-  /* Bumped by every Retry: a GET that started under an older value is stale. */
-  const retries = useRef(0);
   useEffect(() => () => { alive.current = false; }, []);
 
   const check = useCallback(() => {
-    const startedAt = retries.current;
+    const startedAt = retryCounter;
     fetchPrincipleStatus()
-      .then((next) => { if (alive.current && startedAt === retries.current) setStatus(next); })
+      .then((next) => { if (alive.current && startedAt === retryCounter) setStatus(next); })
       .catch(() => undefined);
   }, []);
 
@@ -66,11 +71,11 @@ export function useReadingPaused(enabled: boolean) {
   }, [paused, check]);
 
   const retry = useCallback(() => {
-    retries.current += 1;
+    retryCounter += 1;
     setRetrying(true); setRetryFailed(null); setStillTrying(false);
     const slow = window.setTimeout(() => { if (alive.current) setStillTrying(true); }, STILL_TRYING_AFTER_MS);
     settleAtLeast(retryPausedReading())
-      .then(() => { if (alive.current) check(); })
+      .then(() => { retryCounter += 1; if (alive.current) check(); })
       .catch(() => { if (alive.current) setRetryFailed('failed'); })
       .finally(() => { window.clearTimeout(slow); if (alive.current) { setRetrying(false); setStillTrying(false); } });
   }, [check]);

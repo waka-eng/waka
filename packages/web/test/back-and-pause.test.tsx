@@ -84,6 +84,55 @@ describe("a paused reading", () => {
     expect(container!.textContent, "a GET from before the Retry put the notice back").toBe("");
   });
 
+  /* A GET sent while the Retry POST is still out started after the press,
+     so the press alone cannot mark it stale: the POST's answer bumps again. */
+  it("ignores a GET sent while the Retry POST was out, even when it lands last", async () => {
+    vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
+    vi.mocked(retryPausedReading).mockReset().mockResolvedValue(status(false));
+    render(createElement(Page));
+    await settle();
+    let answerDuring!: (value: ReturnType<typeof status>) => void;
+    vi.useFakeTimers();
+    try {
+      await act(async () => { container!.querySelector("button")!.click(); });
+      vi.mocked(fetchPrincipleStatus).mockImplementationOnce(() => new Promise((resolve) => { answerDuring = resolve; }))
+        .mockResolvedValue(status(false));
+      await act(async () => { window.dispatchEvent(new Event("focus")); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
+      expect(container!.textContent).toBe("");
+      await act(async () => { answerDuring(status(true)); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    } finally { vi.useRealTimers(); }
+    expect(container!.textContent, "a GET sent during the Retry put the notice back").toBe("");
+  });
+
+  /* Home and the principles overlay each mount the hook; a Retry in one
+     invalidates a GET in flight in the other. */
+  it("a Retry in one notice invalidates a GET in flight in another", async () => {
+    vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
+    vi.mocked(retryPausedReading).mockReset().mockResolvedValue(status(false));
+    function Two() { return createElement("div", null, createElement(Page), createElement(Page)); }
+    render(createElement(Two));
+    await settle();
+    expect(container!.querySelectorAll("button").length).toBe(2);
+    const held: Array<(value: ReturnType<typeof status>) => void> = [];
+    const hold = () => new Promise<ReturnType<typeof status>>((resolve) => { held.push(resolve); });
+    vi.mocked(fetchPrincipleStatus).mockImplementationOnce(hold).mockImplementationOnce(hold).mockResolvedValue(status(false));
+    vi.useFakeTimers();
+    try {
+      await act(async () => { window.dispatchEvent(new Event("focus")); });
+      expect(held.length).toBe(2);
+      await act(async () => { container!.querySelector("button")!.click(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
+      await act(async () => { window.dispatchEvent(new Event("focus")); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(container!.textContent).toBe("");
+      await act(async () => { held.forEach((answer) => answer(status(true))); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    } finally { vi.useRealTimers(); }
+    expect(container!.textContent, "the other notice's pre-Retry GET put it back").toBe("");
+  });
+
   it("re-checks every 30s while paused, and a failed check leaves the notice up", async () => {
     vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
     vi.useFakeTimers();
