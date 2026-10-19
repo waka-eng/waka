@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/api/conversations` supplies owned
- * records and lost responses; `Storage.setItem` simulates a quota failure.
+ * records and lost responses; `lib/api` supplies `fetchPrinciples` for a chat
+ * opened from a principle; `Storage.setItem` simulates a quota failure.
  * `matchMedia` and `visualViewport` supply mobile and keyboard metrics;
  * DOM scroll geometry supplies a measurable viewport for the arrival test.
  * Real UI, owner-scoped drafts and recovery run; reply text is synthetic.
@@ -25,8 +26,10 @@ import {fileURLToPath} from 'node:url';
 import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ConversationPanel} from '../src/components/ConversationPanel';
+import {fetchPrinciples} from '../src/lib/api';
 import {createConversation,fetchConversation,fetchConversationReply,listConversations,saveConversationMessage,stopConversationReply,type ApiConversation,type ConversationReplyState} from '../src/lib/api/conversations';
 import {readConversationDrafts} from '../src/lib/conversation-drafts';
+vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),fetchPrinciples:vi.fn()}));
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),stopConversationReply:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
 const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn();
 /* THE SAME JOB, DONE BY THE RULE THAT CAN DO IT SYMMETRICALLY.
@@ -183,6 +186,18 @@ it('re-checks every send guard after the pre-flight read, and sends nothing if t
   await act(async()=>{answer({profileId:scope.profileId,conversations:[],generationEnabled:false});});
   expect(createConversation).not.toHaveBeenCalled();
   expect(host.querySelector('textarea')!.value).toBe('Other words');
+});
+/* Review: a chat opened from a principle whose first read failed must load
+   the principle before Send can go; unavailable, Send stays off and says so. */
+it('loads the focus principle in the pre-flight, and sends nothing when it is unavailable',async()=>{
+  vi.mocked(listConversations).mockRejectedValueOnce(new Error('Offline')).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:false});
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);              // the principle is gone
+  await act(async()=>root.render(<ConversationPanel scope={scope} id={null} initialPrincipleId="principle-1" locale="en-US" onChoose={choose}/>));
+  await type('About this principle');await click('Send');
+  expect(fetchPrinciples).toHaveBeenCalled();
+  expect(createConversation).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('This principle is no longer available.');
+  expect((host.querySelector('.chat-send') as HTMLButtonElement).disabled).toBe(true);
 });
 /* Review: the "Not sent" notice and its Retry stay until a send actually
    begins; a pre-flight whose guards bail must not wipe them. */

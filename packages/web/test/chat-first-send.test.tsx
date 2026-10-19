@@ -118,3 +118,20 @@ it('asks nobody to choose when there is no agent, and starts an ordinary chat', 
   await ask('Just me');
   expect(vi.mocked(createConversation).mock.calls[0]![5]).toBeUndefined();
 });
+
+/* Review: Send after a failed first read waits for the list; if who the chat
+   is with changed meanwhile (here the agent arrives), the press was for the
+   old company — nothing goes, and the next press uses who is there now. */
+it('sends nothing when who the chat is with changed during the pre-flight read, and uses the current company after', async()=>{
+  vi.mocked(listConversations).mockRejectedValueOnce(new Error('Offline'));
+  await render();
+  let answer!:(value:Awaited<ReturnType<typeof listConversations>>)=>void;
+  vi.mocked(listConversations).mockImplementationOnce(()=>new Promise(resolve=>{answer=resolve;}));
+  await ask('What do we each think?');                          // pre-flight in flight
+  withAgent.value={id:'3f6c1a52-8d0e-4b7a-9c21-5e4f7a8b9c0d',name:'Demo Agent'};
+  await render();                                               // the agent arrives meanwhile
+  await act(async()=>{answer({profileId:'profile',conversations:[],generationEnabled:true});});
+  expect(createConversation).not.toHaveBeenCalled();
+  await send();
+  expect(createConversation).toHaveBeenCalledOnce();
+});

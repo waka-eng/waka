@@ -277,7 +277,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
   const awaitingReply=replyPending||replyUnconfirmed;
   // The send guards as they stand now, for code that resumes after an await.
-  const guards=useRef({loading,awaitingReply,storageFailed,focusFailed,conversation});guards.current={loading,awaitingReply,storageFailed,focusFailed,conversation};
+  const guards=useRef({loading,awaitingReply,storageFailed,focusFailed,conversation,talkWith,agent,focusPrinciple});guards.current={loading,awaitingReply,storageFailed,focusFailed,conversation,talkWith,agent,focusPrinciple};
   useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
     if(prependScroll.current){const previous=prependScroll.current;node.scrollTop=previous.top+node.scrollHeight-previous.height;prependScroll.current=null;return;}
     if(saved){nearBottom.current=saved.nearBottom;node.scrollTop=saved.nearBottom?node.scrollHeight:saved.top;restoredScroll.current=null;}
@@ -394,26 +394,44 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        words never left: the draft is NOT marked pending, so it stays
        editable, and the notice says it was not sent and offers to retry. */
     let replies=generationEnabled;
-    const pressed=draftRef.current;
-    if(replies===null){
+    const pressed=draftRef.current,pressedWith={talkWith,agent:agent?.id};
+    /* THE PRE-FLIGHT, for what a failed first read left unknown: whether
+       replies are on, and — for a chat opened from a principle — the
+       principle itself (review: without it, Send would open the chat with
+       no principle under it). */
+    const needFocus=!id&&Boolean(initialPrincipleId)&&!guards.current.focusPrinciple;
+    if(replies===null||needFocus){
       const owner=lifecycle.current;working.current=true;setBusy(true);
-      try{const listed=await run(signal=>listConversations(scope.profileId,signal));if(!mine(owner))return;replies=listed.generationEnabled;setGenerationEnabled(replies);}
+      try{
+        if(replies===null){const listed=await run(signal=>listConversations(scope.profileId,signal));if(!mine(owner))return;replies=listed.generationEnabled;setGenerationEnabled(replies);}
+        if(needFocus){
+          const available=await run(signal=>fetchPrinciples({profile:scope.profileId},signal));if(!mine(owner))return;
+          const focus=available.find(row=>row.id===initialPrincipleId)??null;
+          setFocusPrinciple(focus);setFocusFailed(!focus);
+          // Unavailable: Send stays off and the existing notice says so.
+          if(!focus)return;
+        }
+      }
       /* A JOURNALLED message is never "not sent" on a failed pre-flight
          (review): an earlier send under its id may have reached the server.
          Only words that were never sent at all are "not sent". */
       catch{if(mine(owner)){const held=Boolean(draftRef.current?.pending);setError(say(held?'worldConversationNotConfirmed':'worldConversationNotSent'));setUnsent(!held);}return;}
       finally{working.current=false;if(mine(owner))setBusy(false);}
-      /* EVERY SEND GUARD AGAIN, AFTER THE AWAIT (review): the list read takes
-         time, and in it the words may have been cleared or changed, an upload
-         begun, a reply started, a reload begun. The press was for the draft
-         as it stood; anything else is not what the person sent. State read
-         through `guards`, not this render's stale closure. */
+      /* EVERY SEND GUARD AGAIN, AFTER THE AWAIT (review): the reads take time,
+         and in them the words may have been cleared or changed, an upload
+         begun, a reply started, a reload begun — or who the chat is with
+         changed. The press was for the draft as it stood; anything else is
+         not what the person sent. State read through `guards`, not this
+         render's stale closure. */
       const g=guards.current,now=draftRef.current;
       if(now!==pressed||!now||!now.content.trim()&&!now.attachments?.length||uploadsRef.current.length||working.current||
-        g.loading||g.awaitingReply||g.storageFailed||g.focusFailed||(id&&!g.conversation))return;
+        g.loading||g.awaitingReply||g.storageFailed||g.focusFailed||(id&&!g.conversation)||
+        g.talkWith!==pressedWith.talkWith||g.agent?.id!==pressedWith.agent)return;
     }
     if(!draftRef.current)return;
-    const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID(),...(current.talkWith?{}:agent&&talkWith!=='mine'?{talkWith,agentId:agent.id}:{})}:{})};
+    // Who the chat is with, as it stands now (equal to the press, by the check above).
+    const withNow=guards.current;
+    const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID(),...(current.talkWith?{}:withNow.agent&&withNow.talkWith!=='mine'?{talkWith:withNow.talkWith,agentId:withNow.agent.id}:{})}:{})};
     if(!keep(intent))return;const owner=lifecycle.current;working.current=true;setBusy(true);
     // The notice clears only now, with the send actually begun (review): a pre-flight that bails keeps it, and its Retry.
     setError(null);setUnsent(false);nearBottom.current=true;
