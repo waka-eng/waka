@@ -36,6 +36,7 @@ export function useReadingPaused(enabled: boolean) {
   const [retrying, setRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState<null | 'failed'>(null);
   const alive = useRef(true);
+  const heard = useRef(0);
   useEffect(() => () => { alive.current = false; }, []);
 
   /* NO REQUEST OF ITS OWN WHEN ONE WAS JUST MADE. `PrincipleRead` reads the
@@ -52,7 +53,7 @@ export function useReadingPaused(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     alive.current = true;
-    const unsubscribe = onPrincipleStatus((next) => { if (alive.current) setStatus(next); });
+    const unsubscribe = onPrincipleStatus((next) => { heard.current += 1; if (alive.current) setStatus(next); });
     check();
     const again = () => { if (!document.hidden) check(); };
     window.addEventListener('focus', again);
@@ -64,8 +65,13 @@ export function useReadingPaused(enabled: boolean) {
      presses, since the server keeps no cooldown. */
   const retry = useCallback(() => {
     setRetrying(true); setRetryFailed(null);
-    settleAtLeast(withPostDeadline((signal) => retryPausedReading(signal)))
-      .then((next) => { if (alive.current) setStatus(next); })
+    /* AFTER THE 3s HOLD, THE POST'S ANSWER APPLIES ONLY IF NOTHING NEWER WAS
+       HEARD WHILE IT WAITED: a poll or another reader's answer published
+       during the hold is fresher than the POST's, and must not be put back
+       under it. (`heard` counts every status the broadcast delivered.) */
+    let heardAtAnswer = -1;
+    settleAtLeast(withPostDeadline((signal) => retryPausedReading(signal)).then((next) => { heardAtAnswer = heard.current; return next; }))
+      .then((next) => { if (alive.current && heard.current === heardAtAnswer) setStatus(next); })
       .catch(() => { if (alive.current) setRetryFailed('failed'); })
       .finally(() => { if (alive.current) setRetrying(false); });
   }, []);

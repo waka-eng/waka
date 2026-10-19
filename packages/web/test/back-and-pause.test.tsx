@@ -61,6 +61,27 @@ describe("a paused reading", () => {
     expect(container!.textContent).toBe("");
   });
 
+  it("keeps a status heard during the Retry hold over the POST's older answer", async () => {
+    vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(true));
+    vi.mocked(retryPausedReading).mockReset().mockResolvedValue(status(false));
+    render(createElement(Page));
+    await settle();
+    const { principleStatusFor } = await vi.importActual<typeof import("../src/lib/api/principles")>("../src/lib/api/principles");
+    vi.useFakeTimers();
+    try {
+      await act(async () => { container!.querySelector("button")!.click(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      /* another reader publishes a newer answer while the button holds */
+      const { requestPrincipleRead } = await vi.importActual<typeof import("../src/lib/api/principles")>("../src/lib/api/principles");
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: status(true) }), { status: 202 })));
+      await act(async () => { await requestPrincipleRead(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_500); });
+    } finally { vi.useRealTimers(); vi.unstubAllGlobals(); }
+    expect(container!.textContent, "the POST's answer was put back over a newer one").toContain("Reading is paused");
+    /* drop the status this case published into the shared cache */
+    principleStatusFor("after-hold-case"); principleStatusFor(null);
+  });
+
   it("stays down beside the principles line when that line already says it failed, so there is one Retry", async () => {
     vi.mocked(fetchPrincipleStatus).mockResolvedValue({ ...status(true), phase: "failed" });
     function Home() {
