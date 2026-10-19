@@ -2740,22 +2740,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       if (at.closest?.(".jar-dial") || at.closest?.(".jar-when")) return;
       setTimeOpen(false);
     };
-    /* AND ESCAPE, which is how a keyboard looks away. The rail answered
-       pointers only, so a person who opened it with Enter had no key that
-       put it down again — Tab walked past it and left it standing. */
-    /* CAPTURE PHASE, AND IT STOPS THERE. The rail is the topmost thing an
-       Escape can mean while it is up; heard first and stopped, it closes the
-       rail only — review (or anything else listening for Escape) stays as
-       it was. */
-    const key = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setTimeOpen(false);
-    };
     window.addEventListener("pointerdown", away, true);
-    window.addEventListener("keydown", key, true);
-    return () => { window.removeEventListener("pointerdown", away, true); window.removeEventListener("keydown", key, true); };
+    return () => window.removeEventListener("pointerdown", away, true);
   }, [timeOpen]);
 
   /* ═══ `loadGroup` AND THE WHOLE SHARED-READ MACHINERY ARE GONE ═════════

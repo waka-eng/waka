@@ -451,23 +451,6 @@ describe("how the list opens", () => {
     expect(rows().length, "hovering `now` opened nothing").toBeGreaterThan(0);
   });
 
-  /* Escape with the rail up closes the rail ONLY: it is heard first (capture
-     phase) and stopped, so a handler further along — review's, which ends
-     the sitting on Escape — never hears it. */
-  it("closes the rail on Escape before anything else hears that Escape", async () => {
-    await act(async () => { arrive("mouse"); });
-    expect(rows().length).toBeGreaterThan(0);
-    const later = vi.fn();
-    window.addEventListener("keydown", later);
-    try {
-      await act(async () => {
-        document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
-      });
-    } finally { window.removeEventListener("keydown", later); }
-    expect(rows().length, "Escape left the rail up").toBe(0);
-    expect(later, "the rail's Escape also reached the next handler (review's)").not.toHaveBeenCalled();
-  });
-
   it("leaves the list up when the pointer travels to it", async () => {
     /* the whole reason the 2026-08-30 hover was removed: the list is not
        under the word, it is beside it, so a hover that closes on leaving is
