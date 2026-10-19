@@ -26,10 +26,11 @@ it('accepts direct inspiration links, ignores malformed metadata and refuses inv
   expect(readViewLocation('/w/%ZZ')).toBeNull();
   expect(readViewLocation('/unrelated')).toBeNull();
 });
-/* An `open` this build does not know was dropped silently and opened plain
-   home; it is a dead link now, and Home says so in words. */
-it('refuses an open page this build does not know, and keeps the ones it does', () => {
-  expect(readViewLocation('/', '?open=reading')).toBeNull();
+/* An `open` this build does not know is absent, like a blank one: the rest
+   of the address (the wall, the section) still opens. */
+it('treats an open page this build does not know as absent, keeps the rest, and keeps the ones it does', () => {
+  expect(readViewLocation('/', '?open=reading')).toMatchObject({ open: null });
+  expect(readViewLocation('/w/me', '?open=reading&view=sky')).toMatchObject({ open: null, section: 'sky' });
   expect(readViewLocation('/', '?open=saves')).toMatchObject({ open: 'saves' });
   expect(readViewLocation('/', '?open=claims')).toMatchObject({ open: 'claims' });
 });
