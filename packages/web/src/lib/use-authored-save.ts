@@ -164,7 +164,9 @@ export function useAuthoredSave(options: {
           localStorage.removeItem(key + intent.requestId);
           intentRef.current = null; setPending(null); setPhase('removed');
         } catch { setPhase('storage_error'); }
-      } else if (attempted && error instanceof ApiError && error.status === 400 && !intentRef.current?.acknowledged) {
+      } else if (attempted && error instanceof ApiError && !intentRef.current?.acknowledged &&
+        (error.status === 400 || (error.status === 409 && error.code === 'save_request_conflict'))) {
+        // Both are definitive: this id can never land as written. Offer the words back.
         const validationMessage = [error.fieldErrors?.text?.[0], error.fieldErrors?.answer?.[0], error.fieldErrors?.question?.[0]].find((value) => typeof value === 'string')?.slice(0, 180);
         const rejected = { ...intent, rejected: true, validationMessage };
         try { persist(key, rejected); } catch { /* the original immutable intent is still retained */ }

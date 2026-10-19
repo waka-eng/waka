@@ -254,6 +254,17 @@ it('allows editing only after a confirmed validation rejection, never after an a
   expect(latest.pending?.requestId).toBe(pending); expect(records()).toHaveLength(1);
 });
 
+it('treats a request id already used for different content as a refusal, not an uncertain save', async () => {
+  vi.mocked(createInspiration).mockRejectedValue(new ApiError({ status: 409, code: 'save_request_conflict', message: 'Used for different content' }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  expect(latest.phase).toBe('rejected');
+  await act(async () => root.unmount()); root = createRoot(host);
+  await act(async () => root.render(<Probe />));
+  expect(latest.phase).toBe('rejected'); expect(createInspiration).toHaveBeenCalledOnce(); // refused journals are not re-sent
+  await act(async () => { latest.editRejected(); });
+  expect(records()).toHaveLength(0); expect(latest.pending).toBeNull();
+});
+
 it('does not submit corrupt pending data; an explicit reset retains uninterpreted recovery bytes', async () => {
   vi.mocked(createInspiration).mockRejectedValue(new Error('Ambiguous response'));
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
