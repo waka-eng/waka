@@ -52,33 +52,54 @@ describe("a paused reading", () => {
     await settle();
     expect(container!.textContent).toContain("Reading is paused — your saves are safe.");
     const retry = [...container!.querySelectorAll("button")].find((b) => b.textContent === "Retry")!;
+    vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(false));
     vi.useFakeTimers();
     try {
       await act(async () => { retry.click(); });
       await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
     } finally { vi.useRealTimers(); }
     expect(retryPausedReading).toHaveBeenCalledTimes(1);
-    expect(container!.textContent).toBe("");
+    expect(container!.textContent, "the fresh GET after the retry did not decide").toBe("");
   });
 
-  /* A retry the server took hides the notice at once, and one fresh GET a
-     few seconds later decides whether it comes back — no answer merging. */
-  it("hides the notice after a retry the server took, and lets one fresh GET 5s later decide", async () => {
+  /* ONE RULE: the latest GET is the state, and a GET that started before a
+     Retry is ignored when it lands. */
+  it("ignores a GET that started before the Retry, and takes the fresh one after it", async () => {
     vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
-    vi.mocked(retryPausedReading).mockReset().mockResolvedValue(status(true));
+    vi.mocked(retryPausedReading).mockReset().mockResolvedValue(status(false));
     render(createElement(Page));
     await settle();
-    const gets = vi.mocked(fetchPrincipleStatus).mock.calls.length;
+    let answerOld!: (value: ReturnType<typeof status>) => void;
+    vi.mocked(fetchPrincipleStatus).mockImplementationOnce(() => new Promise((resolve) => { answerOld = resolve; }))
+      .mockResolvedValue(status(false));
     vi.useFakeTimers();
     try {
+      await act(async () => { window.dispatchEvent(new Event("focus")); });
       await act(async () => { container!.querySelector("button")!.click(); });
       await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
-      expect(container!.textContent, "the notice stayed up after the retry was taken").toBe("");
-      expect(vi.mocked(fetchPrincipleStatus).mock.calls.length).toBe(gets);
-      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+      expect(container!.textContent).toBe("");
+      await act(async () => { answerOld(status(true)); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     } finally { vi.useRealTimers(); }
-    expect(vi.mocked(fetchPrincipleStatus).mock.calls.length, "no fresh GET after the retry").toBe(gets + 1);
-    expect(container!.textContent, "the fresh GET said still paused and the notice did not return").toContain("Reading is paused");
+    expect(container!.textContent, "a GET from before the Retry put the notice back").toBe("");
+  });
+
+  it("re-checks every 30s while paused, and a failed check leaves the notice up", async () => {
+    vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
+    vi.useFakeTimers();
+    try {
+      render(createElement(Page));
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(container!.textContent).toContain("Reading is paused");
+      const gets = vi.mocked(fetchPrincipleStatus).mock.calls.length;
+      vi.mocked(fetchPrincipleStatus).mockRejectedValue(new Error("offline"));
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_100); });
+      expect(vi.mocked(fetchPrincipleStatus).mock.calls.length, "no re-check while paused").toBe(gets + 1);
+      expect(container!.textContent, "a failed check took the notice down").toContain("Reading is paused");
+      vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(false));
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    } finally { vi.useRealTimers(); }
+    expect(container!.textContent).toBe("");
   });
 
   it("stays down beside the principles line when that line already says it failed, so there is one Retry", async () => {
@@ -109,6 +130,7 @@ describe("a paused reading", () => {
       expect(button()?.textContent).toBe("Still trying…");
       expect(button()?.disabled).toBe(true);
       expect(vi.mocked(retryPausedReading).mock.calls[0], "the retry was given an abort signal").toEqual([]);
+      vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(false));
       await act(async () => { answer(status(false)); });
       await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     } finally { vi.useRealTimers(); }

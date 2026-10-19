@@ -8,31 +8,27 @@
  * anything could be done. `GET /principles/status` now carries
  * `readingPaused`, and this hook is how home, principles and claims read it.
  *
- * It asks once when enabled and again whenever the tab regains focus, which
- * is when a person who walked away would come back to check. It does not
- * poll: a paused reading stays paused until somebody (or the server's own
- * recovery) restarts it, and asking every few seconds would only spend
- * requests to learn the same thing. It makes its own GET each time; there is
- * no status shared with other readers.
+ * ONE RULE: THE LATEST GET IS THE STATE. It asks once when enabled, on focus,
+ * and — only while the reading is paused — every 30 seconds. A failed GET
+ * changes nothing (a notice that was showing stays). Retry is one POST; when
+ * it succeeds, one fresh GET decides what shows. Every Retry bumps a counter,
+ * and a GET that started before the latest Retry is ignored when it lands, so
+ * an answer from before the restart can never overwrite one from after it.
  *
- * A FAILED CHECK IS NOT A PAUSE. If the status itself cannot be read the
- * notice stays down — the page has its own failure state for a dead server,
- * and "reading is paused" is a claim about the reading, not the network.
+ * A FAILED CHECK IS NOT A PAUSE. If the status cannot be read the notice does
+ * not appear because of it — "reading is paused" is a claim about the
+ * reading, not the network.
  *
- * RETRY. One POST per press, never aborted by the client. The button is
- * disabled while it is out (at least `RETRY_MIN_MS`), and after 20 seconds
- * with no answer it says "Still trying…" — the request is still allowed to
- * answer, and when it does the real result shows. A retry the server took
- * hides the notice at once and checks again with one fresh GET a few seconds
- * later (and on focus), which is what decides whether it comes back. There is
- * no merging of answers: the latest GET is the state.
+ * The POST is never aborted by the client: the button is disabled while it is
+ * out (at least `RETRY_MIN_MS`), says "Still trying…" after 20 seconds, and
+ * shows the real result when the answer comes.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchPrincipleStatus, retryPausedReading, type ApiPrincipleStatus } from './api';
 import { settleAtLeast } from './settle-at-least';
 
-/** After a retry the server took, how long before asking again. */
-const RECHECK_AFTER_RETRY_MS = 5_000;
+/** While paused, how often to ask again. */
+const PAUSED_RECHECK_MS = 30_000;
 /** How long a retry may go unanswered before the button says so. */
 const STILL_TRYING_AFTER_MS = 20_000;
 
@@ -41,17 +37,15 @@ export function useReadingPaused(enabled: boolean) {
   const [retrying, setRetrying] = useState(false);
   const [stillTrying, setStillTrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState<null | 'failed'>(null);
-  /* A retry the server took hides the notice until the next check says. */
-  const [restarted, setRestarted] = useState(false);
   const alive = useRef(true);
-  /* Only the latest check may set the state. */
-  const checkSeq = useRef(0);
+  /* Bumped by every Retry: a GET that started under an older value is stale. */
+  const retries = useRef(0);
   useEffect(() => () => { alive.current = false; }, []);
 
   const check = useCallback(() => {
-    const seq = ++checkSeq.current;
+    const startedAt = retries.current;
     fetchPrincipleStatus()
-      .then((next) => { if (alive.current && seq === checkSeq.current) { setStatus(next); setRestarted(false); } })
+      .then((next) => { if (alive.current && startedAt === retries.current) setStatus(next); })
       .catch(() => undefined);
   }, []);
 
@@ -64,21 +58,25 @@ export function useReadingPaused(enabled: boolean) {
     return () => { window.removeEventListener('focus', again); };
   }, [enabled, check]);
 
+  const paused = enabled && status?.readingPaused === true;
+  useEffect(() => {
+    if (!paused) return;
+    const timer = window.setInterval(check, PAUSED_RECHECK_MS);
+    return () => window.clearInterval(timer);
+  }, [paused, check]);
+
   const retry = useCallback(() => {
+    retries.current += 1;
     setRetrying(true); setRetryFailed(null); setStillTrying(false);
     const slow = window.setTimeout(() => { if (alive.current) setStillTrying(true); }, STILL_TRYING_AFTER_MS);
     settleAtLeast(retryPausedReading())
-      .then(() => {
-        if (!alive.current) return;
-        setRestarted(true);
-        window.setTimeout(() => { if (alive.current) check(); }, RECHECK_AFTER_RETRY_MS);
-      })
+      .then(() => { if (alive.current) check(); })
       .catch(() => { if (alive.current) setRetryFailed('failed'); })
       .finally(() => { window.clearTimeout(slow); if (alive.current) { setRetrying(false); setStillTrying(false); } });
   }, [check]);
 
   return {
-    paused: enabled && !restarted && status?.readingPaused === true,
+    paused,
     /** The principles line (`PrincipleRead`) is already showing a failure
         with its own Try again — which restarts the reading too — so a page
         that shows both says it once. */
