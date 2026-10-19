@@ -1405,12 +1405,7 @@ for one press. (Escape, the bar's rows and the note's own close already commit a
 
 **Status:** open. Both were tried on the branch and reverted to `origin/dev`'s behaviour in review.
 
-- **The photo ×'s tap target (audit f2afcbe2: 28×28 on a 390×844 phone).** A 44px invisible hit box
-  on `.jar-tile-x` does nothing: the photo tile clips overflow, so the box is cut back to the tile,
-  and centred on the × it also covered part of the photo (a press meant to open the photo would
-  remove it). A real fix needs the × to sit OUTSIDE the clipped tile (or the tile to stop clipping),
-  with its hit area reaching away from the picture.
-- **The attachment drawer's × (`.waka-drawer-items button`, 20×20).** Same family: a centred 44px
+- **The attachment drawer's × (`.waka-drawer-items button`, 20×20).** The photo ×'s family: a centred 44px
   hit box spilled onto the filename and the "upload failed" line beside it, so a tap meant to read
   either removed the attachment, with no undo. Back to dev's exact 20px target; a real fix needs room
   in the row (or an undo) before the target can grow.

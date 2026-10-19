@@ -122,8 +122,6 @@ describe("Cancel recording is its own bar item, beside Stop (review)", () => {
 describe("every small control takes a 44px press (#18)", () => {
   it("each named control carries a hit box at least 44 on each side", () => {
     const css = sheet("claims.css");
-    // Not the photo's ×: its tile clips overflow, so a box past it does nothing (known issue).
-    expect(rules(css, (s) => s === ".jar-tile-x::after")).toHaveLength(0);
     // Nor the attachment drawer's ×: a 44px box spilled onto the filename and
     // the failure line, removing the attachment with no undo (review).
     expect(rules(css, (s) => s === ".waka-drawer-items button::after")).toHaveLength(0);
@@ -132,6 +130,34 @@ describe("every small control takes a 44px press (#18)", () => {
       expect(box, control).toMatch(/width:\s*max\(100%,\s*44px\)/);
       expect(box, control).toMatch(/height:\s*max\(100%,\s*44px\)/);
     }
+  });
+  /* The photo's × (audit f2afcbe2: 28x28 on a 390x844 phone). An overlay box
+     was clipped by the tile and, centred, covered the photo. So the BUTTON is
+     44 and reaches 16px past the tile's top/right edge into the shelf's gap,
+     the tile no longer clips, and the gap and the shelf's end padding hold
+     that reach so it never lands on a neighbouring tile or scrolls the
+     notepad sideways. Measured in Chromium at 320-1440 wide: the whole 44
+     box takes the press, and no point of a photo or a file tile outside the
+     ×'s own 28px corner does. */
+  it("the photo's × is a 44px button that reaches away from the picture", () => {
+    const css = sheet("chrome.css");
+    const body = (selector: string) => rules(css, (s) => s === selector).map(([, b]) => b).join("\n");
+    expect(rules(css, (s) => s.startsWith(".jar-tile-x::"))).toHaveLength(0);
+    expect(body(".jar-tile"), "the tile clips the ×'s press").not.toMatch(/overflow\s*:\s*hidden/);
+    const x = rules(css, (s) => s === ".jar-tile-x" || s === ".jar-inspiration-composer .jar-tile-x")
+      .filter(([sel]) => !sel.includes("retry")).map(([, b]) => b).join("\n");
+    for (const prop of ["width", "height", "min-width", "min-height"]) {
+      expect(x, prop).toMatch(new RegExp(`(^|[^-])${prop}:\\s*var\\(--sp-44\\)`));
+    }
+    expect(x).toMatch(/top:\s*calc\(-1 \* var\(--sp-16\)\)/);
+    expect(x).toMatch(/right:\s*calc\(-1 \* var\(--sp-16\)\)/);
+    expect(x, "the drawn corner must stay where the old 28px one was").toMatch(/padding:\s*var\(--sp-16\) var\(--sp-16\) 0 0/);
+    expect(x, "a rounded 44 box hit-tests rounded").toMatch(/border-radius:\s*0;/);
+    const shelf = body(".jar-shelf");
+    expect(shelf).toMatch(/gap:\s*calc\(var\(--sp-16\) \+ 1px\)/);
+    expect(shelf).toMatch(/padding:\s*0 var\(--sp-16\) 0 0/);
+    const tsx = readFileSync(resolve(STYLES, "..", "components/InspirationComposer.tsx"), "utf8");
+    expect(tsx).toContain('<span className="jar-tile-x-face" aria-hidden="true">×</span>');
   });
   it("the saves search input fills its 44px row", () => {
     const input = rules(sheet("claims.css"), (s) => s === ".waka-over-search").map(([, b]) => b).join("\n");

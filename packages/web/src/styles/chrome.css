@@ -1549,16 +1549,28 @@ body .login-shell .login-footer {
 .jar-shelf {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: var(--sp-8);
+  /* 16, AND 16 ON THE RIGHT: the room the ×'s press reaches into (see
+     `.jar-tile-x`). Its 44px box stands 16px past the tile's top and right
+     edge, so the gap is exactly that reach — it meets the next tile's edge
+     and never lands on it — and the end padding keeps the last column's
+     reach inside the shelf, so the scrolling notepad neither clips it nor
+     scrolls sideways for it. The margin above is the same 16 for the top
+     row. The extra pixel is for tiles whose width is fractional: at an
+     exact 16 the reach and the next tile met on a shared device pixel, and
+     the hit test gave that row of the neighbour's photo to the ×. */
+  gap: calc(var(--sp-16) + 1px);
   list-style: none;
   margin: var(--sp-16) 0 0;
-  padding: 0;
+  padding: 0 var(--sp-16) 0 0;
 }
 
 .jar-tile {
   position: relative;
   aspect-ratio: 1;
-  overflow: hidden;
+  /* NO CLIP HERE. The tile clipped its overflow, and that cut the ×'s press
+     back to the tile's own 28px corner. The rounding is carried by what
+     fills it instead (`img` and `.jar-tile-face` inherit the radius and clip
+     themselves), so the × alone may stand past the edge. */
   border-radius: 12px;
   /* THE TILE IS THE ONLY FILLED SHAPE ON THE PAGE, and it has to be: a
      photo needs a boundary or it bleeds into the ground, and a recording
@@ -1571,6 +1583,7 @@ body .login-shell .login-footer {
   display: block;
   width: 100%;
   height: 100%;
+  border-radius: inherit;
   object-fit: cover;
   image-orientation: from-image;
 }
@@ -1593,6 +1606,9 @@ body .login-shell .login-footer {
   line-height: 1.3;
   text-align: center;
   overflow-wrap: anywhere;
+  /* the clip the tile gave up, so a long link name stays in the square */
+  overflow: hidden;
+  border-radius: inherit;
 }
 
 button.jar-tile-face,
@@ -1643,27 +1659,20 @@ button.jar-tile-face,
 .jar-inspiration-composer .jar-tile-x,
 .jar-inspiration-composer .jar-tile-retry {
   position: absolute;
-  top: 0;
   display: grid;
   place-items: center;
-  /* 28, NOT 44. The product's corner size would be a third of an 84px tile
+  /* 28, NOT 44 — TO SEE. (The ×'s PRESS is 44; see its own block.) The product's corner size would be a third of an 84px tile
      and would read as a button parked on a photo rather than as a corner of
      it. 28 clears WCAG 2.5.8's 24x24 floor, which is the number that
      actually applies to a control inside a small item — 2.5.5's 44 is AAA
      and is met by the shelf's own spacing between tiles. */
-  width: 28px;
-  height: 28px;
   /* AND THE FLOOR, NOT JUST THE SIZE. `.jar-inspiration-composer button`
      sets `min-height`/`min-width: var(--sp-44)`, and a `width` that loses
      to a `min-width` is not a width — the first fix set both dimensions and
      left the floor standing, so these stayed 44px squares. Overriding a
      blanket rule means overriding every property it sets, which is the
      cost of having one. */
-  min-width: 28px;
-  min-height: 28px;
-  padding: 0;
   border: 0;
-  border-radius: 0 12px 0 12px;
   /* OVER A PHOTO, SO IT CARRIES ITS OWN GROUND. A bare glyph on an
      arbitrary image is legible or not depending on the image.
 
@@ -1681,10 +1690,47 @@ button.jar-tile-face,
   cursor: pointer;
 }
 
-.jar-tile-x,
-.jar-inspiration-composer .jar-tile-x { right: 0; }
 .jar-tile-retry,
-.jar-inspiration-composer .jar-tile-retry { left: 0; border-radius: 12px 0 12px 0; }
+.jar-inspiration-composer .jar-tile-retry {
+  top: 0;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 12px 0 12px 0;
+}
+
+/* THE ×'S PRESS IS 44, AND IT REACHES AWAY FROM THE PICTURE (audit
+   f2afcbe2: 28x28 on a 390x844 phone). The control itself grows — no
+   overlay box — and stands 16px past the tile's top and right edge, into
+   the shelf's gap; its padding is that reach. The ground and the glyph are
+   its child `.jar-tile-x-face`, so what you SEE is still the 28px corner on
+   the photo and the 16px band outside it is press only: nothing of the
+   picture is under the press that was not under it before. The button
+   stays square and bare — Chromium hit-tests a rounded border, so a radius
+   on the 44px box would cut its own press back. */
+.jar-tile-x,
+.jar-inspiration-composer .jar-tile-x {
+  top: calc(-1 * var(--sp-16));
+  right: calc(-1 * var(--sp-16));
+  width: var(--sp-44);
+  height: var(--sp-44);
+  min-width: var(--sp-44);
+  min-height: var(--sp-44);
+  padding: var(--sp-16) var(--sp-16) 0 0;
+  border-radius: 0;
+  background: none;
+}
+.jar-tile-x-face {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 0 12px 0 12px;
+  background: var(--waka-scrim);
+}
 
 /* A FILE THAT NEEDS ATTENTION, SAID BY THE TILE ITSELF. The sentence is on
    the control's `title` — one line of prose per broken file was most of
