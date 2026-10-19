@@ -1,12 +1,12 @@
 /** Deleting a signal reconciles the principles that cited it — real SQL, no model. */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
-import { createSignalRoutes } from "./signals.js";
+import { createSignalRoutes, deleteProfileSignal } from "./signals.js";
 
 let t: TestDatabase;
 let sequence = 0;
@@ -53,6 +53,33 @@ function app(owner: { profileId: string; accountId: string }) {
   return routes;
 }
 
+/**
+ * A principle edit's lock order — the principle row, then the profile's
+ * generation fence — held open while `act` runs on the app pool. The act must
+ * not take the fence and then wait on the principle (a deadlock); it may wait
+ * on the principle only after its own signal transaction has committed.
+ */
+async function racePrincipleEdit(profileId: string, principleId: string, signalId: string, act: () => Promise<unknown>) {
+  let acting: Promise<unknown> | undefined;
+  await t.sql.begin(async (edit) => {
+    await edit`SET LOCAL lock_timeout = '5s'`;
+    await edit`SELECT id FROM principles WHERE id=${principleId} FOR UPDATE`;
+    acting = act();
+    await vi.waitFor(async () => {
+      /* someone waits on THIS transaction (pg_locks, not pg_stat_activity:
+         the stats view is a snapshot frozen for the rest of the transaction) */
+      const [row] = await edit`SELECT count(*)::int AS n FROM pg_locks WHERE NOT granted
+        AND locktype = 'transactionid' AND transactionid::text = pg_current_xact_id()::text`;
+      expect(row!.n).toBeGreaterThan(0);
+    }, { timeout: 5000, interval: 20 });
+    /* the signal's own transaction committed before anything waited on the
+       principle — so it holds no fence while it waits */
+    expect(await edit`SELECT id FROM signals WHERE id=${signalId}`, "the signal change committed first").toHaveLength(0);
+    await edit`UPDATE generation_revisions SET revision = revision + 1 WHERE profile_id=${profileId}`;
+  });
+  return acting;
+}
+
 beforeAll(async () => {
   t = await createTestDatabase();
   const url = new URL(process.env.DB_CONNECTION_URL!);
@@ -87,5 +114,15 @@ describe("DELETE /api/signals/:signalId reconciles principles", () => {
     expect(response.status).toBe(200);
 
     expect(await t.sql`SELECT id FROM principles WHERE id=${principleId}`).toHaveLength(0);
+  });
+
+  it("does not deadlock against a concurrent principle edit", async () => {
+    const owner = await person();
+    const { principleId, signalIds } = await principleOnThreeSignals(owner.profileId, true);
+    const result = await racePrincipleEdit(owner.profileId, principleId, signalIds[0]!,
+      () => deleteProfileSignal(getDb(), { profileId: owner.profileId, signalId: signalIds[0]! }));
+    expect(result).toBe(true);
+    const [row] = await t.sql`SELECT unsupported_at FROM principles WHERE id=${principleId}`;
+    expect(row!.unsupported_at, "the reconcile still ran after the edit").not.toBeNull();
   });
 });

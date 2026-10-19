@@ -1,5 +1,5 @@
 /** Dismissing a claim is one atomic act that also reconciles principles — real SQL, no model. */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { getDb } from "../lib/db.js";
@@ -34,6 +34,33 @@ async function principleOnThreeSignals(profileId: string, locked: boolean) {
     await t.sql`INSERT INTO principle_signals(profile_id,principle_id,signal_id) VALUES (${profileId},${p.id},${id})`;
   }
   return { principleId: p.id as string, signalIds: ids };
+}
+
+/**
+ * A principle edit's lock order — the principle row, then the profile's
+ * generation fence — held open while `act` runs on the app pool. The act must
+ * not take the fence and then wait on the principle (a deadlock); it may wait
+ * on the principle only after its own signal transaction has committed.
+ */
+async function racePrincipleEdit(profileId: string, principleId: string, signalId: string, act: () => Promise<unknown>) {
+  let acting: Promise<unknown> | undefined;
+  await t.sql.begin(async (edit) => {
+    await edit`SET LOCAL lock_timeout = '5s'`;
+    await edit`SELECT id FROM principles WHERE id=${principleId} FOR UPDATE`;
+    acting = act();
+    await vi.waitFor(async () => {
+      /* someone waits on THIS transaction (pg_locks, not pg_stat_activity:
+         the stats view is a snapshot frozen for the rest of the transaction) */
+      const [row] = await edit`SELECT count(*)::int AS n FROM pg_locks WHERE NOT granted
+        AND locktype = 'transactionid' AND transactionid::text = pg_current_xact_id()::text`;
+      expect(row!.n).toBeGreaterThan(0);
+    }, { timeout: 5000, interval: 20 });
+    /* the signal's own transaction committed before anything waited on the
+       principle — so it holds no fence while it waits */
+    expect(await edit`SELECT id FROM signals WHERE id=${signalId} AND dismissed_at IS NOT NULL`, "the signal change committed first").toHaveLength(1);
+    await edit`UPDATE generation_revisions SET revision = revision + 1 WHERE profile_id=${profileId}`;
+  });
+  return acting;
 }
 
 beforeAll(async () => {
@@ -75,5 +102,15 @@ describe("dismissing a claim", () => {
     }
     const [row] = await t.sql`SELECT status, dismissed_at FROM signals WHERE id=${a}`;
     expect(row, "the claim was not half-dismissed").toMatchObject({ status: "active", dismissed_at: null });
+  });
+
+  it("does not deadlock against a concurrent principle edit", async () => {
+    const profileId = await person();
+    const { principleId, signalIds } = await principleOnThreeSignals(profileId, true);
+    const result = await racePrincipleEdit(profileId, principleId, signalIds[0]!,
+      () => dismissProfileSignal(getDb(), { profileId, signalId: signalIds[0]! }));
+    expect(result).not.toBeNull();
+    const [row] = await t.sql`SELECT unsupported_at FROM principles WHERE id=${principleId}`;
+    expect(row!.unsupported_at, "the reconcile still ran after the edit").not.toBeNull();
   });
 });

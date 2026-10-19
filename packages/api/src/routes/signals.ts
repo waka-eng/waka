@@ -804,8 +804,8 @@ export async function dismissProfileSignal(
   db: WakaDb,
   input: { profileId: string; signalId: string },
 ): Promise<SignalDetail | null> {
-  // One act: the dismissal, the disputes it settles and the principles it
-  // stops supporting commit together or not at all.
+  // One act: the dismissal and the disputes it settles commit together or
+  // not at all.
   const dismissed = await db.transaction(async (tx) => {
     const updated = await tx
       .update(signals)
@@ -826,15 +826,18 @@ export async function dismissProfileSignal(
       signalId: input.signalId,
       act: "dismiss",
     });
-    // A retired signal no longer supports principles: immediate state
-    // maintenance, the same reconcile every other loss of support runs.
-    await reconcilePrinciplesAfterSignalLoss(tx, {
-      profileId: input.profileId,
-      signalIds: [input.signalId],
-    });
     return true;
   });
   if (!dismissed) return null;
+
+  // A retired signal no longer supports principles. Reconciled AFTER the
+  // commit, each principle in its own transaction: inside the signal's, the
+  // signals trigger would hold the generation fence while waiting on a
+  // principle row — the reverse of a principle edit's order, a deadlock.
+  await reconcilePrinciplesAfterSignalLoss(db, {
+    profileId: input.profileId,
+    signalIds: [input.signalId],
+  });
 
   return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
 }
@@ -876,25 +879,24 @@ export async function deleteProfileSignal(
   input: { profileId: string; signalId: string },
 ): Promise<boolean> {
   // The delete cascades the signal's principle citations away, so the
-  // principles that cited it are read first and reconciled in the same
-  // transaction — immediate state maintenance, no model, no midnight wait.
-  return db.transaction(async (tx) => {
-    const citing = await tx
-      .selectDistinct({ principleId: principleSignals.principleId })
-      .from(principleSignals)
-      .where(and(eq(principleSignals.profileId, input.profileId), eq(principleSignals.signalId, input.signalId)));
-    const deleted = await tx
-      .delete(signals)
-      .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
-      .returning({ id: signals.id });
-    if (deleted.length === 0) return false;
-    await reconcilePrinciplesAfterSignalLoss(tx, {
-      profileId: input.profileId,
-      signalIds: [input.signalId],
-      principleIds: citing.map((row) => row.principleId),
-    });
-    return true;
+  // principles that cited it are read first and reconciled after the delete
+  // commits — each in its own transaction, principle before fence, the order
+  // a principle edit takes (inside the delete's transaction it would invert).
+  const citing = await db
+    .selectDistinct({ principleId: principleSignals.principleId })
+    .from(principleSignals)
+    .where(and(eq(principleSignals.profileId, input.profileId), eq(principleSignals.signalId, input.signalId)));
+  const deleted = await db
+    .delete(signals)
+    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+    .returning({ id: signals.id });
+  if (deleted.length === 0) return false;
+  await reconcilePrinciplesAfterSignalLoss(db, {
+    profileId: input.profileId,
+    signalIds: [input.signalId],
+    principleIds: citing.map((row) => row.principleId),
   });
+  return true;
 }
 
 // ---------------------------------------------------------------------------
