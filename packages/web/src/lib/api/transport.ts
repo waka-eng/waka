@@ -30,20 +30,28 @@ function isAuthEndpoint(url: string): boolean {
 async function webRead(url: string, init: RequestInit): Promise<Response> {
   const method = (init.method ?? 'GET').toUpperCase();
   if ((method !== 'GET' && method !== 'HEAD') || isAuthEndpoint(url)) return fetch(url, init);
-  const controller = new AbortController();
-  const abort = () => controller.abort(init.signal?.reason);
-  if (init.signal?.aborted) abort();
-  else init.signal?.addEventListener('abort', abort, { once: true });
-  const timeout = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), READ_FIRST_BYTE_MS);
+  /* The deadline has its own signal, combined with the caller's by
+     `AbortSignal.any`: no listener is added to the caller's signal, so none
+     can outlive the read, and the caller's abort still reaches the body read
+     that follows. Where `any` is missing, a listener bridges the two and is
+     removed the moment the read settles. */
+  const deadline = new AbortController();
+  const timeout = setTimeout(() => deadline.abort(new DOMException('Request timed out', 'TimeoutError')), READ_FIRST_BYTE_MS);
+  const caller = init.signal ?? null;
+  const combine = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+  let release = () => {};
+  let signal: AbortSignal = deadline.signal;
+  if (caller && combine) signal = combine([caller, deadline.signal]);
+  else if (caller) {
+    const abort = () => deadline.abort(caller.reason);
+    if (caller.aborted) abort(); else caller.addEventListener('abort', abort, { once: true });
+    release = () => caller.removeEventListener('abort', abort);
+  }
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } catch (err) {
-    init.signal?.removeEventListener('abort', abort);
-    throw err;
+    return await fetch(url, { ...init, signal });
   } finally {
-    /* only the time-to-headers deadline ends here; the caller's own abort
-       stays wired so it can still cancel the body read that follows */
     clearTimeout(timeout);
+    release();
   }
 }
 

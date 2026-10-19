@@ -145,9 +145,13 @@ describe("the web read deadline", () => {
       vi.stubGlobal("fetch", fetch);
       const { apiFetch } = await import("../src/lib/api/transport");
       const controller = new AbortController();
+      const added = vi.spyOn(controller.signal, "addEventListener");
+      const removed = vi.spyOn(controller.signal, "removeEventListener");
       const response = await apiFetch("/api/inspirations", { signal: controller.signal });
       expect(await response.json()).toEqual({ ok: true });
       expect(vi.getTimerCount(), "the 20s deadline outlived its headers").toBe(0);
+      expect(removed.mock.calls.map((call) => call[1]), "a listener on the caller's signal outlived the read")
+        .toEqual(added.mock.calls.filter((call) => call[0] === "abort").map((call) => call[1]));
       controller.abort();
       expect((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].signal?.aborted, "the caller's abort no longer reaches the read").toBe(true);
     } finally { vi.useRealTimers(); }
