@@ -483,8 +483,9 @@ describe("principles across personal profiles", () => {
   });
 
   /* NO SERVER COOLDOWN: a retry right after a retry's failure goes through
-     (the client's disabled button is the guard). Agents are still refused. */
-  it('takes a retry straight after a failed retry, and refuses agents', async () => {
+     (the client's disabled button is the guard). Access is dev's: an agent
+     session's Try again (retry=1) keeps working. */
+  it('takes a retry straight after a failed retry, from a person or an agent session', async () => {
     const profileId = await person();
     const [owner] = await t.sql`SELECT account_id FROM profiles WHERE id=${profileId}`;
     const app = (type: 'human' | 'agent') => {
@@ -497,14 +498,13 @@ describe("principles across personal profiles", () => {
       return routes;
     };
     await failedReading(profileId, 1);
-    expect((await app('agent').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(403);
-    expect((await app('agent').request('/principles/refresh', { method: 'POST' })).status, 'an agent lost its own plain refresh').toBe(202);
+    expect((await app('agent').request('/principles/refresh?retry=1', { method: 'POST' })).status, "an agent session's Try again was refused").toBe(202);
     await t.sql`UPDATE background_jobs SET status='failed' WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`;
     expect((await app('human').request('/principles/refresh?retry=1', { method: 'POST' })).status).toBe(202);
     await t.sql`UPDATE background_jobs SET status='failed' WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`;
     const again = await app('human').request('/principles/refresh?retry=1', { method: 'POST' });
     expect(again.status, 'a second press was throttled server-side').toBe(202);
-    expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`).toHaveLength(3);
+    expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_top_of_mind'`).toHaveLength(4);
   });
 
   it('restarts failed principles together with a failed reading on one retry', async () => {
