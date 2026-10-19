@@ -11,7 +11,9 @@
  * WHAT THIS MOCKS, AND WHY (gate G6): `lib/api`'s `fetchPrincipleStatus` and
  * `retryPausedReading`, the layer directly beneath the hook, so a case can
  * say "the reading failed" and then "the retry worked" without a server. The
- * hook, the component, the locale catalog and React are real.
+ * hook, the component, the locale catalog and React are real. One case also
+ * stubs the global `fetch` so the real `lib/api/principles` can publish a
+ * newer status while a Retry holds.
  */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
