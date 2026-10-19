@@ -227,6 +227,69 @@ describe("the phone is a width somebody measured", () => {
 });
 
 describe("the four breaks that a browser found and reading did not", () => {
+  /* ═══ THE BAR RAN OFF THE SCREEN AND TOOK CLOSE WITH IT (2026-10-17) ════
+     Measured with Playwright on touch: the open-save bar's row was 387px
+     inside a 328px dock at 360 and a 288px dock at 320, with no overflow rule
+     — Close sat at x 342-403 on a 320px screen. The fix is three lines a
+     tidy-up would call redundant: controls never shrink (so the row cannot
+     squeeze a tap target), only the state line may, and the dock tightens
+     under a phone breakpoint. */
+  it("keeps every control in the bottom bar from shrinking, and tightens the bar on a phone", () => {
+    const css = rules("claims.css");
+    expect(
+      /\.waka-dock-item,\s*\.waka-dock-tool,\s*\.waka-dock-sep\s*\{\s*flex:\s*none;/.test(css),
+      "the dock's controls lost `flex: none`. Without it a crowded bar shrinks " +
+        "Close and the tools below their 44px target — or, with nothing able " +
+        "to shrink, runs off the right edge: Close at x 342-403 on a 320px phone.",
+    ).toBe(true);
+    expect(
+      /@media \(max-width: 4\d\dpx\) \{\s*\.waka-dock \{[^}]*max-width:\s*calc\(100vw - var\(--sp-16\)\)/.test(css),
+      "the dock no longer tightens on a phone. At the desktop spacing the " +
+        "open-save row is 387px and needs a 419px screen to fit.",
+    ).toBe(true);
+    expect(
+      /\.waka-dock-tool[^{]*\{[^}]*\bwidth:\s*(?:[0-3]\d|4[0-3])px/.test(css),
+      "a dock tool is sized under 44px. Fitting a narrow phone by shrinking " +
+        "the targets put every act under the floor beside a one-press Delete; " +
+        "the narrow bar folds Share and Delete into ⋯ instead.",
+    ).toBe(false);
+  });
+
+  /* ═══ AT 350 THE VERBS ABOUT A NOTE FOLD, AND THE STATE GETS A LINE ════
+     Measured 2026-10-17: Back, five 44px tools, Close and two rules need
+     343px of a phone; below that Share and Delete fold into ⋯ rather than
+     any target shrinking. The ⋯ is hidden above 350 (two classes, because
+     `.waka-add` comes later and would show it), its menu hangs from its
+     right edge (centred, it ran off a 320px screen), and under 440 a state
+     line takes its own row instead of being squeezed to ~10px. */
+  it("folds Share and Delete into ⋯ at 350px, anchors its menu right, and gives the state its own line", () => {
+    const css = rules("claims.css");
+    expect(/\.waka-dock-more\.waka-add\s*\{\s*display:\s*none;/.test(css), "the ⋯ shows at full width").toBe(true);
+    expect(
+      /@media \(max-width: 350px\) \{\s*\.waka-dock-roomy\s*\{\s*display:\s*none;\s*\}\s*\.waka-dock-more\.waka-add\s*\{\s*display:\s*inline-flex;/.test(css),
+      "below 350px Share and Delete no longer fold into ⋯ — the row needs 343px at 44px a target",
+    ).toBe(true);
+    expect(
+      /\.waka-add-menu\.waka-more-menu\s*\{[^}]*right:\s*0;[^}]*transform:\s*none;/.test(css),
+      "the ⋯ menu is centred on its button again, which runs it off the right of a 320px phone",
+    ).toBe(true);
+    expect(
+      /\.waka-dock-making:has\(> \.waka-dock-state\)\s*\{[^}]*flex-wrap:\s*wrap;[^}]*\}\s*\.waka-dock-making > \.waka-dock-state\s*\{[^}]*flex:\s*1 0 100%;/.test(css)
+        && /\.waka-dock:has\(\.waka-dock-making > \.waka-dock-state\)\s*\{\s*width:\s*calc\(100vw - var\(--sp-16\)\);/.test(css),
+      "a state line shares the phone row with the tools again and is squeezed to ~10px",
+    ).toBe(true);
+  });
+
+  /* While recording the mic is an auto-width clock; the fold reaches up to
+     400px then, so a long recording cannot push Close off at 351-360. */
+  it("folds Share and Delete into ⋯ up to 400px while a recording clock is in the row", () => {
+    const css = rules("claims.css");
+    expect(
+      /@media \(max-width: 400px\) \{\s*\.waka-dock-making:has\(\.waka-dock-tool--wide\) \.waka-dock-roomy\s*\{\s*display:\s*none;\s*\}\s*\.waka-dock-making:has\(\.waka-dock-tool--wide\) \.waka-dock-more\.waka-add\s*\{\s*display:\s*inline-flex;/.test(css),
+      "the recording clock no longer folds the row, so Close can leave a 351-360px screen",
+    ).toBe(true);
+  });
+
   it("keeps the shelves from being crushed to a sliver", () => {
     expect(
       /flex:\s*none/.test(block("claims.css", ".waka-tabs")),

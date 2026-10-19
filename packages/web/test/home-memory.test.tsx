@@ -286,8 +286,11 @@ vi.mock("../src/lib/data", async (importOriginal) => {
       const kept = FACTS.inspirations.find((x) => x.id === id);
       if (!kept) throw new Error(`no such memory ${id}`);
       const at = BASE - kept.daysAgo * DAY;
+      /* what the server holds NOW: the last words kept for it, else the
+         fixture's — every edit reads the note fresh before it opens */
+      const text = [...KEPT.calls].reverse().find((call) => call.id === id)?.text ?? kept.text;
       return {
-        id: kept.id, preview: kept.text, text: kept.text, isPublic: kept.isPublic, kind: "note", source: "app",
+        id: kept.id, preview: text, text, isPublic: kept.isPublic, kind: "note", source: "app",
         category: null, capturedMs: at, updatedMs: at, attachments: [], reflectionCount: 0,
         conversationOrigin: null, reflections: [], enrichment: [],
       };
@@ -551,6 +554,37 @@ describe("changing a memory's words", () => {
       layout.container.querySelector(".jar-panel-save")?.textContent,
       "and the foot says what just happened",
     ).toBe("Saved");
+  });
+
+  /* TWO EDITS IN A ROW, AND THE FIRST SURVIVES THE SECOND (review,
+     2026-10-17). A kept edit cleared the detail cache but left the open card
+     holding its pre-edit words — and those are what the next edit is seeded
+     from, so the second edit began from the first one's BEFORE and its save
+     wrote the old words back. */
+  it("seeds a second edit from the first one's words, so both survive", { timeout: 30_000 }, async () => {
+    const MORE = `${MINE} And the order things arrive in.`;
+    await layout.toField();
+    const panel = await tapAnOrb();
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    const editTo = async (text: string) => {
+      await act(async () => panel.querySelector<HTMLElement>(".jar-panel-text")!.click());
+      const box = panel.querySelector<HTMLTextAreaElement>("textarea.jar-panel-edit");
+      if (!box) throw new Error("pressing the memory's words opened no caret");
+      const seeded = box.value;
+      await act(async () => { setValue.call(box, text); box.dispatchEvent(new Event("input", { bubbles: true })); });
+      const keep = [...panel.querySelectorAll<HTMLElement>(".jar-panel-foot-c button")].find((b) => /^save$/i.test((b.textContent ?? "").trim()))!;
+      await act(async () => keep.click());
+      await layout.step(10);
+      /* out of the `saved` beat, back to the reading face */
+      await act(async () => { box.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+      await layout.step(4);
+      return seeded;
+    };
+    await editTo(MINE);
+    const seededSecond = await editTo(MORE);
+    expect(seededSecond, "the second edit opens on the words the first one kept").toBe(MINE);
+    expect(KEPT.calls.map((call) => call.text)).toEqual([MINE, MORE]);
+    expect(panel.querySelector(".jar-panel-text")?.textContent).toContain("the order things arrive in");
   });
 });
 

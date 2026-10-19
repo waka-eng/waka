@@ -32,12 +32,13 @@
  * and still saves; it simply cannot take an attachment, which is honest —
  * there is nowhere to put the control.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { AddMenu } from "./AddMenu";
 import { HomeActionIcon } from "./HomeActionIcon";
 import { supportedRecordingType, type useAudioRecording } from "../lib/use-audio-recording";
+import { useDockMenu } from "../lib/use-dock-menu";
 
 /** The id `Home` gives the dock slot this renders into. */
 export const DOCK_SLOT = "waka-note-tools";
@@ -50,6 +51,19 @@ export function NoteTools(props: {
       language; empty is the success state. */
   failed: string;
   uploading: string;
+  /** THE NOTE'S FULL TEXT IS STILL BEING READ. A saved note is opened from a
+      list row that carries only a 220-character preview, so the words are
+      read in full before they can be edited (see `stored` in
+      `SavesOverlay`). Empty once they are here, and on the notepad. */
+  reading?: string;
+  /** The full-text read failed: the note stays read-only and this says so,
+      with Try again beside it. Empty is "nothing failed". */
+  readFailed?: string;
+  retryLabel?: string;
+  onRetry?: () => void;
+  /** The overflow's name on a narrow phone, where Share and Delete fold into
+      it so every remaining act keeps its 44px target. */
+  moreLabel?: string;
   recordLabel: string;
   stopLabel: string;
   /** The ＋'s name, and its two rows: "Add photo" and "Add file". */
@@ -119,8 +133,100 @@ export function NoteTools(props: {
      the worst kind of bug to find. */
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   useEffect(() => { setSlot(document.getElementById(DOCK_SLOT)); });
+  /* AN ARMED DELETE TAKES FOCUS TO ITS CONFIRMATION. The press that armed
+     it is gone from the bar (the group becomes the question), so focus
+     would otherwise fall to the page; "Delete it anyway" is what a keyboard
+     user is being asked about. */
+  const confirm = useRef<HTMLButtonElement>(null);
+  const armed = Boolean(props.erasePending && props.eraseQuestion);
+  useEffect(() => { if (armed) confirm.current?.focus(); }, [armed, slot]);
   if (!slot) return null;
 
+  /* THE WAY OUT OF A NOTE IS ALWAYS IN THE BAR. Delete needs only the
+     note's id, so it is offered in every state below — loading and failed
+     included (review, 2026-10-17: hiding it there left a note that would not
+     open with no way to remove it). */
+  const erase = (
+    <button type="button" className="waka-dock-tool waka-dock-tool--erase"
+      aria-label={props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel}
+      disabled={props.saving}
+      onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
+  );
+  /* ═══ AN ARMED DELETE IS THE WHOLE BAR FOR ITS MOMENT ═════════════════
+     On an archive with no deleted shelf the first press asks. The question,
+     the confirming press and "Not now" are the only three things in the
+     group until it is answered: with the tools beside it the question was
+     squeezed to ~15px on a 320px phone and "Not now" — a link inside the
+     ellipsizing line — was clipped away (review, 2026-10-17). "Not now" is
+     a real dock item with the 44px floor, outside the status line. */
+  /* THE CLOCK THAT STOPS A RECORDING — one control, used in the row and,
+     while a recording runs, kept beside an armed delete too, so the way to
+     stop the microphone never leaves the bar (review, 2026-10-17). */
+  const stopClock = props.recording.phase !== "idle" ? (
+    <button type="button" className="waka-dock-tool waka-dock-tool--wide"
+      aria-label={props.stopLabel}
+      disabled={props.recording.phase === "finishing"}
+      onClick={() => void props.recording.stop()}>
+      {Math.floor(props.recording.seconds / 60)}:
+      {String(props.recording.seconds % 60).padStart(2, "0")}
+    </button>
+  ) : null;
+  if (props.erasePending && props.eraseQuestion) {
+    return createPortal(
+      <>
+        <span className="waka-dock-state" role="status">{props.eraseQuestion}</span>
+        {stopClock}
+        <button ref={confirm} type="button" className="waka-dock-tool waka-dock-tool--erase"
+          aria-label={props.eraseConfirmLabel ?? props.eraseLabel}
+          disabled={props.saving}
+          onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
+        <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onCancelErase}>
+          {props.cancelEraseLabel}
+        </button>
+      </>,
+      slot,
+    );
+  }
+
+  /* ═══ UNTIL THE NOTE IS READ, THE BAR SAYS THAT — AND KEEPS ITS EXITS ═══
+     While the full text is on its way, or after it failed, the making tools
+     have nothing to act on: Save cannot write what has not been read, and a
+     photo aimed at a page that may never open is the wrong press to offer.
+     So the group is one short line of state, Try again when the read failed,
+     and Delete.
+
+     TRY AGAIN IS ITS OWN CONTROL, NOT A LINK INSIDE THE SENTENCE. Inside the
+     state span (which ellipsizes) it was clipped off-screen at every width,
+     and inside `role="alert"` it was read out as part of the error. The
+     alert holds the sentence only; the press is a dock item with the 44px
+     floor beside it. */
+  if (props.reading || props.readFailed) {
+    return createPortal(
+      <>
+        {props.readFailed ? (
+          <span className="waka-dock-state" role="alert">{props.readFailed}</span>
+        ) : (
+          <span className="waka-dock-state" role="status">{props.reading}</span>
+        )}
+        {/* AN EARLIER FAILURE IS STILL NEWS. A save, an upload or a recording
+            that failed before this read began (Try again re-enters this
+            state) keeps its line here rather than vanishing with the tools. */}
+        {props.failed ? (
+          <span className="waka-dock-state" role="alert">{props.failed}</span>
+        ) : null}
+        {/* a recording started on another note can still be running into
+            this one's loading: its Stop never leaves the bar */}
+        {stopClock}
+        {props.readFailed && props.onRetry && props.retryLabel ? (
+          <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onRetry}>
+            {props.retryLabel}
+          </button>
+        ) : null}
+        {erase}
+      </>,
+      slot,
+    );
+  }
   const busy = props.attaching || props.saving;
   return createPortal(
     <>
@@ -133,13 +239,7 @@ export function NoteTools(props: {
           /* THE CLOCK IS THE STOP, as it is on the notepad: a red dot
              cannot say how long you have been talking, and two controls
              for one act is one too many in a slot this size. */
-          <button type="button" className="waka-dock-tool waka-dock-tool--wide"
-            aria-label={props.stopLabel}
-            disabled={props.recording.phase === "finishing"}
-            onClick={() => void props.recording.stop()}>
-            {Math.floor(props.recording.seconds / 60)}:
-            {String(props.recording.seconds % 60).padStart(2, "0")}
-          </button>
+          stopClock
         )
       ) : null}
       {/* ═══ THE PHOTO BECAME ＋, HERE AS ON THE NOTEPAD (2026-10-16) ═════
@@ -227,32 +327,77 @@ export function NoteTools(props: {
           The note is the one place a single inspiration is fully on screen,
           so it is where showing it to somebody starts — the same image the
           top of mind makes, from the same sheet. */}
-      {props.onShare && props.shareLabel ? (
-        <button type="button" className="waka-dock-tool"
-          aria-label={props.shareLabel} disabled={props.saving}
-          onClick={props.onShare}><HomeActionIcon kind="share" /></button>
-      ) : null}
-      <button type="button" className="waka-dock-tool waka-dock-tool--erase"
-        aria-label={props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel}
-        disabled={props.saving}
-        onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
+      {/* ═══ ON A NARROW PHONE, SHARE AND DELETE FOLD INTO ONE ⋯ ═══════════
+          Measured 2026-10-17: Back, five 44px tools, Close and two rules are
+          319px, and a 320px phone's dock holds 296. Narrowing the tools to
+          fit put every act under the 44px floor — beside a one-press
+          Delete. So below 360px the two verbs ABOUT the note (as opposed to
+          the three that make it) move into an overflow, and every control
+          left in the row keeps the full target. Both copies are rendered and
+          the stylesheet chooses (`.waka-dock-roomy` / `.waka-dock-more`), so
+          the switch is a width, not a script. */}
+      <span className="waka-dock-roomy">
+        {props.onShare && props.shareLabel ? (
+          <button type="button" className="waka-dock-tool"
+            aria-label={props.shareLabel} disabled={props.saving}
+            onClick={props.onShare}><HomeActionIcon kind="share" /></button>
+        ) : null}
+        {erase}
+      </span>
+      <MoreMenu label={props.moreLabel ?? "More"} disabled={props.saving}
+        rows={[
+          ...(props.onShare && props.shareLabel ? [{ label: props.shareLabel, icon: "share" as const, act: props.onShare }] : []),
+          { label: props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel, icon: "erase" as const, act: props.onErase },
+        ]} />
       {/* ONE LINE, THE SAME SLOT THE NOTEPAD'S STATE USES. Founder: "states
           should show and disappear in the bottom bar only." */}
-      {props.erasePending && props.eraseQuestion ? (
-        <span className="waka-dock-state" role="status">
-          {props.eraseQuestion}
-          <button type="button" className="waka-dock-undo" onClick={props.onCancelErase}>
-            {props.cancelEraseLabel}
-          </button>
-        </span>
-      ) : props.failed ? (
-        /* the recorder's own problem arrives inside `failed`, already said:
-           `recording.error` is a catalogue key and this has no locale */
+      {/* the recorder's own problem arrives inside `failed`, already said:
+          `recording.error` is a catalogue key and this has no locale (dev,
+          #443). An armed delete is its own branch above. */}
+      {props.failed ? (
         <span className="waka-dock-state" role="alert">{props.failed}</span>
       ) : props.attaching ? (
         <span className="waka-dock-state" role="status">{props.uploading}</span>
       ) : null}
     </>,
     slot,
+  );
+}
+
+/**
+ * THE OVERFLOW, for the verbs about a note on a phone too narrow to show
+ * them at full size. The same pattern and the same classes as `AddMenu`'s
+ * ＋ (a button, a lifted column of 44px rows, Escape and an outside press
+ * close it), because it is the same kind of object in the same bar.
+ */
+function MoreMenu(props: {
+  label: string;
+  disabled?: boolean;
+  rows: Array<{ label: string; icon: "share" | "erase"; act: () => void }>;
+}): JSX.Element {
+  const menu = useDockMenu(props.disabled);
+  return (
+    <span ref={menu.wrap} className="waka-add waka-dock-more">
+      <button {...menu.buttonProps} type="button" className="waka-dock-tool" aria-label={props.label}
+        disabled={props.disabled}>
+        <HomeActionIcon kind="more" />
+      </button>
+      {menu.open ? (
+        /* ANCHORED TO THE BUTTON'S RIGHT EDGE, not centred on it like the ＋'s:
+           the ⋯ sits near the end of the row, and centring ran the menu off
+           the right of the screen (`.waka-more-menu`). */
+        <div {...menu.menuProps} className="waka-add-menu waka-more-menu" aria-label={props.label}>
+          {props.rows.map((row) => (
+            <button key={row.icon} type="button" role="menuitem" className="waka-add-row"
+              /* FOCUS GOES BACK TO ⋯ FIRST, then the row acts: Share opens
+                 its sheet from there, and Delete takes the note (and the ⋯)
+                 away, after which the archive puts focus on its Undo line. */
+              onClick={() => { menu.close(true); row.act(); }}>
+              <HomeActionIcon kind={row.icon} /><span>{row.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </span>
   );
 }

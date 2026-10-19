@@ -67,12 +67,16 @@ import { ShareSheet, inspirationShareTarget, type ShareTarget } from "./ShareShe
    the invariant that a total is never smaller than what arrived. Reaching
    past it to the HTTP layer would have been a second way to read one thing,
    with its own pagination and its own idea of what the archive holds. */
-import { loadInspirations, type Inspiration } from "../lib/data";
+import { loadInspiration, loadInspirations, type Inspiration } from "../lib/data";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { inspectInspirationPhoto } from "../lib/inspiration-photo";
 import { inspectAttachmentFile } from "../lib/api/file-accept";
+import { inspirationPreview } from "../lib/inspiration-preview";
+import { wordsCanStand } from "../lib/note-words";
 
 type Phase = "loading" | "ready" | "failed";
+/** How long a note's full-text read may take before it is a failed read. */
+const NOTE_READ_LIMIT_MS = 20_000;
 
 /** How many kept things it takes before finding one is a real act rather
     than a glance. Roughly a screenful at the archive's row height. */
@@ -220,6 +224,24 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [open, setOpen] = useState<Inspiration | null>(null);
+  /* ═══ THE WORDS AS STORED, READ IN FULL BEFORE ANY OF THEM CAN BE WRITTEN ══
+     P0, 2026-10-17: editing a long save from this list destroyed the rest of
+     it. A row here is a LIST row — `textPreview` is cut at 220 characters on
+     the server and ends in "…", and for a save with no words it is an
+     attachment label ("Photo", a link's title) instead. The note used to seed
+     its editor with that preview and PATCH it back on Save or on the way
+     out, so typing one word into a 1,000-character save stored 220
+     characters of it plus the word, and typing into a photo-only save stored
+     "Photo" as its text.
+
+     SO THE EDITOR IS SEEDED FROM THE DETAIL READ, and from nothing else.
+     `stored.text` is `null` while it is in flight and after it fails; every
+     write path below refuses to run until it is a string, and compares the
+     draft against IT rather than against the preview. A failed read keeps
+     the note read-only with Try again in the bar — never a save from what
+     the list happened to show. */
+  const [stored, setStored] = useState<{ id: string; text: string | null; failed: boolean } | null>(null);
+  const reading = useRef<AbortController | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   /* ═══ DELETE AT ONCE, UNDO FOR A MOMENT, THE SHELF FOR A MONTH ═══════════
      Founder: "just delete when user clicks on this, but give option to undo
@@ -240,6 +262,16 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const [forgetting, setForgetting] = useState<string | null>(null);
   const [shelfFailed, setShelfFailed] = useState(false);
   const [undoable, setUndoable] = useState<Inspiration | null>(null);
+  /* WHERE FOCUS GOES WHEN A DELETE TAKES THE NOTE AWAY. The press that
+     deleted it (the bar's trash, or the ⋯ menu's row) unmounts with the
+     note, and focus fell to the page; the Undo line is the next thing a
+     keyboard user needs, so a delete made on the note hands it focus — once,
+     on that delete, and not on any other way the line appears. */
+  const undoButton = useRef<HTMLButtonElement>(null);
+  const focusUndoNext = useRef(false);
+  /* An immediate delete (an agent's archive, which has no Undo) hands focus
+     to the list it returns to — its first row, or the search field. */
+  const focusListNext = useRef(false);
   /* Armed delete on an archive with no shelf — see `onErase` below. */
   const [askingErase, setAskingErase] = useState<string | null>(null);
   const [eraseFailed, setEraseFailed] = useState(false);
@@ -321,7 +353,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const commitErase = useCallback((pending: { row: Inspiration; at: number }, leaving = false) => {
     /* On an agent's archive the delete names the agent's profile; the
        request outlives the tab when it is sent as the page goes. */
-    void deleteInspiration(pending.row.id, { ...(!ownArchive && profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
+    void deleteInspiration(pending.row.id, { ...(profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
       .then(() => loadShelf())
       .catch(() => {
         if (!mounted.current) return;
@@ -344,7 +376,11 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   /* Leaving the page is leaving the undo: commit what was pending — when the
      surface closes, and when the tab itself goes (a refresh inside the six
      seconds used to bring the note back). */
-  useEffect(() => () => flushErase(), [flushErase]);
+  /* Flushed on the archive's REAL unmount only — the latest `flushErase`,
+     through a ref, from an effect that never re-runs. */
+  const flushNow = useRef(flushErase);
+  flushNow.current = flushErase;
+  useEffect(() => () => flushNow.current(), []);
   useEffect(() => {
     const leave = () => flushErase(true);
     window.addEventListener("pagehide", leave);
@@ -363,6 +399,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       flushErase();
     }, UNDO_MS);
     pendingErase.current = { row, at, timer };
+    focusUndoNext.current = true;
     setUndoable(row);
   }, [flushErase, rows]);
 
@@ -436,22 +473,30 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     const note = open;
     const words = draft.trim();
     if (!note || saving) return;
-    if (!words || words === note.preview) { setOpen(null); return; }
+    /* Not read yet (or the read failed): nothing typed can have reached the
+       draft, and the preview is not the note — so leaving writes nothing. */
+    const base = stored && stored.id === note.id ? stored.text : null;
+    /* CLEARED WORDS ARE AN EDIT ONCE THE WHOLE TEXT IS HERE — when the note
+       still holds an attachment, which is the create rule: a save may have
+       no words beside a photo or a file. A note that would end with neither
+       is not written (the server refuses it too); its stored words stay, and
+       the page said so while it was empty (`placeholder` below). */
+    if (base === null || words === base.trim() || !wordsCanStand(words, note.attachments.length)) { setOpen(null); return; }
     setSaving(true);
     setSaveFailed(false);
     try {
-      await updateInspiration(note.id, { text: words });
+      await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
       if (!mounted.current) return;
       /* The list holds what the page loaded, so it has to agree without a
          refetch — otherwise going back reveals the old first line. */
-      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: words } : row)));
+      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: inspirationPreview(words, row.attachments) } : row)));
       setOpen(null);
     } catch {
       if (mounted.current) setSaveFailed(true);
     } finally {
       if (mounted.current) setSaving(false);
     }
-  }, [draft, open, saving]);
+  }, [draft, open, saving, stored, profileId]);
 
   /**
    * ═══ AND NOW THERE IS A SAVE TO PRESS, WITH THE NET STILL UNDER IT ═════
@@ -518,23 +563,71 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     const words = draft.trim();
     const state = keepReady.current;
     if (!note || !state || !canKeep(state)) return;
+    /* `canKeep` already refuses an unread note through `hasWords`; this is
+       the same fact asked at the write, so no future change to that field can
+       make a preview reach the server. */
+    if (!stored || stored.id !== note.id || stored.text === null) return;
     setSaving(true);
     setSaveFailed(false);
     try {
-      await updateInspiration(note.id, { text: words });
+      await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
       if (!mounted.current) return;
       /* Both copies, for the reason `leaveNote` gives about the list and the
          reason `attach` gives about the snapshot: the grid behind must not
          show the old first line, and the note in front must agree that it is
          saved or the button never dims. */
-      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: words } : row)));
-      setOpen((card) => (card && card.id === note.id ? { ...card, preview: words } : card));
+      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: inspirationPreview(words, row.attachments) } : row)));
+      setOpen((card) => (card && card.id === note.id ? { ...card, preview: inspirationPreview(words, card.attachments) } : card));
+      /* What is stored now, which is what dims the button again. */
+      setStored((held) => (held && held.id === note.id ? { ...held, text: words } : held));
     } catch {
       if (mounted.current) setSaveFailed(true);
     } finally {
       if (mounted.current) setSaving(false);
     }
-  }, [draft, open, saving]);
+  }, [draft, open, saving, stored, profileId]);
+
+  /* READ ONE NOTE IN FULL. A newer read (another note, or Try again) aborts
+     the older, and a reply for a note no longer open is dropped by id — so a
+     slow answer can never seed the wrong page. */
+  const readNote = useCallback((id: string) => {
+    reading.current?.abort();
+    const controller = new AbortController();
+    reading.current = controller;
+    setStored({ id, text: null, failed: false });
+    /* BOUNDED: a read that never answers ends as a failed read (Try again),
+       never an editor stuck "Opening…" */
+    const limit = window.setTimeout(() => {
+      if (reading.current !== controller) return;
+      setStored((held) => (held && held.id === id && held.text === null ? { id, text: null, failed: true } : held));
+      controller.abort();
+    }, NOTE_READ_LIMIT_MS);
+    loadInspiration(id, profileId ?? undefined, controller.signal)
+      .finally(() => window.clearTimeout(limit))
+      .then((detail) => {
+        if (!mounted.current || controller.signal.aborted) return;
+        setStored((held) => (held && held.id === id ? { id, text: detail.text, failed: false } : held));
+        setDraft(detail.text);
+      })
+      .catch(() => {
+        if (!mounted.current || controller.signal.aborted) return;
+        setStored((held) => (held && held.id === id ? { id, text: null, failed: true } : held));
+      });
+  }, [profileId]);
+  const openNote = useCallback((row: Inspiration) => {
+    setOpen(row);
+    setDraft("");
+    setSaveFailed(false);
+    readNote(row.id);
+  }, [readNote]);
+  /* Closed, by any route: the read in flight has no page to land on. */
+  useEffect(() => {
+    if (open) return;
+    reading.current?.abort();
+    reading.current = null;
+    setStored(null);
+  }, [open]);
+  useEffect(() => () => reading.current?.abort(), []);
 
 
   /**
@@ -562,16 +655,24 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
    * with, and holding it until somebody presses back would mean a photo
    * could be lost by closing a tab. The text keeps its own rule.
    */
-  const [attaching, setAttaching] = useState(false);
-  const [attachFailed, setAttachFailed] = useState(false);
+  /* KEYED BY THE NOTE THE UPLOAD BELONGS TO (review, 2026-10-17). A clip
+     can now finish uploading to the note it was recorded on after that note
+     is left, so "Uploading…", the failure line and the disabled tools are
+     that note's — another open note never shows or is disabled by them. */
+  const [attachingFor, setAttachingFor] = useState<string | null>(null);
+  const [attachFailedFor, setAttachFailedFor] = useState<string | null>(null);
+  const attaching = Boolean(open) && attachingFor === open?.id;
+  const attachFailed = Boolean(open) && attachFailedFor === open?.id;
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
      the button that opens it, and that button is in the bar now — see
      `NoteTools`, which owns both. */
-  const attach = useCallback(async (chosen: File, came: "photo" | "recording" | "file" = "photo") => {
-    const note = open;
+  const attach = useCallback(async (chosen: File, came: "photo" | "recording" | "file" = "photo", target?: Inspiration | null) => {
+    /* `target`: the note a recording was STARTED on — a clip belongs to it,
+       whichever note is open when the recorder hands the clip over. */
+    const note = target ?? open;
     if (!note) return;
-    setAttaching(true);
-    setAttachFailed(false);
+    setAttachingFor(note.id);
+    setAttachFailedFor((was) => (was === note.id ? null : was));
     try {
       /* ═══ A PHOTO IS READ BEFORE IT IS SENT; A RECORDING IS NOT A FILE ═══
          This path used to classify from `file.type.startsWith("image/")` and
@@ -637,15 +738,48 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       if (!mounted.current) return;
       setOpen((card) => (card ? fresh.find((row) => row.id === card.id) ?? card : card));
     } catch {
-      if (mounted.current) setAttachFailed(true);
+      if (mounted.current) setAttachFailedFor(note.id);
     } finally {
-      if (mounted.current) setAttaching(false);
+      if (mounted.current) setAttachingFor((was) => (was === note.id ? null : was));
     }
   }, [load, open, profileId]);
   /* The same recorder the notepad uses, handed a different destination —
      and naming the door it comes through, so `attach` does not try to read
      a sound file as a photograph. */
-  const recording = useAudioRecording((clip) => attach(clip, "recording"));
+  /* ═══ A RECORDING IS BOUND TO THE NOTE IT STARTED ON (review, 2026-10-17)
+     The recorder used to hand its clip to whatever note was open when it
+     stopped — so recording on one note, leaving it, and opening another put
+     the first note's clip on the second. The note is captured when the
+     recording starts, the clip is attached to that note, and leaving that
+     note (Back, Close, or opening another) stops the recording there and
+     then, so it is attached to the note it was made on. */
+  const recordingFor = useRef<Inspiration | null>(null);
+  const recording = useAudioRecording((clip) => attach(clip, "recording", recordingFor.current));
+  const recordingPhase = recording.phase;
+  /* captured as a recording begins (the phase leaves `idle`) and kept until
+     the next one begins, so the clip handed over after it stops still knows
+     its note */
+  const lastPhase = useRef(recordingPhase);
+  useEffect(() => {
+    if (lastPhase.current === "idle" && recordingPhase !== "idle") recordingFor.current = open;
+    lastPhase.current = recordingPhase;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordingPhase]);
+  const stopRecording = recording.stop;
+  useEffect(() => {
+    const bound = recordingFor.current;
+    if (bound && bound.id !== open?.id && recordingPhase !== "idle") void stopRecording();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open?.id]);
+  /* ONE NOTE'S FAILURE IS NOT ANOTHER'S. Opening a different note clears the
+     last one's upload failure and the recorder's error line. */
+  const clearRecording = recording.clear;
+  useEffect(() => {
+    /* an upload failure is keyed by its note (`attachFailedFor`): it is
+       still said when that note is opened again, and never on another */
+    clearRecording();
+  }, [open?.id, clearRecording]);
+
 
   /**
    * ═══ WHETHER THIS NOTE'S SAVE CAN BE PRESSED — ASKED, NOT RESTATED ══════
@@ -678,6 +812,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
    * omission — and so that a field added to `KeepReadiness` tomorrow is a
    * type error here rather than a second opinion.
    */
+  /* The full text is in the editor — the one condition for writing it. */
+  const loaded = Boolean(open) && stored?.id === open?.id && typeof stored?.text === "string";
   const keepState: KeepReadiness = {
     /* `hasWords` MEANS "THERE IS SOMETHING TO KEEP", and on a note that is
        already stored that means the words have CHANGED. An unchanged note has
@@ -688,7 +824,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        TRIMMED ON BOTH SIDES OF THE COMPARISON, which is the whole subject of
        the comment above `keepOpenNote`: a typed trailing space must not light
        a button whose write would then return early. */
-    hasWords: Boolean(open) && draft.trim().length > 0 && draft.trim() !== open?.preview,
+    hasWords: loaded && draft.trim() !== (stored?.text ?? "").trim()
+      /* Empty is something to keep only beside an attachment — the one rule
+         both doors ask (`lib/note-words.ts`). */
+      && wordsCanStand(draft, open?.attachments.length ?? 0),
     /* `ready` IS THE DRAFT STORE HAVING OPENED — "before that there is
        nowhere to write". This page has no draft store: the words live in
        React state and the destination is a row that already exists, so there
@@ -746,6 +885,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      because that callback closes over the draft. That is the point rather
      than a cost: the bar must hold the CURRENT closer, or pressing
      Inspirations would commit the words as they were when the note opened. */
+  useEffect(() => {
+    if (open || !focusListNext.current) return;
+    focusListNext.current = false;
+    (document.querySelector<HTMLElement>(".waka-list-row") ?? field.current)?.focus();
+  }, [open, rows]);
+  useEffect(() => {
+    if (!undoable || open || !focusUndoNext.current) return;
+    focusUndoNext.current = false;
+    undoButton.current?.focus();
+  }, [undoable, open]);
+
   const openId = open?.id ?? null;
   useEffect(() => {
     onNoteOpen?.(openId === null ? null : () => void leaveNote());
@@ -1162,6 +1312,14 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           saving={saving}
           recording={recording}
           failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : ""}
+          /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
+             state (founder: "states should show and disappear in the bottom
+             bar only"). See `stored`. */
+          reading={!loaded && !stored?.failed ? say("worldNoteOpening") : ""}
+          readFailed={stored?.failed ? say("worldNoteOpenFailed") : ""}
+          retryLabel={say("surfaceUnavailableRetry")}
+          onRetry={() => readNote(open.id)}
+          moreLabel={say("worldMoreActions")}
           uploading={say("worldComposerUploading")}
           recordLabel={say("worldComposerRecord")}
           stopLabel={say("worldComposerStop")}
@@ -1188,8 +1346,14 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           erasePending={!ownArchive && askingErase === open.id}
           onCancelErase={() => setAskingErase(null)}
           onErase={() => {
-            if (ownArchive) { eraseOpen(open); return; }
+            /* NEVER A LIVE MICROPHONE WITH NO STOP: the recording belongs to
+               the note being deleted, so it is cancelled with it (review,
+               2026-10-17). An agent's archive asks first — the Stop stays in
+               that bar — and cancels on the confirming press. */
+            const silence = () => { if (recording.phase !== "idle") void recording.cancel(); };
+            if (ownArchive) { silence(); eraseOpen(open); return; }
             if (askingErase !== open.id) { setAskingErase(open.id); return; }
+            silence();
             setAskingErase(null);
             flushErase();
             const at = Math.max(0, rows.findIndex((item) => item.id === open.id));
@@ -1197,11 +1361,15 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             setTotal((count) => count === null ? count : Math.max(0, count - 1));
             setOpen(null);
             setEraseFailed(false);
+            /* no Undo line on a shelfless archive: focus goes to the list */
+            focusListNext.current = true;
             commitErase({ row: open, at });
           }}
           /* Only a note with words has a card to make. */
-          shareLabel={(draft.trim() || open.preview.trim()) ? say("worldShareInspirationTitle") : undefined}
-          onShare={() => setShareOf(inspirationShareTarget(locale, { text: draft.trim() || open.preview, capturedMs: open.capturedMs, attachments: open.attachments }))}
+          /* Only a note with words has a card to make — its own words, read
+             in full, never the list's cut of them. */
+          shareLabel={loaded && draft.trim() ? say("worldShareInspirationTitle") : undefined}
+          onShare={() => setShareOf(inspirationShareTarget(locale, { text: draft.trim(), capturedMs: open.capturedMs, attachments: open.attachments }))}
           onFile={(file, door) => void attach(file, door)}
         /> : null}
         {open ? (
@@ -1283,8 +1451,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                   ten months old. */}
               <textarea
                 className="jar-panel-text waka-note-page"
-                value={draft}
-                readOnly={saving}
+                /* UNTIL THE FULL TEXT ARRIVES the list's preview stands in,
+                   read-only, so the page does not open blank — and nothing
+                   typed can land in it, because there is no draft yet. */
+                value={loaded ? draft : open.preview}
+                readOnly={saving || !loaded}
+                /* THE EMPTY NOTE SAYS WHAT IT NEEDS, the way the notepad's
+                   blank page does: with nothing attached, a note with no
+                   words cannot be kept, so Save stays dim and this line is
+                   why. */
+                placeholder={loaded && open.attachments.length === 0 ? say("worldNoteNeedsSomething") : undefined}
+                aria-busy={!loaded && !stored?.failed}
                 aria-label={say("worldCaptureInspiration")}
                 onChange={(event) => { setDraft(event.target.value); setSaveFailed(false); }}
               />
@@ -1422,7 +1599,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                     return (
                       <li key={row.id}>
                         <button type="button" className="waka-list-row"
-                          onClick={() => { setOpen(row); setDraft(row.preview); setSaveFailed(false); }}>
+                          onClick={() => openNote(row)}>
                           <span className="waka-list-lead">{lead}</span>
                           <span className="waka-list-meta">
                             {/* WHICH ONE THIS IS, AND IT IS A NAME RATHER THAN
@@ -1490,7 +1667,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         {!open && undoable ? (
           <p className="waka-over-undo" role="status">
             {say("worldDeletedOne")}
-            <button type="button" className="waka-dock-undo" onClick={undoErase}>{say("worldUndo")}</button>
+            <button ref={undoButton} type="button" className="waka-dock-undo" onClick={undoErase}>{say("worldUndo")}</button>
           </p>
         ) : !open && eraseFailed ? (
           <p className="waka-over-undo" role="alert">{say("worldDeleteFailed")}</p>

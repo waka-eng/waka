@@ -111,6 +111,20 @@ export function dataMockFrom(facts: WorldFacts) {
       }));
       return { inspirations, total: inspirations.length, short: false };
     },
+    /* ONE INSPIRATION IN FULL. A saved note opened from the archive reads its
+       whole text before it can be edited (the list row is only a 220-character
+       preview — P0, 2026-10-17), so a fixture world has to answer that read
+       too, with the same words the list carried. */
+    loadInspiration: async (id: string) => {
+      const c = facts.inspirations.find((item) => item.id === id);
+      if (!c) throw new Error(`no fixture inspiration ${id}`);
+      return {
+        id: c.id, preview: c.text, text: c.text, isPublic: c.isPublic ?? false,
+        kind: "note" as const, source: "app" as const, category: null,
+        capturedMs: at(c.daysAgo), updatedMs: at(c.daysAgo),
+        attachments: [], reflectionCount: 0, reflections: [], conversationOrigin: null,
+      };
+    },
     loadSignals: async () => [],
     loadTopOfMind: async () => null,
   };

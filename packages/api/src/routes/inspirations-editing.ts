@@ -198,6 +198,14 @@ export function registerEditingRoutes(
       const [previous] = await tx.select({ visibility: inspirations.visibility }).from(inspirations)
         .where(and(eq(inspirations.id, idCheck.data), eq(inspirations.profileId, target.profileId))).for("update");
       if (!previous) return undefined;
+      /* No words is a save only while something else is saved with it — the
+         create rule (`text` defaults to "" beside attachments). Checked under
+         the row lock this transaction already holds. */
+      if (patch.text === "") {
+        const [kept] = await tx.select({ id: attachments.id }).from(attachments)
+          .where(and(eq(attachments.inspirationId, idCheck.data), eq(attachments.profileId, target.profileId))).limit(1);
+        if (!kept) return "empty" as const;
+      }
       const [row] = await tx
       .update(inspirations)
       .set(patch)
@@ -215,6 +223,9 @@ export function registerEditingRoutes(
     });
 
     if (!updated) return c.json({ error: "Inspiration not found" }, 404);
+    if (updated === "empty") {
+      return c.json({ error: "Invalid inspiration payload", details: { text: ["Inspiration text is required"] } }, 400);
+    }
 
     await wakeCommittedBackgroundJobs();
 
