@@ -20,6 +20,7 @@ import {
   MAX_RELATED_INSPIRATION_CITATIONS,
   parseSignalCandidates,
 } from "../queue/gemini.js";
+import { MalformedModelOutputError } from "./model-provider.js";
 
 const NOW = new Date("2026-08-15T12:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -250,6 +251,14 @@ describe("parseSignalCandidates — a malformed payload is not an empty answer",
     ["the payload is not an object", "I could not find anything"],
   ])("throws when %s", (_why, payload) => {
     expect(() => parseSignalCandidates(payload)).toThrow("signal extraction");
+    expect(() => parseSignalCandidates(payload), "a distinct, non-retryable outcome").toThrow(MalformedModelOutputError);
+  });
+
+  it("accepts a null quote on related evidence", () => {
+    const result = parseSignalCandidates({ statements: [{ statement: "I keep commitments small.",
+      relatedEvidence: [{ inspirationId: "a3689f1e-0000-4000-8000-000000000001", quote: null }] }] });
+    expect(result.statements[0]?.statement).toBe("I keep commitments small.");
+    expect(result.statements[0]?.relatedEvidence, "a citation without a quote is dropped, as a blank one is").toBeUndefined();
   });
 
   it("parses a valid reply whose optional fields are null", () => {

@@ -5,6 +5,7 @@ import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
 import {readBackgroundJobRecoveryState,drainBackgroundJobs,postgresBackgroundJobStore} from './queue.js';
 import {getDb} from './db.js';
+import {MalformedModelOutputError} from './model-provider.js';
 import postgres from 'postgres';
 let t:TestDatabase;
 const now=new Date('2026-10-05T12:00:00Z');
@@ -103,4 +104,16 @@ it('settles a lease that expired after its final attempt as failed instead of le
   expect(await status(rerun.id),'a requested rerun never resurrects a poison job').toMatchObject({status:'failed',attempts:3});
   expect(await status(live.id),'an unexpired lease is untouched').toMatchObject({status:'running',attempts:3});
   expect(processor).not.toHaveBeenCalled();
+});
+it('records malformed model output once as a terminal failure, never a billed retry',async()=>{
+  /* temperature 0 repeats the same malformed reply, so a retry only pays for it again */
+  const p=await owner();
+  const [job]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,run_after,max_attempts)
+    VALUES(${p},'derive_signals','{}','2026-10-05T11:00:00Z',3) RETURNING id`;
+  const processor=vi.fn(async()=>{throw new MalformedModelOutputError('signal extraction');});
+  expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:1,failed:1,retried:0});
+  expect(processor).toHaveBeenCalledOnce();
+  const [row]=await t.sql`SELECT status,attempts,last_error FROM background_jobs WHERE id=${job.id}`;
+  expect(row).toMatchObject({status:'failed',attempts:1});
+  expect(row!.last_error).toContain('malformed_model_output');
 });

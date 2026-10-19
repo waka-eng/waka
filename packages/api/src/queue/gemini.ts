@@ -96,6 +96,7 @@ import {
   DeclarationNotConsideredError,
   CONVERSATION_REPLY_OUTPUT_TOKENS,
   MODEL_DECLINED,
+  MalformedModelOutputError,
   ModelDidNotAnswerError,
 } from "../lib/model-provider.js";
 import type {
@@ -524,7 +525,7 @@ const extractedStatementsSchema = z.object({
         reason: z.string().nullish(),
         quote: z.string().nullish(),
         relatedEvidence: z
-          .array(z.object({ inspirationId: z.string(), quote: z.string() }))
+          .array(z.object({ inspirationId: z.string(), quote: z.string().nullish() }))
           .nullish(),
       }),
     )
@@ -629,9 +630,9 @@ export function parseSignalCandidates(payload: unknown, input?: SignalCandidateE
       issues: parsed.error.issues,
     });
     /* Not "no candidates": an empty result marks the capture derived-with-
-       nothing for good. A reply without the asked-for shape fails the attempt
-       so the queue retries, like any other malformed envelope. */
-    throw new ModelDidNotAnswerError("signal extraction", parsed.error);
+       nothing for good. Not a retry either: at temperature 0 the same reply
+       comes back. A distinct terminal failure, recorded once. */
+    throw new MalformedModelOutputError("signal extraction", parsed.error);
   }
 
   const statements = (parsed.data.statements ?? [])
@@ -643,7 +644,7 @@ export function parseSignalCandidates(payload: unknown, input?: SignalCandidateE
          schema merely advertises. */
       const seenIds = new Set<string>();
       const relatedEvidence = (candidate.relatedEvidence ?? [])
-        .map((cited) => ({ inspirationId: cited.inspirationId.trim(), quote: cited.quote.trim() }))
+        .map((cited) => ({ inspirationId: cited.inspirationId.trim(), quote: (cited.quote ?? "").trim() }))
         .filter((cited) => {
           if (!cited.inspirationId || !cited.quote || seenIds.has(cited.inspirationId)) return false;
           seenIds.add(cited.inspirationId);
