@@ -656,6 +656,11 @@ export async function promoteIfDemonstrated(
  * stand, undemonstrated again); minted → removed (a machine claim without
  * support has no words worth keeping). Conflict links pointing at a removed
  * row are cleared rather than left dangling.
+ *
+ * A PRINCIPLE CITING A DISMISSED SIGNAL IS LEFT AS IT IS. Dismissal is
+ * undoable and this pass deletes, so it must not turn an undo into a loss:
+ * reads already withhold that principle's support
+ * (`personalPrincipleSupportCurrent`), and a restore brings it back unchanged.
  */
 export async function reconcilePrinciplesAfterSignalLoss(
   db: WakaDb | WakaTx,
@@ -698,6 +703,10 @@ export async function reconcilePrinciplesAfterSignalLoss(
         .from(principleSignals)
         .innerJoin(signals, eq(signals.id, principleSignals.signalId))
         .where(and(eq(principleSignals.principleId, principleId), eq(signals.status, "active")));
+      const [dismissed] = await tx.select({ id: signals.id }).from(principleSignals)
+        .innerJoin(signals, eq(signals.id, principleSignals.signalId))
+        .where(and(eq(principleSignals.principleId, principleId), isNotNull(signals.dismissedAt))).limit(1);
+      if (dismissed) return;
       const evidence = await loadCitationEvidence(tx, input.profileId, cited.map((c) => c.signalId));
       const action = reconcileAction(row, computeCitationEligibility([...evidence.values()], now).eligible);
       if (action === "keep") return;

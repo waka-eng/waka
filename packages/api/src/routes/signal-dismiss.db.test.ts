@@ -3,7 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { getDb } from "../lib/db.js";
-import { dismissProfileSignal } from "./signals.js";
+import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
+import { loadPrincipleViews } from "./principles.js";
+import { dismissProfileSignal, restoreProfileSignal } from "./signals.js";
 
 let t: TestDatabase;
 let sequence = 0;
@@ -59,6 +61,30 @@ describe("dismissing a claim", () => {
     expect(row, "the minted principle survives the dismissal").toMatchObject({ state: "held", unsupported_at: null });
     const links = await t.sql`SELECT signal_id FROM principle_signals WHERE principle_id=${principleId}`;
     expect(links).toHaveLength(3);
+  });
+
+  /* Reads hide a principle resting on a dismissed signal; a later
+     reconcile (another cited signal's support changing, an edit, a forced
+     reconcile job) must not count the dismissal as lost evidence and delete
+     it, or the restore could not bring it back. */
+  it("survives a later reconcile while dismissed, and a restore brings it back unchanged", async () => {
+    const profileId = await person();
+    const { principleId, signalIds } = await principleOnThreeSignals(profileId, false);
+    const view = async () => {
+      const found = (await loadPrincipleViews(t.db as never, profileId)).find((v) => v.id === principleId);
+      return found && { ...found, citedSignals: [...found.citedSignals].sort((a, b) => a.id.localeCompare(b.id)) };
+    };
+    const before = await view();
+    expect(before).toMatchObject({ state: "held", supportChanged: false });
+
+    await dismissProfileSignal(t.db as never, { profileId, signalId: signalIds[0]! });
+    expect(await view(), "a dismissed signal still counted as support").toBeUndefined();
+
+    const reconciled = await reconcilePrinciplesAfterSignalLoss(t.db as never, { profileId, signalIds: [signalIds[1]!] });
+    expect(reconciled.removed, "the reconcile deleted a principle the dismissal only hid").toEqual([]);
+
+    await restoreProfileSignal(t.db as never, { profileId, signalId: signalIds[0]! });
+    expect(await view(), "the restore did not bring it back unchanged").toEqual(before);
   });
 
   it("is all-or-nothing: a failure settling its disputes leaves the claim undismissed", async () => {
