@@ -134,6 +134,31 @@ describe("DELETE /api/signals/:signalId reconciles principles", () => {
     expect(row!.unsupported_at, "the reconcile still ran after the edit").not.toBeNull();
   });
 
+  it("reconciles a principle that began citing the signal while the delete waited", async () => {
+    const owner = await person();
+    const { signalIds } = await principleOnThreeSignals(owner.profileId, true);
+    let deleting: Promise<boolean> | undefined;
+    let lateId = "";
+    await t.sql.begin(async (late) => {
+      await late`SET LOCAL lock_timeout = '5s'`;
+      const [p] = await late`INSERT INTO principles(profile_id, statement, state, origin, rank, locked_at, held_since)
+        VALUES (${owner.profileId}, 'Finish what is started.', 'held', 'minted', 2, now(), now()) RETURNING id`;
+      lateId = p!.id as string;
+      for (const id of signalIds) {
+        await late`INSERT INTO principle_signals(profile_id,principle_id,signal_id) VALUES (${owner.profileId},${lateId},${id})`;
+      }
+      deleting = deleteProfileSignal(getDb(), { profileId: owner.profileId, signalId: signalIds[0]! });
+      await vi.waitFor(async () => {
+        const [row] = await late`SELECT count(*)::int AS n FROM pg_locks WHERE NOT granted
+          AND locktype = 'transactionid' AND transactionid::text = pg_current_xact_id()::text`;
+        expect(row!.n, "the delete waits on the citation being written").toBeGreaterThan(0);
+      }, { timeout: 5000, interval: 20 });
+    });
+    expect(await deleting).toBe(true);
+    const [row] = await t.sql`SELECT unsupported_at FROM principles WHERE id=${lateId}`;
+    expect(row!.unsupported_at, "the late citer was reconciled too").not.toBeNull();
+  });
+
   it("still deletes, and falls back to the profile principles refresh, when the reconcile fails", async () => {
     const owner = await person();
     const { principleId, signalIds } = await principleOnThreeSignals(owner.profileId, true);

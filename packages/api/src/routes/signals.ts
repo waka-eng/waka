@@ -878,15 +878,23 @@ export async function deleteProfileSignal(
   // principles that cited it are read first and reconciled after the delete
   // commits — each in its own transaction, principle before fence, the order
   // a principle edit takes (inside the delete's transaction it would invert).
-  const citing = await db
-    .selectDistinct({ principleId: principleSignals.principleId })
-    .from(principleSignals)
-    .where(and(eq(principleSignals.profileId, input.profileId), eq(principleSignals.signalId, input.signalId)));
-  const deleted = await db
-    .delete(signals)
-    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
-    .returning({ id: signals.id });
-  if (deleted.length === 0) return false;
+  // The read and the delete share one transaction behind the signal's row
+  // lock: a citation needs that row's key-share lock, so none can be written
+  // between the read and the delete. No principle row is locked in here.
+  const citing = await db.transaction(async (tx) => {
+    const [locked] = await tx.select({ id: signals.id }).from(signals)
+      .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+      .for("update");
+    if (!locked) return null;
+    const rows = await tx
+      .selectDistinct({ principleId: principleSignals.principleId })
+      .from(principleSignals)
+      .where(and(eq(principleSignals.profileId, input.profileId), eq(principleSignals.signalId, input.signalId)));
+    await tx.delete(signals)
+      .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)));
+    return rows;
+  });
+  if (citing === null) return false;
   try {
     await reconcilePrinciplesAfterSignalLoss(db, {
       profileId: input.profileId,
