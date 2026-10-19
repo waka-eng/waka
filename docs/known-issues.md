@@ -1468,6 +1468,28 @@ counts these as `ExhaustedLeases`; nothing resolves them. Cases the attempted fi
   enqueue wake takes. A fix probably belongs in the scheduled sweep, not the drain.
 
 ---
+
+## Malformed extraction payload recorded as no candidates (follow-up)
+
+**Status:** open, cut from `claude/fix-api-bugs`; `parseSignalCandidates`
+(`packages/api/src/queue/gemini.ts`) is back to `origin/dev`'s behaviour. A reply that parses but
+fails `extractedStatementsSchema` returns `{ statements: [], category: null }`, the same result as
+a model that found nothing. The capture is then marked derived-with-nothing for good. (The branch
+kept one independent part: null optional fields — `reason`, `quote`, `relatedEvidence`, a
+citation's `quote` — now count as a valid reply instead of failing validation.) Cases the
+attempted fix ran into:
+
+- **Temperature-0 repeats vs provider-routed retries.** Extraction runs at temperature 0, so on
+  one backend the same input mostly returns the same malformed reply, and the full retry budget
+  pays for three identical answers. OpenRouter-routed calls can reach a different backend on
+  retry, though, where a retry can genuinely succeed. "Never retry" gives up on those;
+  "retry once" is a guess about which case you are in.
+- **`last_error` carry-over.** Counting malformed answers through the previous attempt's
+  `last_error` is fragile. The claim does not clear it, success and terminal re-enqueue do, and a
+  different failure in between changes the count. An explicit per-reason counter, or a
+  terminal-outcome column, would be needed to make "one retry for this reason" exact.
+
+---
 ## Refuted findings
 
 Three findings did not survive verification. **A list that only grows is a list nobody trusts**, so

@@ -417,21 +417,6 @@ export class ModelDidNotAnswerError extends Error {
   }
 }
 
-/**
- * The model answered, but not in the shape asked for. At temperature 0 the same
- * input mostly repeats the same reply, so the queue retries it exactly once and
- * then records it as a terminal failure (`malformed_model_output`) — never as
- * an empty result.
- */
-export class MalformedModelOutputError extends ModelDidNotAnswerError {
-  readonly reason = "malformed_model_output" as const;
-  constructor(task: string, cause?: unknown) {
-    super(task, cause);
-    this.name = "MalformedModelOutputError";
-    this.message = `malformed_model_output: ${this.message}`;
-  }
-}
-
 /** One follow-up grounded in the inspiration and the person's saved answers. */
 export interface ReflectionQuestionInput {
   preferredLocale: SupportedLocale;

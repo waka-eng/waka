@@ -5,7 +5,6 @@ import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
 import {readBackgroundJobRecoveryState,drainBackgroundJobs,postgresBackgroundJobStore} from './queue.js';
 import {getDb} from './db.js';
-import {MalformedModelOutputError} from './model-provider.js';
 import postgres from 'postgres';
 let t:TestDatabase;
 const now=new Date('2026-10-05T12:00:00Z');
@@ -87,22 +86,4 @@ it('the recovery selector skips newly due work and active leases while preservin
   expect(processor).not.toHaveBeenCalled();
   expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:1,succeeded:1});
   expect(processor).toHaveBeenCalledOnce();
-});
-it('gives malformed model output exactly one retry, then records it as a terminal failure',async()=>{
-  /* temperature 0 mostly repeats the same malformed reply: one retry covers a
-     transient glitch, a third call would only pay for the same answer again */
-  const p=await owner();
-  const [job]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,run_after,max_attempts)
-    VALUES(${p},'derive_signals','{}','2026-10-05T11:00:00Z',3) RETURNING id`;
-  const processor=vi.fn(async()=>{throw new MalformedModelOutputError('signal extraction');});
-  const row=async()=>(await t.sql`SELECT status,attempts,last_error FROM background_jobs WHERE id=${job.id}`)[0];
-  expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:1,failed:0,retried:1});
-  expect(await row()).toMatchObject({status:'pending',attempts:1});
-  const later=new Date(now.getTime()+3600000);
-  expect(await drainBackgroundJobs({limit:5,now:later,processor})).toMatchObject({claimed:1,failed:1,retried:0});
-  expect(processor).toHaveBeenCalledTimes(2);
-  expect(await row()).toMatchObject({status:'failed',attempts:2});
-  expect((await row())!.last_error).toContain('malformed_model_output');
-  expect(await drainBackgroundJobs({limit:5,now:new Date(later.getTime()+3600000),processor})).toMatchObject({claimed:0});
-  expect(processor,'never a third call').toHaveBeenCalledTimes(2);
 });

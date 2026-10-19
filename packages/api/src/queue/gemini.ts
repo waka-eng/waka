@@ -96,7 +96,6 @@ import {
   DeclarationNotConsideredError,
   CONVERSATION_REPLY_OUTPUT_TOKENS,
   MODEL_DECLINED,
-  MalformedModelOutputError,
   ModelDidNotAnswerError,
 } from "../lib/model-provider.js";
 import type {
@@ -629,11 +628,7 @@ export function parseSignalCandidates(payload: unknown, input?: SignalCandidateE
     console.warn("[gemini] signal extraction payload failed validation", {
       issues: parsed.error.issues,
     });
-    /* Not "no candidates": an empty result marks the capture derived-with-
-       nothing for good. Nor the ordinary retry budget: at temperature 0 the
-       same reply mostly comes back. One retry, then a distinct terminal
-       failure (see the drain). */
-    throw new MalformedModelOutputError("signal extraction", parsed.error);
+    return { statements: [], category: null };
   }
 
   const statements = (parsed.data.statements ?? [])
