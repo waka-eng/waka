@@ -1432,6 +1432,20 @@ for one press. (Escape, the bar's rows and the note's own close already commit a
   single announced "Recording" (`LiveWord`).
 
 ---
+
+## Principles after a dismissed signal (follow-up)
+
+**Status:** open, set aside from `claude/fix-api-bugs`. `dismissProfileSignal`
+(`packages/api/src/routes/signals.ts`) retires the signal and settles its contradictions in one
+transaction, but does not reconcile the principles that cite it, which is dev's behaviour. A
+principle can therefore keep counting a dismissed signal as support until the next principles
+pass. The branch tried running `reconcilePrinciplesAfterSignalLoss` on dismissal and took it back
+out in review. Dismissal is undoable (`/restore`), but the reconcile deletes unedited minted
+principles, and a restore cannot bring those back. A real fix needs a reversible way to withdraw
+support, for example marking the support as withdrawn instead of deleting, with restore clearing
+the mark, or having restore re-run promotion.
+
+---
 ## Refuted findings
 
 Three findings did not survive verification. **A list that only grows is a list nobody trusts**, so

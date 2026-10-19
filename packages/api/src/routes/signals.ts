@@ -830,15 +830,10 @@ export async function dismissProfileSignal(
   });
   if (!dismissed) return null;
 
-  // A retired signal no longer supports principles. Reconciled AFTER the
-  // commit, each principle in its own transaction: inside the signal's, the
-  // signals trigger would hold the generation fence while waiting on a
-  // principle row — the reverse of a principle edit's order, a deadlock.
-  await reconcilePrinciplesAfterSignalLoss(db, {
-    profileId: input.profileId,
-    signalIds: [input.signalId],
-  });
-
+  /* No principles reconcile here, on purpose: a dismissal is undoable, and
+     the reconcile deletes unedited minted principles that a restore could
+     not bring back. See docs/known-issues.md, "Principles after a dismissed
+     signal (follow-up)". */
   return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
 }
 
