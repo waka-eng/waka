@@ -81,7 +81,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 
-import { fetchPublicProfile, type FetchPublicProfileResponse } from "../lib/api";
+import { ApiError, fetchPublicProfile, type FetchPublicProfileResponse } from "../lib/api";
 import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 
@@ -102,29 +102,51 @@ export default function PublicProfilePage(): JSX.Element {
    * for somebody to "fix" it by printing the API client's voice to a
    * stranger; `Login` has a long comment about the day that happened there.
    */
-  const [failed, setFailed] = useState(false);
+  /* TWO DIFFERENT WAYS FOR THERE TO BE NO PAGE, and they used to be one.
+     `missing` is the server saying so (a 404): the handle is not shared, and
+     "This page is not here" is the truth. `failed` is everything else — a
+     500, a dead connection, a request that never came back — where the page
+     may well be there and we simply could not read it. Telling a stranger a
+     friend's page does not exist because the server hiccuped is a false
+     statement about somebody else, so a failure says it failed and offers to
+     try again. */
+  const [failed, setFailed] = useState<"missing" | "failed" | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const isPublicHandleRoute = handle.startsWith("@");
 
   useEffect(() => {
     if (!isPublicHandleRoute) return;
     let cancelled = false;
+    const controller = new AbortController();
+    /* A BOUND ON THE WAIT. A request that never answers left "Opening this
+       page…" up forever, with nothing on screen to do about it. Fifteen
+       seconds is past any honest response and short enough that a person is
+       still looking; it ends in the failed state below, which has a retry. */
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
     setIsLoading(true);
-    setFailed(false);
+    setFailed(null);
     setData(null);
     (async () => {
       try {
-        const next = await fetchPublicProfile(handle);
+        const next = await fetchPublicProfile(handle, controller.signal);
         if (!cancelled) setData(next);
-      } catch {
-        if (!cancelled) setFailed(true);
+      } catch (err) {
+        /* Only a dead connection, a timeout or a 5xx (and 408/429, "try
+           later") is retryable; any other answer — a 404, a 400, a response
+           that did not parse as a page — is the server's "not here". */
+        const retryable = !(err instanceof ApiError) || err.status === 0 || err.status >= 500 || err.status === 408 || err.status === 429;
+        if (!cancelled) setFailed(retryable ? "failed" : "missing");
       } finally {
+        window.clearTimeout(timeout);
         if (!cancelled) setIsLoading(false);
       }
     })();
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
     };
-  }, [handle, isPublicHandleRoute]);
+  }, [handle, isPublicHandleRoute, attempt]);
 
   if (!isPublicHandleRoute) {
     return <Navigate to="/" replace />;
@@ -157,9 +179,34 @@ export default function PublicProfilePage(): JSX.Element {
   if (isLoading) {
     return (
       <main className="waka-public">
-        <p className="waka-public-state" role="status">
-          {t(locale, "publicProfileLoading")}
-        </p>
+        {/* THE WAY IN IS THERE WHILE WE WAIT. It does not depend on the
+            page loading — it goes to the visitor's own WAKA, or to the door —
+            so holding it back until the read finished made a slow server
+            into a page with no exits at all. */}
+        <section className="waka-public-head">
+          <p className="waka-public-state" role="status">
+            {t(locale, "publicProfileLoading")}
+          </p>
+          {corner}
+        </section>
+      </main>
+    );
+  }
+
+  if (failed === "failed") {
+    return (
+      <main className="waka-public">
+        <section className="waka-public-head" aria-labelledby="public-failed-title">
+          <p className="waka-public-handle">@{handle.replace(/^@+/, "")}</p>
+          <h1 className="waka-public-title" id="public-failed-title">
+            {t(locale, "publicProfileFailedTitle")}
+          </h1>
+          <p className="waka-public-state" role="alert">{t(locale, "publicProfileFailedBody")}</p>
+          <button className="waka-public-enter" type="button" onClick={() => setAttempt((n) => n + 1)}>
+            {t(locale, "worldRetry")}
+          </button>
+          {corner}
+        </section>
       </main>
     );
   }

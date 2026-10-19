@@ -186,7 +186,12 @@ export function Days(): JSX.Element {
           two comments is 40px of margin pretending to be a heading, and the
           exit is where every other page keeps it. */}
       <Menu locale={locale} items={menu.items} current={menu.current} left={<ChatCorner locale={locale} onOpen={() => navigate("/?open=conversations")} />} label="worldDaysTitle"
-        account={auth?.account ? { name: auth?.profile?.name, email: auth?.account.email } : null} />
+        account={auth?.account ? { name: auth?.profile?.name, email: auth?.account.email } : null}
+        /* Leaving is offered here too: the cog is where a person reaches to
+           sign out, and on this page it used to answer only "who am I". */
+        onSignOut={auth?.isAuthenticated ? () => {
+          void auth.logout().then(() => navigate("/login", { replace: true })).catch(() => undefined);
+        } : undefined} />
 
       {phase === "loading" ? (
         <p className="waka-page-status" role="status">
@@ -202,7 +207,15 @@ export function Days(): JSX.Element {
           </button>
         </>
       ) : kept === 0 ? (
-        <p className="waka-page-status">{say("worldDaysEmpty")}</p>
+        /* "EVERY DAY YOU KEEP SOMETHING, ITS DOT LIGHTS UP" — and then no way
+           to keep something. The page told a person what to do and left
+           them to find where; the save box is one press, so it is here. */
+        <>
+          <p className="waka-page-status">{say("worldDaysEmpty")}</p>
+          <button type="button" className="waka-page-retry" onClick={() => navigate("/?compose=1")}>
+            {say("worldCaptureInspiration")}
+          </button>
+        </>
       ) : (
         /* THE LIST'S NAME STAYS, AND IT IS NOT THE DUPLICATION LAW 4 MEANS.
             It does repeat the words on the switcher above it — but the

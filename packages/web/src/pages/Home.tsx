@@ -123,7 +123,7 @@ import { deleteAccount } from "../lib/api/auth";
 import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
-import { ClaimsOverlay } from "../components/ClaimsOverlay";
+import { useOpenClaimsLink } from "../lib/open-claims-link";
 import { ClaimSlip } from "../components/ClaimSlip";
 import { HarvestReasons } from "../components/HarvestReasons";
 import { AgentPick } from "../components/AgentPick";
@@ -226,6 +226,8 @@ import {
   ApiError,
 } from "../lib/api";
 import { LoadingHome } from "../components/LoadingHome";
+import { ReadingPausedNotice } from "../components/ReadingPausedNotice";
+import { useReadingPaused } from "../lib/use-reading-paused";
 import {
   loadInspiration,
   loadInspirations,
@@ -745,6 +747,24 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     };
   }, []);
   const [navigationProblem, setNavigationProblem] = useState<'retryable' | 'unavailable' | null>(null);
+  /* Whether another layer (the notepad, review, an overlay) is up — set
+     below once those states exist. The notice's Escape belongs to the
+     topmost layer, so with another one up it is not the notice's. */
+  const otherLayerOpenRef = useRef(false);
+  useEffect(() => {
+    if (!navigationProblem) return;
+    const onKey = (event: KeyboardEvent) => {
+      /* Not gated on `defaultPrevented`: the world's own key handler marks
+         every Escape handled (so the browser does not also act on it), which
+         left this listener deaf. The layer check below is the gate. */
+      if (event.key !== 'Escape') return;
+      if (otherLayerOpenRef.current || document.querySelector('.waka-corner[aria-expanded="true"]')) return;
+      event.preventDefault();
+      viewNavigationRef.current.write({ ...EMPTY_VIEW }, { replace: true });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navigationProblem]);
   const [detachedInspiration, setDetachedInspiration] = useState<{ wall: string; ball: Ball; detail: InspirationDetail | null } | null>(null);
   const detachedRef = useRef(detachedInspiration); detachedRef.current = detachedInspiration;
   const linkedReflectionRef = useRef<{ panelId: string; open: boolean } | null>(null);
@@ -1773,6 +1793,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      the top-of-mind bubble steps aside — and the mode ends when the queue
      runs out or on Esc. */
   const [reviewing, setReviewing] = useState(false);
+  otherLayerOpenRef.current = mouthOpen || reviewing || panelOpen || Boolean(viewNavigation.view?.open);
   /** A candidate that was swiped away and is being asked "why not". */
   const [harvestWhy, setHarvestWhy] = useState<{ candidate: ApiHarvestCandidate; busy: boolean; failed: boolean } | null>(null);
   /** What the invitation counts: your agent's picks and WAKA's readings, both swiped the same way. */
@@ -1782,6 +1803,35 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      card's own goodbye (`worldSittingDone`), not on top of a "why not" the
      person is still answering. */
   useEffect(() => { if (reviewing && toReview === 0 && !harvestWhy) setReviewing(false); }, [reviewing, toReview, harvestWhy]);
+  /* ═══ /?open=claims IS REVIEW NOW ═══════════════════════════════════════
+     The claims page was the queue's own room until 2026-10-15, when review
+     became something you step into from home ("Dive into review") and the
+     same claims are answered there, one card at a time. Nothing in the
+     product linked to the old page after that — the menu passes no items —
+     so it was reachable only by an address somebody had saved, and it had
+     no bar of its own: a page with no way back. An old link now lands where
+     its claims actually are.
+
+     THREE CASES, AND THE REQUEST NEVER OUTLIVES ITS ANSWER. Claims already
+     waiting: review opens now. The queue still loading: the request waits
+     for THAT load to settle and is spent either way — so a queue that turns
+     up later, from some other load, never pops review open unasked. The
+     queue loaded and empty: home is the honest answer, and nothing waits.
+     Only `open` is dropped from the address; the wall you are standing on
+     (yours or your agent's) is kept. */
+  const [queueLoaded, setQueueLoaded] = useState(false);
+  const queueLoadRef = useRef(0);
+  const viewOpen = viewNavigation.view?.open ?? null;
+  /* The rules (and the fourth case, offline: the link is dropped) live in
+     `lib/open-claims-link.ts`. */
+  useOpenClaimsLink({
+    ready: phase === 'ready', asked: viewOpen === 'claims', offline, queueLoaded, toReview,
+    consume: () => {
+      const nav = viewNavigationRef.current;
+      nav.write({ ...(nav.view ?? EMPTY_VIEW), open: null }, { replace: true, query: nav.query });
+    },
+    openReview: () => setReviewing(true),
+  });
   /* THE FIRST CARD HAS FOCUS ON THE WAY IN, so ← and → answer it at once —
      the card owns its arrows only while it is focused (see `ClaimSlip`). */
   useEffect(() => {
@@ -2037,13 +2087,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   standingAsAgentRef.current = standingAsAgent;
   useEffect(() => { if (standingAsAgent) setHarvestWhy(null); }, [standingAsAgent]);
   const loadClaims = useCallback(() => {
-    if (standingAsAgent) { setClaimQueue([]); setHarvestQueue([]); return; }
+    if (standingAsAgent) { setClaimQueue([]); setHarvestQueue([]); setQueueLoaded(true); return; }
+    /* Whether the queue on screen is an answer or a load in flight — what an
+       old `?open=claims` link waits on before deciding (see above). */
+    setQueueLoaded(false);
+    const load = ++queueLoadRef.current;
     /* The basket loads beside the claims. A failure is an empty basket:
        nothing here is broken for the person, nothing is being asked. */
-    void listHarvest()
+    const basket = listHarvest()
       .then((rows) => { if (!standingAsAgentRef.current) setHarvestQueue(rows.slice(0, 3)); })
       .catch(() => setHarvestQueue([]));
-    void listClaims({ limit: 8 })
+    const asked = listClaims({ limit: 8 })
       /* ═══ THREE IS A SITTING ═══════════════════════════════════════════
          Not eight, which is what this used to hold. A claim is expensive to
          answer — it asks a person to consult themselves — and the research
@@ -2068,6 +2122,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
          screen: nothing here is broken for the person, there is simply
          nothing being asked. */
       .catch(() => setClaimQueue([]));
+    void Promise.all([basket, asked]).then(() => { if (load === queueLoadRef.current) setQueueLoaded(true); });
   }, [standingAsAgent]);
   useEffect(() => {
     if (phase !== 'ready' || offline) return;
@@ -4686,6 +4741,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
      right pane asks for the memory itself, once per selection, and says so
      while it is on its way rather than rendering a shorter version of the
      truth. */
+  /* PICKING THE SAME GROUND AGAIN DID NOTHING after a failed fetch: the pick
+     did not change, so the effect below never ran and "couldn't fetch it"
+     stood for good. This is the second ask — bumped by the pane's own Try
+     again and by pressing the failed row again. */
+  const [provRetry, setProvRetry] = useState(0);
   useEffect(() => {
     if (!prov || provPick === null) {
       setProvFull(null);
@@ -4709,7 +4769,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     return () => {
       dead = true;
     };
-  }, [provPick, prov?.rows, say]);
+  }, [provPick, prov?.rows, say, provRetry]);
 
   const panelId = panel ? panel.id : null;
 
@@ -5184,10 +5244,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
     if (!newInspirationRequested || !atNow || inField || inSky) return;
     setNewInspirationRequested(false);
     if (mouthOpen) {
-      setMouthNote("");
+      /* The notepad is already open UNDER whatever overlay asked (the empty
+         archive's "save" in Saves): close the overlay first, or the focus
+         lands in a field nobody can see. */
+      if (viewNavigationRef.current.view?.open) {
+        /* …and keep what is already written there: the overlay's "save"
+           asks for the notepad, not for a blank one. */
+        leaveOpen();
+      } else setMouthNote("");
       mouthFieldRef.current?.focus();
     } else openMouth();
-  }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth]);
+  }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth, leaveOpen]);
 
   /** The way out that keeps the words: the page folds, the draft stays. */
   const saveAsDraft = useCallback(() => {
@@ -7303,6 +7370,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
     setReflectOpen(false); setSelectedId(null);
     simApiRef.current?.goToWall(0); simApiRef.current?.toTop(); setPosterAsk(true);
   });
+  /* A FAILED READING USED TO BE SILENT HERE — see `use-reading-paused.ts`. */
+  const readingPaused = useReadingPaused(phase === 'ready' && !offline);
   const sourceNotice = !offline && !readingRefresh.busy && inspirationSave.phase === 'idle' ? <InspirationProcessingNotice
     processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
   const showHomeProcessing = Boolean(sourceProcessing.active && sourceProcessing.phase !== 'idle' && !offline && !readingRefresh.busy &&
@@ -7468,10 +7537,41 @@ const RETRY_READ_LIMIT_MS = 20_000;
           frame that claims nothing is ready yet. */}
       {phase !== "ready" ? (
         <div style={{ position: "absolute", inset: 0, zIndex: 60 }}>
-          <LoadingHome />
+          {/* A FAILED LOAD SAID "LOADING" FOREVER. This screen sat at z 60
+              over the failure line and its reason (z 7, at the bottom of
+              this tree), and the retry the field loader keeps in
+              `retryFieldRef` was never called by anything. So the screen
+              itself turns into the failure: what went wrong, why, and the
+              two ways out a person can actually take from here. */}
+          <LoadingHome problem={phase === "failed" ? {
+            message: say("homeLoadFailed"),
+            detail: failReason,
+            actions: [
+              { label: say("homeTryAgain"), onClick: () => {
+                setFailReason(null);
+                setPhase("loading");
+                retryFieldRef.current?.();
+                /* The same failure usually took the sky and the agent
+                   roster with it, and the reading; one Try again asks for
+                   all four. */
+                void readSkyRef.current().catch(() => undefined);
+                void loadAgentRoster().then(({ roster }) => setAgentRoster(roster)).catch(() => undefined);
+                retryReadingLoadRef.current();
+              } },
+              ...(auth?.isAuthenticated ? [{ label: say("signOut"), onClick: () => {
+                void auth.logout().then(() => navigate("/login", { replace: true })).catch(() => undefined);
+              } }] : []),
+            ],
+          } : null} />
         </div>
       ) : null}
       {navigationProblem ? <div className="jar-navigation-notice" role="alert" data-jar-chrome="1">
+        {/* A NOTICE IN THE MIDDLE OF THE SCREEN NEEDS THE TWO WAYS EVERY
+            OTHER ONE HAS: a ✕ inside it, and Escape (the listener below).
+            Both do what "Me" does — the view that failed is not there to go
+            back to, so dismissing it IS going home. */}
+        <button type="button" className="jar-navigation-notice-close" aria-label={say('worldClose')}
+          onClick={() => viewNavigation.write({ ...EMPTY_VIEW }, { replace: true })}>×</button>
         <p>{say(navigationProblem === 'unavailable' ? 'worldPrivateLinkUnavailable' : 'worldLinkUnavailable')}</p>
         {navigationProblem === 'retryable' ? <button type="button" onClick={() => viewNavigation.write(viewNavigation.view ?? { ...EMPTY_VIEW }, { replace: true, query: viewNavigation.query })}>{say('worldRoomHistoryRetry')}</button> : auth?.isAuthenticated ?
           <button type="button" onClick={() => {
@@ -8385,6 +8485,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         confirmed where the eye is — the creature's own "I'm
                         inspired!" in the bubble. */}
                     {here && w.kind === 'self' && mouthOpen && !showHomeProcessing && !reflectOpen && !editing.open ? sourceNotice : null}
+                    {/* NOT `besidePrincipleRead`: PrincipleRead's failure line
+                        and its Try again live in the sky, not on this board,
+                        so a principles failure must not hide the only Retry
+                        a person on the board can see. */}
+                    {here && w.kind === "self" && !offline && !readingMessage && !showHomeProcessing ? (
+                      <ReadingPausedNotice state={readingPaused} locale={locale} canRetry={auth?.profile?.type !== 'agent'} />
+                    ) : null}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
                       <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">
                         {readingMessage === "worldReadingSupportChanged" ? null : say(readingMessage)}
@@ -8720,6 +8827,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 {ready && c?.empty && !c?.formingAlt && w.kind === "agent" ? (
                   <p className="jar-wall-empty">
                     {say("worldAgentEmptyGive")}
+                    {/* THE LINE NAMED A WAIT AND NOT THE WAY. "Give me
+                        something" with no control under it asked a person to
+                        act and gave them nowhere to — and the honest answer
+                        is not a button on this wall: an agent's memory is
+                        written by the agent, signed in as itself (see
+                        `docs/data-model.md`, "What an agent session may do").
+                        So the wall says how material gets here. */}
+                    <span className="jar-wall-empty-how">{say("agentWallHowItFills")}</span>
                   </p>
                 ) : null}
                 {/* THE EDGE OF THE WORLD, AND WHAT IS BEYOND IT.
@@ -10458,7 +10573,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     provPick === e.inspirationId ? " jar-prov-row--picked" : ""
                   }`}
                   aria-pressed={provPick === e.inspirationId}
-                  onClick={() => setProvPick(e.inspirationId)}
+                  onClick={() => {
+                    if (provPick === e.inspirationId && provFull?.id === provPick && provFull.text === "") setProvRetry((n) => n + 1);
+                    else setProvPick(e.inspirationId);
+                  }}
                 >
                   <span className="jar-prov-text">{salience(e)}</span>
                   {e.reason ? <span className="jar-prov-why">{e.reason}</span> : null}
@@ -10477,7 +10595,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
               ) : provFull === null || provFull.id !== provPick ? (
                 <p className="jar-prov-room-idle">{say("worldFetchingIt")}</p>
               ) : provFull.text === "" ? (
-                <p className="jar-prov-room-idle">{say("worldProvFetchFailed")}</p>
+                <p className="jar-prov-room-idle">{say("worldProvFetchFailed")}{" "}
+                  <button type="button" className="jar-board-act" onClick={() => setProvRetry((n) => n + 1)}>{say("homeTryAgain")}</button>
+                </p>
               ) : (
                 <p className="jar-prov-room-text">{provFull.text}</p>
               )}
@@ -11775,6 +11895,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           following an old reference here. */}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
         onNoteOpen={savedNoteChanged}
+        onNewSave={startNewInspiration}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         ownArchive={atWall.kind!=='agent'} shareName={auth?.profile?.name ?? ''}
@@ -11789,36 +11910,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
            corner's pair stood behind this sheet's own left edge, clipped to
            "MY AGE". The act survives; the duplicate does not. */
         onClose={leaveOpen}/>:null}
-      {/* THE QUEUE, where answering eight in a row is a different activity
-          from being asked one. The creature keeps asking its single claim on
-          the home screen — that is the product's character and it stays — and
-          this is where a person goes to sit down and work through them. See
-          `ClaimsOverlay` for why this rung needed a door.
-
-          `sayVerdict` is passed down rather than reimplemented: a verdict is
-          filed by whoever is standing here, and a second writer could
-          disagree with the world about who that is. */}
-      {storageScope&&viewNavigation.view?.open==='claims'?<ClaimsOverlay
-        key={`${storageScope.accountId}:${storageScope.profileId}:claims`}
-        locale={locale}
-        onClose={leaveOpen}
-        answered={verdicts}
-        /* THE ROOM HANDS A CLAIM TO THE CREATURE; IT NEVER ANSWERS ONE.
-           Founder: "your claims are duplicated so that's like even bad." The
-           rule every shipping product follows is that a queue has exactly one
-           surface where an item is answerable, and other surfaces may only
-           advertise that it exists — GitHub's badge carries no item content,
-           Anki never renders a card on the deck screen. So pressing a row
-           here moves that claim to the front of the creature's queue and
-           closes the room, which makes the duplication impossible rather than
-           merely discouraged. */
-        onAsk={id=>{
-          setClaimQueue(queue=>{
-            const picked=queue.find(claim=>claim.id===id);
-            return picked?[picked,...queue.filter(claim=>claim.id!==id)]:queue;
-          });
-          leaveOpen();
-        }}/>:null}
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
@@ -12063,15 +12154,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
           the audit actually taught. */}
 
 
-      {phase === "loading" ? (
-        <div className="jar-skel jar-skel-line">{say("worldPouring")}</div>
-      ) : null}
-      {phase === "failed" ? (
-        <div className="jar-skel jar-skel-line">
-          {say("worldPourFailed")}
-          {failReason ? <span className="jar-skel-why">{failReason}</span> : null}
-        </div>
-      ) : null}
+      {/* "POURING WAKA…" AND "COULD NOT BE POURED — RELOAD" LIVED HERE, at
+          z 7 under the loading screen's z 60: never seen, but read aloud by
+          a screen reader beside the screen that is seen, so a failed load
+          announced two different failures. The loading screen says it all
+          now (see the `LoadingHome` call above). */}
     </div>
   );
 }

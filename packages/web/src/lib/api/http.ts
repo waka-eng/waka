@@ -144,10 +144,20 @@ export async function getJson<T>(
   }
 
   let body: unknown = null;
+  let unreadable = false;
   try {
     body = await res.json();
   } catch {
     // Non-JSON response — handled below.
+    unreadable = true;
+  }
+
+  /* A 2xx READ WITH NO READABLE BODY IS NOT AN ANSWER. Every read here is
+     JSON; one that arrives cut off or garbled used to come back as `null`,
+     typed as whatever the caller asked for, and the caller rendered "you
+     have nothing". It is the same fact as a dead connection and says so. */
+  if (res.ok && unreadable) {
+    throw new ApiError({ status: 0, message: `${fallbackMessage}: unreadable response` });
   }
 
   if (!res.ok) {

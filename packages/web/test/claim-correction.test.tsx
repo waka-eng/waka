@@ -41,7 +41,7 @@
  * partly left the slot. `correctionText` is still produced by nothing.
  */
 import { act } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import { apiMockFrom, dataMockFrom, diveIntoReview, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
@@ -347,7 +347,8 @@ it("does not open the roots after a drag that settles back", async () => {
  * the observable form of the mode.
  */
 let where: ReturnType<typeof useLocation>;
-function Where() { where = useLocation(); return null; }
+let go: ReturnType<typeof useNavigate>;
+function Where() { where = useLocation(); go = useNavigate(); return null; }
 const invite = () => world.container.querySelector(".jar-char-bubble--review");
 const inviteSays = () => invite()?.querySelector(".jar-char-bubble-reading")?.textContent?.trim() ?? "";
 const walkedToPrinciples = () => new URLSearchParams(where.search).get("open") === "principles";
@@ -441,4 +442,43 @@ it("does not walk to Principles on → off the card while reviewing", async () =
   await press(document.body, "Escape");
   await press(document.body, "ArrowRight");
   expect(walkedToPrinciples(), "→ on Now does not walk to Principles out of review").toBe(true);
+});
+
+/* ═══ AN OLD `?open=claims` LINK OPENS REVIEW (2026-10-17) ═══════════════
+   The claims page is gone; its address hands over to review. Three cases,
+   because the queue may already be here, still loading, or empty — and the
+   address keeps the wall it named while losing only `open`. */
+it("opens review from a cold ?open=claims link once the claims arrive, and keeps the wall", async () => {
+  vi.mocked(listClaims).mockResolvedValue({ claims: [CLAIM], more: false });
+  world = await mountWorld(FACTS, { routerTools: <Where />, initialEntries: ["/w/me?open=claims"] });
+  await world.step(4);
+  expect(card(), "the old claims link did not open review").toBeTruthy();
+  expect(where.pathname, "the wall the link named was dropped").toBe("/w/me");
+  expect(new URLSearchParams(where.search).get("open")).toBeNull();
+});
+
+it("opens review at once when the claims are already waiting, and Back/Forward do not reopen a dead page", async () => {
+  await mountQueue(CLAIM);
+  expect(card(), "review was open before anybody asked").toBeNull();
+  await act(async () => { go("/?open=claims"); });
+  await world.step(4);
+  expect(card(), "claims were waiting and review did not open").toBeTruthy();
+  expect(new URLSearchParams(where.search).get("open")).toBeNull();
+  await act(async () => { go(-1); }); await world.step(4);
+  await act(async () => { go(1); }); await world.step(4);
+  expect(new URLSearchParams(where.search).get("open"), "history still holds the dead page").toBeNull();
+});
+
+it("stays home when nothing is waiting, and the request does not linger", async () => {
+  vi.mocked(listClaims).mockResolvedValue({ claims: [], more: false });
+  world = await mountWorld(FACTS, { routerTools: <Where />, initialEntries: ["/?open=claims"] });
+  await world.step(4);
+  expect(card()).toBeNull();
+  expect(new URLSearchParams(where.search).get("open")).toBeNull();
+  /* a queue that turns up later, from another load, is not an invitation
+     the link made: review stays closed until somebody dives in */
+  vi.mocked(listClaims).mockResolvedValue({ claims: [CLAIM], more: false });
+  await act(async () => { go("/w/me"); }); await world.step(6);
+  await act(async () => { go("/"); }); await world.step(6);
+  expect(card(), "review popped open long after the link was answered").toBeNull();
 });

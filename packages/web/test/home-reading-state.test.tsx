@@ -13,14 +13,14 @@ import type {TopOfMind} from '../src/lib/data';
 import {profileStorageKey} from '../src/lib/profile-storage';
 const facts=vi.hoisted(()=>({inspirations:[{id:'source-one',text:'A synthetic source',daysAgo:0}],groups:[]}));
 const reads=vi.hoisted(()=>({owner:'profile-viewer',requests:[] as Array<{profile?:string;signal?:AbortSignal;resolve:(value:TopOfMind|null)=>void;reject:(reason:Error)=>void}>}));
-vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),...apiMockFrom(facts),refreshTopOfMind:vi.fn(),fetchInspirationProcessing:vi.fn()}));
+vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),...apiMockFrom(facts),refreshTopOfMind:vi.fn(),fetchInspirationProcessing:vi.fn(),fetchPrincipleStatus:vi.fn()}));
 vi.mock('../src/lib/auth-context',async original=>({...await original<typeof import('../src/lib/auth-context')>(),useOptionalAuth:()=>({status:'authenticated',account:{id:'owner',email:'owner@example.test'},profile:{id:reads.owner,name:'Owner',type:'human'},profiles:[]})}));
 vi.mock('../src/lib/data',async original=>({...await original<typeof import('../src/lib/data')>(),...dataMockFrom(facts),
   loadTopOfMind:(profile?:string,signal?:AbortSignal)=>new Promise<TopOfMind|null>((resolve,reject)=>reads.requests.push({profile,signal,resolve,reject}))}));
-import {refreshTopOfMind,fetchInspirationProcessing} from '../src/lib/api';
+import {refreshTopOfMind,fetchInspirationProcessing,fetchPrincipleStatus} from '../src/lib/api';
 let world:MountedWorld|undefined;
 beforeAll(()=>{installCanvasStub();setViewport(1280,900);(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;});
-beforeEach(()=>{reads.owner=VIEWER_ID;reads.requests=[];facts.inspirations=[{id:'source-one',text:'A synthetic source',daysAgo:0}];localStorage.clear();sessionStorage.clear();vi.mocked(refreshTopOfMind).mockClear();vi.mocked(fetchInspirationProcessing).mockReset();});
+beforeEach(()=>{reads.owner=VIEWER_ID;reads.requests=[];facts.inspirations=[{id:'source-one',text:'A synthetic source',daysAgo:0}];localStorage.clear();sessionStorage.clear();vi.mocked(refreshTopOfMind).mockClear();vi.mocked(fetchInspirationProcessing).mockReset();vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue({phase:'ready',eligible:true,signalCount:3,topOfMindCount:1,readingPaused:false});});
 afterEach(()=>{world?.unmount();world=undefined;vi.useRealTimers();});
 const board=(body='Leave room for a small experiment.',profileId=reads.owner):TopOfMind=>({id:'reading-'+profileId,profileId,version:1,reason:'regenerated',createdMs:Date.now(),
   entries:[{id:'entry-one',type:'hypothesis',body,belief:null,prompt:null,locked:false,pinned:false,dismissed:false,sortOrder:0,citedSignals:[],createdMs:Date.now()}]});
@@ -139,4 +139,12 @@ it.each(['queued','processing','waiting'] as const)('keeps active %s derivation 
   world=await mountWorld(facts);await act(async()=>reads.requests[0]!.resolve({...board(),entries:[],supportChanged:true}));await world.step(2);
   expect([...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].some(row=>row.textContent?.trim()==='Read again')).toBe(false);
   expect(refreshTopOfMind).not.toHaveBeenCalled();
+});
+/* The principles line and its Try again live in the sky, not on the board, so
+   a principles failure must not hide the board's paused-reading Retry. */
+it('shows the paused-reading notice with Retry on the board even when principles also failed',async()=>{
+  vi.mocked(fetchPrincipleStatus).mockResolvedValue({phase:'failed',eligible:true,signalCount:3,topOfMindCount:1,readingPaused:true});
+  world=await mountWorld(facts);await act(async()=>reads.requests[0]!.resolve(board()));await world.step(4);
+  expect(world.container.textContent).toContain('Reading is paused — your saves are safe.');
+  expect([...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].some(row=>row.textContent?.trim()==='Retry')).toBe(true);
 });

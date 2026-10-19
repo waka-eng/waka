@@ -82,6 +82,8 @@ export function PrinciplesGround({ locale, profileId, whose = "own", onChat }: {
     }
   });
 
+  /* Bumped by "Try again"; the read below is this effect running again. */
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let alive = true;
     setPhase("loading");
@@ -103,7 +105,7 @@ export function PrinciplesGround({ locale, profileId, whose = "own", onChat }: {
     return () => {
       alive = false;
     };
-  }, [profileId]);
+  }, [profileId, attempt]);
 
   const lit = Math.min(holding.length, GROUND_SEATS);
 
@@ -120,9 +122,19 @@ export function PrinciplesGround({ locale, profileId, whose = "own", onChat }: {
     return <p className="waka-over-status" role="status">{say("worldGroundLoading")}</p>;
   }
   if (phase === "failed") {
-    /* The old sentence is still true, and it is the honest fallback when the
-       ground itself could not be read. */
-    return <p className="waka-over-status">{say("worldPrinciplesEmpty")}</p>;
+    /* A FAILED READ SAYS IT FAILED. This used to fall back to "no principles
+       yet" on the grounds that the sentence was still true — but it is true
+       of an account with forty steady signals too, and printing it over a
+       dead connection told that person their thinking had added up to
+       nothing, with no way to find out otherwise. */
+    return (
+      <>
+        <p className="waka-over-status" role="alert">{say("worldGroundFailed")}</p>
+        <button type="button" className="waka-over-retry" onClick={() => setAttempt((n) => n + 1)}>
+          {say("worldRetry")}
+        </button>
+      </>
+    );
   }
 
   const count = holding.length;

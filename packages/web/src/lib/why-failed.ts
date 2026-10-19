@@ -81,6 +81,12 @@ export function whyOf(err: unknown, locale: SupportedLocale): string {
   if (err instanceof ApiError) {
     if (err.status === 0) return t(locale, "worldWhyUnreachable");
     if (err.status === 401) return t(locale, "worldWhySignedOut");
+    /* 402 IS THE MODEL PROVIDER OUT OF CREDIT, which is ours to fix and not
+       the reader's. "The server said no (402): …" read like a payment demand
+       aimed at them, about a thing they cannot see. What they need to know
+       is the two facts that are true: reading has stopped for now, and what
+       they kept is kept. */
+    if (err.status === 402) return t(locale, "worldWhyOutOfCredit");
     return formatMessage(locale, "worldWhyServerSaidNo", {
       status: err.status,
       message: err.message,

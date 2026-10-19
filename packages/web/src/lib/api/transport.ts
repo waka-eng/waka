@@ -8,9 +8,56 @@ export const nativeSession = new NativeSession({
   remove: async key => (await platformServices()).credentials.remove(key),
 }, () => window.dispatchEvent(new Event('waka:session-expired')));
 
+/**
+ * THE WEB READ DEADLINE — and nothing about sessions.
+ *
+ * The native branch below has always had a 20s deadline. The web branch was
+ * a bare `fetch`, and a browser waits for a server that accepted the
+ * connection and then said nothing for as long as the socket stays open, so
+ * every screen waiting on a read waited with it, with no "Try again" for a
+ * request that had not yet failed. Web READS now get the same 20s for the
+ * server to START answering (time to response headers); the body then reads
+ * as on dev, with no deadline, so a slow but progressing download is never
+ * cut off. Writes are untouched (one that has been sent may already be
+ * committing), and so is every auth endpoint: `/auth/me` waits as on dev, so
+ * a slow server can never turn a valid session into "signed out". 401s pass
+ * through exactly as before.
+ */
+const READ_FIRST_BYTE_MS = 20_000;
+function isAuthEndpoint(url: string): boolean {
+  try { return new URL(url, window.location.href).pathname.startsWith('/api/auth/'); } catch { return false; }
+}
+async function webRead(url: string, init: RequestInit): Promise<Response> {
+  const method = (init.method ?? 'GET').toUpperCase();
+  if ((method !== 'GET' && method !== 'HEAD') || isAuthEndpoint(url)) return fetch(url, init);
+  /* The deadline has its own signal, combined with the caller's by
+     `AbortSignal.any`: no listener is added to the caller's signal, so none
+     can outlive the read, and the caller's abort still reaches the body read
+     that follows. Where `any` is missing, a listener bridges the two and is
+     removed the moment the read settles. */
+  const deadline = new AbortController();
+  const timeout = setTimeout(() => deadline.abort(new DOMException('Request timed out', 'TimeoutError')), READ_FIRST_BYTE_MS);
+  const caller = init.signal ?? null;
+  const combine = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+  let release = () => {};
+  let signal: AbortSignal = deadline.signal;
+  if (caller && combine) signal = combine([caller, deadline.signal]);
+  else if (caller) {
+    const abort = () => deadline.abort(caller.reason);
+    if (caller.aborted) abort(); else caller.addEventListener('abort', abort, { once: true });
+    release = () => caller.removeEventListener('abort', abort);
+  }
+  try {
+    return await fetch(url, { ...init, signal });
+  } finally {
+    clearTimeout(timeout);
+    release();
+  }
+}
+
 /** The shared resource client only. Signed object-storage uploads bypass it. */
 export async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  if (!isMobileBuild) return fetch(url, init);
+  if (!isMobileBuild) return webRead(url, init);
   const origin = checkedNativeApiOrigin();
   const parsed = new URL(url);
   if (parsed.origin !== origin ||

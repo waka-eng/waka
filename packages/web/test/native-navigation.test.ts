@@ -20,7 +20,7 @@
 import { expect, it } from 'vitest';
 import { nativeLinkDestination } from '../src/lib/platform/navigation';
 const id = 'im.waka.app.dev', origin = 'https://dev.waka.im';
-it.each(['/', '/onboarding', '/login', '/@native_fixture', '/w/room1', '/inspirations/source-id', '/principles/principle-id/share', '/chat/new?principle=principle-id', '/?inspiration=source-id&reflection=open#detail'])('preserves owned consumer destination %s', path => {
+it.each(['/', '/onboarding', '/login', '/@native_fixture', '/w/room1', '/inspirations/source-id', '/principles/principle-id/share', '/chat/new?principle=principle-id', '/?inspiration=source-id&reflection=open#detail', '/?open=reading', '/w/room1?open=&view=sky'])('preserves owned consumer destination %s', path => {
   expect(nativeLinkDestination(origin + path, id, origin)).toBe(path);
   expect(nativeLinkDestination(`${id}://navigate${path}`, id, origin)).toBe(path);
 });

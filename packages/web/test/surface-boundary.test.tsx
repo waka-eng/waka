@@ -118,3 +118,56 @@ it("clears the guard once a screen mounts, so the next stale chunk gets its own 
   );
   expect(sessionStorage.getItem("waka:surface-reloaded")).toBeNull();
 });
+
+it("offers a way home as well as a reload, on any page but home", async () => {
+  /* A RELOAD REBUILDS A FAILURE THAT LIVES IN THIS PAGE. The screen used to
+     offer nothing else, so a page that broke on its own address broke every
+     time it was retried. The second way out is a full navigation home. */
+  const assign = vi.fn();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    writable: true,
+    value: { ...trueLocation, pathname: "/days", reload, assign },
+  });
+  await mount(
+    <SurfaceBoundary surface="your days">
+      <Boom message="Cannot read properties of undefined (reading 'length')" />
+    </SurfaceBoundary>,
+  );
+  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Go to your WAKA");
+  expect(home, "the crash screen offers only a reload").toBeDefined();
+  await act(async () => home!.click());
+  expect(assign).toHaveBeenCalledWith("/");
+});
+
+it("does not offer home on home, where it would be the reload again", async () => {
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    writable: true,
+    value: { ...trueLocation, pathname: "/", search: "", hash: "", reload, assign: vi.fn() },
+  });
+  await mount(
+    <SurfaceBoundary surface="the world">
+      <Boom message="Cannot read properties of undefined (reading 'length')" />
+    </SurfaceBoundary>,
+  );
+  expect(host.textContent).not.toContain("Go to your WAKA");
+});
+
+it("offers home on '/' with a query, since the query may be what breaks it, and goes to a clean '/'", async () => {
+  const assign = vi.fn();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    writable: true,
+    value: { ...trueLocation, pathname: "/", search: "?open=saves", hash: "", reload, assign },
+  });
+  await mount(
+    <SurfaceBoundary surface="the world">
+      <Boom message="Cannot read properties of undefined (reading 'length')" />
+    </SurfaceBoundary>,
+  );
+  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Go to your WAKA");
+  expect(home, "a home with a query got no way to a clean home").toBeDefined();
+  await act(async () => home!.click());
+  expect(assign).toHaveBeenCalledWith("/");
+});

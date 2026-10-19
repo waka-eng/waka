@@ -148,7 +148,13 @@ ReactDOM.createRoot(root).render(
         <MobileShell />
         <Routes>
           {MobileChecks && <Route path="/mobile-check" element={<Suspense fallback={null}><MobileChecks /></Suspense>} />}
-          <Route path="/login" element={<LoginPage />} />
+          {/* EVERY ROUTE HAS A CRASH BOUNDARY, not only home. A render error
+              on the door, the days page, onboarding or a public page took
+              the whole tree down to a blank screen with nothing to press —
+              the one place a person cannot even reload from, because they
+              do not know anything is wrong. `SurfaceBoundary` says what
+              broke and offers the way back. */}
+          <Route path="/login" element={<SurfaceBoundary surface="the door"><LoginPage /></SurfaceBoundary>} />
           {/* THE ARCHIVE AND THE PRINCIPLES ARE NOT PAGES ANY MORE.
               Founder: "for your inspirations, after I click on it, I feel
               like I'm lost how to go back to the previous screen, and I
@@ -173,13 +179,15 @@ ReactDOM.createRoot(root).render(
               redirect. */}
           <Route path="/inspirations" element={<Navigate to="/?open=saves" replace />} />
           <Route path="/principles" element={<Navigate to="/?open=principles" replace />} />
-          <Route path="/days" element={<RequireAuth><Days /></RequireAuth>} />
-          <Route path="/:handle" element={<PublicProfilePage />} />
+          <Route path="/days" element={<RequireAuth><SurfaceBoundary surface="your days"><Days /></SurfaceBoundary></RequireAuth>} />
+          <Route path="/:handle" element={<SurfaceBoundary surface="a public page"><PublicProfilePage /></SurfaceBoundary>} />
           <Route
             path="/onboarding"
             element={
               <RequireAuth>
-                <OnboardingPage />
+                <SurfaceBoundary surface="onboarding">
+                  <OnboardingPage />
+                </SurfaceBoundary>
               </RequireAuth>
             }
           />

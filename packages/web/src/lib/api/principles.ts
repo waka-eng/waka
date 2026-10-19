@@ -40,6 +40,10 @@ export interface ApiPrinciple {
 export interface ApiPrincipleStatus {
   supportPending?: boolean;
   phase: "waiting" | "pending" | "processing" | "ready" | "failed";
+  /** The latest reading or principles job failed (see `readingPausedFor` in
+      the API's `lib/principle-status.ts`). Optional so an older server that
+      never sends it reads as "not paused" rather than as an error. */
+  readingPaused?: boolean;
   eligible: boolean;
   signalCount: number;
   topOfMindCount: number;
@@ -66,14 +70,29 @@ export async function fetchPrincipleStatements(id:string,profileId:string,signal
    first parameter rather than the second, which is the whole change at the
    one call site in `components/PrincipleRead.tsx`. */
 
+/* NO SHARED STATUS CACHE. Each reader of `/principles/status` makes its own
+   GET, as on dev: a shared in-flight request with published answers was
+   tried here and every ordering it allowed (a GET sent before a retry
+   landing after it, an answer from before a sign-out) needed its own rule. */
+
+/** GET /principles/status. */
+export async function fetchPrincipleStatus(): Promise<ApiPrincipleStatus> {
+  return (await getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded")).status;
+}
+
 export async function fetchPrincipleRead(): Promise<{
   principles: ApiPrinciple[]; status: ApiPrincipleStatus;
 }> {
-  const [rows, state] = await Promise.all([
+  const [rows, status] = await Promise.all([
     getJson<{ principles: ApiPrinciple[] }>(apiPath("/principles"), "Principles could not be loaded"),
-    getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded"),
+    fetchPrincipleStatus(),
   ]);
-  return { principles: rows.principles, status: state.status };
+  return { principles: rows.principles, status };
+}
+
+/** POST /principles/refresh?retry=1 — restarts a failed reading and principles. */
+export async function retryPausedReading(): Promise<ApiPrincipleStatus> {
+  return (await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status;
 }
 
 export async function requestPrincipleRead(retry = false): Promise<void> {

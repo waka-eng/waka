@@ -274,8 +274,18 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      landing and `observe` clearing the draft there is a frame where both are
      true, and rendering both would print your sentence twice. */
   const sending=draft?.pending&&!conversation?.messages.some(message=>message.id===draft.id)?draft:null;
+  /* A CHECK THAT FAILED IS NOT AN ANSWER. The reply may still be running, so
+     a failed progress read keeps it counted in flight and Send stays off —
+     a second message sent under a reply that is still being written would
+     cross it. What was wrong before was that the watch STOPPED after two
+     failures, leaving Send off for good; `useConversationReply` now keeps
+     retrying until the server answers, the line says it is retrying, and
+     "Check again" asks at once. */
   const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
-  const awaitingReply=replyPending||replyUnconfirmed;
+  /* Only a 404 (`terminal`) is not a reply in flight: Send comes back and the
+     notice offers a reload. An answer older than the screen (`behind`) keeps
+     the reply unconfirmed — `reply.state` stays null — so Send stays off. */
+  const awaitingReply=!reply.terminal&&(replyPending||replyUnconfirmed);
   // The send guards as they stand now, for code that resumes after an await.
   const guards=useRef({loading,awaitingReply,storageFailed,focusFailed,conversation,talkWith,agent,focusPrinciple});guards.current={loading,awaitingReply,storageFailed,focusFailed,conversation,talkWith,agent,focusPrinciple};
   useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
@@ -383,7 +393,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     void refresh();return()=>lifecycle.current.abort();
   },[scope.accountId,scope.profileId,id,initialPrincipleId]);
   const save=async()=>{
-    if(working.current||loading||(generationEnabled===null&&!error)||awaitingReply||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
+    if(working.current||loading||(generationEnabled===null&&!error)||awaitingReply||reply.terminal||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
     /* A draft kept before its agent was recorded waits for the agent to load,
        rather than starting a chat on your own memory instead. */
     if(!id&&draftRef.current.talkWith&&!draftRef.current.agentId&&!agent)return;
@@ -595,6 +605,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
    * eight `||`s were not.
    */
   const whyNoSend = storageFailed ? 'worldConversationDraftFailed' as const
+    /* GONE (404/410) IS GONE: never a Send onto a deleted conversation. The
+       notice offers a new chat instead. */
+    : reply.terminal === 'gone' ? 'worldConversationReplyGone' as const
     : focusFailed ? 'worldPrincipleUnavailable' as const
     : full ? 'worldConversationFull' as const
     : loading||generationEnabled===null&&!error ? 'worldChatLoading' as const
@@ -606,7 +619,10 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        or at least one attachment, and the server accepts '' then. */
     : !draft?.content.trim()&&!draft?.attachments?.length ? 'worldConversationNeedsWords' as const
     : null;
-  const replyNotice=reply.error?'worldConversationReplyCheckFailed' as const
+  const replyNotice=reply.terminal==='gone'?'worldConversationReplyGone' as const
+    :reply.behind?'worldConversationReplyBehind' as const
+    :reply.stopped?'worldConversationReplyCheckStopped' as const
+    :reply.error?'worldConversationReplyCheckFailed' as const
     :reply.state?.retryAfter&&reply.state.phase!=='ready'?'worldConversationReplyLimit' as const
     :reply.state?.phase==='failed'?'worldConversationReplyFailed' as const
     :reply.state?.phase==='stopped'?'worldConversationReplyStopped' as const:null;
@@ -845,6 +861,12 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             the founder reported, and the reference happens to ship the
             variant that avoids it. */}
         {generationEnabled&&replyNotice?<p className="chat-reply-status" role="status">{say(replyNotice)}</p>:null}
+        {/* THE WAY PAST "COULDN'T CHECK", and past the bounded wait running
+            out. Both stop polling on purpose; neither may stop the person.
+            This reads the reply's progress again — it does not ask for a new
+            reply, so it is not one of the regeneration buttons that went. */}
+        {generationEnabled&&reply.terminal?<button type="button" className="chat-recheck" onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button>
+          :generationEnabled&&(reply.error||reply.waiting||reply.behind)?<button type="button" className="chat-recheck" onClick={()=>reply.check()}>{say('worldReadingCheckAgain')}</button>:null}
         {/* AND WHEN REPLIES ARE NOT CONNECTED AT ALL, THE SURFACE SAYS SO.
             Every notice above is gated behind `generationEnabled`, correctly
             — but that left the one case where nothing will ever come back as
