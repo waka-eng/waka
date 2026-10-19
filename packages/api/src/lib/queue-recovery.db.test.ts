@@ -87,3 +87,20 @@ it('the recovery selector skips newly due work and active leases while preservin
   expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:1,succeeded:1});
   expect(processor).toHaveBeenCalledOnce();
 });
+it('settles a lease that expired after its final attempt as failed instead of leaving it running forever',async()=>{
+  const p=await owner();
+  const [dead]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,locked_at,attempts,max_attempts)
+    VALUES(${p},'derive_signals','{}','running','2026-10-05T11:00:00Z',3,3) RETURNING id`;
+  const [rerun]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,locked_at,attempts,max_attempts,rerun_requested)
+    VALUES(${p},'derive_signals','{}','running','2026-10-05T11:00:00Z',3,3,true) RETURNING id`;
+  const [live]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,locked_at,attempts,max_attempts)
+    VALUES(${p},'derive_signals','{}','running','2026-10-05T11:55:00Z',3,3) RETURNING id`;
+  const processor=vi.fn(async()=>{});
+  await drainBackgroundJobs({limit:5,now,processor});
+  const status=async(id:string)=>(await t.sql`SELECT status,attempts,last_error FROM background_jobs WHERE id=${id}`)[0];
+  expect(await status(dead.id)).toMatchObject({status:'failed',attempts:3});
+  expect((await status(dead.id))!.last_error).toMatch(/lease expired/i);
+  expect(await status(rerun.id),'a rerun requested meanwhile still runs').toMatchObject({status:'succeeded',attempts:1});
+  expect(await status(live.id),'an unexpired lease is untouched').toMatchObject({status:'running',attempts:3});
+  expect(processor).toHaveBeenCalledOnce();
+});

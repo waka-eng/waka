@@ -303,6 +303,9 @@ export interface BackgroundJobStore {
   /** Settle a retired room-work head without claiming it. Optional so
    * in-memory stores need not model room work. */
   settleRetiredGroupWork?(jobId: string, now: Date): Promise<boolean>;
+  /** Settle leases that expired after their final attempt. Optional so
+   * in-memory stores need not model leases. Returns rows settled. */
+  settleExhaustedLeases?(now: Date): Promise<number>;
   markSucceeded(job: BackgroundJob, result: BackgroundJobResult | null): Promise<boolean>;
   markFailedOrPending(
     job: BackgroundJob,
@@ -828,6 +831,13 @@ export async function drainBackgroundJobs(
     failed: 0,
     deferred: 0,
   };
+
+  /* A worker that died on a job's last attempt leaves it `running` with a
+     lease nobody will reclaim (the claim predicate's attempt ceiling). Left
+     there it is neither retried nor failed — and a re-enqueue only flags it
+     for a rerun that never comes. Settle such rows before taking work. */
+  const settled = await store.settleExhaustedLeases?.(clock()) ?? 0;
+  if (settled) console.warn("[background-jobs] settled exhausted leases as failed", { settled });
 
   let deferrals = 0;
   let processed = 0;
@@ -1391,6 +1401,31 @@ function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string,
   `;
 }
 
+/** A lease that expired after the job's final attempt is settled as `failed`
+ * (visible and re-runnable), exactly as the worker's own failure path would
+ * have left it. A rerun requested meanwhile returns it to pending with a fresh
+ * attempt budget, also as that path does. */
+async function settleExhaustedBackgroundLeases(now: Date): Promise<number> {
+  const nowIso = now.toISOString();
+  const rows = await getDb().execute(sql`
+    UPDATE background_jobs AS job
+    SET status = CASE WHEN job.rerun_requested THEN 'pending'::background_job_status ELSE 'failed'::background_job_status END,
+        locked_at = CASE WHEN job.rerun_requested THEN NULL ELSE job.locked_at END,
+        run_after = CASE WHEN job.rerun_requested THEN ${nowIso}::timestamptz ELSE job.run_after END,
+        last_error = CASE WHEN job.rerun_requested THEN NULL ELSE 'Lease expired after the final attempt' END,
+        attempts = CASE WHEN job.rerun_requested THEN 0 ELSE job.attempts END,
+        rerun_requested = false,
+        result = NULL,
+        updated_at = ${nowIso}::timestamptz
+    WHERE job.status = 'running'::background_job_status
+      AND job.locked_at < ${nowIso}::timestamptz - (${STALE_LOCK_SECONDS} || ' seconds')::interval
+      AND job.attempts >= job.max_attempts
+      AND job.type::text IN (${sql.join(backgroundJobTypeValues.map((type) => sql`${type}`), sql`, `)})
+    RETURNING job.id
+  `);
+  return rows.length;
+}
+
 /** One counts-only read. The exact claim predicate defines eligibility; grace
  * is measured from run_after or lease expiry, never from capture creation. */
 export async function readBackgroundJobRecoveryState(database:Pick<ReturnType<typeof getDb>,'execute'>=getDb(),now=new Date()):Promise<QueueRecoveryState>{
@@ -1797,6 +1832,7 @@ export const postgresBackgroundJobStore: BackgroundJobStore = {
   usageForAccount: readAccountModelUsage,
   deferAccountBacklog: deferAccountBacklogForBudget,
   settleRetiredGroupWork: settleRetiredGroupWorkInPlace,
+  settleExhaustedLeases: settleExhaustedBackgroundLeases,
   markSucceeded: markJobSucceeded,
   markFailedOrPending: markJobFailedOrPending,
   holdJob: holdBackgroundJob,
