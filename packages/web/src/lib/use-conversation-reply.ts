@@ -2,6 +2,11 @@ import {useEffect,useRef,useState} from 'react';
 import {ApiError} from './api/http';
 import {fetchConversation,fetchConversationReply,stopConversationReply,type ApiConversation,type ConversationReplyState} from './api/conversations';
 
+/** Another 4xx this many times in a row stops the watch. */
+const MAX_CLIENT_ERRORS=2;
+/** Older-than-shown answers before the watch stops: the old poll window. */
+const MAX_OLDER_READS=35;
+
 /** Reads resume work; only an explicit stop mutates it. */
 export function useConversationReply(profileId:string,id:string|null,enabled:boolean,revision:number,onConversation:(row:ApiConversation)=>void,messageWindowStart?:number){
   const [stored,setStored]=useState<ConversationReplyState|null>(null),[serial,setSerial]=useState(0),[waiting,setWaiting]=useState(false),[error,setError]=useState(false),[busy,setBusy]=useState(false);
@@ -23,7 +28,7 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
   const check=()=>setSerial(value=>value+1);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;mutation.current?.abort();};},[profileId,id]);
   useEffect(()=>{
-    if(!id||!enabled)return;const controller=new AbortController();let timer:number|undefined,polls=0,failures=0,older=0;
+    if(!id||!enabled)return;const controller=new AbortController();let timer:number|undefined,polls=0,failures=0,older=0,clientErrors=0;
     setWaiting(false);setError(false);setTerminal(null);setBehind(false);setStopped(false);
     const read=async()=>{
       if(controller.signal.aborted||document.hidden)return;
@@ -40,7 +45,7 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
            conversation read confirmed the same revision, an 'Older
            conversation' left a "ready" state on screen over messages that
            did not have the reply yet — and Send came back too early. */
-        setStored(next);setError(false);failures=0;
+        setStored(next);setError(false);failures=0;clientErrors=0;
         older=0;setBehind(false);
         if(['pending','running'].includes(next.phase)){
           // A short early cadence avoids adding two seconds to a quick reply.
@@ -59,9 +64,19 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
            ended; this stops asking but still says it could not check (with
            Check again), so a 401 that brings no door is never silence. */
         if(reason instanceof ApiError&&reason.status===401){setError(true);setStopped(true);return;}
-        if(reason instanceof ApiError&&reason.status>=400&&reason.status<500)failures=Math.max(failures,1);
+        /* BOUNDED, LIKE THE OLD WINDOW. Another 4xx twice in a row, or an
+           older-than-shown answer for as many reads as the ~one-minute poll
+           window allows, stops the watch: "could not check", Check again,
+           Send still off. Neither repeats forever. */
+        if(reason instanceof ApiError&&reason.status>=400&&reason.status<500){
+          clientErrors+=1;
+          if(clientErrors>=MAX_CLIENT_ERRORS){setBehind(false);setError(true);setStopped(true);return;}
+          failures=Math.max(failures,1);
+        }
         if(reason instanceof Error&&(reason.message==='Older reply state'||reason.message==='Older conversation')){
-          older+=1;if(older>=2)setBehind(true);
+          older+=1;
+          if(older>=MAX_OLDER_READS){setBehind(false);setError(true);setStopped(true);return;}
+          if(older>=2)setBehind(true);
           timer=window.setTimeout(()=>void read(),Math.min(15000,1000*2**(older-1)));return;
         }
         /* A FAILED READ IS NOT AN ANSWER, SO IT NEVER ENDS THE WATCH. The

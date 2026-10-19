@@ -362,17 +362,20 @@ it('keeps asking on a 429 reply read — that one is "try later", not gone',asyn
   expect(vi.mocked(fetchConversationReply).mock.calls.length).toBeGreaterThan(calls);
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
 });
-it.each([400,403])('treats a %i reply read as an error, not gone: Check again offered, Send off, still asking',async(status)=>{
+it.each([400,403])('treats a %i reply read as an error, not gone, and stops after two in a row: Check again, Send off',async(status)=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status,message:'Bad'}));await mount();await tick(0);
   expect(host.textContent).toContain('Couldn’t check reply progress.');
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
+  await tick(2000);
+  const calls=vi.mocked(fetchConversationReply).mock.calls.length;
+  expect(calls,'a second 4xx was never asked for').toBe(2);
+  await tick(15000);await tick(15000);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length,'a repeated 4xx kept being polled').toBe(calls);
+  expect(host.textContent).not.toContain('Trying again');
   expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
   await type('Still there?');
   expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
-  const calls=vi.mocked(fetchConversationReply).mock.calls.length;
-  await tick(15000);
-  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBeGreaterThan(calls);
 });
 it('on a 401 reply read stops asking but says it could not check, with Check again, and keeps Send off',async()=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
@@ -429,6 +432,19 @@ it('keeps Send off and keeps asking while answers are older than the screen, the
   await click('Check again');await tick(0);
   expect(host.textContent).not.toContain('Still waiting for the latest reply.');
   expect(send().disabled).toBe(false);
+});
+it('stops asking after the old window of older-than-shown answers, says it could not check, and keeps Send off',async()=>{
+  stored={...stored,generationEnabled:true,revision:3,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
+  vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:1}));await mount();
+  for(let i=0;i<40;i+=1)await tick(15000);
+  const calls=vi.mocked(fetchConversationReply).mock.calls.length;
+  expect(calls,'the watch was not bounded at the old window').toBe(35);
+  await tick(15000);await tick(15000);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBe(calls);
+  expect(host.textContent).toContain('Couldn’t check reply progress.');
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  await type('Still there?');
+  expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
 });
 /* ── ELEVEN TOMBSTONES: THE READINGS AND SOURCES A REPLY CITED ──────────────
    A reply could end in a list of top-of-mind previews, each one a button that
