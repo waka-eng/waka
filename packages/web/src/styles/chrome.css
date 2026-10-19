@@ -1787,7 +1787,10 @@ button.jar-tile-face,
    (`keep-all`), and inside a word only when one word is wider than the
    line (`anywhere`) — and no scrollbar, at rest or while typing. */
 .jar-thing-share .jar-share-inline { position:absolute; box-sizing:border-box; min-height:0; margin:0; border:0; resize:none; overflow:hidden; background:transparent; color:transparent; caret-color:transparent; cursor:text; text-wrap:wrap; word-break:keep-all; overflow-wrap:anywhere; hyphens:none; transition:background-color .18s ease, color .18s ease; }
-.jar-thing-share .jar-share-inline:focus { outline:none; background:var(--share-fill); color:var(--share-ink); caret-color:var(--share-ink); overflow:hidden; box-shadow:none; }
+/* While typing the field grows to its words (`--share-grow`, set by the
+   sheet) down to the card's foot, so no line and no caret is hidden; only
+   past the foot does it scroll. */
+.jar-thing-share .jar-share-inline:focus { outline:none; background:var(--share-fill); color:var(--share-ink); caret-color:var(--share-ink); overflow-x:hidden; overflow-y:auto; box-shadow:none; }
 /* After a failed draw the card under the field is stale, so the field shows
    its own words on the bubble until the card draws again; before any card
    has drawn, it sits on the page's own ground. */

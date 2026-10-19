@@ -263,6 +263,30 @@ export function ShareSheet({ target, locale, onClose }: {
     return () => observer.disconnect();
   }, [hasEditor, shownLayout]);
 
+  /* THE FIELD GROWS RATHER THAN HIDE A LINE. A browser's wrap is not the
+     canvas's to the pixel (a font fallback, a hinting difference), and a
+     field exactly the bubble's height then pushed its last line — and the
+     caret on it — out of sight. While you type (or after a failed draw) the
+     field grows to all its words, down to the card's foot; its own fill
+     grows with it, so the bubble is behind every line. Past the foot it
+     scrolls. At rest it is the bubble's size again. `--share-grow` is set
+     here, not in `style`, so a render never resets it mid-keystroke. */
+  useLayoutEffect(() => {
+    const field = inlineRef.current;
+    const card = cardRef.current;
+    if (!field || !shownLayout) return;
+    field.style.setProperty("--share-grow", "0px");
+    if (!editing && !live) return;
+    const over = field.scrollHeight - field.clientHeight;
+    if (!(over > 0)) return;
+    /* The room under the field, as laid out (before the touch scale-back). */
+    const cardHeight = card ? card.getBoundingClientRect().height : 0;
+    const below = cardHeight > 0
+      ? cardHeight * (1 - (shownLayout.edit.y + shownLayout.edit.h) / shownLayout.height) * touchScale
+      : Number.POSITIVE_INFINITY;
+    field.style.setProperty("--share-grow", `${Math.max(0, Math.min(over, below))}px`);
+  }, [words, editing, live, shownLayout, touchScale]);
+
   const ready = Boolean(preview && preview.key === contentKey && !renderError);
   const filename = target.kind === "inspiration" ? "waka-inspiration.png" : "waka-top-of-mind.png";
   const filenames = useMemo(() => ({ download: filename, share: filename }), [filename]);
@@ -305,7 +329,7 @@ export function ShareSheet({ target, locale, onClose }: {
       left: centred ? `calc(${(L.edit.x / L.width) * 100}% - ${WRAP_SLACK_PX / 2}px)` : `${(L.edit.x / L.width) * 100}%`,
       top: `${(L.edit.y / L.height) * 100}%`,
       width: `calc(${(L.edit.w / L.width) * 100 * f}% + ${slack}px)`,
-      height: `${(L.edit.h / L.height) * 100 * f}%`,
+      height: `calc(${(L.edit.h / L.height) * 100 * f}% + var(--share-grow, 0px))`,
       padding: `${at(L.edit.padTop * f)} ${at(L.edit.padX * f)} 0`,
       borderRadius: `${at(L.edit.radiusTop * f)} ${at(L.edit.radiusTop * f)} ${at(L.edit.radiusBottom * f)} ${at(L.edit.radiusBottom * f)}`,
       textAlign: L.text.align,

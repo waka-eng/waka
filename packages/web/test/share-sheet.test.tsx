@@ -362,7 +362,7 @@ it("gives the field's lines a little slack so the widest one never wraps early",
   expect(px).toBe(2);
 });
 
-it("wraps the field as the canvas does, with no scrollbar unless the words failed to fit", () => {
+it("wraps the field as the canvas does; at rest it never scrolls, typing it may past the card's foot", () => {
   const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../src/styles/chrome.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   const rule = (sel: string) => css.split("\n").find((line) => line.startsWith(`${sel} {`)) ?? "";
   const base = rule(".jar-thing-share .jar-share-inline");
@@ -372,9 +372,42 @@ it("wraps the field as the canvas does, with no scrollbar unless the words faile
   expect(base).toMatch(/overflow-wrap:anywhere;/);
   expect(base).toMatch(/hyphens:none;/);
   expect(base).toMatch(/overflow:hidden;/);
-  expect(rule(".jar-thing-share .jar-share-inline:focus")).toMatch(/overflow:hidden;/);
-  /* after a failed draw, all the words can be seen, to know what to cut — and only then */
+  /* typing: it grows to its words (`--share-grow`), and scrolls only past the card's foot, never sideways */
+  expect(rule(".jar-thing-share .jar-share-inline:focus")).toMatch(/overflow-x:hidden;\s*overflow-y:auto;/);
+  /* after a failed draw, all the words can be seen, to know what to cut */
   expect(rule(".jar-thing-share .jar-share-inline.jar-share-inline--live")).toMatch(/overflow:auto;/);
-  const scrolling = [...css.matchAll(/([^{}\n]*\.jar-share-inline[^{]*)\{[^}]*overflow:(auto|scroll)/g)].map((m) => m[1]!.trim());
-  expect(scrolling).toEqual([".jar-thing-share .jar-share-inline.jar-share-inline--live"]);
+  const scrolling = [...css.matchAll(/([^{}\n]*\.jar-share-inline[^{]*)\{[^}]*overflow(?:-y)?:(auto|scroll)/g)].map((m) => m[1]!.trim());
+  expect(scrolling.sort()).toEqual([".jar-thing-share .jar-share-inline.jar-share-inline--live", ".jar-thing-share .jar-share-inline:focus"]);
+});
+
+/* NO LINE AND NO CARET HIDDEN: a browser's wrap can differ from the canvas's. */
+const sized = (area: HTMLTextAreaElement, scroll: number, client: number) => {
+  Object.defineProperty(area, "scrollHeight", { configurable: true, get: () => scroll });
+  Object.defineProperty(area, "clientHeight", { configurable: true, get: () => client });
+};
+
+it("grows the field to all its words while typing, down to the card's foot, and back at rest", async () => {
+  const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const side = this.classList.contains("jar-share-card") ? 432 : 0;
+    return { width: side, height: side, x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, toJSON() {} } as DOMRect;
+  });
+  try {
+    await mount();
+    await settle();
+    const area = host.querySelector<HTMLTextAreaElement>(".jar-share-inline")!;
+    expect(area.style.height).toMatch(/var\(--share-grow, 0px\)/);
+    /* one line more than the bubble holds */
+    sized(area, 152, 128);
+    await typeInto(area, `${SAVE.text} and one line more`);
+    expect(area.style.getPropertyValue("--share-grow")).toBe("24px");
+    /* far more than the card holds: down to its foot (432 · (1 - 620/1080)) and no further */
+    sized(area, 2000, 128);
+    await typeInto(area, `${SAVE.text} ${"many words ".repeat(30)}`);
+    expect(parseFloat(area.style.getPropertyValue("--share-grow"))).toBeCloseTo(432 * (1 - 620 / 1080), 6);
+    /* at rest, the bubble's size again */
+    await act(async () => area.blur());
+    expect(area.style.getPropertyValue("--share-grow")).toBe("0px");
+  } finally {
+    rect.mockRestore();
+  }
 });
