@@ -54,10 +54,12 @@ describe("the bar and the corners light up when the keyboard reaches them (#5)",
 
 describe("no share sheet has the bar painted over its footer (#9)", () => {
   it("the dock steps aside while any share sheet is open", () => {
-    const hide = rules(sheet("claims.css"), (s) => /^body:has\(.*\.jar-thing-share.*\) \.waka-dock$/.test(s));
+    const hide = rules(sheet("claims.css"), (s) => /^body:has\(.*\.jar-thing-share.*\) \.waka-dock(:not\(.*\))?$/.test(s));
     expect(hide).toHaveLength(1);
     expect(hide[0]![0]).toContain(".jar-principle-share");
     expect(hide[0]![1]).toMatch(/visibility\s*:\s*hidden|display\s*:\s*none/);
+    // Never while a recording or dictation runs: its Stop stays reachable (review).
+    expect(hide[0]![0]).toMatch(/\.waka-dock:not\(:has\(\.waka-dock-tool--live\)\)$/);
   });
 });
 

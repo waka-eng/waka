@@ -309,8 +309,10 @@
    f2afcbe2, desk/86). The bar's places are not reachable through a modal
    backdrop anyway; showing them over the sheet only covered its one act.
    Every share sheet wears `.jar-thing-share` (the reading's, a saved note's)
-   or `.jar-principle-share`, so this holds for all of them. */
-body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
+   or `.jar-principle-share`, so this holds for all of them.
+   EXCEPT WHILE SOMETHING IS LISTENING (review): a recording or dictation
+   (`--live`) must never lose its Stop, so the bar stays while one runs. */
+body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-tool--live)) {
   visibility: hidden;
 }
 
