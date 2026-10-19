@@ -96,20 +96,30 @@ export function ShareSheet({ target, name, locale, onClose }: {
   useEffect(() => {
     if (!target.photoId) return undefined;
     const controller = new AbortController();
+    /* AND IT IS TRIED FOR A BOUNDED TIME. "Tried once" said nothing about how
+       long once lasts: a storage request that never answered held the card
+       in "waiting for the photo" for as long as the sheet was open. Past
+       fifteen seconds it is the words alone, the same as a refused read.
+       `closed` tells the sheet closing apart from the clock running out —
+       both abort, and only one of them should say anything. */
+    let closed = false;
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
     void (async () => {
       try {
         const url = await fetchAttachmentUrl(target.photoId!, controller.signal);
         const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) throw new Error("photo unavailable");
         const image = await createImageBitmap(await response.blob());
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) throw new Error("photo timed out");
         photoRef.current = image;
         setPhoto({ step: "ready" });
       } catch {
-        if (!controller.signal.aborted) setPhoto({ step: "failed" });
+        if (!closed) setPhoto({ step: "failed" });
+      } finally {
+        window.clearTimeout(timeout);
       }
     })();
-    return () => controller.abort();
+    return () => { closed = true; window.clearTimeout(timeout); controller.abort(); };
   }, [target.photoId]);
 
   const content = useMemo<PrincipleArtifactContent>(() => ({

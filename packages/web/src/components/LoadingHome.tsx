@@ -66,7 +66,87 @@ const CREATURE = 190;
  */
 const BODY = CREATURE + Math.ceil(CREATURE * REST_BLEED) * 2;
 
-export function LoadingHome(): JSX.Element {
+/**
+ * WHEN THE WAIT IS OVER AND THE ANSWER WAS NO.
+ *
+ * Home drew this screen over its own failure text at z 60 while the failure
+ * text sat at z 7, so a home that could not load said LOADING forever — the
+ * reason and the way out were rendered, underneath, where nobody could reach
+ * them. The fix is not to raise the failure above the loading screen but to
+ * let the loading screen BE the failure: same ground, same creature, and the
+ * one line under it becomes what went wrong and what can be done about it.
+ * Arriving and failing to arrive happen in the same place.
+ */
+export interface LoadingProblem {
+  /** What went wrong, as a finished sentence. */
+  message: string;
+  /** Why, when it is known — `whyOf`'s clause. */
+  detail?: string | null;
+  /** The ways out. The first is the one a person most likely wants. */
+  actions: Array<{ label: string; onClick: () => void; busy?: boolean }>;
+}
+
+const actionStyle = {
+  font: "inherit",
+  fontSize: 14,
+  fontWeight: 500,
+  letterSpacing: "0.01em",
+  color: "rgba(232,238,246,0.92)",
+  background: "rgba(214,222,234,0.08)",
+  border: "1px solid rgba(214,222,234,0.22)",
+  borderRadius: 999,
+  padding: "10px 20px",
+  minHeight: 44,
+  cursor: "pointer",
+} as const;
+
+export function LoadingHome({ problem }: { problem?: LoadingProblem | null } = {}): JSX.Element {
+  if (problem) {
+    return (
+      <div
+        role="alert"
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: ground,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Companion size={CREATURE} />
+        <div
+          style={{
+            position: "absolute",
+            left: 16,
+            right: 16,
+            textAlign: "center",
+            top: `calc(50% + ${BODY / 2 + 48}px)`,
+            fontFamily:
+              'Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif',
+            color: "rgba(214,222,234,0.78)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <p style={{ margin: 0, fontSize: 16, lineHeight: 1.45, maxWidth: 420 }}>{problem.message}</p>
+          {problem.detail ? (
+            <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, maxWidth: 420, color: "rgba(214,222,234,0.5)" }}>{problem.detail}</p>
+          ) : null}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginTop: 8 }}>
+            {problem.actions.map((action) => (
+              <button key={action.label} type="button" style={actionStyle} disabled={action.busy} aria-busy={action.busy || undefined} onClick={action.onClick}>
+                {action.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       role="status"

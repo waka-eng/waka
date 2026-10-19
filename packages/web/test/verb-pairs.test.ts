@@ -119,6 +119,7 @@ const REGISTER: Record<string, string> = {
      removes the capture and the answer together — which is right, because an
      answer given at capture time is part of that capture rather than a second
      thing the person has to find and undo. */
+  retryPausedReading: "RULED: restarts a reading that failed (out of credit, a provider outage) over material already kept; it writes no words of anyone's, and the reading it produces is reviewed like any other",
   retryInspirationProcessing: "RULED: resumes failed processing of already-kept material without creating another capture or answer; existing words remain editable or removable, and opening the resulting reading is a separate choice",
   presignAttachment: "RULED: one half of a single upload, not a state a person is left in",
   uploadMessageAttachment: "discardMessageAttachment",

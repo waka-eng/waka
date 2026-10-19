@@ -1,5 +1,5 @@
 import {principleMaterialKey} from './principle-material-key.js';
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { backgroundJobs } from "../db/index.js";
 import { getDb } from "./db.js";
 import { loadPrincipleMaterial } from "./principle-generation.js";
@@ -11,6 +11,52 @@ type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 type Db = Database | Transaction;
 
 
+/**
+ * IS THE READING STUCK, AS OPPOSED TO SLOW.
+ *
+ * When the model provider refuses — out of credit is a 402 and the founder's
+ * live case — the job that writes a person's reading fails after its
+ * retries, and nothing told the person. Home went on showing the last
+ * reading and a save sat unread with no sign that anything was wrong.
+ *
+ * THE READING JOB ALONE, AND ITS OWN LATEST ROW. The first version took the
+ * latest of the reading AND principles jobs, which was wrong both ways: a
+ * principles job failing for its own reasons (it has its own `phase:
+ * 'failed'` and its own Try again) raised "reading is paused", and a
+ * principles success after a failed reading hid the failure. Each type
+ * answers for itself now; this one is the reading's. Signal support has
+ * its own failed phase too, so it is not folded in here either.
+ *
+ * Signal derivation is deliberately not here. Each save already reports and
+ * retries its own derivation (`/inspirations/:id/processing`).
+ */
+async function latestReadingJob(db: Db, profileId: string) {
+  const [latest] = await db.select({ status: backgroundJobs.status, lastError: backgroundJobs.lastError, updatedAt: backgroundJobs.updatedAt }).from(backgroundJobs)
+    .where(and(eq(backgroundJobs.profileId, profileId), eq(backgroundJobs.type, "refresh_top_of_mind")))
+    .orderBy(desc(backgroundJobs.updatedAt)).limit(1);
+  return latest ?? null;
+}
+
+/**
+ * "READING IS PAUSED" IS A CLAIM ABOUT THE PROVIDER, SO IT NEEDS ITS EVIDENCE.
+ * Only the latest reading job (so nothing newer succeeded or is queued),
+ * only when it failed with a provider refusal — out of credit is HTTP 402,
+ * recorded in `last_error` as "… HTTP 402 Payment Required" — and only when
+ * that failure is under a day old. Any other failure is the reading's own
+ * error, not a pause, and a refusal from last week is history, not news.
+ */
+const PAUSE_FRESH_MS = 24 * 60 * 60_000;
+/* The provider clients (`openrouter-http.ts`, `gemini-http.ts`) throw
+   `formatSafeGeminiError`: "<label> failed: HTTP <status> <statusText>[ providerCode=…]",
+   which the queue records as `last_error`. A refusal is that marker with 402
+   (statusText "Payment Required"), or the provider's own credit code — never
+   a bare "402" that might be a position, a duration or an id. */
+const PROVIDER_REFUSAL = /: HTTP 402(?:\s|$)|providerCode=(?:insufficient_credits|insufficient_quota|payment_required)\b/i;
+function readingPausedFrom(latest: { status: string; lastError: string | null; updatedAt: Date } | null, now = new Date()): boolean {
+  return latest?.status === "failed" && PROVIDER_REFUSAL.test(latest.lastError ?? "")
+    && now.getTime() - latest.updatedAt.getTime() < PAUSE_FRESH_MS;
+}
+
 export async function loadPrincipleStatus(db: Db, profileId: string) {
   const material = await loadPrincipleMaterial(db, profileId);
   const key = principleMaterialKey(material);
@@ -21,16 +67,31 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
     : job?.status === "failed" ? "failed"
     : job?.status === "succeeded" ? "ready"
     : job ? "processing" : "pending";
+  const readingPaused = readingPausedFrom(await latestReadingJob(db, profileId));
   return { phase, eligible: material.eligibility.eligible,
+    readingPaused,
     supportPending: support.pending,
     signalCount: material.eligibility.distinctSignals,
     topOfMindCount: material.eligibility.tomAppearances };
 }
 
+/* NO SERVER-SIDE RETRY COOLDOWN. One stood here (a 429 inside three
+   minutes of a retry) and every review round found another way round it. A
+   provider refusal (402) costs nothing per press, so the guard against a
+   button pressed repeatedly is the client's: Retry disables itself and says
+   "Retrying…" until its request answers. */
 export async function requestPrincipleRefresh(db: Db, profileId: string, retry = false) {
   await db.transaction(async (tx) => {
     const sources = await recoverPendingSignalSupport(tx, profileId);
     if (sources.length) await enqueueTopOfMindRefresh(profileId, 'manual', tx);
+    /* A RETRY ALSO RESTARTS A READING THAT FAILED. Before, it re-enqueued
+       principles and pending support only, so "Try again" under a paused
+       reading asked for the one job that was not the problem. Only on an
+       explicit retry, and only when the latest reading job did fail — a
+       plain refresh still never buys a synthesis nobody asked for. */
+    if (retry && !sources.length) {
+      if ((await latestReadingJob(tx, profileId))?.status === "failed") await enqueueTopOfMindRefresh(profileId, 'manual', tx);
+    }
     await enqueueEligiblePrinciples(tx, profileId, retry, tx);
   });
   await wakeCommittedBackgroundJobs();

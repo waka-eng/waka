@@ -77,7 +77,10 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
   view.reflectionId = params.get('reflection') === 'open' ? 'open' : id(params.get('reflection'));
   if (!view.inspirationId) view.reflectionId = null;
   view.memberId = id(params.get('member'));
-  const open = params.get('open');
+  /* A blank or unknown `open` (`?open=`, `?open=reading` — a page that went)
+     names no page this build has: it is absent, and the rest of the address
+     still opens. The same reading serves web and native deep links. */
+  const open = params.get('open')?.trim() || null;
   view.open = OPEN.find((name) => name === open) ?? null;
   view.find = params.get('find') === '1';
   view.compose = params.get('compose') === '1';

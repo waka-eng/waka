@@ -93,7 +93,7 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, ownArchive = true, shareName = "" }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true, shareName = "" }: {
   locale: SupportedLocale;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
@@ -169,6 +169,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   focus?: { label: string; ids: readonly string[] } | null;
   onClearFocus?: () => void;
   onClose: () => void;
+  /** Opens the save box — the same act as the dock's plus. Offered under an
+      empty archive of your own, where "Nothing kept yet." was the whole
+      page and the only way forward was a control somewhere else. */
+  onNewSave?: () => void;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   /* Scoped to whose archive this is: being new to your own is not being new
@@ -1531,7 +1535,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             </button>
           </>
         ) : rows.length === 0 ? (
-          <p className="waka-over-status">{say("worldInspirationsEmpty")}</p>
+          /* AN EMPTY ARCHIVE OFFERS THE FIRST SAVE. Never on an agent's
+             archive: saving there is refused outright, and a door that is
+             refused on the other side is worse than no door. */
+          <>
+            <p className="waka-over-status">{say("worldInspirationsEmpty")}</p>
+            {ownArchive && onNewSave ? (
+              <button type="button" className="waka-over-new" onClick={onNewSave}>
+                {say("worldCaptureInspiration")}
+              </button>
+            ) : null}
+          </>
         ) : shown.length === 0 ? (
           /* A FILTER MUST NOT BE A TRAP — this file's own standing rule, one
              block up: "a chosen category that no longer exists shows

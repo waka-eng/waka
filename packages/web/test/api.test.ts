@@ -56,6 +56,14 @@ import {
 } from "../src/lib/api";
 import { loadInspiration, loadSignal, loadTopOfMindVersion } from "../src/lib/data";
 
+/* EVERY READ CARRIES THE TRANSPORT'S OWN SIGNAL NOW — the deadline in
+   `lib/api/transport.ts` that ends a stalled request instead of letting a
+   loading screen wait forever. It is the transport's signal, not the
+   caller's, so the exact-request assertions below name it as "an
+   AbortSignal"; that a caller's own abort still reaches the network, and
+   that the deadline fires, are proved once in their own cases at the end. */
+const DEADLINE = expect.any(AbortSignal);
+
 const viewer: ApiViewer = {
   account: {
     id: "account-1",
@@ -216,7 +224,7 @@ it('reads archive pages with an explicit profile, cursor and cancellation signal
   const controller = new AbortController();
   await expect(fetchInspirationPage({ profile: 'profile-1', q: 'garden', limit: 50, cursor: 'page-2' }, controller.signal))
     .resolves.toMatchObject({ inspirations: [inspirationSummary], nextCursor: 'older', total: 2002 });
-  expect(fetch).toHaveBeenCalledWith('/api/inspirations?profile=profile-1&q=garden&limit=50&cursor=page-2', { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'include', signal: controller.signal });
+  expect(fetch).toHaveBeenCalledWith('/api/inspirations?profile=profile-1&q=garden&limit=50&cursor=page-2', { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'include', signal: DEADLINE });
 });
 it('treats a malformed search page as a failure rather than an empty archive', async () => {
   stubFetch(Response.json({ total: 2002 }));
@@ -280,7 +288,7 @@ it('checks processing as a cancellable scoped read, with no generation request',
   const controller = new AbortController();
   await expect(fetchInspirationProcessing(inspiration.id, { profile: 'profile-1', receiptId: 'receipt-1' }, controller.signal)).resolves.toEqual(status);
   expect(fetch).toHaveBeenCalledExactlyOnceWith('/api/inspirations/inspiration-1/processing?profile=profile-1&receipt=receipt-1', {
-    method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: controller.signal,
+    method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: DEADLINE,
   });
 });
 
@@ -342,7 +350,7 @@ it('looks up a save by identity without reposting authored words', async () => {
   stubFetch(Response.json({ saveRequest: saved }));
   await expect(fetchInspirationSaveRequest(requestId, { profile: 'profile-1' }, controller.signal)).resolves.toEqual(saved);
   expect(fetch).toHaveBeenCalledExactlyOnceWith(`/api/inspirations/save-requests/${requestId}?profile=profile-1`, {
-    method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: controller.signal,
+    method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: DEADLINE,
   });
 });
 
@@ -457,6 +465,7 @@ describe("the session", () => {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
+      signal: DEADLINE,
     });
   });
 
@@ -529,6 +538,7 @@ describe("inspirations", () => {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
+      signal: DEADLINE,
     });
   });
 
@@ -562,6 +572,7 @@ describe("signals", () => {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
+      signal: DEADLINE,
     });
   });
 
@@ -573,6 +584,7 @@ describe("signals", () => {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
+      signal: DEADLINE,
     });
   });
 
@@ -599,7 +611,7 @@ describe("top of mind", () => {
     const controller = new AbortController();
     await expect(fetchTopOfMindRefresh('job-id', controller.signal, state.requestVersion)).resolves.toEqual(state);
     expect(fetch).toHaveBeenCalledWith('/api/top-of-mind/refresh/job-id?requestVersion=9007199254740993', {
-      method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: controller.signal,
+      method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: DEADLINE,
     });
   });
 
@@ -611,7 +623,7 @@ describe("top of mind", () => {
     expect(result).toMatchObject({ id: topOfMind.id, profileId: 'profile-1', generationRevision: '9007199254740993', supportChanged: true });
     expect(result?.entries[0]).toMatchObject({ supportChanged: true });
     expect(fetch).toHaveBeenCalledWith('/api/top-of-mind/versions/top-of-mind-1?profile=profile-1', {
-      method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: controller.signal,
+      method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: DEADLINE,
     });
   });
 
@@ -623,6 +635,7 @@ describe("top of mind", () => {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
+      signal: DEADLINE,
     });
   });
 
@@ -760,6 +773,7 @@ describe("public profile", () => {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
+      signal: DEADLINE,
     });
   });
 
@@ -771,5 +785,50 @@ describe("public profile", () => {
       status: 200,
       message: "Malformed public profile response",
     } satisfies Partial<ApiError>);
+  });
+});
+
+describe("the read deadline", () => {
+  it("passes a caller's cancellation through to the network", async () => {
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => new Promise<Response>((_, reject) => {
+      init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    }));
+    vi.stubGlobal("fetch", fetch);
+    const controller = new AbortController();
+    const reading = fetchInspirationPage({ profile: "profile-1" }, controller.signal);
+    controller.abort();
+    await expect(reading).rejects.toMatchObject({ status: 0 });
+    expect((fetch.mock.calls[0]![1] as RequestInit).signal?.aborted).toBe(true);
+  });
+
+  it("gives up on a read the server never answers, as an unreachable server", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetch = vi.fn(async (_url: string, init: RequestInit) => new Promise<Response>((_, reject) => {
+        init.signal?.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")));
+      }));
+      vi.stubGlobal("fetch", fetch);
+      const reading = fetchInspirationPage({ profile: "profile-1" });
+      const settled = expect(reading).rejects.toMatchObject({ status: 0 });
+      await vi.advanceTimersByTimeAsync(20_000);
+      await settled;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("the principles status", () => {
+  /* No shared cache: each reader's GET is its own request and its own answer. */
+  it("makes its own GET every time, with no answer shared between readers", async () => {
+    const { fetchPrincipleStatus } = await import("../src/lib/api/principles");
+    const status = (signalCount: number) => ({ phase: "ready", eligible: true, signalCount, topOfMindCount: 1 });
+    const fetch = vi.fn()
+      .mockImplementationOnce(async () => new Response(JSON.stringify({ status: status(1) }), { status: 200 }))
+      .mockImplementationOnce(async () => new Response(JSON.stringify({ status: status(2) }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const [first, second] = await Promise.all([fetchPrincipleStatus(), fetchPrincipleStatus()]);
+    expect(fetch, "two readers shared one request").toHaveBeenCalledTimes(2);
+    expect([first.signalCount, second.signalCount]).toEqual([1, 2]);
   });
 });

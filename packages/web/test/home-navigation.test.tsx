@@ -419,6 +419,23 @@ it('shows an unavailable link without silently opening another room and can retu
   await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.jar-navigation-notice button')].find(button => button.textContent === 'Me')!.click()); await settle();
   expect(world.container.querySelector('.jar-navigation-notice')).toBeNull(); expect(world.audit().wallKind).toBe('self');
 });
+/* The notice's Escape is the notice's only while it is the topmost layer:
+   with the settings/info card (or the notepad, review, an overlay) up, that
+   Escape is theirs, and the notice stays. */
+it("leaves the unavailable-link notice alone on Escape while another layer is open, and closes it otherwise", async () => {
+  world = await mountWorld(FACTS, { initialEntries: ['/w/missing-id/old-name'], routerTools: <RouterTools /> }); await settle();
+  expect(world.container.querySelector('.jar-navigation-notice')).not.toBeNull();
+  /* on window itself, as a key with nothing focused arrives: every window listener hears it */
+  const escape = () => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
+  const info = world.container.querySelector<HTMLButtonElement>('.waka-corner--info')!;
+  await act(async () => info.click()); await settle();
+  expect(info.getAttribute('aria-expanded'), 'the info card did not open').toBe('true');
+  await escape(); await settle();
+  expect(world.container.querySelector('.jar-navigation-notice'), "the card's Escape also dismissed the notice under it").not.toBeNull();
+  if (info.getAttribute('aria-expanded') === 'true') { await act(async () => info.click()); await settle(); }
+  await escape(); await settle();
+  expect(world.container.querySelector('.jar-navigation-notice'), 'Escape on the notice alone left it up').toBeNull();
+});
 
 /**
  * THE CREATURE CHANGES FORM WHERE IT STANDS.

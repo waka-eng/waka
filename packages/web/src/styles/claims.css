@@ -3666,112 +3666,15 @@
   color: var(--ink);
 }
 
-/**
- * THE CLAIMS ROOM — a queue you sit down to, not a question you are met with.
- *
- * See `components/ClaimsOverlay.tsx` for why this rung finally has a door.
- * The shape here is doing one job: make a claim CHECKABLE. The statement
- * reads first and largest, the saves it was read from sit under it in the
- * person's own words, and the three answers close the block.
- */
-.waka-claims {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-32);
-  margin: 0;
-  padding: 0;
-}
-
-.waka-claim {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-12);
-  min-width: 0;
-  /* A MEASURE FOR A SENTENCE, INSIDE A SHEET SIZED FOR A LIST. This was
-     matched to `.waka-over-what`, which has since been deleted, and to a
-     1230px sheet, which is now 650 — so it no longer rescues anything and
-     is kept for the one thing it still does: a claim is a sentence somebody
-     reads, and it wraps a little before the column's own edge.
-
-     `62ch` was the overlay's measure and is matched rather than
-     improved on purpose: one material. Worth knowing for whoever does
-     improve it — `1ch` is the advance of "0", which in Jost 300 is 0.580em
-     against 0.417em for a character of real text, so 62ch renders about 86
-     characters rather than 62. That lands inside Butterick's 45–90 band by
-     luck rather than by intent. */
-  max-width: 62ch;
-}
-
-/* THE DOORWAY. The statement is the control — see the note on the row in
-   `ClaimsOverlay.tsx` — so it wears a button's reset and the statement's own
-   type, and says it is pressable the way everything else in this world does:
-   quiet at rest, the page's ink under the pointer. No underline; the one
-   underline in this product marks where you are. */
-.waka-claim-open {
-  appearance: none;
-  -webkit-appearance: none;
-  display: block;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.waka-claim-open .waka-claim-statement {
-  transition: color 0.2s ease;
-}
-
-.waka-claim-open:hover .waka-claim-statement,
-.waka-claim-open:focus-visible .waka-claim-statement {
-  color: var(--jar-ink);
-}
-
-.waka-claim-statement {
-  display: block;
-  margin: 0;
-  font-size: var(--t-lead);
-  line-height: 1.45;
-  color: var(--ink);
-  overflow-wrap: anywhere;
-  text-wrap: pretty;
-}
-
-/* THE RECEIPTS. Set below the claim and quieter than it, because they are
-   what the claim is ABOUT rather than part of what it says — and quiet is
-   the only way to show four of them without the page reading as a list of
-   saves with a heading. `--jar-muted` is the 5.5:1 tier, not `--jar-faint`:
-   a person is being asked to CHECK these, and text you cannot read is not
-   evidence. */
-.waka-claim-from {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-6);
-  margin: 0;
-  padding: 0 0 0 var(--sp-12);
-  border-inline-start: 1px solid var(--line);
-  font-size: var(--t-meta);
-  line-height: 1.5;
-  color: var(--jar-muted);
-}
-
-.waka-claim-from li {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-/* The answer, worn. See the overlay's note on why an answered claim stays. */
-.waka-claim-said {
-  margin: 0;
-  font-size: var(--t-meta);
-  color: var(--jar-muted);
-}
+/* ═══ THE CLAIMS ROOM WENT (2026-10-17) ═════════════════════════════════
+   `.waka-claims`, `.waka-claim`, its doorway, statement, receipts and worn
+   answer were the claims page's: a queue you sat down to, reached only by
+   `?open=claims` once review became something you step into from home. That
+   address now opens review, where the same claims are answered one card at
+   a time, so nothing renders these. What they argued — a claim is a sentence
+   you CHECK, its receipts in the person's own words at the 5.5:1 tier
+   because text you cannot read is not evidence — lives on in the slip below
+   and in git under this file. */
 
 /* ═══ THE ANSWER ROW, THEN THE UP/DOWN CARD, WENT (2026-10-15) ══════════
    First the three words under the sentence (`.jar-char-claim-answers`)
@@ -5340,6 +5243,18 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
+}
+
+/* The card's own way out on touch, where the invisible scrim is not a target
+   anybody can find (see the note in `Menu.tsx`). Right-aligned inside the
+   card, never in the screen's corner. A mouse keeps the scrim and Escape. */
+.waka-account-close {
+  align-self: flex-end;
+  min-height: var(--sp-44);
+  padding: 0 var(--sp-8);
+}
+@media (hover: hover) and (pointer: fine) {
+  .waka-account-close { display: none; }
 }
 
 .waka-account-name {

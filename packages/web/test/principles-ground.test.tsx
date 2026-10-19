@@ -115,10 +115,20 @@ it("lights only the seat that filled since the last visit, and nothing on a firs
   expect(fresh).toEqual(["B."]);
 });
 
-it("falls back to the plain sentence when the ground cannot be read", async () => {
+/* A FAILED READ USED TO SAY "No principles yet." — true of an account with
+   forty steady signals too, which is why it was a lie over a dead connection.
+   It says it failed now, and the Try again under it reads the ground again. */
+it("says the ground could not be read, and reads it again on Try again", async () => {
   vi.mocked(fetchSignals).mockRejectedValue(new Error("down"));
   await ground();
-  expect(host.textContent).toContain("No principles yet.");
+  expect(host.textContent).toContain("Couldn’t read what your principles grow from.");
+  expect(host.textContent).not.toContain("No principles yet.");
+  vi.mocked(fetchSignals).mockResolvedValue([signal("a", "A.")]);
+  const retry = host.querySelector<HTMLButtonElement>(".waka-over-retry")!;
+  expect(retry.textContent).toBe("Try again");
+  await act(async () => retry.click());
+  await act(async () => undefined);
+  expect(host.querySelector(".waka-ground-words")?.textContent).toBe("A.");
 });
 
 it("meets the first principle once, and only for someone who waited for it", async () => {

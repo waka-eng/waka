@@ -185,6 +185,18 @@ export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoun
     window.location.reload();
   };
 
+  /**
+   * THE SECOND WAY OUT: somewhere that is not here. A reload is the right
+   * first answer and the wrong only answer — when the failure is in THIS
+   * page (a bad link into a conversation, a day page that cannot draw), a
+   * reload rebuilds the same failure, and the screen used to offer nothing
+   * else. Home is a full navigation for the same reason the reload is: it
+   * goes back to the server rather than re-mounting from a stale document.
+   */
+  private readonly goHome = (): void => {
+    window.location.assign("/");
+  };
+
   render(): ReactNode {
     if (!this.state.failed) return this.props.children;
 
@@ -204,6 +216,16 @@ export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoun
           <button className="btn-primary" type="button" onClick={this.retry}>
             {t(locale, "surfaceUnavailableRetry")}
           </button>
+          {/* Not offered on a clean home itself, where it would be the reload
+              again under a second name. `/?open=…` or `/#…` is NOT home: the
+              query may be what breaks the page, and a clean `/` drops it. */}
+          {window.location.pathname !== "/" || window.location.search !== "" || window.location.hash !== "" ? (
+            <p className="login-footer">
+              <button className="login-link" type="button" onClick={this.goHome}>
+                {t(locale, "surfaceUnavailableHome")}
+              </button>
+            </p>
+          ) : null}
           {/* THE ERROR'S OWN WORDS, small and untranslated. This screen's
               copy guesses at a cause ("usually a dropped connection...") and
               the guess was all a person could report — a founder hit a

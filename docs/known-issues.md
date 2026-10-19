@@ -1237,6 +1237,95 @@ room-synthesized words derived from an erased or privatised memory persist in th
 That is the strongest reason not to leave the room-data drop undecided. Resolve then: either
 drop the room tables, or purge room artifacts that cite a deleted or privatised memory.
 
+## Time rail Escape vs review Escape (follow-up)
+
+**Status:** open follow-up (2026-10-18). The time rail (`.jar-when` / `.jar-dial` in
+`pages/Home.tsx`) closes on a press elsewhere only, as on `origin/dev`; a keyboard that opened it
+has no key that puts it down. An Escape handler for it was added and withdrawn: it has to be heard
+before review's own Escape (which ends the sitting), and another handler already calls
+`preventDefault` on Escape, so a bubble-phase listener that respects `defaultPrevented` never
+fired. Resolve by deciding which layer owns Escape while both are up, in one place.
+
+## Paused notice can show stale "paused" for ≤30s after a Retry (follow-up)
+
+**Status:** open follow-up (2026-10-18), `lib/use-reading-paused.ts`. Two races:
+
+- **A GET in flight during the POST.** A status GET can be sent while the Retry POST is out and
+  start after the Retry's counter bump, so it is not discarded; if it answers with the pre-retry
+  state after the post-retry GET, the notice says "paused" again until the next 30s re-check.
+- **Two counters.** Home and the principles overlay each mount their own `useReadingPaused`, each
+  with its own retry counter: a Retry pressed in one does not invalidate a GET in flight in the
+  other, which can keep showing "paused" until its own next check.
+
+Both clear within one 30s re-check (or on focus).
+
+## Principles Try again restarting failed jobs (follow-up)
+
+**Status:** open follow-up (2026-10-18). `components/PrincipleRead.tsx` is back to `origin/dev`:
+its Try again re-reads, and asks for a retry only the way dev does. A Try again that itself
+restarts failed principles (one POST per press), a stalled-read "still working" line, and a poll
+that never gives up were built here and withdrawn after repeated review findings in the same
+area. Open cases: a failed or hung retry POST (re-sent automatically, or leaving the button
+disabled); a status GET sent before a retry landing after it; a read that stalls for minutes with
+no way on; and polling that stops after repeated failures. The paused-reading notice's Retry
+(`useReadingPaused`) is the one place that still sends `POST /principles/refresh?retry=1`.
+
+## Session expiry return path and signed-in hint (follow-up)
+
+**Status:** open follow-up (2026-10-18). `claude/fix-dead-ends` reworked sign-in, sign-out,
+session expiry and the cached signed-in hint; four review rounds kept finding regressions in the
+same handling, so it was reverted to `origin/dev` (`lib/auth-context.tsx`, `RequireAuth.tsx`,
+`pages/Login.tsx`, `lib/sign-in-destination.ts`, `lib/api/auth.ts`, the 401 handling in
+`lib/api/transport.ts`, and their tests). Only the web READ deadline survived in the transport,
+and it does not touch sessions. The cases any reattempt has to answer:
+
+- **A session that ends mid-flow** meets each screen's own 401 as a local error, with no door and
+  no return to where the person was; a door that does appear says "Welcome back".
+- **Return path ownership.** A remembered "where you were" must only apply to the account whose
+  session ended; another account signing in at that door must go home. The Google button names
+  its destination before anyone is known.
+- **Stale 401s.** A slow read sent under the previous session must not sign out the session made
+  since (web cookies are invisible to script; native compares tokens).
+- **Deliberate sign-out vs expiry.** Native retirement fires the expiry event; an in-flight 401
+  can land mid-logout. Neither may read as "you were signed out", but suppressing them must not
+  drop a genuine later expiry.
+- **Local-first sign-out vs a live credential.** Clearing the UI before the keychain/server
+  retirement can leave a live session behind a signed-out screen if the clear fails; waiting on it
+  can take many seconds offline. On the web a late logout response must not erase the next
+  sign-in's cookie.
+- **Offline at startup.** An unanswered `/auth/me` signed the person out; keeping the stored hint
+  instead can trap them on "can't reach WAKA". A 200 `/auth/me` whose body is unreadable still
+  reads as signed out (dev's `fetchCurrentViewer`).
+- **Background refresh failures** while signed in must not raise "unreachable" for a later
+  sign-out.
+
+The principles status cache is keyed by the profile its readers render for
+(`principleStatusFor`), not by the auth layer.
+
+## Layer history under replace/reload
+
+**Status:** open follow-up (2026-10-17). `claude/fix-dead-ends` shipped and then withdrew
+`lib/back-closes.ts` (`useBackCloses`), which made Back close review and the settings/info card
+by pushing a tagged same-address history entry. Three review rounds kept finding defects in the
+same mechanism, so it was removed rather than patched again. As on `origin/dev`, **Back with
+review or the settings/info card open leaves the page** (on a phone, the edge swipe leaves
+WAKA). Any reattempt has to answer these open cases before it ships:
+
+- **Reload with a layer open.** The pushed entry survives the reload on top of an identical
+  page entry. Stepping back over it crosses into the pre-reload document (a second full load);
+  stripping the tag in place leaves a same-URL Back step that does nothing. The History API
+  cannot delete or merge entries.
+- **Router replace under an open layer.** A `replace` (address cleanup such as dropping
+  `?open=`) rewrites the layer's entry, not the page entry beneath; Back can then restore the
+  pre-replace address. Rebasing it needs an asynchronous silent pop, and a second replace or a
+  push during that pop races it.
+- **Stacked layers.** Review and the corner card can be open together; each pushing its own
+  entry, closing in a different order than opening, or a navigation from inside one, leaves
+  entries no listener owns.
+
+Likely shape of a fix: make the layers real addresses (a query param the router owns) instead
+of raw `history` entries, so Back, replace and reload are the router's ordinary cases.
+
 ---
 
 ## Refuted findings
