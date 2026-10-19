@@ -15,15 +15,23 @@
  * the clipboard's image wrapper, and `fetch` the photo's bytes.
  * Everything else — the editing, the actions — is real.
  *
- * Founder, 2026-10-16: one design (the first, dark and square), always
- * signed, no looks row and no name switch; the words edited in the bubble
- * itself rather than in a box under the card; a plain × to close.
+ * Founder, 2026-10-16: one design (the first, dark and square), unsigned,
+ * no looks row and no name switch; the words edited in the bubble itself
+ * rather than in a box under the card; a plain × to close; two plain icons.
+ *
+ * The touch-screen editor is checked two ways: `window.matchMedia` and
+ * `getComputedStyle` are stubbed to stand in for a phone (the floor the
+ * stylesheet gives the field) and the card's measured width, and the floor
+ * itself is read off chrome.css, since jsdom applies no stylesheet.
  */
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { ShareSheet, type ShareTarget } from "../src/components/ShareSheet";
+import { ShareSheet, touchEditorScale, type ShareTarget } from "../src/components/ShareSheet";
 import { fetchAttachmentUrl } from "../src/lib/api";
 import { renderShareCard, type ShareCardLayout } from "../src/lib/principle-artifact";
 
@@ -180,4 +188,76 @@ it("without a device share sheet, sharing puts the image on the clipboard", asyn
   expect(write).toHaveBeenCalledOnce();
   expect(host.textContent).toContain("Image copied. Paste it anywhere.");
   Reflect.deleteProperty(navigator, "clipboard");
+});
+
+it("without a share sheet or a clipboard, sharing saves the image", async () => {
+  Reflect.deleteProperty(navigator, "clipboard");
+  await mount();
+  await settle();
+  await act(async () => button("Share image")!.click());
+  expect(URL.createObjectURL).toHaveBeenCalled();
+  expect(host.textContent).toContain("Image download started.");
+});
+
+/* NO FOCUS-ZOOM IN THE BUBBLE. iOS zooms the page when a field under 16px
+   takes focus; on a phone the card's words are drawn at ~11px. */
+it("scales the editor so its text can sit at the 16px floor and still match the drawn words", () => {
+  expect(touchEditorScale(16, 16)).toBe(1);
+  expect(touchEditorScale(10, 16)).toBeCloseTo(1.6);
+  expect(touchEditorScale(20, 16), "words shown above the floor are never shrunk").toBe(1);
+  expect(touchEditorScale(0, 16), "nothing measured: no scale").toBe(1);
+  expect(touchEditorScale(10, Number.NaN)).toBe(1);
+});
+
+const pointer = (coarse: boolean) => vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+  matches: coarse && query === "(pointer: coarse)", media: query, addEventListener() {}, removeEventListener() {},
+})));
+
+it("on a touch screen, lays the editor out at the floor and scales it back to the card's size", async () => {
+  pointer(true);
+  const realStyle = window.getComputedStyle.bind(window);
+  /* On a coarse pointer the stylesheet's floor wins over the field's inline size. */
+  const style = vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) => {
+    const computed = realStyle(el, pseudo);
+    return el.classList.contains("jar-share-inline") ? ({ ...computed, fontSize: "16px" } as CSSStyleDeclaration) : computed;
+  });
+  const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return { width: this.classList.contains("jar-share-card") ? 270 : 0, height: 0, x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, toJSON() {} } as DOMRect;
+  });
+  try {
+    await mount();
+    await settle();
+    const area = host.querySelector<HTMLTextAreaElement>(".jar-share-inline")!;
+    /* 44 card px on a card shown 270 wide is 11px; 16 / 11 is the factor. */
+    const f = 16 / 11;
+    expect(Number(area.dataset.touchScale)).toBeCloseTo(f, 3);
+    expect(area.style.transform).toBe(`scale(${1 / f})`);
+    expect(area.style.transformOrigin).toBe("0 0");
+    expect(parseFloat(area.style.width)).toBeCloseTo((856 / 1080) * 100 * f, 6);
+    /* Laid out at the floor (44·f card px on a 270px card is 16px)… */
+    expect((parseFloat(area.style.fontSize) / 100) * 270).toBeCloseTo(16, 6);
+    /* …and seen at the drawn size once scaled back. */
+    expect((parseFloat(area.style.fontSize) / 100) * 270 / f).toBeCloseTo(11, 6);
+  } finally {
+    rect.mockRestore();
+    style.mockRestore();
+  }
+});
+
+it("with a mouse, the editor is the card's own size and not scaled", async () => {
+  pointer(false);
+  await mount();
+  await settle();
+  const area = host.querySelector<HTMLTextAreaElement>(".jar-share-inline")!;
+  expect(area.dataset.touchScale).toBeUndefined();
+  expect(area.style.transform).toBe("");
+  expect(area.style.fontSize).toBe(`${(44 / 1080) * 100}cqw`);
+});
+
+it("keeps the bubble's editor under the stylesheet's 16px coarse-pointer floor", () => {
+  const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../src/styles/chrome.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  /* The editor is a textarea in the share sheet, so the restated floor reaches it… */
+  expect(css).toMatch(/@media \(pointer: coarse\) \{[^@]*body \.jar-thing-share textarea[^{]*\{\s*font-size:\s*var\(--t-lead\)\s*!important/);
+  /* …and nothing sizes it at a strength that could out-rank that floor. */
+  expect(css).not.toMatch(/\.jar-share-inline[^{]*\{[^}]*font-size[^;}]*!important/);
 });

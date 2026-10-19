@@ -37,7 +37,7 @@
  * door behind it. And it never claims a share happened: a native sheet
  * closing says only that it closed.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { CSSProperties } from "react";
 import { DialogSurface } from "./DialogSurface";
@@ -53,6 +53,24 @@ const CARD_LOOK = { appearance: "dark", format: "square" } as const;
 /** Card pixels → a length that scales with the card as it is shown. The
     stage is a size container, so `cqw` is a hundredth of the card's width. */
 const cq = (px: number, cardWidth: number) => `${(px / cardWidth) * 100}cqw`;
+
+/** HOW MUCH LARGER THE EDITOR IS LAID OUT ON A TOUCH SCREEN, so its words can
+    be set at the 16px focus-zoom floor and still be drawn at the card's size.
+
+    Mobile Safari zooms the whole page when a field under 16px takes focus
+    (the floor in chrome.css, `test/no-focus-zoom.test.ts`), and on a phone
+    the card's words are shown at ~11px — so on a coarse pointer the floor
+    wins and the field's text is 16px. Left at that, the words in the bubble
+    grew half again and broke onto other lines the moment you pressed them.
+    Instead the field is laid out `floorPx / shownPx` times larger — box,
+    padding, corners and text alike, so every line breaks where the drawn
+    one does — and scaled back down by the same factor. Its computed size
+    stays at the floor (no zoom); what you see is the home ratio. 1 when the
+    shown words are already at or above the floor, or nothing is measured. */
+export function touchEditorScale(shownPx: number, floorPx: number): number {
+  if (!(shownPx > 0) || !(floorPx > 0) || floorPx <= shownPx) return 1;
+  return floorPx / shownPx;
+}
 
 export interface ShareTarget {
   kind: "inspiration" | "topOfMind";
@@ -89,6 +107,9 @@ export function ShareSheet({ target, locale, onClose }: {
   const [words, setWords] = useState(target.text);
   const [editing, setEditing] = useState(false);
   const [layout, setLayout] = useState<ShareCardLayout | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const inlineRef = useRef<HTMLTextAreaElement | null>(null);
+  const [touchScale, setTouchScale] = useState(1);
   const [photo, setPhoto] = useState<PhotoState>(target.photoId ? { step: "loading" } : { step: "none" });
   const photoRef = useRef<ImageBitmap | null>(null);
   const [preview, setPreview] = useState<{ key: string; url: string; blob: Blob } | null>(null);
@@ -181,15 +202,39 @@ export function ShareSheet({ target, locale, onClose }: {
     photoRef.current?.close?.();
   }, []);
 
+  /* THE TOUCH SCALE (`touchEditorScale`), measured against the card as it is
+     shown and the size the stylesheet's floor actually gives the field —
+     read from the field, so the floor stays the stylesheet's to set. Only on
+     a coarse pointer: a mouse never meets the zoom, and there the field is
+     the card's own size. */
+  const hasEditor = Boolean(layout && preview && !renderError);
+  useLayoutEffect(() => {
+    if (!hasEditor || !layout) return undefined;
+    const measure = () => {
+      const card = cardRef.current;
+      const field = inlineRef.current;
+      const coarse = typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+      if (!coarse || !card || !field) { setTouchScale(1); return; }
+      const shown = (layout.text.size * card.getBoundingClientRect().width) / layout.width;
+      const floor = parseFloat(window.getComputedStyle(field).fontSize);
+      setTouchScale(touchEditorScale(shown, floor));
+    };
+    measure();
+    if (typeof ResizeObserver !== "function" || !cardRef.current) return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(cardRef.current);
+    return () => observer.disconnect();
+  }, [hasEditor, layout]);
+
   const ready = Boolean(preview && preview.key === contentKey && !renderError);
   const filename = target.kind === "inspiration" ? "waka-inspiration.png" : "waka-top-of-mind.png";
   const filenames = useMemo(() => ({ download: filename, share: filename }), [filename]);
-  const { busy, notice, setNotice, download, share } = useShareImage(ready ? preview?.blob ?? null : null, filenames, { fallback: "copy" });
   /* SHARE IS ALWAYS THERE. Founder, 2026-10-16: "a save button icon and a
      share button icon". Where the device has a share sheet, it opens it; a
      desktop browser has none, so there sharing means the image on the
      clipboard, ready to paste into whatever you post with — and failing
      that, the saved file (`fallback: "copy"` in useShareImage). */
+  const { busy, notice, setNotice, download, share } = useShareImage(ready ? preview?.blob ?? null : null, filenames, { fallback: "copy" });
 
   const title = say(target.kind === "inspiration" ? "worldShareInspirationSheet" : "worldShareTopOfMindTitle");
   const alt = [target.proof, words].filter(Boolean).join("\n");
@@ -203,18 +248,23 @@ export function ShareSheet({ target, locale, onClose }: {
   /* The renderer says which part of the bubble the words fill (under the
      frame line on the top of mind, so the line stays while you type) and
      the padding that lands each line where the drawn one is. */
+  /* On a touch screen every length is `touchScale` times larger and the
+     whole field is scaled back down from its top-left corner, so the text
+     can sit at the 16px floor and still land on the drawn lines. */
+  const f = touchScale;
   const inline: CSSProperties | undefined = layout ? {
     left: `${(layout.edit.x / layout.width) * 100}%`,
     top: `${(layout.edit.y / layout.height) * 100}%`,
-    width: `${(layout.edit.w / layout.width) * 100}%`,
-    height: `${(layout.edit.h / layout.height) * 100}%`,
-    padding: `${cq(layout.edit.padTop, layout.width)} ${cq(layout.edit.padX, layout.width)} 0`,
-    borderRadius: `${cq(layout.edit.radiusTop, layout.width)} ${cq(layout.edit.radiusTop, layout.width)} ${cq(layout.edit.radiusBottom, layout.width)} ${cq(layout.edit.radiusBottom, layout.width)}`,
+    width: `${(layout.edit.w / layout.width) * 100 * f}%`,
+    height: `${(layout.edit.h / layout.height) * 100 * f}%`,
+    padding: `${cq(layout.edit.padTop * f, layout.width)} ${cq(layout.edit.padX * f, layout.width)} 0`,
+    borderRadius: `${cq(layout.edit.radiusTop * f, layout.width)} ${cq(layout.edit.radiusTop * f, layout.width)} ${cq(layout.edit.radiusBottom * f, layout.width)} ${cq(layout.edit.radiusBottom * f, layout.width)}`,
     textAlign: layout.text.align,
     fontFamily: layout.text.family,
     fontWeight: layout.text.weight,
-    fontSize: cq(layout.text.size, layout.width),
+    fontSize: cq(layout.text.size * f, layout.width),
     lineHeight: layout.text.leading,
+    ...(f !== 1 ? { transform: `scale(${1 / f})`, transformOrigin: "0 0" } : {}),
     ["--share-ink" as string]: layout.text.ink,
     ["--share-fill" as string]: layout.bubble.fill,
   } : undefined;
@@ -232,11 +282,13 @@ export function ShareSheet({ target, locale, onClose }: {
         <div className="jar-share-body">
           <div className="jar-share-stage" aria-busy={!ready && !renderError}>
             {preview && !renderError ? (
-              <div className="jar-share-card">
+              <div className="jar-share-card" ref={cardRef}>
                 <img src={preview.url} alt={alt} />
                 {inline ? (
                   <textarea
+                    ref={inlineRef}
                     className="jar-share-inline"
+                    data-touch-scale={f !== 1 ? f.toFixed(3) : undefined}
                     style={inline}
                     aria-label={say("worldShareWords")}
                     maxLength={2000}
