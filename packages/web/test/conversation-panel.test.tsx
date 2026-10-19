@@ -335,32 +335,31 @@ it('treats the first reply-read failure as transient rather than flashing an err
    may still be running, so Send stays off while progress cannot be read — but
    the watch never stops: it says it is retrying, keeps asking on its own, and
    lets Send go the moment the server answers. "Check again" asks at once. */
-it('keeps the reply in flight while progress cannot be read, retries on its own, and frees Send on an answer',async()=>{
+it('stops after two failed progress reads, as dev, keeping the reply in flight until Check again gets an answer',async()=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockRejectedValue(new Error('Down'));await mount();await tick(1000);
-  expect(host.textContent).toContain('Couldn’t check reply progress. Trying again…');
+  expect(vi.mocked(fetchConversationReply).mock.calls.length,'the first failure was not retried once').toBe(2);
+  await tick(15000);await tick(15000);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length,'failed reads were polled past two').toBe(2);
+  expect(host.textContent).toContain('Couldn’t check reply progress.');
+  expect(host.textContent,'it claims to retry after stopping').not.toContain('Trying again');
   await type('Still there?');
   const send=()=>[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
   expect(send().disabled,'a failed progress read let a second message cross a reply that may be running').toBe(true);
-  const before=vi.mocked(fetchConversationReply).mock.calls.length;
-  await tick(2000);await tick(4000);
-  expect(vi.mocked(fetchConversationReply).mock.calls.length,'the watch stopped after a failure').toBeGreaterThan(before);
   vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:1}));
-  await tick(15000);
+  await click('Check again');await tick(0);
   expect(host.textContent).not.toContain('Couldn’t check reply progress.');
   expect(send().disabled,'Send stayed off after the server answered').toBe(false);
-  expect(host.querySelector('.chat-recheck')).toBeNull();
 });
 /* Only a 404 is terminal: the watch stops, says so, offers a reload, and Send
    comes back. A server answering with a state older than the screen is not an
    answer: Send stays off and the watch keeps asking, saying it is waiting. */
-it('keeps asking on a 429 reply read — that one is "try later", not gone',async()=>{
+it('treats a 429 reply read as "try later", not gone: retried once, then Check again',async()=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:429,message:'Slow down'}));await mount();await tick(1000);
-  const calls=vi.mocked(fetchConversationReply).mock.calls.length;
-  await tick(15000);
-  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBeGreaterThan(calls);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBe(2);
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
 });
 it.each([400,403])('treats a %i reply read as an error, not gone, and stops after two in a row: Check again, Send off',async(status)=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
@@ -441,11 +440,17 @@ it('keeps Send off and keeps asking while answers are older than the screen, the
 it('stops asking after the old window of older-than-shown answers, says it could not check, and keeps Send off',async()=>{
   stored={...stored,generationEnabled:true,revision:3,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:1}));await mount();
-  for(let i=0;i<40;i+=1)await tick(15000);
+  /* this suite fakes only the timers, so the clock the wait is counted on
+     follows them by hand */
+  let clock=Date.now();const clockSpy=vi.spyOn(Date,'now').mockImplementation(()=>clock);
+  const later=async(ms:number)=>{for(let left=ms;left>0;left-=1000){clock+=1000;await tick(1000);}};
+  /* returning to the tab every ten seconds must not extend the wait */
+  for(let i=0;i<8;i+=1){await later(10000);await act(async()=>{window.dispatchEvent(new Event('focus'));});}
+  await later(5000);
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
-  expect(calls,'the watch was not bounded at the old window').toBe(35);
-  await tick(15000);await tick(15000);
-  expect(vi.mocked(fetchConversationReply).mock.calls.length).toBe(calls);
+  await later(30000);
+  clockSpy.mockRestore();
+  expect(vi.mocked(fetchConversationReply).mock.calls.length,'the older-state wait outlived about a minute (focus reset it)').toBe(calls);
   expect(host.textContent).toContain('Couldn’t check reply progress.');
   expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
   await type('Still there?');

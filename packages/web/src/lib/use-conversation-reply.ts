@@ -4,8 +4,11 @@ import {fetchConversation,fetchConversationReply,stopConversationReply,type ApiC
 
 /** Another 4xx this many times in a row stops the watch. */
 const MAX_CLIENT_ERRORS=2;
-/** Older-than-shown answers before the watch stops: the old poll window. */
-const MAX_OLDER_READS=35;
+/** How long older-than-shown answers may go on before the watch stops: dev's
+    ~one-minute poll window, counted in time. */
+const MAX_OLDER_MS=60_000;
+/** Failed reads (network, timeout, 5xx) in a row before the watch stops, as on dev. */
+const MAX_FAILED_READS=2;
 
 /** Reads resume work; only an explicit stop mutates it. */
 export function useConversationReply(profileId:string,id:string|null,enabled:boolean,revision:number,onConversation:(row:ApiConversation)=>void,messageWindowStart?:number){
@@ -25,8 +28,17 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
   const alive=useRef(true),mutation=useRef<AbortController|null>(null);
   const delivered=useRef('');
   const state=stored?.profileId===profileId&&stored.conversationId===id&&stored.revision>=revision?stored:null;
-  const check=()=>setSerial(value=>value+1);
-  useEffect(()=>{alive.current=true;return()=>{alive.current=false;mutation.current?.abort();};},[profileId,id]);
+  /* When answers began coming back older than the screen. Counted in TIME
+     (about dev's one-minute window) and kept across focus/visibility
+     re-reads, so returning to the tab cannot extend the wait for ever; only
+     a current answer, a person's own Check again, or another conversation
+     resets it. */
+  const olderSince=useRef<number|null>(null);
+  /* A person's Check again: a fresh start, including the older-state clock. */
+  const check=()=>{olderSince.current=null;setSerial(value=>value+1);};
+  /* A focus/visibility re-read: asks again without resetting the clock. */
+  const resumeRead=()=>setSerial(value=>value+1);
+  useEffect(()=>{alive.current=true;olderSince.current=null;return()=>{alive.current=false;mutation.current?.abort();};},[profileId,id]);
   useEffect(()=>{
     if(!id||!enabled)return;const controller=new AbortController();let timer:number|undefined,polls=0,failures=0,older=0,clientErrors=0;
     setWaiting(false);setError(false);setTerminal(null);setBehind(false);setStopped(false);
@@ -46,7 +58,7 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
            conversation' left a "ready" state on screen over messages that
            did not have the reply yet — and Send came back too early. */
         setStored(next);setError(false);failures=0;clientErrors=0;
-        older=0;setBehind(false);
+        older=0;olderSince.current=null;setBehind(false);
         if(['pending','running'].includes(next.phase)){
           // A short early cadence avoids adding two seconds to a quick reply.
           // Keep a bounded ~one-minute window, then require an explicit check.
@@ -68,27 +80,32 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
            older-than-shown answer for as many reads as the ~one-minute poll
            window allows, stops the watch: "could not check", Check again,
            Send still off. Neither repeats forever. */
-        if(reason instanceof ApiError&&reason.status>=400&&reason.status<500){
-          clientErrors+=1;
-          if(clientErrors>=MAX_CLIENT_ERRORS){setBehind(false);setError(true);setStopped(true);return;}
-          failures=Math.max(failures,1);
+        if(reason instanceof ApiError&&reason.status>=400&&reason.status<500&&reason.status!==408&&reason.status!==429){
+          clientErrors+=1;setError(true);
+          if(clientErrors>=MAX_CLIENT_ERRORS){setBehind(false);setStopped(true);return;}
+          timer=window.setTimeout(()=>void read(),1000);return;
         }
         if(reason instanceof Error&&(reason.message==='Older reply state'||reason.message==='Older conversation')){
           older+=1;
-          if(older>=MAX_OLDER_READS){setBehind(false);setError(true);setStopped(true);return;}
+          olderSince.current??=Date.now();
+          if(Date.now()-olderSince.current>=MAX_OLDER_MS){setBehind(false);setError(true);setStopped(true);return;}
           if(older>=2)setBehind(true);
           timer=window.setTimeout(()=>void read(),Math.min(15000,1000*2**(older-1)));return;
         }
-        /* A FAILED READ IS NOT AN ANSWER, SO IT NEVER ENDS THE WATCH. The
-           reply may still be running; the panel keeps it counted in flight
-           (Send stays off) and says it is retrying, and this keeps asking —
-           backing off to fifteen seconds — until the server answers. */
-        if(!controller.signal.aborted){failures+=1;if(failures>=2)setError(true);timer=window.setTimeout(()=>void read(),Math.min(15000,1000*2**(failures-1)));}
+        /* A FAILED READ IS NOT AN ANSWER — and, as on dev, two in a row (a
+           dead connection, a timeout, a 5xx) stop the watch: it says it could
+           not check, with Check again, and the reply stays unconfirmed (Send
+           off). The first failure is retried once, quietly. */
+        if(!controller.signal.aborted){
+          failures+=1;
+          if(failures>=MAX_FAILED_READS){setBehind(false);setError(true);setStopped(true);return;}
+          timer=window.setTimeout(()=>void read(),1000);
+        }
       }
       finally{window.clearTimeout(deadline);controller.signal.removeEventListener('abort',abort);}
     };void read();return()=>{controller.abort();window.clearTimeout(timer);};
   },[profileId,id,enabled,revision,serial,messageWindowStart]);
-  useEffect(()=>{const resume=()=>{if(!document.hidden)check();};window.addEventListener('focus',resume);document.addEventListener('visibilitychange',resume);return()=>{window.removeEventListener('focus',resume);document.removeEventListener('visibilitychange',resume);};},[]);
+  useEffect(()=>{const resume=()=>{if(!document.hidden)resumeRead();};window.addEventListener('focus',resume);document.addEventListener('visibilitychange',resume);return()=>{window.removeEventListener('focus',resume);document.removeEventListener('visibilitychange',resume);};},[]);
   /* STOPPING IS THE ONLY THING A PERSON CAN STILL DO TO A REPLY IN FLIGHT.
      `act('request')` used to sit beside this and re-ran the generator for
      "Retry reply", "Get a reply" and "Check reply" — three buttons the founder
