@@ -155,6 +155,14 @@ describe("DELETE /api/signals/:signalId reconciles principles", () => {
   it("still deletes, and forces a principles reconcile for the profile, when the reconcile fails", async () => {
     const owner = await person();
     const { principleId, signalIds } = await principleOnThreeSignals(owner.profileId, true);
+    /* A principle that never cited the deleted signal. It already falls short
+       of the evidence bar (two signals), so a reconcile reaching it would
+       delete it: the forced job must touch only the deleted signal's citers. */
+    const [bystander] = await t.sql`INSERT INTO principles(profile_id, statement, state, origin, rank, held_since)
+      VALUES (${owner.profileId}, 'Leave room for slack.', 'held', 'minted', 3, now()) RETURNING id`;
+    for (const id of signalIds.slice(0, 2)) {
+      await t.sql`INSERT INTO principle_signals(profile_id,principle_id,signal_id) VALUES (${owner.profileId},${bystander!.id},${id})`;
+    }
     await t.sql.unsafe(`CREATE FUNCTION refuse_principle_write() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN RAISE EXCEPTION 'principles unavailable'; END $$`);
     await t.sql.unsafe(`CREATE TRIGGER refuse_principle_write BEFORE UPDATE OR DELETE ON principles
@@ -173,11 +181,14 @@ describe("DELETE /api/signals/:signalId reconciles principles", () => {
 
     /* Forced: this profile is no longer eligible for principles generation
        (two signals left), so the material-keyed refresh would never come. */
-    const jobs = await t.sql`SELECT id FROM background_jobs
+    const jobs = await t.sql`SELECT payload FROM background_jobs
       WHERE profile_id=${owner.profileId} AND type='refresh_principles' AND payload->>'reconcile' = 'true'`;
     expect(jobs, "a forced reconcile is queued").toHaveLength(1);
+    expect(jobs[0]!.payload.principleIds, "carrying only the deleted signal's citers").toEqual([principleId]);
     await drainBackgroundJobs({ limit: 5 });
     const [after] = await t.sql`SELECT unsupported_at FROM principles WHERE id=${principleId}`;
     expect(after!.unsupported_at, "the forced job revisited the unsupported principle").not.toBeNull();
+    expect(await t.sql`SELECT id FROM principles WHERE id=${bystander!.id}`, "and left every other principle alone")
+      .toHaveLength(1);
   });
 });

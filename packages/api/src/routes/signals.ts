@@ -902,15 +902,16 @@ export async function deleteProfileSignal(
     });
   } catch (err) {
     /* The delete has committed and stands. The fallback is a FORCED
-       reconcile of every principle the profile holds: the material-keyed
-       refresh is skipped for a profile no longer eligible, and an
-       unsupported principle must still be revisited. Best-effort too, and
-       never a failed delete. */
+       reconcile job for exactly the principles that cited this signal: the
+       material-keyed refresh is skipped for a profile no longer eligible,
+       and an unsupported principle must still be revisited. Best-effort
+       too, and never a failed delete. */
     console.warn("[signals] principles reconcile after delete failed; forcing a reconcile job", {
       profileId: input.profileId,
       error: err instanceof Error ? err.message : String(err),
     });
-    await enqueuePrinciplesReconcile(input.profileId).catch((refreshErr: unknown) => {
+    await enqueuePrinciplesReconcile(input.profileId, input.signalId,
+      citing.map((row) => row.principleId)).catch((refreshErr: unknown) => {
       console.warn("[signals] forced principles reconcile enqueue failed", {
         profileId: input.profileId,
         error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
