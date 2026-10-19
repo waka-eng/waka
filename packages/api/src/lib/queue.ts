@@ -1440,7 +1440,9 @@ function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string,
 /** A lease that expired after the job's final attempt is settled as `failed`
  * (visible and re-runnable) — always, even when a rerun was requested while it
  * ran: a job that crashed its worker on every attempt is never handed a fresh
- * attempt budget here. New work reaches it only through a later enqueue. */
+ * attempt budget here. New work reaches it only through a later enqueue.
+ * Only past TWICE the stale interval: on a non-Lambda drain a slow worker can
+ * outlive one interval and still finish, and must not be failed under itself. */
 async function settleExhaustedBackgroundLeases(now: Date): Promise<number> {
   const nowIso = now.toISOString();
   const rows = await getDb().execute(sql`
@@ -1451,7 +1453,7 @@ async function settleExhaustedBackgroundLeases(now: Date): Promise<number> {
         result = NULL,
         updated_at = ${nowIso}::timestamptz
     WHERE job.status = 'running'::background_job_status
-      AND job.locked_at < ${nowIso}::timestamptz - (${STALE_LOCK_SECONDS} || ' seconds')::interval
+      AND job.locked_at < ${nowIso}::timestamptz - (${2 * STALE_LOCK_SECONDS} || ' seconds')::interval
       AND job.attempts >= job.max_attempts
       AND job.type::text IN (${sql.join(backgroundJobTypeValues.map((type) => sql`${type}`), sql`, `)})
     RETURNING job.id

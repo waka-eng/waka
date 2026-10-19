@@ -105,6 +105,14 @@ it('settles a lease that expired after its final attempt as failed instead of le
   expect(await status(live.id),'an unexpired lease is untouched').toMatchObject({status:'running',attempts:3});
   expect(processor).not.toHaveBeenCalled();
 });
+it('leaves a lease past one stale interval but under two alone — a slow worker may still be alive',async()=>{
+  const p=await owner();
+  /* 20 minutes old: past STALE_LOCK_SECONDS (15m), under twice it (30m) */
+  const [slow]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,locked_at,attempts,max_attempts)
+    VALUES(${p},'derive_signals','{}','running','2026-10-05T11:40:00Z',3,3) RETURNING id`;
+  await drainBackgroundJobs({limit:5,now,processor:vi.fn(async()=>{})});
+  expect((await t.sql`SELECT status,attempts FROM background_jobs WHERE id=${slow.id}`)[0]).toMatchObject({status:'running',attempts:3});
+});
 it('records malformed model output once as a terminal failure, never a billed retry',async()=>{
   /* temperature 0 repeats the same malformed reply, so a retry only pays for it again */
   const p=await owner();

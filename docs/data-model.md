@@ -347,8 +347,8 @@ An explicitly invoked recovery inspection can still use the claim predicate
 and a five-minute grace from `run_after` or lease expiry. It takes at most five
 overdue claims in one pass, retaining fairness, account budgets, request
 identities and attempt ceilings. Exhausted stale leases are reported, then
-settled as `failed` by the next drain for operator retry rather than
-automatically revived.
+settled as `failed` by a drain, once twice the stale interval old, for
+operator retry rather than automatically revived.
 
 An inspection emits stage-level overdue counts, oldest overdue age, exhausted
 leases and a check count. The two passive backlog/exhausted-work alarms do not
