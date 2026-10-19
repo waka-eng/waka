@@ -32,6 +32,7 @@ import {
   attachments,
   feedback,
   inspirations,
+  principleSignals,
   profiles,
   reflections,
   signalEvidence,
@@ -53,7 +54,7 @@ import {
   type ProfileOperation,
   asAccountProfile,
 } from "../lib/middleware.js";
-import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
+import { enqueuePrinciplesReconcile, enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { lockSignalStatementSources, requestSignalStatementWork } from '../lib/signal-statement-work.js';
 import { evidenceSupportCurrent } from '../lib/signal-support-state.js';
 import {loadSignalEvidence,reviewEvidenceCurrent} from '../lib/review-evidence.js';
@@ -803,26 +804,36 @@ export async function dismissProfileSignal(
   db: WakaDb,
   input: { profileId: string; signalId: string },
 ): Promise<SignalDetail | null> {
-  const updated = await db
-    .update(signals)
-    .set({
-      status: "retired",
-      supportRetiredAt: null,
-      dismissedAt: sql`coalesce(${signals.dismissedAt}, now())`,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
-    .returning({ id: signals.id });
-  if (updated.length === 0) return null;
+  // One act: the dismissal and the disputes it settles commit together or
+  // not at all.
+  const dismissed = await db.transaction(async (tx) => {
+    const updated = await tx
+      .update(signals)
+      .set({
+        status: "retired",
+        supportRetiredAt: null,
+        dismissedAt: sql`coalesce(${signals.dismissedAt}, now())`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+      .returning({ id: signals.id });
+    if (updated.length === 0) return false;
 
-  /* throwing a side out settles its disputes — that side yields. Leaving a
-     one-sided "contested" standing forever would be a quiet corner. */
-  await resolveContestedPairs(db, {
-    profileId: input.profileId,
-    signalId: input.signalId,
-    act: "dismiss",
+    /* throwing a side out settles its disputes — that side yields. Leaving a
+       one-sided "contested" standing forever would be a quiet corner. */
+    await resolveContestedPairs(tx, {
+      profileId: input.profileId,
+      signalId: input.signalId,
+      act: "dismiss",
+    });
+    return true;
   });
+  if (!dismissed) return null;
 
+  /* No principles reconcile here, on purpose: a dismissal is undoable, and
+     the reconcile deletes unedited minted principles that a restore could
+     not bring back. See docs/known-issues.md, "Principles after a dismissed
+     signal (follow-up)". */
   return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
 }
 
@@ -862,11 +873,52 @@ export async function deleteProfileSignal(
   db: WakaDb,
   input: { profileId: string; signalId: string },
 ): Promise<boolean> {
-  const deleted = await db
-    .delete(signals)
-    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
-    .returning({ id: signals.id });
-  return deleted.length > 0;
+  // The delete cascades the signal's principle citations away, so the
+  // principles that cited it are read first and reconciled after the delete
+  // commits — each in its own transaction, principle before fence, the order
+  // a principle edit takes (inside the delete's transaction it would invert).
+  // The read and the delete share one transaction behind the signal's row
+  // lock: a citation needs that row's key-share lock, so none can be written
+  // between the read and the delete. No principle row is locked in here.
+  const citing = await db.transaction(async (tx) => {
+    const [locked] = await tx.select({ id: signals.id }).from(signals)
+      .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+      .for("update");
+    if (!locked) return null;
+    const rows = await tx
+      .selectDistinct({ principleId: principleSignals.principleId })
+      .from(principleSignals)
+      .where(and(eq(principleSignals.profileId, input.profileId), eq(principleSignals.signalId, input.signalId)));
+    await tx.delete(signals)
+      .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)));
+    return rows;
+  });
+  if (citing === null) return false;
+  try {
+    await reconcilePrinciplesAfterSignalLoss(db, {
+      profileId: input.profileId,
+      signalIds: [input.signalId],
+      principleIds: citing.map((row) => row.principleId),
+    });
+  } catch (err) {
+    /* The delete has committed and stands. The fallback is a FORCED
+       reconcile job for exactly the principles that cited this signal: the
+       material-keyed refresh is skipped for a profile no longer eligible,
+       and an unsupported principle must still be revisited. Best-effort
+       too, and never a failed delete. */
+    console.warn("[signals] principles reconcile after delete failed; forcing a reconcile job", {
+      profileId: input.profileId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    await enqueuePrinciplesReconcile(input.profileId, input.signalId,
+      citing.map((row) => row.principleId)).catch((refreshErr: unknown) => {
+      console.warn("[signals] forced principles reconcile enqueue failed", {
+        profileId: input.profileId,
+        error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+      });
+    });
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -953,7 +1005,6 @@ export interface SignalRouteDependencies {
   deleteSignal?: typeof deleteProfileSignal;
   loadProfile?: typeof loadProfileTarget;
   requestRefresh?: typeof enqueueTopOfMindRefresh;
-  reconcilePrinciples?: typeof reconcilePrinciplesAfterSignalLoss;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
 }
 
@@ -969,16 +1020,17 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
   const deleteSignal = deps.deleteSignal ?? deleteProfileSignal;
   const loadProfile = deps.loadProfile ?? loadProfileTarget;
   const requestRefresh = deps.requestRefresh ?? enqueueTopOfMindRefresh;
-  const reconcilePrinciples = deps.reconcilePrinciples ?? reconcilePrinciplesAfterSignalLoss;
 
   /**
    * Curating a signal changes what the artifact should be built from, so the
    * top of mind is re-synthesised in the background. Best-effort on purpose:
    * the edit itself has already committed, and a failed enqueue is a stale
    * board on the next refresh, not a lost edit. The debounce absorbs a burst.
+   * Awaited before responding: Lambda freezes the function once the response
+   * returns, and an enqueue still in flight then is simply lost.
    */
-  const scheduleRefresh = (profileId: string): void => {
-    void requestRefresh(profileId, "signals_changed").catch((err: unknown) => {
+  const scheduleRefresh = async (profileId: string): Promise<void> => {
+    await requestRefresh(profileId, "signals_changed").catch((err: unknown) => {
       console.warn("[signals] top-of-mind refresh enqueue failed", {
         profileId,
         error: err instanceof Error ? err.message : String(err),
@@ -1155,7 +1207,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     });
     if (!signal) return c.json({ error: "Signal not found" }, 404);
 
-    scheduleRefresh(scope.profileId);
+    await scheduleRefresh(scope.profileId);
     return c.json({ signal }, 200);
   });
 
@@ -1258,7 +1310,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     });
     if (!signal) return c.json({ error: "Signal not found" }, 404);
 
-    scheduleRefresh(scope.profileId);
+    await scheduleRefresh(scope.profileId);
     return c.json({ signal }, 200);
   });
 
@@ -1295,7 +1347,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     });
     if (!signal) return c.json({ error: "Signal not found" }, 404);
 
-    scheduleRefresh(scope.profileId);
+    await scheduleRefresh(scope.profileId);
     return c.json({ signal }, 200);
   });
 
@@ -1333,12 +1385,8 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
 
     // The artifact may cite the signal just removed; re-synthesise so an entry
     // is not left resting on a citation that no longer resolves. Principles
-    // reconcile immediately (state maintenance, no model, no midnight wait).
-    await reconcilePrinciples(db, {
-      profileId: scope.profileId,
-      signalIds: [parsedParams.data.signalId],
-    });
-    scheduleRefresh(scope.profileId);
+    // were reconciled inside the delete itself.
+    await scheduleRefresh(scope.profileId);
     return c.json({ deleted: true }, 200);
   });
 

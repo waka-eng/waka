@@ -240,6 +240,28 @@ describe("resolveRelatedEvidence — which citations code lets stand", () => {
   });
 });
 
+describe("parseSignalCandidates — null optional fields are a valid reply", () => {
+  /* A provider may send null for a field it leaves empty. Rejecting that as
+     invalid quietly discarded real statements. */
+  it("accepts a null quote on related evidence", () => {
+    const result = parseSignalCandidates({ statements: [{ statement: "I keep commitments small.",
+      relatedEvidence: [{ inspirationId: "a3689f1e-0000-4000-8000-000000000001", quote: null }] }] });
+    expect(result.statements[0]?.statement).toBe("I keep commitments small.");
+    expect(result.statements[0]?.relatedEvidence, "a citation without a quote is dropped, as a blank one is").toBeUndefined();
+  });
+
+  it("parses a valid reply whose optional fields are null", () => {
+    const result = parseSignalCandidates({
+      statements: [{ statement: "I keep commitments small.", reason: null, quote: null, relatedEvidence: null }],
+      category: null,
+    });
+    expect(result.statements).toEqual([
+      { statement: "I keep commitments small.", reason: undefined, quote: undefined, relatedEvidence: undefined },
+    ]);
+    expect(parseSignalCandidates({ statements: null, category: null })).toEqual({ statements: [], category: null });
+  });
+});
+
 describe("parseSignalCandidates — related-citation shape discipline", () => {
   const earlier='a3689f1e-0000-4000-8000-000000000001';
   const input={profileId:'profile',preferredLocale:'en-US' as const,

@@ -519,14 +519,16 @@ const extractedStatementsSchema = z.object({
     .array(
       z.object({
         statement: z.string(),
-        reason: z.string().optional(),
-        quote: z.string().optional(),
+        /* nullish, not optional: a provider may send null for a field it
+           leaves empty, and that reply is valid — only a wrong shape fails */
+        reason: z.string().nullish(),
+        quote: z.string().nullish(),
         relatedEvidence: z
-          .array(z.object({ inspirationId: z.string(), quote: z.string() }))
-          .optional(),
+          .array(z.object({ inspirationId: z.string(), quote: z.string().nullish() }))
+          .nullish(),
       }),
     )
-    .optional(),
+    .nullish(),
   category: z.string().nullish(),
 });
 
@@ -638,7 +640,7 @@ export function parseSignalCandidates(payload: unknown, input?: SignalCandidateE
          schema merely advertises. */
       const seenIds = new Set<string>();
       const relatedEvidence = (candidate.relatedEvidence ?? [])
-        .map((cited) => ({ inspirationId: cited.inspirationId.trim(), quote: cited.quote.trim() }))
+        .map((cited) => ({ inspirationId: cited.inspirationId.trim(), quote: (cited.quote ?? "").trim() }))
         .filter((cited) => {
           if (!cited.inspirationId || !cited.quote || seenIds.has(cited.inspirationId)) return false;
           seenIds.add(cited.inspirationId);

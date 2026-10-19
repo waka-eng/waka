@@ -177,7 +177,7 @@ import {
 import { isSupportedLocale } from "./locales.js";
 import { loadReflectionQuestionContext } from './reflection-question-context.js';
 import { loadReviewQuestionContext } from './review-dialogue-context.js';
-import { refreshPrinciplesForProfile } from "./principle-generation.js";
+import { reconcilePrinciplesAfterSignalLoss, refreshPrinciplesForProfile } from "./principle-generation.js";
 import { tendSignalGarden } from "./signal-gardener.js";
 import {
   refreshTopOfMindForProfile,
@@ -365,6 +365,7 @@ async function enqueueKeyedJob(input: {
     | ReviewSignalSupportPayload
     | AssessSignalSupportPayload
     | { profileId: string }
+    | { profileId: string; reconcile: true; principleIds: string[] }
     | ReembedSignalPayload
     | GenerateReflectionQuestionPayload
     | GenerateReviewQuestionPayload
@@ -461,6 +462,28 @@ export async function enqueueRefreshPrinciples(
     else await wakeBackgroundWorker();
   }
   return { jobId: existing.id, requestVersion: existing.requestVersion.toString(), created: Boolean(changed) };
+}
+
+/**
+ * A forced principles reconcile of exactly the principles that cited a
+ * deleted signal, regardless of generation eligibility: the fallback when the
+ * inline reconcile failed after the delete had already committed, so a
+ * principle left without support is always revisited. Never the profile's
+ * other principles. It rides the `refresh_principles` type (no new enum value)
+ * with `reconcile: true`, keyed per deleted signal so two failures never
+ * collapse into one row carrying only the first one's ids.
+ */
+export async function enqueuePrinciplesReconcile(
+  profileId: string,
+  signalId: string,
+  principleIds: string[],
+): Promise<EnqueueResult> {
+  return enqueueKeyedJob({
+    profileId,
+    type: "refresh_principles",
+    payload: { profileId, reconcile: true, principleIds },
+    idempotencyKey: `refresh_principles:${profileId}:reconcile:${signalId}`,
+  });
 }
 
 /**
@@ -1104,6 +1127,17 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
       // A payload naming another profile was a room mind's; retiredGroupJob
       // has already settled it, so the target here is the tenant.
       const profileId = job.profileId;
+      const forced = job.payload as { reconcile?: unknown; principleIds?: unknown } | null;
+      if (forced?.reconcile === true) {
+        // The forced reconcile (enqueuePrinciplesReconcile): state maintenance
+        // only, no model, and only the principle ids the job carries — the
+        // reconcile itself scopes each one to this profile.
+        const principleIds = Array.isArray(forced.principleIds)
+          ? forced.principleIds.filter((id): id is string => typeof id === "string")
+          : [];
+        await reconcilePrinciplesAfterSignalLoss(getDb(), { profileId, signalIds: [], principleIds });
+        return;
+      }
       await refreshPrinciplesForProfile({ profileId }, {jobId:job.id,billingProfileId:job.profileId,
         expectedMaterialKey:job.idempotencyKey?.startsWith(`refresh_principles:${profileId}:`)?job.idempotencyKey.slice(`refresh_principles:${profileId}:`.length):undefined,
         beforeProgress:tx=>assertBackgroundJobOwnership(tx,job,true),beforeCommit:tx=>assertBackgroundJobOwnership(tx,job,true)});

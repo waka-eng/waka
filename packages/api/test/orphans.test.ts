@@ -43,11 +43,13 @@
  *   a name there is a claim someone can check; leaving one there after its
  *   phase has passed is the next audit's finding.
  */
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
+
+import { listSourceFiles, readListedFile } from "./helpers/source-walk.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "../src");
@@ -106,14 +108,8 @@ const PARKED = new Map<string, string>([
  * the suffix rather than by name, because the suffix is the convention every
  * planted file already follows and a pid-keyed name cannot be listed.
  */
-function walk(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const full = resolve(dir, entry);
-    if (statSync(full).isDirectory()) walk(full, out);
-    else if (/\.ts$/.test(entry) && !/\.(test|d|probe)\.ts$/.test(entry)) out.push(full);
-  }
-  return out;
-}
+const walk = (dir: string): string[] =>
+  listSourceFiles(dir, (path) => /\.ts$/.test(path) && !/\.(test|d|probe)\.ts$/.test(path));
 
 /**
  * Every relative specifier a file imports, static or dynamic, resolved to a
@@ -139,7 +135,7 @@ function withoutComments(text: string): string {
 }
 
 function importsOf(file: string): string[] {
-  const text = withoutComments(readFileSync(file, "utf8"));
+  const text = withoutComments(readListedFile(file) ?? "");
   const here = dirname(file);
   const found: string[] = [];
   for (const match of text.matchAll(/(?:from|import|require)\s*\(?\s*["']([^"']+)["']/g)) {
@@ -180,15 +176,7 @@ function toolEntryPoints(): string[] {
   for (const dirName of TOOL_ROOTS) {
     const dir = resolve(SRC, "../../..", dirName);
     if (!existsSync(dir)) continue;
-    const stack = [dir];
-    while (stack.length > 0) {
-      const current = stack.pop() as string;
-      for (const entry of readdirSync(current)) {
-        const full = resolve(current, entry);
-        if (statSync(full).isDirectory()) stack.push(full);
-        else if (/\.(ts|mjs)$/.test(entry)) roots.push(full);
-      }
-    }
+    listSourceFiles(dir, (path) => /\.(ts|mjs)$/.test(path), roots);
   }
   return roots;
 }

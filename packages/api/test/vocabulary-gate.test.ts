@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
   mkdirSync,
 } from "node:fs";
@@ -439,6 +440,25 @@ describe("the vocabulary gate, as the package actually runs it", () => {
     expect(run.out).not.toContain("match nothing");
   });
 
+  it("passes over a file removed between being listed and being read", () => {
+    /*
+     * Other suites plant `*.probe.ts` files in `src/` and remove them while the
+     * package runs in parallel, so the walk can list a path that is gone by the
+     * time it is looked at. That is somebody else's fixture, not this package's
+     * code, and it must not crash the run. A dangling symlink holds that moment
+     * still: the directory read lists it, and anything that follows it finds
+     * nothing there.
+     */
+    const gone = join(PKG, "src", `gate-vanished-${process.pid}.probe.ts`);
+    temporary.push(gone);
+    symlinkSync(join(PKG, "src", `gate-already-removed-${process.pid}.ts`), gone);
+
+    const run = runGate(GATE);
+
+    expect(run.code, `a vanished file must not fail the run\n${run.out}`).toBe(0);
+    expect(run.out).toContain("clean —");
+  });
+
   it("refuses a single TypeScript file no root covers", () => {
     const root = miniPackage({
       "src/fine.ts": "export const value = 1;\n",
@@ -576,8 +596,8 @@ describe("the vocabulary gate, when the mistake is in the gate", () => {
      */
     const script = mutantGate("the scan loop catches and continues", [
       [
-        "    const scan = scanSource(readSource(file), file, used);\n    read.push(file);",
-        "    let scan;\n    try {\n      scan = scanSource(readSource(file), file, used);\n    } catch {\n      continue;\n    }\n    read.push(file);",
+        "    const scan = scanSource(source, file, used);\n    read.push(file);",
+        "    let scan;\n    try {\n      scan = scanSource(source, file, used);\n    } catch {\n      continue;\n    }\n    read.push(file);",
       ],
       [
         "function scanSource(source, file, used = new Set()) {\n  const found = [];",
@@ -601,8 +621,8 @@ describe("the vocabulary gate, when the mistake is in the gate", () => {
      */
     const script = mutantGate("readSource returns nothing for a directory", [
       [
-        '  (rel) => readFileSync(join(PKG, rel), "utf8"),',
-        '  (rel) => (rel.startsWith("test/") ? "" : readFileSync(join(PKG, rel), "utf8")),',
+        '  whileListed((rel) => readFileSync(join(PKG, rel), "utf8"), vanished),',
+        '  whileListed((rel) => (rel.startsWith("test/") ? "" : readFileSync(join(PKG, rel), "utf8")), vanished),',
       ],
     ]);
 

@@ -32,24 +32,18 @@
  * which is the only way a rule about where a comparison may be written can be
  * checked — a fixture would be asserting the rule against a copy of itself.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { listSourceFiles, readListedFile } from "../../test/helpers/source-walk.js";
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..");
 /** The module that owns the predicate, and the only file allowed to write it. */
 const OWNER = join(SRC, "lib", "middleware.ts");
 
-function sources(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    if (statSync(path).isDirectory()) sources(path, out);
-    else if (path.endsWith(".ts") && !path.endsWith(".test.ts")) out.push(path);
-  }
-  return out;
-}
+const sources = (dir: string): string[] =>
+  listSourceFiles(dir, (path) => path.endsWith(".ts") && !path.endsWith(".test.ts"));
 
 /**
  * Comments may name the predicate — several of them explain at length why it
@@ -90,7 +84,7 @@ describe("where a human-only gate may be written", () => {
     const offenders = sources(SRC)
       .filter((path) => path !== OWNER)
       .flatMap((path) =>
-        handRolledLines(readFileSync(path, "utf8")).map(
+        handRolledLines(readListedFile(path) ?? "").map(
           (line) => `${path.slice(SRC.length + 1)}:${line}`,
         ),
       );
