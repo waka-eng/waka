@@ -13,7 +13,7 @@
  * mean they wait a day.
  */
 
-import { and, count, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 
 import { profiles, signals } from "./db/index.js";
 import { getDb } from "./lib/db.js";
@@ -34,24 +34,31 @@ export async function handler() {
   // Profiles with enough active signals to conceivably clear the bar. The
   // full arithmetic (spans, top-of-mind survivals) belongs to the job; this
   // is only the "do not even wake up for it" filter.
+  // The gardener scans the whole standing set — emerging rows too, since a
+  // pattern split across two wordings is exactly what keeps each half below
+  // promotion — so its gate counts those, while principles count actives.
   const eligible = await db
-    .select({ profileId: signals.profileId, actives: count(signals.id) })
+    .select({
+      profileId: signals.profileId,
+      actives: sql<number>`count(*) FILTER (WHERE ${signals.status} = 'active')`,
+      standing: sql<number>`count(*) FILTER (WHERE ${signals.dismissedAt} IS NULL)`,
+    })
     .from(signals)
     .innerJoin(profiles, eq(profiles.id, signals.profileId))
     /* room minds still hold active signals, but the room engine is retired
        (2026-10-17): neither principles nor the gardener tend them any more */
-    .where(and(eq(signals.status, "active"), ne(profiles.type, "group")))
+    .where(and(inArray(signals.status, ["active", "emerging"]), ne(profiles.type, "group")))
     .groupBy(signals.profileId);
 
   /* the garden pass rides the same night, keyed per ISO week — six of the
      seven nightly enqueues collapse into the row already there, so each
-     profile's standing set is tended once a week. Two active signals is the
-     smallest set that can hold a duplicate. */
+     profile's standing set is tended once a week. Two standing signals is
+     the smallest set that can hold a duplicate. */
   const weekKey = isoWeekKey(new Date());
 
   let enqueued = 0;
   for (const row of eligible) {
-    if (Number(row.actives) >= 2) {
+    if (Number(row.standing) >= 2) {
       await enqueueTendSignalGarden(row.profileId, weekKey);
     }
     if (Number(row.actives) < PRINCIPLE_MIN_SIGNALS) continue;
