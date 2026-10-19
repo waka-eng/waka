@@ -131,7 +131,11 @@ export default function PublicProfilePage(): JSX.Element {
         const next = await fetchPublicProfile(handle, controller.signal);
         if (!cancelled) setData(next);
       } catch (err) {
-        if (!cancelled) setFailed(err instanceof ApiError && err.status === 404 ? "missing" : "failed");
+        /* Only a dead connection, a timeout or a 5xx (and 408/429, "try
+           later") is retryable; any other answer — a 404, a 400, a response
+           that did not parse as a page — is the server's "not here". */
+        const retryable = !(err instanceof ApiError) || err.status === 0 || err.status >= 500 || err.status === 408 || err.status === 429;
+        if (!cancelled) setFailed(retryable ? "failed" : "missing");
       } finally {
         window.clearTimeout(timeout);
         if (!cancelled) setIsLoading(false);

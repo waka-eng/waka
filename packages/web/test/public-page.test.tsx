@@ -248,6 +248,18 @@ describe("the page a stranger sees", () => {
     expect(host.querySelector(".waka-public-title")?.textContent).toBe("River’s top of mind");
   });
 
+  /* A 400 or a response that did not parse as a page is the server's answer,
+     like a 404: "not here", not the retryable failure. */
+  it.each([
+    ["a 400", new ApiError({ status: 400, message: "bad handle" })],
+    ["a malformed response", new ApiError({ status: 200, message: "Malformed public profile response" })],
+  ])("says the page is not here for %s, without offering a retry", async (_label, error) => {
+    vi.mocked(fetchPublicProfile).mockRejectedValueOnce(error);
+    await visit();
+    expect(host.textContent).toContain("This page is not here");
+    expect(host.textContent).not.toContain("This page didn’t open");
+  });
+
   /** The way in does not depend on the read, so it is there while it runs. */
   it("offers the way in while the page is still opening", async () => {
     vi.mocked(fetchPublicProfile).mockReturnValue(new Promise(() => undefined));
