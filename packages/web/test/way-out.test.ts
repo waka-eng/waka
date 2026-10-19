@@ -488,7 +488,8 @@ describe("every surface has a way out you can see", () => {
        the sitting — and Esc ends it too. */
     expect(home, "the review bar has no Exit review mode row").toMatch(/\.\.\.\(reviewing && !making \? \[\{ id: 'review', label: 'worldReviewExit' as const, here: false,\s*go: \(\) => \{ setReviewing\(false\); \} \}\] : \[\]\)/);
     expect(code(home), "Esc no longer ends the review").toMatch(
-      /if \(event\.key === 'Escape'\) \{\s*if \(reviewing && atNowView && nothingOpen && !harvestWhy\) \{[^}]*setReviewing\(false\); \}/);
+      /* the time rail's line comes first: while the rail is up it owns Escape */
+      /if \(event\.key === 'Escape'\) \{\s*if \(timeOpen\) \{[^}]*setTimeOpen\(false\); return; \}\s*if \(reviewing && atNowView && nothingOpen && !harvestWhy\) \{[^}]*setReviewing\(false\); \}/);
 
     /* ON A LIST THE WAY OUT IS ↩ │ CLOSE. ↩ steps back where the list was
        opened from — out of a saved note open in the archive first (which

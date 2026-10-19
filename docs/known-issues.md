@@ -1237,15 +1237,6 @@ room-synthesized words derived from an erased or privatised memory persist in th
 That is the strongest reason not to leave the room-data drop undecided. Resolve then: either
 drop the room tables, or purge room artifacts that cite a deleted or privatised memory.
 
-## Time rail Escape vs review Escape (follow-up)
-
-**Status:** open follow-up (2026-10-18). The time rail (`.jar-when` / `.jar-dial` in
-`pages/Home.tsx`) closes on a press elsewhere only, as on `origin/dev`; a keyboard that opened it
-has no key that puts it down. An Escape handler for it was added and withdrawn: it has to be heard
-before review's own Escape (which ends the sitting), and another handler already calls
-`preventDefault` on Escape, so a bubble-phase listener that respects `defaultPrevented` never
-fired. Resolve by deciding which layer owns Escape while both are up, in one place.
-
 ## Paused notice can show stale "paused" for ≤30s after a Retry (follow-up)
 
 **Status:** open follow-up (2026-10-18), `lib/use-reading-paused.ts`. Two races:
