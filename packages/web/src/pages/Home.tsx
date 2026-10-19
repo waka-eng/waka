@@ -8453,7 +8453,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         so a principles failure must not hide the only Retry
                         a person on the board can see. */}
                     {here && w.kind === "self" && !offline && !readingMessage && !showHomeProcessing ? (
-                      <ReadingPausedNotice state={readingPaused} locale={locale} />
+                      <ReadingPausedNotice state={readingPaused} locale={locale} canRetry={auth?.profile?.type !== 'agent'} />
                     ) : null}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
                       <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">

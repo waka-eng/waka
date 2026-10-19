@@ -102,6 +102,18 @@ describe("a paused reading", () => {
     expect(container!.textContent).toBe("");
   });
 
+  it("shows an agent session the notice without the Retry (restarting is a person's call)", async () => {
+    vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
+    function AgentPage() {
+      const state = useReadingPaused(true);
+      return createElement(ReadingPausedNotice, { state, locale: "en-US", canRetry: false });
+    }
+    render(createElement(AgentPage));
+    await settle();
+    expect(container!.textContent).toContain("Reading is paused — your saves are safe.");
+    expect(container!.querySelector("button"), "an agent session was offered Retry").toBeNull();
+  });
+
   it("stays down beside the principles line when that line already says it failed, so there is one Retry", async () => {
     vi.mocked(fetchPrincipleStatus).mockResolvedValue({ ...status(true), phase: "failed" });
     function Home() {

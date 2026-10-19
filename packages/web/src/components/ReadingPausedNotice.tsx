@@ -14,21 +14,26 @@
 import { t, type SupportedLocale } from '../lib/locales';
 import type { useReadingPaused } from '../lib/use-reading-paused';
 
-export function ReadingPausedNotice({ state, locale, className = 'jar-board-acts jar-reading-status', besidePrincipleRead = false }: {
+export function ReadingPausedNotice({ state, locale, className = 'jar-board-acts jar-reading-status', besidePrincipleRead = false, canRetry = true }: {
   state: ReturnType<typeof useReadingPaused>; locale: SupportedLocale; className?: string;
   /** On a page that also shows `PrincipleRead`: when that line is already
       saying "could not be updated" with its own Try again, this one stays
       down, so the person meets one failure and one button, not two. */
   besidePrincipleRead?: boolean;
+  /** Restarting a reading spends model calls on the account — a person's
+      decision. An agent session sees the notice, without the Retry. */
+  canRetry?: boolean;
 }): JSX.Element | null {
   if (!state.paused || (besidePrincipleRead && state.principlesFailed)) return null;
   return (
     <p className={className} role="status" data-jar-chrome="1">
       <span>{t(locale, state.retryFailed ?'readingPausedRetryFailed' : 'readingPausedNotice')}</span>
-      {' '}
-      <button className="jar-board-act" type="button" disabled={state.retrying} onClick={state.retry}>
-        {t(locale, state.stillTrying ? 'worldStillTrying' : state.retrying ? 'readingPausedRetrying' : 'readingPausedRetry')}
-      </button>
+      {canRetry ? <>
+        {' '}
+        <button className="jar-board-act" type="button" disabled={state.retrying} onClick={state.retry}>
+          {t(locale, state.stillTrying ? 'worldStillTrying' : state.retrying ? 'readingPausedRetrying' : 'readingPausedRetry')}
+        </button>
+      </> : null}
     </p>
   );
 }
