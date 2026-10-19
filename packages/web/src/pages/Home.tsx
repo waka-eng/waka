@@ -745,10 +745,18 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     };
   }, []);
   const [navigationProblem, setNavigationProblem] = useState<'retryable' | 'unavailable' | null>(null);
+  /* Whether another layer (the notepad, review, an overlay) is up — set
+     below once those states exist. The notice's Escape belongs to the
+     topmost layer, so with another one up it is not the notice's. */
+  const otherLayerOpenRef = useRef(false);
   useEffect(() => {
     if (!navigationProblem) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      /* Not gated on `defaultPrevented`: the world's own key handler marks
+         every Escape handled (so the browser does not also act on it), which
+         left this listener deaf. The layer check below is the gate. */
+      if (event.key !== 'Escape') return;
+      if (otherLayerOpenRef.current || document.querySelector('.waka-corner[aria-expanded="true"]')) return;
       event.preventDefault();
       viewNavigationRef.current.write({ ...EMPTY_VIEW }, { replace: true });
     };
@@ -1781,6 +1789,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      the top-of-mind bubble steps aside — and the mode ends when the queue
      runs out or on Esc. */
   const [reviewing, setReviewing] = useState(false);
+  otherLayerOpenRef.current = mouthOpen || reviewing || panelOpen || Boolean(viewNavigation.view?.open);
   /** A candidate that was swiped away and is being asked "why not". */
   const [harvestWhy, setHarvestWhy] = useState<{ candidate: ApiHarvestCandidate; busy: boolean; failed: boolean } | null>(null);
   /** What the invitation counts: your agent's picks and WAKA's readings, both swiped the same way. */
