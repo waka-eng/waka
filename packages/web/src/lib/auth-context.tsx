@@ -131,9 +131,25 @@ function readCachedViewer(): ApiViewer | null {
  * private mode and quota-exceeded conditions both throw, and neither should
  * be allowed to block the person from logging in.
  */
+/**
+ * WHETHER THIS BROWSER HAS EVER BEEN SIGNED IN — one flag, no identity.
+ * The door said "Welcome back." to everybody, including a person arriving
+ * for the first time (audit f2afcbe2). It is kept across sign-out on
+ * purpose: a person who signed out is still someone coming back. It names
+ * nobody, so it is not one of the things logout must clear.
+ */
+const SEEN_KEY = "waka.auth.seenHere";
+export function hasSignedInHere(): boolean {
+  if (typeof window === "undefined") return false;
+  // A cached viewer predates this flag: anyone signed in before it shipped.
+  try { return window.localStorage.getItem(SEEN_KEY) === "1" || window.localStorage.getItem(STORAGE_KEY) !== null; } catch { return false; }
+}
+
 function writeCachedViewer(viewer: ApiViewer | null): void {
   if (typeof window === "undefined") return;
   try {
+    // A viewer arriving, or a cached one being cleared, both mean "here before".
+    if (viewer || window.localStorage.getItem(STORAGE_KEY) !== null) window.localStorage.setItem(SEEN_KEY, "1");
     if (viewer && !isMobileBuild) {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(viewer));
     } else {

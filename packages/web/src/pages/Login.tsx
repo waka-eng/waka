@@ -53,7 +53,7 @@ import { Companion } from "../components/Companion";
 import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSignIn";
 import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
-import { useAuth } from "../lib/auth-context";
+import { hasSignedInHere, useAuth } from "../lib/auth-context";
 import { formatMessage, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 import { resolveRedirect, safeInAppPath } from "../lib/sign-in-destination";
@@ -648,8 +648,11 @@ export default function LoginPage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const headline = t(locale, mode === "login" ? "loginWelcome" : "loginBegin");
-  const subtitle = t(locale, mode === "login" ? "loginSubtitle" : "signupSubtitle");
+  /* "Welcome back." only to a browser that has been signed in before; a
+     first visit is greeted without the claim that it is a return. */
+  const [returning] = useState(hasSignedInHere);
+  const headline = t(locale, mode === "login" ? (returning ? "loginWelcome" : "loginWelcomeFirst") : "loginBegin");
+  const subtitle = t(locale, mode === "login" ? (returning ? "loginSubtitle" : "loginSubtitleFirst") : "signupSubtitle");
 
   const activateLoginTab = (): void => {
     setMode("login");

@@ -1328,6 +1328,110 @@ of raw `history` entries, so Back, replace and reload are the router's ordinary 
 
 ---
 
+## Save recovery redesign (follow-up PR)
+
+**Status:** open, deliberately not fixed in `claude/fix-usability`. The save journal, request-id
+handling and composer locking on that branch are exactly `origin/dev`'s (`use-authored-save.ts`,
+`AuthoredSaveNotice.tsx`, the save parts of `InspirationComposer.tsx` and `Home.tsx`, and their
+tests). Seven review rounds on a rewrite kept finding new duplicate-save races, so the rewrite was
+cut and the problem is written down here, to be designed once.
+
+**The defect (usability audit at f2afcbe2).** A save that loses its network after the journal is
+written leaves Save disabled on "Uploading…" with "Couldn't confirm the save" under it: every load
+reads `GET /inspirations/save-requests/:id`, gets 404 `save_not_found`, keeps the journal, and the
+composer stays locked. Retry (same id) is the only way out; reloading or reconnecting does not
+re-send.
+
+**What any design has to answer** — each case below broke at least one attempt:
+
+- **Gateway timeouts vs the app's own 500.** A 502/503/504, an HTML page or a bodyless 500 may sit in
+  front of a POST that still commits; only a JSON-bodied 500 from our API (a caught, rolled-back
+  failure) says anything about the write. A client that treats any 5xx followed by a 404 as "did not
+  land" can release a journal whose POST then commits — and the next save makes a second copy.
+- **"Not found" is not "did not land".** A status read races an in-flight POST (another tab, or this
+  tab before a reload). Any release on 404 needs a rule for "a POST under this id may still be
+  committing", and that rule must survive reloads and work across tabs.
+- **Cross-tab journals.** Two tabs may hold the same journal. Re-POSTing the same id is safe (the
+  server is idempotent on (profile, request id) and answers a concurrent POST with 409
+  `save_in_progress`), but a tab must not start a NEW journal for words another live tab is already
+  saving, must not adopt a journal while its owner is still open, and must not write back over a
+  newer write (re-read before every write-back). Storage events and shared "landed" notes were
+  tried and produced new races; landed notes also held words past sign-out.
+- **409 `save_request_conflict`.** The id was already used for different content: that request can
+  never land as written. It is a refusal, not "busy".
+- **"Save as new" while a save is pending.** Edited words must not silently become a second copy, and
+  choosing "new" must not drop the earlier unconfirmed save; each id must land once. Pressing it on
+  words the pending save already carries is that save's retry.
+- **The why (photo reflections).** `keepIt` clears `momentWhy` at the press; if the save is then
+  refused or unconfirmed, the why is lost, and a retry carries different input (no reflection) from
+  the held journal, so the same note looks edited. It should clear only once the save lands, and
+  must not ride a second save once a held one with the same why lands.
+- **Same words, current draft revision.** A retry from a draft touched since must resolve against the
+  current revision, or the composer is not settled when the save lands.
+- **Acknowledging a press (`initiated`).** Whether a person pressed Save is per window; a background
+  or adopted send must not report a press, and a press queued behind a background send must keep it.
+- **410 `saved_item_removed`.** The id points at a deleted item: settle the draft via `onRemoved`; no
+  other window should be left holding it.
+- **Sign-out.** `pendingSave:` and `unrecoveredSave:` are account+profile scoped and are kept across
+  sign-out by design (`draft-eviction.ts`) so an unsent save is not lost; anything new that holds
+  words must be added to that decision deliberately.
+
+---
+## Back from an open saved note (follow-up)
+
+**Status:** open, deliberately not fixed in `claude/fix-usability`. Opening a saved note inside the
+archive (`?open=saves`) does not touch history, exactly as on `origin/dev`
+(`SavesOverlay.tsx`, `use-view-navigation.ts`). A note-history mechanism was tried and cut after
+review found three regressions in it.
+
+**The defect (usability audit at f2afcbe2, desk/27 and /32).** The note has no history entry of its
+own, so the browser's Back from an open note skips the list and closes the whole archive — two levels
+for one press. (Escape, the bar's rows and the note's own close already commit and step one level.)
+
+**What any design has to answer** — each broke the attempt:
+
+- **A same-URL entry re-runs the view restore.** Pushing an entry at the archive's own address (to mark
+  the open note in router state) changes `location.key`, and Home re-applies the view on every key
+  change; the note's entry must not cost a restore pass, or the restore must ignore it.
+- **The world rewrites the address in place.** `useViewNavigation.write` replaces the entry (to
+  record the seek query, among others) with a state built from scratch; any mark on the entry is
+  dropped, which reads exactly like Back and closes the note. A replace to a DIFFERENT href drops it
+  too.
+- **Stale entries become dead Back presses.** An entry left behind by a note that closed some other
+  way (a failed or in-flight save, a switch from note A straight to note B, the archive closed under
+  it) is a Back that does nothing visible.
+- **Closing the archive over an open note.** Escape must still land where the archive was opened from
+  (two entries, not one), including from a cold `?open=saves` link with no `openFrom`, where the list's
+  entry must not be left underneath to reopen it.
+- **A note that cannot close.** If Back pops the note's entry but its save fails or is still in flight,
+  the edit must not be lost and the next Back must still reach the list.
+- **Event order.** Home's own `popstate` listener commits the note before the router commits the popped
+  location (a transition), so code that reads the rendered location to decide "is my entry still on
+  top" sees a stale answer.
+
+---
+## Small usability follow-ups set aside from `claude/fix-usability`
+
+**Status:** open. Both were tried on the branch and reverted to `origin/dev`'s behaviour in review.
+
+- **The photo ×'s tap target (audit f2afcbe2: 28×28 on a 390×844 phone).** A 44px invisible hit box
+  on `.jar-tile-x` does nothing: the photo tile clips overflow, so the box is cut back to the tile,
+  and centred on the × it also covered part of the photo (a press meant to open the photo would
+  remove it). A real fix needs the × to sit OUTSIDE the clipped tile (or the tile to stop clipping),
+  with its hit area reaching away from the picture.
+- **The attachment drawer's × (`.waka-drawer-items button`, 20×20).** Same family: a centred 44px
+  hit box spilled onto the filename and the "upload failed" line beside it, so a tap meant to read
+  either removed the attachment, with no undo. Back to dev's exact 20px target; a real fix needs room
+  in the row (or an undo) before the target can grow.
+- **The recording/dictation line in the bar (audit f2afcbe2, desk/106).** Stop now stays in the
+  microphone's own seat, but the state line beside it is still in the bar's row, as on dev: when it
+  appears the centred bar widens and the row shifts, and its 14rem cap cuts the cloud disclosure
+  ("Your browser sends speech to its own …"). The tried fix lifted the line off the row into a
+  caption over the bar (out of flow, wrapping, `pointer-events: none` except its Cancel) and was set
+  aside for its own change. Whatever lands must keep the one shared clock (`clockWords`) and the
+  single announced "Recording" (`LiveWord`).
+
+---
 ## Refuted findings
 
 Three findings did not survive verification. **A list that only grows is a list nobody trusts**, so

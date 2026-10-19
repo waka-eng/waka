@@ -445,3 +445,10 @@ export function asSentence(clause: string, locale: WordsLocale = "en-US"): strin
   if (!words) return clause;
   return words[0]!.toLocaleUpperCase(locale) + words.slice(1);
 }
+
+/** A running recorder clock, m:ss — the one shape the dock caption, the
+    composer foot and a saved note's recorder all show. */
+export function clockWords(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}

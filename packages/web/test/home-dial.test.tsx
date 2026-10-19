@@ -228,6 +228,11 @@ const pastDays = () =>
     .filter((ms) => railEnd - ms >= DAY / 2)
     .sort((a, b) => b - a);
 
+function inspirationRow(): HTMLElement {
+  const row = [...layout.container.querySelectorAll<HTMLElement>(".waka-dock .waka-dock-item")].find((item) => item.textContent?.trim() === "Inspiration");
+  if (!row) throw new Error("no Inspiration row in the bar");
+  return row;
+}
 function one(selector: string): HTMLElement {
   const el = layout.container.querySelector<HTMLElement>(selector);
   if (!el) throw new Error(`no ${selector} — the dial did not render`);
@@ -651,9 +656,10 @@ describe("the mouth while the dial is away from now", () => {
   it("offers capture in the past, returns to now, and focuses the existing composer", async () => {
     await windToDay(endOfDayOf(keptMs[2]));
     expect(one(".jar-mouth-slot").hasAttribute("inert")).toBe(true);
-    const shortcut = one(".jar-capture-shortcut");
-    expect(shortcut.textContent).toContain("Capture inspiration");
-    expect(shortcut.querySelector('[data-home-action-icon="capture"]')).not.toBeNull();
+    /* THE BAR'S "Inspiration" IS THE ONE DOOR NOW: the pill that duplicated
+       it above the bar went (audit f2afcbe2). Same act: back to now, the
+       notepad. */
+    const shortcut = inspirationRow();
     await act(async () => shortcut.click());
     await layout.step(40);
 
@@ -665,7 +671,7 @@ describe("the mouth while the dial is away from now", () => {
   it("offers capture from the ground and brings the pen back into view", async () => {
     await layout.toField();
     expect(one(".jar-mouth-slot").hasAttribute("inert")).toBe(true);
-    await act(async () => one(".jar-capture-shortcut").click());
+    await act(async () => inspirationRow().click());
     await layout.step(80);
     const field = one(".jar-mouth-field");
     expect(document.activeElement).toBe(field);

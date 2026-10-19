@@ -285,7 +285,7 @@ describe("the four breaks that a browser found and reading did not", () => {
   it("folds Share and Delete into ⋯ up to 400px while a recording clock is in the row", () => {
     const css = rules("claims.css");
     expect(
-      /@media \(max-width: 400px\) \{\s*\.waka-dock-making:has\(\.waka-dock-tool--wide\) \.waka-dock-roomy\s*\{\s*display:\s*none;\s*\}\s*\.waka-dock-making:has\(\.waka-dock-tool--wide\) \.waka-dock-more\.waka-add\s*\{\s*display:\s*inline-flex;/.test(css),
+      /@media \(max-width: 400px\) \{\s*\.waka-dock-making:has\(\.waka-dock-tool--live\) \.waka-dock-roomy\s*\{\s*display:\s*none;\s*\}\s*\.waka-dock-making:has\(\.waka-dock-tool--live\) \.waka-dock-more\.waka-add\s*\{\s*display:\s*inline-flex;/.test(css),
       "the recording clock no longer folds the row, so Close can leave a 351-360px screen",
     ).toBe(true);
   });

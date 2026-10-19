@@ -295,11 +295,25 @@
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  max-width: calc(100vw - var(--sp-32));
+  max-width: calc(100vw - var(--sp-32) - env(safe-area-inset-left) - env(safe-area-inset-right));
   padding: var(--sp-6);
   border-radius: var(--r-pill);
   background: var(--waka-raised);
   pointer-events: auto;
+}
+
+/* ═══ A SHARE SHEET HAS ITS OWN WAY OUT, SO THE BAR STEPS ASIDE ═══════════
+   The sheet is modal (a backdrop, its own Close) and runs nearly the full
+   height of a short window, so at 1280x720 the bar sat on top of the
+   sheet's footer — "Inspiration · Chat" painted beside "Save image" (audit
+   f2afcbe2, desk/86). The bar's places are not reachable through a modal
+   backdrop anyway; showing them over the sheet only covered its one act.
+   Every share sheet wears `.jar-thing-share` (the reading's, a saved note's)
+   or `.jar-principle-share`, so this holds for all of them.
+   EXCEPT WHILE SOMETHING IS LISTENING (review): a recording or dictation
+   (`--live`) must never lose its Stop, so the bar stays while one runs. */
+body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-tool--live)) {
+  visibility: hidden;
 }
 
 .waka-dock-item {
@@ -335,10 +349,22 @@
    bar says WHERE YOU ARE with light; it says WHAT YOU HAVE REACHED with a
    ring, which is a different channel for a different question and the only
    way both can be true at once. */
-.waka-dock-item:focus-visible {
+/* ═══ AND THE RING WAS NEVER DRAWN (audit f2afcbe2) ═══════════════════════
+   The `outline` that stood here — and on `.waka-dock-tool` and `.waka-corner`
+   — lost to `layers.css`'s unlayered `:focus-visible { outline: none }`, the
+   floor kept there on the founder's "never show this white border
+   ANYWHERE". What reached these controls was only `.jar :focus-visible`'s
+   brightness, and brightening text that is already pale moves it a few
+   levels: measured, Tab onto "Chat" or the cog changed nothing a person
+   could see. So focus here says what everything in this world says — the
+   thing lights up — as a soft pool of the creature's own light behind it.
+   Light, not a ring: no edge, no rectangle, the control's own round shape. */
+.waka-dock-item:focus-visible,
+.waka-dock-tool:focus-visible,
+.waka-corner:focus-visible {
   color: var(--ink);
-  outline: 2px solid var(--ink);
-  outline-offset: -2px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--jar-live, var(--moon-warm)) 30%, transparent), color-mix(in srgb, var(--jar-live, var(--moon-warm)) 10%, transparent) 70%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--jar-live, var(--moon-warm)) 22%, transparent);
 }
 
 .waka-dock-item--here {
@@ -447,13 +473,27 @@
   cursor: default;
 }
 
-/* Wide enough for the running clock, which is the one state that is words
-   rather than a glyph — a red dot cannot say how long you have been
-   talking. */
-.waka-dock-tool--wide {
-  width: auto;
-  padding: 0 var(--sp-12);
-  font-variant-numeric: tabular-nums;
+/* ═══ A LIVE MICROPHONE, IN THE MICROPHONE'S OWN SEAT ═════════════════════
+   `--wide` stood here: the running clock and "Stop" as words, in a button
+   that grew when recording began. The bar is centred, so growing one button
+   moved every other one, and Stop landed where ＋ had been a moment before
+   (audit f2afcbe2: Speak at x=675, Stop at x=561). The control now keeps its
+   size and place and says it is listening with light — lit, and breathing
+   slowly, which is motion that explains (it is live) rather than decorates.
+   The clock and Cancel ride in the bar's state line beside it. */
+.waka-dock-tool--live {
+  color: var(--ink);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--jar-live, var(--moon-warm)) 34%, transparent), transparent);
+  animation: waka-live-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes waka-live-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--jar-live, var(--moon-warm)) 0%, transparent); }
+  50% { box-shadow: 0 0 14px 2px color-mix(in srgb, var(--jar-live, var(--moon-warm)) 30%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waka-dock-tool--live { animation: none; }
 }
 
 /* ═══ THE ONE FILLED CONTROL IN THE BAR ═══════════════════════════════════
@@ -620,9 +660,37 @@
   cursor: pointer;
 }
 
-.waka-dock-tool:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: -2px;
+/* ═══ A FINGER'S TARGET, LARGER THAN WHAT IT LOOKS LIKE (audit f2afcbe2) ══
+   Measured on a 390x844 phone: the delete line's Undo 27x32, the chat's
+   Send 40x44 and its Me / My agent / Both 36 tall, the review's Skip 32x44,
+   a principle's row 32 tall. Each is drawn at the size its surface wants, so
+   the drawing stays and the TARGET grows: an invisible box centred on the
+   control, at least 44 on each side. A pseudo-element takes the control's
+   own press, so nothing else needs to know it is there. (The photo's 28px ×
+   is not here: its tile clips overflow, so a box past it does nothing. Nor
+   is the attachment drawer's 20px ×: a 44px box spilled onto the filename
+   and the "upload failed" line, so a tap there removed the attachment with
+   no undo. Both are in docs/known-issues.md.) */
+.waka-dock-undo,
+.chat-with-choice,
+.chat-send,
+.jar-harvest-skip,
+.waka-held-open {
+  position: relative;
+}
+
+.waka-dock-undo::after,
+.chat-with-choice::after,
+.chat-send::after,
+.jar-harvest-skip::after,
+.waka-held-open::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
 }
 
 /* THE SLOT INSPIRATION STANDS IN. While a note is being written (or a saved
@@ -690,9 +758,6 @@
     min-width: var(--waka-corner);
     padding: 0 var(--sp-8);
   }
-  .waka-dock-tool--wide {
-    padding: 0 var(--sp-8);
-  }
   .waka-dock-sep {
     margin: 0 var(--sp-2);
   }
@@ -718,6 +783,12 @@
   color: var(--ink);
   text-decoration: underline;
 }
+/* CANCEL RECORDING, beside Stop and outside the state line: never shrunk,
+   ellipsized or clipped with it, and never narrower than a fingertip. */
+.waka-dock-cancel {
+  flex: none;
+  min-width: var(--waka-corner);
+}
 /* MEASURED: tightened with 44px glyph slots, the open-save row is 327px; the
    dock is 100vw - 16, so it fits down to 343px. Below 350 Share and Delete
    fold into ⋯ — the row becomes Back, Record, ＋, Save, ⋯, Close: 283px at
@@ -732,16 +803,19 @@
 }
 /* MEASURED WHILE RECORDING (review, 2026-10-17): the mic becomes a clock,
    an auto-width tool — 44px at "0:07", wider once it reads "12:34" — and
+   (since the merge with claude/fix-usability the mic stays a lit 44px Stop,
+   `--live`, and the clock rides in a state line beside it: the same growth,
+   so the fold keys on `--live`) — and
    the unfolded row has only 17px to spare at 360 (327 of a 344px dock), so a
    long recording could push Close off at 351-360px. While a clock is in the
    row the fold reaches up to 400px. Playwright, fake microphone, at
    351/355/360/380/400: ⋯ shown, Close inside (355: x 270-315); at 401/414
    the five tools return and Close is still inside. */
 @media (max-width: 400px) {
-  .waka-dock-making:has(.waka-dock-tool--wide) .waka-dock-roomy {
+  .waka-dock-making:has(.waka-dock-tool--live) .waka-dock-roomy {
     display: none;
   }
-  .waka-dock-making:has(.waka-dock-tool--wide) .waka-dock-more.waka-add {
+  .waka-dock-making:has(.waka-dock-tool--live) .waka-dock-more.waka-add {
     display: inline-flex;
   }
 }
@@ -809,7 +883,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: calc(var(--sp-12) + env(safe-area-inset-top)) var(--sp-16) 0;
+  /* The sides clear the notch too: in landscape the corners sat under the
+     camera housing (audit f2afcbe2, land-home). */
+  padding: calc(var(--sp-12) + env(safe-area-inset-top)) calc(var(--sp-16) + env(safe-area-inset-right)) 0 calc(var(--sp-16) + env(safe-area-inset-left));
   pointer-events: none;
 }
 
@@ -925,11 +1001,6 @@
 .waka-corner--settings {
   position: relative;
   z-index: 61;
-}
-
-.waka-corner:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1249,6 +1320,11 @@
      when the geometry moved down here. */
   padding: calc(var(--waka-corner) + var(--sp-16) + env(safe-area-inset-top)) var(--sp-20)
     calc(var(--sp-20) + var(--waka-corner) + var(--sp-24) + env(safe-area-inset-bottom));
+  /* AND THE NOTCH, IN LANDSCAPE (audit f2afcbe2, land-*): nothing in the
+     product read `safe-area-inset-left/right`, so on a phone turned sideways
+     the page's edge ran under the camera housing. The gutter is at least
+     the inset on each side. */
+  padding-inline: max(var(--sp-20), env(safe-area-inset-left)) max(var(--sp-20), env(safe-area-inset-right));
   /* THE GROUND, NOT A FILM OVER IT. A scrim says "the thing behind is still
      the thing you are in, and this is on top of it" — true of a dialog, and
      the exact opposite of what a room is. The notepad already stands on
@@ -1280,6 +1356,18 @@
      vignette and its dust keep drawing — they are what the page stands
      on. */
   background: transparent;
+}
+
+/* WHILE AN iOS KEYBOARD IS UP, `ConversationPanel` pins the page to the
+   visual viewport (inline `top`/`height`) and marks it. The dock is under the
+   keyboard then, so the room reserved for it would only push the composer
+   back under the keyboard's edge. */
+.waka-page[data-keyboard] {
+  /* `min-height: 0` too (review): the page's own `min-height: 100dvh` would
+     otherwise win over the inline keyboard height, and `top` would only push
+     a full-height page down under the keyboard. */
+  min-height: 0;
+  padding-bottom: calc(var(--sp-8) + env(safe-area-inset-bottom));
 }
 
 /**
@@ -2012,6 +2100,11 @@
      below its intrinsic size, without which a flex item with a long value
      pushes the clear out through the right border. */
   flex: 1 1 auto;
+  /* THE WHOLE 44px ROW IS THE FIELD. Centred, the input was 23px tall
+     inside its 44px box, and a press above or below the words landed on the
+     wrapper and focused nothing (audit f2afcbe2). Stretched, it fills the
+     row the edge is drawn around; the words stay centred in it. */
+  align-self: stretch;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -2204,6 +2297,15 @@
      screen's gap (founder, 2026-10-15: "the spacing between the character
      and the speech bubble is too high. I prefer the amount ... used here"). */
   margin-block: calc(var(--being, 106px) * -1.32 - var(--sp-24)) calc(var(--being, 106px) * -1.22);
+  /* LIGHT TAKES NO PRESS, AND THIS BOX IS MOSTLY LIGHT. It is the aura's
+     four-body square, and the margins above slide the first card up into
+     it — so it sat over that card's top and swallowed every click on it
+     (audit f2afcbe2: the first principle could not be opened with a mouse).
+     The creature has no press of its own here; the pull home belongs to the
+     page (`PrinciplesOverlay`'s pointer handlers), and a press that passes
+     through this box still reaches the page underneath, so the gesture is
+     untouched. */
+  pointer-events: none;
 }
 
 /* THE AURA IS THE PROGRESS. The companion's own light, at the strength the
@@ -2674,7 +2776,10 @@
   cursor: pointer;
 }
 
-.waka-tab:hover {
+/* Not on the lit tab. `.waka-tab:hover` (two classes' weight) outranks
+   `.waka-tab--on` (one), so hovering the chosen tab painted ink text on its
+   own ink fill and the label vanished (audit f2afcbe2, #39). */
+.waka-tab:not(.waka-tab--on):hover {
   color: var(--ink);
 }
 
@@ -5195,8 +5300,10 @@
      so the card never touches the bottom edge. It also binds EVERY card the
      corner opens rather than only the one that happened to overflow, which
      is why the new "i" panel needed no bound of its own. */
+  /* `- safe-area-inset-bottom` too: in landscape the home indicator's band
+     took the card's last row (audit f2afcbe2, land-settings). */
   max-height: calc(
-    100dvh - env(safe-area-inset-top) - var(--sp-12) - var(--waka-corner) - var(--sp-8) - var(--sp-16)
+    100dvh - env(safe-area-inset-top) - var(--sp-12) - var(--waka-corner) - var(--sp-8) - var(--sp-16) - env(safe-area-inset-bottom)
   );
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -6207,6 +6314,34 @@
   animation: waka-cross-reveal 460ms ease-out 1240ms forwards;
 }
 
+/* THE CARDS WAIT FOR THE CREATURE TO PASS THEM. The walk ends where the home
+   screen keeps the creature — low, exactly where the first card lands — and
+   it only rises to its seat during the glide (from 1380ms, landing ~2100ms).
+   Revealed with the rest of the page at 1240ms, the first card's "Make a
+   share card" sat under the walking body for over a second (audit f2afcbe2,
+   iphone-after-drag-right). The bubble still arrives with the page; the
+   cards arrive as the creature lands above them. */
+.waka-page--crossing-in .waka-held,
+.waka-page--crossing-in .waka-ground-card {
+  /* Unseen is unreachable (review): while held back the cards take no press
+     and no focus — `visibility: hidden` until their own reveal sets it. */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  animation: waka-cross-cards-in 320ms ease-out 1980ms forwards;
+}
+
+/* The press comes back WITH THE REVEAL'S END, not the walk's (review): the
+   walk's class stays until 2580ms, and a card already shown at 2300 must
+   already take its press. `pointer-events` is discrete, so it is held at
+   `none` to 99% and switched on at the last frame; a card overrides the
+   page's own `pointer-events: none` on `.waka-over`. */
+@keyframes waka-cross-cards-in {
+  from { visibility: visible; pointer-events: none; opacity: 0; transform: translateY(8px); }
+  99% { pointer-events: none; }
+  to { visibility: visible; pointer-events: auto; opacity: 1; transform: none; }
+}
+
 /* Out: the contents go first, so the walk home is the creature and the sky. */
 .waka-page--crossing-out .waka-over {
   animation: waka-cross-hide 220ms ease-in forwards;
@@ -6231,9 +6366,17 @@
 
 @media (prefers-reduced-motion: reduce) {
   .waka-page--crossing-in .waka-over,
-  .waka-page--crossing-out .waka-over {
+  .waka-page--crossing-out .waka-over,
+  .waka-page--crossing-in .waka-held,
+  .waka-page--crossing-in .waka-ground-card {
     animation: none;
     opacity: 1;
+  }
+  /* Nothing held back under reduced motion: seen, and pressable, at once. */
+  .waka-page--crossing-in .waka-held,
+  .waka-page--crossing-in .waka-ground-card {
+    visibility: visible;
+    pointer-events: auto;
   }
 }
 

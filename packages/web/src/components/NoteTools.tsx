@@ -37,6 +37,8 @@ import { createPortal } from "react-dom";
 
 import { AddMenu } from "./AddMenu";
 import { HomeActionIcon } from "./HomeActionIcon";
+import { LiveWord } from "./LiveWord";
+import { clockWords } from "../lib/words";
 import { supportedRecordingType, type useAudioRecording } from "../lib/use-audio-recording";
 import { useDockMenu } from "../lib/use-dock-menu";
 
@@ -66,6 +68,8 @@ export function NoteTools(props: {
   moreLabel?: string;
   recordLabel: string;
   stopLabel: string;
+  /** Announced once when a recording starts; the clock itself is not read out. */
+  recordingLabel: string;
   /** The ＋'s name, and its two rows: "Add photo" and "Add file". */
   addLabel: string;
   photoLabel: string;
@@ -162,14 +166,23 @@ export function NoteTools(props: {
   /* THE CLOCK THAT STOPS A RECORDING — one control, used in the row and,
      while a recording runs, kept beside an armed delete too, so the way to
      stop the microphone never leaves the bar (review, 2026-10-17). */
+  /* STOP STANDS WHERE THE MICROPHONE WAS (audit f2afcbe2): a wide
+     clock-button re-laid the centred bar under the pointer. So Stop is the
+     microphone's own icon seat, lit while live, and the clock — words,
+     because a red dot cannot say how long you have been talking — rides in
+     a state line beside it: for eyes (aria-hidden), with "Recording"
+     announced once (`LiveWord`). */
   const stopClock = props.recording.phase !== "idle" ? (
-    <button type="button" className="waka-dock-tool waka-dock-tool--wide"
-      aria-label={props.stopLabel}
-      disabled={props.recording.phase === "finishing"}
-      onClick={() => void props.recording.stop()}>
-      {Math.floor(props.recording.seconds / 60)}:
-      {String(props.recording.seconds % 60).padStart(2, "0")}
-    </button>
+    <>
+      <button type="button" className="waka-dock-tool waka-dock-tool--live"
+        aria-label={props.stopLabel}
+        disabled={props.recording.phase === "finishing"}
+        onClick={() => void props.recording.stop()}><HomeActionIcon kind="stop" /></button>
+      <span className="waka-dock-state">
+        <LiveWord text={props.recordingLabel} />
+        <span aria-hidden="true">{clockWords(props.recording.seconds)}</span>
+      </span>
+    </>
   ) : null;
   if (props.erasePending && props.eraseQuestion) {
     return createPortal(
@@ -236,9 +249,7 @@ export function NoteTools(props: {
             aria-label={props.recordLabel}
             onClick={() => void props.recording.start()}><HomeActionIcon kind="record" /></button>
         ) : (
-          /* THE CLOCK IS THE STOP, as it is on the notepad: a red dot
-             cannot say how long you have been talking, and two controls
-             for one act is one too many in a slot this size. */
+          /* The same Stop and clock the other states keep (above). */
           stopClock
         )
       ) : null}

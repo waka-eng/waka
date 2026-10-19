@@ -81,11 +81,11 @@ export function AddMenu(props: {
       ) : null}
       <input ref={photos} type="file" hidden multiple={props.multiple}
         accept={PHOTO_ACCEPT}
-        onChange={(event) => { const picked = [...event.target.files ?? []]; event.target.value = "";
+        onChange={(event) => { const picked = [...event.target.files ?? []]; event.target.value = ""; close(false);
           if (picked.length) props.onPhotos(picked); }} />
       <input ref={files} type="file" hidden multiple={props.multiple}
         accept={FILE_ACCEPT}
-        onChange={(event) => { const picked = [...event.target.files ?? []]; event.target.value = "";
+        onChange={(event) => { const picked = [...event.target.files ?? []]; event.target.value = ""; close(false);
           if (picked.length) props.onFiles(picked); }} />
     </span>
   );

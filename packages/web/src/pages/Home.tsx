@@ -107,6 +107,7 @@ import { inspectInspirationPhoto, PHOTO_ACCEPT, PhotoRefused } from '../lib/insp
 import { uploadInspirationMedia } from '../lib/inspiration-media-upload';
 import { restoreInspirationDraft, settleInspirationDraft } from '../lib/authored-save-drafts';
 import { AuthoredSaveNotice } from '../components/AuthoredSaveNotice';
+import { LiveWord } from '../components/LiveWord';
 import { acceptsReadingSnapshot } from "../lib/reading-snapshot";
 import { DAY_MS } from "../lib/num";
 import { GRAIN_PX, GRAIN_TILE } from "../canvas/sprites";
@@ -183,6 +184,7 @@ import { offlineHome, type OfflineHome } from "../lib/fixture/offline-home";
 import {
   agoWords,
   asSentence,
+  clockWords,
   dateStamp,
   dateWords,
   dialMonth,
@@ -1642,6 +1644,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [inField, setInField] = useState(false);
   /** And whether it stands in the sky — where philosophies and values form. */
   const [inSky, setInSky] = useState(false);
+  // Any of the sky in frame at all (see `setSkyInView`): what decides whether its rows are reachable.
+  const [skyInView, setSkyInView] = useState(false);
   /** Drafts assembled here, in this session. They live nowhere else. */
   /* ---- the mouth: the one verb this world was missing ----
      At rest it is a phrase. Open, it is a plain field at the seam between
@@ -4146,6 +4150,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         setDialAway,
         setInField,
         setInSky,
+        setSkyInView,
         setSelectedId,
         agentsRef,
         asideRef,
@@ -7651,6 +7656,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         : "jar-values-room"
                     }
                     data-jar-chrome="1"
+                    /* OUT OF FRAME IS OUT OF REACH (audit f2afcbe2). The sky
+                       stands at its own height above Now, so from Now its
+                       principle rows sat at y=-654…-307 — and were the FIRST
+                       three Tab stops on the home screen, lighting nothing a
+                       person could see. Inert only while it is wholly out of
+                       frame: `skyInView` flips the moment the camera rises
+                       above Now (review: `inSky` waits for half-way, which
+                       left a sky already on screen unreachable). */
+                    {...(!(here && (inSky || skyInView)) ? { inert: '', 'aria-hidden': true } : {})}
                   >
                     {/* THE SKY KEEPS ITS PROMISE. The forming copy says "keep
                         capturing, and this sky will start to fill" — so once
@@ -7980,6 +7994,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
                        it stays and the agent's bubble steps out instead (code
                        review round 2, 2026-10-16). */
                     ref={w.kind === "self" ? measured.hqInner : undefined}
+                    /* A COLLAPSED BAND IS UNSEEN, SO IT IS UNREACHABLE TOO.
+                       Height zero hid its contents from the eye but not from
+                       Tab or a screen reader: the audit at f2afcbe2 tabbed
+                       onto a "Details" button inside it with nothing on
+                       screen to show where focus had gone. `inert` takes the
+                       whole band out of focus order and the accessibility
+                       tree while it yields (React 18 has no typed prop for
+                       it, hence the spread of a plain attribute). */
+                    {...(here&&(w.kind==='self'||(w.kind==='agent'&&atNow))&&!mouthOpen ? { inert: '', 'aria-hidden': true } : {})}
                   >
                     {/* R01 makes the personal reading explicit while keeping
                         the existing field, headline and companion layout. */}
@@ -8456,7 +8479,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         progress keeps them mounted regardless: a control that
                         vanished mid-work would take its own progress report
                         with it. */}
-                    {here && w.kind === 'self' && !showHomeProcessing && !reflectOpen && !editing.open ? sourceNotice : null}
+                    {/* Only while the band is open (`mouthOpen`): on the
+                        yielded band "Saved. WAKA will revisit this…" was
+                        rendered at height zero, unseen. The save is already
+                        confirmed where the eye is — the creature's own "I'm
+                        inspired!" in the bubble. */}
+                    {here && w.kind === 'self' && mouthOpen && !showHomeProcessing && !reflectOpen && !editing.open ? sourceNotice : null}
                     {/* NOT `besidePrincipleRead`: PrincipleRead's failure line
                         and its Try again live in the sky, not on this board,
                         so a principles failure must not hide the only Retry
@@ -9085,8 +9113,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       running number is a control you have to trust rather
                       than one you can watch. */}
                   {recording.phase === 'recording' ? (
-                    <span className="waka-composer-recording" role="status">
-                      {formatMessage(locale, 'worldComposerRecordingFor', { seconds: recording.seconds })}
+                    /* THE RUNNING COUNT IS FOR EYES (review): inside a live
+                       region it was read out every second. "Recording" is
+                       announced once, by a region that mounts empty. */
+                    <span className="waka-composer-recording">
+                      <span aria-hidden="true">{formatMessage(locale, 'worldComposerRecordingFor', { clock: clockWords(recording.seconds) })}</span>
+                      <LiveWord text={say('worldComposerRecordingNow')} />
                     </span>
                   ) : null}
                   {recording.error || recording.notice ? (
@@ -9278,7 +9310,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
               data-jar-interactive="1"
               onPointerDown={event => {
                 creatureDragged.current = false;
-                if (!atNowView) return;
+                /* NOT WHILE REVIEWING, as → is not (the key handler above
+                   already says `!reviewing`). On a phone a sideways swipe at
+                   a card that began on the creature walked the world to
+                   Principles mid-review, leaving "Exit review mode" in the
+                   bar with no card under it (audit f2afcbe2, mob). */
+                if (!atNowView || reviewing) return;
                 creatureDrag.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
                 event.currentTarget.setPointerCapture?.(event.pointerId);
               }}
@@ -9841,8 +9878,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 id={claimQueue[0].id}
                 tone="reading"
                 label={claimQueue[0].statement}
-                labelKeep={say('worldStillTrue')}
-                labelNot={say('worldNotAnymore')}
+                /* "STILL" AND "ANYMORE" ONLY WHEN IT IS A SECOND ASKING.
+                   Both words presume an earlier yes, and on a reading asked
+                   for the first time there was none (audit f2afcbe2). A first
+                   asking takes the founder's own earlier pair, "True" / "Not
+                   true" (the 2026-10-11 card); a re-ask of an aged yes —
+                   `askedAgain`, the founder's "is this still true?" — keeps
+                   the pair written for it. */
+                labelKeep={say(claimQueue[0].askedAgain ? 'worldStillTrue' : 'worldClaimTrue')}
+                labelNot={say(claimQueue[0].askedAgain ? 'worldNotAnymore' : 'worldNotTrue')}
                 /* NO CHAT DOOR ON THE CARD. Founder, 2026-10-15: "remove chat
                    about it under the claim." The card asks one thing — still
                    true or not anymore — so `labelChat`/`onChat` are left off,
@@ -11125,8 +11169,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
           `reviewEntry.label` — is gone with the fold, and `useReviewEntry`
           with it, so dev's relabelling of that button had nothing left to
           relabel. */}
-      {phase==='ready'&&(inField||inSky||!atNow)?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
-        <HomeActionIcon kind="capture"/> {say('worldCaptureInspiration')}</button>:null}
+      {/* THE "CAPTURE INSPIRATION" PILL WENT (audit f2afcbe2, desk/78). It
+          stood over the bar in the field, the sky and a wound-back wall,
+          directly above the bar's own "Inspiration", which opens the same
+          notepad: two controls for one act, one of them the loudest shape on
+          the screen. The bar is the one place this act lives now. */}
       {/* AND SO IS FIND. Founder ruling, long since applied everywhere
           else: "find is just it should be a search bar on the your
           inspirations page instead." It survived here for the same reason the
@@ -11455,11 +11502,18 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     is which one the bare microphone should do. */}
                 {dictationAvailable() ? (
                   dictation.listening ? (
-                    /* THE SAME SHAPE THE RECORDER'S STOP HAS: a word, not a
-                       second glyph. "Speaking" with a press on it says both
-                       what is happening and how to end it. */
-                    <button type="button" className="waka-dock-tool waka-dock-tool--wide"
-                      onClick={() => dictation.stop()}>{say('worldComposerDictateStop')}</button>
+                    /* ═══ STOP IS WHERE THE MICROPHONE WAS (audit f2afcbe2) ══
+                       This was a wide word, "Stop", and the bar is centred:
+                       the wider button and the disclosure line beside it
+                       re-laid the whole bar, so Stop landed ~110px left of
+                       where the microphone had been (675 → 561 at 1440) and
+                       a second press on the same spot hit ＋. Now the SAME
+                       button stays in the SAME slot at the SAME size, lit
+                       and breathing while it listens (`--live`), and the
+                       press that started it is the press that ends it. */
+                    <button type="button" className="waka-dock-tool waka-dock-tool--live"
+                      aria-pressed="true" aria-label={say('worldComposerDictateStop')}
+                      onClick={() => dictation.stop()}><HomeActionIcon kind="record"/></button>
                   ) : (
                     <button type="button" className="waka-dock-tool"
                       aria-label={say('worldComposerDictate')}
@@ -11484,23 +11538,23 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       disabled={!composerDraft.available}
                       onClick={() => void recording.start()}><HomeActionIcon kind="record"/></button>
                   ) : (
+                    /* STOP KEEPS IT, CANCEL THROWS IT AWAY — both, because a
+                       recording you can start and stop but not discard is
+                       worse than one you cannot start. Stop stands in the
+                       microphone's own slot for the reason dictation's does
+                       (above); the clock — words, because a red dot cannot
+                       say how long you have been talking — rides in the
+                       state line. CANCEL IS ITS OWN ITEM BESIDE STOP, as on
+                       dev (review): inside the state line it was ellipsized
+                       with it and its press clipped to ~17px on a phone. */
                     <>
-                      {/* STOP KEEPS IT, CANCEL THROWS IT AWAY — both, because a
-                          recording you can start and stop but not discard is
-                          worse than one you cannot start. The clock is words
-                          rather than a glyph for the reason the composer gave:
-                          a red dot cannot say how long you have been talking. */}
-                      <button type="button" className="waka-dock-tool waka-dock-tool--wide"
+                      <button type="button" className="waka-dock-tool waka-dock-tool--live"
                         aria-label={say('worldComposerStop')}
                         disabled={recording.phase === 'finishing'}
-                        onClick={() => void recording.stop()}>
-                        {Math.floor(recording.seconds / 60)}:{String(recording.seconds % 60).padStart(2, '0')}
-                      </button>
-                      <button type="button" className="waka-dock-tool waka-dock-tool--wide"
+                        onClick={() => void recording.stop()}><HomeActionIcon kind="stop"/></button>
+                      <button type="button" className="waka-dock-item waka-dock-cancel"
                         disabled={recording.phase === 'finishing'}
-                        onClick={() => void recording.cancel()}>
-                        {say('worldComposerCancelRecording')}
-                      </button>
+                        onClick={() => void recording.cancel()}>{say('worldComposerCancelRecording')}</button>
                     </>
                   )
                 ) : null}
@@ -11642,7 +11696,27 @@ const RETRY_READ_LIMIT_MS = 20_000;
 
                     `role="status"` so it is still announced; it is the
                     position that changed, not whether it is said. */}
-                {composerState ? (
+                {/* WHILE THE MICROPHONE IS OPEN the state line stays in the
+                    bar's row, as on dev. A caption lifted off the bar (so the
+                    row never widens and the disclosure is never cut at 14rem)
+                    was tried and set aside for its own change — see
+                    docs/known-issues.md. */}
+                {dictation.listening || recording.phase !== 'idle' ? (
+                  /* THE CLOCK IS NOT A LIVE REGION (review): inside
+                     `role="status"` a screen reader re-announced it every
+                     second. The disclosure and a one-word "Recording" are
+                     the live part; the clock is for eyes and is hidden. */
+                  <span className="waka-dock-state">
+                    {/* Shown for eyes; said by `LiveWord`, which mounts empty
+                        and fills a beat later so the words are announced. */}
+                    {composerState ? <span aria-hidden="true">{composerState}</span> : null}
+                    {/* ONE "Recording" AT A TIME (review): the composer foot says it
+                        while the mouth is closed (`!mouthOpen`), so the bar says it
+                        only while the mouth is open — never both regions at once. */}
+                    <LiveWord text={composerState || (recording.phase !== 'idle' && mouthOpen ? say('worldComposerRecordingNow') : '')} />
+                    {recording.phase !== 'idle' ? <span aria-hidden="true">{clockWords(recording.seconds)}</span> : null}
+                  </span>
+                ) : composerState ? (
                   <span className="waka-dock-state" role="status">{composerState}</span>
                 ) : null}
               </span>

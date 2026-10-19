@@ -90,7 +90,7 @@ it("asks about a picked sentence before any reading, in the agent's voice, and s
   /* NOT THE CLAIM CARD. Founder: type two needs "a very clear distinction". */
   expect(world.container.querySelector(".jar-pick--reading"), "a pick must not wear the reading's tone").toBeNull();
   expect(world.container.querySelector(".jar-pick-who")?.textContent).toContain("Your agent noticed this");
-  expect(world.container.querySelector(".jar-pick-source")?.textContent).toContain("Inferred from your Claude MCP");
+  expect(world.container.querySelector(".jar-pick-source")?.textContent).toContain("Noticed while you worked with Claude");
 });
 
 it("keeps it when the slip is dragged to the right, the pick's own gesture", async () => {

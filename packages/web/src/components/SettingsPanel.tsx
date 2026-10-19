@@ -130,7 +130,12 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   useEffect(() => {
     if (open !== "agents" || agents !== null) return;
     fetchProfiles()
-      .then((rows) => { if (alive.current) setAgents(rows); })
+      /* AGENTS ONLY. `GET /profiles` returns every profile the account owns,
+         and that includes the person's OWN human profile — which this list
+         offered to rename as a memory and to delete as one (audit f2afcbe2,
+         desk/51). Deleting yourself is the account card's job, behind its
+         own typed confirmation, not a two-press row here. */
+      .then((rows) => { if (alive.current) setAgents(rows.filter((row) => row.type === "agent")); })
       .catch(() => { if (alive.current) setAgentTrouble(say("profileMemoriesError")); });
   }, [open, agents, say]);
 
@@ -229,7 +234,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
                     setBusyAgent(agent.id);
                     void renameProfile(agent.id, next)
                       .then((row) => { if (alive.current) setAgents((rows) => (rows ?? []).map((r) => r.id === row.id ? row : r)); })
-                      .catch(() => { if (alive.current) setAgentTrouble(say("profileMemoriesError")); })
+                      .catch(() => { if (alive.current) setAgentTrouble(say("profileMemoryRenameError")); })
                       .finally(() => { if (alive.current) setBusyAgent(null); });
                   }} />
                 {/* ERASING AN AGENT TAKES ITS WHOLE ARCHIVE BY CASCADE, so
@@ -243,7 +248,9 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
                     setBusyAgent(agent.id);
                     void deleteProfile(agent.id)
                       .then(() => { if (alive.current) setAgents((rows) => (rows ?? []).filter((r) => r.id !== agent.id)); })
-                      .catch(() => { if (alive.current) setAgentTrouble(say("profileMemoriesError")); })
+                      /* Not "could not be loaded": the list loaded; it was
+                         the delete that failed, and the row is still here. */
+                      .catch(() => { if (alive.current) setAgentTrouble(say("profileMemoryDeleteError")); })
                       .finally(() => { if (alive.current) setBusyAgent(null); });
                   }}>
                   {busyAgent === `erase:${agent.id}` ? say("worldDeleteItAnyway") : say("worldDelete")}

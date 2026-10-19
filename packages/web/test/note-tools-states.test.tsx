@@ -49,7 +49,11 @@ it("keeps an earlier save failure beside the loading line", async () => {
 
 it("keeps Stop in the bar while another note is still loading", async () => {
   await bar({ reading: "Opening…", recording: { ...idle, phase: "recording", seconds: 12 } as never, stopLabel: "Stop recording" });
-  expect(slot.querySelector('[aria-label="Stop recording"]')?.textContent, "a recording running into the next note's loading can still be stopped").toBe("0:12");
+  /* Since the merge with claude/fix-usability, Stop keeps the microphone's 44px seat and the
+     clock rides in the state line beside it (audit f2afcbe2: the wide clock-button re-laid the bar). */
+  const stop = slot.querySelector('[aria-label="Stop recording"]');
+  expect(stop, "a recording running into the next note's loading can still be stopped").not.toBeNull();
+  expect(stop!.nextElementSibling?.textContent).toContain("0:12");
 });
 
 it("keeps Stop in the bar while a delete is armed during a recording", async () => {
@@ -58,7 +62,9 @@ it("keeps Stop in the bar while a delete is armed during a recording", async () 
     erasePending: true, eraseQuestion: "Delete this for good?", eraseConfirmLabel: "Delete it anyway",
     cancelEraseLabel: "Not now", onCancelErase: vi.fn(), stopLabel: "Stop recording",
   });
-  expect(slot.querySelector('[aria-label="Stop recording"]')?.textContent, "the way to stop the microphone stayed").toBe("0:07");
+  const stop = slot.querySelector('[aria-label="Stop recording"]');
+  expect(stop, "the way to stop the microphone stayed").not.toBeNull();
+  expect(stop!.nextElementSibling?.textContent).toContain("0:07");
   expect(slot.querySelector('[aria-label="Delete it anyway"]')).not.toBeNull();
 });
 

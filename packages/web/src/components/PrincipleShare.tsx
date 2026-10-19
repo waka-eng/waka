@@ -9,6 +9,43 @@ import {DialogSurface} from './DialogSurface';
 import {ShareLooks} from './ShareLooks';
 import {SHARE_NOTICE_KEY,useShareImage} from '../lib/use-share-image';
 
+/**
+ * THE PROOF, COMPUTED FROM WHAT IS ACTUALLY ON THE CARD.
+ *
+ * The postable fact is not the sentiment, it is that the sentiment was
+ * EARNED — so this counts the real saves behind the chosen principles and
+ * the span they were kept across. Distinct saves, never the sum of the
+ * per-principle counts: two principles standing on the same evidence must
+ * not let it be counted twice, because the one number a stranger cannot
+ * check is the one the card must not inflate.
+ *
+ * AND THE SPAN IS TOLD HONESTLY (audit f2afcbe2). It was `max(1,
+ * round(months))` from the principle's `heldSince`, so a principle held since
+ * this morning printed "6 things I kept over 1 month". It still runs from
+ * `heldSince` (the examples the API sends are only the two newest per signal,
+ * so their dates cannot say how long anything was kept), but in weeks under
+ * two months and months after; under a week there is no span to speak of,
+ * and the line says the count alone rather than inventing one.
+ */
+export function principleShareProof(locale:SupportedLocale,chosen:ApiPrinciple[],now:number):string|undefined{
+  const saves=new Set<string>();
+  let earliest=Number.POSITIVE_INFINITY;
+  for(const row of chosen){
+    for(const signal of row.citedSignals)for(const example of signal.examples??[])saves.add(example.createdAt+example.text);
+    /* THE SPAN IS THE PRINCIPLE'S `heldSince`, as on dev (review): the API
+       sends only the two newest examples per signal, so their dates said
+       nothing about how long anything was kept. */
+    const held=row.heldSince?Date.parse(row.heldSince):Number.NaN;
+    if(Number.isFinite(held))earliest=Math.min(earliest,held);
+  }
+  if(!saves.size||!Number.isFinite(earliest))return undefined;
+  const values={count:saves.size,principles:chosen.length};
+  const days=(now-earliest)/86_400_000;
+  if(!Number.isFinite(days)||days<7)return formatMessage(locale,'worldShareProofRecent',values);
+  const span=days<60?formatMessage(locale,'worldShareSpanWeeks',{n:Math.floor(days/7)}):formatMessage(locale,'worldShareSpanMonths',{n:Math.floor(days/30)});
+  return formatMessage(locale,'worldShareProof',{...values,span});
+}
+
 export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:ProfileStorageScope;id:string;name:string;locale:SupportedLocale;onClose:()=>void;onChoose:(id:string)=>void}){
   const [rows,setRows]=useState<ApiPrinciple[]|null>(null),[loadFailed,setLoadFailed]=useState(false),[attempt,setAttempt]=useState(0);
   const [draft,setDraft]=useState<StoredPrincipleArtifactDraft|null>(null),[drafts,setDrafts]=useState<StoredPrincipleArtifactDraft[]>([]),[storageFailed,setStorageFailed]=useState(false);
@@ -21,54 +58,20 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const source=rows?.find(row=>row.id===id);
   const useDraft=(value:StoredPrincipleArtifactDraft)=>{current.current=value;setDraft(value);setNotice(null);};
   /**
-   * IT OPENS WITH THE SET, NOT WITH THE ONE YOU PRESSED.
+   * IT OPENS WITH THE ONE YOU PRESSED (audit f2afcbe2, desk/77).
    *
-   * Founder: "how we can make the principal page something that people would
-   * want to like share on their social media and stuff."
-   *
-   * One principle is a quote; three are a portrait. A single line posted alone
-   * reads as a fortune cookie — a stranger cannot tell it from something typed
-   * that morning, and there is nothing in it that makes them wonder what
-   * theirs would say. Three together have shape, a voice, sometimes a
-   * contradiction, and they invite the comparison that is the whole mechanism
-   * of anything people actually post about themselves.
-   *
-   * The pressed one leads, because that is the one they meant. The rest
-   * follow in the order the reading ranks them, and any of them can still be
-   * removed — the set is the DEFAULT rather than the rule, which is the only
-   * version of this that does not take a decision away from someone who had
-   * already made it.
+   * It used to open with the set — the pressed principle and the next two by
+   * rank — on the argument that "one principle is a quote; three are a
+   * portrait". Pressed from a card that names one principle, "Make a share
+   * card" then put every principle on the card: the press did more than it
+   * said (Law 1). The set is still one choice away — "Add another" below
+   * offers the rest, up to three — but it is the person's to add, not ours
+   * to presume.
    */
-  const fresh=(row:ApiPrinciple,all:ApiPrinciple[]):PrincipleArtifactDraft=>({id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),appearance:'dark',format:'square',showName:false,mode:'card',beforeStatementId:null,
-    entries:[row,...all.filter(other=>other.id!==row.id)].slice(0,3).map(item=>({principleId:item.id,text:item.statement,originalStatement:item.statement}))});
+  const fresh=(row:ApiPrinciple):PrincipleArtifactDraft=>({id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),appearance:'dark',format:'square',showName:false,mode:'card',beforeStatementId:null,
+    entries:[{principleId:row.id,text:row.statement,originalStatement:row.statement}]});
 
-  /**
-   * THE PROOF, COMPUTED FROM THE SET THAT IS ACTUALLY ON THE CARD.
-   *
-   * The postable fact is not the sentiment, it is that the sentiment was
-   * EARNED — so this counts the real saves behind the chosen principles and
-   * the span they were held across. Both halves matter and neither works
-   * alone: a count with no duration is a statistic, a duration with no count
-   * is a timestamp. Together they say the only thing worth saying to a
-   * stranger, which is that this took a while and came from somewhere real.
-   *
-   * Distinct saves, never the sum of the per-principle counts: two principles
-   * standing on the same evidence must not let it be counted twice, because
-   * the one number a stranger cannot check is the one the card must not
-   * inflate.
-   */
-  const proofFor=(chosen:ApiPrinciple[]):string|undefined=>{
-    const saves=new Set<string>();
-    let earliest=Number.POSITIVE_INFINITY;
-    for(const row of chosen){
-      for(const signal of row.citedSignals)for(const example of signal.examples??[])saves.add(example.createdAt+example.text);
-      const held=row.heldSince?Date.parse(row.heldSince):Number.NaN;
-      if(Number.isFinite(held))earliest=Math.min(earliest,held);
-    }
-    if(!saves.size||!Number.isFinite(earliest))return undefined;
-    const months=Math.max(1,Math.round((Date.now()-earliest)/(30*86_400_000)));
-    return formatMessage(locale,'worldShareProof',{count:saves.size,months});
-  };
+  const proofFor=(chosen:ApiPrinciple[]):string|undefined=>principleShareProof(locale,chosen,Date.now());
   useEffect(()=>{
     const controller=new AbortController();setLoadFailed(false);
     const timer=window.setTimeout(()=>{controller.abort();setLoadFailed(true);},15000);
@@ -80,7 +83,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
     if(!source||current.current)return;
     let stored:StoredPrincipleArtifactDraft|undefined;
     try{const saved=readPrincipleArtifactDrafts(scope,id);setDrafts(saved);stored=saved[0];}catch{setStorageFailed(true);}
-    useDraft(stored??{key:'',raw:'',value:fresh(source,rows??[])});
+    useDraft(stored??{key:'',raw:'',value:fresh(source)});
   },[source?.id,scope.accountId,scope.profileId,id]);
   const update=(value:PrincipleArtifactDraft)=>{
     if(busy)return;
@@ -142,7 +145,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const {busy,notice,setNotice,canShare,download,share}=useShareImage(ready?preview?.blob??null:null,filenames);
   const discard=()=>{
     if(busy||!draft||!source||!window.confirm(say('worldShareDiscardConfirm')))return;
-    try{clearPrincipleArtifactDraft(draft);useDraft({key:'',raw:'',value:fresh(source,rows??[])});setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
+    try{clearPrincipleArtifactDraft(draft);useDraft({key:'',raw:'',value:fresh(source)});setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
     catch{setStorageFailed(true);}
   };
   return <>

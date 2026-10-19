@@ -1323,6 +1323,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           uploading={say("worldComposerUploading")}
           recordLabel={say("worldComposerRecord")}
           stopLabel={say("worldComposerStop")}
+          recordingLabel={say("worldComposerRecordingNow")}
           addLabel={say("worldAddMenu")}
           photoLabel={say("worldAddPhoto")}
           fileLabel={say("worldAddFile")}

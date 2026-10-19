@@ -103,6 +103,43 @@ it('opens your own material over a world that never leaves, and the world is one
   expect(new URLSearchParams(location.search).get('open')).toBe('conversations');
 });
 
+/* Audit f2afcbe2: the first Tab stops landed on a "Details" button inside the
+   height-zero band, with nothing on screen to show where focus went. */
+it('takes the collapsed band out of focus order while it yields to the creature',async()=>{
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
+  const yielded=[...world.container.querySelectorAll<HTMLElement>('.jar-hq-inner--yielded')];
+  expect(yielded.length).toBeGreaterThan(0);
+  for(const band of yielded){expect(band.hasAttribute('inert')).toBe(true);expect(band.getAttribute('aria-hidden')).toBe('true');}
+  for(const band of world.container.querySelectorAll<HTMLElement>('.jar-hq-inner:not(.jar-hq-inner--yielded)'))expect(band.hasAttribute('inert')).toBe(false);
+});
+
+/* Audit f2afcbe2: from Now, the sky's principle rows (above the frame) were
+   the first three Tab stops. */
+it('keeps the sky out of reach until you stand in it',async()=>{
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
+  const own=()=>world.container.querySelector<HTMLElement>('.jar-values-room--live');
+  expect(own()?.hasAttribute('inert')).toBe(true);
+  world.unmount();
+  world=await mountWorld(FACTS,{initialEntries:['/?view=sky'],routerTools:<RouterTools/>});await settle();
+  expect(own()?.hasAttribute('inert')).toBe(false);
+});
+
+/* Review: `inSky` waits for half-way up, so a sky already partly on screen was
+   unreachable. Reachable the moment ANY of it is in frame. */
+it('makes the sky reachable as soon as any of it is in frame, before half-way',async()=>{
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
+  const own=()=>world.container.querySelector<HTMLElement>('.jar-values-room--live');
+  const sim=(window as unknown as {wakaSim?:()=>{toSky():void}|null}).wakaSim!()!;
+  await act(async()=>sim.toSky());
+  let checked=false;
+  for(let frame=0;frame<120&&!checked;frame+=1){
+    await world.step(1);
+    const {camY}=world.audit() as unknown as {camY:number};
+    if(camY < -1 && camY > -300){ await act(async()=>{}); expect(own()?.hasAttribute('inert'),`camY ${camY}`).toBe(false); checked=true; }
+  }
+  expect(checked,'the camera never passed through a partly-shown sky').toBe(true);
+});
+
 it('offers places in the dock, and nothing that is already on the screen',async()=>{
   /* THE FOUR RUNGS ACROSS THE TOP ARE GONE. Founder: "have a bottom navbar."
      Two of those four named rooms a person is already standing in — claims

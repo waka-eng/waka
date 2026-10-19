@@ -123,7 +123,9 @@ async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
 /** The one transient line the bar shows while a note is open. */
-const bar = () => world.container.querySelector('.waka-dock-state')?.textContent ?? '';
+/** What the bar SHOWS — its screen-reader twin (`LiveWord`, sr-only) says the same words once. */
+const bar = () => [...(world.container.querySelector('.waka-dock-state')?.childNodes ?? [])]
+  .filter((node) => !(node instanceof HTMLElement && node.classList.contains('sr-only'))).map((node) => node.textContent).join('');
 const field = () => world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
 /** The notepad's own slot in the dock: the microphone, then Stop. */
 const mic = () => world.container.querySelector<HTMLButtonElement>('.waka-dock-tool')!;
@@ -258,6 +260,28 @@ it('says the cloud disclosure even when the bar was already holding a line', asy
  * a finished session cleared `listening` and dropped the handle on the live
  * one, which is the Stop control disappearing while the engine runs.
  */
+/* Audit f2afcbe2 (desk/106): pressing the microphone re-laid the centred bar
+   — Stop landed where ＋ had been, and the disclosure was cut to "Your
+   browser sends speech to its own …". jsdom has no layout, so what is held
+   here is the cause: the row keeps the same controls in the same order and
+   the live control is the microphone's own element. (Where the disclosure
+   sits is a known issue: docs/known-issues.md.) */
+it('keeps Stop in the microphone\'s own seat, and announces the disclosure', async () => {
+  await openNotepad();
+  const row = () => [...world.container.querySelectorAll<HTMLElement>('.waka-dock-making > *')].map(node => node.className.replace(/ waka-dock-tool--live/, ''));
+  const before = row(), first = mic();
+  await pressMic();
+  expect(row().filter(name => !name.includes('waka-dock-state'))).toEqual(before.filter(name => !name.includes('waka-dock-state')));
+  expect(mic()).toBe(first);
+  expect(mic().classList.contains('waka-dock-tool--live')).toBe(true);
+  const caption = world.container.querySelector('.waka-dock-state');
+  expect(caption?.querySelector('[aria-hidden="true"]')?.textContent).toBe('Your browser sends speech to its own service to turn it into text.');
+  await settle();
+  expect(caption?.querySelector('[role="status"]')?.textContent, 'the disclosure is not announced').toBe('Your browser sends speech to its own service to turn it into text.');
+  await act(async () => mic().click()); await settle();
+  expect(engine().started).toBe(false); expect(mic().classList.contains('waka-dock-tool--live')).toBe(false);
+});
+
 it('does not splice a finished session\'s last words into the next one', async () => {
   await openNotepad();
   await pressMic();
@@ -266,7 +290,7 @@ it('does not splice a finished session\'s last words into the next one', async (
   expect(field().value).toBe('first thought');
 
   /* Stop, which is the control the person presses. */
-  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-dock-tool--wide')!.click());
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-dock-tool--live')!.click());
   await settle();
   const finished = engine();
 
@@ -284,5 +308,5 @@ it('does not splice a finished session\'s last words into the next one', async (
   /* AND ITS ERROR CANNOT TAKE THE LIVE SESSION DOWN WITH IT. */
   await act(async () => finished.onerror?.({ error: 'network' }));
   await settle();
-  expect(world.container.querySelector('.waka-dock-tool--wide'), 'the Stop control went while the engine ran').toBeTruthy();
+  expect(world.container.querySelector('.waka-dock-tool--live'), 'the Stop control went while the engine ran').toBeTruthy();
 });

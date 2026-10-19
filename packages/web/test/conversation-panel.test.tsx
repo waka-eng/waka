@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/api/conversations` supplies owned
- * records and lost responses; `Storage.setItem` simulates a quota failure.
+ * records and lost responses; `lib/api` supplies `fetchPrinciples` for a chat
+ * opened from a principle; `Storage.setItem` simulates a quota failure.
  * `matchMedia` and `visualViewport` supply mobile and keyboard metrics;
  * DOM scroll geometry supplies a measurable viewport for the arrival test.
  * Real UI, owner-scoped drafts and recovery run; reply text is synthetic.
@@ -25,9 +26,11 @@ import {fileURLToPath} from 'node:url';
 import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ConversationPanel} from '../src/components/ConversationPanel';
+import {fetchPrinciples} from '../src/lib/api';
 import {createConversation,fetchConversation,fetchConversationReply,listConversations,saveConversationMessage,stopConversationReply,type ApiConversation,type ConversationReplyState} from '../src/lib/api/conversations';
 import {readConversationDrafts} from '../src/lib/conversation-drafts';
 import {ApiError} from '../src/lib/api/http';
+vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),fetchPrinciples:vi.fn()}));
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),stopConversationReply:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
 const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn();
 /* THE SAME JOB, DONE BY THE RULE THAT CAN DO IT SYMMETRICALLY.
@@ -126,6 +129,29 @@ it('clearly saves messages without promising an assistant reply',async()=>{
   expect(host.textContent).not.toContain('Thinking');
   expect(host.textContent).not.toContain('Still working');
 });
+/* Audit f2afcbe2 (desk/93): offline, a new chat said "This conversation
+   couldn't be opened" over a page with nothing to open, "Your messages are
+   still saved" under words that were never sent, and Send stayed dead. */
+it('says words typed offline were not sent, keeps them editable, and sends them on Retry',async()=>{
+  vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
+  await mount(null);
+  expect(host.textContent).toContain('WAKA can’t be reached right now.');
+  expect(host.textContent).not.toContain('couldn’t be opened');
+  expect(host.textContent).not.toContain('still saved');
+  await type('Words from the train');await click('Send');
+  expect(host.textContent).toContain('Not sent');
+  expect(host.querySelector('textarea')!.value).toBe('Words from the train');
+  expect(host.querySelector('textarea')!.disabled).toBe(false);
+  expect(createConversation).not.toHaveBeenCalled();
+  vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:false});
+  vi.mocked(createConversation).mockImplementation(async(_profile,conversationId,_signal,_principle,first)=>({...stored,id:conversationId,revision:1,
+    messages:[{...first!,attachments:[],profileId:scope.profileId,conversationId,position:1,role:'user',createdAt:'2026-10-03T01:00:00Z'}]}) as ApiConversation);
+  await click('Retry this message');
+  expect(createConversation).toHaveBeenCalledOnce();
+  expect(vi.mocked(createConversation).mock.calls[0]![4]).toMatchObject({content:'Words from the train'});
+  expect(host.textContent).not.toContain('Not sent');
+});
+
 it('offers a new-chat exit when a conversation is unavailable, without showing old words',async()=>{
   vi.mocked(fetchConversation).mockRejectedValueOnce(new Error('Unavailable'));await mount();
   /* No box to type in, so the exit has to be visible without opening
@@ -139,6 +165,135 @@ it('reconciles a lost save response with a read, without resending',async()=>{
   await mount();await type('Keep my exact thought');await click('Send');
   expect(host.querySelector('textarea')!.value).toBe('Keep my exact thought');expect(host.textContent).toContain('Couldn’t confirm this message.');
   await click('Check saved messages');expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(stored.messages).toHaveLength(1);expect(host.querySelector('textarea')!.value).toBe('');
+});
+/* Review round 6: a failed list read on an open conversation used to be
+   swallowed, leaving "are replies on?" unknown and Send "loading" for good. */
+it('says when the list read fails and nothing else can tell whether replies are on',async()=>{
+  vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
+  vi.mocked(fetchConversation).mockImplementation(()=>new Promise(()=>{}));
+  await mount();
+  expect(host.textContent).toContain('WAKA can’t be reached right now.');
+  expect([...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent)).toContain('Try again');
+});
+/* Review: Send waits for the list read when replies are unknown; whatever
+   changed meanwhile, the press was for the words as they stood. */
+it('re-checks every send guard after the pre-flight read, and sends nothing if the words changed or went',async()=>{
+  vi.mocked(listConversations).mockRejectedValueOnce(new Error('Offline'));
+  await mount(null);
+  let answer!:(value:Awaited<ReturnType<typeof listConversations>>)=>void;
+  vi.mocked(listConversations).mockImplementation(()=>new Promise(resolve=>{answer=resolve;}));
+  await type('First words');await click('Send');            // pre-flight in flight
+  await type('Other words');                                  // changed meanwhile
+  await act(async()=>{answer({profileId:scope.profileId,conversations:[],generationEnabled:false});});
+  expect(createConversation).not.toHaveBeenCalled();
+  expect(host.querySelector('textarea')!.value).toBe('Other words');
+});
+/* Review: a chat opened from a principle whose first read failed must load
+   the principle before Send can go; unavailable, Send stays off and says so. */
+it('loads the focus principle in the pre-flight, and sends nothing when it is unavailable',async()=>{
+  vi.mocked(listConversations).mockRejectedValueOnce(new Error('Offline')).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:false});
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);              // the principle is gone
+  await act(async()=>root.render(<ConversationPanel scope={scope} id={null} initialPrincipleId="principle-1" locale="en-US" onChoose={choose}/>));
+  await type('About this principle');await click('Send');
+  expect(fetchPrinciples).toHaveBeenCalled();
+  expect(createConversation).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('This principle is no longer available.');
+  expect((host.querySelector('.chat-send') as HTMLButtonElement).disabled).toBe(true);
+});
+/* Review: the "Not sent" notice and its Retry stay until a send actually
+   begins; a pre-flight whose guards bail must not wipe them. */
+it('keeps "Not sent" and Retry when the re-checked guards stop the send',async()=>{
+  vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
+  await mount(null);
+  await type('First words');await click('Send');
+  expect(host.textContent).toContain('Not sent');
+  let answer!:(value:Awaited<ReturnType<typeof listConversations>>)=>void;
+  vi.mocked(listConversations).mockImplementation(()=>new Promise(resolve=>{answer=resolve;}));
+  await click('Retry this message');                          // pre-flight in flight
+  await type('Other words');                                  // changed meanwhile: the send bails
+  await act(async()=>{answer({profileId:scope.profileId,conversations:[],generationEnabled:false});});
+  expect(createConversation).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('Not sent');
+  expect([...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent)).toContain('Retry this message');
+});
+/* Round 7: the list read's failure never replaces a more specific sentence. */
+it('keeps the conversation\'s own failure when the list read fails after it',async()=>{
+  let failList!:(reason:unknown)=>void;
+  vi.mocked(listConversations).mockImplementation(()=>new Promise((_,reject)=>{failList=reject;}));
+  vi.mocked(fetchConversation).mockRejectedValue(new Error('Unavailable'));
+  await mount();
+  expect(host.textContent).toContain('This conversation couldn’t be opened.');
+  await act(async()=>{failList(new Error('Offline'));});
+  expect(host.textContent).toContain('This conversation couldn’t be opened.');
+  expect(host.textContent).not.toContain('WAKA can’t be reached right now.');
+});
+/* Review round 3: a journalled message is never "Not sent" because a
+   pre-flight failed — an earlier send under its id may have landed. */
+it('calls a pending message "not confirmed", never "not sent", when the pre-flight fails',async()=>{
+  vi.mocked(createConversation).mockRejectedValueOnce(new Error('Network'));
+  await mount(null);await type('Words in flight');await click('Send');
+  await act(async()=>root.unmount());root=createRoot(host);
+  vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
+  vi.mocked(fetchConversation).mockRejectedValue(new Error('Offline'));
+  await mount(null);
+  await click('Retry this message');
+  expect(host.textContent).toContain('Not confirmed yet');
+  expect(host.textContent).not.toContain('Not sent');
+});
+/* And "Not sent" with nothing left in the box offers the re-read, not a
+   Retry that has no words to send. */
+it('offers the re-read once the unsent words are cleared from the box',async()=>{
+  vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
+  await mount(null);await type('Words from the train');await click('Send');
+  expect(host.textContent).toContain('Not sent');
+  await type('');
+  const acts=[...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent);
+  expect(acts).not.toContain('Retry this message');expect(acts).toContain('Try again');
+});
+/* Review: with a pending message and a conversation that could not be read,
+   "Retry" was offered and did nothing (sending needs the conversation). */
+it('offers the re-read, not a dead Retry, when a pending message sits on an unread conversation',async()=>{
+  vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Response lost'));
+  await mount();await type('A thought in flight');await click('Send');
+  await act(async()=>root.unmount());root=createRoot(host);
+  vi.mocked(fetchConversation).mockRejectedValue(new Error('Unavailable'));
+  await mount();
+  const acts=[...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent);
+  expect(acts).not.toContain('Retry this message');
+  expect(acts).toContain('Try again');
+  vi.mocked(fetchConversation).mockImplementation(async()=>structuredClone(stored));
+  await click('Try again');
+  expect(host.querySelector('.chat-notice')).toBeNull();
+});
+/* Review: the notice's Retry is offered only where `save` would act. Once the
+   conversation is GONE (a 404 reply read), Retry would do nothing, so the
+   notice offers the way out instead — a new chat. */
+it('offers a new chat, not a dead Retry, beside a failed send once the conversation is gone',async()=>{
+  stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
+  vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:true});
+  replyState={...replyState,revision:1};
+  await mount();await tick(0);
+  vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Response lost'));
+  await type('Still there?');await click('Send');
+  const acts=()=>[...host.querySelectorAll('.chat-notice[role="alert"] button')].map(b=>b.textContent);
+  expect(acts()).toContain('Retry this message');
+  vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:404,message:'Gone'}));
+  await act(async()=>{window.dispatchEvent(new Event('focus'));});await tick(1000);   // the next re-read finds it gone
+  expect(host.textContent).toContain('This reply can’t be found anymore.');
+  expect(acts()).not.toContain('Retry this message');
+  expect(acts()).toContain('New chat');
+});
+/* …and any other hold (here the draft can no longer be written down) offers
+   no Retry at all: the send button's own title names the reason. */
+it('offers no Retry beside a failed send while the draft cannot be saved',async()=>{
+  await mount();
+  vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Response lost'));
+  await type('A thought');await click('Send');
+  const acts=()=>[...host.querySelectorAll('.chat-notice[role="alert"] button')].map(b=>b.textContent);
+  expect(acts()).toContain('Retry this message');
+  vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('Quota');});
+  await click('Retry this message');
+  expect(acts()).not.toContain('Retry this message');
 });
 it('restores unsent words after reopening and forks edits instead of overwriting the previous writer',async()=>{
   /* THE DRAFT PICKER WENT; THE FORKING DID NOT. Two tabs still keep two
@@ -255,6 +410,42 @@ it('keeps the full-page composer within the visible keyboard viewport',async()=>
   expect(page.style.getPropertyValue('--chat-height')).toBe('340px');expect(page.style.getPropertyValue('--chat-top')).toBe('40px');
   expect(transcript.scrollTop).toBe(1200);
   viewport.height=0;await act(async()=>viewport.dispatchEvent(new Event('resize')));expect(page.style.getPropertyValue('--chat-height')).toBe('340px');
+});
+/* Audit f2afcbe2 (mob, iphone-ioskb-chat): inside the world the chat is
+   static in a fixed `.waka-page` sized to the LAYOUT viewport, which iOS does
+   not shrink for its keyboard — so the variables above moved nothing and the
+   composer sat under the keyboard. The page itself follows the keyboard. */
+it('pins the enclosing page to the visual viewport while an iOS keyboard is up, and lets go after',async()=>{
+  const viewport=Object.assign(new EventTarget(),{height:window.innerHeight,offsetTop:0,scale:1});vi.stubGlobal('visualViewport',viewport);
+  const page=document.createElement('div');page.className='waka-page';host.append(page);const inner=createRoot(page);
+  await act(async()=>inner.render(<ConversationPanel scope={scope} id={id} locale="en-US" onChoose={choose}/>));
+  page.querySelector('textarea')!.focus();
+  expect(page.style.height).toBe('');expect(page.dataset.keyboard).toBeUndefined();
+  /* A PINCH IS NOT A KEYBOARD (review): the viewport shrinks but its scale
+     is not 1, and the page is left alone. */
+  viewport.height=window.innerHeight-300;viewport.offsetTop=120;viewport.scale=2;await act(async()=>viewport.dispatchEvent(new Event('resize')));
+  expect(page.dataset.keyboard).toBeUndefined();
+  viewport.scale=1;await act(async()=>viewport.dispatchEvent(new Event('resize')));
+  expect(page.style.height).toBe(`${window.innerHeight-300}px`);expect(page.style.top).toBe('120px');expect(page.dataset.keyboard).toBe('1');
+  viewport.height=window.innerHeight;viewport.offsetTop=0;await act(async()=>viewport.dispatchEvent(new Event('resize')));
+  expect(page.style.height).toBe('');expect(page.dataset.keyboard).toBeUndefined();
+  await act(async()=>inner.unmount());
+});
+/* Review: offline is not proof a journalled message never reached the
+   server, so it is "not confirmed", and Retry resends the same id. */
+it('calls a pending message lost offline not confirmed, and retries it under the same id',async()=>{
+  await mount();
+  vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Network'));
+  const online=vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
+  await type('Words on the train');await click('Send');
+  expect(host.textContent).toContain('Not confirmed yet');expect(host.textContent).not.toContain('Not sent');
+  const first=vi.mocked(saveConversationMessage).mock.calls[0]![2].id;
+  online.mockReturnValue(true);
+  const retry=[...host.querySelectorAll('.chat-notice button')].find(b=>b.textContent==='Retry this message') as HTMLButtonElement;
+  expect(retry).toBeTruthy();
+  await act(async()=>retry.click());
+  expect(vi.mocked(saveConversationMessage).mock.calls[1]![2].id).toBe(first);
+  online.mockRestore();
 });
 /* ── TWO TOMBSTONES: DELETING A CONVERSATION, AND READING ITS MEMORY ────────
    `requires confirmation for deletion and removes only this conversation’s
