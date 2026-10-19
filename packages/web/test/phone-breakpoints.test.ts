@@ -274,8 +274,9 @@ describe("the four breaks that a browser found and reading did not", () => {
       "the ⋯ menu is centred on its button again, which runs it off the right of a 320px phone",
     ).toBe(true);
     expect(
-      /\.waka-dock-making:has\(> \.waka-dock-state\)\s*\{[^}]*flex-wrap:\s*wrap;[^}]*\}\s*\.waka-dock-making > \.waka-dock-state\s*\{[^}]*flex:\s*1 0 100%;/.test(css)
-        && /\.waka-dock:has\(\.waka-dock-making > \.waka-dock-state\)\s*\{\s*width:\s*calc\(100vw - var\(--sp-16\)\);/.test(css),
+      /* (the recording caption, `--live`, is out of the row and excluded) */
+      /\.waka-dock-making:has\(> \.waka-dock-state:not\(\.waka-dock-state--live\)\)\s*\{[^}]*flex-wrap:\s*wrap;[^}]*\}\s*\.waka-dock-making > \.waka-dock-state:not\(\.waka-dock-state--live\)\s*\{[^}]*flex:\s*1 0 100%;/.test(css)
+        && /\.waka-dock:has\(\.waka-dock-making > \.waka-dock-state:not\(\.waka-dock-state--live\)\)\s*\{\s*width:\s*calc\(100vw - var\(--sp-16\)\);/.test(css),
       "a state line shares the phone row with the tools again and is squeezed to ~10px",
     ).toBe(true);
   });

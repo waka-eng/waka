@@ -119,6 +119,42 @@ describe("Cancel recording is its own bar item, beside Stop (review)", () => {
   });
 });
 
+describe("the recording line is the bar's caption, off the row (desk/106)", () => {
+  /* In the row it widened the centred bar under a pointer about to press
+     Stop, and the 14rem cap cut the cloud disclosure. Lifted off the row it
+     must: wrap rather than clip, take no press, stay inside a 320-414px
+     screen (anchored to the bar, which is centred, never to the positioned
+     slot), hold no control (Stop and Cancel stay row items), and keep the
+     one clock and the one announced "Recording". Measured in Chromium at
+     320-1440 with a 12:34 clock and the full disclosure: on screen, not
+     clipped, presses fall through, and no row button moves when it appears. */
+  it("is lifted, wraps, takes no press, and leaves the row alone", () => {
+    const home = readFileSync(resolve(STYLES, "..", "pages/Home.tsx"), "utf8");
+    const open = home.indexOf('<span className="waka-dock-state waka-dock-state--live">');
+    expect(open, "the live state line is not the caption").toBeGreaterThan(0);
+    const close = home.indexOf(") : composerState ? (", open);
+    const live = home.slice(open, close);
+    expect(live).not.toContain("<button");
+    expect(live).toContain("clockWords(recording.seconds)");
+    expect(live).toContain("<LiveWord");
+    const css = sheet("claims.css");
+    const cap = rules(css, (s) => s === ".waka-dock-state.waka-dock-state--live").map(([, b]) => b).join("\n");
+    expect(cap).toMatch(/position:\s*absolute/);
+    expect(cap).toMatch(/bottom:\s*calc\(100% \+ var\(--sp-12\)\)/);
+    expect(cap).toMatch(/pointer-events:\s*none/);
+    expect(cap).toMatch(/white-space:\s*normal/);
+    expect(cap).toMatch(/overflow:\s*visible/);
+    expect(cap).toMatch(/max-width:\s*min\(26rem, calc\(100vw - var\(--sp-32\)\)\)/);
+    const slot = rules(css, (s) => s === ".waka-dock-slot:has(> .waka-dock-making > .waka-dock-state--live)").map(([, b]) => b).join("\n");
+    expect(slot, "a positioned slot would anchor the caption off-centre").toMatch(/position:\s*static/);
+    // the phone rules that put a state line on its own row inside the bar
+    // (and widen the bar for it) must not catch the caption
+    for (const [selector] of rules(css, (s) => /\.waka-dock-making\s*>\s*\.waka-dock-state(?![-\w])/.test(s))) {
+      expect(selector).toContain(":not(.waka-dock-state--live)");
+    }
+  });
+});
+
 describe("every small control takes a 44px press (#18)", () => {
   it("each named control carries a hit box at least 44 on each side", () => {
     const css = sheet("claims.css");

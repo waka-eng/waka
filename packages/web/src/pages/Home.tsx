@@ -11718,17 +11718,22 @@ const RETRY_READ_LIMIT_MS = 20_000;
 
                     `role="status"` so it is still announced; it is the
                     position that changed, not whether it is said. */}
-                {/* WHILE THE MICROPHONE IS OPEN the state line stays in the
-                    bar's row, as on dev. A caption lifted off the bar (so the
-                    row never widens and the disclosure is never cut at 14rem)
-                    was tried and set aside for its own change — see
-                    docs/known-issues.md. */}
+                {/* WHILE THE MICROPHONE IS OPEN, THE LINE RISES OFF THE BAR
+                    (audit f2afcbe2, desk/106). In the row it widened a
+                    centred bar and moved every button under a pointer that
+                    was about to press Stop, and its 14rem cap cut the cloud
+                    disclosure to "Your browser sends speech to its own …".
+                    As the bar's caption (`--live`) it is still the bar's —
+                    it sits on it and leaves with it — but out of the row, so
+                    nothing in the row moves, and it wraps instead of
+                    truncating. It holds no control and takes no press: Stop
+                    and Cancel stay their own buttons in the row. */}
                 {dictation.listening || recording.phase !== 'idle' ? (
                   /* THE CLOCK IS NOT A LIVE REGION (review): inside
                      `role="status"` a screen reader re-announced it every
                      second. The disclosure and a one-word "Recording" are
                      the live part; the clock is for eyes and is hidden. */
-                  <span className="waka-dock-state">
+                  <span className="waka-dock-state waka-dock-state--live">
                     {/* Shown for eyes; said by `LiveWord`, which mounts empty
                         and fills a beat later so the words are announced. */}
                     {composerState ? <span aria-hidden="true">{composerState}</span> : null}
