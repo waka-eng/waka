@@ -88,31 +88,6 @@ it('the recovery selector skips newly due work and active leases while preservin
   expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:1,succeeded:1});
   expect(processor).toHaveBeenCalledOnce();
 });
-it('settles a lease that expired after its final attempt as failed instead of leaving it running forever',async()=>{
-  const p=await owner();
-  const [dead]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,locked_at,attempts,max_attempts)
-    VALUES(${p},'derive_signals','{}','running','2026-10-05T11:00:00Z',3,3) RETURNING id`;
-  const [rerun]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,locked_at,attempts,max_attempts,rerun_requested)
-    VALUES(${p},'derive_signals','{}','running','2026-10-05T11:00:00Z',3,3,true) RETURNING id`;
-  const [live]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,locked_at,attempts,max_attempts)
-    VALUES(${p},'derive_signals','{}','running','2026-10-05T11:55:00Z',3,3) RETURNING id`;
-  const processor=vi.fn(async()=>{});
-  await drainBackgroundJobs({limit:5,now,processor});
-  const status=async(id:string)=>(await t.sql`SELECT status,attempts,last_error FROM background_jobs WHERE id=${id}`)[0];
-  expect(await status(dead.id)).toMatchObject({status:'failed',attempts:3});
-  expect((await status(dead.id))!.last_error).toMatch(/lease expired/i);
-  expect(await status(rerun.id),'a requested rerun never resurrects a poison job').toMatchObject({status:'failed',attempts:3});
-  expect(await status(live.id),'an unexpired lease is untouched').toMatchObject({status:'running',attempts:3});
-  expect(processor).not.toHaveBeenCalled();
-});
-it('leaves a lease past one stale interval but under two alone — a slow worker may still be alive',async()=>{
-  const p=await owner();
-  /* 20 minutes old: past STALE_LOCK_SECONDS (15m), under twice it (30m) */
-  const [slow]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,locked_at,attempts,max_attempts)
-    VALUES(${p},'derive_signals','{}','running','2026-10-05T11:40:00Z',3,3) RETURNING id`;
-  await drainBackgroundJobs({limit:5,now,processor:vi.fn(async()=>{})});
-  expect((await t.sql`SELECT status,attempts FROM background_jobs WHERE id=${slow.id}`)[0]).toMatchObject({status:'running',attempts:3});
-});
 it('gives malformed model output exactly one retry, then records it as a terminal failure',async()=>{
   /* temperature 0 mostly repeats the same malformed reply: one retry covers a
      transient glitch, a third call would only pay for the same answer again */
@@ -130,12 +105,4 @@ it('gives malformed model output exactly one retry, then records it as a termina
   expect((await row())!.last_error).toContain('malformed_model_output');
   expect(await drainBackgroundJobs({limit:5,now:new Date(later.getTime()+3600000),processor})).toMatchObject({claimed:0});
   expect(processor,'never a third call').toHaveBeenCalledTimes(2);
-});
-it('keeps draining when settling exhausted leases fails',async()=>{
-  const p=await owner();
-  await t.sql`INSERT INTO background_jobs(profile_id,type,payload,run_after) VALUES(${p},'derive_signals','{}','2026-10-05T10:00:00Z')`;
-  const processor=vi.fn(async()=>{});
-  const store={...postgresBackgroundJobStore,settleExhaustedLeases:async():Promise<number>=>{throw new Error('settle unavailable');}};
-  expect(await drainBackgroundJobs({limit:5,now,processor,store})).toMatchObject({claimed:1,succeeded:1});
-  expect(processor).toHaveBeenCalledOnce();
 });

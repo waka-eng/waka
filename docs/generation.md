@@ -788,9 +788,7 @@ five claims in one pass. Scheduled cadence/budget waits and active leases are
 excluded. The daily sweep stays in place and production's cadence is unchanged.
 Recovery never creates a second job or resets its attempt budget; ambiguous
 conversation dispatches retain their existing refusal-to-redispatch guard.
-Exhausted stale leases raise operational counts and are settled as `failed`
-by a drain once the lease is twice the stale interval old, so a slow live worker
-is never failed under itself (re-runnable, never automatically revived).
+Exhausted stale leases raise operational counts instead of being revived.
 
 The claim rechecks the runnable predicate on its locked base row and update
 target, not only the earlier fairness-ranking snapshot. A row that another

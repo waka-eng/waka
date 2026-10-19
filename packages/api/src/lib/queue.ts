@@ -304,9 +304,6 @@ export interface BackgroundJobStore {
   /** Settle a retired room-work head without claiming it. Optional so
    * in-memory stores need not model room work. */
   settleRetiredGroupWork?(jobId: string, now: Date): Promise<boolean>;
-  /** Settle leases that expired after their final attempt. Optional so
-   * in-memory stores need not model leases. Returns rows settled. */
-  settleExhaustedLeases?(now: Date): Promise<number>;
   markSucceeded(job: BackgroundJob, result: BackgroundJobResult | null): Promise<boolean>;
   markFailedOrPending(
     job: BackgroundJob,
@@ -849,20 +846,6 @@ export async function drainBackgroundJobs(
     failed: 0,
     deferred: 0,
   };
-
-  /* A worker that died on a job's last attempt leaves it `running` with a
-     lease nobody will reclaim (the claim predicate's attempt ceiling). Left
-     there it is neither retried nor failed — and a re-enqueue only flags it
-     for a rerun that never comes. Settle such rows before taking work. */
-  // Housekeeping only: a failure here is logged and never costs the drain.
-  try {
-    const settled = await store.settleExhaustedLeases?.(clock()) ?? 0;
-    if (settled) console.warn("[background-jobs] settled exhausted leases as failed", { settled });
-  } catch (err) {
-    console.warn("[background-jobs] settling exhausted leases failed", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
 
   let deferrals = 0;
   let processed = 0;
@@ -1440,30 +1423,6 @@ function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string,
   `;
 }
 
-/** A lease that expired after the job's final attempt is settled as `failed`
- * (visible and re-runnable) — always, even when a rerun was requested while it
- * ran: a job that crashed its worker on every attempt is never handed a fresh
- * attempt budget here. New work reaches it only through a later enqueue.
- * Only past TWICE the stale interval: on a non-Lambda drain a slow worker can
- * outlive one interval and still finish, and must not be failed under itself. */
-async function settleExhaustedBackgroundLeases(now: Date): Promise<number> {
-  const nowIso = now.toISOString();
-  const rows = await getDb().execute(sql`
-    UPDATE background_jobs AS job
-    SET status = 'failed'::background_job_status,
-        last_error = 'Lease expired after the final attempt',
-        rerun_requested = false,
-        result = NULL,
-        updated_at = ${nowIso}::timestamptz
-    WHERE job.status = 'running'::background_job_status
-      AND job.locked_at < ${nowIso}::timestamptz - (${2 * STALE_LOCK_SECONDS} || ' seconds')::interval
-      AND job.attempts >= job.max_attempts
-      AND job.type::text IN (${sql.join(backgroundJobTypeValues.map((type) => sql`${type}`), sql`, `)})
-    RETURNING job.id
-  `);
-  return rows.length;
-}
-
 /** One counts-only read. The exact claim predicate defines eligibility; grace
  * is measured from run_after or lease expiry, never from capture creation. */
 export async function readBackgroundJobRecoveryState(database:Pick<ReturnType<typeof getDb>,'execute'>=getDb(),now=new Date()):Promise<QueueRecoveryState>{
@@ -1870,7 +1829,6 @@ export const postgresBackgroundJobStore: BackgroundJobStore = {
   usageForAccount: readAccountModelUsage,
   deferAccountBacklog: deferAccountBacklogForBudget,
   settleRetiredGroupWork: settleRetiredGroupWorkInPlace,
-  settleExhaustedLeases: settleExhaustedBackgroundLeases,
   markSucceeded: markJobSucceeded,
   markFailedOrPending: markJobFailedOrPending,
   holdJob: holdBackgroundJob,
