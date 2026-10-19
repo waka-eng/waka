@@ -1385,20 +1385,6 @@
   text-wrap: pretty;
   color: var(--jar-muted);
 }
-/* The line's own answer, in the line's own type: it rendered as the
-   browser's grey button on the dark ground (audit f2afcbe2, desk/78). An
-   underlined word, as the bar's Undo is — light and an underline, no box. */
-.jar-values-retry {
-  appearance: none;
-  min-height: var(--sp-44);
-  padding: 0 var(--sp-4);
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
 
 /* ---------- the way back up, from the ground ----------
    The count and its caret point down from headquarters and then get out of the

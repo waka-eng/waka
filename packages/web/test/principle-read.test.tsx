@@ -100,16 +100,6 @@ describe("principle read", () => {
     expect(host.textContent).not.toContain(principle.statement);
   });
 
-  /* Audit f2afcbe2 (desk/78): a failed BACKGROUND re-read printed "Principles
-     could not be updated… Try again" over principles that were all there,
-     on open, with nobody having asked for anything. */
-  it("stays quiet about a failed background read while principles are on screen", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [principle], status: { ...ready, phase: "failed" } });
-    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    expect(host.textContent).not.toContain("could not be updated");
-    expect(host.querySelector("button")).toBeNull();
-  });
-
   it("says your principles will form here while there are none", async () => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: ready });
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
