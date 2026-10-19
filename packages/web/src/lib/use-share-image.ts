@@ -68,6 +68,7 @@ export function useShareImage(blob: Blob | null, names: { download: string; shar
     }
     setBusy(true);
     setNotice(null);
+    let copying = false;
     try {
       if (canShare && file) {
         /* Files only. No title, no text, no URL: what leaves is the picture
@@ -75,11 +76,15 @@ export function useShareImage(blob: Blob | null, names: { download: string; shar
         await navigator.share({ files: [file] });
         setNotice("shared");
       } else {
+        copying = true;
         await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
         setNotice("copied");
       }
     } catch (error) {
-      if ((error as { name?: string }).name !== "AbortError") setNotice("unavailable");
+      /* A clipboard that refuses (no permission, an unfocused page, a type
+         it will not take) still leaves the person with the picture: saved. */
+      if (copying) download();
+      else if ((error as { name?: string }).name !== "AbortError") setNotice("unavailable");
     } finally {
       setBusy(false);
     }

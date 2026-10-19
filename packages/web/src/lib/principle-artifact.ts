@@ -121,6 +121,38 @@ function seeded(seed:number):()=>number{
   return()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
 }
 
+/** THE GRAIN, BUILT ONCE. ±GRAIN_SPAN on every channel, seeded, as a small
+ * tile kept for the life of the page: the card redraws a beat after each
+ * keystroke, and reading and writing every pixel of a 1080 card each time
+ * was the slowest thing in the draw. The tile holds `n + GRAIN_SPAN` (never
+ * negative); it is ADDED ('lighter') and the constant GRAIN_SPAN is then
+ * taken back off ('difference' against it), which is `base + n` wherever
+ * the result stays in range — the same grain, composited by the GPU. */
+const GRAIN_SPAN=7,GRAIN_TILE=256;
+let grainTile:HTMLCanvasElement|null|undefined;
+export function grainTileCanvas():HTMLCanvasElement|null{
+  if(grainTile!==undefined)return grainTile;
+  try{
+    const tile=document.createElement('canvas');tile.width=GRAIN_TILE;tile.height=GRAIN_TILE;
+    const tctx=tile.getContext('2d');
+    if(!tctx){grainTile=null;return null;}
+    const image=tctx.createImageData(GRAIN_TILE,GRAIN_TILE),data=image.data,rand=seeded(29);
+    for(let i=0;i<data.length;i+=4){const v=Math.round((rand()-0.5)*GRAIN_SPAN*2)+GRAIN_SPAN;data[i]=v;data[i+1]=v;data[i+2]=v;data[i+3]=255;}
+    tctx.putImageData(image,0,0);
+    grainTile=tile;
+  }catch{grainTile=null;}
+  return grainTile;
+}
+function laySignedGrain(ctx:CanvasRenderingContext2D,width:number,height:number){
+  const tile=grainTileCanvas();
+  const grainFill=tile?ctx.createPattern(tile,'repeat'):null;
+  if(!grainFill)return;/* no tile: the card keeps its clean surface */
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';ctx.fillStyle=grainFill;ctx.fillRect(0,0,width,height);
+  ctx.globalCompositeOperation='difference';ctx.fillStyle=`rgb(${GRAIN_SPAN},${GRAIN_SPAN},${GRAIN_SPAN})`;ctx.fillRect(0,0,width,height);
+  ctx.restore();
+}
+
 /** The preview and exported file use these same pixels. No evidence, ids or
  * private metadata are accepted by the renderer. Principles, saves and the
  * top of mind all draw here, so the three cards are one family. */
@@ -433,13 +465,7 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
      and the bubble there all carry a fine paper grain, and a clean canvas
      next to it read as a different material. Seeded, so the same words
      always make the same card. */
-  if(said){
-    try{
-      const image=ctx.getImageData(0,0,width,height),data=image.data;let seed=29;
-      for(let i=0;i<data.length;i+=4){seed=(seed*16807)%2147483647;const n=((seed/2147483647)-0.5)*14;data[i]=Math.max(0,Math.min(255,data[i]!+n));data[i+1]=Math.max(0,Math.min(255,data[i+1]!+n));data[i+2]=Math.max(0,Math.min(255,data[i+2]!+n));}
-      ctx.putImageData(image,0,0);
-    }catch{/* a tainted or unavailable canvas keeps its clean surface */}
-  }
+  if(said)laySignedGrain(ctx,width,height);
   const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new ArtifactLayoutError('unavailable')),'image/png'));
   /* The editor covers the words: under the frame line when there is one, so
      the line stays visible while you type. Each line of a field sits half its
@@ -447,12 +473,13 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   const halfLead=((leading-1)*selected.size)/2;
   const radius=said?Math.round(19*said.s):kind==='principle'?0:16;
   const padX=said?said.padX:pad;
-  const editTop=said&&frame?textTop-halfLead:y0;
+  /* …and under the photo when there is one, so the photo stays in view. */
+  const editTop=(said&&frame)||photo?textTop-halfLead:y0;
   const layout:ShareCardLayout={width,height,
     bubble:{x:x0,y:y0,w:bubbleW,h:bubbleH,radius,fill:said?SAID_FILL:(dark?'#efe6d4':'#fffdf8')},
     text:{x:x0+padX,y:textTop,w:bubbleW-padX*2,size:selected.size,leading,weight:said?400:wordWeight,family,ink:wordInk,align:said?'center':'left'},
     edit:{x:x0,y:editTop,w:bubbleW,h:y1-editTop,padTop:Math.max(0,textTop-editTop-halfLead),padX,padBottom:said?said.padBottom:pad,
-      radiusTop:said&&frame?0:radius,radiusBottom:radius,
+      radiusTop:(said&&frame)||photo?0:radius,radiusBottom:radius,
       rotation:!said&&kind!=='principle'?NOTE_TILT:0,origin:{x:cx,y:(y0+y1)/2}}};
   return {blob,width,height,fallbackFont,layout};
 }

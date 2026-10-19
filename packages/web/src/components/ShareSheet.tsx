@@ -65,10 +65,12 @@ const cq = (px: number, cardWidth: number) => `${(px / cardWidth) * 100}cqw`;
     Instead the field is laid out `floorPx / shownPx` times larger — box,
     padding, corners and text alike, so every line breaks where the drawn
     one does — and scaled back down by the same factor. Its computed size
-    stays at the floor (no zoom); what you see is the home ratio. 1 when the
-    shown words are already at or above the floor, or nothing is measured. */
+    stays at the floor (no zoom); what you see is the home ratio. Below 1
+    where the card is shown LARGER than the floor (a tablet): the floor
+    pins the field's size there too, so it is laid out smaller and scaled
+    up to the drawn size. 1 when nothing is measured. */
 export function touchEditorScale(shownPx: number, floorPx: number): number {
-  if (!(shownPx > 0) || !(floorPx > 0) || floorPx <= shownPx) return 1;
+  if (!(shownPx > 0) || !(floorPx > 0)) return 1;
   return floorPx / shownPx;
 }
 
@@ -124,6 +126,10 @@ export function ShareSheet({ target, locale, onClose }: {
   const [words, setWords] = useState(target.text);
   const [editing, setEditing] = useState(false);
   const [layout, setLayout] = useState<ShareCardLayout | null>(null);
+  /* Whether the last draw failed. Sticky until a draw succeeds — not cleared
+     when the next attempt starts — so the field keeps its place and its
+     solid look while the person types the fix. */
+  const [failed, setFailed] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const inlineRef = useRef<HTMLTextAreaElement | null>(null);
   const [touchScale, setTouchScale] = useState(1);
@@ -202,9 +208,15 @@ export function ShareSheet({ target, locale, onClose }: {
           previewUrl.current = url;
           setPreview({ key: contentKey, url, blob: result.blob });
           setLayout(result.layout);
+          setFailed(false);
         })
         .catch((error) => {
-          if (alive) setRenderError(error instanceof ArtifactLayoutError ? error.code : "unavailable");
+          if (!alive) return;
+          setRenderError(error instanceof ArtifactLayoutError ? error.code : "unavailable");
+          setFailed(true);
+          /* Never drawn: the field sits on a blank bubble from now until a
+             draw succeeds, through every keystroke in between. */
+          setLayout((prior) => prior ?? BLANK_LAYOUT);
         });
     }, 150);
     return () => {
@@ -229,8 +241,8 @@ export function ShareSheet({ target, locale, onClose }: {
      over it, shown solid so the stale drawing under it cannot be read as the
      words, and the reason sits beneath. Before any card has drawn, the field
      sits on a blank bubble (`BLANK_LAYOUT`). */
-  const shownLayout = layout ?? (renderError ? BLANK_LAYOUT : null);
-  const live = Boolean(renderError) || !preview;
+  const shownLayout = layout;
+  const live = failed || !preview;
   const hasEditor = Boolean(shownLayout);
   useLayoutEffect(() => {
     const layout = shownLayout;

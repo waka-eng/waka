@@ -204,7 +204,7 @@ it("without a share sheet or a clipboard, sharing saves the image", async () => 
 it("scales the editor so its text can sit at the 16px floor and still match the drawn words", () => {
   expect(touchEditorScale(16, 16)).toBe(1);
   expect(touchEditorScale(10, 16)).toBeCloseTo(1.6);
-  expect(touchEditorScale(20, 16), "words shown above the floor are never shrunk").toBe(1);
+  expect(touchEditorScale(20, 16), "shown above the floor (a tablet): laid out smaller, scaled up").toBeCloseTo(0.8);
   expect(touchEditorScale(0, 16), "nothing measured: no scale").toBe(1);
   expect(touchEditorScale(10, Number.NaN)).toBe(1);
 });
@@ -305,6 +305,40 @@ it("opens on a blank bubble with the field when the kept words cannot be drawn a
   expect(host.querySelector("[role=alert]")?.textContent).toContain("Shorten the words");
 });
 
+it("keeps the blank bubble's field mounted and focused through every keystroke of the fix", async () => {
+  vi.mocked(renderShareCard).mockRejectedValue(new ArtifactLayoutError("too_long"));
+  await mount();
+  await settle();
+  const area = host.querySelector<HTMLTextAreaElement>(".jar-share-inline")!;
+  for (const text of [`${SAVE.text}!`, `${SAVE.text}!!`, `${SAVE.text}!!!`]) {
+    await typeInto(area, text);
+    /* mid-redraw (the error is cleared while the next attempt runs) and after it */
+    expect(host.querySelector(".jar-share-inline"), "the same field, still there").toBe(area);
+    expect(document.activeElement).toBe(area);
+    expect(area.classList.contains("jar-share-inline--live")).toBe(true);
+    await settle();
+    expect(host.querySelector(".jar-share-inline")).toBe(area);
+    expect(document.activeElement).toBe(area);
+  }
+});
+
+it("when the clipboard refuses the image, sharing saves it instead", async () => {
+  const write = vi.fn(async () => { throw new DOMException("Denied", "NotAllowedError"); });
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { write } });
+  vi.stubGlobal("ClipboardItem", class { constructor(readonly items: Record<string, Blob>) {} });
+  try {
+    await mount();
+    await settle();
+    await act(async () => button("Share image")!.click());
+    expect(write).toHaveBeenCalledOnce();
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    expect(host.textContent).toContain("Image download started.");
+    expect(host.textContent).not.toContain("Sharing isn’t available here.");
+  } finally {
+    Reflect.deleteProperty(navigator, "clipboard");
+  }
+});
+
 it("turns the kept note's field with the note, about the note's centre", async () => {
   const tilted: ShareCardLayout = { ...LAYOUT, edit: { ...LAYOUT.edit, rotation: -0.026, origin: { x: 540, y: 460 } } };
   vi.mocked(renderShareCard).mockImplementation(async (content) => ({ blob: new Blob([content.items[0]!.text], { type: "image/png" }), width: 1080, height: 1080, fallbackFont: false, layout: tilted }));
@@ -328,11 +362,19 @@ it("gives the field's lines a little slack so the widest one never wraps early",
   expect(px).toBe(2);
 });
 
-it("wraps the field greedily, as the canvas does, with no scrollbar at rest or while typing", () => {
+it("wraps the field as the canvas does, with no scrollbar unless the words failed to fit", () => {
   const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../src/styles/chrome.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   const rule = (sel: string) => css.split("\n").find((line) => line.startsWith(`${sel} {`)) ?? "";
-  expect(rule(".jar-thing-share .jar-share-inline")).toMatch(/text-wrap:wrap;/);
-  expect(rule(".jar-thing-share .jar-share-inline")).toMatch(/overflow:hidden;/);
+  const base = rule(".jar-thing-share .jar-share-inline");
+  expect(base).toMatch(/text-wrap:wrap;/);
+  /* at spaces only, so a Korean word is never split; inside a word only when it is wider than the line */
+  expect(base).toMatch(/word-break:keep-all;/);
+  expect(base).toMatch(/overflow-wrap:anywhere;/);
+  expect(base).toMatch(/hyphens:none;/);
+  expect(base).toMatch(/overflow:hidden;/);
   expect(rule(".jar-thing-share .jar-share-inline:focus")).toMatch(/overflow:hidden;/);
-  expect(css).not.toMatch(/\.jar-share-inline[^{]*\{[^}]*overflow:(auto|scroll)/);
+  /* after a failed draw, all the words can be seen, to know what to cut — and only then */
+  expect(rule(".jar-thing-share .jar-share-inline.jar-share-inline--live")).toMatch(/overflow:auto;/);
+  const scrolling = [...css.matchAll(/([^{}\n]*\.jar-share-inline[^{]*)\{[^}]*overflow:(auto|scroll)/g)].map((m) => m[1]!.trim());
+  expect(scrolling).toEqual([".jar-thing-share .jar-share-inline.jar-share-inline--live"]);
 });
