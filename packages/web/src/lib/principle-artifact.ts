@@ -121,6 +121,19 @@ function seeded(seed:number):()=>number{
   return()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
 }
 
+/** THE SIZES A HELD CARD (a note, a thought) OR A PRINCIPLE TRIES, largest
+ * first, in steps of 2 and always ending on the floor: held 51 → 28,
+ * principle 70 → 36. The tops carry the ~6% bump (founder, 2026-10-18, "very
+ * slightly bigger"); the floors are the ones before it, so every card that
+ * fitted before the bump still fits. */
+export function fitSizes(kind:'held'|'principle'):number[]{
+  const [top,floor]=kind==='held'?[51,28]:[70,36];
+  const sizes:number[]=[];
+  for(let size=top;size>floor;size-=2)sizes.push(size);
+  sizes.push(floor);
+  return sizes;
+}
+
 /** THE GRAIN, BUILT ONCE. ±GRAIN_SPAN on every channel, seeded, as a small
  * tile kept for the life of the page: the card redraws a beat after each
  * keystroke, and reading and writing every pixel of a 1080 card each time
@@ -262,10 +275,11 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
   let bubbleW=width-inset*2;const textW=bubbleW-pad*2;
   /* ═══ VERY SLIGHTLY BIGGER WORDS ═════════════════════════════════════
      Founder, 2026-10-18: "make the font very slightly bigger." Every kind's
-     words are WORD_SCALE (~6%) larger: the held and principle fits start and
-     stop that much higher, and the top of mind's home measure is 13.75px on
-     lines scaled with it (below). */
-  const sizeMax=held?51:70,sizeMin=held?30:38,leading=spoken?HOME_WORD_LINE/HOME_WORD_SIZE:held?1.42:1.32;
+     words are WORD_SCALE (~6%) larger where they have room: the held and
+     principle fits START that much higher (`fitSizes`), and the top of
+     mind's home measure is 13.75px on lines scaled with it (below). The
+     floors do not move, so nothing that fitted before stops fitting. */
+  const leading=spoken?HOME_WORD_LINE/HOME_WORD_SIZE:held?1.42:1.32;
   const photo=content.photo&&content.photo.width>0&&content.photo.height>0?content.photo:null;
   const photoH=photo?Math.round(Math.min((bubbleBottomMax-bubbleTop)*0.42,textW*photo.height/photo.width)):0;
   const photoSpace=photo?photoH+36:0;
@@ -311,7 +325,7 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
     being=Math.round(homeBeing*k);
     beingLeft=(width-being)/2;
   }else{
-    for(let size=sizeMax;size>=sizeMin;size-=2){
+    for(const size of fitSizes(held?'held':'principle')){
       ctx.font=`${wordWeight} ${size}px ${family}`;
       const items=content.items.map(item=>({...item,lines:wrapArtifactText(item.text,textW,value=>ctx.measureText(value).width)}));
       const total=items.reduce((sum,item)=>sum+item.lines.length*size*leading+(item.label||item.date?50:0),0)+(items.length-1)*44;
