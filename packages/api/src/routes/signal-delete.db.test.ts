@@ -6,15 +6,8 @@ import { Hono } from "hono";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
-import { requestPrincipleRefresh } from "../lib/principle-status.js";
+import { drainBackgroundJobs } from "../lib/queue.js";
 import { createSignalRoutes, deleteProfileSignal } from "./signals.js";
-
-/* the fallback's own enqueue is the normal one, pinned elsewhere; here only
-   whether it is asked for */
-vi.mock("../lib/principle-status.js", async (actual) => ({
-  ...(await actual<typeof import("../lib/principle-status.js")>()),
-  requestPrincipleRefresh: vi.fn(async () => ({})),
-}));
 
 let t: TestDatabase;
 let sequence = 0;
@@ -159,14 +152,13 @@ describe("DELETE /api/signals/:signalId reconciles principles", () => {
     expect(row!.unsupported_at, "the late citer was reconciled too").not.toBeNull();
   });
 
-  it("still deletes, and falls back to the profile principles refresh, when the reconcile fails", async () => {
+  it("still deletes, and forces a principles reconcile for the profile, when the reconcile fails", async () => {
     const owner = await person();
     const { principleId, signalIds } = await principleOnThreeSignals(owner.profileId, true);
     await t.sql.unsafe(`CREATE FUNCTION refuse_principle_write() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN RAISE EXCEPTION 'principles unavailable'; END $$`);
     await t.sql.unsafe(`CREATE TRIGGER refuse_principle_write BEFORE UPDATE OR DELETE ON principles
       FOR EACH ROW EXECUTE FUNCTION refuse_principle_write()`);
-    vi.mocked(requestPrincipleRefresh).mockClear();
     let response: Response;
     try {
       response = await app(owner).request(`/api/signals/${signalIds[2]}`, { method: "DELETE" });
@@ -176,7 +168,16 @@ describe("DELETE /api/signals/:signalId reconciles principles", () => {
     }
     expect(response.status, "the delete committed; the reconcile is follow-up work").toBe(200);
     expect(await t.sql`SELECT id FROM signals WHERE id=${signalIds[2]}`).toHaveLength(0);
-    expect(requestPrincipleRefresh).toHaveBeenCalledWith(expect.anything(), owner.profileId);
-    expect(await t.sql`SELECT id FROM principles WHERE id=${principleId}`).toHaveLength(1);
+    const [before] = await t.sql`SELECT unsupported_at FROM principles WHERE id=${principleId}`;
+    expect(before!.unsupported_at, "nothing was reconciled yet").toBeNull();
+
+    /* Forced: this profile is no longer eligible for principles generation
+       (two signals left), so the material-keyed refresh would never come. */
+    const jobs = await t.sql`SELECT id FROM background_jobs
+      WHERE profile_id=${owner.profileId} AND type='refresh_principles' AND payload->>'reconcile' = 'true'`;
+    expect(jobs, "a forced reconcile is queued").toHaveLength(1);
+    await drainBackgroundJobs({ limit: 5 });
+    const [after] = await t.sql`SELECT unsupported_at FROM principles WHERE id=${principleId}`;
+    expect(after!.unsupported_at, "the forced job revisited the unsupported principle").not.toBeNull();
   });
 });
