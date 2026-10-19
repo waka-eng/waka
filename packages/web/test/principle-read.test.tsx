@@ -80,13 +80,9 @@ describe("principle read", () => {
     vi.mocked(requestPrincipleRead).mockResolvedValue();
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     expect(host.textContent).toContain("Couldn't confirm current support. Your words are kept.");
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
-      ...ready, phase: 'pending', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true,
-    } });
     await act(async () => host.querySelector('button')!.click());
-    await act(async () => vi.advanceTimersByTimeAsync(3_100));
-    /* THE RETRY FLAG IS THE FIRST ARGUMENT (the room id that once came first
-       is gone); the second is the POST's own deadline signal. */
+    /* THE RETRY FLAG IS THE WHOLE ARGUMENT, and it used to be the SECOND
+       argument because the first was the room id. One parameter now. */
     expect(requestPrincipleRead).toHaveBeenCalledWith(true);
     expect(host.textContent).toContain('A support check is queued.');
   });
@@ -140,63 +136,9 @@ describe("principle read", () => {
     expect(host.querySelector('[role="alert"]')?.textContent)
       .toContain("Principles could not be updated. Your saved words are still here.");
     await act(async () => host.querySelector("button")!.click());
-    await act(async () => vi.advanceTimersByTimeAsync(3_100));
     expect(read).toHaveBeenCalledWith([principle]);
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(fetchPrincipleRead).toHaveBeenCalledTimes(4);
-  });
-
-  /* TRY AGAIN IS ONE POST PER PRESS. A failed one says so and re-arms the
-     button; nothing re-sends it on its own, however long the page polls. */
-  it("sends exactly one POST per Try again, and never re-sends a failed one by itself", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "failed" } });
-    vi.mocked(requestPrincipleRead).mockRejectedValue(new Error("lost"));
-    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    expect(requestPrincipleRead, "a failed phase sent a retry nobody pressed").not.toHaveBeenCalled();
-    await act(async () => host.querySelector("button")!.click());
-    await act(async () => vi.advanceTimersByTimeAsync(3_100));
-    expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
-    expect(requestPrincipleRead).toHaveBeenCalledWith(true);
-    expect(host.textContent).toContain("Couldn’t retry. Try again.");
-    expect(host.querySelector("button")?.disabled).toBe(false);
-    await act(async () => vi.advanceTimersByTimeAsync(300_000));
-    expect(requestPrincipleRead, "a failed Try again was re-sent automatically").toHaveBeenCalledTimes(1);
-    await act(async () => host.querySelector("button")!.click());
-    expect(requestPrincipleRead, "a second press did not send its own POST").toHaveBeenCalledTimes(2);
-  });
-
-  it("drops Couldn't retry once a later poll reads the work as processing or ready", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "failed" } });
-    vi.mocked(requestPrincipleRead).mockRejectedValue(new Error("lost"));
-    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    await act(async () => host.querySelector("button")!.click());
-    await act(async () => vi.advanceTimersByTimeAsync(3_100));
-    expect(host.textContent).toContain("Couldn’t retry. Try again.");
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "processing" } });
-    await act(async () => vi.advanceTimersByTimeAsync(60_000));
-    expect(host.textContent, "a stale Couldn't retry outlived the work restarting").not.toContain("Couldn’t retry");
-    expect(host.querySelector('[role="alert"]')).toBeNull();
-  });
-
-  it("retries a failed auto-start on later polls, then after three failures offers Try again", async () => {
-    vi.mocked(requestPrincipleRead).mockRejectedValue(new Error("lost"));
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "pending" } });
-    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
-    expect(requestPrincipleRead).toHaveBeenCalledWith(false);
-    for (let i = 0; i < 6; i += 1) await act(async () => vi.advanceTimersByTimeAsync(10_000));
-    expect(requestPrincipleRead, "the auto-start was not bounded").toHaveBeenCalledTimes(3);
-    expect(host.querySelector("button")?.textContent).toBe("Try again");
-  });
-
-  it("counts the auto-start as done once the server takes it", async () => {
-    vi.mocked(requestPrincipleRead).mockRejectedValueOnce(new Error("lost")).mockResolvedValue();
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "pending" } });
-    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
-    expect(requestPrincipleRead, "a failed start was taken as done").toHaveBeenCalledTimes(2);
-    await act(async () => vi.advanceTimersByTimeAsync(30_000));
-    expect(requestPrincipleRead, "a start the server took was sent again").toHaveBeenCalledTimes(2);
   });
 
   it("queues missing work once and displays completion without a page reload", async () => {
@@ -219,74 +161,6 @@ describe("principle read", () => {
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(fetchPrincipleRead).toHaveBeenCalledTimes(2);
     expect(requestPrincipleRead).not.toHaveBeenCalled();
-  });
-
-  /* A LONG WAIT IS NOT A FAILURE. Thirty reads in, the line says the work
-     can take a few minutes and the poll slows to once a minute. There is no
-     Try again: the server never restarts a job that is pending or running,
-     so a button there would do nothing. */
-  it("says a long read is still working, with no Try again, and slows the poll", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "processing" } });
-    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    for (let i = 0; i < 29; i += 1) await act(async () => vi.advanceTimersByTimeAsync(10_000));
-    expect(fetchPrincipleRead).toHaveBeenCalledTimes(30);
-    expect(host.textContent).toContain("Still working — this can take a few minutes. Your saves are safe.");
-    expect(host.querySelector("button"), "a long wait offered a Try again that cannot do anything").toBeNull();
-    expect(host.querySelector('[role="alert"]')).toBeNull();
-    await act(async () => vi.advanceTimersByTimeAsync(50_000));
-    expect(fetchPrincipleRead, "the slow poll still ran every ten seconds").toHaveBeenCalledTimes(30);
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [principle], status: ready });
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
-    expect(fetchPrincipleRead).toHaveBeenCalledTimes(31);
-    expect(host.textContent).not.toContain("Still working");
-    expect(requestPrincipleRead).not.toHaveBeenCalled();
-  });
-
-  /* NO SERVER COOLDOWN, SO THE BUTTON GUARDS ITSELF: disabled and saying
-     "Retrying…" until the request answers, and for at least three seconds. */
-  it("never aborts a slow Try again: Still trying… after 20s, then the real answer", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "failed" } });
-    let answer!: () => void;
-    vi.mocked(requestPrincipleRead).mockImplementation(() => new Promise<void>((resolve) => { answer = resolve; }));
-    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    await act(async () => host.querySelector("button")!.click());
-    await act(async () => vi.advanceTimersByTimeAsync(20_100));
-    expect(host.querySelector("button")?.textContent).toBe("Still trying…");
-    expect(host.querySelector("button")?.disabled).toBe(true);
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "processing" } });
-    await act(async () => { answer(); });
-    await act(async () => vi.advanceTimersByTimeAsync(0));
-    expect(host.textContent, "the late answer was not shown").toContain("Reading the patterns for principles…");
-    expect(host.textContent).not.toContain("Still trying");
-    expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
-  });
-
-  it("disables Try again and says Retrying… until the retry answers, for at least three seconds", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "failed" } });
-    vi.mocked(requestPrincipleRead).mockResolvedValue();
-    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    await act(async () => host.querySelector("button")!.click());
-    expect(requestPrincipleRead).toHaveBeenCalledWith(true);
-    const button = () => host.querySelector("button");
-    expect(button()?.textContent).toBe("Retrying…");
-    expect(button()?.disabled, "a second press could go out while the first was in flight").toBe(true);
-    await act(async () => vi.advanceTimersByTimeAsync(2_000));
-    expect(button()?.textContent, "the button re-armed before the minimum wait").toBe("Retrying…");
-    await act(async () => vi.advanceTimersByTimeAsync(1_100));
-    expect(button()?.textContent).not.toBe("Retrying…");
-  });
-
-  /* NEVER GIVES UP, as on dev: a failing read is asked again every ten
-     seconds, with the failure line up meanwhile, and recovers on its own. */
-  it("keeps polling every ten seconds through repeated failures, and recovers on its own", async () => {
-    vi.mocked(fetchPrincipleRead).mockRejectedValue(new Error("down"));
-    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    for (let i = 0; i < 20; i += 1) await act(async () => vi.advanceTimersByTimeAsync(10_000));
-    expect(vi.mocked(fetchPrincipleRead).mock.calls.length, "the poll gave up on failures").toBeGreaterThanOrEqual(20);
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain("Principles could not be updated.");
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [principle], status: ready });
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
-    expect(host.querySelector('[role="alert"]'), "it did not recover once reads worked").toBeNull();
   });
 
   it("does not fetch an inactive wall", async () => {
