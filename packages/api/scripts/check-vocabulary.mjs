@@ -169,7 +169,7 @@
  *
  * Run: node scripts/check-vocabulary.mjs        (also runs in `pnpm test`)
  */
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -964,10 +964,30 @@ function classify(filename) {
  * package is clean today and says nothing about whether the walk still walks.
  */
 const realListing = (dir) =>
-  readdirSync(dir).map((name) => ({
-    name,
-    isDirectory: statSync(join(dir, name)).isDirectory(),
+  /* The entry's type comes with the directory read: a separate stat raced
+     the `*.probe.ts` fixtures other suites plant and remove in parallel. */
+  readdirSync(dir, { withFileTypes: true }).map((entry) => ({
+    name: entry.name,
+    isDirectory: entry.isDirectory(),
   }));
+
+/**
+ * A reader that tolerates exactly one thing: a file that was listed and is no
+ * longer there (another suite's fixture, removed while this ran). It is
+ * recorded in `vanished` and answers null; any other failure — or a read that
+ * fails on a file still present — throws as before.
+ */
+const whileListed = (readSource, vanished) => (rel) => {
+  try {
+    return readSource(rel);
+  } catch (error) {
+    if (error?.code === "ENOENT" && !existsSync(join(PKG, rel))) {
+      vanished.add(rel);
+      return null;
+    }
+    throw error;
+  }
+};
 
 /**
  * WHICH FILES THE SCAN WILL READ, AND WHICH IT REFUSES.
@@ -1091,7 +1111,10 @@ function scanFiles(files, readSource, used) {
   const read = [];
   const silent = [];
   for (const file of files) {
-    const scan = scanSource(readSource(file), file, used);
+    const source = readSource(file);
+    /* null only for a file removed after it was listed — see whileListed */
+    if (source === null) continue;
+    const scan = scanSource(source, file, used);
     read.push(file);
     if (!(scan.tokens > 0)) silent.push(file);
     for (const hit of scan.found) violations.push({ ...hit, file });
@@ -2678,9 +2701,10 @@ if (discovered.refuse.length > 0) {
 
 const scanned = new Set(discovered.scan);
 
+const vanished = new Set();
 const { violations, blind, read, silent } = scanFiles(
   [...scanned].map((f) => relative(PKG, f)),
-  (rel) => readFileSync(join(PKG, rel), "utf8"),
+  whileListed((rel) => readFileSync(join(PKG, rel), "utf8"), vanished),
   allowancesUsed,
 );
 
@@ -2751,7 +2775,7 @@ if (blind.length > 0) {
  * `> 0` is the boundary and it is asserted at one file as well as at several —
  * see the note on the blind check above for why that needed saying out loud.
  */
-const shouldHaveRead = [...scanned].map((f) => relative(PKG, f));
+const shouldHaveRead = [...scanned].map((f) => relative(PKG, f)).filter((f) => !vanished.has(f));
 const wasRead = new Set(read);
 const neverRead = shouldHaveRead.filter((f) => !wasRead.has(f));
 if (neverRead.length > 0) {

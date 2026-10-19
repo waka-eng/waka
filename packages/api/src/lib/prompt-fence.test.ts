@@ -16,26 +16,20 @@
  * off disk, which is the only way a rule about where text may appear can be
  * checked — a fixture would be asserting the rule against a copy of itself.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { listSourceFiles, readListedFile } from "../../test/helpers/source-walk.js";
 import { fence, neutralizeFenceMarkers } from "./prompt-fence.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..");
 /** The module that owns the marker, and the only file allowed to write it. */
 const OWNER = join(SRC, "lib", "prompt-fence.ts");
 
-function sources(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    if (statSync(path).isDirectory()) sources(path, out);
-    else if (path.endsWith(".ts") && !path.endsWith(".test.ts")) out.push(path);
-  }
-  return out;
-}
+const sources = (dir: string): string[] =>
+  listSourceFiles(dir, (path) => path.endsWith(".ts") && !path.endsWith(".test.ts"));
 
 /** Comments may name the marker; this is about what the code emits. */
 const withoutComments = (code: string): string =>
@@ -49,7 +43,7 @@ describe("where a prompt delimiter may be written", () => {
          produces it — whereas `>>>` falls out of nested generics all the
          time (`Promise<Array<Array<T>>>`), which is what the first version
          of this gate flagged three innocent files for. */
-      .filter((path) => /<{3}/.test(withoutComments(readFileSync(path, "utf8"))));
+      .filter((path) => /<{3}/.test(withoutComments(readListedFile(path) ?? "")));
 
     expect(
       offenders.map((path) => path.slice(SRC.length + 1)),
