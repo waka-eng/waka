@@ -652,7 +652,15 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         it was, on a product whose other screens have one bar and two corner
         buttons. The corners are the navigation here as everywhere. */}
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
-      {error?<div className="chat-notice" role="alert">{error} {(unsent&&!draft?.pending&&Boolean(draft?.content.trim()||draft?.attachments?.length))||(draft?.pending&&(!id||conversation))?<button type="button" disabled={busy||loading} onClick={()=>void save()}>{say('worldConversationRetry')}</button>
+      {error?<div className="chat-notice" role="alert">{error} {(unsent&&!draft?.pending&&Boolean(draft?.content.trim()||draft?.attachments?.length))||(draft?.pending&&(!id||conversation))?
+        /* RETRY ONLY WHERE IT WORKS (review): `save` stops for every reason
+           `whyNoSend` names, so a Retry beside one of them was a button that
+           did nothing. A conversation that is GONE offers its way out — a new
+           one — instead; any other hold offers nothing here, and the send
+           button's own title says why. (Sending is the press already
+           running: Retry stays, disabled, so it does not blink away.) */
+        reply.terminal==='gone'?<button type="button" disabled={busy} onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button>
+        :!whyNoSend||whyNoSend==='worldChatSending'?<button type="button" disabled={busy||loading} onClick={()=>void save()}>{say('worldConversationRetry')}</button>:null
         /* A pending message on a conversation that could not be read cannot be
            re-sent (`save` needs the conversation), so the act offered is the
            re-read that brings it back (review): Retry only where it works. */

@@ -265,6 +265,36 @@ it('offers the re-read, not a dead Retry, when a pending message sits on an unre
   await click('Try again');
   expect(host.querySelector('.chat-notice')).toBeNull();
 });
+/* Review: the notice's Retry is offered only where `save` would act. Once the
+   conversation is GONE (a 404 reply read), Retry would do nothing, so the
+   notice offers the way out instead — a new chat. */
+it('offers a new chat, not a dead Retry, beside a failed send once the conversation is gone',async()=>{
+  stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
+  vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:true});
+  replyState={...replyState,revision:1};
+  await mount();await tick(0);
+  vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Response lost'));
+  await type('Still there?');await click('Send');
+  const acts=()=>[...host.querySelectorAll('.chat-notice[role="alert"] button')].map(b=>b.textContent);
+  expect(acts()).toContain('Retry this message');
+  vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:404,message:'Gone'}));
+  await act(async()=>{window.dispatchEvent(new Event('focus'));});await tick(1000);   // the next re-read finds it gone
+  expect(host.textContent).toContain('This reply can’t be found anymore.');
+  expect(acts()).not.toContain('Retry this message');
+  expect(acts()).toContain('New chat');
+});
+/* …and any other hold (here the draft can no longer be written down) offers
+   no Retry at all: the send button's own title names the reason. */
+it('offers no Retry beside a failed send while the draft cannot be saved',async()=>{
+  await mount();
+  vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Response lost'));
+  await type('A thought');await click('Send');
+  const acts=()=>[...host.querySelectorAll('.chat-notice[role="alert"] button')].map(b=>b.textContent);
+  expect(acts()).toContain('Retry this message');
+  vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('Quota');});
+  await click('Retry this message');
+  expect(acts()).not.toContain('Retry this message');
+});
 it('restores unsent words after reopening and forks edits instead of overwriting the previous writer',async()=>{
   /* THE DRAFT PICKER WENT; THE FORKING DID NOT. Two tabs still keep two
      drafts rather than one tab overwriting the other's sentence — what
