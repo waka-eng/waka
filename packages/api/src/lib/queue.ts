@@ -949,8 +949,11 @@ export async function drainBackgroundJobs(
         });
         continue;
       }
-      // Malformed model output repeats on retry (temperature 0): terminal at once.
-      const exhausted = job.attempts >= job.maxAttempts || err instanceof MalformedModelOutputError;
+      // Malformed model output mostly repeats at temperature 0: one retry (for
+      // a transient glitch), then terminal. The previous attempt's recorded
+      // error is what says this is the second malformed answer.
+      const exhausted = job.attempts >= job.maxAttempts || (err instanceof MalformedModelOutputError
+        && (job.lastError ?? "").includes("malformed_model_output"));
       const failedAt = clock();
       await store.markFailedOrPending(job, err, exhausted, failedAt);
       if (exhausted) result.failed += 1;

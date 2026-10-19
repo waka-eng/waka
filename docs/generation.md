@@ -822,10 +822,10 @@ minted a duplicate signal):
   the dedupe band of anything the earlier attempt already minted.
 
 - **The model answered in the wrong shape** — an extraction reply that parses
-  but fails the schema. At temperature 0 the same input brings back the same
-  reply, so it is not retried: the job is settled `failed` once with
-  `malformed_model_output`. It is never recorded as "no candidates", and the
-  model is billed for one call only.
+  but fails the schema. At temperature 0 the same input mostly brings back the
+  same reply, so it gets exactly one retry (for a transient glitch), and then
+  the job is settled `failed` with `malformed_model_output`. It is never
+  recorded as "no candidates", and it is billed for two calls at most.
 
 Whole-artifact synthesis and declaration routing throw on **both** absences
 — an artifact must never record a decision the model did not make.

@@ -113,17 +113,23 @@ it('leaves a lease past one stale interval but under two alone — a slow worker
   await drainBackgroundJobs({limit:5,now,processor:vi.fn(async()=>{})});
   expect((await t.sql`SELECT status,attempts FROM background_jobs WHERE id=${slow.id}`)[0]).toMatchObject({status:'running',attempts:3});
 });
-it('records malformed model output once as a terminal failure, never a billed retry',async()=>{
-  /* temperature 0 repeats the same malformed reply, so a retry only pays for it again */
+it('gives malformed model output exactly one retry, then records it as a terminal failure',async()=>{
+  /* temperature 0 mostly repeats the same malformed reply: one retry covers a
+     transient glitch, a third call would only pay for the same answer again */
   const p=await owner();
   const [job]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,run_after,max_attempts)
     VALUES(${p},'derive_signals','{}','2026-10-05T11:00:00Z',3) RETURNING id`;
   const processor=vi.fn(async()=>{throw new MalformedModelOutputError('signal extraction');});
-  expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:1,failed:1,retried:0});
-  expect(processor).toHaveBeenCalledOnce();
-  const [row]=await t.sql`SELECT status,attempts,last_error FROM background_jobs WHERE id=${job.id}`;
-  expect(row).toMatchObject({status:'failed',attempts:1});
-  expect(row!.last_error).toContain('malformed_model_output');
+  const row=async()=>(await t.sql`SELECT status,attempts,last_error FROM background_jobs WHERE id=${job.id}`)[0];
+  expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:1,failed:0,retried:1});
+  expect(await row()).toMatchObject({status:'pending',attempts:1});
+  const later=new Date(now.getTime()+3600000);
+  expect(await drainBackgroundJobs({limit:5,now:later,processor})).toMatchObject({claimed:1,failed:1,retried:0});
+  expect(processor).toHaveBeenCalledTimes(2);
+  expect(await row()).toMatchObject({status:'failed',attempts:2});
+  expect((await row())!.last_error).toContain('malformed_model_output');
+  expect(await drainBackgroundJobs({limit:5,now:new Date(later.getTime()+3600000),processor})).toMatchObject({claimed:0});
+  expect(processor,'never a third call').toHaveBeenCalledTimes(2);
 });
 it('keeps draining when settling exhausted leases fails',async()=>{
   const p=await owner();

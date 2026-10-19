@@ -419,9 +419,9 @@ export class ModelDidNotAnswerError extends Error {
 
 /**
  * The model answered, but not in the shape asked for. At temperature 0 the same
- * input repeats the same reply, so a retry only pays for it again: the queue
- * records it once as a terminal failure (`malformed_model_output`) rather than
- * retrying, and never as an empty result.
+ * input mostly repeats the same reply, so the queue retries it exactly once and
+ * then records it as a terminal failure (`malformed_model_output`) — never as
+ * an empty result.
  */
 export class MalformedModelOutputError extends ModelDidNotAnswerError {
   readonly reason = "malformed_model_output" as const;

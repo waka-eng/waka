@@ -630,8 +630,9 @@ export function parseSignalCandidates(payload: unknown, input?: SignalCandidateE
       issues: parsed.error.issues,
     });
     /* Not "no candidates": an empty result marks the capture derived-with-
-       nothing for good. Not a retry either: at temperature 0 the same reply
-       comes back. A distinct terminal failure, recorded once. */
+       nothing for good. Nor the ordinary retry budget: at temperature 0 the
+       same reply mostly comes back. One retry, then a distinct terminal
+       failure (see the drain). */
     throw new MalformedModelOutputError("signal extraction", parsed.error);
   }
 
