@@ -343,6 +343,24 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   color: var(--ink);
 }
 
+/* THE GLYPH IN FRONT OF "Inspiration" AND "Chat" (founder, 2026-10-18).
+   The same `HomeActionIcon` the tools draw, at the tools' own 1.4em of the
+   label's `--t-meta`, so the 1.7/24 stroke lands at a 12px stem and the
+   glyph sits beside the word as a peer. No colour of its own: it takes the
+   item's `currentColor`, so it is muted, and lit on hover and focus, with
+   the word it belongs to. Only the inline row gains the glyph and a small
+   gap; the item's height, padding and 44px floor are untouched. */
+.waka-dock-item:has(> .waka-dock-item-icon) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.waka-dock-item-icon {
+  flex: none;
+  width: 1.4em;
+  height: 1.4em;
+}
+
 /* THE ROW YOU ARE STANDING ON CANNOT ANNOUNCE FOCUS WITH LIGHT, because it
    is already the lit one — `--here` and `:focus-visible` both resolved to
    `--ink`, so tabbing onto the current place changed nothing on screen. The
