@@ -99,6 +99,8 @@ import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
+import { wordsCanStand } from '../lib/note-words';
+import { inspirationPreview } from '../lib/inspiration-preview';
 import { candidateSaveRequestId } from '../lib/harvest';
 import { inspirationInputMedia, inspirationLinks, inspirationWithPendingLink, removeInspirationLink } from '../lib/inspiration-input';
 import { inspectInspirationPhoto, PHOTO_ACCEPT, PhotoRefused } from '../lib/inspiration-photo';
@@ -635,6 +637,14 @@ interface PanelData {
   id: string;
   detail: InspirationDetail | null;
   partial: boolean;
+  /** The full read is still in flight after the panel gave up waiting for it
+      (the two-second rule below), or an edit is reading the words fresh: the
+      panel says "Opening this note…" and takes the detail when it lands. */
+  pending?: boolean;
+  /** A memory with no detail (one kept a moment ago, or a fixture's) whose
+      words were just kept: what it now says, so the card shows them and the
+      next edit starts from them. */
+  keptText?: string;
 }
 
 /**
@@ -1317,6 +1327,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      again — releases. It lags `selectedId` at BOTH ends: it does not appear
      until its content is whole, and it stays mounted through its fade-out. */
   const [panel, setPanel] = useState<PanelData | null>(null);
+  const panelNowRef = useRef<PanelData | null>(null);
+  /** The panel's current read request (see `retryPanelDetail`). */
+  const panelReadTokenRef = useRef(0);
+  panelNowRef.current = panel;
   /**
    * A SAVE OR THE TOP OF MIND, BEING MADE INTO A CARD.
    *
@@ -3223,6 +3237,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   }, [storageScope?.profileId]);
 
 const AWAY_LONG_ENOUGH_MS = 30_000;
+/** How long a card's Try again may wait before it is a failed read again. */
+const RETRY_READ_LIMIT_MS = 20_000;
   useEffect(() => {
     let hiddenAt: number | null = null;
     const onVisibility = () => {
@@ -4284,6 +4300,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, [panel?.id]);
 
   useEffect(() => {
+    /* another memory (or none) is selected: every read still out for the
+       last one is no longer the panel's (see `retryPanelDetail`) */
+    panelReadTokenRef.current += 1;
     if (!selectedId) {
       setPanelOpen(false);
       if (!hasPanelRef.current) return undefined;
@@ -4356,22 +4375,68 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        from nothing, and back to nothing. */
     if (!steppingRef.current && !panelOpenRef.current) setPanelOpen(false);
     let done = false;
-    const show = (detail: InspirationDetail | null) => {
+    let cancelled = false;
+    const show = (detail: InspirationDetail | null, pending = false) => {
       if (done) return;
       done = true;
       steppingRef.current = false;
       window.clearTimeout(timer);
-      setPanel({ id: selectedId, detail, partial: detail === null });
+      setPanel({ id: selectedId, detail, partial: detail === null, pending });
       setPanelOpen(true);
     };
-    /* the network is not allowed to hold a reading hostage */
+    /* the network is not allowed to hold a reading hostage: at two seconds
+       the panel appears partial — "Couldn't load the rest", with Try again —
+       and from then on THIS read's answer is ignored (dev's rule): Try again
+       is the way on, and a late first answer could otherwise land over a
+       retry's or over words just kept. */
     const timer = window.setTimeout(() => show(null), 2000);
-    loadDetail(fetchId).then(show);
+    loadDetail(fetchId).then((detail) => {
+      if (cancelled) return;
+      show(detail);
+    });
     return () => {
       done = true;
+      cancelled = true;
       window.clearTimeout(timer);
     };
   }, [selectedId, loadDetail]);
+
+  /* TRY AGAIN, for a panel whose full read failed. The same read the effect
+     above makes, by the same id rule, landing on the panel only if it is
+     still the memory that asked. */
+  const retryPanelDetail = useCallback(() => {
+    const id = panel?.id;
+    if (!id) return;
+    /* ONE CURRENT REQUEST PER PANEL. Each Try again takes a new token; a
+       save (`onMemoryKept`) or selecting another memory moves the token on,
+       so an outstanding read's answer is applied only while it is still the
+       latest thing asked of this panel. */
+    const token = ++panelReadTokenRef.current;
+    const fetchId = ballsRef.current?.byId.get(id)?.sigId ?? id;
+    setPanel((p) => (p && p.id === id ? { ...p, pending: true } : p));
+    /* A FRESH REQUEST, NOT THE ONE THAT HUNG: `loadDetail` shares a read in
+       flight, so a hung first read would answer every Try again too. */
+    detailPendingRef.current.delete(fetchId);
+    /* and bounded: a retry that hangs too ends as "Couldn't load the rest"
+       again (its hung entry dropped, so the next Try again is fresh) rather
+       than "Opening…" for ever */
+    const read = loadDetail(fetchId);
+    const limit = new Promise<null>((give) => window.setTimeout(() => {
+      if (detailPendingRef.current.get(fetchId) === read) detailPendingRef.current.delete(fetchId);
+      give(null);
+    }, RETRY_READ_LIMIT_MS));
+    void Promise.race([read, limit]).then((detail) => {
+      if (panelReadTokenRef.current !== token) return;
+      /* a failed retry never takes away a full detail already on the card,
+         nor calls it partial: the failure line is only for a card that does
+         not have the full text */
+      setPanel((p) => {
+        if (!p || p.id !== id) return p;
+        if (detail) return { id, detail, partial: false };
+        return p.detail ? { ...p, pending: false, partial: false } : { ...p, pending: false, partial: true };
+      });
+    });
+  }, [panel?.id, loadDetail]);
 
   /* Placement is the stylesheet's now: the panel opens in the middle of the
      frame, always (founder, 2026-08-24). It used to be solved from the orb
@@ -6836,6 +6901,28 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     reloadReading: async () => { absorbBoard(await loadPersonalReading()); },
     beginReadingMutation,
     onInspirationSaved: (made) => { sourceListMutationRef.current += 1; if (made.processing) sourceProcessing.track(made.id, made.processing); },
+    /* THE CARD SHOWS THE WORDS IT JUST KEPT — the server's row when one came
+       back, or the typed words (a fixture world) — rather than the words from
+       before the edit. */
+    onMemoryKept: (id, text, made) => {
+      /* the kept words are now the newest thing this card knows: any read
+         still out (a Try again) is older than them */
+      panelReadTokenRef.current += 1;
+      const fresh = made && made.id === id && Array.isArray(made.attachments) ? toInspirationDetail(made) : null;
+      setPanel((p) => {
+        if (!p || (p.id !== id && p.detail?.id !== id)) return p;
+        if (fresh) return { ...p, detail: fresh, partial: false };
+        return p.detail ? { ...p, detail: { ...p.detail, text, preview: inspirationPreview(text, p.detail.attachments) } } : { ...p, keptText: text };
+      });
+    },
+    /* the empty-words rule (`lib/note-words.ts`) counts what the memory holds
+       besides its words */
+    memoryAttachmentCount: (id) => {
+      const shown = panelNowRef.current;
+      return (shown?.detail && (shown.detail.id === id || shown.id === id) ? shown.detail : detailsRef.current.get(id))?.attachments.length ?? 0;
+    },
+    /* the profile the card was read with — an agent's wall reads its own */
+    memoryProfile: () => (atWallRef.current.kind === 'agent' ? atWallRef.current.id : storageScope?.profileId),
     onEntrySaved: () => {
       readingMutationRef.current += 1;
       readingNeedsLatestRef.current = true;
@@ -6969,6 +7056,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const beginPanelEdit = useCallback(
     (ev: ReactMouseEvent<HTMLParagraphElement>) => {
       if (!panelId || editing.open) return;
+      /* NEVER AN EDITOR SEEDED FROM A PREVIEW OR A STALE COPY (P0,
+         2026-10-17). This fell back to `panelBall.textPreview` — a cut
+         ending in "…", or an attachment label — while the full read was out
+         or after it failed, and the edit then PATCHed that back as the whole
+         text. A panel that is partial (still opening, or failed) has no edit
+         to offer. */
+      /* A PANEL WITHOUT ITS FULL TEXT HAS NO EDIT TO OFFER: it is saying
+         "Couldn't load the rest" with Try again, and that is the way on. */
+      if (!panel || panel.id !== panelId || panel.partial || panel.pending) return;
       /* THE CARET GOES WHERE THE FINGER WENT. Without this the press lands
          you at the end of a page of text and you scroll back to the sentence
          you meant — which is the same "find your place again" cost the
@@ -6991,11 +7087,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            behaviour and never wrong, only less kind */
       }
       panelCaretRef.current = at;
-      editing.begin(
-        "memory",
-        panelId,
-        panel?.detail ? panel.detail.text : panelBall?.textPreview ?? "",
-      );
+      /* A MEMORY WITH NO SERVER DETAIL (kept a moment ago, or a fixture's)
+         is complete as shown: its words are the ones typed. */
+      if (!panel.detail) {
+        editing.begin("memory", panelId, panel.keptText ?? panelBall?.textPreview ?? "");
+        return;
+      }
+      /* THE FULL TEXT IS ON THE CARD: the edit opens inside the tap (so a
+         phone raises its keyboard, and the caret lands in the words the
+         finger touched), seeded from it — never from a preview. */
+      editing.begin("memory", panelId, panel.detail.text);
     },
     [panelId, editing, panel, panelBall],
   );
@@ -9973,6 +10074,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                  is measuring the same words the same way, not teaching the
                  reading face to hold invented air. */
               rows={1}
+              /* why Save is dim on an emptied memory (the card cannot attach) */
+              placeholder={(panel.detail?.attachments.length ?? 0) === 0 ? say("worldMemoryNeedsWords") : undefined}
               value={editing.open.text}
               onChange={(e) => {
                 editing.retype(e.target.value);
@@ -9997,13 +10100,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               onClick={beginPanelEdit}
             >
               {markPassages(
-                panel.detail ? panel.detail.text || panel.detail.preview : panelBall.textPreview,
+                panel.detail ? panel.detail.text || panel.detail.preview : panel.keptText ?? panelBall.textPreview,
                 panelMarks,
               )}
             </p>
           )}
-          {panel.partial ? (
-            <p className="jar-panel-note">{say("worldCouldntLoadRest")}</p>
+          {/* STILL OPENING, OR IT DID NOT — and from the second, a way to ask
+              again. The same states the archive's note page has. */}
+          {panel.pending ? (
+            <p className="jar-panel-note" role="status">{say("worldNoteOpening")}</p>
+          ) : panel.partial ? (
+            <p className="jar-panel-note">
+              {say("worldCouldntLoadRest")}{" "}
+              <button type="button" className="jar-panel-retry" onClick={retryPanelDetail}>
+                {say("surfaceUnavailableRetry")}
+              </button>
+            </p>
           ) : null}
           {panel.detail?.attachments.length ? <InspirationAttachments items={panel.detail.attachments} locale={locale} /> : null}
           {/* THE CITED-BY SENTENCE WENT WITH THE ROOM THAT NEEDED IT. On a
@@ -10147,7 +10259,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   disabled={
                     editing.open.saving ||
                     editing.open.saved ||
-                    editing.open.text.trim() === ""
+                    /* the archive's rule, from the same helper: no words is
+                       keepable only beside an attachment */
+                    !wordsCanStand(editing.open.text, panel.detail?.attachments.length ?? 0)
                   }
                 >
                   {/* three states in one word, in the slot the carets will

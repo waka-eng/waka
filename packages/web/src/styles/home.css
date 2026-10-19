@@ -2846,6 +2846,20 @@
   font-size: var(--t-ui);
   color: var(--jar-faint);
 }
+/* ITS WAY TO ASK AGAIN (2026-10-17). A word in the sentence's own voice,
+   with the 44px target every act in this product gets, so the quiet line
+   does not become a control a thumb has to aim at. */
+.jar-panel-retry {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 var(--sp-4);
+  border: 0;
+  background: none;
+  color: var(--jar-ink);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
 /* ---------- marks inside the memory ----------
    Not a highlighter and not a pull-quote: the way a person underlines their
    own book. Two tiers — the passage that fed a reading carries a wash as well

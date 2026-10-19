@@ -1161,6 +1161,67 @@ in a dedicated PR.**
 
 ---
 
+### L13. Card ↔ archive concurrent edits of the same note *(pre-existing on dev; follow-up)*
+**Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/pages/Home.tsx`, `components/SavesOverlay.tsx`, `space/editing.ts` · severity medium
+
+**What.** Home's memory card and the archive's note page can both edit one note, and nothing orders
+their writes against each other or against reads in flight. The P0 branch makes each editor start from the
+note's FULL text, never a 220-character preview: the archive reads it fresh before its editor opens;
+the card opens its edit only on a full detail it has read (inside the tap, so a phone raises its
+keyboard), and opening the archive closes the card's edit. It
+deliberately does NOT try to coordinate the two doors: four review rounds of cross-surface cache,
+freshness stamps and pending-write counting each found new holes and new regressions (stuck
+"Opening…", address links that did nothing, a "Still saving…" that never cleared), so that layer was
+removed. The races it was chasing, all present on `origin/dev`:
+
+- A card save still in flight when the archive opens the same note: the archive's fresh read can
+  answer before the save lands, and its later save then overwrites the card's words.
+- The card's edit seeds from the full detail it holds, which can be older than an archive save made
+  since (or a slow read landing after a save can put older words back on it); a card save from
+  that edit then overwrites the archive's words.
+- An archive save, delete, restore or upload is not reflected in Home's field or card until Home
+  reads again (no cross-surface notification); a deleted note stays on the field until reload.
+- Two writes of one note from different doors are not ordered on the client; the server applies
+  them in arrival order.
+
+**Follow-up.** One per-profile detail store, keyed by inspiration id and holding the server row and
+its `updatedAt`, that both doors read and write through — with write ordering per note and an
+explicit, bounded wait for a pending write before an editor opens. Designed as its own change, with
+browser-level tests, rather than layered onto the P0 fix.
+
+**Also noticed, not verified.** `finalizeAttachment` for an inspiration sends no `?profile=`, while
+the archive's presign does; attaching to an agent's note from the agent's archive may resolve against
+the signed-in human.
+
+---
+
+### L11. Opening the archive closes Home's card edit and drops unsaved card typing without asking *(pre-existing)*
+**Noted on `claude/fix-save-truncation`, 2026-10-17** · `packages/web/src/pages/Home.tsx` · severity low
+
+**What.** With a memory's words open for editing on Home's card, opening the archive (All
+inspirations) ends that edit; whatever had been typed and not saved is gone, with no prompt. Found
+while pinning that an archive save cannot land on an open card edit (`home-memory-reads.test.tsx`),
+which this behaviour is what guarantees. Not introduced by the P0 branch.
+
+**Follow-up.** Either keep the card's draft across the archive, or ask before leaving unsaved words.
+See L13 for the concurrent-edit races between the two doors.
+
+---
+
+### L12. Closing the archive mid-recording loses the recording *(pre-existing)*
+**Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/components/SavesOverlay.tsx` · severity low
+
+**What.** A recording started on a saved note in the archive is lost if the archive itself is closed
+(Close, Escape) while it runs: the overlay unmounts with the recorder, and the clip is never handed
+over. Same on `origin/dev`. Leaving the NOTE (Back, or opening another note) is handled on this
+branch — the recording stops and attaches to the note it was made on — but unmounting the whole
+archive is not.
+
+**Follow-up.** Stop and attach on unmount (the clip needs the upload to outlive the overlay), or
+ask before closing with a recording running.
+
+---
+
 ## Added after the audit: room-derived text outlives the memory it came from
 
 **Status:** accepted for phase 1 of the room retirement (2026-10-17), open until the room data

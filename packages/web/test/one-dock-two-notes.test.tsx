@@ -291,7 +291,11 @@ const KNOWN_DIFFERENCES = [
 /* SHARE JOINED IT (2026-10-15) for the same reason as Delete. Founder: "i
    also dont see option to share a specfici inspiration." Only a kept thing
    has anything to show anyone; the notepad must not grow it either. */
-const ONLY_ON_THE_SAVED_NOTE = ["Delete", "Share this inspiration"];
+/* AND "MORE" (2026-10-17): on a phone under 350px Share and Delete fold into
+   one overflow so every act keeps its 44px target. It is the same two verbs
+   in another shape — rendered always, chosen by the stylesheet — so it is
+   one-sided for exactly their reason. */
+const ONLY_ON_THE_SAVED_NOTE = ["Delete", "Share this inspiration", "More"];
 
 /** Both rows, with the one-sided presses taken out so the rest can be compared. */
 function comparable(row: ReturnType<typeof dockPresses>) {
