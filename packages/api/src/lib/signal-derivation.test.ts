@@ -240,6 +240,23 @@ describe("resolveRelatedEvidence — which citations code lets stand", () => {
   });
 });
 
+describe("parseSignalCandidates — a malformed payload is not an empty answer", () => {
+  /* Zero statements marks a capture derived-with-nothing for good. A reply
+     that does not have the shape asked for is the road failing, not the model
+     finding nothing — it must fail the attempt so the queue retries. */
+  it.each([
+    ["statements is not a list", { statements: "none" }],
+    ["a statement is not text", { statements: [{ statement: 42 }] }],
+    ["the payload is not an object", "I could not find anything"],
+  ])("throws when %s", (_why, payload) => {
+    expect(() => parseSignalCandidates(payload)).toThrow("signal extraction");
+  });
+
+  it("still returns a genuinely empty answer as no candidates", () => {
+    expect(parseSignalCandidates({ statements: [], category: null })).toEqual({ statements: [], category: null });
+  });
+});
+
 describe("parseSignalCandidates — related-citation shape discipline", () => {
   const earlier='a3689f1e-0000-4000-8000-000000000001';
   const input={profileId:'profile',preferredLocale:'en-US' as const,

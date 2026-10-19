@@ -626,7 +626,10 @@ export function parseSignalCandidates(payload: unknown, input?: SignalCandidateE
     console.warn("[gemini] signal extraction payload failed validation", {
       issues: parsed.error.issues,
     });
-    return { statements: [], category: null };
+    /* Not "no candidates": an empty result marks the capture derived-with-
+       nothing for good. A reply without the asked-for shape fails the attempt
+       so the queue retries, like any other malformed envelope. */
+    throw new ModelDidNotAnswerError("signal extraction", parsed.error);
   }
 
   const statements = (parsed.data.statements ?? [])
