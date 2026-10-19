@@ -122,9 +122,6 @@ describe("Cancel recording is its own bar item, beside Stop (review)", () => {
 describe("every small control takes a 44px press (#18)", () => {
   it("each named control carries a hit box at least 44 on each side", () => {
     const css = sheet("claims.css");
-    // Nor the attachment drawer's ×: a 44px box spilled onto the filename and
-    // the failure line, removing the attachment with no undo (review).
-    expect(rules(css, (s) => s === ".waka-drawer-items button::after")).toHaveLength(0);
     for (const control of [".waka-dock-undo", ".chat-with-choice", ".chat-send", ".jar-harvest-skip", ".waka-held-open"]) {
       const box = rules(css, (s) => s === `${control}::after`).map(([, b]) => b).join("\n");
       expect(box, control).toMatch(/width:\s*max\(100%,\s*44px\)/);
@@ -158,6 +155,29 @@ describe("every small control takes a 44px press (#18)", () => {
     expect(shelf).toMatch(/padding:\s*0 var\(--sp-16\) 0 0/);
     const tsx = readFileSync(resolve(STYLES, "..", "components/InspirationComposer.tsx"), "utf8");
     expect(tsx).toContain('<span className="jar-tile-x-face" aria-hidden="true">×</span>');
+  });
+  /* The attachment drawer's × was 20x20. A centred overlay box spilled onto
+     the filename and the "upload failed" line, so the BUTTON is 44 itself:
+     in flow across the row (the name and the failure line are pushed aside,
+     never under it) and given back to the pill's height by a negative block
+     margin, with no smaller floor on a touch screen. Where the list scrolls
+     (a phone on its side) the scroller's own padding holds the 7px reach so
+     it is not clipped. Measured in Chromium at 320-1440: no point of a name
+     or a failure line reaches the ×. */
+  it("the attachment drawer's × is a 44px button that never covers its row", () => {
+    const css = sheet("claims.css");
+    expect(rules(css, (s) => s.startsWith(".waka-drawer-items button::"))).toHaveLength(0);
+    const all = rules(css, (s) => s === ".waka-drawer-items button");
+    for (const [, body] of all) {
+      for (const m of body.matchAll(/min-(?:width|height):\s*([^;]+);/g)) expect(m[1], "a floor under 44").toBe("var(--sp-44)");
+    }
+    const own = all.map(([, b]) => b).join("\n");
+    expect(own).toMatch(/min-width:\s*var\(--sp-44\)/);
+    expect(own).toMatch(/min-height:\s*var\(--sp-44\)/);
+    expect(own).toMatch(/margin-block:\s*calc\(\(20px - var\(--sp-44\)\) \/ 2\)/);
+    expect(own, "a horizontal negative margin would pull the failure line under it").not.toMatch(/margin(-inline|-left|-right)?:\s*-|margin:\s*\S+\s+-/);
+    const short = /@media \(max-height: 520px\)\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    expect(short).toMatch(/\.waka-drawer-items\s*\{[^}]*padding-block:\s*var\(--sp-8\)/);
   });
   it("the saves search input fills its 44px row", () => {
     const input = rules(sheet("claims.css"), (s) => s === ".waka-over-search").map(([, b]) => b).join("\n");

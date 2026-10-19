@@ -3140,8 +3140,18 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 
 .waka-drawer-items button {
-  min-width: 20px;
-  min-height: 20px;
+  /* 44 TO PRESS, 20 IN THE ROW. The button itself is the 44px square — no
+     overlay box — and its negative block margin gives back the 24px it
+     would add to the pill, so the drawer is no taller than it was. Across
+     the row it takes its real width in flow: the filename on one side and
+     "upload failed" on the other are pushed aside by it and can never sit
+     under it, which is what the centred overlay box got wrong. Up and down
+     it stands 7px past the pill, inside the 8px gap to the next row and to
+     the toggle above. */
+  min-width: var(--sp-44);
+  min-height: var(--sp-44);
+  margin-block: calc((20px - var(--sp-44)) / 2);
+  padding: 0;
   border: 0;
   border-radius: 50%;
   background: transparent;
@@ -6028,9 +6038,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
  *                                  target is a worse one. `.waka-rail-del`
  *                                  now, and it still carries its own 44.
  *
- * The attachment drawer's × was 20×20 — under even the WCAG floor — so it is
- * brought to 24 rather than to 44: it lives inside a 28px-tall pill beside a
- * filename, and 44 would make the drawer taller than the box you type in.
+ * The attachment drawer's × was 20×20 — under even the WCAG floor. It takes
+ * 44 now everywhere, from its own rule: a negative block margin keeps the
+ * 28px pill 28px, so the drawer is not taller than the box you type in.
  */
 @media (pointer: coarse) {
   .waka-composer-send,
@@ -6102,11 +6112,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
     align-items: center;
   }
 
-  /* To the floor, not to 44. See the note above. */
-  .waka-drawer-items button {
-    min-width: var(--sp-24);
-    min-height: var(--sp-24);
-  }
 }
 
 /**
@@ -6132,7 +6137,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
  * instead of stacking, and the question keeps its words but loses a row of
  * field and some air.
  *
- * That recovers 28px, which fixes 844×390 and 932×430 outright. 568×320 is
+ * That recovered 28px, which fixed 844×390 and 932×430 outright; 16 of it
+ * went back on 2026-10-19 as the band the drawer ×'s 44px press reaches
+ * into, which still clears 844×390's 10px. 568×320 is
  * still about 50px short, and it cannot be fixed from here: 158px of field
  * and actions plus a question and a file list does not fit 320px of window,
  * and the honest fix is a scrollable wrapper around the drawer and the
@@ -6149,8 +6156,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
     padding: var(--sp-8);
   }
 
+  /* The 8px above and below is the ×'s reach (see `.waka-drawer-items
+     button`): a scroller clips at its own edge, and without it the first
+     row's press would be cut there. */
   .waka-drawer-items {
-    max-height: var(--sp-40);
+    max-height: calc(var(--sp-40) + var(--sp-16));
+    padding-block: var(--sp-8);
     overflow-y: auto;
     overscroll-behavior: contain;
   }

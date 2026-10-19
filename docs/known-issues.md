@@ -1403,12 +1403,9 @@ for one press. (Escape, the bar's rows and the note's own close already commit a
 ---
 ## Small usability follow-ups set aside from `claude/fix-usability`
 
-**Status:** open. Both were tried on the branch and reverted to `origin/dev`'s behaviour in review.
+**Status:** open. Tried on the branch and reverted to `origin/dev`'s behaviour in review. (The photo
+× and the attachment drawer's × that were also here are fixed on `claude/followup-small-ui`.)
 
-- **The attachment drawer's × (`.waka-drawer-items button`, 20×20).** The photo ×'s family: a centred 44px
-  hit box spilled onto the filename and the "upload failed" line beside it, so a tap meant to read
-  either removed the attachment, with no undo. Back to dev's exact 20px target; a real fix needs room
-  in the row (or an undo) before the target can grow.
 - **The recording/dictation line in the bar (audit f2afcbe2, desk/106).** Stop now stays in the
   microphone's own seat, but the state line beside it is still in the bar's row, as on dev: when it
   appears the centred bar widens and the row shifts, and its 14rem cap cuts the cloud disclosure
