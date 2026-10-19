@@ -836,8 +836,15 @@ export async function drainBackgroundJobs(
      lease nobody will reclaim (the claim predicate's attempt ceiling). Left
      there it is neither retried nor failed — and a re-enqueue only flags it
      for a rerun that never comes. Settle such rows before taking work. */
-  const settled = await store.settleExhaustedLeases?.(clock()) ?? 0;
-  if (settled) console.warn("[background-jobs] settled exhausted leases as failed", { settled });
+  // Housekeeping only: a failure here is logged and never costs the drain.
+  try {
+    const settled = await store.settleExhaustedLeases?.(clock()) ?? 0;
+    if (settled) console.warn("[background-jobs] settled exhausted leases as failed", { settled });
+  } catch (err) {
+    console.warn("[background-jobs] settling exhausted leases failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   let deferrals = 0;
   let processed = 0;

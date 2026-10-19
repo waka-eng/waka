@@ -117,3 +117,11 @@ it('records malformed model output once as a terminal failure, never a billed re
   expect(row).toMatchObject({status:'failed',attempts:1});
   expect(row!.last_error).toContain('malformed_model_output');
 });
+it('keeps draining when settling exhausted leases fails',async()=>{
+  const p=await owner();
+  await t.sql`INSERT INTO background_jobs(profile_id,type,payload,run_after) VALUES(${p},'derive_signals','{}','2026-10-05T10:00:00Z')`;
+  const processor=vi.fn(async()=>{});
+  const store={...postgresBackgroundJobStore,settleExhaustedLeases:async():Promise<number>=>{throw new Error('settle unavailable');}};
+  expect(await drainBackgroundJobs({limit:5,now,processor,store})).toMatchObject({claimed:1,succeeded:1});
+  expect(processor).toHaveBeenCalledOnce();
+});
