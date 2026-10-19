@@ -184,6 +184,22 @@ it('re-checks every send guard after the pre-flight read, and sends nothing if t
   expect(createConversation).not.toHaveBeenCalled();
   expect(host.querySelector('textarea')!.value).toBe('Other words');
 });
+/* Review: the "Not sent" notice and its Retry stay until a send actually
+   begins; a pre-flight whose guards bail must not wipe them. */
+it('keeps "Not sent" and Retry when the re-checked guards stop the send',async()=>{
+  vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
+  await mount(null);
+  await type('First words');await click('Send');
+  expect(host.textContent).toContain('Not sent');
+  let answer!:(value:Awaited<ReturnType<typeof listConversations>>)=>void;
+  vi.mocked(listConversations).mockImplementation(()=>new Promise(resolve=>{answer=resolve;}));
+  await click('Retry this message');                          // pre-flight in flight
+  await type('Other words');                                  // changed meanwhile: the send bails
+  await act(async()=>{answer({profileId:scope.profileId,conversations:[],generationEnabled:false});});
+  expect(createConversation).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('Not sent');
+  expect([...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent)).toContain('Retry this message');
+});
 /* Round 7: the list read's failure never replaces a more specific sentence. */
 it('keeps the conversation\'s own failure when the list read fails after it',async()=>{
   let failList!:(reason:unknown)=>void;

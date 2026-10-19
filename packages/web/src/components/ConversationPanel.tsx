@@ -397,7 +397,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     const pressed=draftRef.current;
     if(replies===null){
       const owner=lifecycle.current;working.current=true;setBusy(true);
-      try{const listed=await run(signal=>listConversations(scope.profileId,signal));if(!mine(owner))return;replies=listed.generationEnabled;setGenerationEnabled(replies);setError(null);setUnsent(false);}
+      try{const listed=await run(signal=>listConversations(scope.profileId,signal));if(!mine(owner))return;replies=listed.generationEnabled;setGenerationEnabled(replies);}
       /* A JOURNALLED message is never "not sent" on a failed pre-flight
          (review): an earlier send under its id may have reached the server.
          Only words that were never sent at all are "not sent". */
@@ -414,7 +414,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     }
     if(!draftRef.current)return;
     const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID(),...(current.talkWith?{}:agent&&talkWith!=='mine'?{talkWith,agentId:agent.id}:{})}:{})};
-    if(!keep(intent))return;const owner=lifecycle.current;working.current=true;setBusy(true);setError(null);nearBottom.current=true;
+    if(!keep(intent))return;const owner=lifecycle.current;working.current=true;setBusy(true);
+    // The notice clears only now, with the send actually begun (review): a pre-flight that bails keeps it, and its Retry.
+    setError(null);setUnsent(false);nearBottom.current=true;
     try{
       /* The agent the draft was started with; a draft kept before that was recorded falls back to the one shown. */
       const talkAgent=intent.agentId??agent?.id;
