@@ -122,7 +122,10 @@ describe("every small control takes a 44px press (#18)", () => {
     const css = sheet("claims.css");
     // Not the photo's ×: its tile clips overflow, so a box past it does nothing (known issue).
     expect(rules(css, (s) => s === ".jar-tile-x::after")).toHaveLength(0);
-    for (const control of [".waka-dock-undo", ".waka-drawer-items button", ".chat-with-choice", ".chat-send", ".jar-harvest-skip", ".waka-held-open"]) {
+    // Nor the attachment drawer's ×: a 44px box spilled onto the filename and
+    // the failure line, removing the attachment with no undo (review).
+    expect(rules(css, (s) => s === ".waka-drawer-items button::after")).toHaveLength(0);
+    for (const control of [".waka-dock-undo", ".chat-with-choice", ".chat-send", ".jar-harvest-skip", ".waka-held-open"]) {
       const box = rules(css, (s) => s === `${control}::after`).map(([, b]) => b).join("\n");
       expect(box, control).toMatch(/width:\s*max\(100%,\s*44px\)/);
       expect(box, control).toMatch(/height:\s*max\(100%,\s*44px\)/);

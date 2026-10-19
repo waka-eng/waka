@@ -665,19 +665,19 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
    the drawing stays and the TARGET grows: an invisible box centred on the
    control, at least 44 on each side. A pseudo-element takes the control's
    own press, so nothing else needs to know it is there. (The photo's 28px ×
-   is not here: its tile clips overflow, so a box past it does nothing — see
-   docs/known-issues.md.) */
+   is not here: its tile clips overflow, so a box past it does nothing. Nor
+   is the attachment drawer's 20px ×: a 44px box spilled onto the filename
+   and the "upload failed" line, so a tap there removed the attachment with
+   no undo. Both are in docs/known-issues.md.) */
 .waka-dock-undo,
 .chat-with-choice,
 .chat-send,
 .jar-harvest-skip,
-.waka-held-open,
-.waka-drawer-items button {
+.waka-held-open {
   position: relative;
 }
 
 .waka-dock-undo::after,
-.waka-drawer-items button::after,
 .chat-with-choice::after,
 .chat-send::after,
 .jar-harvest-skip::after,

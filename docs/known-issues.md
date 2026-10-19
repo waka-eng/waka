@@ -1330,6 +1330,10 @@ for one press. (Escape, the bar's rows and the note's own close already commit a
   and centred on the × it also covered part of the photo (a press meant to open the photo would
   remove it). A real fix needs the × to sit OUTSIDE the clipped tile (or the tile to stop clipping),
   with its hit area reaching away from the picture.
+- **The attachment drawer's × (`.waka-drawer-items button`, 20×20).** Same family: a centred 44px
+  hit box spilled onto the filename and the "upload failed" line beside it, so a tap meant to read
+  either removed the attachment, with no undo. Back to dev's exact 20px target; a real fix needs room
+  in the row (or an undo) before the target can grow.
 - **The recording/dictation line in the bar (audit f2afcbe2, desk/106).** Stop now stays in the
   microphone's own seat, but the state line beside it is still in the bar's row, as on dev: when it
   appears the centred bar widens and the row shifts, and its 14rem cap cuts the cloud disclosure
