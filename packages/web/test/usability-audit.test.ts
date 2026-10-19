@@ -95,6 +95,28 @@ describe("the recording clock is never read out every second (review of #11)", (
   }
 });
 
+describe("Cancel recording is its own bar item, beside Stop (review)", () => {
+  /* Inside the state line (overflow: hidden, ellipsized) it was clipped and
+     its press cut to ~17px on a phone. The browser check (390x844 and
+     1440x900, a fake microphone, a long state line) is in the PR notes; this
+     holds the cause: Cancel is a dock item outside the state line, with a
+     44px floor that never shrinks. */
+  it("is a dock item, not inside the state line, and never narrower than 44px", () => {
+    const home = readFileSync(resolve(STYLES, "..", "pages/Home.tsx"), "utf8");
+    const cancel = home.indexOf("{say('worldComposerCancelRecording')}");
+    expect(cancel).toBeGreaterThan(0);
+    const opening = home.lastIndexOf("<button", cancel);
+    expect(home.slice(opening, cancel)).toContain('className="waka-dock-item waka-dock-cancel"');
+    const stateLine = home.lastIndexOf('<span className="waka-dock-state"', cancel);
+    const stateEnd = stateLine < 0 ? -1 : home.indexOf("</span>", stateLine);
+    expect(stateLine < 0 || stateEnd < opening, "Cancel sits inside the state line").toBe(true);
+    const css = sheet("claims.css");
+    const own = rules(css, (s) => s === ".waka-dock-cancel").map(([, b]) => b).join("\n");
+    expect(own).toMatch(/flex:\s*none/); expect(own).toMatch(/min-width:\s*var\(--waka-corner\)/);
+    expect(rules(css, (s) => s === ".waka-dock-item").map(([, b]) => b).join("\n")).toMatch(/min-height:\s*var\(--waka-corner\)/);
+  });
+});
+
 describe("every small control takes a 44px press (#18)", () => {
   it("each named control carries a hit box at least 44 on each side", () => {
     const css = sheet("claims.css");

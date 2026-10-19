@@ -11423,12 +11423,19 @@ const RETRY_READ_LIMIT_MS = 20_000;
                        worse than one you cannot start. Stop stands in the
                        microphone's own slot for the reason dictation's does
                        (above); the clock — words, because a red dot cannot
-                       say how long you have been talking — and Cancel ride
-                       in the live caption over the bar, so neither widens it. */
-                    <button type="button" className="waka-dock-tool waka-dock-tool--live"
-                      aria-label={say('worldComposerStop')}
-                      disabled={recording.phase === 'finishing'}
-                      onClick={() => void recording.stop()}><HomeActionIcon kind="stop"/></button>
+                       say how long you have been talking — rides in the
+                       state line. CANCEL IS ITS OWN ITEM BESIDE STOP, as on
+                       dev (review): inside the state line it was ellipsized
+                       with it and its press clipped to ~17px on a phone. */
+                    <>
+                      <button type="button" className="waka-dock-tool waka-dock-tool--live"
+                        aria-label={say('worldComposerStop')}
+                        disabled={recording.phase === 'finishing'}
+                        onClick={() => void recording.stop()}><HomeActionIcon kind="stop"/></button>
+                      <button type="button" className="waka-dock-item waka-dock-cancel"
+                        disabled={recording.phase === 'finishing'}
+                        onClick={() => void recording.cancel()}>{say('worldComposerCancelRecording')}</button>
+                    </>
                   )
                 ) : null}
                 {/* ═══ THE PHOTO BECAME ＋ (2026-10-16) ═════════════════════
@@ -11587,11 +11594,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         while the mouth is closed (`!mouthOpen`), so the bar says it
                         only while the mouth is open — never both regions at once. */}
                     <LiveWord text={composerState || (recording.phase !== 'idle' && mouthOpen ? say('worldComposerRecordingNow') : '')} />
-                    {recording.phase !== 'idle' ? <>
-                      <span aria-hidden="true">{clockWords(recording.seconds)}</span>
-                      <button type="button" className="waka-dock-undo" disabled={recording.phase === 'finishing'}
-                        onClick={() => void recording.cancel()}>{say('worldComposerCancelRecording')}</button>
-                    </> : null}
+                    {recording.phase !== 'idle' ? <span aria-hidden="true">{clockWords(recording.seconds)}</span> : null}
                   </span>
                 ) : composerState ? (
                   <span className="waka-dock-state" role="status">{composerState}</span>

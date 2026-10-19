@@ -781,6 +781,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock {
   color: var(--ink);
   text-decoration: underline;
 }
+/* CANCEL RECORDING, beside Stop and outside the state line: never shrunk,
+   ellipsized or clipped with it, and never narrower than a fingertip. */
+.waka-dock-cancel {
+  flex: none;
+  min-width: var(--waka-corner);
+}
 /* MEASURED: tightened with 44px glyph slots, the open-save row is 327px; the
    dock is 100vw - 16, so it fits down to 343px. Below 350 Share and Delete
    fold into ⋯ — the row becomes Back, Record, ＋, Save, ⋯, Close: 283px at
