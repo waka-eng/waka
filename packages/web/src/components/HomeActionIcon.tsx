@@ -5,7 +5,10 @@
    `chat` is left alone and is also unused: it belonged to the chat corner
    deleted in an earlier pass, and the conversation work is another session's.
    Noted here rather than quietly removed, because an icon nobody draws is the
-   same kind of leftover as a verb nobody calls. */
+   same kind of leftover as a verb nobody calls. (2026-10-18: drawn again, in
+   front of the bottom bar's "Chat", with `plus` in front of "Inspiration".
+   Founder: "add + icon in front of Inspiration, and chat icon in front of
+   Chat at bottom bar.") */
 /* `record` AND `photo` ARRIVED 2026-10-11, and they are the first two shapes
    in this product that stand WITHOUT a visible label beside them. Founder,
    with Apple Notes' blank note on screen: "copy this apple note experience",
