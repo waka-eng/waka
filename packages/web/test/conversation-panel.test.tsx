@@ -401,6 +401,11 @@ it.each([404,410])('stops on a %i reply read, says it is gone, keeps Send off an
   await type('Still there?');
   const send=[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
   expect(send.disabled,'Send went back on onto a deleted conversation').toBe(true);
+  /* Enter is the other way to send: it must not post onto a deleted conversation either */
+  vi.mocked(saveConversationMessage).mockClear();
+  await act(async()=>host.querySelector('textarea')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})));
+  await tick(0);
+  expect(saveConversationMessage,'Enter sent onto a gone conversation').not.toHaveBeenCalled();
   const fresh=[...host.querySelectorAll<HTMLButtonElement>('button.chat-recheck')].find(b=>b.textContent==='New chat');
   expect(fresh,'a gone conversation offered no way on').toBeTruthy();
   vi.mocked(choose).mockClear();

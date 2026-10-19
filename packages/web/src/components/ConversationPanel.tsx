@@ -344,7 +344,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     void refresh();return()=>lifecycle.current.abort();
   },[scope.accountId,scope.profileId,id,initialPrincipleId]);
   const save=async()=>{
-    if(working.current||loading||generationEnabled===null||awaitingReply||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
+    if(working.current||loading||generationEnabled===null||awaitingReply||reply.terminal||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
     /* A draft kept before its agent was recorded waits for the agent to load,
        rather than starting a chat on your own memory instead. */
     if(!id&&draftRef.current.talkWith&&!draftRef.current.agentId&&!agent)return;
