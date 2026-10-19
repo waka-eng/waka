@@ -659,14 +659,17 @@ export async function promoteIfDemonstrated(
  */
 export async function reconcilePrinciplesAfterSignalLoss(
   db: WakaDb | WakaTx,
-  input: { profileId: string; signalIds: string[]; now?: Date },
+  /* `principleIds` names principles whose citation rows are already gone —
+     a deleted signal cascades its `principle_signals` links away, so they
+     can no longer be found from the signal id. */
+  input: { profileId: string; signalIds: string[]; principleIds?: string[]; now?: Date },
 ): Promise<{ demoted: string[]; removed: string[] }> {
   const now = input.now ?? new Date();
   const demoted: string[] = [];
   const removed: string[] = [];
-  if (input.signalIds.length === 0) return { demoted, removed };
+  if (input.signalIds.length === 0 && !input.principleIds?.length) return { demoted, removed };
 
-  const affected = await db
+  const citing = input.signalIds.length === 0 ? [] : await db
     .selectDistinct({ principleId: principleSignals.principleId })
     .from(principleSignals)
     .where(
@@ -675,6 +678,8 @@ export async function reconcilePrinciplesAfterSignalLoss(
         inArray(principleSignals.signalId, input.signalIds),
       ),
     );
+  const affected = [...new Set([...citing.map((row) => row.principleId), ...(input.principleIds ?? [])])]
+    .map((principleId) => ({ principleId }));
 
   for (const { principleId } of affected) {
     await db.transaction(async (tx) => {

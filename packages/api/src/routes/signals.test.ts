@@ -395,14 +395,12 @@ describe("PATCH /api/signals/:signalId", () => {
 describe("DELETE /api/signals/:signalId", () => {
   it("deletes the acting profile's signal", async () => {
     const deleteSignal = vi.fn(async () => true);
-    const reconcilePrinciples = vi.fn(async () => ({ demoted: [], removed: [] }));
     const app = new Hono();
     app.route(
       "/api/signals",
       createSignalRoutes({
         getDatabase: () => serveDb() as any,
         deleteSignal,
-        reconcilePrinciples,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
     );

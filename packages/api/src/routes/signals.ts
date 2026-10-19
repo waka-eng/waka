@@ -32,6 +32,7 @@ import {
   attachments,
   feedback,
   inspirations,
+  principleSignals,
   profiles,
   reflections,
   signalEvidence,
@@ -862,11 +863,26 @@ export async function deleteProfileSignal(
   db: WakaDb,
   input: { profileId: string; signalId: string },
 ): Promise<boolean> {
-  const deleted = await db
-    .delete(signals)
-    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
-    .returning({ id: signals.id });
-  return deleted.length > 0;
+  // The delete cascades the signal's principle citations away, so the
+  // principles that cited it are read first and reconciled in the same
+  // transaction — immediate state maintenance, no model, no midnight wait.
+  return db.transaction(async (tx) => {
+    const citing = await tx
+      .selectDistinct({ principleId: principleSignals.principleId })
+      .from(principleSignals)
+      .where(and(eq(principleSignals.profileId, input.profileId), eq(principleSignals.signalId, input.signalId)));
+    const deleted = await tx
+      .delete(signals)
+      .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+      .returning({ id: signals.id });
+    if (deleted.length === 0) return false;
+    await reconcilePrinciplesAfterSignalLoss(tx, {
+      profileId: input.profileId,
+      signalIds: [input.signalId],
+      principleIds: citing.map((row) => row.principleId),
+    });
+    return true;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -953,7 +969,6 @@ export interface SignalRouteDependencies {
   deleteSignal?: typeof deleteProfileSignal;
   loadProfile?: typeof loadProfileTarget;
   requestRefresh?: typeof enqueueTopOfMindRefresh;
-  reconcilePrinciples?: typeof reconcilePrinciplesAfterSignalLoss;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
 }
 
@@ -969,7 +984,6 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
   const deleteSignal = deps.deleteSignal ?? deleteProfileSignal;
   const loadProfile = deps.loadProfile ?? loadProfileTarget;
   const requestRefresh = deps.requestRefresh ?? enqueueTopOfMindRefresh;
-  const reconcilePrinciples = deps.reconcilePrinciples ?? reconcilePrinciplesAfterSignalLoss;
 
   /**
    * Curating a signal changes what the artifact should be built from, so the
@@ -1333,11 +1347,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
 
     // The artifact may cite the signal just removed; re-synthesise so an entry
     // is not left resting on a citation that no longer resolves. Principles
-    // reconcile immediately (state maintenance, no model, no midnight wait).
-    await reconcilePrinciples(db, {
-      profileId: scope.profileId,
-      signalIds: [parsedParams.data.signalId],
-    });
+    // were reconciled inside the delete itself.
     scheduleRefresh(scope.profileId);
     return c.json({ deleted: true }, 200);
   });
