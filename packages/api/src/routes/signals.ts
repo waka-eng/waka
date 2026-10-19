@@ -804,25 +804,37 @@ export async function dismissProfileSignal(
   db: WakaDb,
   input: { profileId: string; signalId: string },
 ): Promise<SignalDetail | null> {
-  const updated = await db
-    .update(signals)
-    .set({
-      status: "retired",
-      supportRetiredAt: null,
-      dismissedAt: sql`coalesce(${signals.dismissedAt}, now())`,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
-    .returning({ id: signals.id });
-  if (updated.length === 0) return null;
+  // One act: the dismissal, the disputes it settles and the principles it
+  // stops supporting commit together or not at all.
+  const dismissed = await db.transaction(async (tx) => {
+    const updated = await tx
+      .update(signals)
+      .set({
+        status: "retired",
+        supportRetiredAt: null,
+        dismissedAt: sql`coalesce(${signals.dismissedAt}, now())`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+      .returning({ id: signals.id });
+    if (updated.length === 0) return false;
 
-  /* throwing a side out settles its disputes — that side yields. Leaving a
-     one-sided "contested" standing forever would be a quiet corner. */
-  await resolveContestedPairs(db, {
-    profileId: input.profileId,
-    signalId: input.signalId,
-    act: "dismiss",
+    /* throwing a side out settles its disputes — that side yields. Leaving a
+       one-sided "contested" standing forever would be a quiet corner. */
+    await resolveContestedPairs(tx, {
+      profileId: input.profileId,
+      signalId: input.signalId,
+      act: "dismiss",
+    });
+    // A retired signal no longer supports principles: immediate state
+    // maintenance, the same reconcile every other loss of support runs.
+    await reconcilePrinciplesAfterSignalLoss(tx, {
+      profileId: input.profileId,
+      signalIds: [input.signalId],
+    });
+    return true;
   });
+  if (!dismissed) return null;
 
   return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
 }
