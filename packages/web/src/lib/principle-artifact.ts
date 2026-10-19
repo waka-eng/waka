@@ -63,7 +63,10 @@ export interface ShareCardLayout {
   /** The box an editable copy of the words should fill: the part of the
    * bubble the words occupy (under the frame line, if there is one), with the
    * padding that puts each line where the drawn one is. */
-  edit:{x:number;y:number;w:number;h:number;padTop:number;padX:number;padBottom:number;radiusTop:number;radiusBottom:number};
+  edit:{x:number;y:number;w:number;h:number;padTop:number;padX:number;padBottom:number;radiusTop:number;radiusBottom:number;
+    /** The turn the bubble is drawn at (radians; the kept note sits a little
+     * crooked) and the card point it turns about, so the editor turns with it. */
+    rotation:number;origin:{x:number;y:number}};
 }
 export class ArtifactLayoutError extends Error {
   constructor(readonly code:'empty'|'too_long'|'unavailable'){super(code);}
@@ -102,6 +105,9 @@ export function wrapArtifactText(text:string,maxWidth:number,measure:(value:stri
  * signature would go.
  */
 const SHARE_MARK='WAKA';
+
+/** How crooked a kept note is held up, in radians (see the note's drawing). */
+const NOTE_TILT=-0.026;
 
 /** A seeded Park–Miller stream, so the same card always draws the same sky. */
 function seeded(seed:number):()=>number{
@@ -343,7 +349,7 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
        Paper rather than speech — a thing you put away, now taken out and
        shown — so it sits a little crooked, lifted on a soft shadow, with a
        strip of tape at its top. The words and photo turn with it. */
-    ctx.translate(cx,(y0+y1)/2);ctx.rotate(-0.026);ctx.translate(-cx,-(y0+y1)/2);
+    ctx.translate(cx,(y0+y1)/2);ctx.rotate(NOTE_TILT);ctx.translate(-cx,-(y0+y1)/2);
     ctx.save();
     ctx.shadowColor=dark?'rgba(0,0,0,0.45)':'rgba(40,32,20,0.18)';ctx.shadowBlur=36;ctx.shadowOffsetY=16;
     ctx.fillStyle=dark?'#efe6d4':'#fffdf8';
@@ -430,6 +436,7 @@ export async function renderShareCard(content:PrincipleArtifactContent):Promise<
     bubble:{x:x0,y:y0,w:bubbleW,h:bubbleH,radius,fill:said?SAID_FILL:(dark?'#efe6d4':'#fffdf8')},
     text:{x:x0+padX,y:textTop,w:bubbleW-padX*2,size:selected.size,leading,weight:said?400:wordWeight,family,ink:wordInk,align:said?'center':'left'},
     edit:{x:x0,y:editTop,w:bubbleW,h:y1-editTop,padTop:Math.max(0,textTop-editTop-halfLead),padX,padBottom:said?said.padBottom:pad,
-      radiusTop:said&&frame?0:radius,radiusBottom:radius}};
+      radiusTop:said&&frame?0:radius,radiusBottom:radius,
+      rotation:!said&&kind!=='principle'?NOTE_TILT:0,origin:{x:cx,y:(y0+y1)/2}}};
   return {blob,width,height,fallbackFont,layout};
 }

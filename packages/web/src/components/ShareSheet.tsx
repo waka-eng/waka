@@ -72,6 +72,23 @@ export function touchEditorScale(shownPx: number, floorPx: number): number {
   return floorPx / shownPx;
 }
 
+/** WHERE THE WORDS ARE EDITED BEFORE ANY CARD HAS BEEN DRAWN — when the
+    kept words themselves cannot be drawn (too long for the card, or empty),
+    so the sheet opens on a failure with no bubble reported. A plain bubble
+    in the top-of-mind's proportions, so the words can still be fixed where
+    they would be. */
+const BLANK_LAYOUT: ShareCardLayout = {
+  width: 1080, height: 1080,
+  bubble: { x: 112, y: 240, w: 856, h: 520, radius: 49, fill: "#d7cdbb" },
+  text: { x: 153, y: 271, w: 774, size: 34, leading: 18.85 / 13, weight: 400, family: 'Jost, Pretendard, "Apple SD Gothic Neo", sans-serif', ink: "#11131a", align: "center" },
+  edit: { x: 112, y: 240, w: 856, h: 520, padTop: 31, padX: 41, padBottom: 26, radiusTop: 49, radiusBottom: 49, rotation: 0, origin: { x: 540, y: 500 } },
+};
+
+/** Slack on the editor's line width, in CSS px as seen: the canvas wraps at
+    the widest line exactly, and a field a sub-pixel narrower than the
+    measured text would break that line early. */
+const WRAP_SLACK_PX = 2;
+
 export interface ShareTarget {
   kind: "inspiration" | "topOfMind";
   /** The words as they are kept. The card starts with exactly these. */
@@ -207,8 +224,16 @@ export function ShareSheet({ target, locale, onClose }: {
      read from the field, so the floor stays the stylesheet's to set. Only on
      a coarse pointer: a mouse never meets the zoom, and there the field is
      the card's own size. */
-  const hasEditor = Boolean(layout && preview && !renderError);
+  /* THE FIELD NEVER GOES AWAY ON A FAILURE. Words too long for the card, or
+     none, are fixed where they are: the last good card stays with the field
+     over it, shown solid so the stale drawing under it cannot be read as the
+     words, and the reason sits beneath. Before any card has drawn, the field
+     sits on a blank bubble (`BLANK_LAYOUT`). */
+  const shownLayout = layout ?? (renderError ? BLANK_LAYOUT : null);
+  const live = Boolean(renderError) || !preview;
+  const hasEditor = Boolean(shownLayout);
   useLayoutEffect(() => {
+    const layout = shownLayout;
     if (!hasEditor || !layout) return undefined;
     const measure = () => {
       const card = cardRef.current;
@@ -224,7 +249,7 @@ export function ShareSheet({ target, locale, onClose }: {
     const observer = new ResizeObserver(measure);
     observer.observe(cardRef.current);
     return () => observer.disconnect();
-  }, [hasEditor, layout]);
+  }, [hasEditor, shownLayout]);
 
   const ready = Boolean(preview && preview.key === contentKey && !renderError);
   const filename = target.kind === "inspiration" ? "waka-inspiration.png" : "waka-top-of-mind.png";
@@ -251,23 +276,36 @@ export function ShareSheet({ target, locale, onClose }: {
   /* On a touch screen every length is `touchScale` times larger and the
      whole field is scaled back down from its top-left corner, so the text
      can sit at the 16px floor and still land on the drawn lines. */
+  /* The kept note is drawn a little crooked, so its field turns the same
+     way about the same point (`layout.edit.rotation`, `.origin`). Transforms
+     run right to left: back to the card's size first, then the turn. */
   const f = touchScale;
-  const inline: CSSProperties | undefined = layout ? {
-    left: `${(layout.edit.x / layout.width) * 100}%`,
-    top: `${(layout.edit.y / layout.height) * 100}%`,
-    width: `${(layout.edit.w / layout.width) * 100 * f}%`,
-    height: `${(layout.edit.h / layout.height) * 100 * f}%`,
-    padding: `${cq(layout.edit.padTop * f, layout.width)} ${cq(layout.edit.padX * f, layout.width)} 0`,
-    borderRadius: `${cq(layout.edit.radiusTop * f, layout.width)} ${cq(layout.edit.radiusTop * f, layout.width)} ${cq(layout.edit.radiusBottom * f, layout.width)} ${cq(layout.edit.radiusBottom * f, layout.width)}`,
-    textAlign: layout.text.align,
-    fontFamily: layout.text.family,
-    fontWeight: layout.text.weight,
-    fontSize: cq(layout.text.size * f, layout.width),
-    lineHeight: layout.text.leading,
-    ...(f !== 1 ? { transform: `scale(${1 / f})`, transformOrigin: "0 0" } : {}),
-    ["--share-ink" as string]: layout.text.ink,
-    ["--share-fill" as string]: layout.bubble.fill,
-  } : undefined;
+  const inline: CSSProperties | undefined = shownLayout ? (() => {
+    const L = shownLayout;
+    const at = (px: number) => cq(px, L.width);
+    const slack = WRAP_SLACK_PX * f;
+    const centred = L.text.align === "center";
+    const turn = L.edit.rotation
+      ? `translate(${at(L.edit.origin.x - L.edit.x)}, ${at(L.edit.origin.y - L.edit.y)}) rotate(${L.edit.rotation}rad) translate(${at(L.edit.x - L.edit.origin.x)}, ${at(L.edit.y - L.edit.origin.y)})`
+      : "";
+    const transform = [turn, f !== 1 ? `scale(${1 / f})` : ""].filter(Boolean).join(" ");
+    return {
+      left: centred ? `calc(${(L.edit.x / L.width) * 100}% - ${WRAP_SLACK_PX / 2}px)` : `${(L.edit.x / L.width) * 100}%`,
+      top: `${(L.edit.y / L.height) * 100}%`,
+      width: `calc(${(L.edit.w / L.width) * 100 * f}% + ${slack}px)`,
+      height: `${(L.edit.h / L.height) * 100 * f}%`,
+      padding: `${at(L.edit.padTop * f)} ${at(L.edit.padX * f)} 0`,
+      borderRadius: `${at(L.edit.radiusTop * f)} ${at(L.edit.radiusTop * f)} ${at(L.edit.radiusBottom * f)} ${at(L.edit.radiusBottom * f)}`,
+      textAlign: L.text.align,
+      fontFamily: L.text.family,
+      fontWeight: L.text.weight,
+      fontSize: at(L.text.size * f),
+      lineHeight: L.text.leading,
+      ...(transform ? { transform, transformOrigin: "0 0" } : {}),
+      ["--share-ink" as string]: L.text.ink,
+      ["--share-fill" as string]: L.bubble.fill,
+    };
+  })() : undefined;
 
   return (
     <>
@@ -281,13 +319,13 @@ export function ShareSheet({ target, locale, onClose }: {
         </header>
         <div className="jar-share-body">
           <div className="jar-share-stage" aria-busy={!ready && !renderError}>
-            {preview && !renderError ? (
-              <div className="jar-share-card" ref={cardRef}>
-                <img src={preview.url} alt={alt} />
+            {preview || inline ? (
+              <div className={preview ? "jar-share-card" : "jar-share-card jar-share-card--blank"} ref={cardRef}>
+                {preview ? <img src={preview.url} alt={alt} /> : null}
                 {inline ? (
                   <textarea
                     ref={inlineRef}
-                    className="jar-share-inline"
+                    className={live ? "jar-share-inline jar-share-inline--live" : "jar-share-inline"}
                     data-touch-scale={f !== 1 ? f.toFixed(3) : undefined}
                     style={inline}
                     aria-label={say("worldShareWords")}

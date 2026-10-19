@@ -33,13 +33,13 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ShareSheet, touchEditorScale, type ShareTarget } from "../src/components/ShareSheet";
 import { fetchAttachmentUrl } from "../src/lib/api";
-import { renderShareCard, type ShareCardLayout } from "../src/lib/principle-artifact";
+import { ArtifactLayoutError, renderShareCard, type ShareCardLayout } from "../src/lib/principle-artifact";
 
 const LAYOUT: ShareCardLayout = {
   width: 1080, height: 1080,
   bubble: { x: 112, y: 300, w: 856, h: 320, radius: 84, fill: "#e9dfcc" },
   text: { x: 176, y: 364, w: 728, size: 44, leading: 1.42, weight: 400, family: "Jost", ink: "#151821", align: "left" },
-  edit: { x: 112, y: 300, w: 856, h: 320, padTop: 55, padX: 64, padBottom: 64, radiusTop: 84, radiusBottom: 84 },
+  edit: { x: 112, y: 300, w: 856, h: 320, padTop: 55, padX: 64, padBottom: 64, radiusTop: 84, radiusBottom: 84, rotation: 0, origin: { x: 540, y: 460 } },
 };
 
 vi.mock("../src/lib/api", async (original) => ({ ...await original<typeof import("../src/lib/api")>(), fetchAttachmentUrl: vi.fn() }));
@@ -233,7 +233,10 @@ it("on a touch screen, lays the editor out at the floor and scales it back to th
     expect(Number(area.dataset.touchScale)).toBeCloseTo(f, 3);
     expect(area.style.transform).toBe(`scale(${1 / f})`);
     expect(area.style.transformOrigin).toBe("0 0");
-    expect(parseFloat(area.style.width)).toBeCloseTo((856 / 1080) * 100 * f, 6);
+    const [pct, px] = /calc\(([\d.]+)% \+ ([\d.]+)px\)/.exec(area.style.width)!.slice(1).map(Number);
+    expect(pct).toBeCloseTo((856 / 1080) * 100 * f, 2);
+    /* the 2px wrap slack, laid out f times larger like everything else */
+    expect(px).toBeCloseTo(2 * f, 6);
     /* Laid out at the floor (44·f card px on a 270px card is 16px)… */
     expect((parseFloat(area.style.fontSize) / 100) * 270).toBeCloseTo(16, 6);
     /* …and seen at the drawn size once scaled back. */
@@ -260,4 +263,76 @@ it("keeps the bubble's editor under the stylesheet's 16px coarse-pointer floor",
   expect(css).toMatch(/@media \(pointer: coarse\) \{[^@]*body \.jar-thing-share textarea[^{]*\{\s*font-size:\s*var\(--t-lead\)\s*!important/);
   /* …and nothing sizes it at a strength that could out-rank that floor. */
   expect(css).not.toMatch(/\.jar-share-inline[^{]*\{[^}]*font-size[^;}]*!important/);
+});
+
+const typeInto = (area: HTMLTextAreaElement, text: string) => act(async () => {
+  area.focus();
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(area, text);
+  area.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
+/* THE FIELD NEVER GOES AWAY ON A FAILURE: the words are fixed in place. */
+it("keeps the field over the last good card when the words stop fitting, and says why beneath", async () => {
+  await mount();
+  await settle();
+  vi.mocked(renderShareCard).mockRejectedValue(new ArtifactLayoutError("too_long"));
+  const area = host.querySelector<HTMLTextAreaElement>(".jar-share-inline")!;
+  await typeInto(area, "far too many words ".repeat(40));
+  await settle();
+  const still = host.querySelector<HTMLTextAreaElement>(".jar-share-card .jar-share-inline");
+  expect(still, "the field stays where the words are").toBe(area);
+  expect(document.activeElement).toBe(area);
+  expect(still!.classList.contains("jar-share-inline--live"), "shown solid over the stale card").toBe(true);
+  expect(host.querySelector(".jar-share-card img"), "the last good card stays").not.toBeNull();
+  expect(host.querySelector("[role=alert]")?.textContent).toContain("Shorten the words so they fit on the card.");
+  expect(button("Save image")!.disabled).toBe(true);
+  /* Shortened in place, the card draws again and the field goes back to clear. */
+  vi.mocked(renderShareCard).mockImplementation(async (content) => ({ blob: new Blob([content.items[0]!.text], { type: "image/png" }), width: 1080, height: 1080, fallbackFont: false, layout: LAYOUT }));
+  await typeInto(area, "Short again.");
+  await settle();
+  expect(host.querySelector("[role=alert]")).toBeNull();
+  expect(area.classList.contains("jar-share-inline--live")).toBe(false);
+  expect(button("Save image")!.disabled).toBe(false);
+});
+
+it("opens on a blank bubble with the field when the kept words cannot be drawn at all", async () => {
+  vi.mocked(renderShareCard).mockRejectedValue(new ArtifactLayoutError("too_long"));
+  await mount();
+  await settle();
+  const area = host.querySelector<HTMLTextAreaElement>(".jar-share-card--blank .jar-share-inline");
+  expect(area, "a field to fix the words in").not.toBeNull();
+  expect(area!.value).toBe(SAVE.text);
+  expect(host.querySelector("[role=alert]")?.textContent).toContain("Shorten the words");
+});
+
+it("turns the kept note's field with the note, about the note's centre", async () => {
+  const tilted: ShareCardLayout = { ...LAYOUT, edit: { ...LAYOUT.edit, rotation: -0.026, origin: { x: 540, y: 460 } } };
+  vi.mocked(renderShareCard).mockImplementation(async (content) => ({ blob: new Blob([content.items[0]!.text], { type: "image/png" }), width: 1080, height: 1080, fallbackFont: false, layout: tilted }));
+  await mount();
+  await settle();
+  const area = host.querySelector<HTMLTextAreaElement>(".jar-share-inline")!;
+  expect(area.style.transform).toContain("rotate(-0.026rad)");
+  expect(area.style.transformOrigin).toBe("0 0");
+  /* about the note's centre: (540 - 112, 460 - 300) card px from the field's corner */
+  const [dx, dy] = /^translate\(([\d.]+)cqw, ([\d.]+)cqw\)/.exec(area.style.transform)!.slice(1).map(Number);
+  expect(dx).toBeCloseTo((428 / 1080) * 100, 3);
+  expect(dy).toBeCloseTo((160 / 1080) * 100, 3);
+});
+
+it("gives the field's lines a little slack so the widest one never wraps early", async () => {
+  await mount();
+  await settle();
+  const area = host.querySelector<HTMLTextAreaElement>(".jar-share-inline")!;
+  const [pct, px] = /calc\(([\d.]+)% \+ ([\d.]+)px\)/.exec(area.style.width)!.slice(1).map(Number);
+  expect(pct).toBeCloseTo((856 / 1080) * 100, 2);
+  expect(px).toBe(2);
+});
+
+it("wraps the field greedily, as the canvas does, with no scrollbar at rest or while typing", () => {
+  const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../src/styles/chrome.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const rule = (sel: string) => css.split("\n").find((line) => line.startsWith(`${sel} {`)) ?? "";
+  expect(rule(".jar-thing-share .jar-share-inline")).toMatch(/text-wrap:wrap;/);
+  expect(rule(".jar-thing-share .jar-share-inline")).toMatch(/overflow:hidden;/);
+  expect(rule(".jar-thing-share .jar-share-inline:focus")).toMatch(/overflow:hidden;/);
+  expect(css).not.toMatch(/\.jar-share-inline[^{]*\{[^}]*overflow:(auto|scroll)/);
 });

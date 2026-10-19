@@ -1782,9 +1782,15 @@ button.jar-tile-face,
 .jar-share-card img { display:block; width:100%; height:100%; max-height:none; object-fit:cover; border-radius:0; }
 /* The words, editable where they are. Clear at rest — the drawn words show
    through and a press lands in the field — and the bubble's own colour
-   while you type, so the edit happens in the bubble. */
-.jar-thing-share .jar-share-inline { position:absolute; box-sizing:border-box; min-height:0; margin:0; border:0; resize:none; overflow:hidden; background:transparent; color:transparent; caret-color:transparent; cursor:text; text-wrap:pretty; transition:background-color .18s ease, color .18s ease; }
-.jar-thing-share .jar-share-inline:focus { outline:none; background:var(--share-fill); color:var(--share-ink); caret-color:var(--share-ink); overflow:auto; box-shadow:none; }
+   while you type, so the edit happens in the bubble. Greedy wrapping, as
+   the canvas wraps, and no scrollbar, at rest or while typing. */
+.jar-thing-share .jar-share-inline { position:absolute; box-sizing:border-box; min-height:0; margin:0; border:0; resize:none; overflow:hidden; background:transparent; color:transparent; caret-color:transparent; cursor:text; text-wrap:wrap; transition:background-color .18s ease, color .18s ease; }
+.jar-thing-share .jar-share-inline:focus { outline:none; background:var(--share-fill); color:var(--share-ink); caret-color:var(--share-ink); overflow:hidden; box-shadow:none; }
+/* After a failed draw the card under the field is stale, so the field shows
+   its own words on the bubble until the card draws again; before any card
+   has drawn, it sits on a blank night. */
+.jar-thing-share .jar-share-inline--live { background:var(--share-fill); color:var(--share-ink); caret-color:var(--share-ink); }
+.jar-share-card--blank { background:#070d16; }
 .jar-share-hint-line { display:flex; justify-content:center; align-items:center; gap:var(--sp-8); margin:0; min-height:var(--sp-24); text-align:center; }
 .jar-share-hint-line .jar-share-link { min-height:0; padding:0; font-size:var(--t-meta); }
 .jar-thing-share footer { border-top:0; padding-top:0; justify-content:center; }
