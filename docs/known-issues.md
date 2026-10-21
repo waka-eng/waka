@@ -1433,6 +1433,35 @@ for one press. (Escape, the bar's rows and the note's own close already commit a
 
 ---
 
+## Principles after a dismissed signal (follow-up)
+
+**Status:** open, set aside from `claude/fix-api-bugs` and again from
+`claude/followup-principles` (2026-10-20). `dismissProfileSignal`
+(`packages/api/src/routes/signals.ts`) retires the signal and settles its contradictions in one
+transaction, but does not reconcile the principles that cite it, which is dev's behaviour. Reads
+already withhold the support (`personalPrincipleSupportCurrent` excludes a dismissed signal, so an
+unedited minted principle is hidden and a locked one reads "support unconfirmed"), and a restore
+brings it back. The open case is the irreversible one: any later `reconcilePrinciplesAfterSignalLoss`
+(another cited signal's support withdrawn, an inspiration edit, a forced reconcile job) counts the
+dismissed citation as lost evidence and deletes an unedited minted principle, which the restore
+cannot bring back. Running the reconcile on dismissal was tried and taken out for the same reason.
+
+Tried on `claude/followup-principles` and withdrawn in review:
+
+- **Leaving any principle that cites a dismissed signal untouched** (an early exit in the
+  reconcile): a real loss beside the dismissal (a deleted signal, lost evidence) was then never
+  handled.
+- **Counting a dismissed citation as standing support** (in the reconcile and its top-of-mind
+  appearance check): a principle resting on a signal that is never restored stays `held` for
+  good, and the nightly pass, which does not see the dismissed signal, can mint near-duplicates
+  beside it; a dismissed signal that was only `emerging` (never active) was counted as support it
+  never gave; and a declared or locked principle whose real support went was never demoted.
+
+A real fix needs a reversible way to withdraw support, for example marking the support as
+withdrawn instead of deleting, with restore clearing the mark, or having restore re-run promotion.
+
+---
+
 ## Exhausted final-attempt leases stay running (follow-up)
 
 **Status:** open, cut from `claude/fix-api-bugs` after three review rounds; `lib/queue.ts` is

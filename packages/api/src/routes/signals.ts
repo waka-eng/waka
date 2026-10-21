@@ -832,9 +832,8 @@ export async function dismissProfileSignal(
 
   /* No principles reconcile here, on purpose: a dismissal is undoable, and
      the reconcile deletes unedited minted principles that a restore could
-     not bring back. Reads withhold support resting on a dismissed signal
-     (`personalPrincipleSupportCurrent`), and the reconcile counts a
-     dismissed citation as standing, so a restore finds it unchanged. */
+     not bring back. See docs/known-issues.md, "Principles after a dismissed
+     signal (follow-up)". */
   return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
 }
 

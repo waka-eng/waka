@@ -3,9 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { getDb } from "../lib/db.js";
-import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
-import { loadPrincipleViews } from "./principles.js";
-import { dismissProfileSignal, restoreProfileSignal } from "./signals.js";
+import { dismissProfileSignal } from "./signals.js";
 
 let t: TestDatabase;
 let sequence = 0;
@@ -16,12 +14,10 @@ async function person() {
   return p.id as string;
 }
 
-/** `count` (default three) active, evidenced signals, each in a reading of
-    its own, and a principle citing all of them. */
-async function principleOnThreeSignals(profileId: string, locked: boolean, count = 3) {
+/** Three active, evidenced signals and a principle citing all of them. */
+async function principleOnThreeSignals(profileId: string, locked: boolean) {
   const ids: string[] = [];
-  const [tom] = await t.sql`INSERT INTO top_of_minds(profile_id) VALUES (${profileId}) RETURNING id`;
-  for (let n = 0; n < count; n++) {
+  for (let n = 0; n < 3; n++) {
     const [s] = await t.sql`INSERT INTO signals(profile_id,statement) VALUES (${profileId},${`Pattern ${n}`}) RETURNING id`;
     for (let i = 0; i < 3; i++) {
       const [ins] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${profileId},'raw') RETURNING id`;
@@ -29,9 +25,6 @@ async function principleOnThreeSignals(profileId: string, locked: boolean, count
         VALUES (${profileId},${profileId},${s.id},${ins.id})`;
     }
     await t.sql`UPDATE signals SET status='active' WHERE id=${s.id}`;
-    const [entry] = await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body)
-      VALUES (${tom.id},'pattern',${`Focus ${n}`}) RETURNING id`;
-    await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES (${entry.id},${s.id})`;
     ids.push(s.id as string);
   }
   const [p] = await t.sql`INSERT INTO principles(profile_id, statement, state, origin, rank, locked_at, held_since)
@@ -67,54 +60,6 @@ describe("dismissing a claim", () => {
     const links = await t.sql`SELECT signal_id FROM principle_signals WHERE principle_id=${principleId}`;
     expect(links).toHaveLength(3);
   });
-
-  /* Reads hide a principle resting on a dismissed signal. A later reconcile
-     (another cited signal's support changing, an edit, a forced reconcile
-     job) counts the dismissed signal as still standing — dismissal is
-     undoable — so a principle whose only shortfall is the dismissal is left
-     untouched and the restore finds it unchanged. */
-  it("survives a reconcile while dismissed, and a restore brings it back unchanged", async () => {
-    const profileId = await person();
-    const { principleId, signalIds } = await principleOnThreeSignals(profileId, false);
-    const view = async () => {
-      const found = (await loadPrincipleViews(t.db as never, profileId)).find((v) => v.id === principleId);
-      return found && { ...found, citedSignals: [...found.citedSignals].sort((a, b) => a.id.localeCompare(b.id)) };
-    };
-    const before = await view();
-    expect(before).toMatchObject({ state: "held", supportChanged: false });
-
-    await dismissProfileSignal(t.db as never, { profileId, signalId: signalIds[0]! });
-    expect(await view(), "a dismissed signal still counted as support on a read").toBeUndefined();
-
-    const reconciled = await reconcilePrinciplesAfterSignalLoss(t.db as never, { profileId, signalIds: [signalIds[0]!, signalIds[1]!] });
-    expect(reconciled, "the reconcile counted the dismissal as lost evidence").toEqual({ demoted: [], removed: [] });
-    const [row] = await t.sql`SELECT state, unsupported_at FROM principles WHERE id=${principleId}`;
-    expect(row).toMatchObject({ state: "held", unsupported_at: null });
-
-    await restoreProfileSignal(t.db as never, { profileId, signalId: signalIds[0]! });
-    expect(await view(), "the restore did not bring it back unchanged").toEqual(before);
-  });
-
-  /* A real loss beside a dismissal is still a loss: the bar is checked on
-     what remains, the dismissed signal counted as standing. */
-  it.each([[3, "removed"], [4, "kept"]] as const)(
-    "with %i citations, dismissing one and deleting another leaves it %s, as if the dismissed one stood",
-    async (count, outcome) => {
-      const profileId = await person();
-      const { principleId, signalIds } = await principleOnThreeSignals(profileId, false, count);
-      await dismissProfileSignal(t.db as never, { profileId, signalId: signalIds[0]! });
-      await t.sql`DELETE FROM signals WHERE id=${signalIds[1]!}`;
-      const reconciled = await reconcilePrinciplesAfterSignalLoss(t.db as never, { profileId, signalIds: [], principleIds: [principleId] });
-      const rows = await t.sql`SELECT state, unsupported_at FROM principles WHERE id=${principleId}`;
-      if (outcome === "removed") {
-        expect(reconciled.removed).toEqual([principleId]);
-        expect(rows).toHaveLength(0);
-      } else {
-        expect(reconciled, "the dismissed citation was not counted").toEqual({ demoted: [], removed: [] });
-        expect(rows[0]).toMatchObject({ state: "held", unsupported_at: null });
-      }
-    },
-  );
 
   it("is all-or-nothing: a failure settling its disputes leaves the claim undismissed", async () => {
     const profileId = await person();

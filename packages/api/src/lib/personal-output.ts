@@ -9,14 +9,9 @@ type Db = Pick<ReturnType<typeof getDb>, "select">;
 
 /** Current standing, not a claim that legacy lineage or semantic quality was
  * independently verified. Every current witness must belong to this profile. */
-export function personalSignalReadable(profileId: string, countDismissed = false) {
-  /* `countDismissed`: only the principles reconcile, which deletes, and must
-     treat an undoable dismissal as still standing. Never for a read. */
-  const standing = countDismissed
-    ? sql`(${signals.status} <> 'retired' OR ${signals.dismissedAt} IS NOT NULL)`
-    : sql`${signals.status} <> 'retired' AND ${signals.dismissedAt} IS NULL`;
-  return sql`(${signals.profileId} = ${profileId}::uuid AND ${standing}
-    AND ${signals.unsupportedAt} IS NULL
+export function personalSignalReadable(profileId: string) {
+  return sql`(${signals.profileId} = ${profileId}::uuid AND ${signals.status} <> 'retired'
+    AND ${signals.dismissedAt} IS NULL AND ${signals.unsupportedAt} IS NULL
     AND (EXISTS (SELECT 1 FROM signal_evidence pe JOIN inspirations pi
       ON pi.id = pe.inspiration_id AND pi.profile_id = pe.owner_profile_id
       WHERE pe.signal_id = ${signals.id} AND pe.profile_id = ${profileId}::uuid
@@ -33,11 +28,11 @@ export function personalSignalReadable(profileId: string, countDismissed = false
 
 /** Apply before a public limit: hidden rows must not crowd readable entries
  * out of the result, nor require fetching an unbounded private artifact. */
-export function personalEntrySupportCurrent(profileId: string, countDismissed = false) {
+export function personalEntrySupportCurrent(profileId: string) {
   return sql`(
     EXISTS (SELECT 1 FROM top_of_mind_entry_signals pc WHERE pc.entry_id = ${topOfMindEntries.id})
     AND NOT EXISTS (SELECT 1 FROM top_of_mind_entry_signals pc LEFT JOIN signals ON signals.id = pc.signal_id
-      WHERE pc.entry_id = ${topOfMindEntries.id} AND ((${personalSignalReadable(profileId, countDismissed)}) IS NOT TRUE
+      WHERE pc.entry_id = ${topOfMindEntries.id} AND ((${personalSignalReadable(profileId)}) IS NOT TRUE
         OR (${citationStatementCurrent('pc')}) IS NOT TRUE))
     AND NOT EXISTS (SELECT 1 FROM top_of_mind_entry_signals pc WHERE pc.entry_id = ${topOfMindEntries.id}
       AND (${citationBodyCurrent('pc', 'top_of_mind_entries', 'entry_body_revision', 'body_revision')}) IS NOT TRUE)
