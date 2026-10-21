@@ -147,6 +147,7 @@ class InMemoryBackgroundJobStore implements BackgroundJobStore {
       lastError: null,
       idempotencyKey: null,
       rerunRequested: false,
+      malformedRetryVersion: null,
       createdAt: row.createdAt,
       updatedAt: now,
     };

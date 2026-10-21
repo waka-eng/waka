@@ -20,6 +20,7 @@ import {
   MAX_RELATED_INSPIRATION_CITATIONS,
   parseSignalCandidates,
 } from "../queue/gemini.js";
+import { MalformedModelOutputError } from "./model-provider.js";
 
 const NOW = new Date("2026-08-15T12:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -259,6 +260,19 @@ describe("parseSignalCandidates — null optional fields are a valid reply", () 
       { statement: "I keep commitments small.", reason: undefined, quote: undefined, relatedEvidence: undefined },
     ]);
     expect(parseSignalCandidates({ statements: null, category: null })).toEqual({ statements: [], category: null });
+  });
+});
+
+describe("parseSignalCandidates — a wrong shape is malformed output, never no candidates", () => {
+  it.each([
+    [{ statements: "I keep commitments small." }],
+    [{ statements: [{ reason: "no statement field" }] }],
+    [{ statements: [{ statement: 42 }] }],
+    ["not an object"],
+  ])("throws MalformedModelOutputError for %j", (payload) => {
+    /* "no candidates" marks the capture derived-with-nothing for good */
+    expect(() => parseSignalCandidates(payload)).toThrow(MalformedModelOutputError);
+    expect(() => parseSignalCandidates(payload)).toThrow("malformed_model_output");
   });
 });
 

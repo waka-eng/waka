@@ -825,6 +825,15 @@ minted a duplicate signal):
   re-runnable. Derivation is safe to retry by construction: evidence is
   unique per (signal, inspiration), and a re-extracted statement lands in
   the dedupe band of anything the earlier attempt already minted.
+- **The answer had the wrong shape.** An extraction reply that parses but
+  fails its schema throws `MalformedModelOutputError`. It is never "no
+  candidates", which would mark the capture derived-with-nothing for good.
+  It gets **one retry per request version**, tracked in
+  `background_jobs.malformed_retry_version`. A second malformed answer for
+  that version fails the job with `malformed_model_output`. At temperature 0
+  one backend mostly repeats the same reply, so this caps the cost at two
+  calls, while a provider-routed retry can still reach a backend that answers.
+  A new enqueue bumps the version, so edited input gets its own retry.
 
 Whole-artifact synthesis and declaration routing throw on **both** absences
 — an artifact must never record a decision the model did not make.

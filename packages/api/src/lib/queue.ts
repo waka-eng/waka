@@ -161,7 +161,7 @@ import { applySignalSupportReview } from './signal-support-apply.js';
 import { SupportSourceUnavailableError } from './signal-support-review.js';
 import { isRetiredGroupWork, retiredGroupWork, withoutLegacyGroupDestination } from './retired-group-work.js';
 import { bindInspirationSupportReading } from './inspiration-processing.js';
-import { getDefaultModelProvider } from "./model-provider.js";
+import { getDefaultModelProvider, MalformedModelOutputError } from "./model-provider.js";
 import { InspirationProcessingUnavailableError, recordInspirationProcessingRequest, recordInspirationReadingResult, type InspirationProcessingReceipt } from "./inspiration-processing.js";
 import {
   type AccountModelUsage,
@@ -937,7 +937,13 @@ export async function drainBackgroundJobs(
         });
         continue;
       }
-      const exhausted = job.attempts >= job.maxAttempts;
+      // Malformed output gets one retry per request version, then is terminal:
+      // a second identical temperature-0 answer is not worth a third call.
+      // Keyed to request_version (not last_error), so new input earns its own
+      // retry and an unrelated failure in between changes nothing.
+      const malformedRetrySpent = err instanceof MalformedModelOutputError
+        && job.malformedRetryVersion !== null && job.malformedRetryVersion === job.requestVersion;
+      const exhausted = job.attempts >= job.maxAttempts || malformedRetrySpent;
       const failedAt = clock();
       await store.markFailedOrPending(job, err, exhausted, failedAt);
       if (exhausted) result.failed += 1;
@@ -1705,6 +1711,7 @@ async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Pro
       job.request_version AS "requestVersion",
       job.completed_version AS "completedVersion",
       job.rerun_requested AS "rerunRequested",
+      job.malformed_retry_version::text AS "malformedRetryVersion",
       job.status,
       job.attempts,
       job.max_attempts AS "maxAttempts",
@@ -1722,7 +1729,8 @@ async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Pro
 
   const result = rows as unknown as ClaimedBackgroundJob[];
   const job = result[0];
-  return job ? { ...job, requestVersion: BigInt(job.requestVersion), completedVersion: BigInt(job.completedVersion) } : null;
+  return job ? { ...job, requestVersion: BigInt(job.requestVersion), completedVersion: BigInt(job.completedVersion),
+    malformedRetryVersion: job.malformedRetryVersion === null ? null : BigInt(job.malformedRetryVersion) } : null;
 }
 
 async function markJobSucceeded(job: BackgroundJob, completion: BackgroundJobResult | null): Promise<boolean> {
@@ -1797,6 +1805,11 @@ async function markJobFailedOrPending(
         last_error = CASE WHEN rerun_requested THEN NULL ELSE ${sanitizeError(err)} END,
         attempts = CASE WHEN rerun_requested THEN 0 ELSE attempts END,
         rerun_requested = false,
+        -- The version this attempt read has now spent its one malformed retry.
+        -- A newer request (rerun flag, or any later enqueue) carries a higher
+        -- request_version, so it is not charged for this one.
+        malformed_retry_version = CASE WHEN ${err instanceof MalformedModelOutputError}
+          THEN ${job.requestVersion.toString()}::bigint ELSE malformed_retry_version END,
         result = NULL,
         updated_at = ${now.toISOString()}::timestamptz
     WHERE id = ${job.id}::uuid AND status = 'running'
