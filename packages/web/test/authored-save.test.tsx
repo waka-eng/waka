@@ -18,8 +18,8 @@ const resolved = vi.fn(), removed = vi.fn();
 let host: HTMLDivElement, root: Root, latest: ReturnType<typeof useAuthoredSave>;
 const records = () => Object.keys(localStorage).filter((key) => key.includes(':pendingSave:'));
 const missing = () => new ApiError({ status: 404, code: 'save_not_found', message: 'No committed save found' });
-function Probe({ owner = scope, operation = 'inspiration' as const }) {
-  latest = useAuthoredSave({ scope: owner, operation,
+function Probe({ owner = scope, operation = 'inspiration' as const, enabled = true }) {
+  latest = useAuthoredSave({ scope: owner, operation, enabled,
     onResolved: resolved, onRemoved: removed });
   return <span>{latest.phase}</span>;
 }
@@ -189,6 +189,39 @@ it("the owner's success refresh never POSTs another tab's journal", async () => 
   await act(async () => { finish(source); });
   expect(createInspiration).toHaveBeenCalledOnce(); expect(ids()).toEqual(new Set([mine.requestId]));
   expect(latest.pending?.requestId).toBe(theirs.requestId); expect(latest.busy).toBe(false);
+});
+
+it('an enabled flip while a POST is in flight never sends a second POST', async () => {
+  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise(() => {}));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => { window.dispatchEvent(new Event('online')); }); // owed while the POST is in flight
+  await act(async () => root.render(<Probe enabled={false} />));
+  await act(async () => root.render(<Probe enabled />));
+  await act(async () => vi.advanceTimersByTimeAsync(20_000));
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(records()).toHaveLength(1); expect(latest.busy).toBe(false);
+});
+
+it('only the first mount re-sends; a later effect re-run only reads', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  expect(latest.phase).toBe('uncertain');
+  await act(async () => root.render(<Probe enabled={false} />));
+  await act(async () => root.render(<Probe enabled />));
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(latest.phase).toBe('uncertain');
+});
+
+it('a first mount whose resend was cut off before its POST still owes it to the re-run', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => root.unmount()); root = createRoot(host);
+  let answer!: () => void;
+  vi.mocked(fetchInspirationSaveRequest).mockImplementationOnce(() => new Promise((_, reject) => { answer = () => reject(missing()); }));
+  await act(async () => root.render(<Probe />)); // load: resend starts with its status read
+  await act(async () => root.render(<Probe enabled={false} />)); // re-run before any POST (e.g. StrictMode)
+  await act(async () => root.render(<Probe enabled />));
+  await act(async () => { answer(); });
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1);
+  expect(latest.pending).toBeNull(); expect(records()).toHaveLength(0);
 });
 
 it('focus still only reads a pending save; it does not re-send', async () => {

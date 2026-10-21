@@ -103,14 +103,16 @@ export function useAuthoredSave(options: {
       flight). The next scan that can run performs it: focus/visibility, or
       the end of the in-flight run. In memory only. */
   const resendOwed = useRef(false);
-  const own = useRef<Set<string> | null>(null);
+  const own = useRef<Set<string> | null>(null), firstMount = useRef(true);
+  /** What the run in flight has done: a re-run must not re-POST over 'posted'. */
+  const inFlight = useRef<'reading' | 'sending' | 'posted'>('reading');
   const isOwn = (intent: AuthoredSaveIntent | null | undefined) => Boolean(intent && own.current?.has(intent.requestId));
 
   const run = useCallback(async (intent: AuthoredSaveIntent, write: boolean, pressed = write) => {
     const owner = live.current, key = owner.prefix;
     if (!mounted.current || working.current || !key || !owner.scope || owner.enabled === false || (document.hidden && !write)) return;
     if (intent.rejected) { setPhase('rejected'); return; }
-    working.current = true; setBusy(true); setPhase('checking');
+    working.current = true; inFlight.current = write ? 'sending' : 'reading'; setBusy(true); setPhase('checking');
     abort.current?.abort(); const controller = new AbortController(); abort.current = controller;
     const sequence = ++epoch.current;
     const owns = () => mounted.current && live.current.prefix === key && epoch.current === sequence;
@@ -138,6 +140,7 @@ export function useAuthoredSave(options: {
         current(); setPhase('saving');
         attempted = true;
         const saveOptions = { ...scoped, requestId: intent.requestId, signal: controller.signal };
+        inFlight.current = 'posted';
         created = await createInspiration(intent.input, saveOptions); current();
         if (!created?.id || created.profileId !== intent.profileId) throw new Error('Unexpected saved inspiration');
         saved = { inspirationId: created.id, reflectionId: null, processing: created.processing };
@@ -209,9 +212,13 @@ export function useAuthoredSave(options: {
   refresh.current = scan;
 
   useEffect(() => {
+    // Only the true first mount owes the load resend; a re-run (enabled or
+    // prefix change) only reads. A re-run after a run that was in flight
+    // drops any owed resend (cleanup below), so it never re-POSTs over it.
     if (!own.current) own.current = readOwn();
+    const first = firstMount.current; firstMount.current = false;
     mounted.current = true; epoch.current += 1; abort.current?.abort(); working.current = false;
-    intentRef.current = null; setPending(null); setBusy(false); setPhase('idle'); scan(true);
+    intentRef.current = null; setPending(null); setBusy(false); setPhase('idle'); scan(first);
     const onFocus = () => scan();
     const onOnline = () => scan(true);
     const onStorage = (event: StorageEvent) => { if (!event.key || event.key.startsWith(prefix ?? '\0')) scan(); };
@@ -219,6 +226,8 @@ export function useAuthoredSave(options: {
     window.addEventListener('online', onOnline);
     return () => {
       window.removeEventListener('online', onOnline);
+      if (working.current && inFlight.current === 'posted') resendOwed.current = false;
+      else if (working.current && inFlight.current === 'sending') resendOwed.current = true; // not POSTed yet: still owed
       mounted.current = false; epoch.current += 1; abort.current?.abort(); working.current = false;
       window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); window.removeEventListener('storage', onStorage);
     };
