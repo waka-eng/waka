@@ -49,6 +49,8 @@ export function NoteTools(props: {
   attaching: boolean;
   saving: boolean;
   recording: ReturnType<typeof useAudioRecording>;
+  /** Record cannot start: another recorder on the page is running. */
+  recordDisabled?: boolean;
   /** Said in the bar when a write or the recorder failed, in the reader's
       language; empty is the success state. */
   failed: string;
@@ -245,7 +247,7 @@ export function NoteTools(props: {
     <>
       {supportedRecordingType() ? (
         props.recording.phase === "idle" ? (
-          <button type="button" className="waka-dock-tool" disabled={busy}
+          <button type="button" className="waka-dock-tool" disabled={busy || props.recordDisabled}
             aria-label={props.recordLabel}
             onClick={() => void props.recording.start()}><HomeActionIcon kind="record" /></button>
         ) : (

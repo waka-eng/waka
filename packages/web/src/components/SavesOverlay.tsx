@@ -1339,6 +1339,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           attaching={attaching}
           saving={saving}
           recording={recording}
+          /* the notepad's recorder is running under this page: one
+             microphone at a time */
+          recordDisabled={recorder.blocked}
           failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : ""}
           /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
              state (founder: "states should show and disappear in the bottom

@@ -20,17 +20,21 @@
  * answers with one agent, so a wall switch has somewhere to go.
  * `lib/auth-context` states the signed-in viewer. `MediaRecorder` and
  * `navigator.mediaDevices` are pieces of browser jsdom lacks; the stub holds
- * `stop`'s delivery until the case releases it.
+ * `stop`'s delivery until the case releases it. `indexedDB` is
+ * `fake-indexeddb`, the notepad's draft store, without which its Record is
+ * disabled and the one-microphone cases could not start the notepad's.
  *
  * `helpers/canvas-stub` stands in for drawing (jsdom has no 2D context) and
  * `helpers/render-home` for the mount and the frame loop.
  */
 import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { useNavigate } from "react-router-dom";
+import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
-import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
+import { apiMockFrom, dataMockFrom, mountWorld, pressDockRow, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 
 const FACTS = {
   inspirations: Array.from({ length: 3 }, (_, i) => ({ id: `own-${i}`, text: `something I kept, ${i}`, daysAgo: i + 1 })),
@@ -102,6 +106,8 @@ beforeAll(() => {
 });
 beforeEach(() => {
   window.localStorage.clear();
+  /* the notepad's draft store, so its Record can be pressed */
+  (globalThis as { indexedDB?: IDBFactory }).indexedDB = new IDBFactory();
   Object.assign(S, { presigned: [], finalized: [], failFinalize: 0, undelivered: [], recorders: 0 });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   vi.stubGlobal("MediaRecorder", Recorder);
@@ -137,7 +143,7 @@ async function recordOn(id: string) {
   expect(row, `no row for ${id}`).toBeTruthy();
   await act(async () => row!.click());
   await settle();
-  const record = q<HTMLButtonElement>('.waka-dock-tool[aria-label="Record"]');
+  const record = q<HTMLButtonElement>('#waka-note-tools .waka-dock-tool[aria-label="Record"]');
   expect(record, "the open note offers no Record").toBeTruthy();
   await act(async () => record!.click());
   await settle(2);
@@ -238,6 +244,62 @@ it("says on Home that a clip failed to attach after the archive closed, and Try 
   expect(S.finalized, "Try again did not attach the clip to the note it was made on").toEqual(["own-2"]);
   expect(S.presigned).toEqual([VIEWER_ID, VIEWER_ID]);
   expect(q(".waka-clip-failed"), "the line stayed after the clip attached").toBeNull();
+});
+
+/* ═══ ONE MICROPHONE AT A TIME ═══════════════════════════════════════════
+   The archive can stand over an open notepad (`?compose=1&open=saves`), and
+   with the archive's recorder in `Home` beside the notepad's, both could
+   hold a microphone at once. Each refuses while the other is live. (With
+   the notepad recording, the bar keeps the notepad's tools and the archive
+   offers no Record at all, so that direction is held at the hook.) */
+it("does not let the notepad record while the archive's recording is still finishing", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-1");
+  expect(S.recorders).toBe(1);
+  /* the archive closes; the browser has not yet handed over its clip, so
+     its microphone is still live — and a new note is opened at once */
+  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await settle();
+  expect(archiveOpen()).toBe(false);
+  await pressDockRow(world.container, "Inspiration");
+  await settle();
+  const notepadRecord = () => q<HTMLButtonElement>('.waka-dock .waka-dock-tool[aria-label="Record"]');
+  expect(notepadRecord(), "the notepad under the archive is not on screen").toBeTruthy();
+  expect(notepadRecord()!.disabled, "the notepad's Record was offered over a live microphone").toBe(true);
+  /* a press that reaches it anyway starts nothing */
+  notepadRecord()!.disabled = false;
+  await act(async () => notepadRecord()!.click());
+  await settle(2);
+  expect(S.recorders, "two recorders ran at once").toBe(1);
+  /* once the clip is handed over, the notepad's microphone is free */
+  await deliverStops();
+  expect(S.finalized).toEqual(["own-1"]);
+  expect(notepadRecord()!.disabled, "the notepad stayed locked after the archive let go").toBe(false);
+  await act(async () => notepadRecord()!.click());
+  await settle(2);
+  expect(S.recorders, "the notepad could not record once the archive was done").toBe(2);
+});
+
+it("does not let the archive's recorder start while the notepad's is live", async () => {
+  const { useArchiveRecorder } = await import("../src/lib/archive-recorder");
+  let recorder: ReturnType<typeof useArchiveRecorder> | null = null;
+  function Probe({ blocked }: { blocked: boolean }) { recorder = useArchiveRecorder({ blocked }); return null; }
+  const host = document.createElement("div");
+  document.body.append(host);
+  const probe = createRoot(host);
+  try {
+    await act(async () => probe.render(<Probe blocked />));
+    await act(async () => { await recorder!.start({ id: "own-1", preview: "something I kept, 1" }, VIEWER_ID); });
+    expect(S.recorders, "the archive recorded over the notepad's microphone").toBe(0);
+    expect(recorder!.phase).toBe("idle");
+    await act(async () => probe.render(<Probe blocked={false} />));
+    await act(async () => { await recorder!.start({ id: "own-1", preview: "something I kept, 1" }, VIEWER_ID); });
+    expect(S.recorders, "the archive could not record once the notepad was done").toBe(1);
+  } finally {
+    await act(async () => probe.unmount());
+    host.remove();
+  }
 });
 
 it("lets the failure line go with ×, without attaching anything", async () => {

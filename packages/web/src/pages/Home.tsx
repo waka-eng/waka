@@ -733,7 +733,13 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /* THE ARCHIVE'S RECORDER LIVES HERE TOO (L12), not in `SavesOverlay`: this
      page outlives the archive, so a clip still finishing when the archive
      closes or remounts is attached to its note and its failure said here. */
-  const archiveRecorder = useArchiveRecorder();
+  /* ONE MICROPHONE AT A TIME. The archive can stand over an open notepad
+     (`?compose=1&open=saves`), so both recorders can be on screen; each
+     refuses to start while the other is recording or finishing, and its
+     Record is disabled while it would refuse. */
+  const archiveRecorder = useArchiveRecorder({ blocked: recording.phase !== 'idle' });
+  const notepadRecordBlocked = archiveRecorder.phase !== 'idle';
+  const startNotepadRecording = () => { if (!notepadRecordBlocked) void recording.start(); };
   useEffect(() => () => { composerEpoch.current += 1; fileOwnerEpoch.current += 1; uploadController.current?.abort(); }, []);
   const viewNavigation = useViewNavigation(storageScope ? `${storageScope.accountId}:${storageScope.profileId}` : 'fixture');
   const viewNavigationRef = useRef(viewNavigation); viewNavigationRef.current = viewNavigation;
@@ -9108,8 +9114,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       className={`waka-composer-mic${recording.phase === 'recording' ? ' waka-composer-mic--on' : ''}`}
                       aria-label={say(recording.phase === 'recording' ? 'worldComposerStopRecording' : 'worldComposerRecord')}
                       aria-pressed={recording.phase === 'recording'}
-                      disabled={recording.phase === 'requesting' || recording.phase === 'finishing' || !composerDraft.available}
-                      onClick={() => { if (recording.phase === 'recording') void recording.stop(); else void recording.start(); }}
+                      disabled={recording.phase === 'requesting' || recording.phase === 'finishing' || !composerDraft.available
+                        || (recording.phase === 'idle' && notepadRecordBlocked)}
+                      onClick={() => { if (recording.phase === 'recording') void recording.stop(); else startNotepadRecording(); }}
                     >
                       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                         <rect x="5.6" y="1.6" width="4.8" height="8.2" rx="2.4"
@@ -11575,8 +11582,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   recording.phase === 'idle' ? (
                     <button type="button" className="waka-dock-tool"
                       aria-label={say(inputMedia.some(m => m.type === 'audio') ? 'worldComposerRecordAgain' : 'worldComposerRecord')}
-                      disabled={!composerDraft.available}
-                      onClick={() => void recording.start()}><HomeActionIcon kind="record"/></button>
+                      disabled={!composerDraft.available || notepadRecordBlocked}
+                      onClick={startNotepadRecording}><HomeActionIcon kind="record"/></button>
                   ) : (
                     /* STOP KEEPS IT, CANCEL THROWS IT AWAY — both, because a
                        recording you can start and stop but not discard is

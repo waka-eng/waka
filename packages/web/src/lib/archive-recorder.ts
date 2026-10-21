@@ -40,7 +40,10 @@ export interface ClipFailure {
   target: ClipTarget;
 }
 
-export function useArchiveRecorder() {
+/** `blocked`: another recorder on the page (the notepad's) is recording or
+    finishing — one microphone at a time, so `start` refuses while it is. */
+export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
+  const blocked = Boolean(options.blocked);
   const target = useRef<ClipTarget | null>(null);
   const [forNote, setForNote] = useState<ClipTarget | null>(null);
   const [sending, setSending] = useState<ClipTarget | null>(null);
@@ -81,10 +84,16 @@ export function useArchiveRecorder() {
   }, [setFailures]);
 
   /* The clip's note is read when the clip is handed over, which is before a
-     next recording can begin: `start` refuses while one is finishing. */
+     next recording can begin: `start` refuses while one is finishing.
+
+     THE UPLOAD IS NOT AWAITED HERE. The hook stays `finishing` until its
+     callback settles, and `finishing` is what holds the other recorder off
+     — so awaiting the upload would hold the notepad's microphone off for a
+     network round trip after this one's had already been released. The
+     upload reports through `sending`, `landed` and `failures` instead. */
   const recorder = useAudioRecording((file) => {
     const to = target.current;
-    return to ? send(file, to) : undefined;
+    if (to) void send(file, to);
   });
 
   const recorderStart = recorder.start, phase = recorder.phase;
@@ -92,12 +101,12 @@ export function useArchiveRecorder() {
      called inside the tap, and the hook asks for the stream before its own
      first await. */
   const start = useCallback((note: { id: string; preview: string }, profileId: string | null) => {
-    if (phase !== "idle") return Promise.resolve();
+    if (blocked || phase !== "idle") return Promise.resolve();
     const to = { noteId: note.id, label: note.preview, profileId };
     target.current = to;
     setForNote(to);
     return recorderStart();
-  }, [phase, recorderStart]);
+  }, [blocked, phase, recorderStart]);
 
   const retry = useCallback((id: number) => {
     const found = failuresRef.current.find((item) => item.id === id);
@@ -107,7 +116,7 @@ export function useArchiveRecorder() {
   }, [send, setFailures]);
   const dismiss = useCallback((id: number) => setFailures((all) => all.filter((item) => item.id !== id)), [setFailures]);
 
-  return { ...recorder, start, forNote, sending, landed, failures, retry, dismiss };
+  return { ...recorder, start, blocked, forNote, sending, landed, failures, retry, dismiss };
 }
 
 export type ArchiveRecorder = ReturnType<typeof useArchiveRecorder>;
