@@ -1262,29 +1262,29 @@ capture-phase Escape handler and was withdrawn in review for three cases a fix m
 - **Focus is dropped.** Escape pressed from inside the rail's own list closed it and left focus on
   `body` instead of returning it to `.jar-when`.
 
-## Paused notice can show stale "paused" for ≤30s after a Retry (follow-up)
-
-**Status:** open follow-up (2026-10-18), `lib/use-reading-paused.ts`. Two races:
-
-- **A GET in flight during the POST.** A status GET can be sent while the Retry POST is out and
-  start after the Retry's counter bump, so it is not discarded; if it answers with the pre-retry
-  state after the post-retry GET, the notice says "paused" again until the next 30s re-check.
-- **Two counters.** Home and the principles overlay each mount their own `useReadingPaused`, each
-  with its own retry counter: a Retry pressed in one does not invalidate a GET in flight in the
-  other, which can keep showing "paused" until its own next check.
-
-Both clear within one 30s re-check (or on focus).
-
 ## Principles Try again restarting failed jobs (follow-up)
 
-**Status:** open follow-up (2026-10-18). `components/PrincipleRead.tsx` is back to `origin/dev`:
-its Try again re-reads, and asks for a retry only the way dev does. A Try again that itself
-restarts failed principles (one POST per press), a stalled-read "still working" line, and a poll
-that never gives up were built here and withdrawn after repeated review findings in the same
-area. Open cases: a failed or hung retry POST (re-sent automatically, or leaving the button
-disabled); a status GET sent before a retry landing after it; a read that stalls for minutes with
-no way on; and polling that stops after repeated failures. The paused-reading notice's Retry
+**Status:** open follow-up (2026-10-18, re-tried and withdrawn again 2026-10-20 on
+`claude/followup-principles`). `components/PrincipleRead.tsx` is back to `origin/dev`: its Try
+again re-reads, and asks for a retry only the way dev does. A Try again that itself restarts
+failed principles (one POST per press), a stalled-read "still working" line, and a poll that
+never gives up were built here and withdrawn after repeated review findings in the same area.
+Open cases: a failed or hung retry POST (re-sent automatically, or leaving the button disabled);
+a status GET sent before a retry landing after it; a read that stalls for minutes with no way
+on; and polling that stops after repeated failures. The paused-reading notice's Retry
 (`useReadingPaused`) is the one place that still sends `POST /principles/refresh?retry=1`.
+
+Found in review of the 2026-10-20 attempt (a press-handler POST, disabled while out, "Still
+trying…" after 20s):
+
+- **Double POST.** When the retry POST answered, the read restarted, and a first GET reporting
+  `pending` sent the read path's own "queue missing work" POST — two POSTs for one press.
+- **No counter bump.** The press did not bump `useReadingPaused`'s shared retry counter or ask the
+  mounted paused notices to re-check, so a status GET in flight there was not discarded.
+- **Silent failure.** A refused or failed retry POST was swallowed: the line went back to its
+  failure text with nothing saying the retry itself had failed.
+- **Two presses.** Try again here and Retry on the paused notice are separate buttons with
+  separate in-flight state, so pressing both sends two retry POSTs for one stall.
 
 ## Session expiry return path and signed-in hint (follow-up)
 
@@ -1492,15 +1492,30 @@ in review. No code shipped. Every case found is listed so the next attempt start
 
 ## Principles after a dismissed signal (follow-up)
 
-**Status:** open, set aside from `claude/fix-api-bugs`. `dismissProfileSignal`
+**Status:** open, set aside from `claude/fix-api-bugs` and again from
+`claude/followup-principles` (2026-10-20). `dismissProfileSignal`
 (`packages/api/src/routes/signals.ts`) retires the signal and settles its contradictions in one
-transaction, but does not reconcile the principles that cite it, which is dev's behaviour. A
-principle can therefore keep counting a dismissed signal as support until the next principles
-pass. The branch tried running `reconcilePrinciplesAfterSignalLoss` on dismissal and took it back
-out in review. Dismissal is undoable (`/restore`), but the reconcile deletes unedited minted
-principles, and a restore cannot bring those back. A real fix needs a reversible way to withdraw
-support, for example marking the support as withdrawn instead of deleting, with restore clearing
-the mark, or having restore re-run promotion.
+transaction, but does not reconcile the principles that cite it, which is dev's behaviour. Reads
+already withhold the support (`personalPrincipleSupportCurrent` excludes a dismissed signal, so an
+unedited minted principle is hidden and a locked one reads "support unconfirmed"), and a restore
+brings it back. The open case is the irreversible one: any later `reconcilePrinciplesAfterSignalLoss`
+(another cited signal's support withdrawn, an inspiration edit, a forced reconcile job) counts the
+dismissed citation as lost evidence and deletes an unedited minted principle, which the restore
+cannot bring back. Running the reconcile on dismissal was tried and taken out for the same reason.
+
+Tried on `claude/followup-principles` and withdrawn in review:
+
+- **Leaving any principle that cites a dismissed signal untouched** (an early exit in the
+  reconcile): a real loss beside the dismissal (a deleted signal, lost evidence) was then never
+  handled.
+- **Counting a dismissed citation as standing support** (in the reconcile and its top-of-mind
+  appearance check): a principle resting on a signal that is never restored stays `held` for
+  good, and the nightly pass, which does not see the dismissed signal, can mint near-duplicates
+  beside it; a dismissed signal that was only `emerging` (never active) was counted as support it
+  never gave; and a declared or locked principle whose real support went was never demoted.
+
+A real fix needs a reversible way to withdraw support, for example marking the support as
+withdrawn instead of deleting, with restore clearing the mark, or having restore re-run promotion.
 
 ---
 
