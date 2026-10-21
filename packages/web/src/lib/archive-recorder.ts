@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { attachToNote } from "./attach-to-note";
 import { useAudioRecording } from "./use-audio-recording";
@@ -83,6 +83,17 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
       bump(key, -1);
     }
   }, [bump, setFailures]);
+  /* LEAVING THE PAGE MID-UPLOAD LOSES THE CLIP, so the page warns while
+     any is in flight (review, 2026-10-21). The hook warns while it records
+     or finishes; the upload is no longer awaited inside it (one microphone
+     at a time), so this is the warning for the part after. */
+  const uploading = inFlight.size > 0;
+  useEffect(() => {
+    if (!uploading) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [uploading]);
   /** Whether a clip is on its way to this note in this archive. */
   const isSending = useCallback((noteId: string, profileId: string | null) =>
     inFlight.has(noteKey(noteId, profileId)), [inFlight]);

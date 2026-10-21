@@ -99,3 +99,18 @@ it("keeps each note's upload its own while two are in flight", async () => {
   /* the same note in another archive is another note */
   expect(recorder.isSending("a", "agent")).toBe(false);
 });
+
+it("warns before the page is left while a clip is still uploading, and not after", async () => {
+  const leave = () => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  expect(leave(), "warned with nothing in flight").toBe(false);
+  await recordOnto("a");
+  expect(recorder.phase, "the recorder itself is done").toBe("idle");
+  expect(leave(), "the page could be left over an upload still in flight").toBe(true);
+  await act(async () => { S.held[0]!.land(); await Promise.resolve(); });
+  await act(async () => { await Promise.resolve(); });
+  expect(leave(), "still warned after the clip landed").toBe(false);
+});
