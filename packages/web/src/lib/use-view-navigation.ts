@@ -32,7 +32,19 @@ export function useViewNavigation(scope: string | null) {
   /* Set while a late act runs where it stands, so it does not ask to step
      back a second time. */
   const overNote = useRef(false);
+  /* THE ENTRY A TRAVERSAL WAS ASKED FROM, until the router lands elsewhere.
+     Leaving the archive from a note commits the note on the way, and the
+     note letting go asks for its own close — which, arriving while the
+     archive's step is still in flight, would be a second step back (seen in
+     Chromium: Escape from a note walked one entry too far). A close asked
+     for while a traversal from this entry is under way is already answered. */
+  const traversal = useRef<{ from: string; at: number } | null>(null);
+  const traverse = (delta: number) => { traversal.current = { from: latest.current.location.key, at: Date.now() }; latest.current.navigate(delta); };
+  /** Whether a traversal asked from `key` may still land (one that never
+      does stops counting, so a close is never a dead press for good). */
+  const traversing = (key: string) => Boolean(traversal.current && traversal.current.from === key && Date.now() - traversal.current.at < POP_LIMIT_MS);
   useEffect(() => {
+    if (traversal.current?.from !== location.key) traversal.current = null;
     const waiting = afterPop.current;
     if (!waiting || waiting.from === location.key) return;
     afterPop.current = null; window.clearTimeout(waiting.timer); waiting.run();
@@ -46,7 +58,7 @@ export function useViewNavigation(scope: string | null) {
        write hostage: the act then runs where it stands. */
     const timer = window.setTimeout(() => { if (afterPop.current?.from === from) { const late = afterPop.current; afterPop.current = null; overNote.current = true; try { late.run(); } finally { overNote.current = false; } } }, POP_LIMIT_MS);
     afterPop.current = { from, run, timer };
-    latest.current.navigate(-1);
+    traverse(-1);
   }, []);
   /** Whether the entry under this one is the archive's list, pushed by this
       page load — the only case a step back can be followed by an act. */
@@ -112,11 +124,11 @@ export function useViewNavigation(scope: string | null) {
    */
   const closeNote = useCallback(() => {
     const current = latest.current, before = readViewLocation(current.location.pathname, current.location.search);
-    if (!before?.note) return;
+    if (!before?.note || afterPop.current || traversing(current.location.key)) return;
     const stored = (current.location.state as { wakaView?: StoredView } | null)?.wakaView;
     const to = viewHref({ ...before, note: null });
     own.current = null;
-    if (stored?.scope === current.scope && stored.noteFrom === to) current.navigate(-1);
+    if (stored?.scope === current.scope && stored.noteFrom === to) traverse(-1);
     else writeRef.current({ ...before, note: null }, { replace: true });
   }, []);
   const closeComposer = useCallback(() => {
@@ -156,6 +168,7 @@ export function useViewNavigation(scope: string | null) {
     const current=latest.current,before=readViewLocation(current.location.pathname,current.location.search);
     if(!before?.open)return;
     if(afterPop.current){afterPop.current.run=()=>closeOpenRef.current();return;}
+    if(traversing(current.location.key))return;
     const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
     own.current=null;
     /* FROM AN OPEN NOTE, closing the archive is TWO entries: the note's and
@@ -164,10 +177,10 @@ export function useViewNavigation(scope: string | null) {
        link (no origin) the step lands on the list and the list is then
        rewritten to the world, so no entry is left that reopens it. */
     if(before.note&&stored?.scope===current.scope&&stored.noteFrom===viewHref({...before,note:null})){
-      if(stored.openFrom){current.navigate(-2);return;}
+      if(stored.openFrom){traverse(-2);return;}
       if(!overNote.current&&noteOverList(current,before,stored)){stepBackThen(()=>closeOpenRef.current());return;}
     }
-    if(stored?.scope===current.scope&&stored.openFrom) current.navigate(-1);
+    if(stored?.scope===current.scope&&stored.openFrom) traverse(-1);
     else current.navigate(viewHref({...before,open:null}),{replace:true});
   },[]);
   const closeOpenRef=useRef(closeOpen);closeOpenRef.current=closeOpen;

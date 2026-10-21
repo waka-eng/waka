@@ -108,6 +108,33 @@ it('commits what was typed when Back leaves the note, with no popstate to hear',
   expect(listRow()).toBeTruthy();
 });
 
+/* THE BROWSER'S ORDER: `popstate` first, the router's landing after it. A
+   note let go of by the pop, while the rendered address still names it, must
+   not be closed "on screen" as well — that was a second step back, past the
+   list (Chromium and WebKit, `tools/e2e/back-from-a-note.ts`). */
+it('a Back the browser delivers (popstate before the router lands) is one step, not two', async () => {
+  await openArchiveThenNote();
+  await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); go(-1); });
+  await settle();
+  expect(params().get('open'), 'one Back walked out of the archive').toBe('saves');
+  expect(params().get('note')).toBeNull();
+  expect(listRow()).toBeTruthy();
+});
+
+/* Escape from a note closes the archive: the note commits on the way, and
+   its letting go must not add a step of its own to the archive's. */
+it('Escape from a note closes the archive in one step and keeps the note as the forward entry', async () => {
+  world = await mountWorld(FACTS, { initialEntries: ['/?view=field', '/'], routerTools: <RouterTools/> }); await settle();
+  await chooseFromMenu(world.container, 'Inspirations'); await settle();
+  await act(async () => listRow()!.click()); await settle();
+  await act(async () => { page()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  await settle();
+  expect(params().get('open'), 'Escape did not close the archive').toBeNull();
+  expect(params().get('view'), 'Escape walked past where the archive was opened from').toBeNull();
+  await forward();
+  expect(params().get('note'), 'the forward entry is not the note').toBe('kept');
+});
+
 it('Forward after Back reopens the note', async () => {
   await openArchiveThenNote();
   await back();

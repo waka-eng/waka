@@ -2472,8 +2472,16 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
 
      `closeOpen`'s own `navigate(-1)` raises this event too, which is the
      duplicate the identity guard above exists for. */
+  /* WHICH ENTRY A POP LEFT, until the router has landed on the next one.
+     The router commits a popped location later, inside a transition, so
+     for a moment after a Back the rendered address still names the note the
+     person just left. A note let go of in that moment was let go of BY the
+     pop, and must not be "closed on screen" a second time — that would step
+     back again and skip the list (seen in Chromium and WebKit). */
+  const poppedFrom = useRef<string | null>(null);
+  useEffect(() => { poppedFrom.current = null; }, [viewNavigation.key]);
   useEffect(() => {
-    const popped = () => commitOpenNote();
+    const popped = () => { poppedFrom.current = viewNavigationRef.current.key; commitOpenNote(); };
     window.addEventListener("popstate", popped);
     return () => window.removeEventListener("popstate", popped);
   }, [commitOpenNote]);
@@ -2494,7 +2502,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     const nav = viewNavigationRef.current;
     if (nav.view?.open !== 'saves') return;
     if (change === 'open') { if (nav.view.note !== id) nav.write({ ...nav.view, note: id }); }
-    else if (nav.view.note === id) {
+    else if (nav.view.note === id && poppedFrom.current !== nav.key) {
       if (change === 'close') nav.closeNote();
       else nav.write({ ...nav.view, note: null }, { replace: true });
     }
