@@ -547,9 +547,12 @@ describe("every surface has a way out you can see", () => {
 
     /* AND CLOSE, LAST, THE ONE-PRESS WAY HOME on a making page and on a
        list: the note goes down as a draft; a chat, a list, or a saved note
-       in the archive (committed first) simply goes home. Rendered beside
-       the bar owner's row and nowhere else. */
-    const close = /\{barOwner && item\.id === barOwner \? \(\s*<button[^>]*className="waka-dock-item waka-dock-item--close"\s*onClick=\{\(\) => leaveAsModal\(making === 'inspiration' \? saveAsDraft : \(\) => \{ commitOpenNote\(\); openOverHome\(null\); \}\)\}>\s*\{say\('worldClose'\)\}/;
+       in the archive simply goes home. Rendered beside the bar owner's row
+       and nowhere else. The saved note is committed by `leaveOpen`, which
+       `openOverHome(null)` reaches, and which first finishes a running
+       recording (L12). Committing here first would close the note before
+       a failed upload could say so on it. */
+    const close = /\{barOwner && item\.id === barOwner \? \(\s*<button[^>]*className="waka-dock-item waka-dock-item--close"\s*onClick=\{\(\) => leaveAsModal\(making === 'inspiration' \? saveAsDraft : \(\) => openOverHome\(null\)\)\}>\s*\{say\('worldClose'\)\}/;
     expect(code(home), "a making page's or a list's bar no longer ends in a Close that goes home (with the note kept)").toMatch(close);
 
     /* THE CHAT WRITES ON ITS OWN PAGE AGAIN. The chat-in-the-bar composer
