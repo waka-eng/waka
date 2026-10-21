@@ -24,7 +24,7 @@
  * frame is the only honest answer.
  */
 
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useRef, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../lib/auth-context";
@@ -38,6 +38,13 @@ export interface RequireAuthProps {
 export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps): JSX.Element {
   const { isAuthenticated, isLoading, account, profile } = useAuth();
   const location = useLocation();
+  /* The account this guard has seen CONFIRMED (`/auth/me` answered, not the
+     cached hint). When it ends, the place it ended is that account's, so the
+     bounce names it as `owner` and only the same account returns there
+     (`resolveRedirect`). Read here, never on a sign-out path, so no sign-out
+     ordering changes. See docs/plans/session-expiry.md. */
+  const confirmedRef = useRef<string | null>(null);
+  if (!isLoading && account) confirmedRef.current = account.id;
 
   if (isLoading) {
     // The splash was a white page with a word on it — the product changing
@@ -54,7 +61,8 @@ export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps
     // hash` together form the smallest faithful round-trip key — anything
     // less drops query params and fragment-based UI state.
     const from = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to="/login" replace state={{ from }} />;
+    const owner = confirmedRef.current;
+    return <Navigate to="/login" replace state={owner ? { from, owner } : { from }} />;
   }
 
   if (account && !account.onboardingCompletedAt && location.pathname !== "/onboarding") {

@@ -54,10 +54,19 @@ export function safeInAppPath(value: unknown): string | null {
  * /login; otherwise falls back to the home route. We refuse anything that
  * doesn't start with "/" so a malicious referrer cannot steer the user to
  * an external site after they sign in.
+ *
+ * A `from` that carries an `owner` is where a CONFIRMED session ended (see
+ * RequireAuth): it is that account's place, so it applies only when the
+ * account now signing in is that same account. `signedInAs` is null when
+ * nobody is known yet (the Google button names its destination before the
+ * trip), and an owned `from` is then never carried. A `from` with no owner
+ * ("Switch account", an anonymous deep link) applies to whoever signs in.
+ * See docs/plans/session-expiry.md.
  */
-export function resolveRedirect(location: Location): string {
-  const state = location.state as { from?: unknown } | null;
-  const from = safeInAppPath(state?.from);
+export function resolveRedirect(location: Location, signedInAs: string | null = null): string {
+  const state = location.state as { from?: unknown; owner?: unknown } | null;
+  const owner = typeof state?.owner === "string" ? state.owner : null;
+  const from = owner === null || owner === signedInAs ? safeInAppPath(state?.from) : null;
   if (from) return from;
   const queryReturnTo = new URLSearchParams(location.search).get("returnTo");
   const returnTo = safeInAppPath(queryReturnTo);
