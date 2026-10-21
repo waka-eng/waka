@@ -93,7 +93,7 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onRecording, onClose, onNewSave, ownArchive = true }: {
   locale: SupportedLocale;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
@@ -128,6 +128,16 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
    * world could form a second opinion with.
    */
   onNoteOpen?: (close: (() => void) | null) => void;
+  /**
+   * WHILE A RECORDING RUNS, HOW TO FINISH IT (L12,
+   * `docs/plans/card-and-archive.md`, rule 3). Closing the archive unmounts
+   * the recorder, and a clip still being made is lost with it. So the world
+   * is handed a finisher while one runs: it stops the recording and resolves
+   * once the clip is uploaded and attached to the note it was made on —
+   * `true` when it was, `false` when the upload failed (the note is still
+   * open and says so). `null` when nothing is recording.
+   */
+  onRecording?: (finish: (() => Promise<boolean>) | null) => void;
   /**
    * WHOSE ARCHIVE THIS COULD BE INSTEAD — asked in the corner, not here.
    *
@@ -668,7 +678,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     /* `target`: the note a recording was STARTED on — a clip belongs to it,
        whichever note is open when the recorder hands the clip over. */
     const note = target ?? open;
-    if (!note) return;
+    if (!note) return false;
     setAttachingFor(note.id);
     setAttachFailedFor((was) => (was === note.id ? null : was));
     try {
@@ -728,15 +738,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         name: file.name,
         ...(file.type ? { contentType: file.type } : {}),
       });
-      if (!mounted.current) return;
+      if (!mounted.current) return true;
       /* The open note is a snapshot, so it is re-pointed at the row that
          now carries the attachment — otherwise the upload lands, the list
          knows, and the page somebody is looking at does not. */
       const fresh = (await load()) ?? [];
-      if (!mounted.current) return;
+      if (!mounted.current) return true;
       setOpen((card) => (card ? fresh.find((row) => row.id === card.id) ?? card : card));
+      return true;
     } catch {
       if (mounted.current) setAttachFailedFor(note.id);
+      return false;
     } finally {
       if (mounted.current) setAttachingFor((was) => (was === note.id ? null : was));
     }
@@ -752,18 +764,33 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      note (Back, Close, or opening another) stops the recording there and
      then, so it is attached to the note it was made on. */
   const recordingFor = useRef<Inspiration | null>(null);
-  const recording = useAudioRecording((clip) => attach(clip, "recording", recordingFor.current));
+  /* whether the last clip handed over failed to attach, for the finisher */
+  const clipFailed = useRef(false);
+  const recording = useAudioRecording(async (clip) => {
+    clipFailed.current = false;
+    if (!(await attach(clip, "recording", recordingFor.current))) clipFailed.current = true;
+  });
   const recordingPhase = recording.phase;
   /* captured as a recording begins (the phase leaves `idle`) and kept until
      the next one begins, so the clip handed over after it stops still knows
      its note */
   const lastPhase = useRef(recordingPhase);
   useEffect(() => {
-    if (lastPhase.current === "idle" && recordingPhase !== "idle") recordingFor.current = open;
+    if (lastPhase.current === "idle" && recordingPhase !== "idle") { recordingFor.current = open; clipFailed.current = false; }
     lastPhase.current = recordingPhase;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordingPhase]);
   const stopRecording = recording.stop;
+  /* THE FINISHER, HANDED UP ONLY WHILE A RECORDING RUNS (see `onRecording`) */
+  const recordingNow = recordingPhase !== "idle";
+  useEffect(() => {
+    if (!recordingNow) return undefined;
+    onRecording?.(async () => {
+      await stopRecording();
+      return !clipFailed.current;
+    });
+    return () => onRecording?.(null);
+  }, [recordingNow, onRecording, stopRecording]);
   useEffect(() => {
     const bound = recordingFor.current;
     if (bound && bound.id !== open?.id && recordingPhase !== "idle") void stopRecording();

@@ -54,6 +54,9 @@ const S = vi.hoisted(() => ({
   holdWrite: false,
   writtenAt: new Map<string, number>(),
   landWrite: null as null | (() => void),
+  /* the notes a clip was attached to, and whether the attach fails */
+  finalized: [] as string[],
+  failFinalize: false,
 }));
 
 const row = (id: string, text: string) => {
@@ -83,7 +86,11 @@ vi.mock("../src/lib/api", async (original) => ({
   presignAttachment: async (input: { filename: string }) =>
     ({ uploadUrl: "https://bucket.test/put", key: `k/${input.filename}`, headers: {}, profileId: VIEWER_ID, expiresAt: "" }),
   uploadToPresignedUrl: async () => undefined,
-  finalizeAttachment: async () => ({ id: "att-1" }),
+  finalizeAttachment: async (input: { inspirationId?: string }) => {
+    if (S.failFinalize) throw new Error("offline");
+    S.finalized.push(input.inspirationId ?? "");
+    return { id: "att-1" };
+  },
   /* the server row, as of WHEN THE READ WAS ASKED, stamped then */
   fetchInspiration: (id: string) => {
     const snapshot = { id, profileId: VIEWER_ID, text: S.store.get(id) ?? "", kind: "note", category: null, source: "app", visibility: "private",
@@ -148,6 +155,8 @@ beforeEach(() => {
   S.holdWrite = false;
   S.landWrite = null;
   S.writtenAt = new Map();
+  S.finalized = [];
+  S.failFinalize = false;
 });
 afterEach(() => world?.unmount());
 
@@ -422,4 +431,72 @@ it("a bar press over a card edit with unchanged words goes through as before", {
   await pressWords();
   await pressBar("Inspiration");
   expect(barShape(world.container)).toContain("All inspirations");
+});
+
+
+/* ═══ CLOSING THE ARCHIVE MID-RECORDING KEEPS THE CLIP (L12) ═════════════
+   `docs/plans/card-and-archive.md`, rule 3. Close stops the recording and
+   waits for the clip to be attached to the note it was made on; when that
+   upload fails the archive stays on the note and says so.
+
+   WHAT THIS MOCKS, AND WHY (gate G6): `MediaRecorder` and
+   `navigator.mediaDevices` stand in for a microphone jsdom does not have —
+   the recorder emits one chunk when stopped, as a real one does. */
+class StubRecorder {
+  static isTypeSupported(): boolean { return true; }
+  state = "inactive";
+  mimeType: string;
+  ondataavailable?: (event: { data: Blob }) => void;
+  onstop?: () => Promise<void>;
+  onerror?: () => void;
+  constructor(_stream: MediaStream, options: { mimeType: string }) { this.mimeType = options.mimeType; }
+  start(): void { this.state = "recording"; }
+  /* a browser's recorder hands over its last chunk and `stop` in a LATER
+     task, not inside the call — which is what lets an unmount get between */
+  stop(): void {
+    this.state = "inactive";
+    setTimeout(() => {
+      this.ondataavailable?.({ data: new Blob(["fixture audio"], { type: this.mimeType }) });
+      void this.onstop?.();
+    }, 0);
+  }
+}
+async function recordInArchive(): Promise<void> {
+  (globalThis as unknown as { MediaRecorder?: unknown }).MediaRecorder = StubRecorder;
+  Object.defineProperty(navigator, "mediaDevices", { configurable: true,
+    value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {}, addEventListener() {}, removeEventListener() {} }] }) } });
+  await openByAddress("own-3");
+  await openInArchive(here, "something I kept, 3");
+  const record = document.querySelector<HTMLButtonElement>('#waka-note-tools button[aria-label="Record"]');
+  if (!record) throw new Error("the open note offers no Record");
+  await act(async () => record.click());
+  for (let turn = 0; turn < 4; turn += 1) { await world.step(2); await wait(10); }
+  expect(document.querySelector('button[aria-label="Stop recording"]'), "a recording is running").not.toBeNull();
+}
+const archiveOpen = () => Boolean(world.container.querySelector(".waka-over[data-jar-surface]"));
+const pressClose = async () => {
+  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-item--close")!.click());
+  for (let turn = 0; turn < 10; turn += 1) { await world.step(4); await wait(20); }
+};
+afterEach(() => {
+  delete (globalThis as unknown as { MediaRecorder?: unknown }).MediaRecorder;
+  delete (navigator as unknown as { mediaDevices?: unknown }).mediaDevices;
+});
+
+it("closing the archive while recording attaches the clip to its note, then closes", { timeout: 30_000 }, async () => {
+  await recordInArchive();
+  await pressClose();
+  expect(S.finalized, "the clip went onto the note it was recorded on").toEqual(["own-3"]);
+  expect(archiveOpen(), "and the archive closed").toBe(false);
+});
+
+it("closing the archive while recording, when the upload fails, stays on the note and says so", { timeout: 30_000 }, async () => {
+  S.failFinalize = true;
+  await recordInArchive();
+  await pressClose();
+  expect(archiveOpen(), "the archive stayed").toBe(true);
+  expect(world.container.querySelector<HTMLTextAreaElement>(".waka-note-page"), "on the note").not.toBeNull();
+  expect(document.body.textContent).toContain("Couldn’t upload this attachment.");
+  await pressClose();
+  expect(archiveOpen(), "a second Close, with nothing recording, closes").toBe(false);
 });

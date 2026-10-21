@@ -1214,7 +1214,7 @@ Back, still drop the typing. They change the selection from outside these presse
 
 ---
 
-### L12. Closing the archive mid-recording loses the recording *(pre-existing)*
+### L12. Closing the archive mid-recording loses the recording *(fixed for Close, Escape, top of mind)*
 **Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/components/SavesOverlay.tsx` · severity low
 
 **What.** A recording started on a saved note in the archive is lost if the archive itself is closed
@@ -1223,8 +1223,16 @@ over. Same on `origin/dev`. Leaving the NOTE (Back, or opening another note) is 
 branch — the recording stops and attaches to the note it was made on — but unmounting the whole
 archive is not.
 
-**Follow-up.** Stop and attach on unmount (the clip needs the upload to outlive the overlay), or
-ask before closing with a recording running.
+**Fixed on `claude/followup-card-archive`, 2026-10-21** (`docs/plans/card-and-archive.md`, rule 3).
+While a recording runs, `SavesOverlay` gives Home a finisher (`onRecording`). Home's `leaveOpen`,
+which Close, Escape and the top-of-mind row all go through, awaits it first. The finisher stops the
+recording and waits until the clip is uploaded and attached to the note it was recorded on. If the
+upload fails, the archive stays on that note with "Couldn't upload this attachment." A second press
+while it waits does nothing, and if the address moves in the meantime the close is dropped. With
+nothing recording, nothing is awaited. The bar's Close no longer commits the note before
+`leaveOpen` does, because that closed the note first and hid the failure line. Pinned in
+`home-memory-reads.test.tsx`. **Still open:** the browser's Back and a wall switch from the corner
+unmount the archive from outside React, so a recording running then is still lost.
 
 ---
 

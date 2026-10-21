@@ -2449,8 +2449,29 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     committedNote.current = close;
     close();
   }, []);
+  /* A RECORDING STILL RUNNING IN THE ARCHIVE IS FINISHED BEFORE IT CLOSES
+     (L12, `docs/plans/card-and-archive.md`, rule 3). `SavesOverlay` hands up
+     a finisher while one runs; leaving waits for the clip to be attached to
+     its note, and stays when that failed (the note says so). Nothing is
+     awaited when nothing is recording, so every other close is still made
+     inside the press. */
+  const finishArchiveRecording = useRef<(() => Promise<boolean>) | null>(null);
+  const archiveRecordingChanged = useCallback((finish: (() => Promise<boolean>) | null) => {
+    finishArchiveRecording.current = finish;
+  }, []);
+  const leavingOpenRef = useRef(false);
   /** Leaving whatever is held up over the world, committing it on the way. */
-  const leaveOpen = useCallback(() => {
+  const leaveOpen = useCallback(async () => {
+    const finish = finishArchiveRecording.current;
+    if (finish) {
+      if (leavingOpenRef.current) return;
+      leavingOpenRef.current = true;
+      const from = viewNavigationRef.current.key;
+      let attached = false;
+      try { attached = await finish(); } finally { leavingOpenRef.current = false; }
+      /* stayed: the upload failed, or the person has gone somewhere else */
+      if (!attached || viewNavigationRef.current.key !== from) return;
+    }
     commitOpenNote();
     viewNavigationRef.current.closeOpen();
   }, [commitOpenNote]);
@@ -11785,7 +11806,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             {barOwner && item.id === barOwner && (making !== null || (viewNavigation.view?.open === 'saves' && savedNoteOpen)) ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
             {barOwner && item.id === barOwner ? (
               <button type="button" className="waka-dock-item waka-dock-item--close"
-                onClick={() => leaveAsModal(making === 'inspiration' ? saveAsDraft : () => { commitOpenNote(); openOverHome(null); })}>
+                onClick={() => leaveAsModal(making === 'inspiration' ? saveAsDraft : () => openOverHome(null))}>
                 {say('worldClose')}
               </button>
             ) : null}
@@ -11934,6 +11955,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           following an old reference here. */}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
         onNoteOpen={savedNoteChanged}
+        onRecording={archiveRecordingChanged}
         onNewSave={startNewInspiration}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
