@@ -247,7 +247,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   /* A FORK IS WRITTEN DOWN (L10): when this store lands under a new key over a
      draft whose bytes are still what THIS tab wrote, the draft it replaced is recorded, so a confirmed
      send clears both. Another tab's draft is never linked. */
-  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{const before=receipt.current;receipt.current=storeConversationDraft(scope,journal,next,before);recordDraftStored(receipt.current,before);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
+  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{const before=receipt.current;receipt.current=storeConversationDraft(scope,journal,next,before);recordDraftStored(scope,receipt.current,before);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
   const observe=(next:ApiConversation)=>{
     if(conversationRef.current?.id===next.id&&conversationRef.current.profileId===next.profileId&&conversationRef.current.revision>next.revision)next=conversationRef.current;
     conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);
@@ -259,7 +259,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        forever the day the copy drifted.) */
     const pending=draftRef.current;
     if(pending?.pending&&next.messages.some(message=>message.id===pending.id)){
-      try{if(receipt.current){clearConversationDraft(receipt.current);clearDraftLineage(receipt.current.key);}}catch{setStorageFailed(true);}
+      try{if(receipt.current){clearConversationDraft(receipt.current);clearDraftLineage(scope,receipt.current.key);}}catch{setStorageFailed(true);}
       receipt.current=undefined;draftRef.current=null;setDraft(null);setError(null);
       if(!id){onCreated?.(next);onChoose(next.id);}
     }

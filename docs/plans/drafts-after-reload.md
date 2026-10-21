@@ -56,14 +56,20 @@ D is new code modelled on it; attaching the first photo (`draftForAttaching`) an
 
 ## What shipped (`claude/drafts-lineage`): D as a per-tab lineage
 Forks still happen exactly as before; what changed is that this tab remembers them.
-- `lib/draft-lineage.ts` keeps `waka:draftLineage:own` in sessionStorage: one row per
-  fork this tab stored, `{key: F, from: O, raw: O's bytes when forked}`, last 50, and
-  only between two drafts of one place (one chat journal). It also keeps
-  `waka:draftLineage:mine`, the keys this tab stored (like `OWN_SAVES`' own request
-  ids), last 100. A fork is linked ONLY when this tab itself stored O; a reload of
-  the same tab keeps the set, so the reload chain is linked. A draft another tab
-  wrote is never linked (review on f4091472: sending here deleted another open tab's
-  idle draft, which that tab still showed and would lose on its next reload).
+- `lib/draft-lineage.ts` keeps, in sessionStorage under the account and profile
+  scope (`waka.profile:<account>:<profile>:draftLineage:forks`), one row per fork this
+  tab stored, `{key: F, from: O, print: fingerprint of O's bytes when forked}`, last
+  50, only between two drafts of one place (one chat journal). It also keeps
+  `…:draftLineage:mine`, key → fingerprint of the bytes this tab last wrote there
+  (like `OWN_SAVES`' own request ids), last 100. A fork is linked ONLY when O's
+  restored bytes are exactly what this tab last wrote at O; a reload of the same tab
+  keeps the map, so the reload chain is linked. A draft another tab wrote is never
+  linked, including one it rewrote under a key this tab made (a draft with photos
+  keeps its key when edited) — reviews on f4091472 and 00a2c1d6: sending here deleted
+  another open tab's words.
+- **No words are kept** (security review on 00a2c1d6): only draft keys and cyrb53
+  fingerprints, compared for "unchanged since the fork" and "these are this tab's
+  bytes". Sign-out (`clearUnsentDrafts`) removes both records for that account.
 - **Chat:** `keep()` records every store, and a fork when it lands under a new key over
   a draft this tab stored — an edit
   or the first photo on a restored draft. When `observe()` confirms the send it

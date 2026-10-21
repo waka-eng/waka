@@ -1163,7 +1163,7 @@ fork in sessionStorage (modelled on `OWN_SAVES`, PR #452), and a confirmed send 
 line by compare-and-delete. Covered: an existing chat and the next new chat
 (`new:<principleId|general>`), chains of forks across mounts, edited words, attaching the first photo.
 A fork is linked only when this tab itself stored the original (a per-tab set of the keys it
-stored, kept across this tab's reloads), so a draft another tab wrote is never touched.
+stored with a fingerprint of its bytes, kept across this tab's reloads, never the words; cleared at sign-out), so a draft another tab wrote is never touched.
 
 **Left as dev behaviour (share cards).** Discard clears only the card on screen, so a forked card's
 original stays. That is deliberate: the original is visible and choosable in the Drafts picker, a
