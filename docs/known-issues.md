@@ -1349,9 +1349,12 @@ of raw `history` entries, so Back, replace and reload are the router's ordinary 
 **Status:** partly fixed in `claude/followup-save-recovery`; design in `docs/plans/save-recovery.md`.
 
 **Fixed there.** The composer no longer jams after a save loses its network (usability audit at
-f2afcbe2): page load re-POSTs the journal read from disk, and `online` re-POSTs this tab's pending
-journal, under the original id; the server dedupes on (profile, request id). Retry, focus and
-storage events behave exactly as on `origin/dev`. `busy` clears when a superseded run ends.
+f2afcbe2): the tab that created a save re-POSTs its own pending journal, read from disk, under the
+original id on its first page load and on `online` (owed and run on the next visible, idle moment
+if the tab is hidden or busy); the server dedupes on (profile, request id). "Own" is per tab: ids
+created by `start()` kept in `sessionStorage`, so a reload of the same tab still re-sends and no
+other tab ever does. Effect re-runs only read. Retry, focus and storage events behave exactly as on
+`origin/dev`. `busy` clears when a superseded run ends.
 
 **Still open** — each case below broke at least one attempt:
 
@@ -1360,11 +1363,14 @@ storage events behave exactly as on `origin/dev`. `busy` clears when a supersede
   the journal kept, as on dev; what it should say is undesigned.
 - **409 `save_in_progress` for the pressing tab.** Shows "Couldn't confirm" with no acknowledgement.
   A poll was tried and left `busy` stuck forever.
-- **Cross-tab journals.** A tab must not adopt a journal while its owner is still open. A tab that
-  loads while another is mid-send re-POSTs too (the server answers 409 or a replay, never a copy,
-  but that tab shows "Couldn't confirm"). Storage-event sends raced the pressing tab; a persisted
-  `sentAt` / 30s rule and a "gone from disk" mode were tried and cut. A tab must also not write back
-  over a newer write (re-read before every write-back).
+- **Cross-tab journals.** A tab must not adopt a journal while its owner is still open; now a tab
+  re-sends only journals it created, and only reads others'. Still open: an **orphaned journal**
+  (its tab closed before landing) is never re-sent by another tab — only Retry there, which does
+  POST it; a **duplicated browser tab** copies `sessionStorage` and shares ownership (the server
+  dedupes, but both may show "Couldn't confirm" on 409); a non-owner tab holding another's journal
+  stays "Couldn't confirm" until a storage event or focus reads it landed. Storage-event sends
+  raced the pressing tab; a persisted `sentAt` / 30s rule and a "gone from disk" mode were tried and
+  cut. A tab must also not write back over a newer write (re-read before every write-back).
 - **Gateway timeouts vs the app's own 500**, and **"not found" is not "did not land"**: not needed
   for this fix (nothing releases on 404 or 5xx), but any future release rule must answer them.
 - **Acknowledging a press (`initiated`).** Load/online sends report no press, so a press that only

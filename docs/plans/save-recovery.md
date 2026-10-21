@@ -11,10 +11,15 @@ Reconnecting and reloading only READ `GET /inspirations/save-requests/:id`; it a
 
 ## What this PR does (and only this)
 
-- **Page load** reads the journal from disk and re-POSTs it under its original id and body.
-- **`online`** re-POSTs this tab's pending journal under the same id.
-- If the tab is hidden or a run is in flight, that resend is owed (an in-memory flag) and runs on
-  the next scan that can: focus/visibility, or the end of the in-flight run.
+Only **this tab's own saves** are ever re-sent: request ids created by `start()` are kept per tab in
+`sessionStorage` (survives a reload of that tab, nothing else), snapshotted at first mount.
+
+- **First page load** reads this tab's own journal from disk and re-POSTs it, same id and body.
+  Effect re-runs (`enabled`/`prefix` changes) only read; one after a POST was issued never re-POSTs.
+- **`online`** re-POSTs this tab's own pending journal under the same id.
+- If the tab is hidden or a run is in flight, that resend is owed (in-memory flag), consumed only by
+  this tab's own visible, idle scan of its own journal (focus/visibility, or the end of the run).
+- Another tab's journal is only read, on every path (load, online, refresh, storage, focus).
 - **Retry** is unchanged from dev (re-POSTs the in-memory intent, same id).
 - Focus and storage events still only READ, exactly as on dev. Load/online sends are not presses
   (`initiated=false`); Save and Retry are.
@@ -35,7 +40,7 @@ Reconnecting and reloading only READ `GET /inspirations/save-requests/:id`; it a
 | --- | --- |
 | Gateway 5xx vs our 500 | Not distinguished: every 5xx keeps the journal; a later same-id re-POST commits or replays. |
 | "Not found" is not "did not land" | 404 never releases a journal; on load/online it leads to a same-id re-POST. |
-| Cross-tab journals | Unchanged from dev, except a tab that LOADS while another is mid-send re-POSTs too: the server answers 409 `save_in_progress` (that tab shows "Couldn't confirm" until it lands) or a replay. Open. |
+| Cross-tab journals | A tab re-sends only journals it created (per-tab `sessionStorage` ids); another tab only reads them, as on dev. Open: an orphaned journal (its tab closed) is never re-sent by another tab, only by Retry there; a duplicated browser tab copies `sessionStorage` and so shares ownership (server dedupes). |
 | 409 `save_request_conflict` | Unchanged from dev: "uncertain", journal kept. It can mean the id already landed, so it must never release the journal or offer the words back as new. Open. |
 | 409 `save_in_progress` for the pressing tab | Unchanged from dev: "Couldn't confirm", no acknowledgement. Open. |
 | "Save as new" while pending | Not offered, as on dev. Open. |
