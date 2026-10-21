@@ -1,45 +1,47 @@
-# Back from layers: Back is caught, not stacked
+# Back from layers: the "catch Back" attempt, and why it was withdrawn
 
-**Problem.** A layer is a state with no address of its own, such as a saved note open inside the archive.
-Back from it skips the layer and leaves the address beneath it. Every earlier fix gave the layer its own
-history entry. That entry then had to be kept true through replaces, reloads, other ways of closing and
-stacking, and it went wrong in each of those (see `docs/known-issues.md`).
+**Problem.** A layer is a state with no address of its own, such as a saved note open inside the
+archive, or the settings/info corner card. Back from it skips the layer and leaves the address
+beneath it. Earlier attempts gave each layer its own history entry. Each of those failed (see
+`docs/known-issues.md`): the entry re-ran Home's view restore, a replace dropped its marker, stale
+entries became dead Back presses, `history.back()` on reload crossed documents, rebasing under a
+replace stepped back twice, and stacked layers mis-read pops.
 
-**Rule. A layer never adds a history entry.** Each open layer registers a closer on a stack
-(`lib/back-layers.ts`). The module listens to `popstate` before the router does. A pop is caught
-only if all of these hold: a layer is open, the pop is one step back (the router's `idx` drops by
-exactly 1 from the entry we were on), and the app did not ask for the pop itself. When it is caught,
-the module:
+**This attempt (`claude/followup-back`, withdrawn; no code shipped).** It added no entry per layer.
+The plan was for a module-level `popstate` listener to catch the person's one-step Back while a
+layer was open. It would `pushState` back an exact copy of the entry they were on (router state,
+key and idx) and close the topmost registered layer. In jsdom this passed every case: Back from a
+note returns to the list; the next Back leaves the archive; a reload has no marker to strip; a
+replace has nothing above it to rebase; stacked layers close one per Back.
 
-1. stops the event, so neither the router nor Home's own listeners hear it;
-2. writes the entry we were on back with `pushState`, copying its `{usr, key, idx}` and address
-   exactly (taken after every router commit), so the router's location and key never change;
-3. calls the topmost layer's closer. The layer leaves the stack when it really closes.
+**Why it fails in the real app.**
 
-The history is then the same shape it would have had with no layer open. Only one thing is lost:
-the forward entry the pop came from.
+1. **Listener order.** The design needed its listener to run before the router's. `Home` is loaded
+   with `lazy()`, so `back-layers.ts` is evaluated only after `BrowserRouter` has registered its
+   own `popstate` listener (in a layout effect at mount). The router hears the pop first and
+   commits the popped location. Then either `stopImmediatePropagation` is too late and the fix
+   does nothing, or the `pushState` that follows leaves the URL and the router out of sync.
+2. **Chrome's history-manipulation intervention.** A `pushState` made inside a `popstate` handler
+   has no user activation of its own. Chrome then marks the entry beneath it as skippable, so a
+   later Back can skip Home and leave WAKA altogether.
+3. **Forward history is lost.** Pushing from entry N-1 discards every forward entry, not just the
+   one the pop came from. Back then Forward no longer works, and anything further forward is gone.
 
-| Case | What happens | Why the old failure cannot happen |
-|---|---|---|
-| Back from an open note | The note commits and closes. The list stays, at the same key. | No new key, so Home's view restore never runs. |
-| Back from the list | No layer is open, so the router pops as usual and the archive closes. | Nothing to skip. |
-| Reload with a note open | The note is not restored (as on dev). History holds only the router's own entries. | No marker entry exists, so nothing has to be stripped or stepped over, and nothing loads twice. |
-| Replace while a layer is open (seek query, wall switch, `?open=` cleanup) | The replace rewrites the real entry. The copy is taken after it, so Back writes back the new address. | No entry sits above the page entry, so nothing needs rebasing and there is no extra step. |
-| Two stacked layers (archive + note, or any two registered) | Each Back closes the topmost layer. When none is left, the router pops. | Closers live on a stack, not in history, so closing them out of order leaves nothing behind. |
-| The note cannot close (save failed or in flight) | It stays registered, so the next Back retries the commit. The words stay. | No entry was used up. |
-| Note A to note B, archive closed under a note, delete | Nothing to clean up. The layer unregisters when it unmounts. | There are no stale entries. |
-| App's own `navigate(-1)` (Escape, Now, close) | `expectAppPop()` lets the next pop through. | The Now row's close is never mistaken for Back. |
-| Long-press Back several steps, or Forward | The `idx` delta is not -1, so the pop goes through. Home commits the note as on dev. | The user's chosen jump is never redirected. |
+The jsdom suites could not see any of these. They imported the module directly, so they never had
+lazy-route listener order, and jsdom has neither the intervention nor real forward stacks.
 
-**Never** called: `history.back()`, `history.go()` or `replaceState`. The only `pushState` is the one
-in step 2, made while handling the user's own Back.
+**What a viable approach needs.**
 
-**What it does not fix (stays open).** A pop that crosses documents raises no `popstate`. So when the
-archive's entry is the first in its document (a cold `/?open=saves` link, or after a reload), Back from
-an open note still leaves the archive, as on dev. The settings/info corner card sits on the root
-entry, which has nothing in the same document beneath it, so it is not registered. Making it close
-on Back still needs a real address.
-
-**Browser checks still owed.** The iOS edge-swipe shows the snapshot of the previous page for a moment
-before the list stays. Chrome may skip back over entries that were pushed without a user gesture; the
-person has always pressed something before a note opens, but this has not been tested in Chrome.
+- **Router-level integration, not a side listener.** The layer has to be something the router
+  owns: a real address (a query param such as `note=<id>`, read by the router and ignored by
+  Home's view restore when only that param differs), or a data router's blocker/`unstable_usePrompt`-style
+  hook that decides before the location commits. Listener order must be guaranteed by
+  construction, not by the order modules load.
+- **No `pushState` or `go()` outside a user gesture.** Entries are created only in response to a
+  press. Back must only ever pop, never pop-then-push.
+- **Replace under a layer and closing an archive over a note** still have to be answered without
+  async rebasing. That is the open case for the address approach (`docs/known-issues.md`).
+- **Real-device testing before review:** an iOS Safari edge-swipe (snapshot and swipe-back),
+  Chrome desktop and Android Back (including the intervention, with and without a prior
+  gesture), long-press Back history, Forward after Back, reload with a layer open, and a cold
+  `/?open=saves` link. jsdom green is not evidence for any of these.
