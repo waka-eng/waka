@@ -24,9 +24,6 @@
  * made to FAIL, which is how "late" and "failed" become states a case can
  * stand in rather than races it hopes to lose.
  *
- * `lib/leave-deadline` — the card's 20-second save deadline, shortened so a
- * case can wait it out.
- *
  * `lib/auth-context` — a signed-in viewer; the world renders nothing without
  * one. `helpers/canvas-stub` — jsdom has no 2D context. `helpers/render-home`
  * — the mount and the frame loop.
@@ -36,7 +33,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
-import { apiMockFrom, barShape, dataMockFrom, mountWorld, pressDockRow, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
+import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 
 const FACTS = {
   inspirations: Array.from({ length: 6 }, (_, i) => ({ id: `own-${i}`, text: `something I kept, ${i}`, daysAgo: i + 1 })),
@@ -120,12 +117,6 @@ vi.mock("../src/lib/data", async (original) => ({
       S.held.push({ resolve: () => done(snapshot), reject: () => fail(new Error("offline")) });
     });
   },
-}));
-/* THE CARD'S SAVE DEADLINE, SHORTENED: the shipped 20 s, at a scale a case
-   can wait out. */
-vi.mock("../src/lib/leave-deadline", async (original) => ({
-  ...await original<typeof import("../src/lib/leave-deadline")>(),
-  LEAVE_DEADLINE_MS: 1_500,
 }));
 vi.mock("../src/lib/auth-context", async (original) => {
   const session = { status: "authenticated", account: { id: "account-1", email: "you@example.test" },
@@ -381,104 +372,4 @@ it("a save between Try again and a late answer: the kept words stay and seed the
   expect(words()?.textContent, "the kept words stay").toContain("kept on the card");
   await act(async () => words()!.click());
   expect(editBox()?.value, "and seed the next edit").toBe(KEPT);
-});
-
-/* ═══ THE CARD DOES NOT LET GO OF UNSAVED WORDS (L11, L13) ═══════════════
-   `docs/plans/card-and-archive.md`, rule 1. A press that would take Home
-   off a card holding changed words (or a save still out) is not made; the
-   card says so, and its own Save and Cancel are the way on. Nothing waits:
-   the press either goes through inside the tap or does not happen. */
-const held = () => card()?.querySelector(".jar-panel-warn")?.textContent ?? "";
-const pressBar = async (label: string) => {
-  await pressDockRow(world.container, label);
-  for (let turn = 0; turn < 6; turn += 1) { await world.step(4); await wait(20); }
-};
-
-it("a bar press over a card holding changed words is refused, says why, and goes through once the edit is cancelled", { timeout: 30_000 }, async () => {
-  await openByAddress("own-2");
-  await pressWords();
-  await setText(editBox()!, "something I kept, 2 — typed and not saved.");
-  await pressBar("Inspiration");
-  expect(editBox()?.value, "the typed words are still on the card").toBe("something I kept, 2 — typed and not saved.");
-  expect(held()).toBe("Save or cancel this edit first.");
-  expect(barShape(world.container), "no new note opened").toEqual(["Inspiration", "Chat"]);
-  expect(S.written).toEqual([]);
-  await act(async () => [...card()!.querySelectorAll<HTMLButtonElement>(".jar-panel-foot-r button")].find((b) => /cancel edit/i.test(b.textContent ?? ""))!.click());
-  await pressBar("Inspiration");
-  expect(barShape(world.container), "the press goes through now").toContain("All inspirations");
-});
-
-it("a bar press while the card's save is still out is refused until the save lands", { timeout: 30_000 }, async () => {
-  await openByAddress("own-2");
-  await pressWords();
-  S.holdWrite = true;
-  await setText(editBox()!, "something I kept, 2 — saving.");
-  await act(async () => card()!.querySelector<HTMLButtonElement>(".jar-panel-save")!.click());
-  await world.step(4);
-  await pressBar("Inspiration");
-  expect(editBox(), "the edit is still open while its save is out").not.toBeNull();
-  expect(barShape(world.container)).toEqual(["Inspiration", "Chat"]);
-  await act(async () => S.landWrite!());
-  await world.step(6);
-  await pressBar("Inspiration");
-  expect(S.store.get("own-2")).toBe("something I kept, 2 — saving.");
-  expect(barShape(world.container), "the press goes through once it is saved").toContain("All inspirations");
-});
-
-it("a bar press over a card edit with unchanged words goes through as before", { timeout: 30_000 }, async () => {
-  await openByAddress("own-2");
-  await pressWords();
-  await pressBar("Inspiration");
-  expect(barShape(world.container)).toContain("All inspirations");
-});
-
-it("a press refused while the card's save is out says so, and offers Cancel edit past the deadline", { timeout: 30_000 }, async () => {
-  await openByAddress("own-2");
-  await pressWords();
-  S.holdWrite = true;
-  await setText(editBox()!, "something I kept, 2 — never answered.");
-  await act(async () => card()!.querySelector<HTMLButtonElement>(".jar-panel-save")!.click());
-  await world.step(4);
-  await pressBar("Inspiration");
-  expect(held(), "the refused press says why while saving").toContain("Save or cancel this edit first.");
-  expect(card()!.querySelector(".jar-panel-warn button"), "no Cancel in the line yet").toBeNull();
-  await wait(1_600);
-  await world.step(4);
-  const cancel = card()!.querySelector<HTMLButtonElement>(".jar-panel-warn button");
-  expect(cancel?.textContent).toBe("Cancel edit");
-  await act(async () => cancel!.click());
-  await world.step(4);
-  expect(editBox(), "the edit is put down").toBeNull();
-  await pressBar("Inspiration");
-  expect(barShape(world.container), "and the bar answers again").toContain("All inspirations");
-});
-
-
-/* ═══ ONE DOOR AT A TIME, AND EVERY WAY OUT OF THE ARCHIVE OPENS ═════════
-   `docs/plans/card-and-archive.md`, rule 2: the card under the archive is
-   not an editor. And the card's hold never refuses a way OUT of the archive
-   — the list's ↩, the bar's Close, Escape (review, 2026-10-21). */
-const archiveOpen = () => Boolean(world.container.querySelector(".waka-over[data-jar-surface]"));
-const settleBar = async () => { for (let turn = 0; turn < 10; turn += 1) { await world.step(4); await wait(20); } };
-
-it("the card under the archive opens no edit, and ↩, Close and Escape each leave the archive", { timeout: 30_000 }, async () => {
-  await openByAddress("own-2");
-  const path = here;
-  await openInArchive(path, "something I kept, 2");
-  const under = card()?.querySelector<HTMLElement>("p.jar-panel-text");
-  if (under) await act(async () => under.click());
-  expect(editBox(), "no card edit opens while the archive is open").toBeNull();
-  /* ↩ from the open note goes back to the list, and ↩ again leaves */
-  await pressDockRow(world.container, "Back"); await settleBar();
-  expect(world.container.querySelector(".waka-note-page"), "↩ left the note").toBeNull();
-  await pressDockRow(world.container, "Back"); await settleBar();
-  expect(archiveOpen(), "↩ from the list left the archive").toBe(false);
-  /* Close */
-  await openInArchive(path, "something I kept, 2");
-  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-item--close")!.click()); await settleBar();
-  expect(archiveOpen(), "Close left the archive").toBe(false);
-  /* Escape */
-  const page = await openInArchive(path, "something I kept, 2");
-  await act(async () => { page.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); }); await settleBar();
-  expect(archiveOpen(), "Escape left the archive").toBe(false);
 });

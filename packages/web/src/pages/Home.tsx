@@ -228,7 +228,6 @@ import {
 import { LoadingHome } from "../components/LoadingHome";
 import { ReadingPausedNotice } from "../components/ReadingPausedNotice";
 import { useReadingPaused } from "../lib/use-reading-paused";
-import { LEAVE_DEADLINE_MS } from "../lib/leave-deadline";
 import {
   loadInspiration,
   loadInspirations,
@@ -4884,18 +4883,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
    */
   const standingAway = (view: ViewLocation | null | undefined) =>
     Boolean(view?.open || view?.conversationId || view?.compose);
-  /* THE CARD DOES NOT LET GO OF UNSAVED WORDS (L11/L13,
-     `docs/plans/card-and-archive.md`). Answers true, and says so on the card,
-     when its edit holds changed words or a save still out: the press that
-     asked is then not made. Nothing waits — the press goes through inside
-     the tap or not at all, so a field focused next still raises a phone's
-     keyboard. Set beside `editing`, which is declared further down. */
-  const cardHoldsRef = useRef<() => boolean>(() => false);
 
   const openOverHome = useCallback((what: ViewOpen | null) => {
-    /* only a press that would LEAVE the card is held: `null` puts down what
-       is held up over the world, which goes back toward the card */
-    if (what !== null && cardHoldsRef.current()) return;
     const nav = viewNavigationRef.current;
     /* `null` IS YOUR TOP OF MIND, which is the world itself — so that row
        puts down whatever is held up rather than navigating anywhere. It is
@@ -4938,7 +4927,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
    * not an exit."
    */
   const openTalk = useCallback((id: string | null) => {
-    if (cardHoldsRef.current()) return;
     const nav = viewNavigationRef.current;
     nav.write(
       { ...EMPTY_VIEW, conversationId: id ?? 'new' },
@@ -7077,28 +7065,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
   leaveWordsRef.current = () => {
     if (editing.open) editing.leave();
   };
-  /* Which edit was refused a press, so the card can say why — and only that
-     edit, only until it is saved or left. */
-  const [cardHeldFor, setCardHeldFor] = useState<string | null>(null);
-  useEffect(() => { setCardHeldFor(null); }, [editingOpenKey]);
-  /* A SAVE THAT NEVER ANSWERS MUST NOT HOLD THE BAR FOREVER (review,
-     2026-10-21): past the deadline the held line offers Cancel edit. */
-  const [cardSaveLongFor, setCardSaveLongFor] = useState<string | null>(null);
-  const cardSaving = editing.open?.kind === "memory" && editing.open.saving;
-  useEffect(() => {
-    setCardSaveLongFor(null);
-    if (!cardSaving) return undefined;
-    const key = editingOpenKey;
-    const timer = window.setTimeout(() => setCardSaveLongFor(key), LEAVE_DEADLINE_MS);
-    return () => window.clearTimeout(timer);
-  }, [cardSaving, editingOpenKey]);
-  cardHoldsRef.current = () => {
-    const held = editing.open;
-    if (!held || held.kind !== "memory" || held.saved) return false;
-    if (!held.saving && held.text.trim() === held.seed.trim()) return false;
-    setCardHeldFor(editingOpenKey);
-    return true;
-  };
 
   /**
    * THROW IT AWAY, FOR REAL.
@@ -7157,10 +7123,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const beginPanelEdit = useCallback(
     (ev: ReactMouseEvent<HTMLParagraphElement>) => {
       if (!panelId || editing.open) return;
-      /* ONE DOOR AT A TIME (L13, `docs/plans/card-and-archive.md`, rule 2):
-         with the archive (or any page) held up over the world, the card
-         under it is not an editor — the archive may be editing this note. */
-      if (viewNavigationRef.current.view?.open) return;
       /* NEVER AN EDITOR SEEDED FROM A PREVIEW OR A STALE COPY (P0,
          2026-10-17). This fell back to `panelBall.textPreview` — a cut
          ending in "…", or an attachment label — while the full read was out
@@ -10453,15 +10415,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
               a refusal on screen does not re-point the sentence at a card it
               was never about. */}
           {editing.open?.kind === "memory" && editing.open.id === panelId
-            && !editing.open.saved && cardHeldFor === editingOpenKey ? (
-            <p className="jar-panel-warn" role="status">
-              {say("worldCardSaveOrCancel")}
-              {editing.open.saving && cardSaveLongFor === editingOpenKey ? (
-                <>{" "}<button type="button" className="jar-panel-retry" onClick={editing.leave}>{say("worldCancelEdit")}</button></>
-              ) : null}
-            </p>
-          ) : null}
-          {editing.open?.kind === "memory" && editing.open.id === panelId
             && attachTrouble?.id === (panelBall?.sigId ?? panelId) ? (
             <p className="jar-panel-warn" role="status">{attachTrouble.text}</p>
           ) : null}
@@ -11463,12 +11416,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}`}
               aria-current={item.here ? 'page' : undefined}
               aria-label={item.id === 'return' ? say('worldBack') : undefined}
-              onClick={() => {
-                /* every way OUT of the archive goes through, held card or not:
-                   the list's ↩ leads back toward the world (review, 2026-10-21) */
-                if (item.id !== 'return' && cardHoldsRef.current()) return;
-                item.go();
-              }}
+              onClick={item.go}
             >
               {item.id === 'return'
                 ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
