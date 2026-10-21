@@ -1333,42 +1333,39 @@ of raw `history` entries, so Back, replace and reload are the router's ordinary 
 **Status:** partly fixed in `claude/followup-save-recovery`; design in `docs/plans/save-recovery.md`.
 
 **Fixed there.** The composer no longer jams after a save loses its network (usability audit at
-f2afcbe2): a press, Retry and page load re-POST the journal read from disk under its original id,
-which the server dedupes (idempotent on (profile, request id)); focus and `online` do too for a
-journal this tab sent or whose persisted `sentAt` is over 30s old. 409 `save_in_progress` is "still
-saving": the tab stays busy and re-sends the same id with a short backoff until it lands or is
-refused. A journal leaves disk only when its id lands, is refused (400, or 409
-`save_request_conflict`, which now offers the words back), is removed (410) or is discarded — never
-on 404, 5xx or a timeout, so gateway-vs-app 5xx and "not found is not did not land" no longer need
-answers. Two tabs re-sending the same id make one inspiration; a tab whose journal another tab
-settled reads it once and lets go. The tab that pressed acknowledges (`initiated`, kept in memory
-only) however the save lands; other tabs and page loads do not.
+f2afcbe2): page load re-POSTs the journal read from disk, and `online` re-POSTs this tab's pending
+journal, under the original id; the server dedupes on (profile, request id). Retry, focus and
+storage events behave exactly as on `origin/dev`. `busy` clears when a superseded run ends.
 
-**A tab must not adopt a journal while its owner is still open.** Handled by timing, not by
-coordination: a storage event only READS the status (its writer is open and sending), and focus
-re-sends another tab's journal only once its `sentAt` is 30s stale. A page load still re-sends at
-once; if the owner is mid-send the server answers 409 `save_in_progress` or a replay, never a
-second copy.
+**Still open** — each case below broke at least one attempt:
 
-**Still open** — each case below broke at least one earlier attempt:
-
-- **Cross-tab write-backs.** A tab must not write back (acknowledged / rejected marks) over a newer
-  write from another tab; nothing re-reads before those write-backs yet.
-- **No discard for an uncertain save.** A journal the server keeps failing (5xx forever) holds the
-  composer until it lands; there is Retry but no "Discard".
-- **"Save as new" while a save is pending.** Not offered (Save stays disabled while a journal is
-  pending). Any future version: edited words must not silently become a second copy, choosing "new"
-  must not drop the earlier unconfirmed save, and each id must land once.
-- **The why (photo reflections).** `keepIt` clears `momentWhy` at the press; if the save is then
-  refused, "Edit" restores the text only and the why is lost. It should clear only once the save
-  lands, and must not ride a second save once a held one with the same why lands.
+- **409 `save_request_conflict`.** It can mean the id already LANDED, so treating it as a refusal
+  (releasing the journal, offering the words back) makes a second copy. It stays "uncertain" with
+  the journal kept, as on dev; what it should say is undesigned.
+- **409 `save_in_progress` for the pressing tab.** Shows "Couldn't confirm" with no acknowledgement.
+  A poll was tried and left `busy` stuck forever.
+- **Cross-tab journals.** A tab must not adopt a journal while its owner is still open. A tab that
+  loads while another is mid-send re-POSTs too (the server answers 409 or a replay, never a copy,
+  but that tab shows "Couldn't confirm"). Storage-event sends raced the pressing tab; a persisted
+  `sentAt` / 30s rule and a "gone from disk" mode were tried and cut. A tab must also not write back
+  over a newer write (re-read before every write-back).
+- **Gateway timeouts vs the app's own 500**, and **"not found" is not "did not land"**: not needed
+  for this fix (nothing releases on 404 or 5xx), but any future release rule must answer them.
+- **Acknowledging a press (`initiated`).** Load/online sends report no press, so a press that only
+  lands via a later reload/online resend is not acknowledged; a press queued behind a background
+  send is dropped. In-memory pressed ids were tried and cut.
+- **No discard for an uncertain save.** A journal the server keeps failing holds the composer.
+- **"Save as new" while a save is pending.** Edited words must not silently become a second copy,
+  choosing "new" must not drop the earlier unconfirmed save; each id must land once.
+- **The why (photo reflections).** `keepIt` clears `momentWhy` at the press; if the save is refused
+  or unconfirmed the why is lost. It should clear only once the save lands.
 - **Same words, current draft revision.** A retry from a draft touched since must resolve against the
   current revision, or the composer is not settled when the save lands.
-- **A press queued behind a background send** is dropped (Retry is hidden while busy) rather than
-  kept.
-- **Sign-out.** `pendingSave:` and `unrecoveredSave:` are account+profile scoped and are kept across
-  sign-out by design (`draft-eviction.ts`) so an unsent save is not lost; anything new that holds
-  words must be added to that decision deliberately.
+- **410 `saved_item_removed`.** Settles the draft via `onRemoved`; no other window should be left
+  holding it.
+- **Sign-out.** `pendingSave:` and `unrecoveredSave:` are account+profile scoped and kept across
+  sign-out by design (`draft-eviction.ts`); anything new that holds words must be added to that
+  decision deliberately.
 
 ---
 ## Back from an open saved note (follow-up)

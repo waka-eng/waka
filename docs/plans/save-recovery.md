@@ -4,47 +4,48 @@ Follow-up to "Save recovery redesign" in `docs/known-issues.md`. Design first, t
 
 ## What a person sees on dev
 
-1. **The composer jams after an offline save.** Save is pressed, the journal is written, the network
-   drops. The bar says "Couldn't confirm the save" and Save stays disabled. Reconnecting, refocusing
-   and reloading only READ `GET /inspirations/save-requests/:id`; it answers 404 `save_not_found`, the
-   journal is kept, and nothing is ever re-sent. Only pressing Retry gets out.
-2. **409 `save_request_conflict` jams the same way.** It is a refusal, but the hook calls it
-   "uncertain" and keeps the journal forever.
+**The composer jams after an offline save** (usability audit item 1). Save is pressed, the journal
+is written, the network drops. The bar says "Couldn't confirm the save" and Save stays disabled.
+Reconnecting and reloading only READ `GET /inspirations/save-requests/:id`; it answers 404
+`save_not_found`, the journal is kept, and nothing is ever re-sent. Only pressing Retry gets out.
 
-## The rules
+## What this PR does (and only this)
 
-- The server is idempotent on (profile_id, request_id) and answers a concurrent same-id POST with 409
-  `save_in_progress`. So recovery is **re-POST the same id with the body read from disk**: on a
-  press, Retry and page load; on focus/`online` only for a journal this tab sent or whose persisted
-  `sentAt` is over 30s old. A **storage event only reads** the status (its writer is open, sending).
-- 409 `save_in_progress` is **still saving**, never "Couldn't confirm": stay busy and re-send the same
-  id with a short backoff (1s doubling to 8s) until it lands or is refused.
-- A journal leaves disk only when its id **lands** (2xx), is **definitively refused** (400 validation
-  or 409 `save_request_conflict` — the full input is offered back by "Edit"), is **removed** (410), or
-  the person **discards** it. Never on 404, 5xx, a timeout or a network error.
-- No "did not land" inference, no tombstones, no persisted pressed flag, no displaced tracking.
-  Cross-tab is reading the journal from disk (plus its `sentAt`) before acting.
-- A tab whose in-memory journal is gone from disk (another tab settled it) reads it once — found
-  resolves the view, 404 lets the memory go (landed, refused or discarded cannot commit later).
-- The tab that pressed acknowledges (`initiated`), whichever path lands it; ids pressed are kept in
-  memory only. Other tabs and fresh page loads never report a press.
+- **Page load** reads the journal from disk and re-POSTs it under its original id and body.
+- **`online`** re-POSTs this tab's pending journal under the same id.
+- **Retry** is unchanged from dev (re-POSTs the in-memory intent, same id).
+- Focus and storage events still only READ, exactly as on dev. Load/online sends are not presses
+  (`initiated=false`); Save and Retry are.
+- `busy` clears when a superseded run ends, not only when the current run ends.
+
+## The rules this relies on
+
+- The server is idempotent on (profile_id, request_id): a committed id replays, a concurrent same-id
+  POST gets 409 `save_in_progress`. So re-POSTing the same id + immutable body can never make a
+  second copy.
+- A journal is removed only when its id lands (2xx), is refused by validation (400, words offered
+  back by "Edit"), is removed (410), or the person discards it. Never on 404, 5xx or a timeout.
+- No "did not land" inference, no tombstones, no cross-tab coordination, no persisted pressed flag.
 
 ## The cases from known-issues
 
 | Case | Handled how |
 | --- | --- |
-| Gateway 5xx vs our 500 | Not distinguished, and no longer needs to be: every 5xx keeps the journal; the next re-POST of the same id either commits or replays. |
-| "Not found" is not "did not land" | 404 never releases a journal; it only leads to a same-id re-POST, which the server dedupes. |
-| Cross-tab journals | A tab does not adopt a journal while its owner is open: storage events only read, and focus re-sends another tab's journal only once its `sentAt` is 30s stale. A page load still re-sends; a race there gets 409 `save_in_progress` (polled) or a replay. `start` refuses a new journal while any is on disk. Write-backs over a newer write: still open. |
-| 409 `save_request_conflict` | Refusal: marked rejected, "Edit" offers the words back and removes it. |
-| "Save as new" while pending | Not offered: Save stays disabled while a journal is pending, as on dev. Open. |
-| The why (photo reflections) | Still cleared at the press; a refusal's "Edit" restores text only. Open. |
+| Gateway 5xx vs our 500 | Not distinguished: every 5xx keeps the journal; a later same-id re-POST commits or replays. |
+| "Not found" is not "did not land" | 404 never releases a journal; on load/online it leads to a same-id re-POST. |
+| Cross-tab journals | Unchanged from dev, except a tab that LOADS while another is mid-send re-POSTs too: the server answers 409 `save_in_progress` (that tab shows "Couldn't confirm" until it lands) or a replay. Open. |
+| 409 `save_request_conflict` | Unchanged from dev: "uncertain", journal kept. It can mean the id already landed, so it must never release the journal or offer the words back as new. Open. |
+| 409 `save_in_progress` for the pressing tab | Unchanged from dev: "Couldn't confirm", no acknowledgement. Open. |
+| "Save as new" while pending | Not offered, as on dev. Open. |
+| The why (photo reflections) | Unchanged from dev. Open. |
 | Same words, current draft revision | Unchanged from dev. Open. |
-| Acknowledging a press | Pressed ids live in memory in the pressing tab, which gets `initiated=true` however the save lands; other tabs and page loads get false. A press queued behind a background send is dropped (Retry is hidden while busy). |
-| 410 `saved_item_removed` | Unchanged: `onRemoved` settles the draft. Now also reached from a re-POST, which answers 410 too. |
-| Sign-out | Unchanged: `pendingSave:` is kept across sign-out by design; nothing new holds words. |
+| Acknowledging a press | Load/online sends report no press; a press then answered by a later load/online resend is not acknowledged. Open. |
+| 410 `saved_item_removed` | Unchanged: `onRemoved` settles the draft. |
+| Sign-out | Unchanged: `pendingSave:` is kept across sign-out by design. |
 
-## Still open after this PR
+## Cut after review (do not re-try without a design)
 
-The why, "Save as new", same-words/current-revision, write-backs over a newer write, and a Discard
-for an uncertain save (the journal can still only be released by landing, refusal or removal).
+Storage-event reads vs sends, focus re-sends with a persisted `sentAt` / 30s rule, polling on
+`save_in_progress`, treating `save_request_conflict` as a refusal (it can mean the id landed — a
+duplicate path), a "gone from disk" scan mode, and in-memory pressed ids. Each round of these found
+a new duplicate or a stuck `busy`.
