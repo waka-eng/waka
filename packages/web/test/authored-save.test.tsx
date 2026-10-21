@@ -114,7 +114,7 @@ it('an offline save does not jam the composer: reconnecting re-sends it', async 
   await act(async () => { window.dispatchEvent(new Event('online')); });
   expect(latest.pending).toBeNull(); expect(latest.phase).toBe('idle'); expect(records()).toHaveLength(0);
   expect(rows.size).toBe(1); expect(resolved).toHaveBeenCalledOnce();
-  expect(resolved.mock.calls[0]?.[2]).toBe(false); // a background send is not a press
+  expect(resolved.mock.calls[0]?.[2]).toBe(true); // this tab's own press, landed on reconnect
 });
 
 it('timeout, then the first POST commits: reload re-POSTs the same id and there is exactly one inspiration', async () => {
@@ -145,7 +145,7 @@ it('two tabs re-sending the same id make one inspiration, and both settle', asyn
   try {
     await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
     await b.open(); // B finds A's journal on disk and re-sends it while A's POST is committing
-    expect(b.tab.save?.phase).toBe('uncertain'); expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1);
+    expect(b.tab.save?.phase).toBe('saving'); expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1);
     await act(async () => { release(); });
     await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: null })); });
     expect(rows.size).toBe(1); expect(records()).toHaveLength(0);
@@ -186,6 +186,31 @@ it("focus re-sends another tab's journal only once its last send is stale", asyn
     expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1);
     expect(b.tab.save?.pending).toBeNull(); expect(records()).toHaveLength(0);
   } finally { await b.close(); }
+});
+
+it('a press answered 409 save_in_progress keeps saving, polls, and acknowledges the press', async () => {
+  const { rows } = server();
+  vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 409, code: 'save_in_progress', message: 'In progress' }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  expect(latest.phase).toBe('saving'); expect(latest.busy).toBe(true); expect(latest.pending).not.toBeNull();
+  await act(async () => vi.advanceTimersByTimeAsync(1_000));
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1); expect(rows.size).toBe(1);
+  expect(resolved).toHaveBeenCalledOnce(); expect(resolved.mock.calls[0]?.[2]).toBe(true);
+  expect(latest.pending).toBeNull(); expect(latest.phase).toBe('idle'); expect(records()).toHaveLength(0);
+});
+
+
+it('a press waiting on save_in_progress still acknowledges when another tab is what lands it', async () => {
+  const { rows } = server();
+  vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 409, code: 'save_in_progress', message: 'In progress' }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const requestId = latest.pending!.requestId;
+  rows.set(requestId, { ...source, id: 'landed-elsewhere' }); localStorage.removeItem(records()[0]!); // the other tab landed it
+  await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: null })); });
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(resolved).toHaveBeenCalledOnce();
+  expect(resolved.mock.calls[0]?.[2]).toBe(true); expect(latest.pending).toBeNull();
+  await act(async () => vi.advanceTimersByTimeAsync(10_000));
+  expect(createInspiration).toHaveBeenCalledOnce(); // the poll stopped with it
 });
 
 it('a tab lets go of a journal another tab discarded, without re-sending it', async () => {

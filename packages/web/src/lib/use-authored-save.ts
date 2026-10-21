@@ -90,7 +90,12 @@ export function useAuthoredSave(options: {
   const [busy, setBusy] = useState(false);
   const working = useRef(false), mounted = useRef(false), epoch = useRef(0);
   const abort = useRef<AbortController | null>(null);
-  const refresh = useRef<() => unknown>(() => {});
+  const refresh = useRef<(trigger?: 'send' | 'focus' | 'storage', pressed?: boolean) => unknown>(() => {});
+  /** Request ids pressed (Save or Retry) in THIS tab: in memory only. Whichever
+      path lands the save, the tab that pressed acknowledges it. */
+  const pressedHere = useRef(new Set<string>());
+  /** 409 save_in_progress: a same-id POST is committing. Poll, short backoff. */
+  const poll = useRef({ timer: 0, attempt: 0 });
   /** Request ids THIS tab has sent: in memory only, never persisted. */
   const sentHere = useRef(new Set<string>());
 
@@ -100,6 +105,8 @@ export function useAuthoredSave(options: {
     const write = mode === 'send';
     const owner = live.current, key = owner.prefix;
     if (!mounted.current || working.current || !key || !owner.scope || owner.enabled === false || (document.hidden && !write)) return;
+    if (pressed) pressedHere.current.add(intent.requestId);
+    let inProgress = false;
     const release = () => { intentRef.current = null; setPending(null); setPhase('idle'); };
     if (intent.rejected) { if (mode !== 'gone') setPhase('rejected'); else release(); return; }
     working.current = true; setBusy(true); setPhase('checking');
@@ -160,8 +167,9 @@ export function useAuthoredSave(options: {
       })]);
       current();
       if (!result) { release(); return; }
-      if (result === 'elsewhere') { setPhase('saving'); return; }
-      const afterSettlement = await live.current.onResolved(intent, result, pressed);
+      // Not landed yet. If this tab sent it, keep polling as for save_in_progress.
+      if (result === 'elsewhere') { inProgress = sentHere.current.has(intent.requestId); setPhase('saving'); return; }
+      const afterSettlement = await live.current.onResolved(intent, result, pressedHere.current.has(intent.requestId));
       current();
       // Cleanup follows matching-draft settlement; a crash before cleanup can
       // only cause a read/replay, never a newly identified copy of these words.
@@ -184,10 +192,22 @@ export function useAuthoredSave(options: {
         const rejected = { ...intent, rejected: true, validationMessage };
         try { persist(key, rejected); } catch { /* the original immutable intent is still retained */ }
         intentRef.current = rejected; setPending(rejected); setPhase('rejected');
+      } else if (error instanceof ApiError && error.status === 409 && error.code === 'save_in_progress') {
+        // Still saving, not "couldn't confirm": the composer stays as it is.
+        inProgress = true; setPhase('saving');
       } else setPhase(error instanceof ApiError && error.code === 'save_protocol_unavailable' ? 'unsupported' : 'uncertain');
     } finally {
       window.clearTimeout(timeout); controller.signal.removeEventListener('abort', rejectAborted); controller.abort();
-      if (owns()) { working.current = false; setBusy(false); if (!intentRef.current) refresh.current(); }
+      if (owns()) {
+        working.current = false;
+        window.clearTimeout(poll.current.timer);
+        if (inProgress) {
+          const delay = Math.min(1000 * 2 ** poll.current.attempt++, 8000);
+          poll.current.timer = window.setTimeout(() => {
+            if (mounted.current && intentRef.current?.requestId === intent.requestId) void refresh.current('send');
+          }, delay);
+        } else { poll.current.attempt = 0; setBusy(false); if (!intentRef.current) refresh.current(); }
+      }
     }
   }, []);
 
@@ -216,7 +236,7 @@ export function useAuthoredSave(options: {
     window.addEventListener('focus', onFocus); document.addEventListener('visibilitychange', onFocus); window.addEventListener('storage', onStorage);
     window.addEventListener('online', onFocus);
     return () => {
-      mounted.current = false; epoch.current += 1; abort.current?.abort(); working.current = false;
+      mounted.current = false; epoch.current += 1; abort.current?.abort(); working.current = false; window.clearTimeout(poll.current.timer);
       window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); window.removeEventListener('storage', onStorage);
       window.removeEventListener('online', onFocus);
     };
