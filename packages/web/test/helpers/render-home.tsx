@@ -29,7 +29,7 @@
  */
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { BrowserRouter, MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 
 import type { FieldAudit } from "../../src/pages/Home";
 
@@ -313,10 +313,7 @@ async function withFixtureAlarm<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
-/* `browserRouter` puts the router on jsdom's real session history, for suites
-   that need a real `history.back()` and `popstate` (MemoryRouter raises none). */
-export async function mountWorld(facts: WorldFacts, options: { initialEntries?: string[]; routerTools?: ReactElement; browserRouter?: boolean } = {}): Promise<MountedWorld> {
-  const Router = (options.browserRouter ? BrowserRouter : MemoryRouter) as typeof MemoryRouter;
+export async function mountWorld(facts: WorldFacts, options: { initialEntries?: string[]; routerTools?: ReactElement } = {}): Promise<MountedWorld> {
   const { default: HomePage } = await import("../../src/pages/Home");
   const { AuthProvider } = await import("../../src/lib/auth-context");
 
@@ -332,7 +329,7 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
       await act(async () => {
         root.render(
           createElement(
-            Router,
+            MemoryRouter,
             { initialEntries: options.initialEntries },
             createElement(AuthProvider, null, createElement(HomePage) as ReactElement),
             options.routerTools,
@@ -394,7 +391,7 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
     step,
     async rerender() {
       await act(async () => {
-        root.render(createElement(Router, { initialEntries: options.initialEntries },
+        root.render(createElement(MemoryRouter, { initialEntries: options.initialEntries },
           createElement(AuthProvider, null, createElement(HomePage) as ReactElement), options.routerTools));
       });
       await step(30);

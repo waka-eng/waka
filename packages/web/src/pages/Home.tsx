@@ -69,7 +69,6 @@ import { DialogSurface, leaveAsModal } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
-import { useBackLayer } from '../lib/back-layers';
 import { EMPTY_VIEW, resolveViewWall, viewHref, type ViewLocation, type ViewOpen } from '../lib/view-location';
 import { InspirationSearch } from '../components/InspirationSearch';
 
@@ -2478,16 +2477,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     window.addEventListener("popstate", popped);
     return () => window.removeEventListener("popstate", popped);
   }, [commitOpenNote]);
-  /* AND BACK FROM AN OPEN NOTE CLOSES THE NOTE, NOT THE ARCHIVE. The note has
-     no address, so its Back used to pop the archive's own entry and skip the
-     list. `useBackLayer` catches that one-step Back before the router hears
-     it, keeps the archive's entry exactly as it was, and commits the note
-     through the same path as every other exit. No history entry is added for
-     the note, so a replace, a reload or another way of closing it has nothing
-     to clean up (`docs/plans/back-from-layers.md`). The listener above still
-     commits on every pop that is not caught: an app-initiated step back, or
-     a jump of more than one entry. */
-  useBackLayer(savedNoteOpen, commitOpenNote);
   /* The field shows what you typed while you are typing and the account's
      own name the rest of the time, so another tab renaming you is not
      overwritten by a stale field — and nothing is held here that the
