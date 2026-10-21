@@ -62,9 +62,24 @@ function persist(prefix: string, intent: AuthoredSaveIntent) {
   if (localStorage.getItem(key) !== raw) throw new Error('Pending save was not retained');
 }
 
+/* REQUEST IDS THIS TAB CREATED. sessionStorage is per tab and survives a
+   reload of that tab only, so a resend is limited to this tab's own saves.
+   Read once at first mount into memory; written on start(). */
+const OWN_SAVES = 'waka:authoredSave:own';
+function readOwn(): Set<string> {
+  try { const ids = JSON.parse(sessionStorage.getItem(OWN_SAVES) ?? '[]'); return new Set(Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : []); }
+  catch { return new Set(); }
+}
+function writeOwn(ids: Set<string>) {
+  try { sessionStorage.setItem(OWN_SAVES, JSON.stringify([...ids].slice(-20))); } catch { /* resend after reload is a convenience */ }
+}
+
 /** One visible pending intent, with separate durable keys for simultaneous
- * tabs. Mount/focus only READ. An explicit retry may POST the immutable intent
- * using its original identity, after verifying the server supports it. */
+ * tabs. Focus and storage events only READ. First page load and `online`
+ * re-POST a journal THIS TAB created (read from disk) under its original
+ * identity, and an explicit retry POSTs the immutable intent, after verifying
+ * the server supports it; the server dedupes on that identity. Another tab's
+ * journal is only read. See docs/plans/save-recovery.md. */
 export function useAuthoredSave(options: {
   scope: ProfileStorageScope | null; operation: AuthoredSaveInput['operation']; inspirationId?: string; enabled?: boolean;
   journal?:string;
@@ -84,12 +99,20 @@ export function useAuthoredSave(options: {
   const working = useRef(false), mounted = useRef(false), epoch = useRef(0);
   const abort = useRef<AbortController | null>(null);
   const refresh = useRef<() => void>(() => {});
+  /** A load/`online` resend that could not run yet (tab hidden, or a run in
+      flight). The next scan that can run performs it: focus/visibility, or
+      the end of the in-flight run. In memory only. */
+  const resendOwed = useRef(false);
+  const own = useRef<Set<string> | null>(null), firstMount = useRef(true);
+  /** What the run in flight has done: a re-run must not re-POST over 'posted'. */
+  const inFlight = useRef<'reading' | 'sending' | 'posted'>('reading');
+  const isOwn = (intent: AuthoredSaveIntent | null | undefined) => Boolean(intent && own.current?.has(intent.requestId));
 
-  const run = useCallback(async (intent: AuthoredSaveIntent, write: boolean) => {
+  const run = useCallback(async (intent: AuthoredSaveIntent, write: boolean, pressed = write) => {
     const owner = live.current, key = owner.prefix;
     if (!mounted.current || working.current || !key || !owner.scope || owner.enabled === false || (document.hidden && !write)) return;
     if (intent.rejected) { setPhase('rejected'); return; }
-    working.current = true; setBusy(true); setPhase('checking');
+    working.current = true; inFlight.current = write ? 'sending' : 'reading'; setBusy(true); setPhase('checking');
     abort.current?.abort(); const controller = new AbortController(); abort.current = controller;
     const sequence = ++epoch.current;
     const owns = () => mounted.current && live.current.prefix === key && epoch.current === sequence;
@@ -117,6 +140,7 @@ export function useAuthoredSave(options: {
         current(); setPhase('saving');
         attempted = true;
         const saveOptions = { ...scoped, requestId: intent.requestId, signal: controller.signal };
+        inFlight.current = 'posted';
         created = await createInspiration(intent.input, saveOptions); current();
         if (!created?.id || created.profileId !== intent.profileId) throw new Error('Unexpected saved inspiration');
         saved = { inspirationId: created.id, reflectionId: null, processing: created.processing };
@@ -141,7 +165,7 @@ export function useAuthoredSave(options: {
         timeout = window.setTimeout(() => { controller.abort(); reject(new Error('Save check timed out')); }, 15_000);
       })]);
       current();
-      const afterSettlement = await live.current.onResolved(intent, result, write);
+      const afterSettlement = await live.current.onResolved(intent, result, pressed);
       current();
       // Cleanup follows matching-draft settlement; a crash before cleanup can
       // only cause a read/replay, never a newly identified copy of these words.
@@ -165,29 +189,45 @@ export function useAuthoredSave(options: {
       } else setPhase(error instanceof ApiError && error.code === 'save_protocol_unavailable' ? 'unsupported' : 'uncertain');
     } finally {
       window.clearTimeout(timeout); controller.signal.removeEventListener('abort', rejectAborted); controller.abort();
-      if (owns()) { working.current = false; setBusy(false); if (!intentRef.current) refresh.current(); }
+      if (owns()) { working.current = false; setBusy(false); if (!intentRef.current || (resendOwed.current && isOwn(intentRef.current))) refresh.current(); }
+      else if (mounted.current && !working.current) setBusy(false);
     }
   }, []);
 
-  const scan = useCallback(() => {
+  // `owe`: page load and `online` owe a re-POST under the same id; never a press.
+  const scan = useCallback((owe = false) => {
     const at = live.current;
+    if (owe) resendOwed.current = true;
     if (!mounted.current || working.current || !at.prefix || !at.scope || at.enabled === false || document.hidden) return;
-    if (intentRef.current) { void run(intentRef.current, false); return; }
+    // The owed resend is consumed only here, by this tab, for its own journal.
+    const owed = (intent: AuthoredSaveIntent) => { const send = resendOwed.current && isOwn(intent); if (send) resendOwed.current = false; return send; };
+    if (intentRef.current) { void run(intentRef.current, owed(intentRef.current), false); return; }
     try {
       const found = readIntents(at.prefix, at.scope, at.operation);
-      if (found.intents[0]) { intentRef.current = found.intents[0]; setPending(found.intents[0]); void run(found.intents[0], false); }
-      else if (found.invalid) setPhase('invalid');
+      const next = found.intents.find(isOwn) ?? found.intents[0];
+      if (next) { intentRef.current = next; setPending(next); void run(next, owed(next), false); }
+      else { resendOwed.current = false; if (found.invalid) setPhase('invalid'); }
     } catch { setPhase('storage_error'); }
   }, [run]);
   refresh.current = scan;
 
   useEffect(() => {
+    // Only the true first mount owes the load resend; a re-run (enabled or
+    // prefix change) only reads. A re-run after a run that was in flight
+    // drops any owed resend (cleanup below), so it never re-POSTs over it.
+    if (!own.current) own.current = readOwn();
+    const first = firstMount.current; firstMount.current = false;
     mounted.current = true; epoch.current += 1; abort.current?.abort(); working.current = false;
-    intentRef.current = null; setPending(null); setBusy(false); setPhase('idle'); scan();
+    intentRef.current = null; setPending(null); setBusy(false); setPhase('idle'); scan(first);
     const onFocus = () => scan();
+    const onOnline = () => scan(true);
     const onStorage = (event: StorageEvent) => { if (!event.key || event.key.startsWith(prefix ?? '\0')) scan(); };
     window.addEventListener('focus', onFocus); document.addEventListener('visibilitychange', onFocus); window.addEventListener('storage', onStorage);
+    window.addEventListener('online', onOnline);
     return () => {
+      window.removeEventListener('online', onOnline);
+      if (working.current && inFlight.current === 'posted') resendOwed.current = false;
+      else if (working.current && inFlight.current === 'sending') resendOwed.current = true; // not POSTed yet: still owed
       mounted.current = false; epoch.current += 1; abort.current?.abort(); working.current = false;
       window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); window.removeEventListener('storage', onStorage);
     };
@@ -204,6 +244,7 @@ export function useAuthoredSave(options: {
       const copy = JSON.parse(JSON.stringify(input)) as AuthoredSaveInput;
       const intent: AuthoredSaveIntent = { ...copy, ...at.scope, version: 1, requestId: crypto.randomUUID(), createdAt: Date.now(), checksum: checksum(copy) };
       persist(at.prefix, intent); // no request may precede durable ownership/words
+      resendOwed.current = false; own.current?.add(intent.requestId); writeOwn(own.current ?? new Set([intent.requestId]));
       intentRef.current = intent; setPending(intent); void run(intent, true);
       return true;
     } catch { setPhase('storage_error'); return false; }

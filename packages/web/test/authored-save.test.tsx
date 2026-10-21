@@ -18,13 +18,13 @@ const resolved = vi.fn(), removed = vi.fn();
 let host: HTMLDivElement, root: Root, latest: ReturnType<typeof useAuthoredSave>;
 const records = () => Object.keys(localStorage).filter((key) => key.includes(':pendingSave:'));
 const missing = () => new ApiError({ status: 404, code: 'save_not_found', message: 'No committed save found' });
-function Probe({ owner = scope, operation = 'inspiration' as const }) {
-  latest = useAuthoredSave({ scope: owner, operation,
+function Probe({ owner = scope, operation = 'inspiration' as const, enabled = true }) {
+  latest = useAuthoredSave({ scope: owner, operation, enabled,
     onResolved: resolved, onRemoved: removed });
   return <span>{latest.phase}</span>;
 }
 beforeEach(() => {
-  vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
+  vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear(); sessionStorage.clear();
   Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
@@ -62,14 +62,173 @@ it('reuses immutable words, visibility and identity after a lost response', asyn
   expect(resolved).toHaveBeenCalledOnce();
 });
 
-it('only reads a pending save on remount; missing is not permission to repost', async () => {
-  vi.mocked(createInspiration).mockRejectedValue(new Error('Lost response'));
+/* A FAKE OF THE SERVER'S IDEMPOTENCY (inspiration-save-requests.ts): one row
+   per request id; a committed id replays. `rows` is what was created. */
+function server() {
+  const rows = new Map<string, ApiInspiration>();
+  vi.mocked(createInspiration).mockImplementation(async (_body, options) => {
+    const id = options!.requestId!, prior = rows.get(id);
+    if (prior) return { ...prior, saveRequest: { requestId: id, replayed: true } };
+    const row = { ...source, id: `source-${rows.size + 1}` }; rows.set(id, row); return row;
+  });
+  return rows;
+}
+const ids = () => new Set(vi.mocked(createInspiration).mock.calls.map((call) => call[1]?.requestId));
+
+it('an offline save does not jam the composer: coming back online re-sends it under the same id', async () => {
+  const rows = server();
+  vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 0, message: 'Failed to fetch' }));
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
-  const key = records()[0]!, before = localStorage.getItem(key);
+  expect(latest.phase).toBe('uncertain'); expect(latest.pending).not.toBeNull();
+  await act(async () => { window.dispatchEvent(new Event('online')); });
+  expect(latest.pending).toBeNull(); expect(latest.phase).toBe('idle'); expect(latest.busy).toBe(false);
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1); expect(rows.size).toBe(1);
+  expect(resolved).toHaveBeenCalledOnce(); expect(records()).toHaveLength(0);
+});
+
+it('reload re-sends a pending save from disk under its original id and words: one inspiration', async () => {
+  const rows = server();
+  vi.mocked(createInspiration).mockImplementationOnce(async (body, options) => { // commits, but the response is lost
+    rows.set(options!.requestId!, { ...source, id: 'source-1', text: body.text }); throw new Error('Lost response');
+  });
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const key = records()[0]!, first = vi.mocked(createInspiration).mock.calls[0]!;
   await act(async () => root.unmount()); root = createRoot(host);
   await act(async () => root.render(<Probe />));
-  expect(latest.phase).toBe('uncertain'); expect(localStorage.getItem(key)).toBe(before);
-  expect(createInspiration).toHaveBeenCalledOnce(); expect(resolved).not.toHaveBeenCalled();
+  const second = vi.mocked(createInspiration).mock.calls[1]!;
+  expect(second[0]).toEqual(first[0]); expect(second[1]?.requestId).toBe(first[1]?.requestId);
+  expect(rows.size).toBe(1); expect(resolved).toHaveBeenCalledOnce();
+  expect(resolved.mock.calls[0]?.[1].recovered).toBe(true); expect(resolved.mock.calls[0]?.[2]).toBe(false);
+  expect(localStorage.getItem(key)).toBeNull(); expect(latest.pending).toBeNull(); expect(latest.busy).toBe(false);
+});
+
+const hide = (hidden: boolean) => Object.defineProperty(document, 'hidden', { configurable: true, value: hidden });
+
+it('online while hidden: the resend is owed, and happens when the tab is visible again', async () => {
+  const rows = server();
+  vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 0, message: 'Failed to fetch' }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  hide(true);
+  await act(async () => { window.dispatchEvent(new Event('online')); });
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(latest.pending).not.toBeNull();
+  hide(false);
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1); expect(rows.size).toBe(1);
+  expect(latest.pending).toBeNull(); expect(latest.busy).toBe(false); expect(records()).toHaveLength(0);
+});
+
+it('online while a POST is stalled: once it times out, the owed resend happens', async () => {
+  const rows = server();
+  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise(() => {}));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => { window.dispatchEvent(new Event('online')); });
+  expect(createInspiration).toHaveBeenCalledOnce();
+  await act(async () => vi.advanceTimersByTimeAsync(15_000));
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1); expect(rows.size).toBe(1);
+  expect(latest.pending).toBeNull(); expect(latest.busy).toBe(false); expect(records()).toHaveLength(0);
+});
+
+it('a page loaded in a background tab re-sends on its first visible moment', async () => {
+  const rows = server();
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => root.unmount()); root = createRoot(host);
+  hide(true);
+  await act(async () => root.render(<Probe />));
+  expect(createInspiration).toHaveBeenCalledOnce();
+  hide(false);
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1); expect(rows.size).toBe(1);
+  expect(latest.pending).toBeNull(); expect(records()).toHaveLength(0);
+});
+
+function otherTab() {
+  const tab: { save?: ReturnType<typeof useAuthoredSave> } = {};
+  const where = document.createElement('div'); document.body.append(where); const at = createRoot(where);
+  function ProbeB() { tab.save = useAuthoredSave({ scope, operation: 'inspiration', onResolved: resolved, onRemoved: removed }); return null; }
+  return { tab, open: () => act(async () => at.render(<ProbeB />)), close: async () => { await act(async () => at.unmount()); where.remove(); } };
+}
+
+it('two tabs + online: only the tab that created the save re-POSTs it', async () => {
+  const rows = server();
+  vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 0, message: 'Failed to fetch' }));
+  const b = otherTab();
+  try {
+    await b.open(); // B mounted first: its snapshot of this tab's own ids is empty
+    await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+    await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: null })); }); // B adopts the journal, reading only
+    expect(b.tab.save?.pending).not.toBeNull(); expect(createInspiration).toHaveBeenCalledOnce();
+    vi.mocked(fetchInspirationSaveRequest).mockImplementation(async (id) => {
+      const row = rows.get(id); if (!row) throw missing();
+      return { requestId: id, operation: 'inspiration', inspirationId: row.id, reflectionId: null, processing: { id: 'r', profileId: scope.profileId, inspirationId: row.id, materialRevision: '1', jobId: 'j', requestVersion: '1' }, createdAt: row.createdAt };
+    });
+    vi.mocked(fetchInspiration).mockImplementation(async (id) => [...rows.values()].find((row) => row.id === id)!);
+    await act(async () => { window.dispatchEvent(new Event('online')); });
+    expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1); expect(rows.size).toBe(1);
+    expect(latest.pending).toBeNull();
+  } finally { await b.close(); }
+});
+
+it("a different tab loading never re-POSTs a journal it did not create", async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => root.unmount()); root = createRoot(host);
+  sessionStorage.clear(); // a new tab: its own sessionStorage
+  await act(async () => root.render(<Probe />));
+  await act(async () => { window.dispatchEvent(new Event('online')); });
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
+});
+
+it("the owner's success refresh never POSTs another tab's journal", async () => {
+  let finish!: (value: ApiInspiration) => void;
+  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const mine = JSON.parse(localStorage.getItem(records()[0]!)!), theirs = { ...mine, requestId: crypto.randomUUID(), createdAt: mine.createdAt + 1 };
+  localStorage.setItem(records()[0]!.replace(mine.requestId, theirs.requestId), JSON.stringify(theirs)); // another tab's journal
+  await act(async () => { window.dispatchEvent(new Event('online')); }); // owed while A's POST is in flight
+  await act(async () => { finish(source); });
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(ids()).toEqual(new Set([mine.requestId]));
+  expect(latest.pending?.requestId).toBe(theirs.requestId); expect(latest.busy).toBe(false);
+});
+
+it('an enabled flip while a POST is in flight never sends a second POST', async () => {
+  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise(() => {}));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => { window.dispatchEvent(new Event('online')); }); // owed while the POST is in flight
+  await act(async () => root.render(<Probe enabled={false} />));
+  await act(async () => root.render(<Probe enabled />));
+  await act(async () => vi.advanceTimersByTimeAsync(20_000));
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(records()).toHaveLength(1); expect(latest.busy).toBe(false);
+});
+
+it('only the first mount re-sends; a later effect re-run only reads', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  expect(latest.phase).toBe('uncertain');
+  await act(async () => root.render(<Probe enabled={false} />));
+  await act(async () => root.render(<Probe enabled />));
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(latest.phase).toBe('uncertain');
+});
+
+it('a first mount whose resend was cut off before its POST still owes it to the re-run', async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => root.unmount()); root = createRoot(host);
+  let answer!: () => void;
+  vi.mocked(fetchInspirationSaveRequest).mockImplementationOnce(() => new Promise((_, reject) => { answer = () => reject(missing()); }));
+  await act(async () => root.render(<Probe />)); // load: resend starts with its status read
+  await act(async () => root.render(<Probe enabled={false} />)); // re-run before any POST (e.g. StrictMode)
+  await act(async () => root.render(<Probe enabled />));
+  await act(async () => { answer(); });
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1);
+  expect(latest.pending).toBeNull(); expect(records()).toHaveLength(0);
+});
+
+it('focus still only reads a pending save; it does not re-send', async () => {
+  vi.mocked(createInspiration).mockRejectedValue(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
 });
 
 it('recovers a committed save by reading its current item, without another POST', async () => {
