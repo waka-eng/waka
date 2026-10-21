@@ -107,30 +107,38 @@ describe("a paused reading", () => {
   });
 
   /* Home and the principles overlay each mount the hook; a Retry in one
-     invalidates a GET in flight in the other. */
-  it("a Retry in one notice invalidates a GET in flight in another", async () => {
+     invalidates a GET in flight in the other, and when the POST answers the
+     other asks again, so it shows the state after the Retry. */
+  it("a Retry in one notice invalidates the other's in-flight GET, and the other asks again", async () => {
     vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
     vi.mocked(retryPausedReading).mockReset().mockResolvedValue(status(false));
-    function Two() { return createElement("div", null, createElement(Page), createElement(Page)); }
+    function Overlay() {
+      const state = useReadingPaused(true);
+      return createElement("section", { id: "overlay" }, createElement(ReadingPausedNotice, { state, locale: "en-US", canRetry: true }));
+    }
+    function Two() { return createElement("div", null, createElement("section", { id: "home" }, createElement(Page)), createElement(Overlay)); }
     render(createElement(Two));
     await settle();
-    expect(container!.querySelectorAll("button").length).toBe(2);
-    const held: Array<(value: ReturnType<typeof status>) => void> = [];
-    const hold = () => new Promise<ReturnType<typeof status>>((resolve) => { held.push(resolve); });
-    vi.mocked(fetchPrincipleStatus).mockImplementationOnce(hold).mockImplementationOnce(hold).mockResolvedValue(status(false));
+    const overlay = () => container!.querySelector("#overlay")!.textContent;
+    expect(overlay()).toContain("Reading is paused");
+    let answerOverlay!: (value: ReturnType<typeof status>) => void;
     vi.useFakeTimers();
     try {
+      /* Only the overlay's GET is in flight (Home's answers at once). */
+      vi.mocked(fetchPrincipleStatus).mockResolvedValueOnce(status(true))
+        .mockImplementationOnce(() => new Promise((resolve) => { answerOverlay = resolve; }));
       await act(async () => { window.dispatchEvent(new Event("focus")); });
-      expect(held.length).toBe(2);
-      await act(async () => { container!.querySelector("button")!.click(); });
+      vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(false));
+      const gets = vi.mocked(fetchPrincipleStatus).mock.calls.length;
+      await act(async () => { container!.querySelector("#home button")!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
       await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
-      await act(async () => { window.dispatchEvent(new Event("focus")); });
-      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-      expect(container!.textContent).toBe("");
-      await act(async () => { held.forEach((answer) => answer(status(true))); });
+      expect(vi.mocked(fetchPrincipleStatus).mock.calls.length, "both notices ask again when the POST answers").toBe(gets + 2);
+      expect(overlay(), "the overlay did not ask again after the Retry").toBe("");
+      await act(async () => { answerOverlay(status(true)); });
       await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     } finally { vi.useRealTimers(); }
-    expect(container!.textContent, "the other notice's pre-Retry GET put it back").toBe("");
+    expect(overlay(), "the overlay's pre-Retry GET put it back").toBe("");
+    expect(container!.textContent).toBe("");
   });
 
   it("re-checks every 30s while paused, and a failed check leaves the notice up", async () => {
