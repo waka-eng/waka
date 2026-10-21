@@ -196,7 +196,7 @@ export function SignupForm({
     setFormError(null);
     setFieldErrors({});
     try {
-      await signup({
+      const created = await signup({
         email,
         password: values.password,
         name: values.name.trim(),
@@ -205,7 +205,7 @@ export function SignupForm({
       // AuthContext has already cached the user; the route guard on `/`
       // (or the user's pre-redirect destination) will see them as
       // authenticated on the very next render.
-      navigate(resolveRedirect(location), { replace: true });
+      navigate(resolveRedirect(location, created.account.id), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         /* STATUS 0 IS A DEAD CONNECTION, NOT AN ANSWER — and this branch is
@@ -433,8 +433,8 @@ export function LoginForm(): JSX.Element {
     setWrongCredentials(false);
     setFieldErrors({});
     try {
-      await login({ email, password: values.password });
-      navigate(resolveRedirect(location), { replace: true });
+      const signedIn = await login({ email, password: values.password });
+      navigate(resolveRedirect(location, signedIn.account.id), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         // A dead connection is not an answer from the server — see the same
