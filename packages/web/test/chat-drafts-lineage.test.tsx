@@ -123,3 +123,17 @@ it('never deletes another open tab’s idle draft that this tab restored, forked
   expect(saveConversationMessage).toHaveBeenCalledOnce();
   expect(readConversationDrafts(scope,chat).map(row=>row.value),'a send in tab A deleted the draft tab B still shows').toEqual([theirs]);
 });
+
+it('never deletes words another tab wrote under a key this tab made, when this tab then forks and sends',async()=>{
+  /* Tab A (this panel) writes K with a photo. Tab B carries K (a draft with
+     photos keeps its key), takes the photo off and writes its own words. */
+  await mount();await pickPhoto();
+  const mine=readConversationDrafts(scope,chat)[0]!;
+  const theirs={...mine.value,writer:'6c1d0e9f-8a7b-4c6d-8e9f-0a1b2c3d4e5f',updatedAt:Date.now()+1000,content:'Tab B words'};delete theirs.attachments;
+  localStorage.setItem(mine.key,JSON.stringify(theirs));
+  /* A reloads, restores K as tab B left it, forks it on an edit and sends. */
+  await remount();expect(box().value).toBe('Tab B words');
+  await type('Tab B words, and what tab A added');await send();
+  expect(saveConversationMessage).toHaveBeenCalledOnce();
+  expect(readConversationDrafts(scope,chat).map(row=>row.value),'a send in tab A deleted tab B\u2019s words').toEqual([theirs]);
+});

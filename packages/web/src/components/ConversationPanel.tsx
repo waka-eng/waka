@@ -245,9 +245,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     finally{window.clearTimeout(timer);owner.signal.removeEventListener('abort',abort);request.signal.removeEventListener('abort',stopped);}
   };
   /* A FORK IS WRITTEN DOWN (L10): when this store lands under a new key over a
-     draft THIS tab stored, the draft it replaced is recorded, so a confirmed
+     draft whose bytes are still what THIS tab wrote, the draft it replaced is recorded, so a confirmed
      send clears both. Another tab's draft is never linked. */
-  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{const before=receipt.current;receipt.current=storeConversationDraft(scope,journal,next,before);recordDraftStored(receipt.current.key,before);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
+  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{const before=receipt.current;receipt.current=storeConversationDraft(scope,journal,next,before);recordDraftStored(receipt.current,before);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
   const observe=(next:ApiConversation)=>{
     if(conversationRef.current?.id===next.id&&conversationRef.current.profileId===next.profileId&&conversationRef.current.revision>next.revision)next=conversationRef.current;
     conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);

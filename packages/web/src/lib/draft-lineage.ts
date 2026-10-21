@@ -7,11 +7,13 @@
  * used to clear F alone and O came back on the next mount.
  *
  * So each fork is written down here: "F replaced O, whose bytes were these"
- * — but ONLY when this tab itself stored O. Every key this tab stores is
- * kept in a per-tab set (like `OWN_SAVES`' own request ids), which a reload
- * of this tab keeps, so the reload chain is linked. A draft another tab
- * wrote is never linked, so sending here never deletes it: that tab may
- * still be showing it, and would lose it on its next reload.
+ * — but ONLY when O's bytes are still the ones this tab last wrote there.
+ * Every store this tab makes is kept in a per-tab map, key to the bytes
+ * written (like `OWN_SAVES`' own request ids), which a reload of this tab
+ * keeps, so the reload chain is linked. A draft another tab wrote is never
+ * linked — including one it rewrote under a key this tab made (a draft with
+ * photos keeps its key when another tab edits it) — so sending here never
+ * deletes it: that tab may still be showing it.
  * When a send is confirmed, the current draft's
  * recorded line is cleared with it — O, and whatever O replaced in turn — but
  * only by compare-and-delete on the bytes this tab saw when it forked, so a
@@ -36,12 +38,12 @@ function writeForks(rows: Fork[]) {
   try { if (rows.length) sessionStorage.setItem(OWN_FORKS, JSON.stringify(rows.slice(-LIMIT))); else sessionStorage.removeItem(OWN_FORKS); }
   catch { /* clearing a replaced draft is a convenience; the draft itself is safe */ }
 }
-function readOwn(): Set<string> {
-  try { const keys = JSON.parse(sessionStorage.getItem(OWN_DRAFTS) ?? '[]'); return new Set(Array.isArray(keys) ? keys.filter((key) => typeof key === 'string') : []); }
-  catch { return new Set(); }
+function readOwn(): Map<string, string> {
+  try { const rows = JSON.parse(sessionStorage.getItem(OWN_DRAFTS) ?? '[]'); return new Map(Array.isArray(rows) ? rows.filter((row): row is [string, string] => Array.isArray(row) && row.length === 2 && typeof row[0] === 'string' && typeof row[1] === 'string') : []); }
+  catch { return new Map(); }
 }
-function writeOwn(keys: Set<string>) {
-  try { if (keys.size) sessionStorage.setItem(OWN_DRAFTS, JSON.stringify([...keys].slice(-OWN_LIMIT))); else sessionStorage.removeItem(OWN_DRAFTS); }
+function writeOwn(rows: Map<string, string>) {
+  try { if (rows.size) sessionStorage.setItem(OWN_DRAFTS, JSON.stringify([...rows].slice(-OWN_LIMIT))); else sessionStorage.removeItem(OWN_DRAFTS); }
   catch { /* as above */ }
 }
 /* A draft key is its place's prefix plus the draft's uuid; a link is kept
@@ -49,13 +51,14 @@ function writeOwn(keys: Set<string>) {
    this: a forked card's original stays a choice in the Drafts picker. */
 const place = (key: string) => key.slice(0, -36);
 
-/** This tab stored a draft at `key`; `previous` is the stored row it was
- * editing. A new key over a row THIS tab stored is a fork, and is linked. */
-export function recordDraftStored(key: string, previous: { key: string; raw: string } | null | undefined) {
-  const own = readOwn();
-  if (previous?.key && previous.key !== key && own.has(previous.key) && place(previous.key) === place(key))
+/** This tab stored `saved`; `previous` is the stored row it was editing. A
+ * new key over a row whose bytes are exactly what THIS tab last wrote there
+ * is a fork, and is linked. */
+export function recordDraftStored(saved: { key: string; raw: string }, previous: { key: string; raw: string } | null | undefined) {
+  const own = readOwn(), key = saved.key;
+  if (previous?.key && previous.key !== key && own.get(previous.key) === previous.raw && place(previous.key) === place(key))
     writeForks([...readForks().filter((row) => row.key !== key), { key, from: previous.key, raw: previous.raw }]);
-  own.delete(key); own.add(key); writeOwn(own);
+  own.delete(key); own.set(key, saved.raw); writeOwn(own);
 }
 
 /** The draft at `key` was sent: clear every draft this tab
