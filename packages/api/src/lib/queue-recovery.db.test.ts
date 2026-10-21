@@ -1,10 +1,11 @@
 /** WHAT THIS MOCKS, AND WHY: `processor` completes jobs without model calls.
  * The real recovery query, budgets, claims and completion run on Postgres. */
 import {randomUUID} from 'node:crypto';
-import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
+import {afterAll,beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
-import {readBackgroundJobRecoveryState,drainBackgroundJobs,postgresBackgroundJobStore} from './queue.js';
+import {readBackgroundJobRecoveryState,drainBackgroundJobs,postgresBackgroundJobStore,settleAbandonedExhaustedLeases} from './queue.js';
 import {getDb} from './db.js';
+import {MalformedModelOutputError} from './model-provider.js';
 import postgres from 'postgres';
 let t:TestDatabase;
 const now=new Date('2026-10-05T12:00:00Z');
@@ -86,4 +87,70 @@ it('the recovery selector skips newly due work and active leases while preservin
   expect(processor).not.toHaveBeenCalled();
   expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:1,succeeded:1});
   expect(processor).toHaveBeenCalledOnce();
+});
+it('the daily sweep settles only final-attempt leases no live worker can hold, keeping a requested rerun',async()=>{
+  /* 2026-10-04T11:00 is 25 h before `now`; 11:00 today is 1 h — well past the
+     15-minute stale interval, yet inside the margin a slow worker may use */
+  const p=await owner();
+  const rows=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,run_after,locked_at,attempts,max_attempts,rerun_requested,request_version) VALUES
+    (${p},'derive_signals','{"n":"crashed"}','running','2026-10-04T10:00:00Z','2026-10-04T11:00:00Z',3,3,false,1),
+    (${p},'derive_signals','{"n":"rerun"}','running','2026-10-04T10:00:00Z','2026-10-04T11:00:00Z',3,3,true,2),
+    (${p},'derive_signals','{"n":"slow"}','running','2026-10-05T10:00:00Z','2026-10-05T11:00:00Z',3,3,false,1),
+    (${p},'derive_signals','{"n":"reclaimable"}','running','2026-10-04T10:00:00Z','2026-10-04T11:00:00Z',1,3,false,1)
+    RETURNING id,payload->>'n' AS n`;
+  const id=Object.fromEntries(rows.map(row=>[row.n,row.id]));
+  const read=async(n:string)=>(await t.sql`SELECT status,attempts,rerun_requested,request_version::int AS version,last_error,locked_at FROM background_jobs WHERE id=${id[n]}`)[0]!;
+  expect(await settleAbandonedExhaustedLeases(t.db as never,now)).toBe(2);
+  expect(await read('crashed')).toMatchObject({status:'failed',attempts:3,rerun_requested:false});
+  expect((await read('crashed')).last_error).toContain('abandoned_lease');
+  // the newer request becomes one normal run, not the poison attempt revived
+  expect(await read('rerun')).toMatchObject({status:'pending',attempts:0,rerun_requested:false,version:2,last_error:null,locked_at:null});
+  expect(await read('slow'),'inside the margin: a live worker may still finish it').toMatchObject({status:'running',attempts:3});
+  expect(await read('reclaimable'),'the claim reclaims it; not this sweep').toMatchObject({status:'running',attempts:1});
+  expect(await settleAbandonedExhaustedLeases(t.db as never,now),'idempotent').toBe(0);
+  expect((await readBackgroundJobRecoveryState(t.db as never,now)).exhaustedLeases).toBe(1);
+  const processor=vi.fn(async()=>{});
+  expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:2,succeeded:2});
+  expect((await read('crashed')).status,'terminal until a new request').toBe('failed');
+});
+describe('malformed model output: one retry per request version, then a distinct terminal failure',()=>{
+  const malformed=()=>new MalformedModelOutputError('signal extraction');
+  const hour=3600000;
+  async function job(maxAttempts:number){
+    const p=await owner();
+    const [row]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,run_after,max_attempts)
+      VALUES(${p},'derive_signals','{}','2026-10-05T11:00:00Z',${maxAttempts}) RETURNING id`;
+    return {row:async()=>(await t.sql`SELECT status,attempts,last_error,request_version::int AS version,malformed_retry_version::int AS spent FROM background_jobs WHERE id=${row.id}`)[0]!,id:row.id as string};
+  }
+  it('pays for two calls, never the full budget',async()=>{
+    const j=await job(3),processor=vi.fn(async()=>{throw malformed();});
+    expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:1,retried:1,failed:0});
+    expect(await j.row()).toMatchObject({status:'pending',attempts:1,spent:1});
+    expect(await drainBackgroundJobs({limit:5,now:new Date(now.getTime()+hour),processor})).toMatchObject({claimed:1,retried:0,failed:1});
+    const settled=await j.row();
+    expect(settled).toMatchObject({status:'failed',attempts:2});
+    expect(settled.last_error).toContain('malformed_model_output');
+    expect(await drainBackgroundJobs({limit:5,now:new Date(now.getTime()+2*hour),processor})).toMatchObject({claimed:0});
+    expect(processor,'never a third call').toHaveBeenCalledTimes(2);
+  });
+  it('an unrelated failure in between neither resets nor spends the malformed retry',async()=>{
+    const j=await job(5);let call=0;
+    const processor=vi.fn(async()=>{call+=1;throw call===2?new Error('provider timeout'):malformed();});
+    for(let pass=0;pass<3;pass+=1)await drainBackgroundJobs({limit:5,now:new Date(now.getTime()+pass*hour),processor});
+    expect(processor).toHaveBeenCalledTimes(3);
+    const settled=await j.row();
+    expect(settled).toMatchObject({status:'failed',attempts:3,spent:1});
+    expect(settled.last_error).toContain('malformed_model_output');
+  });
+  it('a newer request version earns its own single retry',async()=>{
+    const j=await job(5),processor=vi.fn(async()=>{throw malformed();});
+    await drainBackgroundJobs({limit:5,now,processor});
+    expect(await j.row()).toMatchObject({status:'pending',spent:1,version:1});
+    // what enqueueKeyedJob does to a pending row when an edit lands: the version moves
+    await t.sql`UPDATE background_jobs SET request_version=request_version+1 WHERE id=${j.id}`;
+    expect(await drainBackgroundJobs({limit:5,now:new Date(now.getTime()+hour),processor})).toMatchObject({retried:1,failed:0});
+    expect(await j.row()).toMatchObject({status:'pending',spent:2,version:2});
+    expect(await drainBackgroundJobs({limit:5,now:new Date(now.getTime()+2*hour),processor})).toMatchObject({retried:0,failed:1});
+    expect(processor).toHaveBeenCalledTimes(3);
+  });
 });

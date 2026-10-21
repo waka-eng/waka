@@ -1,0 +1,18 @@
+-- 0078 malformed retry version (background-job follow-ups, 2026-10-21).
+--
+-- An extraction reply that parses but fails its schema used to be recorded as
+-- "no candidates", marking the capture derived-with-nothing for good. It now
+-- fails the attempt, with exactly ONE retry per request version: at
+-- temperature 0 one backend mostly repeats the same malformed reply, while a
+-- provider-routed retry can reach a backend that answers properly.
+--
+-- This column is that count, made exact. It holds the request_version whose
+-- one malformed-output retry has been spent. A second malformed answer while
+-- it equals request_version is terminal; any new enqueue bumps
+-- request_version, so new input gets its own retry. It replaces reading the
+-- previous attempt's last_error, which a different failure in between, or a
+-- re-enqueue, would change.
+--
+-- Nullable, no default, no backfill: an instant catalog change, and a build
+-- that predates it never reads or writes it.
+ALTER TABLE "background_jobs" ADD COLUMN IF NOT EXISTS "malformed_retry_version" bigint;

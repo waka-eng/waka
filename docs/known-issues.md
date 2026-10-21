@@ -935,6 +935,16 @@ dev. Both the sentence and the gate that contradicts it are this branch's.
 ### L3. A re-run requested while a job was running is silently dropped if that job later exhausts its attempts
 **PRE-EXISTING** · `packages/api/src/lib/queue.ts:1082-1102` · lens: correctness F4 · severity low (unchanged)
 
+**Status: fixed on `dev`.** Commit 46c74dc5 made `markJobFailedOrPending` read the flag. A
+flagged job whose attempt throws, the last one included, goes back to `pending` with
+`attempts = 0` and the error cleared. The enqueue that set the flag already bumped
+`request_version`, so the job runs once more as one new request with a normal attempt budget,
+and the poison attempt is not revived. Pinned by `routes/source-job-durability.db.test.ts`
+("a failed older attempt cannot strand a newer saved revision"). The last gap was a final
+attempt that crashed instead of throwing, which never reached that path. The daily
+abandoned-lease sweep (`settleAbandonedExhaustedLeases`) closes it with the same rule. The
+account below is kept as the record of the original defect.
+
 **What.** `rerun_requested` exists so a request arriving mid-run is not lost: `enqueueKeyedJob`
 and `enqueueTopOfMindRefresh` set the flag on a `running` row, and `markJobSucceeded` turns a
 flagged job back to `pending` with attempts zeroed. `markJobFailedOrPending` never reads or clears
@@ -1491,49 +1501,6 @@ withdrawn instead of deleting, with restore clearing the mark, or having restore
 
 ---
 
-## Exhausted final-attempt leases stay running (follow-up)
-
-**Status:** open, cut from `claude/fix-api-bugs` after three review rounds; `lib/queue.ts` is
-back to `origin/dev`'s behaviour. The claim predicate's attempt ceiling stops a lease being
-reclaimed once `attempts >= max_attempts`. Nothing else settles such a row, so a job whose final
-attempt never reached its own failure path stays `running` forever. The recovery inspection
-counts these as `ExhaustedLeases`; nothing resolves them. Cases the attempted fix ran into:
-
-- **Crashed final attempt.** A worker that dies (rather than throws) on the last attempt leaves
-  the row `running`, never `failed`. It cannot be retried from the UI, because it never reaches
-  a terminal state.
-- **Live slow worker.** On a non-Lambda drain a slow job can outlive `STALE_LOCK_SECONDS` and
-  still finish. Settling at one stale interval failed jobs under workers that were still
-  running them; two intervals narrows that window without proving the worker is gone.
-- **`rerun_requested` dropped.** An enqueue against a `running` row only sets
-  `rerun_requested`. Settling the row as `failed` has to choose: drop that request, or
-  resurrect a poison job with a fresh attempt budget. Neither is right as it stands.
-- **Hot-path scan.** Settling at the start of every drain adds a table scan to the path every
-  enqueue wake takes. A fix probably belongs in the scheduled sweep, not the drain.
-
----
-
-## Malformed extraction payload recorded as no candidates (follow-up)
-
-**Status:** open, cut from `claude/fix-api-bugs`; `parseSignalCandidates`
-(`packages/api/src/queue/gemini.ts`) is back to `origin/dev`'s behaviour. A reply that parses but
-fails `extractedStatementsSchema` returns `{ statements: [], category: null }`, the same result as
-a model that found nothing. The capture is then marked derived-with-nothing for good. (The branch
-kept one independent part: null optional fields — `reason`, `quote`, `relatedEvidence`, a
-citation's `quote` — now count as a valid reply instead of failing validation.) Cases the
-attempted fix ran into:
-
-- **Temperature-0 repeats vs provider-routed retries.** Extraction runs at temperature 0, so on
-  one backend the same input mostly returns the same malformed reply, and the full retry budget
-  pays for three identical answers. OpenRouter-routed calls can reach a different backend on
-  retry, though, where a retry can genuinely succeed. "Never retry" gives up on those;
-  "retry once" is a guess about which case you are in.
-- **`last_error` carry-over.** Counting malformed answers through the previous attempt's
-  `last_error` is fragile. The claim does not clear it, success and terminal re-enqueue do, and a
-  different failure in between changes the count. An explicit per-reason counter, or a
-  terminal-outcome column, would be needed to make "one retry for this reason" exact.
-
----
 ## Refuted findings
 
 Three findings did not survive verification. **A list that only grows is a list nobody trusts**, so
