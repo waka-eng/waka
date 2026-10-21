@@ -113,6 +113,15 @@ describe.each([['web', false], ['native', true]])('%s sign-out', (_name, native)
   });
 });
 
+it('a web session that expires mid-flow opens the door owned by that account', async () => {
+  await mountAt('/rooms/r1');
+  vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
+  await act(async () => { window.dispatchEvent(new Event('waka:session-check')); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(here.pathname).toBe('/login');
+  expect(here.state).toEqual({ from: '/rooms/r1', owner: A.account.id });
+});
+
 it('a cached hint the server rejected claims no owner (dev behaviour for a deep link)', async () => {
   window.localStorage.setItem('waka.auth.viewer', JSON.stringify(A));
   vi.mocked(fetchCurrentViewer).mockResolvedValue(null);

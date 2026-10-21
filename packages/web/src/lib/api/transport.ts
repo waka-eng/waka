@@ -57,7 +57,16 @@ async function webRead(url: string, init: RequestInit): Promise<Response> {
 
 /** The shared resource client only. Signed object-storage uploads bypass it. */
 export async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  if (!isMobileBuild) return webRead(url, init);
+  if (!isMobileBuild) {
+    const response = await webRead(url, init);
+    /* A WEB 401 IS A QUESTION, NOT AN ANSWER. The cookie is invisible to
+       script, so this cannot tell a 401 from the current session apart from
+       a slow read sent under the previous one. It only asks the provider to
+       check with `/auth/me` (docs/plans/session-expiry.md, B); the response
+       still passes through unchanged and nothing here signs anyone out. */
+    if (response.status === 401 && typeof window !== 'undefined' && !isAuthEndpoint(url)) window.dispatchEvent(new Event('waka:session-check'));
+    return response;
+  }
   const origin = checkedNativeApiOrigin();
   const parsed = new URL(url);
   if (parsed.origin !== origin ||

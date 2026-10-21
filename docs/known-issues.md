@@ -1388,7 +1388,18 @@ trying…" after 20s):
 
 ## Session expiry return path and signed-in hint (follow-up)
 
-**Status:** open follow-up (2026-10-18). `claude/fix-dead-ends` reworked sign-in, sign-out,
+**Status (2026-10-21, `claude/followup-session`):** mostly addressed without touching sign-out
+ordering, cookies, hydration or native credential clearing; design in
+`docs/plans/session-expiry.md`. (A) RequireAuth marks a bounce from a CONFIRMED session with its
+account as `owner`; `resolveRedirect` honours an owned `from` only for that account (Google,
+which cannot know, carries `/`); "Switch account" and anonymous deep links are unchanged.
+(B) A web non-auth 401 only asks `/auth/me`; the viewer clears only on a signed-out answer with a
+viewer present and no auth mutation since — so stale 401s, 401s mid-sign-in/out and offline
+checks are no-ops, and nothing sets "unreachable". Still open: the door says "Welcome back"
+after an expiry (it cannot tell expiry from sign-out without touching the sign-out path);
+offline-at-startup and the unreadable-200 `/auth/me` remain dev's behaviour, deliberately.
+
+**Original status:** open follow-up (2026-10-18). `claude/fix-dead-ends` reworked sign-in, sign-out,
 session expiry and the cached signed-in hint; four review rounds kept finding regressions in the
 same handling, so it was reverted to `origin/dev` (`lib/auth-context.tsx`, `RequireAuth.tsx`,
 `pages/Login.tsx`, `lib/sign-in-destination.ts`, `lib/api/auth.ts`, the 401 handling in

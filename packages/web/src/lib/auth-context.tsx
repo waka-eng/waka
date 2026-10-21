@@ -258,6 +258,8 @@ export interface AuthProviderProps {
  */
 export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [viewer, setViewer] = useState<ApiViewer | null>(() => readCachedViewer());
+  const viewerRef = useRef(viewer);
+  viewerRef.current = viewer;
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   /**
@@ -285,6 +287,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         authMutationRef.current += 1;
       }
       setViewer(next);
+      viewerRef.current = next;
       setInspirationSnapshotOwner(next?{accountId:next.account.id,profileId:next.profile.id}:null);
       writeCachedViewer(next);
       if (next) {
@@ -301,6 +304,30 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     const expired = () => { applyViewer(null); setServerUnreachable(false); setIsLoading(false); };
     window.addEventListener('waka:session-expired', expired);
     return () => window.removeEventListener('waka:session-expired', expired);
+  }, [applyViewer]);
+
+  /* A WEB 401 ASKS; `/auth/me` ANSWERS (docs/plans/session-expiry.md, B).
+     The session ends here only when the server, asked with the current
+     cookie, says signed out, a viewer is still shown, and no sign-in, sign-out
+     or refresh happened while it was asked. A stale 401 therefore never ends a
+     newer session, a 401 during sign-in or sign-out does nothing, and an
+     unanswered check changes nothing (no "unreachable", no trapped hint).
+     The clear is not an auth mutation, so an in-flight sign-in is never told
+     "Sign-in changed". One check at a time; the next 401 after it asks again. */
+  const checkingRef = useRef(false);
+  useEffect(() => {
+    if (isMobileBuild) return;
+    const check = () => {
+      if (checkingRef.current || !viewerRef.current) return;
+      checkingRef.current = true;
+      const startedAt = authMutationRef.current;
+      void fetchCurrentViewer().then(fresh => {
+        if (fresh || !aliveRef.current || startedAt !== authMutationRef.current || !viewerRef.current) return;
+        applyViewer(null, { countAsAuthMutation: false });
+      }).catch(() => undefined).finally(() => { checkingRef.current = false; });
+    };
+    window.addEventListener('waka:session-check', check);
+    return () => window.removeEventListener('waka:session-check', check);
   }, [applyViewer]);
 
   // Initial hydration: confirm the cached viewer against the server.
