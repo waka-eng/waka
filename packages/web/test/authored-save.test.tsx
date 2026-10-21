@@ -154,6 +154,40 @@ it('two tabs re-sending the same id make one inspiration, and both settle', asyn
   } finally { await b.close(); }
 });
 
+it('a storage event only reads: B never POSTs the save A pressed, and A acknowledges its own press', async () => {
+  const { rows, holdNext } = server();
+  const release = holdNext(), b = secondTab();
+  try {
+    await act(async () => root.render(<Probe />)); await b.open();
+    await act(async () => { latest.start(input); });
+    await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: null })); });
+    expect(createInspiration).toHaveBeenCalledOnce(); // A's press only
+    expect(b.tab.save?.pending).not.toBeNull(); expect(b.tab.save?.phase).toBe('saving');
+    await act(async () => { release(); });
+    expect(resolved).toHaveBeenCalledOnce(); expect(resolved.mock.calls[0]?.[2]).toBe(true); // A: kept + "let's chat"
+    await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: null })); });
+    expect(b.tab.save?.pending).toBeNull(); expect(resolved.mock.calls[1]?.[2]).toBe(false);
+    expect(createInspiration).toHaveBeenCalledOnce(); expect(rows.size).toBe(1); expect(records()).toHaveLength(0);
+  } finally { await b.close(); }
+});
+
+it("focus re-sends another tab's journal only once its last send is stale", async () => {
+  const { holdNext } = server();
+  holdNext(); const b = secondTab();
+  try {
+    await act(async () => root.render(<Probe />)); await b.open();
+    await act(async () => { latest.start(input); }); // A's POST never answers (A's owner vanished mid-send)
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(createInspiration).toHaveBeenCalledOnce();
+    await act(async () => root.unmount()); root = createRoot(host);
+    vi.setSystemTime(Date.now() + 31_000);
+    vi.mocked(createInspiration).mockImplementation(async (_body, options) => ({ ...source, id: `late-${options!.requestId}` }));
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1);
+    expect(b.tab.save?.pending).toBeNull(); expect(records()).toHaveLength(0);
+  } finally { await b.close(); }
+});
+
 it('a tab lets go of a journal another tab discarded, without re-sending it', async () => {
   vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 400, message: 'Invalid', fieldErrors: { text: ['Too long'] } }));
   const b = secondTab();
