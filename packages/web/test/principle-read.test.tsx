@@ -80,43 +80,11 @@ describe("principle read", () => {
     vi.mocked(requestPrincipleRead).mockResolvedValue();
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     expect(host.textContent).toContain("Couldn't confirm current support. Your words are kept.");
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
-      ...ready, phase: 'pending', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true,
-    } });
     await act(async () => host.querySelector('button')!.click());
     /* THE RETRY FLAG IS THE WHOLE ARGUMENT, and it used to be the SECOND
        argument because the first was the room id. One parameter now. */
     expect(requestPrincipleRead).toHaveBeenCalledWith(true);
     expect(host.textContent).toContain('A support check is queued.');
-  });
-
-  /* One POST per press, from the press: a hung retry keeps the button
-     disabled (Still trying… after 20s), is never re-sent by a poll or a
-     second press, and is never aborted; its answer restarts the read. */
-  it("sends a failed read's Try again once per press, and holds it while the POST is out", async () => {
-    const failedStatus = { ...ready, phase: 'failed' as const };
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: failedStatus });
-    let answer!: () => void;
-    vi.mocked(requestPrincipleRead).mockImplementation(() => new Promise<void>((resolve) => { answer = resolve; }));
-    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    const button = () => host.querySelector('button')!;
-    await act(async () => button().click());
-    expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
-    expect(requestPrincipleRead).toHaveBeenLastCalledWith(true);
-    expect(button().disabled).toBe(true);
-    expect(button().textContent).toBe('Retrying…');
-    await act(async () => button().click());
-    await act(async () => { window.dispatchEvent(new Event('focus')); });
-    await act(async () => vi.advanceTimersByTimeAsync(120_000));
-    expect(button().textContent).toBe('Still trying…');
-    expect(requestPrincipleRead, 'the retry POST was re-sent').toHaveBeenCalledTimes(1);
-    const reads = vi.mocked(fetchPrincipleRead).mock.calls.length;
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: 'processing' } });
-    await act(async () => answer());
-    await act(async () => vi.advanceTimersByTimeAsync(0));
-    expect(vi.mocked(fetchPrincipleRead).mock.calls.length, 'the answer did not restart the read').toBeGreaterThan(reads);
-    expect(host.textContent).toContain('Reading the patterns for principles…');
-    expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
   });
 
   it("hands the rows it read to its owner rather than listing them itself", async () => {

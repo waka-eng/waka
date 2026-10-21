@@ -1246,6 +1246,30 @@ before review's own Escape (which ends the sitting), and another handler already
 `preventDefault` on Escape, so a bubble-phase listener that respects `defaultPrevented` never
 fired. Resolve by deciding which layer owns Escape while both are up, in one place.
 
+## Principles Try again restarting failed jobs (follow-up)
+
+**Status:** open follow-up (2026-10-18, re-tried and withdrawn again 2026-10-20 on
+`claude/followup-principles`). `components/PrincipleRead.tsx` is back to `origin/dev`: its Try
+again re-reads, and asks for a retry only the way dev does. A Try again that itself restarts
+failed principles (one POST per press), a stalled-read "still working" line, and a poll that
+never gives up were built here and withdrawn after repeated review findings in the same area.
+Open cases: a failed or hung retry POST (re-sent automatically, or leaving the button disabled);
+a status GET sent before a retry landing after it; a read that stalls for minutes with no way
+on; and polling that stops after repeated failures. The paused-reading notice's Retry
+(`useReadingPaused`) is the one place that still sends `POST /principles/refresh?retry=1`.
+
+Found in review of the 2026-10-20 attempt (a press-handler POST, disabled while out, "Still
+trying…" after 20s):
+
+- **Double POST.** When the retry POST answered, the read restarted, and a first GET reporting
+  `pending` sent the read path's own "queue missing work" POST — two POSTs for one press.
+- **No counter bump.** The press did not bump `useReadingPaused`'s shared retry counter or ask the
+  mounted paused notices to re-check, so a status GET in flight there was not discarded.
+- **Silent failure.** A refused or failed retry POST was swallowed: the line went back to its
+  failure text with nothing saying the retry itself had failed.
+- **Two presses.** Try again here and Retry on the paused notice are separate buttons with
+  separate in-flight state, so pressing both sends two retry POSTs for one stall.
+
 ## Session expiry return path and signed-in hint (follow-up)
 
 **Status:** open follow-up (2026-10-18). `claude/fix-dead-ends` reworked sign-in, sign-out,
