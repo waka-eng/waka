@@ -1171,7 +1171,7 @@ in a dedicated PR.**
 
 ---
 
-### L13. Card ↔ archive concurrent edits of the same note *(fixed except the field refresh; see below)*
+### L13. Card ↔ archive concurrent edits of the same note *(partly fixed; see below)*
 **Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/pages/Home.tsx`, `components/SavesOverlay.tsx`, `space/editing.ts` · severity medium
 
 **What.** Home's memory card and the archive's note page can both edit one note, and nothing orders
@@ -1194,23 +1194,23 @@ removed. The races it was chasing, all present on `origin/dev`:
 - Two writes of one note from different doors are not ordered on the client; the server applies
   them in arrival order.
 
-**Mostly fixed on `claude/followup-card-archive`, 2026-10-21, without a shared store.** The rule
-is in `docs/plans/card-and-archive.md`: only one door is open at a time, and a door does not close
-while its own write is still out. Bullet by bullet:
+**Partly fixed on `claude/followup-card-archive`, 2026-10-21, without a shared store**
+(`docs/plans/card-and-archive.md`):
 
 - *Card save in flight when the archive opens*: **fixed.** The card refuses any press away while
   its save is out (L11).
-- *Card edit seeded older than an archive save*: **fixed.** The card's edit refuses while a page is
-  held up over the world. That was assumed to be true already and was not: an address holding both
-  a note and `?open=saves` opened it. Closing the archive now waits for the note's write, and a
-  failed write keeps the archive open with "That didn't save. Your words are still here." So the
-  card's next read sees the archive's words.
+- *Card edit seeded older than an archive save*: **half fixed.** The card's edit now refuses while a
+  page is held up over the world. That was assumed to be true already and was not: an address
+  holding both a note and `?open=saves` opened it. **Still open:** closing the archive fires the
+  note's write and leaves at once (as on `origin/dev`). The card can then read the note and seed its
+  edit before that write lands, and a card save from that edit overwrites it. Making the close wait
+  for the write was tried and reverted. Its review found a stale closer dropping words cleared during
+  the wait, a late close shutting a note opened since, flicker, and a write that never answered
+  holding the archive open (see L12 for the full list).
 - *Archive changes not shown in Home's field*: **skipped.** Fixing it means telling Home what
   changed, which is the coordination layer that was reverted, or reloading the field on close,
-  which moves orbs the person did not touch. The card itself is read fresh every time it opens.
-- *Two doors' writes not ordered on the client*: **fixed for in-app routes.** Only one door can
-  have a write out. The browser's Back and a wall switch still unmount the archive without waiting
-  for its write.
+  which moves orbs the person did not touch.
+- *Two doors' writes not ordered on the client*: **open** for the archive's way out, as above.
 
 Pinned in `home-memory-reads.test.tsx`.
 
@@ -1239,7 +1239,7 @@ Back, still drop the typing. They change the selection from outside these presse
 
 ---
 
-### L12. Closing the archive mid-recording loses the recording *(fixed for Close, Escape, top of mind)*
+### L12. Closing the archive mid-recording loses the recording *(pre-existing; open)*
 **Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/components/SavesOverlay.tsx` · severity low
 
 **What.** A recording started on a saved note in the archive is lost if the archive itself is closed
@@ -1248,16 +1248,22 @@ over. Same on `origin/dev`. Leaving the NOTE (Back, or opening another note) is 
 branch — the recording stops and attaches to the note it was made on — but unmounting the whole
 archive is not.
 
-**Fixed on `claude/followup-card-archive`, 2026-10-21** (`docs/plans/card-and-archive.md`, rule 3).
-While a recording runs, `SavesOverlay` gives Home a finisher (`onRecording`). Home's `leaveOpen`,
-which Close, Escape and the top-of-mind row all go through, awaits it first. The finisher stops the
-recording and waits until the clip is uploaded and attached to the note it was recorded on. If the
-upload fails, the archive stays on that note with "Couldn't upload this attachment." A second press
-while it waits does nothing, and if the address moves in the meantime the close is dropped. With
-nothing recording, nothing is awaited. The bar's Close no longer commits the note before
-`leaveOpen` does, because that closed the note first and hid the failure line. Pinned in
-`home-memory-reads.test.tsx`. **Still open:** the browser's Back and a wall switch from the corner
-unmount the archive from outside React, so a recording running then is still lost.
+**Still open (2026-10-21).** Three rounds on `claude/followup-card-archive` made Close, Escape and
+the top-of-mind row wait for the recording to stop and the clip to attach. A `/code-review` of each
+round found new defects, so the waits were reverted to `origin/dev`. What the reviews found:
+
+- the archive flickered while the close waited, then came back;
+- a closer captured before the wait went stale, so words cleared during the wait were dropped;
+- a clip that failed to attach to a note already left was reported nowhere, and the close silently
+  did nothing;
+- a close that answered late closed a note opened since;
+- the recorder's own error path (empty or too-large clip) was reported as attached;
+- a list re-read failing after the attach landed was reported as a failed upload;
+- a write or upload that never answered held the archive open, until a deadline was added. The
+  deadline then closed the archive over work still running.
+
+**Follow-up.** Make the clip outlive the overlay: let the recorder hand the clip over after unmount,
+and let the upload report through Home, not the unmounted note. Don't hold the close.
 
 ---
 

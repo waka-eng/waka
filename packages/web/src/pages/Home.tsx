@@ -228,7 +228,7 @@ import {
 import { LoadingHome } from "../components/LoadingHome";
 import { ReadingPausedNotice } from "../components/ReadingPausedNotice";
 import { useReadingPaused } from "../lib/use-reading-paused";
-import { LEAVE_DEADLINE_MS, withinDeadline } from "../lib/leave-deadline";
+import { LEAVE_DEADLINE_MS } from "../lib/leave-deadline";
 import {
   loadInspiration,
   loadInspirations,
@@ -2369,8 +2369,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      leaving commits what was typed. A ref rather than state: it is replaced
      on every keystroke (the closer captures the draft), and re-rendering
      the world for that would be a frame of work per character. */
-  const closeSavedNote = useRef<(() => Promise<boolean>) | null>(null);
-  const savedNoteChanged = useCallback((close: (() => Promise<boolean>) | null) => {
+  const closeSavedNote = useRef<(() => void) | null>(null);
+  const savedNoteChanged = useCallback((close: (() => void) | null) => {
     closeSavedNote.current = close;
     setSavedNoteOpen(Boolean(close));
   }, []);
@@ -2385,11 +2385,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      that did not. Removing the chevron is what made it the only path, so
      it is fixed here rather than noted.
 
-     IT AWAITS NOW, through `leaveOpen` (L13, 2026-10-21). It used to fire
-     the write and leave at once, and the card could then read the note and
-     seed its edit before the write had landed. Waiting costs the close one
-     round trip, only when there are changed words; the note says "Saving…"
-     meanwhile, and a failed write keeps the archive open on its words. */
+     IT DOES NOT AWAIT. `leaveNote` fires the write and the navigation
+     happens; the request completes whether or not this component is still
+     mounted, and `leaveNote`'s own `mounted.current` guards keep it from
+     writing state into a page that has gone. Awaiting would hold the bar
+     unresponsive for the length of a round trip, which is the thing a
+     bottom bar must never do. */
   /* ═══ AND IT IS FIXED ONCE, BECAUSE FIVE CALL SITES IS NOT A RULE ═════
      Everything above counted the BAR'S presses and stopped there, and the
      sentence at the top of this block — "every way out of a note commits it"
@@ -2442,63 +2443,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      leaves that suite green. It stays because a duplicate write is exactly
      the thing a surface whose whole claim is "we kept what you wrote"
      cannot afford to do quietly, and because it costs one comparison. */
-  /* The commit hands back whether the words were kept (or had nothing to
-     keep), and the same closer asked twice hands back the same answer — so
-     `leaveOpen` below can wait on a commit a bar press already started. */
-  const committedNote = useRef<{ close: () => Promise<boolean>; done: Promise<boolean> } | null>(null);
-  const commitOpenNote = useCallback((): Promise<boolean> => {
+  const committedNote = useRef<(() => void) | null>(null);
+  const commitOpenNote = useCallback(() => {
     const close = closeSavedNote.current;
-    if (!close) return Promise.resolve(true);
-    if (committedNote.current?.close === close) return committedNote.current.done;
-    const done = close();
-    committedNote.current = { close, done };
-    return done;
+    if (!close || close === committedNote.current) return;
+    committedNote.current = close;
+    close();
   }, []);
-  /* A RECORDING STILL RUNNING IN THE ARCHIVE IS FINISHED BEFORE IT CLOSES
-     (L12, `docs/plans/card-and-archive.md`, rule 3). `SavesOverlay` hands up
-     a finisher while one runs; leaving waits for the clip to be attached to
-     its note, and stays when that failed (the note says so). Nothing is
-     awaited when nothing is recording, so every other close is still made
-     inside the press. */
-  const finishArchiveRecording = useRef<(() => Promise<boolean>) | null>(null);
-  const archiveRecordingChanged = useCallback((finish: (() => Promise<boolean>) | null) => {
-    finishArchiveRecording.current = finish;
-  }, []);
-  /* AND THE NOTE'S OWN WORDS ARE KEPT BEFORE IT CLOSES (L13, same rule).
-     Closing used to fire the archive's write and leave at once, so the card
-     could read the note again — and seed its edit — before that write had
-     landed. Now the close waits for it; a failed write keeps the archive
-     open on the note, which says so. Nothing to commit, nothing awaited. */
-  const leavingOpenRef = useRef(false);
   /** Leaving whatever is held up over the world, committing it on the way. */
-  const leaveOpen = useCallback(async () => {
-    const finish = finishArchiveRecording.current;
-    if (!finish && !closeSavedNote.current) { viewNavigationRef.current.closeOpen(); return; }
-    if (leavingOpenRef.current) return;
-    leavingOpenRef.current = true;
-    /* which page is held up — not the whole address, which closing the
-       note itself rewrites */
-    const from = viewNavigationRef.current.view?.open ?? null;
-    /* stays: the upload or the write failed, or the person went elsewhere */
-    const moved = () => (viewNavigationRef.current.view?.open ?? null) !== from;
-    /* A WAIT IS NEVER A TRAP (review, 2026-10-21). Each wait has a
-       deadline; past it the archive closes anyway, the write or upload
-       carries on in the background, and the creature says so. The guard
-       above is always cleared, so Close and Escape always answer. */
-    let late: MessageKey | null = null;
-    try {
-      if (finish) {
-        const attached = await withinDeadline(finish(), LEAVE_DEADLINE_MS);
-        if (attached === "late") late = "worldStillUploadingKept";
-        else if (!attached || moved()) return;
-      }
-      if (moved()) return;
-      const kept = await withinDeadline(commitOpenNote(), LEAVE_DEADLINE_MS);
-      if (kept === "late") late = late ?? "worldStillSavingKept";
-      else if (!kept || moved()) return;
-    } finally { leavingOpenRef.current = false; }
+  const leaveOpen = useCallback(() => {
+    commitOpenNote();
     viewNavigationRef.current.closeOpen();
-    if (late) setCharSay(say(late));
   }, [commitOpenNote]);
   /* ═══ AND THE BROWSER'S OWN BACK, WHICH NO HANDLER CAN SEE ════════════
      `closeOpen` IS a history step — that is the property it was chosen for,
@@ -11508,7 +11463,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
               className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}`}
               aria-current={item.here ? 'page' : undefined}
               aria-label={item.id === 'return' ? say('worldBack') : undefined}
-              onClick={() => { if (!cardHoldsRef.current()) item.go(); }}
+              onClick={() => {
+                /* every way OUT of the archive goes through, held card or not:
+                   the list's ↩ leads back toward the world (review, 2026-10-21) */
+                if (item.id !== 'return' && cardHoldsRef.current()) return;
+                item.go();
+              }}
             >
               {item.id === 'return'
                 ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
@@ -11853,7 +11813,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             {barOwner && item.id === barOwner && (making !== null || (viewNavigation.view?.open === 'saves' && savedNoteOpen)) ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
             {barOwner && item.id === barOwner ? (
               <button type="button" className="waka-dock-item waka-dock-item--close"
-                onClick={() => leaveAsModal(making === 'inspiration' ? saveAsDraft : () => openOverHome(null))}>
+                onClick={() => leaveAsModal(making === 'inspiration' ? saveAsDraft : () => { commitOpenNote(); openOverHome(null); })}>
                 {say('worldClose')}
               </button>
             ) : null}
@@ -12002,7 +11962,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
           following an old reference here. */}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
         onNoteOpen={savedNoteChanged}
-        onRecording={archiveRecordingChanged}
         onNewSave={startNewInspiration}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}

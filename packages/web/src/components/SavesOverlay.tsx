@@ -93,7 +93,7 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onRecording, onClose, onNewSave, ownArchive = true }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true }: {
   locale: SupportedLocale;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
@@ -127,17 +127,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
    * WHAT IS NOT HANDED UP is which note, or its words, or anything else the
    * world could form a second opinion with.
    */
-  onNoteOpen?: (close: (() => Promise<boolean>) | null) => void;
-  /**
-   * WHILE A RECORDING RUNS, HOW TO FINISH IT (L12,
-   * `docs/plans/card-and-archive.md`, rule 3). Closing the archive unmounts
-   * the recorder, and a clip still being made is lost with it. So the world
-   * is handed a finisher while one runs: it stops the recording and resolves
-   * once the clip is uploaded and attached to the note it was made on —
-   * `true` when it was, `false` when the upload failed (the note is still
-   * open and says so). `null` when nothing is recording.
-   */
-  onRecording?: (finish: (() => Promise<boolean>) | null) => void;
+  onNoteOpen?: (close: (() => void) | null) => void;
   /**
    * WHOSE ARCHIVE THIS COULD BE INSTEAD — asked in the corner, not here.
    *
@@ -230,8 +220,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      seeded when a note opens and written back when it closes. */
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
-  /* the write out right now (Save or the way out), for a close to wait on */
-  const writing = useRef<Promise<boolean> | null>(null);
   const [saveFailed, setSaveFailed] = useState(false);
   const [open, setOpen] = useState<Inspiration | null>(null);
   /* ═══ THE WORDS AS STORED, READ IN FULL BEFORE ANY OF THEM CAN BE WRITTEN ══
@@ -313,11 +301,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     };
   }, []);
 
-  /* `quiet`: a re-read after an attachment landed. The list stays as it is
-     while it runs, and a failure is thrown to the caller rather than
-     turning the whole archive into its failed page. */
-  const load = useCallback(async (quiet = false) => {
-    if (!quiet) setPhase("loading");
+  const load = useCallback(async () => {
+    setPhase("loading");
     try {
       const field = await loadInspirations(profileId ?? undefined);
       if (!mounted.current) return;
@@ -340,8 +325,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
          first attachment uploaded correctly and then did not appear — the
          note on screen was the row as it had been a second earlier. */
       return field.inspirations;
-    } catch (error) {
-      if (quiet) throw error;
+    } catch {
       if (!mounted.current) return [];
       setPhase("failed");
     }
@@ -483,14 +467,10 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      recorder itself either way. What the two DO share is the trimmed
      comparison, for the same reason: unchanged words close the note instead
      of writing it. */
-  /* Resolves whether the words were kept (or had nothing to keep), so the
-     world can wait for it before closing the archive (L13). A write already
-     out from Save is waited on rather than sent twice. */
-  const leaveNote = useCallback(async (): Promise<boolean> => {
+  const leaveNote = useCallback(async () => {
     const note = open;
     const words = draft.trim();
-    if (!note) return true;
-    if (saving) return writing.current ?? true;
+    if (!note || saving) return;
     /* Not read yet (or the read failed): nothing typed can have reached the
        draft, and the preview is not the note — so leaving writes nothing. */
     const base = stored && stored.id === note.id ? stored.text : null;
@@ -499,27 +479,21 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        no words beside a photo or a file. A note that would end with neither
        is not written (the server refuses it too); its stored words stay, and
        the page said so while it was empty (`placeholder` below). */
-    if (base === null || words === base.trim() || !wordsCanStand(words, note.attachments.length)) { setOpen(null); return true; }
+    if (base === null || words === base.trim() || !wordsCanStand(words, note.attachments.length)) { setOpen(null); return; }
     setSaving(true);
     setSaveFailed(false);
-    const write = (async () => {
-      try {
-        await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
-        if (!mounted.current) return true;
-        /* The list holds what the page loaded, so it has to agree without a
-           refetch — otherwise going back reveals the old first line. */
-        setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: inspirationPreview(words, row.attachments) } : row)));
-        setOpen(null);
-        return true;
-      } catch {
-        if (mounted.current) setSaveFailed(true);
-        return false;
-      } finally {
-        if (mounted.current) setSaving(false);
-      }
-    })();
-    writing.current = write;
-    return write;
+    try {
+      await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
+      if (!mounted.current) return;
+      /* The list holds what the page loaded, so it has to agree without a
+         refetch — otherwise going back reveals the old first line. */
+      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: inspirationPreview(words, row.attachments) } : row)));
+      setOpen(null);
+    } catch {
+      if (mounted.current) setSaveFailed(true);
+    } finally {
+      if (mounted.current) setSaving(false);
+    }
   }, [draft, open, saving, stored, profileId]);
 
   /**
@@ -593,11 +567,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     if (!stored || stored.id !== note.id || stored.text === null) return;
     setSaving(true);
     setSaveFailed(false);
-    let landed: (kept: boolean) => void = () => {};
-    writing.current = new Promise<boolean>((done) => { landed = done; });
     try {
       await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
-      landed(true);
       if (!mounted.current) return;
       /* Both copies, for the reason `leaveNote` gives about the list and the
          reason `attach` gives about the snapshot: the grid behind must not
@@ -608,7 +579,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       /* What is stored now, which is what dims the button again. */
       setStored((held) => (held && held.id === note.id ? { ...held, text: words } : held));
     } catch {
-      landed(false);
       if (mounted.current) setSaveFailed(true);
     } finally {
       if (mounted.current) setSaving(false);
@@ -689,8 +659,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      that note's — another open note never shows or is disabled by them. */
   const [attachingFor, setAttachingFor] = useState<string | null>(null);
   const [attachFailedFor, setAttachFailedFor] = useState<string | null>(null);
-  /* attached, but the list could not be re-read afterwards */
-  const [refreshFailedFor, setRefreshFailedFor] = useState<string | null>(null);
   const attaching = Boolean(open) && attachingFor === open?.id;
   const attachFailed = Boolean(open) && attachFailedFor === open?.id;
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
@@ -700,10 +668,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     /* `target`: the note a recording was STARTED on — a clip belongs to it,
        whichever note is open when the recorder hands the clip over. */
     const note = target ?? open;
-    if (!note) return false;
+    if (!note) return;
     setAttachingFor(note.id);
     setAttachFailedFor((was) => (was === note.id ? null : was));
-    setRefreshFailedFor((was) => (was === note.id ? null : was));
     try {
       /* ═══ A PHOTO IS READ BEFORE IT IS SENT; A RECORDING IS NOT A FILE ═══
          This path used to classify from `file.type.startsWith("image/")` and
@@ -761,25 +728,15 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         name: file.name,
         ...(file.type ? { contentType: file.type } : {}),
       });
-      if (!mounted.current) return true;
+      if (!mounted.current) return;
       /* The open note is a snapshot, so it is re-pointed at the row that
          now carries the attachment — otherwise the upload lands, the list
          knows, and the page somebody is looking at does not. */
-      /* THE CLIP IS ATTACHED ONCE `finalizeAttachment` ANSWERED (review,
-         2026-10-21). A list that then fails to re-read is a soft fact about
-         the list, not a failed upload: it must not keep the archive open
-         as if the clip were lost. */
-      try {
-        const fresh = (await load(true)) ?? [];
-        if (!mounted.current) return true;
-        setOpen((card) => (card ? fresh.find((row) => row.id === card.id) ?? card : card));
-      } catch {
-        if (mounted.current) setRefreshFailedFor(note.id);
-      }
-      return true;
+      const fresh = (await load()) ?? [];
+      if (!mounted.current) return;
+      setOpen((card) => (card ? fresh.find((row) => row.id === card.id) ?? card : card));
     } catch {
       if (mounted.current) setAttachFailedFor(note.id);
-      return false;
     } finally {
       if (mounted.current) setAttachingFor((was) => (was === note.id ? null : was));
     }
@@ -795,33 +752,18 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      note (Back, Close, or opening another) stops the recording there and
      then, so it is attached to the note it was made on. */
   const recordingFor = useRef<Inspiration | null>(null);
-  /* whether the last clip handed over failed to attach, for the finisher */
-  const clipFailed = useRef(false);
-  const recording = useAudioRecording(async (clip) => {
-    clipFailed.current = false;
-    if (!(await attach(clip, "recording", recordingFor.current))) clipFailed.current = true;
-  });
+  const recording = useAudioRecording((clip) => attach(clip, "recording", recordingFor.current));
   const recordingPhase = recording.phase;
   /* captured as a recording begins (the phase leaves `idle`) and kept until
      the next one begins, so the clip handed over after it stops still knows
      its note */
   const lastPhase = useRef(recordingPhase);
   useEffect(() => {
-    if (lastPhase.current === "idle" && recordingPhase !== "idle") { recordingFor.current = open; clipFailed.current = false; }
+    if (lastPhase.current === "idle" && recordingPhase !== "idle") recordingFor.current = open;
     lastPhase.current = recordingPhase;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordingPhase]);
   const stopRecording = recording.stop;
-  /* THE FINISHER, HANDED UP ONLY WHILE A RECORDING RUNS (see `onRecording`) */
-  const recordingNow = recordingPhase !== "idle";
-  useEffect(() => {
-    if (!recordingNow) return undefined;
-    onRecording?.(async () => {
-      await stopRecording();
-      return !clipFailed.current;
-    });
-    return () => onRecording?.(null);
-  }, [recordingNow, onRecording, stopRecording]);
   useEffect(() => {
     const bound = recordingFor.current;
     if (bound && bound.id !== open?.id && recordingPhase !== "idle") void stopRecording();
@@ -954,7 +896,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
 
   const openId = open?.id ?? null;
   useEffect(() => {
-    onNoteOpen?.(openId === null ? null : () => leaveNote());
+    onNoteOpen?.(openId === null ? null : () => void leaveNote());
     return () => onNoteOpen?.(null);
   }, [openId, onNoteOpen, leaveNote]);
 
@@ -1367,8 +1309,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           attaching={attaching}
           saving={saving}
           recording={recording}
-          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error)
-            : open && refreshFailedFor === open.id ? say("worldArchiveRefreshFailed") : ""}
+          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : ""}
           /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
              state (founder: "states should show and disappear in the bottom
              bar only"). See `stored`. */

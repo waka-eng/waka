@@ -24,7 +24,7 @@
  * made to FAIL, which is how "late" and "failed" become states a case can
  * stand in rather than races it hopes to lose.
  *
- * `lib/leave-deadline` — the way out's 20-second deadline, shortened so a
+ * `lib/leave-deadline` — the card's 20-second save deadline, shortened so a
  * case can wait it out.
  *
  * `lib/auth-context` — a signed-in viewer; the world renders nothing without
@@ -57,13 +57,6 @@ const S = vi.hoisted(() => ({
   holdWrite: false,
   writtenAt: new Map<string, number>(),
   landWrite: null as null | (() => void),
-  /* the notes a clip was attached to, and whether the attach fails */
-  finalized: [] as string[],
-  failFinalize: false,
-  failWrite: false,
-  /* the archive's list re-read fails once a clip has been attached */
-  failListAfterAttach: false,
-  failList: false,
 }));
 
 const row = (id: string, text: string) => {
@@ -93,12 +86,7 @@ vi.mock("../src/lib/api", async (original) => ({
   presignAttachment: async (input: { filename: string }) =>
     ({ uploadUrl: "https://bucket.test/put", key: `k/${input.filename}`, headers: {}, profileId: VIEWER_ID, expiresAt: "" }),
   uploadToPresignedUrl: async () => undefined,
-  finalizeAttachment: async (input: { inspirationId?: string }) => {
-    if (S.failFinalize) throw new Error("offline");
-    S.finalized.push(input.inspirationId ?? "");
-    if (S.failListAfterAttach) S.failList = true;
-    return { id: "att-1" };
-  },
+  finalizeAttachment: async () => ({ id: "att-1" }),
   /* the server row, as of WHEN THE READ WAS ASKED, stamped then */
   fetchInspiration: (id: string) => {
     const snapshot = { id, profileId: VIEWER_ID, text: S.store.get(id) ?? "", kind: "note", category: null, source: "app", visibility: "private",
@@ -110,7 +98,6 @@ vi.mock("../src/lib/api", async (original) => ({
     S.written.push({ id, text: input.text });
     /* a write the case holds in flight lands only when it says so */
     if (S.holdWrite) await new Promise<void>((land) => { S.landWrite = land; });
-    if (S.failWrite) throw new Error("offline");
     S.store.set(id, input.text);
     const writtenAt = Date.now();
     S.writtenAt.set(id, writtenAt);
@@ -123,8 +110,6 @@ vi.mock("../src/lib/api", async (original) => ({
 vi.mock("../src/lib/data", async (original) => ({
   ...await original<typeof import("../src/lib/data")>(),
   ...dataMockFrom(FACTS),
-  loadInspirations: (...args: Parameters<ReturnType<typeof dataMockFrom>["loadInspirations"]>) =>
-    S.failList ? Promise.reject(new Error("offline")) : dataMockFrom(FACTS).loadInspirations(...args),
   loadInspiration: (id: string) => {
     /* what was stored WHEN THE READ WAS ASKED — a held read answers with
        that, the way a slow response carries the row it read */
@@ -136,7 +121,7 @@ vi.mock("../src/lib/data", async (original) => ({
     });
   },
 }));
-/* THE WAY OUT'S DEADLINE, SHORTENED: the shipped 20 s, at a scale a case
+/* THE CARD'S SAVE DEADLINE, SHORTENED: the shipped 20 s, at a scale a case
    can wait out. */
 vi.mock("../src/lib/leave-deadline", async (original) => ({
   ...await original<typeof import("../src/lib/leave-deadline")>(),
@@ -172,11 +157,6 @@ beforeEach(() => {
   S.holdWrite = false;
   S.landWrite = null;
   S.writtenAt = new Map();
-  S.finalized = [];
-  S.failFinalize = false;
-  S.failWrite = false;
-  S.failListAfterAttach = false;
-  S.failList = false;
 });
 afterEach(() => world?.unmount());
 
@@ -403,7 +383,6 @@ it("a save between Try again and a late answer: the kept words stay and seed the
   expect(editBox()?.value, "and seed the next edit").toBe(KEPT);
 });
 
-
 /* ═══ THE CARD DOES NOT LET GO OF UNSAVED WORDS (L11, L13) ═══════════════
    `docs/plans/card-and-archive.md`, rule 1. A press that would take Home
    off a card holding changed words (or a save still out) is not made; the
@@ -453,130 +432,6 @@ it("a bar press over a card edit with unchanged words goes through as before", {
   expect(barShape(world.container)).toContain("All inspirations");
 });
 
-
-/* ═══ CLOSING THE ARCHIVE MID-RECORDING KEEPS THE CLIP (L12) ═════════════
-   `docs/plans/card-and-archive.md`, rule 3. Close stops the recording and
-   waits for the clip to be attached to the note it was made on; when that
-   upload fails the archive stays on the note and says so.
-
-   WHAT THIS MOCKS, AND WHY (gate G6): `MediaRecorder` and
-   `navigator.mediaDevices` stand in for a microphone jsdom does not have —
-   the recorder emits one chunk when stopped, as a real one does. */
-class StubRecorder {
-  static isTypeSupported(): boolean { return true; }
-  state = "inactive";
-  mimeType: string;
-  ondataavailable?: (event: { data: Blob }) => void;
-  onstop?: () => Promise<void>;
-  onerror?: () => void;
-  constructor(_stream: MediaStream, options: { mimeType: string }) { this.mimeType = options.mimeType; }
-  start(): void { this.state = "recording"; }
-  /* a browser's recorder hands over its last chunk and `stop` in a LATER
-     task, not inside the call — which is what lets an unmount get between */
-  stop(): void {
-    this.state = "inactive";
-    setTimeout(() => {
-      this.ondataavailable?.({ data: new Blob(["fixture audio"], { type: this.mimeType }) });
-      void this.onstop?.();
-    }, 0);
-  }
-}
-async function recordInArchive(): Promise<void> {
-  (globalThis as unknown as { MediaRecorder?: unknown }).MediaRecorder = StubRecorder;
-  Object.defineProperty(navigator, "mediaDevices", { configurable: true,
-    value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {}, addEventListener() {}, removeEventListener() {} }] }) } });
-  await openByAddress("own-3");
-  await openInArchive(here, "something I kept, 3");
-  const record = document.querySelector<HTMLButtonElement>('#waka-note-tools button[aria-label="Record"]');
-  if (!record) throw new Error("the open note offers no Record");
-  await act(async () => record.click());
-  for (let turn = 0; turn < 4; turn += 1) { await world.step(2); await wait(10); }
-  expect(document.querySelector('button[aria-label="Stop recording"]'), "a recording is running").not.toBeNull();
-}
-const archiveOpen = () => Boolean(world.container.querySelector(".waka-over[data-jar-surface]"));
-const pressClose = async () => {
-  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-item--close")!.click());
-  for (let turn = 0; turn < 10; turn += 1) { await world.step(4); await wait(20); }
-};
-afterEach(() => {
-  delete (globalThis as unknown as { MediaRecorder?: unknown }).MediaRecorder;
-  delete (navigator as unknown as { mediaDevices?: unknown }).mediaDevices;
-});
-
-it("closing the archive while recording attaches the clip to its note, then closes", { timeout: 30_000 }, async () => {
-  await recordInArchive();
-  await pressClose();
-  expect(S.finalized, "the clip went onto the note it was recorded on").toEqual(["own-3"]);
-  expect(archiveOpen(), "and the archive closed").toBe(false);
-});
-
-it("closing the archive while recording, when the upload fails, stays on the note and says so", { timeout: 30_000 }, async () => {
-  S.failFinalize = true;
-  await recordInArchive();
-  await pressClose();
-  expect(archiveOpen(), "the archive stayed").toBe(true);
-  expect(world.container.querySelector<HTMLTextAreaElement>(".waka-note-page"), "on the note").not.toBeNull();
-  expect(document.body.textContent).toContain("Couldn’t upload this attachment.");
-  await pressClose();
-  expect(archiveOpen(), "a second Close, with nothing recording, closes").toBe(false);
-});
-
-
-/* ═══ THE ARCHIVE DOES NOT CLOSE WHILE ITS NOTE'S WRITE IS OUT (L13) ══════
-   `docs/plans/card-and-archive.md`, rule 3. Closing used to fire the write
-   and leave at once, so the card could read the note — and seed its edit —
-   before the archive's words had landed, and then save over them. */
-const ARCHIVE_WORDS = "something I kept, 2 — written in the archive.";
-it("closing the archive waits for its note's save, so the card's next edit starts from those words", { timeout: 30_000 }, async () => {
-  await openByAddress("own-2");
-  const page = await openInArchive(here, "something I kept, 2");
-  /* rule 2: whatever of the card is still drawn under the archive, pressing
-     its words opens no edit */
-  const under = card()?.querySelector<HTMLElement>("p.jar-panel-text");
-  if (under) await act(async () => under.click());
-  expect(editBox(), "no card edit opens while the archive is open").toBeNull();
-  S.holdWrite = true;
-  await setText(page, ARCHIVE_WORDS);
-  await pressClose();
-  expect(archiveOpen(), "still open while its write is out").toBe(true);
-  await act(async () => S.landWrite!());
-  for (let turn = 0; turn < 10; turn += 1) { await world.step(4); await wait(20); }
-  expect(archiveOpen(), "closed once the write landed").toBe(false);
-  await pressWords();
-  expect(editBox()?.value).toBe(ARCHIVE_WORDS);
-});
-
-it("closing the archive when its note's save fails stays on the note and says so", { timeout: 30_000 }, async () => {
-  await openByAddress("own-2");
-  const page = await openInArchive(here, "something I kept, 2");
-  S.failWrite = true;
-  await setText(page, ARCHIVE_WORDS);
-  await pressClose();
-  expect(archiveOpen(), "the archive stayed").toBe(true);
-  expect(world.container.querySelector<HTMLTextAreaElement>(".waka-note-page")?.value).toBe(ARCHIVE_WORDS);
-  expect(document.body.textContent).toContain("That didn’t save. Your words are still here.");
-});
-
-
-/* ═══ NO WAIT IS A TRAP (review of cc8c14ff) ══════════════════════════════
-   Every wait on a way out has a deadline (`lib/leave-deadline.ts`, shortened
-   above). Past it the archive closes and the write carries on; a card whose
-   save never answers offers Cancel edit in its held line. */
-it("closing the archive on a write that never answers closes at the deadline and says the words are kept", { timeout: 30_000 }, async () => {
-  await openByAddress("own-2");
-  const page = await openInArchive(here, "something I kept, 2");
-  S.holdWrite = true;
-  await setText(page, ARCHIVE_WORDS);
-  await pressClose();
-  expect(archiveOpen(), "still waiting inside the deadline").toBe(true);
-  await wait(1_600);
-  for (let turn = 0; turn < 6; turn += 1) { await world.step(4); await wait(20); }
-  expect(archiveOpen(), "closed at the deadline").toBe(false);
-  expect(document.body.textContent).toContain("Still saving — your words are kept.");
-  await act(async () => S.landWrite!());
-  expect(S.store.get("own-2"), "and the write still lands").toBe(ARCHIVE_WORDS);
-});
-
 it("a press refused while the card's save is out says so, and offers Cancel edit past the deadline", { timeout: 30_000 }, async () => {
   await openByAddress("own-2");
   await pressWords();
@@ -598,15 +453,32 @@ it("a press refused while the card's save is out says so, and offers Cancel edit
   expect(barShape(world.container), "and the bar answers again").toContain("All inspirations");
 });
 
-it("a clip attached when the list then fails to re-read counts as attached, with a soft line", { timeout: 30_000 }, async () => {
-  S.failListAfterAttach = true;
-  await recordInArchive();
-  await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Stop recording"]')!.click());
-  for (let turn = 0; turn < 10; turn += 1) { await world.step(4); await wait(20); }
-  expect(S.finalized).toEqual(["own-3"]);
-  expect(world.container.querySelector<HTMLTextAreaElement>(".waka-note-page"), "the note stays open").not.toBeNull();
-  expect(document.body.textContent).toContain("Attached. Couldn’t refresh the list.");
-  expect(document.body.textContent).not.toContain("Couldn’t upload this attachment.");
-  await pressClose();
-  expect(archiveOpen(), "and Close closes").toBe(false);
+
+/* ═══ ONE DOOR AT A TIME, AND EVERY WAY OUT OF THE ARCHIVE OPENS ═════════
+   `docs/plans/card-and-archive.md`, rule 2: the card under the archive is
+   not an editor. And the card's hold never refuses a way OUT of the archive
+   — the list's ↩, the bar's Close, Escape (review, 2026-10-21). */
+const archiveOpen = () => Boolean(world.container.querySelector(".waka-over[data-jar-surface]"));
+const settleBar = async () => { for (let turn = 0; turn < 10; turn += 1) { await world.step(4); await wait(20); } };
+
+it("the card under the archive opens no edit, and ↩, Close and Escape each leave the archive", { timeout: 30_000 }, async () => {
+  await openByAddress("own-2");
+  const path = here;
+  await openInArchive(path, "something I kept, 2");
+  const under = card()?.querySelector<HTMLElement>("p.jar-panel-text");
+  if (under) await act(async () => under.click());
+  expect(editBox(), "no card edit opens while the archive is open").toBeNull();
+  /* ↩ from the open note goes back to the list, and ↩ again leaves */
+  await pressDockRow(world.container, "Back"); await settleBar();
+  expect(world.container.querySelector(".waka-note-page"), "↩ left the note").toBeNull();
+  await pressDockRow(world.container, "Back"); await settleBar();
+  expect(archiveOpen(), "↩ from the list left the archive").toBe(false);
+  /* Close */
+  await openInArchive(path, "something I kept, 2");
+  await act(async () => document.querySelector<HTMLButtonElement>(".waka-dock-item--close")!.click()); await settleBar();
+  expect(archiveOpen(), "Close left the archive").toBe(false);
+  /* Escape */
+  const page = await openInArchive(path, "something I kept, 2");
+  await act(async () => { page.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); }); await settleBar();
+  expect(archiveOpen(), "Escape left the archive").toBe(false);
 });

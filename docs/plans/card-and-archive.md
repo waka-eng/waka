@@ -6,9 +6,9 @@ detail cache, freshness counters, pending-write counts, conflict prompts,
 reads that waited on writes) and were reverted: conflicts landed on the wrong
 note, reads hung, stale words came back, the iOS keyboard stopped rising.
 
-This plan coordinates nothing. **Only one door is open at a time, and a door
-does not close while its own write is still out.** Nothing is shared between
-the two surfaces, nothing is counted, and no read ever waits.
+This plan coordinates nothing. **Only one door is open at a time.** Nothing is
+shared between the two surfaces, nothing is counted, and no read or close
+ever waits.
 
 ## The rules
 
@@ -16,53 +16,40 @@ the two surfaces, nothing is counted, and no read ever waits.
    words that differ from the ones it opened with, or its Save is still in
    flight, a press that would take Home somewhere else (a bar row, a menu
    row, anything through `openOverHome` or `openTalk`) does nothing except
-   show one line on the card: "Save or cancel your changes first." The card's
-   own Save and Cancel sit right under it. Nothing is awaited: the press
+   show one line on the card: "Save or cancel this edit first." The card's
+   own Save and Cancel edit sit right under it. Nothing is awaited: the press
    either goes through at once, inside the tap, or it does not happen. So a
    field that is focused next (the notepad, a chat's composer) still gets
-   focus inside the tap, and the iOS keyboard still rises.
-   Unchanged words, and an edit already in its "Saved" beat, let go as they
-   do today.
+   focus inside the tap, and the iOS keyboard still rises. If the save is
+   still out after 20 s (`lib/leave-deadline.ts`), the line also offers
+   Cancel edit, so the bar is never dead. Unchanged words, and an edit
+   already in its "Saved" beat, let go as they do today.
 2. **The card's edit cannot open while the archive is open.** This was
    assumed, and checking it showed it was false. An address holding both a
    note and `?open=saves` draws the card under the archive, and its words
    still opened an edit. Now the card's edit refuses while any page is held
    up over the world. The check is synchronous, so a permitted edit still
-   opens inside the tap. A test pins it.
-3. **The archive does not close while its own writes are out.** Every way out
-   that Home handles (Close, Escape, a top-of-mind row) goes through
-   `leaveOpen`, and `leaveOpen` now awaits, in this order:
-   - a running recording: stop it, and wait until the clip is uploaded and
-     attached to the note it was recorded on. If the upload fails, the archive
-     stays open on that note with its upload-failed line.
-   - the open note's changed words: wait for the save. If it fails, the
-     archive stays open with "That didn't save. Your words are still here."
-   Then it closes, but only if the address has not moved in the meantime.
-   Every wait has a 20 s deadline (`lib/leave-deadline.ts`). Past it the
-   archive closes anyway, the write or upload carries on, and the creature
-   says "Still saving — your words are kept." A card whose save is out past
-   the deadline offers Cancel edit in its held line. A
-   second press while it waits does nothing. No editor is focused after the
-   archive closes (the world and the card start read-only), so this wait
-   cannot cost a keyboard.
+   opens inside the tap.
+3. **Every way out of the archive is exempt from rule 1**: the list's return
+   row, the bar's Close, the top-of-mind row and Escape. They lead back
+   toward the card, never away from it.
+
+## Tried and reverted: the archive waiting on its own writes
+
+Three review rounds made Close, Escape and the top-of-mind row wait for a
+running recording to attach and for the note's write to land, later with a
+20 s deadline. Each round found new defects: flicker, a stale closer dropping
+cleared words, silent no-op closes, a late close shutting a newer note, the
+recorder's error path reported as success. So the close is back to
+`origin/dev`: it fires the write and leaves. L12 and that half of L13 stay
+open in `docs/known-issues.md`, with every case found.
 
 ## What each race in L13 becomes
 
 - *Card save in flight when the archive opens*: cannot happen (rule 1).
 - *Card edit seeded from words older than an archive save*: the card cannot
-  edit while the archive is open (rule 2). The archive's save has landed
-  before it closes (rule 3), and the card reads the note again when it opens.
-- *Archive changes not shown in Home's field until Home reads again*:
-  **skipped.** Fixing it means telling Home what changed, or reloading the
-  field on close. The first is the coordination layer this plan avoids. The
-  second moves orbs the person did not touch. The card itself is always
-  read fresh.
-- *Two writes from two doors not ordered on the client*: covered by rules 1
-  and 3, because only one door can have a write out at a time.
-
-## Not covered
-
-The browser's own Back, and switching walls from the corner, take the
-address away from outside React. Nothing can be awaited there. The archive
-still commits on the way out, but does not wait for it, and a recording
-running at that moment is still lost (L12 stays open for those two routes).
+  edit while the archive is open (rule 2). It is still open on the way out:
+  the archive's write may land after the card reads again.
+- *Archive changes not shown in Home's field*: skipped. It needs either the
+  coordination layer this plan avoids, or orbs moving untouched.
+- *Two writes from two doors not ordered*: open for the archive's way out.
