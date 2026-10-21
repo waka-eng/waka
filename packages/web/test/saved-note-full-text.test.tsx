@@ -20,13 +20,17 @@
  * write under test) swapped to record what would be sent; and `URL`, a piece
  * of browser jsdom lacks the blob half of. The real `SavesOverlay`,
  * `NoteTools` and `keep-ready.ts` run.
+ *
+ * `helpers/archive` plays `Home`'s part: the archive's recorder lives in
+ * `Home` now (L12), so the archive is mounted with the real
+ * `useArchiveRecorder` handed to it, as `Home` mounts it.
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { DOCK_SLOT } from "../src/components/NoteTools";
-import { SavesOverlay } from "../src/components/SavesOverlay";
+import { Archive } from "./helpers/archive";
 
 const LONG = Array.from({ length: 40 }, (_, i) => `line ${String(i).padStart(2, "0")} of a long thought.`).join(" ").slice(0, 1000);
 const state = vi.hoisted(() => ({
@@ -115,7 +119,7 @@ type World = { profileId?: string; ownArchive?: boolean };
     every render, exactly as Home passes them. */
 async function renderArchive(whose: World = {}): Promise<void> {
   await act(async () => root.render(
-    <SavesOverlay locale="en-US" title="Your Inspirations" onClose={vi.fn()}
+    <Archive locale="en-US" title="Your Inspirations" onClose={vi.fn()}
       profileId={whose.profileId} ownArchive={whose.ownArchive}
       onNoteOpen={(close) => { closer = close; }} />,
   ));

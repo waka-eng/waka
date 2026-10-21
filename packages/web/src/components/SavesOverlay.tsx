@@ -58,7 +58,7 @@ import {
   uploadToPresignedUrl,
 } from "../lib/api";
 import { useFirstVisit } from "../lib/first-visit";
-import { useAudioRecording } from "../lib/use-audio-recording";
+import type { ArchiveRecorder } from "../lib/archive-recorder";
 import { canKeep, type KeepReadiness } from "../lib/keep-ready";
 import { archiveChapter, dateWords } from "../lib/words";
 import { ShareSheet, inspirationShareTarget, type ShareTarget } from "./ShareSheet";
@@ -93,8 +93,13 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true, recorder }: {
   locale: SupportedLocale;
+  /** THE ARCHIVE'S RECORDER, OWNED BY THE CALLER (L12). It outlives this
+      surface, so a clip still finishing when the archive closes or remounts
+      is attached by the caller to the note it was made on, and a failure is
+      reported by the caller. This surface only shows it and presses it. */
+  recorder: ArchiveRecorder;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
       works, and the request names the agent's profile. */
@@ -659,15 +664,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      that note's — another open note never shows or is disabled by them. */
   const [attachingFor, setAttachingFor] = useState<string | null>(null);
   const [attachFailedFor, setAttachFailedFor] = useState<string | null>(null);
-  const attaching = Boolean(open) && attachingFor === open?.id;
+  const attaching = Boolean(open) && (attachingFor === open?.id
+    || (recorder.sending?.noteId === open?.id && (recorder.sending?.profileId ?? null) === (profileId ?? null)));
   const attachFailed = Boolean(open) && attachFailedFor === open?.id;
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
      the button that opens it, and that button is in the bar now — see
      `NoteTools`, which owns both. */
-  const attach = useCallback(async (chosen: File, came: "photo" | "recording" | "file" = "photo", target?: Inspiration | null) => {
-    /* `target`: the note a recording was STARTED on — a clip belongs to it,
-       whichever note is open when the recorder hands the clip over. */
-    const note = target ?? open;
+  const attach = useCallback(async (chosen: File, came: "photo" | "file" = "photo") => {
+    /* A RECORDING DOES NOT COME THROUGH HERE ANY MORE (L12): the caller's
+       recorder attaches its own clip (`lib/archive-recorder.ts`), because it
+       outlives this surface and this callback does not. */
+    const note = open;
     if (!note) return;
     setAttachingFor(note.id);
     setAttachFailedFor((was) => (was === note.id ? null : was));
@@ -711,7 +718,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       const asFile = verdict?.kind === "file";
       const file = verdict && asFile
         ? (chosen.type === verdict.contentType ? chosen : new File([chosen], chosen.name, { type: verdict.contentType, lastModified: chosen.lastModified }))
-        : came === "recording" ? chosen : await inspectInspirationPhoto(chosen);
+        : await inspectInspirationPhoto(chosen);
       const pre = await presignAttachment(
         { filename: file.name, contentType: file.type || "application/octet-stream", size: file.size },
         undefined,
@@ -722,7 +729,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         /* A STATEMENT ABOUT BYTES THAT WERE READ, on the photo side: the
            sniffer returns one of seven image types or throws, so there is
            no third answer left to guess at. */
-        type: came === "recording" || asFile ? "file" : "image",
+        type: asFile ? "file" : "image",
         inspirationId: note.id,
         key: pre.key,
         name: file.name,
@@ -741,37 +748,60 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       if (mounted.current) setAttachingFor((was) => (was === note.id ? null : was));
     }
   }, [load, open, profileId]);
-  /* The same recorder the notepad uses, handed a different destination —
-     and naming the door it comes through, so `attach` does not try to read
-     a sound file as a photograph. */
   /* ═══ A RECORDING IS BOUND TO THE NOTE IT STARTED ON (review, 2026-10-17)
      The recorder used to hand its clip to whatever note was open when it
      stopped — so recording on one note, leaving it, and opening another put
-     the first note's clip on the second. The note is captured when the
-     recording starts, the clip is attached to that note, and leaving that
-     note (Back, Close, or opening another) stops the recording there and
-     then, so it is attached to the note it was made on. */
-  const recordingFor = useRef<Inspiration | null>(null);
-  const recording = useAudioRecording((clip) => attach(clip, "recording", recordingFor.current));
-  const recordingPhase = recording.phase;
-  /* captured as a recording begins (the phase leaves `idle`) and kept until
-     the next one begins, so the clip handed over after it stops still knows
-     its note */
-  const lastPhase = useRef(recordingPhase);
+     the first note's clip on the second. The note (and this archive's
+     owner) is handed to the recorder when the recording starts, and leaving
+     that note (Back, Close, or opening another) stops the recording there
+     and then, so it is attached to the note it was made on.
+
+     THE RECORDER IS THE CALLER'S (L12, 2026-10-21). It lived here, and
+     closing or remounting the archive mid-recording unmounted it before the
+     browser delivered `stop`, so the clip was refused. It lives in `Home`
+     now; this surface stops it on the way out (below), and the clip lands
+     in `Home`, which attaches it and reports a failure itself. */
+  const recordingPhase = recorder.phase;
+  const recordingOn = recorder.forNote?.noteId ?? null;
+  /* `NoteTools` presses `start()` with no note; this one names the note it
+     is pressed on, inside the tap (no await before the microphone). */
+  const recording = useMemo(() => ({
+    ...recorder,
+    start: async () => { if (open) await recorder.start(open, profileId ?? null); },
+  }), [recorder, open, profileId]);
+  const stopRecording = recorder.stop;
   useEffect(() => {
-    if (lastPhase.current === "idle" && recordingPhase !== "idle") recordingFor.current = open;
-    lastPhase.current = recordingPhase;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recordingPhase]);
-  const stopRecording = recording.stop;
-  useEffect(() => {
-    const bound = recordingFor.current;
-    if (bound && bound.id !== open?.id && recordingPhase !== "idle") void stopRecording();
+    if (recordingOn && recordingOn !== open?.id && recordingPhase !== "idle") void stopRecording();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open?.id]);
+  /* NEVER A LIVE MICROPHONE WITH NO STOP. The Stop is in this surface's
+     bar, so however the archive is left — Close, Escape, the top-of-mind
+     row, Back, a cold link's close, a wall switch remounting it by key —
+     the recording stops here, and the caller attaches what was recorded. */
+  const leaving = useRef({ stop: stopRecording, phase: recordingPhase });
+  leaving.current = { stop: stopRecording, phase: recordingPhase };
+  useEffect(() => () => {
+    if (leaving.current.phase !== "idle") void leaving.current.stop();
+  }, []);
+  /* A CLIP THAT LANDED ON A NOTE IN THIS ARCHIVE is shown on it: the list
+     is read again and the open note re-pointed at the row that now carries
+     it. Only a landing after this surface mounted — its own first read
+     already holds anything earlier. */
+  const landedSeq = recorder.landed?.seq ?? 0;
+  const seenLanded = useRef(landedSeq);
+  useEffect(() => {
+    if (landedSeq === seenLanded.current) return;
+    seenLanded.current = landedSeq;
+    if ((recorder.landed?.target.profileId ?? null) !== (profileId ?? null)) return;
+    void load().then((fresh) => {
+      if (!mounted.current || !fresh) return;
+      setOpen((card) => (card ? fresh.find((row) => row.id === card.id) ?? card : card));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [landedSeq]);
   /* ONE NOTE'S FAILURE IS NOT ANOTHER'S. Opening a different note clears the
      last one's upload failure and the recorder's error line. */
-  const clearRecording = recording.clear;
+  const clearRecording = recorder.clear;
   useEffect(() => {
     /* an upload failure is keyed by its note (`attachFailedFor`): it is
        still said when that note is opened again, and never on another */

@@ -82,6 +82,7 @@ import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { useSettingsWrites } from '../lib/use-settings-writes';
 import { DraftProblem, draftProblem, forkDraftAndClear } from '../lib/draft-problem';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
+import { useArchiveRecorder } from '../lib/archive-recorder';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { attachmentLabel } from '../lib/attachment-label';
 import { Menu } from '../components/Menu';
@@ -729,6 +730,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const uploadController = useRef<AbortController | null>(null);
   const onRecorded = useRef<(file: File) => Promise<void>>(() => Promise.resolve());
   const recording = useAudioRecording(file => onRecorded.current(file));
+  /* THE ARCHIVE'S RECORDER LIVES HERE TOO (L12), not in `SavesOverlay`: this
+     page outlives the archive, so a clip still finishing when the archive
+     closes or remounts is attached to its note and its failure said here. */
+  const archiveRecorder = useArchiveRecorder();
   useEffect(() => () => { composerEpoch.current += 1; fileOwnerEpoch.current += 1; uploadController.current?.abort(); }, []);
   const viewNavigation = useViewNavigation(storageScope ? `${storageScope.accountId}:${storageScope.profileId}` : 'fixture');
   const viewNavigationRef = useRef(viewNavigation); viewNavigationRef.current = viewNavigation;
@@ -11924,6 +11929,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            buttons saying the same two words, which stood here while the
            corner's pair stood behind this sheet's own left edge, clipped to
            "MY AGE". The act survives; the duplicate does not. */
+        recorder={archiveRecorder}
         onClose={leaveOpen}/>:null}
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
