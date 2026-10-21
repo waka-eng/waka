@@ -4,6 +4,10 @@
  * against jsdom's real session history (real `pushState`, real asynchronous
  * `history.back()` and `popstate`). Router entries are imitated by their state
  * shape `{ usr, key, idx }`, which is all the module reads.
+ *
+ * WHAT THIS MOCKS, AND WHY (gate G6): nothing. The module talks only to
+ * `window.history` and `popstate`, and jsdom's session history is the real
+ * thing for both, so there is no layer to replace.
  */
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

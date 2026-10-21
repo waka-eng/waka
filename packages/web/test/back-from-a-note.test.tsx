@@ -7,7 +7,16 @@
  * Usability audit at f2afcbe2 (desk/27, /32): the note had no entry of its own,
  * so one Back skipped the list and closed the whole archive. The note still
  * has no entry (`docs/plans/back-from-layers.md`): `useBackLayer` catches the
- * one-step Back and closes the note instead. Mocks as `leaving-a-note.test.tsx`.
+ * one-step Back and closes the note instead.
+ *
+ * WHAT THIS MOCKS, AND WHY (gate G6): the same layers as
+ * `leaving-a-note.test.tsx`, for its reasons. `lib/data` supplies the three
+ * layers, so the archive's row is a fixture. `lib/api` supplies group reads
+ * and records `updateInspiration`, the write under test. `lib/api/principles`
+ * supplies principle reads, and `lib/auth-context` supplies the signed-in
+ * viewer. `helpers/render-home` and `helpers/canvas-stub` replace canvas,
+ * viewport, clock and randomness. The router, the history, the world and the
+ * archive are real.
  */
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
