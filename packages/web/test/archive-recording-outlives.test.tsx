@@ -49,6 +49,8 @@ const S = vi.hoisted(() => ({
   /* `stop` deliveries the browser has not made yet */
   undelivered: [] as Array<() => void>,
   recorders: 0,
+  /* a note the list read gives an attachment the open card has not seen */
+  attachedOnRead: null as string | null,
 }));
 
 vi.mock("../src/lib/api", async (original) => ({
@@ -69,6 +71,11 @@ vi.mock("../src/lib/api", async (original) => ({
 vi.mock("../src/lib/data", async (original) => ({
   ...await original<typeof import("../src/lib/data")>(),
   ...dataMockFrom(FACTS),
+  loadInspirations: async () => {
+    const field = await dataMockFrom(FACTS).loadInspirations();
+    return { ...field, inspirations: field.inspirations.map((row) => row.id === S.attachedOnRead
+      ? { ...row, attachments: [{ id: "att-x", type: "file" as const, label: "Recording.webm" }] } : row) };
+  },
 }));
 vi.mock("../src/lib/auth-context", async (original) => {
   const session = { status: "authenticated", account: { id: "account-1", email: "you@example.test" },
@@ -108,7 +115,7 @@ beforeEach(() => {
   window.localStorage.clear();
   /* the notepad's draft store, so its Record can be pressed */
   (globalThis as { indexedDB?: IDBFactory }).indexedDB = new IDBFactory();
-  Object.assign(S, { presigned: [], finalized: [], failFinalize: 0, undelivered: [], recorders: 0 });
+  Object.assign(S, { presigned: [], finalized: [], failFinalize: 0, undelivered: [], recorders: 0, attachedOnRead: null });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   vi.stubGlobal("MediaRecorder", Recorder);
   Object.defineProperty(window.navigator, "mediaDevices", {
@@ -316,4 +323,30 @@ it("lets the failure line go with ×, without attaching anything", async () => {
   await settle(2);
   expect(q(".waka-clip-failed")).toBeNull();
   expect(S.finalized).toEqual([]);
+});
+
+/* ═══ A CLIP LANDING ON ONE NOTE RE-POINTS ONLY THAT NOTE (review) ═══════
+   The archive re-reads its list when a clip lands. It used to re-point
+   WHICHEVER note was open at the row that came back — so a clip for note A
+   landing while note B was open replaced B's card with the list's copy of
+   B. Only the note the clip landed on is re-pointed. */
+it("re-points the open note only when the clip landed on it", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-1");
+  /* back to the list (the recording stops there), and into another note */
+  await act(async () => q<HTMLButtonElement>('.waka-dock button[aria-label="Back"]')!.click());
+  await settle(2);
+  const other = [...document.querySelectorAll<HTMLButtonElement>(".waka-list-row")]
+    .find((item) => item.textContent?.includes("something I kept, 0"));
+  expect(other, "the list did not come back").toBeTruthy();
+  await act(async () => other!.click());
+  await settle();
+  const field = () => q<HTMLTextAreaElement>(".waka-over textarea");
+  expect(field()?.placeholder, "the open note should know it holds nothing").toBeTruthy();
+  /* the list read after the landing says the OTHER note holds something */
+  S.attachedOnRead = "own-0";
+  await deliverStops();
+  expect(S.finalized).toEqual(["own-1"]);
+  expect(field()?.placeholder, "a clip for another note re-pointed this one").toBeTruthy();
 });

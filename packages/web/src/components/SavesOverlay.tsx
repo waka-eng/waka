@@ -776,16 +776,19 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   /* A CLIP THAT LANDED ON A NOTE IN THIS ARCHIVE is shown on it: the list
      is read again and the open note re-pointed at the row that now carries
      it. Only a landing after this surface mounted — its own first read
-     already holds anything earlier. */
+     already holds anything earlier. And ONLY THAT NOTE is re-pointed
+     (review, 2026-10-21): a clip for one note landing while another is open
+     must not swap the open note's card for the list's copy of it. */
   const landedSeq = recorder.landed?.seq ?? 0;
   const seenLanded = useRef(landedSeq);
   useEffect(() => {
     if (landedSeq === seenLanded.current) return;
     seenLanded.current = landedSeq;
-    if ((recorder.landed?.target.profileId ?? null) !== (profileId ?? null)) return;
+    const landedOn = recorder.landed?.target;
+    if (!landedOn || (landedOn.profileId ?? null) !== (profileId ?? null)) return;
     void load().then((fresh) => {
       if (!mounted.current || !fresh) return;
-      setOpen((card) => (card ? fresh.find((row) => row.id === card.id) ?? card : card));
+      setOpen((card) => (card && card.id === landedOn.noteId ? fresh.find((row) => row.id === card.id) ?? card : card));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [landedSeq]);
