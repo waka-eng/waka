@@ -547,6 +547,13 @@
       "when": 1792089605615,
       "tag": "0077_attachment_hygiene",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1792089665615,
+      "tag": "0078_malformed_retry_version",
+      "breakpoints": true
     }
   ]
 }

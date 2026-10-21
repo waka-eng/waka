@@ -212,6 +212,15 @@ export const backgroundJobs = pgTable(
      */
     rerunRequested: boolean("rerun_requested").notNull().default(false),
 
+    /**
+     * The `request_version` whose single malformed-model-output retry has
+     * been spent. A second malformed answer while this equals
+     * `request_version` is terminal; a new enqueue bumps the version, so new
+     * input earns its own retry. Kept apart from `last_error`, which a
+     * different failure in between would overwrite.
+     */
+    malformedRetryVersion: bigint("malformed_retry_version", { mode: "bigint" }),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
