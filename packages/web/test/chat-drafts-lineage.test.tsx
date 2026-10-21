@@ -112,3 +112,14 @@ it('never clears another tab’s draft that this tab did not fork from',async()=
   expect(readConversationDrafts(scope,chat).map(row=>row.value.content)).toEqual(['Another tab, still typing']);
   expect(readConversationDrafts(scope,otherChat).map(row=>row.value.content)).toEqual(['Another chat']);
 });
+
+it('never deletes another open tab’s idle draft that this tab restored, forked and sent',async()=>{
+  /* Tab B wrote this draft and is still showing it, untouched. Tab A (this
+     panel) restores it as the newest, forks it on its first edit and sends. */
+  const theirs={id:'3d0c9d8e-7f6a-4b5c-9d8e-7f6a5b4c3d2e',writer:'6c1d0e9f-8a7b-4c6d-8e9f-0a1b2c3d4e5f',updatedAt:1,content:'Tab B, idle',revision:0,pending:false};
+  storeConversationDraft(scope,chat,theirs);
+  await mount();expect(box().value).toBe('Tab B, idle');
+  await type('Tab B, idle, and what tab A added');await send();
+  expect(saveConversationMessage).toHaveBeenCalledOnce();
+  expect(readConversationDrafts(scope,chat).map(row=>row.value),'a send in tab A deleted the draft tab B still shows').toEqual([theirs]);
+});

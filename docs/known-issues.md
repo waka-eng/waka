@@ -1162,7 +1162,8 @@ first change and sending the fork used to leave the original behind. This tab no
 fork in sessionStorage (modelled on `OWN_SAVES`, PR #452), and a confirmed send clears the recorded
 line by compare-and-delete. Covered: an existing chat and the next new chat
 (`new:<principleId|general>`), chains of forks across mounts, edited words, attaching the first photo.
-Drafts with no recorded link (another tab's) are never touched.
+A fork is linked only when this tab itself stored the original (a per-tab set of the keys it
+stored, kept across this tab's reloads), so a draft another tab wrote is never touched.
 
 **Left as dev behaviour (share cards).** Discard clears only the card on screen, so a forked card's
 original stays. That is deliberate: the original is visible and choosable in the Drafts picker, a
@@ -1170,9 +1171,10 @@ card the person may be keeping, not words already sent. See `docs/plans/drafts-a
 
 **Still open.** (i) A duplicated tab copies the list, so either copy may clear what the other forked
 from. (ii) A tab that has closed (or a browser restart) loses its list, so a fork made there leaves
-its original to come back. (iii) Forks stored before this shipped come back once. (iv) Forking from
-another open tab's live draft and sending clears that draft's stored copy if unchanged since the
-fork; that tab still shows the words and stores them again on its next edit.
+its original to come back. (iii) Forks stored before this shipped come back once. (iv) A draft another
+tab wrote, restored here, edited and sent, stays on disk and comes back on this chat's next mount.
+(v) A draft this tab wrote that another open tab is showing unedited is cleared when this tab sends
+its fork; that tab keeps the (already sent) words only if it edits before reloading or closing.
 
 ---
 
