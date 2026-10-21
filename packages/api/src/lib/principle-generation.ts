@@ -189,6 +189,7 @@ async function loadCitationEvidence(
   db: WakaDb | WakaTx,
   profileId: string,
   signalIds: string[],
+  countDismissed = false,
 ): Promise<Map<string, CitationEvidence>> {
   const out = new Map<string, CitationEvidence>();
   if (signalIds.length === 0) return out;
@@ -259,7 +260,7 @@ async function loadCitationEvidence(
         eq(topOfMinds.profileId, profileId),
         inArray(topOfMindEntrySignals.signalId, signalIds),
         citationStatementCurrent('top_of_mind_entry_signals'),
-        personalEntrySupportCurrent(profileId),
+        personalEntrySupportCurrent(profileId, countDismissed),
       ),
     );
   for (const row of tomRows) {
@@ -657,10 +658,12 @@ export async function promoteIfDemonstrated(
  * support has no words worth keeping). Conflict links pointing at a removed
  * row are cleared rather than left dangling.
  *
- * A PRINCIPLE CITING A DISMISSED SIGNAL IS LEFT AS IT IS. Dismissal is
- * undoable and this pass deletes, so it must not turn an undo into a loss:
- * reads already withhold that principle's support
- * (`personalPrincipleSupportCurrent`), and a restore brings it back unchanged.
+ * A DISMISSED CITATION STILL COUNTS HERE. Dismissal is undoable and this
+ * pass deletes, so it must not turn an undo into a loss: a dismissed signal
+ * (and the readings citing it) count as support, exactly as before the
+ * dismissal; anything else that falls below the bar is handled as always.
+ * Reads already withhold support resting on a dismissed signal
+ * (`personalPrincipleSupportCurrent`), so a restore needs no reconcile.
  */
 export async function reconcilePrinciplesAfterSignalLoss(
   db: WakaDb | WakaTx,
@@ -702,12 +705,9 @@ export async function reconcilePrinciplesAfterSignalLoss(
         .select({ signalId: principleSignals.signalId })
         .from(principleSignals)
         .innerJoin(signals, eq(signals.id, principleSignals.signalId))
-        .where(and(eq(principleSignals.principleId, principleId), eq(signals.status, "active")));
-      const [dismissed] = await tx.select({ id: signals.id }).from(principleSignals)
-        .innerJoin(signals, eq(signals.id, principleSignals.signalId))
-        .where(and(eq(principleSignals.principleId, principleId), isNotNull(signals.dismissedAt))).limit(1);
-      if (dismissed) return;
-      const evidence = await loadCitationEvidence(tx, input.profileId, cited.map((c) => c.signalId));
+        .where(and(eq(principleSignals.principleId, principleId),
+          or(eq(signals.status, "active"), isNotNull(signals.dismissedAt))));
+      const evidence = await loadCitationEvidence(tx, input.profileId, cited.map((c) => c.signalId), true);
       const action = reconcileAction(row, computeCitationEligibility([...evidence.values()], now).eligible);
       if (action === "keep") return;
 
