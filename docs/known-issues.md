@@ -1280,27 +1280,21 @@ over. Same on `origin/dev`. Leaving the NOTE (Back, or opening another note) is 
 branch — the recording stops and attaches to the note it was made on — but unmounting the whole
 archive is not.
 
-**Found on `claude/followup-card-archive`, 2026-10-21.** A browser's recorder fires its last chunk
-and `stop` in a later task, so the unmount always wins. The hook's cleanup also bumps its epoch,
-which makes `onstop` drop the clip deliberately. What ends the recording depends on the note's
-words:
+**Found on `claude/followup-card-archive`, 2026-10-21.** The clip is lost on every way out of the
+archive. A browser's `MediaRecorder` delivers its last chunk and `stop` in a later task. By then the
+overlay has unmounted, and the hook's unmount cleanup has bumped its epoch, so `onstop` drops the
+clip deliberately. Whether the note-change effect runs before the unmount depends on render
+scheduling, and it doesn't change this outcome.
 
-- **Changed words.** `leaveNote` awaits `updateInspiration` before `setOpen(null)`, so the note
-  never changes before the overlay unmounts. The recording is ended by the hook's unmount cleanup,
-  not by the note-change effect.
-- **Unchanged words.** `setOpen(null)` runs first. The note-change effect stops the recording before
-  the unmount only when `closeOpen` goes back through history (`navigate(-1)`). On a cold
-  `/?open=saves` link, `closeOpen` replaces the address in the same handler as `setOpen(null)`.
-  The overlay then unmounts in that one render, and only the hook's unmount cleanup ends the
-  recorder. So even a close with unchanged words can lose the clip. When the effect does run first,
-  the overlay still unmounts before the clip arrives.
+- **Close, Escape, the top-of-mind row.** These go through Home's `leaveOpen`, which commits the
+  note and then closes.
+- **The browser's Back.** Home's `popstate` listener does run `commitOpenNote`, and so
+  `leaveNote`, but nothing there saves the clip. A fix must not add a second `popstate` commit.
+- **A wall switch (Me / My agent).** The overlay's React key includes the owner's profile id, so
+  the switch unmounts and remounts it, with no `popstate` and no Close.
 
-Two more routes skip every handler. The browser's Back unmounts the archive from outside React. A
-wall switch (Me / My agent) changes the overlay's React key, which includes the owner's profile id,
-so React unmounts and remounts it with no popstate and no Close.
-
-**Conclusion.** A fix must save the clip from the overlay's (or the hook's) unmount path itself.
-Neither a history listener nor the note-change effect covers every close.
+**Conclusion.** A fix must save the clip from the overlay's (or the hook's) unmount path itself. It
+must not rely on the note-change effect or on a history listener.
 
 **Tried and reverted: hold the close until the clip is attached.** `SavesOverlay` handed Home a
 finisher, and Close, Escape and the top-of-mind row awaited it, later with a 20 s deadline. Three
