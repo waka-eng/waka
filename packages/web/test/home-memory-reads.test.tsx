@@ -33,7 +33,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
-import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
+import { apiMockFrom, barShape, dataMockFrom, mountWorld, pressDockRow, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 
 const FACTS = {
   inspirations: Array.from({ length: 6 }, (_, i) => ({ id: `own-${i}`, text: `something I kept, ${i}`, daysAgo: i + 1 })),
@@ -372,4 +372,54 @@ it("a save between Try again and a late answer: the kept words stay and seed the
   expect(words()?.textContent, "the kept words stay").toContain("kept on the card");
   await act(async () => words()!.click());
   expect(editBox()?.value, "and seed the next edit").toBe(KEPT);
+});
+
+
+/* ═══ THE CARD DOES NOT LET GO OF UNSAVED WORDS (L11, L13) ═══════════════
+   `docs/plans/card-and-archive.md`, rule 1. A press that would take Home
+   off a card holding changed words (or a save still out) is not made; the
+   card says so, and its own Save and Cancel are the way on. Nothing waits:
+   the press either goes through inside the tap or does not happen. */
+const held = () => card()?.querySelector(".jar-panel-warn")?.textContent ?? "";
+const pressBar = async (label: string) => {
+  await pressDockRow(world.container, label);
+  for (let turn = 0; turn < 6; turn += 1) { await world.step(4); await wait(20); }
+};
+
+it("a bar press over a card holding changed words is refused, says why, and goes through once the edit is cancelled", { timeout: 30_000 }, async () => {
+  await openByAddress("own-2");
+  await pressWords();
+  await setText(editBox()!, "something I kept, 2 — typed and not saved.");
+  await pressBar("Inspiration");
+  expect(editBox()?.value, "the typed words are still on the card").toBe("something I kept, 2 — typed and not saved.");
+  expect(held()).toBe("Save or cancel this edit first.");
+  expect(barShape(world.container), "no new note opened").toEqual(["Inspiration", "Chat"]);
+  expect(S.written).toEqual([]);
+  await act(async () => [...card()!.querySelectorAll<HTMLButtonElement>(".jar-panel-foot-r button")].find((b) => /cancel edit/i.test(b.textContent ?? ""))!.click());
+  await pressBar("Inspiration");
+  expect(barShape(world.container), "the press goes through now").toContain("All inspirations");
+});
+
+it("a bar press while the card's save is still out is refused until the save lands", { timeout: 30_000 }, async () => {
+  await openByAddress("own-2");
+  await pressWords();
+  S.holdWrite = true;
+  await setText(editBox()!, "something I kept, 2 — saving.");
+  await act(async () => card()!.querySelector<HTMLButtonElement>(".jar-panel-save")!.click());
+  await world.step(4);
+  await pressBar("Inspiration");
+  expect(editBox(), "the edit is still open while its save is out").not.toBeNull();
+  expect(barShape(world.container)).toEqual(["Inspiration", "Chat"]);
+  await act(async () => S.landWrite!());
+  await world.step(6);
+  await pressBar("Inspiration");
+  expect(S.store.get("own-2")).toBe("something I kept, 2 — saving.");
+  expect(barShape(world.container), "the press goes through once it is saved").toContain("All inspirations");
+});
+
+it("a bar press over a card edit with unchanged words goes through as before", { timeout: 30_000 }, async () => {
+  await openByAddress("own-2");
+  await pressWords();
+  await pressBar("Inspiration");
+  expect(barShape(world.container)).toContain("All inspirations");
 });

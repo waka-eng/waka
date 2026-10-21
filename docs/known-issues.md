@@ -1195,7 +1195,7 @@ the signed-in human.
 
 ---
 
-### L11. Opening the archive closes Home's card edit and drops unsaved card typing without asking *(pre-existing)*
+### L11. Opening the archive closes Home's card edit and drops unsaved card typing without asking *(fixed for in-app presses)*
 **Noted on `claude/fix-save-truncation`, 2026-10-17** · `packages/web/src/pages/Home.tsx` · severity low
 
 **What.** With a memory's words open for editing on Home's card, opening the archive (All
@@ -1203,8 +1203,14 @@ inspirations) ends that edit; whatever had been typed and not saved is gone, wit
 while pinning that an archive save cannot land on an open card edit (`home-memory-reads.test.tsx`),
 which this behaviour is what guarantees. Not introduced by the P0 branch.
 
-**Follow-up.** Either keep the card's draft across the archive, or ask before leaving unsaved words.
-See L13 for the concurrent-edit races between the two doors.
+**Fixed on `claude/followup-card-archive`, 2026-10-21** (`docs/plans/card-and-archive.md`, rule 1).
+The archive is reached from the card through the bar (Inspiration, then All inspirations), and the
+drop happened on that first press. While the card's edit holds changed words, or its save is still
+out, a bar press, a menu row or a chat door (`openOverHome`, `openTalk`, the bar's rows) is not made,
+and the card says "Save or cancel this edit first." above its own Save and Cancel edit. Nothing is
+awaited, so a press that goes through still focuses inside the tap. Unchanged words let go as before.
+Pinned in `home-memory-reads.test.tsx`. **Still open:** a tap on another orb, and the browser's
+Back, still drop the typing. They change the selection from outside these presses.
 
 ---
 

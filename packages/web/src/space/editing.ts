@@ -97,6 +97,9 @@ export interface OpenEdit {
   readonly id: string;
   /** The text as typed, which is ahead of the server until `keep` lands. */
   readonly text: string;
+  /** The words this edit opened with, or last kept: what `text` is compared
+      with to tell whether anything is unsaved. */
+  readonly seed: string;
   /** True while the keep is in flight, so the button can say so and refuse a
       second press. */
   readonly saving: boolean;
@@ -235,7 +238,7 @@ export function useEditing(deps: EditingDeps): Editing {
       /* a new edit cancels the previous one's `saved` beat, or the old one
          would close the new one out from under the person */
       clearHold();
-      put({ kind, id, text, saving: false, saved: false });
+      put({ kind, id, text, seed: text, saving: false, saved: false });
     },
     [put],
   );
@@ -289,7 +292,7 @@ export function useEditing(deps: EditingDeps): Editing {
     const done = () => {
       const still = heldRef.current;
       if (!ours(still)) return;
-      put({ ...still, saving: false, saved: true });
+      put({ ...still, seed: held.text, saving: false, saved: true });
       clearHold();
       holdRef.current = window.setTimeout(() => {
         holdRef.current = null;
