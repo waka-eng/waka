@@ -6854,15 +6854,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
       /* `prov` too: the claim's roots open as a sheet OVER review, and its own
          Escape must close it rather than end the sitting under it. */
       const nothingOpen = !panelOpen && !mouthOpen && !savedNoteOpen && seek === null && !thingShare && !prov;
-      /* Esc steps out of review — the cards go, the invitation comes back.
-         THE TIME RAIL OWNS ESCAPE WHILE IT IS UP, decided here and not by a
-         listener of its own: this one handler sees both layers, so which one
-         closes never depends on which listener registered first. The rail is
-         the innermost thing open (any press elsewhere already put it down),
-         so it goes alone and the sitting under it, a held reading, and the
-         navigation notice keep their Escape for the next press. */
+      /* Esc steps out of review — the cards go, the invitation comes back. */
       if (event.key === 'Escape') {
-        if (timeOpen) { event.preventDefault(); event.stopPropagation(); setTimeOpen(false); return; }
         if (reviewing && atNowView && nothingOpen && !harvestWhy) { event.preventDefault(); event.stopPropagation(); setReviewing(false); }
         return;
       }
@@ -6876,7 +6869,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [phase, atNowView, principlesOpen, principlesCrossing, panelOpen, mouthOpen, savedNoteOpen, seek, thingShare, prov, toPrinciples, openOverHome, reviewing, harvestWhy, timeOpen]);
+  }, [phase, atNowView, principlesOpen, principlesCrossing, panelOpen, mouthOpen, savedNoteOpen, seek, thingShare, prov, toPrinciples, openOverHome, reviewing, harvestWhy]);
   /** read by the loop's key handler, which is built once */
   const openSeekRef = useRef<() => void>(() => undefined);
   openSeekRef.current = () => setSeek((s) => (s === null ? "" : s));

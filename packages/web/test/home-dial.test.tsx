@@ -456,25 +456,6 @@ describe("how the list opens", () => {
     expect(rows().length, "hovering `now` opened nothing").toBeGreaterThan(0);
   });
 
-  /* Escape with the rail up closes the rail ONLY. Review's own capture
-     handler decides it (it sees both layers), so nothing further along —
-     the world's reading, the navigation notice, review ending the sitting —
-     hears that press. Pressed from the word, where a keyboard that opened
-     the rail is standing. */
-  it("closes the rail on Escape, and that Escape goes no further", async () => {
-    await act(async () => { arrive("mouse"); });
-    expect(rows().length).toBeGreaterThan(0);
-    const later = vi.fn();
-    window.addEventListener("keydown", later);
-    try {
-      await act(async () => {
-        one(".jar-when").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
-      });
-    } finally { window.removeEventListener("keydown", later); }
-    expect(rows().length, "Escape left the rail up").toBe(0);
-    expect(later, "the rail's Escape also reached a later layer").not.toHaveBeenCalled();
-  });
-
   it("leaves the list up when the pointer travels to it", async () => {
     /* the whole reason the 2026-08-30 hover was removed: the list is not
        under the word, it is beside it, so a hover that closes on leaving is

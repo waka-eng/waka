@@ -1237,6 +1237,25 @@ room-synthesized words derived from an erased or privatised memory persist in th
 That is the strongest reason not to leave the room-data drop undecided. Resolve then: either
 drop the room tables, or purge room artifacts that cite a deleted or privatised memory.
 
+## Time rail Escape vs review Escape (follow-up)
+
+**Status:** open follow-up (2026-10-18). The time rail (`.jar-when` / `.jar-dial` in
+`pages/Home.tsx`) closes on a press elsewhere only, as on `origin/dev`; a keyboard that opened it
+has no key that puts it down. An Escape handler for it was added and withdrawn: it has to be heard
+before review's own Escape (which ends the sitting), and another handler already calls
+`preventDefault` on Escape, so a bubble-phase listener that respects `defaultPrevented` never
+fired. Resolve by deciding which layer owns Escape while both are up, in one place.
+
+A second attempt (2026-10-19, `claude/followup-small-ui`) put a `timeOpen` check first in review's
+capture-phase Escape handler and was withdrawn in review for three cases a fix must also cover:
+- **A faded rail swallows Escape.** While `.jar-dial--away` has faded the rail out, `timeOpen` is
+  still true, so Escape closed an instrument nobody could see and did nothing visible.
+- **A rail under another layer takes that layer's Escape.** A layer opened over it by keyboard or
+  hover (which does not fire the rail's press-away) is innermost, but the rail's check ran first
+  and closed the rail instead of that layer.
+- **Focus is dropped.** Escape pressed from inside the rail's own list closed it and left focus on
+  `body` instead of returning it to `.jar-when`.
+
 ## Paused notice can show stale "paused" for ≤30s after a Retry (follow-up)
 
 **Status:** open follow-up (2026-10-18), `lib/use-reading-paused.ts`. Two races:
