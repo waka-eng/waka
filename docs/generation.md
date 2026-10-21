@@ -789,6 +789,13 @@ excluded. The daily sweep stays in place and production's cadence is unchanged.
 Recovery never creates a second job or resets its attempt budget; ambiguous
 conversation dispatches retain their existing refusal-to-redispatch guard.
 Exhausted stale leases raise operational counts instead of being revived.
+The claim never reclaims a lease whose final attempt is spent. A worker that
+died during that attempt would leave the row `running` forever, so the daily
+scheduled run settles such a lease once it is 24 hours old. No worker can
+still hold a lease that old: the Lambda times out at 14 minutes. The row
+becomes `failed` (`abandoned_lease`), visible and re-runnable, and its attempts
+are not reset. If a newer request was flagged on it (`rerun_requested`), it
+becomes that request instead: pending, with a normal attempt budget.
 
 The claim rechecks the runnable predicate on its locked base row and update
 target, not only the earlier fairness-ranking snapshot. A row that another

@@ -1516,28 +1516,6 @@ withdrawn instead of deleting, with restore clearing the mark, or having restore
 
 ---
 
-## Exhausted final-attempt leases stay running (follow-up)
-
-**Status:** open, cut from `claude/fix-api-bugs` after three review rounds; `lib/queue.ts` is
-back to `origin/dev`'s behaviour. The claim predicate's attempt ceiling stops a lease being
-reclaimed once `attempts >= max_attempts`. Nothing else settles such a row, so a job whose final
-attempt never reached its own failure path stays `running` forever. The recovery inspection
-counts these as `ExhaustedLeases`; nothing resolves them. Cases the attempted fix ran into:
-
-- **Crashed final attempt.** A worker that dies (rather than throws) on the last attempt leaves
-  the row `running`, never `failed`. It cannot be retried from the UI, because it never reaches
-  a terminal state.
-- **Live slow worker.** On a non-Lambda drain a slow job can outlive `STALE_LOCK_SECONDS` and
-  still finish. Settling at one stale interval failed jobs under workers that were still
-  running them; two intervals narrows that window without proving the worker is gone.
-- **`rerun_requested` dropped.** An enqueue against a `running` row only sets
-  `rerun_requested`. Settling the row as `failed` has to choose: drop that request, or
-  resurrect a poison job with a fresh attempt budget. Neither is right as it stands.
-- **Hot-path scan.** Settling at the start of every drain adds a table scan to the path every
-  enqueue wake takes. A fix probably belongs in the scheduled sweep, not the drain.
-
----
-
 ## Malformed extraction payload recorded as no candidates (follow-up)
 
 **Status:** open, cut from `claude/fix-api-bugs`; `parseSignalCandidates`

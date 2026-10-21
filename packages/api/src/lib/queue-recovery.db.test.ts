@@ -3,7 +3,7 @@
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
-import {readBackgroundJobRecoveryState,drainBackgroundJobs,postgresBackgroundJobStore} from './queue.js';
+import {readBackgroundJobRecoveryState,drainBackgroundJobs,postgresBackgroundJobStore,settleAbandonedExhaustedLeases} from './queue.js';
 import {getDb} from './db.js';
 import postgres from 'postgres';
 let t:TestDatabase;
@@ -86,4 +86,29 @@ it('the recovery selector skips newly due work and active leases while preservin
   expect(processor).not.toHaveBeenCalled();
   expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:1,succeeded:1});
   expect(processor).toHaveBeenCalledOnce();
+});
+it('the daily sweep settles only final-attempt leases no live worker can hold, keeping a requested rerun',async()=>{
+  /* 2026-10-04T11:00 is 25 h before `now`; 11:00 today is 1 h — well past the
+     15-minute stale interval, yet inside the margin a slow worker may use */
+  const p=await owner();
+  const rows=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,run_after,locked_at,attempts,max_attempts,rerun_requested,request_version) VALUES
+    (${p},'derive_signals','{"n":"crashed"}','running','2026-10-04T10:00:00Z','2026-10-04T11:00:00Z',3,3,false,1),
+    (${p},'derive_signals','{"n":"rerun"}','running','2026-10-04T10:00:00Z','2026-10-04T11:00:00Z',3,3,true,2),
+    (${p},'derive_signals','{"n":"slow"}','running','2026-10-05T10:00:00Z','2026-10-05T11:00:00Z',3,3,false,1),
+    (${p},'derive_signals','{"n":"reclaimable"}','running','2026-10-04T10:00:00Z','2026-10-04T11:00:00Z',1,3,false,1)
+    RETURNING id,payload->>'n' AS n`;
+  const id=Object.fromEntries(rows.map(row=>[row.n,row.id]));
+  const read=async(n:string)=>(await t.sql`SELECT status,attempts,rerun_requested,request_version::int AS version,last_error,locked_at FROM background_jobs WHERE id=${id[n]}`)[0]!;
+  expect(await settleAbandonedExhaustedLeases(t.db as never,now)).toBe(2);
+  expect(await read('crashed')).toMatchObject({status:'failed',attempts:3,rerun_requested:false});
+  expect((await read('crashed')).last_error).toContain('abandoned_lease');
+  // the newer request becomes one normal run, not the poison attempt revived
+  expect(await read('rerun')).toMatchObject({status:'pending',attempts:0,rerun_requested:false,version:2,last_error:null,locked_at:null});
+  expect(await read('slow'),'inside the margin: a live worker may still finish it').toMatchObject({status:'running',attempts:3});
+  expect(await read('reclaimable'),'the claim reclaims it; not this sweep').toMatchObject({status:'running',attempts:1});
+  expect(await settleAbandonedExhaustedLeases(t.db as never,now),'idempotent').toBe(0);
+  expect((await readBackgroundJobRecoveryState(t.db as never,now)).exhaustedLeases).toBe(1);
+  const processor=vi.fn(async()=>{});
+  expect(await drainBackgroundJobs({limit:5,now,processor})).toMatchObject({claimed:2,succeeded:2});
+  expect((await read('crashed')).status,'terminal until a new request').toBe('failed');
 });

@@ -1445,6 +1445,52 @@ export async function readBackgroundJobRecoveryState(database:Pick<ReturnType<ty
 }
 
 /**
+ * How long a final-attempt lease must sit before the daily sweep may settle
+ * it. The claim's attempt ceiling stops an exhausted lease being reclaimed,
+ * so a final attempt whose worker died (rather than threw) would stay
+ * `running` forever. The worker Lambda times out at 14 minutes (AWS caps it at
+ * 15), and in-process drains never receive the scheduled event — a lease this
+ * old has no live holder, so settling it cannot fail work still being done.
+ */
+export const ABANDONED_LEASE_SECONDS = 24 * 60 * 60;
+const MAX_ABANDONED_LEASES_PER_SWEEP = 100;
+
+/**
+ * Daily housekeeping only — never on the drain path. An abandoned final
+ * attempt goes `failed` (visible, explicitly re-runnable), attempts untouched.
+ * A row whose `rerun_requested` was set by a newer enqueue (which already
+ * bumped `request_version`) becomes that newer request instead — pending, a
+ * normal attempt budget — exactly as `markJobFailedOrPending` treats a flagged
+ * job whose last attempt threw. Returns rows settled.
+ */
+export async function settleAbandonedExhaustedLeases(database:Pick<ReturnType<typeof getDb>,'execute'>=getDb(),now=new Date()):Promise<number>{
+  const nowIso=now.toISOString();
+  const rows=await database.execute(sql`
+    UPDATE background_jobs AS job
+    SET status=CASE WHEN job.rerun_requested THEN 'pending'::background_job_status ELSE 'failed'::background_job_status END,
+        locked_at=CASE WHEN job.rerun_requested THEN NULL ELSE job.locked_at END,
+        run_after=CASE WHEN job.rerun_requested THEN ${nowIso}::timestamptz ELSE job.run_after END,
+        attempts=CASE WHEN job.rerun_requested THEN 0 ELSE job.attempts END,
+        last_error=CASE WHEN job.rerun_requested THEN NULL
+          ELSE 'abandoned_lease: the final attempt''s worker never finished it' END,
+        rerun_requested=false,
+        result=NULL,
+        updated_at=${nowIso}::timestamptz
+    WHERE job.id IN (
+      SELECT candidate.id FROM background_jobs candidate
+      WHERE candidate.status='running'::background_job_status
+        AND candidate.attempts>=candidate.max_attempts
+        AND candidate.locked_at<${nowIso}::timestamptz-(${ABANDONED_LEASE_SECONDS}||' seconds')::interval
+        AND candidate.type::text IN (${sql.join(backgroundJobTypeValues.map(type=>sql`${type}`),sql`, `)})
+      ORDER BY candidate.locked_at
+      LIMIT ${MAX_ABANDONED_LEASES_PER_SWEEP}
+      FOR UPDATE SKIP LOCKED)
+      AND job.status='running'::background_job_status AND job.attempts>=job.max_attempts
+    RETURNING job.id`);
+  return (rows as unknown as unknown[]).length;
+}
+
+/**
  * Rank by longest-unserved profile/kind, never-served first, then oldest due
  * and created. Claim and budget peek share both order and eligibility.
  * `started_at` survives completion so a just-served kind steps behind another
