@@ -24,6 +24,9 @@
  * made to FAIL, which is how "late" and "failed" become states a case can
  * stand in rather than races it hopes to lose.
  *
+ * `lib/leave-deadline` — the way out's 20-second deadline, shortened so a
+ * case can wait it out.
+ *
  * `lib/auth-context` — a signed-in viewer; the world renders nothing without
  * one. `helpers/canvas-stub` — jsdom has no 2D context. `helpers/render-home`
  * — the mount and the frame loop.
