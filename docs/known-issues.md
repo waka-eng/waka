@@ -1171,7 +1171,7 @@ in a dedicated PR.**
 
 ---
 
-### L13. Card ↔ archive concurrent edits of the same note *(pre-existing on dev; follow-up)*
+### L13. Card ↔ archive concurrent edits of the same note *(pre-existing on dev; open)*
 **Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/pages/Home.tsx`, `components/SavesOverlay.tsx`, `space/editing.ts` · severity medium
 
 **What.** Home's memory card and the archive's note page can both edit one note, and nothing orders
@@ -1194,10 +1194,30 @@ removed. The races it was chasing, all present on `origin/dev`:
 - Two writes of one note from different doors are not ordered on the client; the server applies
   them in arrival order.
 
-**Follow-up.** One per-profile detail store, keyed by inspiration id and holding the server row and
-its `updatedAt`, that both doors read and write through — with write ordering per note and an
-explicit, bounded wait for a pending write before an editor opens. Designed as its own change, with
-browser-level tests, rather than layered onto the P0 fix.
+**Found on `claude/followup-card-archive`, 2026-10-21 (four review rounds, no code shipped).** See
+`docs/plans/card-and-archive.md`.
+
+- **The card's edit opens under the archive.** An address holding both a note and `?open=saves`
+  draws the card under the archive, and pressing its words opens an edit. "Opening the archive closes
+  the card's edit" holds only for an archive opened by navigation. Verified in jsdom; whether a
+  pointer can reach the card through the overlay was not checked.
+- **The archive's way out does not wait for its write.** Closing fires the note's write and
+  leaves at once. With the address returning to `/inspirations/<id>`, the card reads the note again
+  and can seed its edit before that write lands. A card save from that edit then overwrites the
+  archive's words.
+- Making the close wait for that write was tried and reverted, with these defects: the archive
+  flickered while waiting; a closer captured before the wait dropped words cleared during it; a
+  late close shut a note opened since; a write that never answered held the archive open; and the
+  20 s deadline added for that closed the archive over a write still running. See L12 for the
+  recording half.
+- Refusing presses away from a card with a save in flight was tried (L11). It closed the first race
+  for in-app presses, and was reverted with L11.
+- The field refresh (third bullet above) was not attempted. It needs either the cross-surface
+  notification that was reverted, or a reload on close that moves orbs the person did not touch.
+
+**Follow-up.** What a fix needs is in `docs/plans/card-and-archive.md`: one owner for leaving the
+card, no refusal and no wait on any press, per-note write ordering in one place both doors call, and
+browser-level tests.
 
 **Also noticed, not verified.** `finalizeAttachment` for an inspiration sends no `?profile=`, while
 the archive's presign does; attaching to an agent's note from the agent's archive may resolve against
@@ -1205,7 +1225,7 @@ the signed-in human.
 
 ---
 
-### L11. Opening the archive closes Home's card edit and drops unsaved card typing without asking *(pre-existing)*
+### L11. Opening the archive closes Home's card edit and drops unsaved card typing without asking *(pre-existing; open)*
 **Noted on `claude/fix-save-truncation`, 2026-10-17** · `packages/web/src/pages/Home.tsx` · severity low
 
 **What.** With a memory's words open for editing on Home's card, opening the archive (All
@@ -1213,12 +1233,45 @@ inspirations) ends that edit; whatever had been typed and not saved is gone, wit
 while pinning that an archive save cannot land on an open card edit (`home-memory-reads.test.tsx`),
 which this behaviour is what guarantees. Not introduced by the P0 branch.
 
-**Follow-up.** Either keep the card's draft across the archive, or ask before leaving unsaved words.
-See L13 for the concurrent-edit races between the two doors.
+**Found on `claude/followup-card-archive`, 2026-10-21.** Two doors lead from the card to the
+archive, and both drop the typing:
+
+- **The page menu's archive row.** It is `VIEWS {what: "saves"}` in `page-menu.ts`, which calls
+  `openOverHome('saves')`. It opens the archive in one press straight from the card. The view
+  effect then runs `setSelectedId(null)`, the selection change runs `leaveWordsRef`, and that
+  calls `editing.leave()`.
+- **The bar.** Inspiration opens a new note, then All inspirations opens the archive. The typing
+  is already gone on the first press.
+
+Chat drops the typing the same way. So does any other change of selection: an orb tap, an address,
+the browser's Back. All of them run `leaveWordsRef`, which calls `editing.leave()`.
+
+**Tried and reverted: refuse the press.** While the card held changed words, or a save in flight,
+bar rows, menu rows (`openOverHome`) and chat (`openTalk`) were refused. The card said "Save or
+cancel this edit first." and, after 20 s of saving, offered Cancel edit. Four review rounds found:
+
+- the line was hidden while the save was in flight, so the refusal looked like a dead bar;
+- a save that never answered left the bar dead, until the 20 s Cancel edit was added;
+- closing the archive (bar Close, the menu's top of mind) was refused, when it should lead back to
+  the card;
+- the list's ↩ return row was refused;
+- ↩ from a chat goes through `openTalk` and was still refused;
+- the exit from review was refused;
+- `savesFocus` was set before an `openOverHome('saves')` that was then refused, so it leaked into
+  the next archive opened;
+- a refused tap still took focus, and iOS refocused the field;
+- the refusal was silent when the held edit was not on screen;
+- a tap on another orb and the browser's Back were never covered.
+
+Each exit had to be exempted one at a time, and each round found another.
+
+**Follow-up.** Decide at the one place the selection changes (`leaveWordsRef`), not at each door.
+The cheapest rule is the archive's own: commit the card's changed words on the way out, without
+waiting, and report a failure through Home. See `docs/plans/card-and-archive.md`.
 
 ---
 
-### L12. Closing the archive mid-recording loses the recording *(pre-existing)*
+### L12. Closing the archive mid-recording loses the recording *(pre-existing; open)*
 **Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/components/SavesOverlay.tsx` · severity low
 
 **What.** A recording started on a saved note in the archive is lost if the archive itself is closed
@@ -1227,8 +1280,45 @@ over. Same on `origin/dev`. Leaving the NOTE (Back, or opening another note) is 
 branch — the recording stops and attaches to the note it was made on — but unmounting the whole
 archive is not.
 
-**Follow-up.** Stop and attach on unmount (the clip needs the upload to outlive the overlay), or
-ask before closing with a recording running.
+**Found on `claude/followup-card-archive`, 2026-10-21.** The clip is lost on every way out of the
+archive. A browser's `MediaRecorder` delivers its last chunk and `stop` in a later task. By then the
+overlay has unmounted. The hook's unmount cleanup (`use-audio-recording.ts`) has set `mounted.current
+= false` and bumped its epoch, and `onstop` refuses the clip on either check. Even past those
+checks, the clip's callback is `SavesOverlay`'s `attach`, which sets the overlay's state and reports
+its failure through a surface that is gone. Whether the note-change effect runs before the unmount depends on render
+scheduling, and it doesn't change this outcome.
+
+- **Close, Escape, the top-of-mind row.** These go through Home's `leaveOpen`, which commits the
+  note and then closes.
+- **The browser's Back.** Home's `popstate` listener does run `commitOpenNote`, and so
+  `leaveNote`, but nothing there saves the clip. A fix must not add a second `popstate` commit.
+- **A wall switch (Me / My agent).** The overlay's React key includes the owner's profile id, so
+  the switch unmounts and remounts it, with no `popstate` and no Close.
+
+**Conclusion.** A fix must save the clip from the overlay's (or the hook's) unmount path itself. It
+must not rely on the note-change effect or on a history listener. It has to get past both of
+`onstop`'s checks, `mounted.current` and the epoch, and hand the clip to a callback Home owns (for
+example a Home-level finalize that reports through Home). Changing the epoch handling alone is not
+enough.
+
+**Tried and reverted: hold the close until the clip is attached.** `SavesOverlay` handed Home a
+finisher, and Close, Escape and the top-of-mind row awaited it, later with a 20 s deadline. Three
+review rounds found:
+
+- the archive flickered while the close waited, then came back;
+- a closer captured before the wait went stale, so words cleared during the wait were dropped;
+- a clip that failed to attach to a note already left was reported nowhere, and the close silently
+  did nothing;
+- a close that answered late closed a note opened since;
+- the recorder's own error path (empty or too-large clip) was reported as attached;
+- a list re-read failing after the attach landed was reported as a failed upload, and flipped the
+  archive to its failed page;
+- an upload that never answered held the archive open, until a deadline was added. The deadline
+  then closed the archive over an upload still running.
+
+**Follow-up.** Make the clip outlive the overlay, and do not hold the close. The recorder hands the
+clip over after unmount, and Home owns the upload and its failure line. See
+`docs/plans/card-and-archive.md`.
 
 ---
 
