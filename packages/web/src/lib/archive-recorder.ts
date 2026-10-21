@@ -120,9 +120,17 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
     if (blocked || phase !== "idle") return Promise.resolve();
     const to = { noteId: note.id, label: note.preview, profileId };
     target.current = to;
+    live.current = true;
     setForNote(to);
     return recorderStart();
   }, [blocked, phase, recorderStart]);
+  /* LIVE FROM THE PRESS, not from the next render: `start` marks it before
+     anything is committed, and only the recorder's return to idle clears it,
+     so a surface leaving in the same breath as Record still stops it. */
+  const live = useRef(false);
+  useEffect(() => { if (phase === "idle") live.current = false; }, [phase]);
+  const recorderStop = recorder.stop;
+  const stopIfLive = useCallback(() => { if (live.current) void recorderStop(); }, [recorderStop]);
 
   const retry = useCallback((id: number) => {
     const found = failuresRef.current.find((item) => item.id === id);
@@ -140,8 +148,8 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   const { phase: recorderPhase, seconds, error, notice, stop, cancel, clear } = recorder;
   return useMemo(() => ({
     phase: recorderPhase, seconds, error, notice, stop, cancel, clear,
-    start, blocked, forNote, isSending, landed, failures, retry, dismiss,
-  }), [recorderPhase, seconds, error, notice, stop, cancel, clear, start, blocked, forNote, isSending, landed, failures, retry, dismiss]);
+    start, stopIfLive, blocked, forNote, isSending, landed, failures, retry, dismiss,
+  }), [recorderPhase, seconds, error, notice, stop, cancel, clear, start, stopIfLive, blocked, forNote, isSending, landed, failures, retry, dismiss]);
 }
 
 export type ArchiveRecorder = ReturnType<typeof useArchiveRecorder>;

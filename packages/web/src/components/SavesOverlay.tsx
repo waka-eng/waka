@@ -767,12 +767,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   /* NEVER A LIVE MICROPHONE WITH NO STOP. The Stop is in this surface's
      bar, so however the archive is left — Close, Escape, the top-of-mind
      row, Back, a cold link's close, a wall switch remounting it by key —
-     the recording stops here, and the caller attaches what was recorded. */
-  const leaving = useRef({ stop: stopRecording, phase: recordingPhase });
-  leaving.current = { stop: stopRecording, phase: recordingPhase };
-  useEffect(() => () => {
-    if (leaving.current.phase !== "idle") void leaving.current.stop();
-  }, []);
+     the recording stops here, and the caller attaches what was recorded.
+
+     DECIDED BY THE RECORDER, NOT BY THIS SURFACE'S LAST RENDER (review,
+     2026-10-21). Record pressed and the archive closed before the next
+     render committed read the old "idle" here, so nothing was stopped and
+     the microphone arrived with no Stop on screen. `stopIfLive` reads a
+     mark the press itself sets. */
+  const stopIfLive = recorder.stopIfLive;
+  const leaving = useRef(stopIfLive);
+  leaving.current = stopIfLive;
+  useEffect(() => () => leaving.current(), []);
   /* A CLIP THAT LANDED ON A NOTE IN THIS ARCHIVE is shown on it: the list
      is read again and the open note re-pointed at the row that now carries
      it. Only a landing after this surface mounted — its own first read
