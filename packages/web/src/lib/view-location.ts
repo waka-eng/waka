@@ -46,8 +46,15 @@ export interface ViewLocation {
   sharePrinciple:boolean;
   conversationId:string|null;
   open: ViewOpen | null;
+  /** The saved note open inside the archive. Only ever beside
+      `open: 'saves'`: read and written nowhere else, so a note can never
+      outlive the archive it is open in. It is a real address for the same
+      reason `inspiration=` is: Back, Forward and reload are then the
+      router's ordinary cases, with no entry of our own to manage
+      (`docs/plans/back-from-layers.md`). */
+  note: string | null;
 }
-export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false, compose: false,principleId:null,sharePrinciple:false,conversationId:null,open:null };
+export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false, compose: false,principleId:null,sharePrinciple:false,conversationId:null,open:null,note:null };
 const id = (value: string | null) => value && /^[a-zA-Z0-9_-]{1,120}$/.test(value) ? value : null;
 
 export function readViewLocation(pathname: string, search = ''): ViewLocation | null {
@@ -82,6 +89,7 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
      still opens. The same reading serves web and native deep links. */
   const open = params.get('open')?.trim() || null;
   view.open = OPEN.find((name) => name === open) ?? null;
+  view.note = view.open === 'saves' ? id(params.get('note')) : null;
   view.find = params.get('find') === '1';
   view.compose = params.get('compose') === '1';
   const section = params.get('view');
@@ -104,6 +112,7 @@ export function viewHref(view: ViewLocation): string {
   if (view.find) params.set('find', '1');
   if (view.compose) params.set('compose', '1');
   if (view.open) params.set('open', view.open);
+  if (view.open === 'saves' && view.note) params.set('note', view.note);
   return path + (params.size ? `?${params}` : '');
 }
 
