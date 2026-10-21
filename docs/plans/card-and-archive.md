@@ -37,7 +37,11 @@ the two surfaces, nothing is counted, and no read ever waits.
      stays open on that note with its upload-failed line.
    - the open note's changed words: wait for the save. If it fails, the
      archive stays open with "That didn't save. Your words are still here."
-   Then it closes, but only if the address has not moved in the meantime. A
+   Then it closes, but only if the address has not moved in the meantime.
+   Every wait has a 20 s deadline (`lib/leave-deadline.ts`). Past it the
+   archive closes anyway, the write or upload carries on, and the creature
+   says "Still saving — your words are kept." A card whose save is out past
+   the deadline offers Cancel edit in its held line. A
    second press while it waits does nothing. No editor is focused after the
    archive closes (the world and the card start read-only), so this wait
    cannot cost a keyboard.

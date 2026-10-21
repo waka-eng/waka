@@ -313,8 +313,11 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     };
   }, []);
 
-  const load = useCallback(async () => {
-    setPhase("loading");
+  /* `quiet`: a re-read after an attachment landed. The list stays as it is
+     while it runs, and a failure is thrown to the caller rather than
+     turning the whole archive into its failed page. */
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setPhase("loading");
     try {
       const field = await loadInspirations(profileId ?? undefined);
       if (!mounted.current) return;
@@ -337,7 +340,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
          first attachment uploaded correctly and then did not appear — the
          note on screen was the row as it had been a second earlier. */
       return field.inspirations;
-    } catch {
+    } catch (error) {
+      if (quiet) throw error;
       if (!mounted.current) return [];
       setPhase("failed");
     }
@@ -685,6 +689,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      that note's — another open note never shows or is disabled by them. */
   const [attachingFor, setAttachingFor] = useState<string | null>(null);
   const [attachFailedFor, setAttachFailedFor] = useState<string | null>(null);
+  /* attached, but the list could not be re-read afterwards */
+  const [refreshFailedFor, setRefreshFailedFor] = useState<string | null>(null);
   const attaching = Boolean(open) && attachingFor === open?.id;
   const attachFailed = Boolean(open) && attachFailedFor === open?.id;
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
@@ -697,6 +703,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     if (!note) return false;
     setAttachingFor(note.id);
     setAttachFailedFor((was) => (was === note.id ? null : was));
+    setRefreshFailedFor((was) => (was === note.id ? null : was));
     try {
       /* ═══ A PHOTO IS READ BEFORE IT IS SENT; A RECORDING IS NOT A FILE ═══
          This path used to classify from `file.type.startsWith("image/")` and
@@ -758,9 +765,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       /* The open note is a snapshot, so it is re-pointed at the row that
          now carries the attachment — otherwise the upload lands, the list
          knows, and the page somebody is looking at does not. */
-      const fresh = (await load()) ?? [];
-      if (!mounted.current) return true;
-      setOpen((card) => (card ? fresh.find((row) => row.id === card.id) ?? card : card));
+      /* THE CLIP IS ATTACHED ONCE `finalizeAttachment` ANSWERED (review,
+         2026-10-21). A list that then fails to re-read is a soft fact about
+         the list, not a failed upload: it must not keep the archive open
+         as if the clip were lost. */
+      try {
+        const fresh = (await load(true)) ?? [];
+        if (!mounted.current) return true;
+        setOpen((card) => (card ? fresh.find((row) => row.id === card.id) ?? card : card));
+      } catch {
+        if (mounted.current) setRefreshFailedFor(note.id);
+      }
       return true;
     } catch {
       if (mounted.current) setAttachFailedFor(note.id);
@@ -1352,7 +1367,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           attaching={attaching}
           saving={saving}
           recording={recording}
-          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : ""}
+          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error)
+            : open && refreshFailedFor === open.id ? say("worldArchiveRefreshFailed") : ""}
           /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
              state (founder: "states should show and disappear in the bottom
              bar only"). See `stored`. */

@@ -228,6 +228,7 @@ import {
 import { LoadingHome } from "../components/LoadingHome";
 import { ReadingPausedNotice } from "../components/ReadingPausedNotice";
 import { useReadingPaused } from "../lib/use-reading-paused";
+import { LEAVE_DEADLINE_MS, withinDeadline } from "../lib/leave-deadline";
 import {
   loadInspiration,
   loadInspirations,
@@ -2480,11 +2481,24 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     const from = viewNavigationRef.current.view?.open ?? null;
     /* stays: the upload or the write failed, or the person went elsewhere */
     const moved = () => (viewNavigationRef.current.view?.open ?? null) !== from;
+    /* A WAIT IS NEVER A TRAP (review, 2026-10-21). Each wait has a
+       deadline; past it the archive closes anyway, the write or upload
+       carries on in the background, and the creature says so. The guard
+       above is always cleared, so Close and Escape always answer. */
+    let late: MessageKey | null = null;
     try {
-      if (finish && (!(await finish()) || moved())) return;
-      if (!(await commitOpenNote()) || moved()) return;
+      if (finish) {
+        const attached = await withinDeadline(finish(), LEAVE_DEADLINE_MS);
+        if (attached === "late") late = "worldStillUploadingKept";
+        else if (!attached || moved()) return;
+      }
+      if (moved()) return;
+      const kept = await withinDeadline(commitOpenNote(), LEAVE_DEADLINE_MS);
+      if (kept === "late") late = late ?? "worldStillSavingKept";
+      else if (!kept || moved()) return;
     } finally { leavingOpenRef.current = false; }
     viewNavigationRef.current.closeOpen();
+    if (late) setCharSay(say(late));
   }, [commitOpenNote]);
   /* ═══ AND THE BROWSER'S OWN BACK, WHICH NO HANDLER CAN SEE ════════════
      `closeOpen` IS a history step — that is the property it was chosen for,
@@ -4924,7 +4938,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const cardHoldsRef = useRef<() => boolean>(() => false);
 
   const openOverHome = useCallback((what: ViewOpen | null) => {
-    if (cardHoldsRef.current()) return;
+    /* only a press that would LEAVE the card is held: `null` puts down what
+       is held up over the world, which goes back toward the card */
+    if (what !== null && cardHoldsRef.current()) return;
     const nav = viewNavigationRef.current;
     /* `null` IS YOUR TOP OF MIND, which is the world itself — so that row
        puts down whatever is held up rather than navigating anywhere. It is
@@ -7110,6 +7126,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
      edit, only until it is saved or left. */
   const [cardHeldFor, setCardHeldFor] = useState<string | null>(null);
   useEffect(() => { setCardHeldFor(null); }, [editingOpenKey]);
+  /* A SAVE THAT NEVER ANSWERS MUST NOT HOLD THE BAR FOREVER (review,
+     2026-10-21): past the deadline the held line offers Cancel edit. */
+  const [cardSaveLongFor, setCardSaveLongFor] = useState<string | null>(null);
+  const cardSaving = editing.open?.kind === "memory" && editing.open.saving;
+  useEffect(() => {
+    setCardSaveLongFor(null);
+    if (!cardSaving) return undefined;
+    const key = editingOpenKey;
+    const timer = window.setTimeout(() => setCardSaveLongFor(key), LEAVE_DEADLINE_MS);
+    return () => window.clearTimeout(timer);
+  }, [cardSaving, editingOpenKey]);
   cardHoldsRef.current = () => {
     const held = editing.open;
     if (!held || held.kind !== "memory" || held.saved) return false;
@@ -10471,8 +10498,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
               a refusal on screen does not re-point the sentence at a card it
               was never about. */}
           {editing.open?.kind === "memory" && editing.open.id === panelId
-            && !editing.open.saved && !editing.open.saving && cardHeldFor === editingOpenKey ? (
-            <p className="jar-panel-warn" role="status">{say("worldCardSaveOrCancel")}</p>
+            && !editing.open.saved && cardHeldFor === editingOpenKey ? (
+            <p className="jar-panel-warn" role="status">
+              {say("worldCardSaveOrCancel")}
+              {editing.open.saving && cardSaveLongFor === editingOpenKey ? (
+                <>{" "}<button type="button" className="jar-panel-retry" onClick={editing.leave}>{say("worldCancelEdit")}</button></>
+              ) : null}
+            </p>
           ) : null}
           {editing.open?.kind === "memory" && editing.open.id === panelId
             && attachTrouble?.id === (panelBall?.sigId ?? panelId) ? (

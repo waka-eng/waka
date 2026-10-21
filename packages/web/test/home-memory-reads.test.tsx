@@ -58,6 +58,9 @@ const S = vi.hoisted(() => ({
   finalized: [] as string[],
   failFinalize: false,
   failWrite: false,
+  /* the archive's list re-read fails once a clip has been attached */
+  failListAfterAttach: false,
+  failList: false,
 }));
 
 const row = (id: string, text: string) => {
@@ -90,6 +93,7 @@ vi.mock("../src/lib/api", async (original) => ({
   finalizeAttachment: async (input: { inspirationId?: string }) => {
     if (S.failFinalize) throw new Error("offline");
     S.finalized.push(input.inspirationId ?? "");
+    if (S.failListAfterAttach) S.failList = true;
     return { id: "att-1" };
   },
   /* the server row, as of WHEN THE READ WAS ASKED, stamped then */
@@ -116,6 +120,8 @@ vi.mock("../src/lib/api", async (original) => ({
 vi.mock("../src/lib/data", async (original) => ({
   ...await original<typeof import("../src/lib/data")>(),
   ...dataMockFrom(FACTS),
+  loadInspirations: (...args: Parameters<ReturnType<typeof dataMockFrom>["loadInspirations"]>) =>
+    S.failList ? Promise.reject(new Error("offline")) : dataMockFrom(FACTS).loadInspirations(...args),
   loadInspiration: (id: string) => {
     /* what was stored WHEN THE READ WAS ASKED — a held read answers with
        that, the way a slow response carries the row it read */
@@ -126,6 +132,12 @@ vi.mock("../src/lib/data", async (original) => ({
       S.held.push({ resolve: () => done(snapshot), reject: () => fail(new Error("offline")) });
     });
   },
+}));
+/* THE WAY OUT'S DEADLINE, SHORTENED: the shipped 20 s, at a scale a case
+   can wait out. */
+vi.mock("../src/lib/leave-deadline", async (original) => ({
+  ...await original<typeof import("../src/lib/leave-deadline")>(),
+  LEAVE_DEADLINE_MS: 1_500,
 }));
 vi.mock("../src/lib/auth-context", async (original) => {
   const session = { status: "authenticated", account: { id: "account-1", email: "you@example.test" },
@@ -160,6 +172,8 @@ beforeEach(() => {
   S.finalized = [];
   S.failFinalize = false;
   S.failWrite = false;
+  S.failListAfterAttach = false;
+  S.failList = false;
 });
 afterEach(() => world?.unmount());
 
@@ -538,4 +552,58 @@ it("closing the archive when its note's save fails stays on the note and says so
   expect(archiveOpen(), "the archive stayed").toBe(true);
   expect(world.container.querySelector<HTMLTextAreaElement>(".waka-note-page")?.value).toBe(ARCHIVE_WORDS);
   expect(document.body.textContent).toContain("That didn’t save. Your words are still here.");
+});
+
+
+/* ═══ NO WAIT IS A TRAP (review of cc8c14ff) ══════════════════════════════
+   Every wait on a way out has a deadline (`lib/leave-deadline.ts`, shortened
+   above). Past it the archive closes and the write carries on; a card whose
+   save never answers offers Cancel edit in its held line. */
+it("closing the archive on a write that never answers closes at the deadline and says the words are kept", { timeout: 30_000 }, async () => {
+  await openByAddress("own-2");
+  const page = await openInArchive(here, "something I kept, 2");
+  S.holdWrite = true;
+  await setText(page, ARCHIVE_WORDS);
+  await pressClose();
+  expect(archiveOpen(), "still waiting inside the deadline").toBe(true);
+  await wait(1_600);
+  for (let turn = 0; turn < 6; turn += 1) { await world.step(4); await wait(20); }
+  expect(archiveOpen(), "closed at the deadline").toBe(false);
+  expect(document.body.textContent).toContain("Still saving — your words are kept.");
+  await act(async () => S.landWrite!());
+  expect(S.store.get("own-2"), "and the write still lands").toBe(ARCHIVE_WORDS);
+});
+
+it("a press refused while the card's save is out says so, and offers Cancel edit past the deadline", { timeout: 30_000 }, async () => {
+  await openByAddress("own-2");
+  await pressWords();
+  S.holdWrite = true;
+  await setText(editBox()!, "something I kept, 2 — never answered.");
+  await act(async () => card()!.querySelector<HTMLButtonElement>(".jar-panel-save")!.click());
+  await world.step(4);
+  await pressBar("Inspiration");
+  expect(held(), "the refused press says why while saving").toContain("Save or cancel this edit first.");
+  expect(card()!.querySelector(".jar-panel-warn button"), "no Cancel in the line yet").toBeNull();
+  await wait(1_600);
+  await world.step(4);
+  const cancel = card()!.querySelector<HTMLButtonElement>(".jar-panel-warn button");
+  expect(cancel?.textContent).toBe("Cancel edit");
+  await act(async () => cancel!.click());
+  await world.step(4);
+  expect(editBox(), "the edit is put down").toBeNull();
+  await pressBar("Inspiration");
+  expect(barShape(world.container), "and the bar answers again").toContain("All inspirations");
+});
+
+it("a clip attached when the list then fails to re-read counts as attached, with a soft line", { timeout: 30_000 }, async () => {
+  S.failListAfterAttach = true;
+  await recordInArchive();
+  await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Stop recording"]')!.click());
+  for (let turn = 0; turn < 10; turn += 1) { await world.step(4); await wait(20); }
+  expect(S.finalized).toEqual(["own-3"]);
+  expect(world.container.querySelector<HTMLTextAreaElement>(".waka-note-page"), "the note stays open").not.toBeNull();
+  expect(document.body.textContent).toContain("Attached. Couldn’t refresh the list.");
+  expect(document.body.textContent).not.toContain("Couldn’t upload this attachment.");
+  await pressClose();
+  expect(archiveOpen(), "and Close closes").toBe(false);
 });
