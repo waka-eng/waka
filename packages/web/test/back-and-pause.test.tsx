@@ -141,6 +141,38 @@ describe("a paused reading", () => {
     expect(container!.textContent).toBe("");
   });
 
+  /* A failed Retry POST has already discarded the other notice's in-flight
+     GET at the press; it too must make every notice ask again. */
+  it("a failed Retry also makes every notice ask again, so none keeps a discarded GET", async () => {
+    vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
+    vi.mocked(retryPausedReading).mockReset().mockRejectedValue(new ApiError({ status: 502, message: "refused" }));
+    function Overlay() {
+      const state = useReadingPaused(true);
+      return createElement("section", { id: "overlay" }, createElement(ReadingPausedNotice, { state, locale: "en-US", canRetry: true }));
+    }
+    function Two() { return createElement("div", null, createElement("section", { id: "home" }, createElement(Page)), createElement(Overlay)); }
+    render(createElement(Two));
+    await settle();
+    const overlay = () => container!.querySelector("#overlay")!.textContent;
+    let answerOverlay!: (value: ReturnType<typeof status>) => void;
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetchPrincipleStatus).mockResolvedValueOnce(status(true))
+        .mockImplementationOnce(() => new Promise((resolve) => { answerOverlay = resolve; }));
+      await act(async () => { window.dispatchEvent(new Event("focus")); });
+      /* the reading recovered on its own meanwhile */
+      vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(false));
+      const gets = vi.mocked(fetchPrincipleStatus).mock.calls.length;
+      await act(async () => { container!.querySelector("#home button")!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
+      expect(vi.mocked(fetchPrincipleStatus).mock.calls.length, "a failed Retry left the notices without a fresh GET").toBe(gets + 2);
+      await act(async () => { answerOverlay(status(true)); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    } finally { vi.useRealTimers(); }
+    expect(overlay(), "the overlay kept the answer from before the Retry").toBe("");
+    expect(retryPausedReading).toHaveBeenCalledTimes(1);
+  });
+
   it("re-checks every 30s while paused, and a failed check leaves the notice up", async () => {
     vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
     vi.useFakeTimers();
