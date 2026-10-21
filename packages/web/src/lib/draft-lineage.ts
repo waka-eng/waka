@@ -1,13 +1,13 @@
 /* THE DRAFTS THIS TAB FORKED, AND WHAT EACH ONE REPLACED (L10).
  *
- * Chat and share-card drafts are stamped with a writer minted per mount, and
+ * Chat drafts are stamped with a writer minted per mount, and
  * an edit to a draft another writer stored is forked under a new key so two
  * tabs never overwrite each other. A reload, reopening or switching back is a
- * new mount, so the restored draft O forks to F; sending (or discarding) F
+ * new mount, so the restored draft O forks to F; sending F
  * used to clear F alone and O came back on the next mount.
  *
  * So each fork is written down here: "F replaced O, whose bytes were these".
- * When a send is confirmed or a card is discarded, the current draft's
+ * When a send is confirmed, the current draft's
  * recorded line is cleared with it — O, and whatever O replaced in turn — but
  * only by compare-and-delete on the bytes this tab saw when it forked, so a
  * draft another tab has written since is kept. A draft with no recorded link
@@ -31,7 +31,8 @@ function writeForks(rows: Fork[]) {
   catch { /* clearing a replaced draft is a convenience; the draft itself is safe */ }
 }
 /* A draft key is its place's prefix plus the draft's uuid; a link is kept
-   only between two drafts of one place (one chat, one card). */
+   only between two drafts of one place (one chat). Share cards do not use
+   this: a forked card's original stays a choice in the Drafts picker. */
 const place = (key: string) => key.slice(0, -36);
 
 /** This tab stored `key` as a fork of `parent` (the stored row it restored). */
@@ -40,7 +41,7 @@ export function recordDraftFork(key: string, parent: { key: string; raw: string 
   writeForks([...readForks().filter((row) => row.key !== key), { key, from: parent.key, raw: parent.raw }]);
 }
 
-/** The draft at `key` was sent or discarded: clear every draft this tab
+/** The draft at `key` was sent: clear every draft this tab
  * recorded it as replacing, each only if its bytes are still the ones seen
  * at the fork. The caller clears `key` itself. */
 export function clearDraftLineage(key: string) {

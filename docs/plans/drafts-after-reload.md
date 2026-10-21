@@ -58,27 +58,29 @@ D is new code modelled on it; attaching the first photo (`draftForAttaching`) an
 Forks still happen exactly as before; what changed is that this tab remembers them.
 - `lib/draft-lineage.ts` keeps `waka:draftLineage:own` in sessionStorage: one row per
   fork this tab stored, `{key: F, from: O, raw: O's bytes when forked}`, last 50, and
-  only between two drafts of one place (one chat journal, one principle's cards).
+  only between two drafts of one place (one chat journal).
 - **Chat:** `keep()` records a fork whenever a store lands under a new key — an edit
   or the first photo on a restored draft. When `observe()` confirms the send it
   clears the current draft and `clearDraftLineage(key)`: every recorded ancestor,
   through any chain, by compare-and-delete on the recorded bytes. A new chat's
   drafts live under `new:<principleId|general>` and so does their lineage, so the
   next new chat is empty.
-- **Share card:** `update()` holds the stored card a fork replaces (`forkedFrom`) until
-  the fork is first stored, so a failed write followed by "Keep draft" still records
-  it; the change-mode mount fork goes through the same `update()`. Discard clears the
-  card, its line, and a held `forkedFrom` not yet stored. Choosing another draft in
-  the picker drops the held one.
+- **Share card: left as dev behaviour (case 4 not changed).** Discard clears only the
+  card on screen. Unlike a sent chat message, the original card O stays visible: the
+  Drafts picker lists it as its own choice, which the person may be keeping on
+  purpose, so deleting it with its fork F would discard a card nobody discarded.
+  (Code review on 04148948 found this in a first version that cleared card lineage.)
+  No card fork is recorded.
 - A draft with no recorded link to the one cleared (another tab's own draft, another
-  chat, another card) is never touched. No tombstones, no storage events, no leases.
+  chat) is never touched. No tombstones, no storage events, no leases.
 
 Tests: `test/draft-lineage.test.ts`, `test/chat-drafts-lineage.test.tsx` (existing
 chat, next new chat, a chain of three, edited words, attach-then-send, another tab's
-draft kept), `test/share-drafts-lineage.test.tsx` (setting fork, change-mode mount
-fork, Keep draft after a failed write, another tab's card kept).
+draft kept), `test/share-drafts-lineage.test.tsx` (fork a card, discard the fork: the
+original is still in the picker).
 
-**Residuals (accepted):** (i) a duplicated tab copies the list, so either copy may
+**Residuals (accepted):** (0) case 4 as above: a discarded card's original stays, by
+design, in the picker. (i) a duplicated tab copies the list, so either copy may
 clear what the other forked from. (ii) A closed tab's list is gone (and a browser
 restart is a new sessionStorage), so a fork made there leaves its original behind:
 "came back the next day" still happens when the fork was made in a tab since closed.

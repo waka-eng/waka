@@ -1154,16 +1154,19 @@ deliberately-broken security check. One auditor reported leaving
   concurrent runs.
 - Give each reviewing agent its own worktree or clone.
 
-### L10. A sent chat message or discarded share card can come back after a reload *(fixed on `claude/drafts-lineage`; residuals open)*
-**Residuals open** · `packages/web/src/lib/draft-lineage.ts`, `components/ConversationPanel.tsx`, `PrincipleShare.tsx` · severity low
+### L10. A sent chat message or discarded share card can come back after a reload *(chat fixed on `claude/drafts-lineage`; cards left as dev; residuals open)*
+**Residuals open** · `packages/web/src/lib/draft-lineage.ts`, `components/ConversationPanel.tsx` · severity low
 
-**What was fixed.** Every new mount is a new draft writer, so a restored draft forks on its first
-change and sending (or discarding) the fork used to leave the original behind. This tab now records
-each fork in sessionStorage (modelled on `OWN_SAVES`, PR #452), and a confirmed send or a Discard
-clears the recorded line by compare-and-delete. Covered: an existing chat and the next new chat
-(`new:<principleId|general>`), chains of forks across mounts, edited words, attaching the first photo,
-a card setting change, the change-mode fork on mount, and "Keep draft" after a storage failure.
-Drafts with no recorded link (another tab's) are never touched. See `docs/plans/drafts-after-reload.md`.
+**What was fixed (chat).** Every new mount is a new draft writer, so a restored draft forks on its
+first change and sending the fork used to leave the original behind. This tab now records each chat
+fork in sessionStorage (modelled on `OWN_SAVES`, PR #452), and a confirmed send clears the recorded
+line by compare-and-delete. Covered: an existing chat and the next new chat
+(`new:<principleId|general>`), chains of forks across mounts, edited words, attaching the first photo.
+Drafts with no recorded link (another tab's) are never touched.
+
+**Left as dev behaviour (share cards).** Discard clears only the card on screen, so a forked card's
+original stays. That is deliberate: the original is visible and choosable in the Drafts picker, a
+card the person may be keeping, not words already sent. See `docs/plans/drafts-after-reload.md`.
 
 **Still open.** (i) A duplicated tab copies the list, so either copy may clear what the other forked
 from. (ii) A tab that has closed (or a browser restart) loses its list, so a fork made there leaves
