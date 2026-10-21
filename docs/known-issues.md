@@ -1333,9 +1333,17 @@ The principles status cache is keyed by the profile its readers render for
 **Status:** open follow-up (2026-10-17). `claude/fix-dead-ends` shipped and then withdrew
 `lib/back-closes.ts` (`useBackCloses`), which made Back close review and the settings/info card
 by pushing a tagged same-address history entry. Three review rounds kept finding defects in the
-same mechanism, so it was removed rather than patched again. The layers on `origin/dev` are
-review, the open memory/detail panel, the saved note inside the archive (next entry) and the
-settings/info card. As on `origin/dev`, **Back with review or the settings/info card open leaves
+same mechanism, so it was removed rather than patched again. The address-less layers on
+`origin/dev` are:
+- review;
+- the claim-roots sheet (`prov`), which opens over review;
+- the share sheet (`thingShare`, `ShareSheet`);
+- the saved note inside the archive (next entry);
+- the settings/info card.
+
+The memory/detail panel is not on this list. It already has an address (`/inspirations/:id` or
+`?inspiration=<id>`, pushed when it opens and replaced when it closes), so Back from it works
+through the router. As on `origin/dev`, **Back with review or the settings/info card open leaves
 the page** (on a phone, the edge swipe leaves WAKA). Any reattempt has to answer these open
 cases before it ships:
 
@@ -1347,10 +1355,13 @@ cases before it ships:
   `?open=`) rewrites the layer's entry, not the page entry beneath; Back can then restore the
   pre-replace address. Rebasing it needs an asynchronous silent pop, and a second replace or a
   push during that pop races it.
-- **Stacked layers.** Review and the corner card can be open together, and so can the archive,
-  a saved note in it and the corner card. When each pushes its own entry, closing them in a
-  different order than they opened, or navigating from inside one, leaves entries no listener
-  owns.
+- **Stacked layers.** These can be open together:
+  - the claim-roots sheet over review;
+  - review and the corner card;
+  - the archive, a saved note in it, and the corner card.
+
+  When each pushes its own entry, closing them in a different order than they opened, or
+  navigating from inside one, leaves entries no listener owns.
 - **Catching Back instead of adding entries** (`claude/followup-back`, withdrawn 2026-10-21; see
   `docs/plans/back-from-layers.md`). A `popstate` listener re-pushed the current entry and closed
   the topmost layer. Only the saved note was registered; the corner card was never wired. It
@@ -1374,7 +1385,9 @@ cases before it ships:
   edge-swipe, Chrome desktop and Android Back) before review.
 
 Likely shape of a fix: make the layers real addresses (a query param the router owns) instead
-of raw `history` entries, so Back, replace and reload are the router's ordinary cases.
+of raw `history` entries, so Back and reload are the router's ordinary cases. Even then, a replace
+under a pushed layer leaves the page entry beneath it holding the pre-replace address. Either
+rewrite both entries, or forbid address-changing replaces while a layer is pushed.
 
 ---
 
