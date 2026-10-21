@@ -1320,27 +1320,20 @@ The principles status cache is keyed by the profile its readers render for
 
 ## Layer history under replace/reload
 
-**Status:** open follow-up (2026-10-17). `claude/fix-dead-ends` shipped and then withdrew
-`lib/back-closes.ts` (`useBackCloses`), which made Back close review and the settings/info card
-by pushing a tagged same-address history entry. Three review rounds kept finding defects in the
-same mechanism, so it was removed rather than patched again. As on `origin/dev`, **Back with
-review or the settings/info card open leaves the page** (on a phone, the edge swipe leaves
-WAKA). Any reattempt has to answer these open cases before it ships:
+**Status:** mechanism fixed in `claude/followup-back`; the corner card is still open. Design:
+`docs/plans/back-from-layers.md`. `lib/back-layers.ts` gives a layer NO history entry. It catches
+the person's one-step Back before the router does, writes the entry they were on back exactly
+(router state, key, idx) and closes the topmost registered layer. So the three open cases below
+cannot happen: a reload finds no marker to strip, a replace rewrites the real entry with nothing
+above it to rebase, and stacked layers are a stack of closers rather than entries. The app's own
+`navigate(-1)` is marked (`expectAppPop`) and is never caught. Nothing calls `back`, `go` or
+`replaceState`.
 
-- **Reload with a layer open.** The pushed entry survives the reload on top of an identical
-  page entry. Stepping back over it crosses into the pre-reload document (a second full load);
-  stripping the tag in place leaves a same-URL Back step that does nothing. The History API
-  cannot delete or merge entries.
-- **Router replace under an open layer.** A `replace` (address cleanup such as dropping
-  `?open=`) rewrites the layer's entry, not the page entry beneath; Back can then restore the
-  pre-replace address. Rebasing it needs an asynchronous silent pop, and a second replace or a
-  push during that pop races it.
-- **Stacked layers.** Review and the corner card can be open together; each pushing its own
-  entry, closing in a different order than opening, or a navigation from inside one, leaves
-  entries no listener owns.
-
-Likely shape of a fix: make the layers real addresses (a query param the router owns) instead
-of raw `history` entries, so Back, replace and reload are the router's ordinary cases.
+**Still open.** The settings/info corner card is not registered. It mostly sits on the root entry,
+and a pop that crosses documents raises no `popstate`, so catching cannot help there; Back with it
+open still leaves the page, as on dev. That needs a real address. Review no longer exists.
+Not yet checked in a real browser: the iOS edge-swipe snapshot, and Chrome skipping entries pushed
+without a user gesture (the catch pushes inside the person's Back).
 
 ---
 
@@ -1392,35 +1385,17 @@ other tab ever does. Effect re-runs only read. Retry, focus and storage events b
 ---
 ## Back from an open saved note (follow-up)
 
-**Status:** open, deliberately not fixed in `claude/fix-usability`. Opening a saved note inside the
-archive (`?open=saves`) does not touch history, exactly as on `origin/dev`
-(`SavesOverlay.tsx`, `use-view-navigation.ts`). A note-history mechanism was tried and cut after
-review found three regressions in it.
+**Status:** fixed in `claude/followup-back` (`useBackLayer(savedNoteOpen, commitOpenNote)` in
+`Home.tsx`; tests in `test/back-from-a-note.test.tsx` and `test/back-layers.test.tsx`). Back from an
+open note commits it and returns to the list. The next Back leaves the archive. A note whose save
+fails or is in flight stays open with its words, and the next Back retries. Opening a note still
+adds no history entry, so every case the earlier attempt broke (restore pass, replace dropping the
+mark, stale entries, closing the archive over a note, event order) has nothing to act on.
 
-**The defect (usability audit at f2afcbe2, desk/27 and /32).** The note has no history entry of its
-own, so the browser's Back from an open note skips the list and closes the whole archive — two levels
-for one press. (Escape, the bar's rows and the note's own close already commit and step one level.)
-
-**What any design has to answer** — each broke the attempt:
-
-- **A same-URL entry re-runs the view restore.** Pushing an entry at the archive's own address (to mark
-  the open note in router state) changes `location.key`, and Home re-applies the view on every key
-  change; the note's entry must not cost a restore pass, or the restore must ignore it.
-- **The world rewrites the address in place.** `useViewNavigation.write` replaces the entry (to
-  record the seek query, among others) with a state built from scratch; any mark on the entry is
-  dropped, which reads exactly like Back and closes the note. A replace to a DIFFERENT href drops it
-  too.
-- **Stale entries become dead Back presses.** An entry left behind by a note that closed some other
-  way (a failed or in-flight save, a switch from note A straight to note B, the archive closed under
-  it) is a Back that does nothing visible.
-- **Closing the archive over an open note.** Escape must still land where the archive was opened from
-  (two entries, not one), including from a cold `?open=saves` link with no `openFrom`, where the list's
-  entry must not be left underneath to reopen it.
-- **A note that cannot close.** If Back pops the note's entry but its save fails or is still in flight,
-  the edit must not be lost and the next Back must still reach the list.
-- **Event order.** Home's own `popstate` listener commits the note before the router commits the popped
-  location (a transition), so code that reads the rendered location to decide "is my entry still on
-  top" sees a stale answer.
+**Still open.** When the archive's entry is the first one in its document (a cold `/?open=saves`
+link, or after a reload), the entry beneath it belongs to another document. Back then raises no
+`popstate` and still leaves the archive with the note, as on dev. A note open at reload is not
+reopened, as on dev.
 
 ---
 ## Small usability follow-ups set aside from `claude/fix-usability`
