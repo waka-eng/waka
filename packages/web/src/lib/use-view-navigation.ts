@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { expectAppPop, noteEntry } from './back-layers';
 import { EMPTY_VIEW, readViewLocation, viewHref, type ViewLocation } from './view-location';
 
 interface StoredView { scope: string; query: string; composerFrom?: string;shareFrom?:string;conversationFrom?:string;openFrom?:string }
@@ -9,6 +10,8 @@ export function useViewNavigation(scope: string | null) {
   const href = location.pathname + location.search;
   const view = useMemo(() => readViewLocation(location.pathname, location.search), [href]);
   const own = useRef<string | null>(null);
+  /* Where Back from a layer returns to: the entry as the router just wrote it (`lib/back-layers.ts`). */
+  useLayoutEffect(() => { noteEntry(); }, [location]);
   const latest = useRef({ location, navigate, scope }); latest.current = { location, navigate, scope };
   const query = (() => {
     const state = location.state as { wakaView?: StoredView } | null;
@@ -41,7 +44,7 @@ export function useViewNavigation(scope: string | null) {
     if (!before?.compose) return;
     const stored = (current.location.state as { wakaView?: StoredView } | null)?.wakaView;
     own.current = null;
-    if (stored?.scope === current.scope && stored.composerFrom) current.navigate(-1);
+    if (stored?.scope === current.scope && stored.composerFrom) { expectAppPop(); current.navigate(-1); }
     else current.navigate(viewHref({ ...before, compose: false }), { replace: true });
   }, []);
   /* `closeReview` and its `reviewFrom` origin are GONE (2026-10-10). The
@@ -54,7 +57,7 @@ export function useViewNavigation(scope: string | null) {
     const to=viewHref({...before,sharePrinciple:false});
     const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
     own.current=null;
-    if(stored?.scope===current.scope&&stored.shareFrom===to)current.navigate(-1);
+    if(stored?.scope===current.scope&&stored.shareFrom===to){ expectAppPop(); current.navigate(-1); }
     else current.navigate(to,{replace:true});
   },[]);
   /**
@@ -73,7 +76,7 @@ export function useViewNavigation(scope: string | null) {
     if(!before?.open)return;
     const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
     own.current=null;
-    if(stored?.scope===current.scope&&stored.openFrom) current.navigate(-1);
+    if(stored?.scope===current.scope&&stored.openFrom) { expectAppPop(); current.navigate(-1); }
     else current.navigate(viewHref({...before,open:null}),{replace:true});
   },[]);
   /**
@@ -99,7 +102,7 @@ export function useViewNavigation(scope: string | null) {
     if(!before?.conversationId)return;
     const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
     own.current=null;
-    if(stored?.scope===current.scope&&stored.conversationFrom) current.navigate(-1);
+    if(stored?.scope===current.scope&&stored.conversationFrom) { expectAppPop(); current.navigate(-1); }
     else current.navigate(viewHref({...EMPTY_VIEW}),{replace:true});
   },[]);
   return { view, href, key: location.key, query, write, closeComposer,closeShare,closeOpen,closeConversation, own };
