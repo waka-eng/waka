@@ -935,6 +935,16 @@ dev. Both the sentence and the gate that contradicts it are this branch's.
 ### L3. A re-run requested while a job was running is silently dropped if that job later exhausts its attempts
 **PRE-EXISTING** · `packages/api/src/lib/queue.ts:1082-1102` · lens: correctness F4 · severity low (unchanged)
 
+**Status: fixed on `dev`.** Commit 46c74dc5 made `markJobFailedOrPending` read the flag. A
+flagged job whose attempt throws, the last one included, goes back to `pending` with
+`attempts = 0` and the error cleared. The enqueue that set the flag already bumped
+`request_version`, so the job runs once more as one new request with a normal attempt budget,
+and the poison attempt is not revived. Pinned by `routes/source-job-durability.db.test.ts`
+("a failed older attempt cannot strand a newer saved revision"). The last gap was a final
+attempt that crashed instead of throwing, which never reached that path. The daily
+abandoned-lease sweep (`settleAbandonedExhaustedLeases`) closes it with the same rule. The
+account below is kept as the record of the original defect.
+
 **What.** `rerun_requested` exists so a request arriving mid-run is not lost: `enqueueKeyedJob`
 and `enqueueTopOfMindRefresh` set the flag on a `running` row, and `markJobSucceeded` turns a
 flagged job back to `pending` with attempts zeroed. `markJobFailedOrPending` never reads or clears
