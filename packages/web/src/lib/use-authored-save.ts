@@ -26,7 +26,7 @@ import { profileStorageKey, type ProfileStorageScope } from './profile-storage';
  */
 export type AuthoredSaveInput = { operation: 'inspiration'; input: CreateInspirationRequest; draft?: { id: string; revision: number } };
 type SavedReference = { inspirationId: string; reflectionId: string | null; processing?: ApiInspirationProcessingReceipt };
-export type AuthoredSaveIntent = AuthoredSaveInput & { version: 1; accountId: string; profileId: string; requestId: string; createdAt: number; checksum: number; sentAt?: number; acknowledged?: SavedReference; rejected?: boolean; validationMessage?: string };
+export type AuthoredSaveIntent = AuthoredSaveInput & { version: 1; accountId: string; profileId: string; requestId: string; createdAt: number; checksum: number; acknowledged?: SavedReference; rejected?: boolean; validationMessage?: string };
 export interface AuthoredSaveResult { inspiration: ApiInspiration; reflection: ApiReflection | null; processing?: ApiInspirationProcessingReceipt; recovered: boolean }
 type Phase = 'idle' | 'checking' | 'saving' | 'uncertain' | 'storage_error' | 'unsupported' | 'invalid' | 'removed' | 'rejected';
 
@@ -48,7 +48,7 @@ function readIntents(prefix: string, scope: ProfileStorageScope, operation: Auth
         key !== prefix + value.requestId || !Number.isFinite(value.createdAt) || !value.input ||
         typeof value.input.text !== 'string' ||
         value.checksum !== checksum(value)) throw new Error('Unverifiable pending save');
-      if ((value.rejected !== undefined && typeof value.rejected !== 'boolean') || (value.sentAt !== undefined && !Number.isFinite(value.sentAt)) ||
+      if ((value.rejected !== undefined && typeof value.rejected !== 'boolean') ||
         (value.acknowledged && (typeof value.acknowledged.inspirationId !== 'string' || !value.acknowledged.inspirationId || value.rejected))) throw new Error('Invalid saved reference');
       if (value.draft && (typeof value.draft.id !== 'string' || !Number.isSafeInteger(value.draft.revision) || value.draft.revision < 1)) throw new Error('Invalid draft reference');
       intents.push(value);
@@ -56,8 +56,6 @@ function readIntents(prefix: string, scope: ProfileStorageScope, operation: Auth
   }
   return { intents: intents.sort((a, b) => a.createdAt - b.createdAt || a.requestId.localeCompare(b.requestId)), invalid: invalidKeys.length > 0, invalidKeys };
 }
-/** A journal last sent this recently is presumed still being sent by its tab. */
-const RESEND_AFTER = 30_000;
 function persist(prefix: string, intent: AuthoredSaveIntent) {
   const raw = JSON.stringify(intent), key = prefix + intent.requestId;
   localStorage.setItem(key, raw);
@@ -65,13 +63,8 @@ function persist(prefix: string, intent: AuthoredSaveIntent) {
 }
 
 /** One visible pending intent, with separate durable keys for simultaneous
- * tabs. A press, Retry and page load POST the journal READ FROM DISK under its
- * original identity (the server dedupes on it), after verifying the server
- * supports it; focus and `online` do too once its last send (`sentAt`) is
- * older than RESEND_AFTER. A storage event only READS: the tab that wrote the
- * journal is open and sending it. A journal leaves disk only when
- * it lands, is refused, is removed, or the person discards it — never on 404.
- * See docs/plans/save-recovery.md. */
+ * tabs. Mount/focus only READ. An explicit retry may POST the immutable intent
+ * using its original identity, after verifying the server supports it. */
 export function useAuthoredSave(options: {
   scope: ProfileStorageScope | null; operation: AuthoredSaveInput['operation']; inspirationId?: string; enabled?: boolean;
   journal?:string;
@@ -90,25 +83,12 @@ export function useAuthoredSave(options: {
   const [busy, setBusy] = useState(false);
   const working = useRef(false), mounted = useRef(false), epoch = useRef(0);
   const abort = useRef<AbortController | null>(null);
-  const refresh = useRef<(trigger?: 'send' | 'focus' | 'storage', pressed?: boolean) => unknown>(() => {});
-  /** Request ids pressed (Save or Retry) in THIS tab: in memory only. Whichever
-      path lands the save, the tab that pressed acknowledges it. */
-  const pressedHere = useRef(new Set<string>());
-  /** 409 save_in_progress: a same-id POST is committing. Poll, short backoff. */
-  const poll = useRef({ timer: 0, attempt: 0 });
-  /** Request ids THIS tab has sent: in memory only, never persisted. */
-  const sentHere = useRef(new Set<string>());
+  const refresh = useRef<() => void>(() => {});
 
-  // 'read': another tab may be sending it, so only its status is read.
-  // 'gone': it left disk (another tab landed, refused or discarded it).
-  const run = useCallback(async (intent: AuthoredSaveIntent, mode: 'send' | 'read' | 'gone', pressed: boolean) => {
-    const write = mode === 'send';
+  const run = useCallback(async (intent: AuthoredSaveIntent, write: boolean) => {
     const owner = live.current, key = owner.prefix;
     if (!mounted.current || working.current || !key || !owner.scope || owner.enabled === false || (document.hidden && !write)) return;
-    if (pressed) pressedHere.current.add(intent.requestId);
-    let inProgress = false;
-    const release = () => { intentRef.current = null; setPending(null); setPhase('idle'); };
-    if (intent.rejected) { if (mode !== 'gone') setPhase('rejected'); else release(); return; }
+    if (intent.rejected) { setPhase('rejected'); return; }
     working.current = true; setBusy(true); setPhase('checking');
     abort.current?.abort(); const controller = new AbortController(); abort.current = controller;
     const sequence = ++epoch.current;
@@ -120,7 +100,7 @@ export function useAuthoredSave(options: {
     let rejectAborted!: () => void;
     const cancelled = new Promise<never>((_, reject) => { rejectAborted = () => reject(new Error('Save observation cancelled')); });
     controller.signal.addEventListener('abort', rejectAborted, { once: true });
-    const work = async (): Promise<AuthoredSaveResult | 'elsewhere' | null> => {
+    const work = async (): Promise<AuthoredSaveResult> => {
       let saved = intent.acknowledged;
       let created: ApiInspiration | null = null;
       try {
@@ -133,14 +113,9 @@ export function useAuthoredSave(options: {
         if (error.code !== 'save_not_found') throw new ApiError({ status: 404, code: 'save_protocol_unavailable', message: 'Save recovery is unavailable' });
       }
       if (!saved) {
-        if (mode === 'gone') return null;
-        if (mode === 'read') return 'elsewhere';
+        if (!write) throw new Error('Save not yet observed');
         current(); setPhase('saving');
         attempted = true;
-        sentHere.current.add(intent.requestId);
-        if (localStorage.getItem(key + intent.requestId) !== null) {
-          try { persist(key, { ...intent, sentAt: Date.now() }); } catch { /* the journal itself is retained */ }
-        }
         const saveOptions = { ...scoped, requestId: intent.requestId, signal: controller.signal };
         created = await createInspiration(intent.input, saveOptions); current();
         if (!created?.id || created.profileId !== intent.profileId) throw new Error('Unexpected saved inspiration');
@@ -166,10 +141,7 @@ export function useAuthoredSave(options: {
         timeout = window.setTimeout(() => { controller.abort(); reject(new Error('Save check timed out')); }, 15_000);
       })]);
       current();
-      if (!result) { release(); return; }
-      // Not landed yet. If this tab sent it, keep polling as for save_in_progress.
-      if (result === 'elsewhere') { inProgress = sentHere.current.has(intent.requestId); setPhase('saving'); return; }
-      const afterSettlement = await live.current.onResolved(intent, result, pressedHere.current.has(intent.requestId));
+      const afterSettlement = await live.current.onResolved(intent, result, write);
       current();
       // Cleanup follows matching-draft settlement; a crash before cleanup can
       // only cause a read/replay, never a newly identified copy of these words.
@@ -185,44 +157,25 @@ export function useAuthoredSave(options: {
           localStorage.removeItem(key + intent.requestId);
           intentRef.current = null; setPending(null); setPhase('removed');
         } catch { setPhase('storage_error'); }
-      } else if (attempted && error instanceof ApiError && !intentRef.current?.acknowledged &&
-        (error.status === 400 || (error.status === 409 && error.code === 'save_request_conflict'))) {
-        // Both are definitive: this id can never land as written. Offer the words back.
+      } else if (attempted && error instanceof ApiError && error.status === 400 && !intentRef.current?.acknowledged) {
         const validationMessage = [error.fieldErrors?.text?.[0], error.fieldErrors?.answer?.[0], error.fieldErrors?.question?.[0]].find((value) => typeof value === 'string')?.slice(0, 180);
         const rejected = { ...intent, rejected: true, validationMessage };
         try { persist(key, rejected); } catch { /* the original immutable intent is still retained */ }
         intentRef.current = rejected; setPending(rejected); setPhase('rejected');
-      } else if (error instanceof ApiError && error.status === 409 && error.code === 'save_in_progress') {
-        // Still saving, not "couldn't confirm": the composer stays as it is.
-        inProgress = true; setPhase('saving');
       } else setPhase(error instanceof ApiError && error.code === 'save_protocol_unavailable' ? 'unsupported' : 'uncertain');
     } finally {
       window.clearTimeout(timeout); controller.signal.removeEventListener('abort', rejectAborted); controller.abort();
-      if (owns()) {
-        working.current = false;
-        window.clearTimeout(poll.current.timer);
-        if (inProgress) {
-          const delay = Math.min(1000 * 2 ** poll.current.attempt++, 8000);
-          poll.current.timer = window.setTimeout(() => {
-            if (mounted.current && intentRef.current?.requestId === intent.requestId) void refresh.current('send');
-          }, delay);
-        } else { poll.current.attempt = 0; setBusy(false); if (!intentRef.current) refresh.current(); }
-      }
+      if (owns()) { working.current = false; setBusy(false); if (!intentRef.current) refresh.current(); }
     }
   }, []);
 
-  // 'send': press, Retry, load. 'focus': send only if not sent recently.
-  // 'storage': read only. `pressed` is whether THIS tab's person pressed.
-  const scan = useCallback(async (trigger: 'send' | 'focus' | 'storage' = 'focus', pressed = false) => {
+  const scan = useCallback(() => {
     const at = live.current;
     if (!mounted.current || working.current || !at.prefix || !at.scope || at.enabled === false || document.hidden) return;
+    if (intentRef.current) { void run(intentRef.current, false); return; }
     try {
-      const found = readIntents(at.prefix, at.scope, at.operation), held = intentRef.current;
-      const next = held ? found.intents.find((intent) => intent.requestId === held.requestId) : found.intents[0];
-      const fresh = next?.sentAt !== undefined && Date.now() - next.sentAt < RESEND_AFTER && !sentHere.current.has(next.requestId);
-      const mode = trigger === 'storage' || (trigger === 'focus' && fresh) ? 'read' : 'send';
-      if (next) { intentRef.current = next; setPending(next); await run(next, mode, pressed); }
-      else if (held) await run(held, 'gone', pressed);
+      const found = readIntents(at.prefix, at.scope, at.operation);
+      if (found.intents[0]) { intentRef.current = found.intents[0]; setPending(found.intents[0]); void run(found.intents[0], false); }
       else if (found.invalid) setPhase('invalid');
     } catch { setPhase('storage_error'); }
   }, [run]);
@@ -230,15 +183,13 @@ export function useAuthoredSave(options: {
 
   useEffect(() => {
     mounted.current = true; epoch.current += 1; abort.current?.abort(); working.current = false;
-    intentRef.current = null; setPending(null); setBusy(false); setPhase('idle'); void scan('send');
-    const onFocus = () => { void scan('focus'); };
-    const onStorage = (event: StorageEvent) => { if (!event.key || event.key.startsWith(prefix ?? '\0')) void scan('storage'); };
+    intentRef.current = null; setPending(null); setBusy(false); setPhase('idle'); scan();
+    const onFocus = () => scan();
+    const onStorage = (event: StorageEvent) => { if (!event.key || event.key.startsWith(prefix ?? '\0')) scan(); };
     window.addEventListener('focus', onFocus); document.addEventListener('visibilitychange', onFocus); window.addEventListener('storage', onStorage);
-    window.addEventListener('online', onFocus);
     return () => {
-      mounted.current = false; epoch.current += 1; abort.current?.abort(); working.current = false; window.clearTimeout(poll.current.timer);
+      mounted.current = false; epoch.current += 1; abort.current?.abort(); working.current = false;
       window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); window.removeEventListener('storage', onStorage);
-      window.removeEventListener('online', onFocus);
     };
   }, [prefix, options.enabled, scan]);
 
@@ -248,12 +199,12 @@ export function useAuthoredSave(options: {
     if (!at.scope || !at.prefix) { setPhase('unsupported'); return false; }
     try {
       const found = readIntents(at.prefix, at.scope, at.operation);
-      if (found.invalid || found.intents.length) { void scan(); return false; }
+      if (found.invalid || found.intents.length) { scan(); return false; }
       if (input.operation !== at.operation) throw new Error('Unexpected save target');
       const copy = JSON.parse(JSON.stringify(input)) as AuthoredSaveInput;
       const intent: AuthoredSaveIntent = { ...copy, ...at.scope, version: 1, requestId: crypto.randomUUID(), createdAt: Date.now(), checksum: checksum(copy) };
       persist(at.prefix, intent); // no request may precede durable ownership/words
-      intentRef.current = intent; setPending(intent); void run(intent, 'send', true);
+      intentRef.current = intent; setPending(intent); void run(intent, true);
       return true;
     } catch { setPhase('storage_error'); return false; }
   }, [run, scan]);
@@ -279,10 +230,10 @@ export function useAuthoredSave(options: {
         localStorage.setItem(backup, JSON.stringify({ key, raw: localStorage.getItem(key) }));
         localStorage.removeItem(key);
       }
-      setPhase('idle'); void scan();
+      setPhase('idle'); scan();
     } catch { setPhase('storage_error'); }
   };
 
-  return { pending, phase, busy, start, retry: () => scan('send', true),
-    check: () => { void scan(); }, editRejected, resetInvalid, dismiss: () => { if (!intentRef.current) setPhase('idle'); } };
+  return { pending, phase, busy, start, retry: () => intentRef.current ? run(intentRef.current, true) : Promise.resolve(scan()),
+    check: scan, editRejected, resetInvalid, dismiss: () => { if (!intentRef.current) setPhase('idle'); } };
 }
