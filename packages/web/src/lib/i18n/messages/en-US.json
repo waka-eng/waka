@@ -186,6 +186,8 @@
   "worldDraftFilesUnavailable": "This device can’t keep file drafts. Keep this window open.",
   "worldDraftKeepFailed": "Couldn’t keep the draft on this device.",
   "worldDraftLinkUnavailable": "This device can’t keep the link yet. Paste it into your note before closing.",
+  "worldRecordingAttachFailed": "Couldn’t attach your recording to “{note}”.",
+  "worldRecordingAttachFailedUntitled": "Couldn’t attach your recording to its note.",
   "worldRecordingCanceled": "Recording canceled.",
   "worldRecordingDenied": "Microphone access wasn’t allowed. Allow it in your browser and try again.",
   "worldRecordingDisconnected": "The microphone disconnected. Listen to the recording before saving.",

@@ -807,6 +807,52 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   flex: none;
   min-width: var(--waka-corner);
 }
+/* ═══ A RECORDING THAT DID NOT ATTACH, SAID BY THE PAGE THAT OUTLIVES IT ══
+   L12: the archive's recorder is `Home`'s, so its failure can arrive after
+   the archive has gone. The line stands just above the dock, in the dock's
+   own material and type, at the dock's height in the stack — over a page,
+   and never over the bar that is the way out of it. Try again is underlined
+   the way the bar's Try again is; × is a fingertip wide. */
+.waka-clip-failed {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: calc(var(--sp-20) + env(safe-area-inset-bottom) + var(--waka-corner) + var(--sp-12) + var(--sp-12));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  max-width: calc(100vw - var(--sp-32) - env(safe-area-inset-left) - env(safe-area-inset-right));
+  padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-16);
+  border-radius: var(--r-pill);
+  background: var(--waka-raised);
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  pointer-events: auto;
+}
+.waka-clip-failed-words {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.waka-clip-failed button {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  min-width: var(--waka-corner);
+  min-height: var(--waka-corner);
+  padding: 0 var(--sp-12);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.waka-clip-failed-retry { text-decoration: underline; }
+/* × lets the clip go: secondary to Try again, so it speaks in the muted ink */
+.waka-clip-failed .waka-clip-failed-close { color: var(--muted); }
+.waka-clip-failed button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 /* MEASURED: tightened with 44px glyph slots, the open-save row is 327px; the
    dock is 100vw - 16, so it fits down to 343px. Below 350 Share and Delete
    fold into ⋯ — the row becomes Back, Record, ＋, Save, ⋯, Close: 283px at

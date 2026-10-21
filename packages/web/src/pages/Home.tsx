@@ -7585,6 +7585,26 @@ const RETRY_READ_LIMIT_MS = 20_000;
           }}>{say('worldSwitchAccount')}</button> : null}
         <button type="button" onClick={() => viewNavigation.write({ ...EMPTY_VIEW }, { replace: true })}>{say('worldMe')}</button>
       </div> : null}
+      {/* ═══ A CLIP THAT DID NOT ATTACH IS SAID HERE, NOT IN THE ARCHIVE (L12)
+          The archive's recorder lives on this page, so its upload can fail
+          after the archive has closed — and the archive's own failure line
+          went with it. This line is this page's: it names the note the clip
+          was made on, stays until Try again lands it or × lets it go, and
+          says one failure at a time (the next waits behind it). */}
+      {archiveRecorder.failures[0] ? (() => {
+        const failure = archiveRecorder.failures[0];
+        const words = failure.target.label.trim().replace(/\s+/g, ' ');
+        const note = words.length > 32 ? `${words.slice(0, 31).trimEnd()}…` : words;
+        return (
+          <div className="waka-clip-failed" role="alert" data-jar-chrome="1" data-jar-interactive="1">
+            <span className="waka-clip-failed-words">{note
+              ? formatMessage(locale, 'worldRecordingAttachFailed', { note })
+              : say('worldRecordingAttachFailedUntitled')}</span>
+            <button type="button" className="waka-clip-failed-retry" onClick={() => archiveRecorder.retry(failure.id)}>{say('surfaceUnavailableRetry')}</button>
+            <button type="button" className="waka-clip-failed-close" aria-label={say('worldClose')} onClick={() => archiveRecorder.dismiss(failure.id)}>×</button>
+          </div>
+        );
+      })() : null}
       {/* the volume: a layout-tall gradient the camera descends through */}
       <div ref={measured.atmos} className="jar-atmos" aria-hidden="true" />
 

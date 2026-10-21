@@ -213,3 +213,45 @@ it("attaches the clip to the original note under the original profile when a wal
   expect(S.presigned, "the clip was attached under the agent instead of its owner").toEqual([VIEWER_ID]);
   expect(S.presigned).not.toContain(AGENT_ID);
 });
+
+it("says on Home that a clip failed to attach after the archive closed, and Try again attaches it to its note", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-2");
+  S.failFinalize = 1;
+  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await settle();
+  expect(archiveOpen()).toBe(false);
+  await deliverStops();
+  expect(S.finalized, "nothing should have attached yet").toEqual([]);
+  const line = q(".waka-clip-failed");
+  expect(line, "the failure was said nowhere once the archive had gone").toBeTruthy();
+  expect(line!.getAttribute("role")).toBe("alert");
+  expect(line!.textContent).toContain("Couldn’t attach your recording to “something I kept, 2”.");
+  /* it stays until it is handled */
+  await settle(12);
+  expect(q(".waka-clip-failed"), "the failure line went away on its own").toBeTruthy();
+  const retry = [...line!.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Try again");
+  expect(retry, "the failure line offers no Try again").toBeTruthy();
+  await act(async () => retry!.click());
+  await settle(4);
+  expect(S.finalized, "Try again did not attach the clip to the note it was made on").toEqual(["own-2"]);
+  expect(S.presigned).toEqual([VIEWER_ID, VIEWER_ID]);
+  expect(q(".waka-clip-failed"), "the line stayed after the clip attached").toBeNull();
+});
+
+it("lets the failure line go with ×, without attaching anything", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-0");
+  S.failFinalize = 1;
+  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await settle();
+  await deliverStops();
+  const close = q<HTMLButtonElement>('.waka-clip-failed button[aria-label="Close"]');
+  expect(close, "the failure line has no ×").toBeTruthy();
+  await act(async () => close!.click());
+  await settle(2);
+  expect(q(".waka-clip-failed")).toBeNull();
+  expect(S.finalized).toEqual([]);
+});
