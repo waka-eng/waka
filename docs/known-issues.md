@@ -1161,7 +1161,7 @@ in a dedicated PR.**
 
 ---
 
-### L13. Card ↔ archive concurrent edits of the same note *(pre-existing on dev; follow-up)*
+### L13. Card ↔ archive concurrent edits of the same note *(fixed except the field refresh; see below)*
 **Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/pages/Home.tsx`, `components/SavesOverlay.tsx`, `space/editing.ts` · severity medium
 
 **What.** Home's memory card and the archive's note page can both edit one note, and nothing orders
@@ -1184,10 +1184,25 @@ removed. The races it was chasing, all present on `origin/dev`:
 - Two writes of one note from different doors are not ordered on the client; the server applies
   them in arrival order.
 
-**Follow-up.** One per-profile detail store, keyed by inspiration id and holding the server row and
-its `updatedAt`, that both doors read and write through — with write ordering per note and an
-explicit, bounded wait for a pending write before an editor opens. Designed as its own change, with
-browser-level tests, rather than layered onto the P0 fix.
+**Mostly fixed on `claude/followup-card-archive`, 2026-10-21, without a shared store.** The rule
+is in `docs/plans/card-and-archive.md`: only one door is open at a time, and a door does not close
+while its own write is still out. Bullet by bullet:
+
+- *Card save in flight when the archive opens*: **fixed.** The card refuses any press away while
+  its save is out (L11).
+- *Card edit seeded older than an archive save*: **fixed.** The card's edit refuses while a page is
+  held up over the world. That was assumed to be true already and was not: an address holding both
+  a note and `?open=saves` opened it. Closing the archive now waits for the note's write, and a
+  failed write keeps the archive open with "That didn't save. Your words are still here." So the
+  card's next read sees the archive's words.
+- *Archive changes not shown in Home's field*: **skipped.** Fixing it means telling Home what
+  changed, which is the coordination layer that was reverted, or reloading the field on close,
+  which moves orbs the person did not touch. The card itself is read fresh every time it opens.
+- *Two doors' writes not ordered on the client*: **fixed for in-app routes.** Only one door can
+  have a write out. The browser's Back and a wall switch still unmount the archive without waiting
+  for its write.
+
+Pinned in `home-memory-reads.test.tsx`.
 
 **Also noticed, not verified.** `finalizeAttachment` for an inspiration sends no `?profile=`, while
 the archive's presign does; attaching to an agent's note from the agent's archive may resolve against

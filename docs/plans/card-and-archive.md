@@ -23,9 +23,12 @@ the two surfaces, nothing is counted, and no read ever waits.
    focus inside the tap, and the iOS keyboard still rises.
    Unchanged words, and an edit already in its "Saved" beat, let go as they
    do today.
-2. **The card's edit cannot open while the archive is open.** This is already
-   true: applying any address clears the selection, which closes the card,
-   and the archive covers the world. A test pins it.
+2. **The card's edit cannot open while the archive is open.** This was
+   assumed, and checking it showed it was false. An address holding both a
+   note and `?open=saves` draws the card under the archive, and its words
+   still opened an edit. Now the card's edit refuses while any page is held
+   up over the world. The check is synchronous, so a permitted edit still
+   opens inside the tap. A test pins it.
 3. **The archive does not close while its own writes are out.** Every way out
    that Home handles (Close, Escape, a top-of-mind row) goes through
    `leaveOpen`, and `leaveOpen` now awaits, in this order:

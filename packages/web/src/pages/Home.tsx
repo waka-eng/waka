@@ -2368,8 +2368,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      leaving commits what was typed. A ref rather than state: it is replaced
      on every keystroke (the closer captures the draft), and re-rendering
      the world for that would be a frame of work per character. */
-  const closeSavedNote = useRef<(() => void) | null>(null);
-  const savedNoteChanged = useCallback((close: (() => void) | null) => {
+  const closeSavedNote = useRef<(() => Promise<boolean>) | null>(null);
+  const savedNoteChanged = useCallback((close: (() => Promise<boolean>) | null) => {
     closeSavedNote.current = close;
     setSavedNoteOpen(Boolean(close));
   }, []);
@@ -2384,12 +2384,11 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      that did not. Removing the chevron is what made it the only path, so
      it is fixed here rather than noted.
 
-     IT DOES NOT AWAIT. `leaveNote` fires the write and the navigation
-     happens; the request completes whether or not this component is still
-     mounted, and `leaveNote`'s own `mounted.current` guards keep it from
-     writing state into a page that has gone. Awaiting would hold the bar
-     unresponsive for the length of a round trip, which is the thing a
-     bottom bar must never do. */
+     IT AWAITS NOW, through `leaveOpen` (L13, 2026-10-21). It used to fire
+     the write and leave at once, and the card could then read the note and
+     seed its edit before the write had landed. Waiting costs the close one
+     round trip, only when there are changed words; the note says "Saving…"
+     meanwhile, and a failed write keeps the archive open on its words. */
   /* ═══ AND IT IS FIXED ONCE, BECAUSE FIVE CALL SITES IS NOT A RULE ═════
      Everything above counted the BAR'S presses and stopped there, and the
      sentence at the top of this block — "every way out of a note commits it"
@@ -2442,12 +2441,17 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
      leaves that suite green. It stays because a duplicate write is exactly
      the thing a surface whose whole claim is "we kept what you wrote"
      cannot afford to do quietly, and because it costs one comparison. */
-  const committedNote = useRef<(() => void) | null>(null);
-  const commitOpenNote = useCallback(() => {
+  /* The commit hands back whether the words were kept (or had nothing to
+     keep), and the same closer asked twice hands back the same answer — so
+     `leaveOpen` below can wait on a commit a bar press already started. */
+  const committedNote = useRef<{ close: () => Promise<boolean>; done: Promise<boolean> } | null>(null);
+  const commitOpenNote = useCallback((): Promise<boolean> => {
     const close = closeSavedNote.current;
-    if (!close || close === committedNote.current) return;
-    committedNote.current = close;
-    close();
+    if (!close) return Promise.resolve(true);
+    if (committedNote.current?.close === close) return committedNote.current.done;
+    const done = close();
+    committedNote.current = { close, done };
+    return done;
   }, []);
   /* A RECORDING STILL RUNNING IN THE ARCHIVE IS FINISHED BEFORE IT CLOSES
      (L12, `docs/plans/card-and-archive.md`, rule 3). `SavesOverlay` hands up
@@ -2459,20 +2463,27 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const archiveRecordingChanged = useCallback((finish: (() => Promise<boolean>) | null) => {
     finishArchiveRecording.current = finish;
   }, []);
+  /* AND THE NOTE'S OWN WORDS ARE KEPT BEFORE IT CLOSES (L13, same rule).
+     Closing used to fire the archive's write and leave at once, so the card
+     could read the note again — and seed its edit — before that write had
+     landed. Now the close waits for it; a failed write keeps the archive
+     open on the note, which says so. Nothing to commit, nothing awaited. */
   const leavingOpenRef = useRef(false);
   /** Leaving whatever is held up over the world, committing it on the way. */
   const leaveOpen = useCallback(async () => {
     const finish = finishArchiveRecording.current;
-    if (finish) {
-      if (leavingOpenRef.current) return;
-      leavingOpenRef.current = true;
-      const from = viewNavigationRef.current.key;
-      let attached = false;
-      try { attached = await finish(); } finally { leavingOpenRef.current = false; }
-      /* stayed: the upload failed, or the person has gone somewhere else */
-      if (!attached || viewNavigationRef.current.key !== from) return;
-    }
-    commitOpenNote();
+    if (!finish && !closeSavedNote.current) { viewNavigationRef.current.closeOpen(); return; }
+    if (leavingOpenRef.current) return;
+    leavingOpenRef.current = true;
+    /* which page is held up — not the whole address, which closing the
+       note itself rewrites */
+    const from = viewNavigationRef.current.view?.open ?? null;
+    /* stays: the upload or the write failed, or the person went elsewhere */
+    const moved = () => (viewNavigationRef.current.view?.open ?? null) !== from;
+    try {
+      if (finish && (!(await finish()) || moved())) return;
+      if (!(await commitOpenNote()) || moved()) return;
+    } finally { leavingOpenRef.current = false; }
     viewNavigationRef.current.closeOpen();
   }, [commitOpenNote]);
   /* ═══ AND THE BROWSER'S OWN BACK, WHICH NO HANDLER CAN SEE ════════════
@@ -7164,6 +7175,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const beginPanelEdit = useCallback(
     (ev: ReactMouseEvent<HTMLParagraphElement>) => {
       if (!panelId || editing.open) return;
+      /* ONE DOOR AT A TIME (L13, `docs/plans/card-and-archive.md`, rule 2):
+         with the archive (or any page) held up over the world, the card
+         under it is not an editor — the archive may be editing this note. */
+      if (viewNavigationRef.current.view?.open) return;
       /* NEVER AN EDITOR SEEDED FROM A PREVIEW OR A STALE COPY (P0,
          2026-10-17). This fell back to `panelBall.textPreview` — a cut
          ending in "…", or an attachment label — while the full read was out

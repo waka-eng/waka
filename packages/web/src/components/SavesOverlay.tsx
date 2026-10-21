@@ -127,7 +127,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
    * WHAT IS NOT HANDED UP is which note, or its words, or anything else the
    * world could form a second opinion with.
    */
-  onNoteOpen?: (close: (() => void) | null) => void;
+  onNoteOpen?: (close: (() => Promise<boolean>) | null) => void;
   /**
    * WHILE A RECORDING RUNS, HOW TO FINISH IT (L12,
    * `docs/plans/card-and-archive.md`, rule 3). Closing the archive unmounts
@@ -230,6 +230,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      seeded when a note opens and written back when it closes. */
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  /* the write out right now (Save or the way out), for a close to wait on */
+  const writing = useRef<Promise<boolean> | null>(null);
   const [saveFailed, setSaveFailed] = useState(false);
   const [open, setOpen] = useState<Inspiration | null>(null);
   /* ═══ THE WORDS AS STORED, READ IN FULL BEFORE ANY OF THEM CAN BE WRITTEN ══
@@ -477,10 +479,14 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      recorder itself either way. What the two DO share is the trimmed
      comparison, for the same reason: unchanged words close the note instead
      of writing it. */
-  const leaveNote = useCallback(async () => {
+  /* Resolves whether the words were kept (or had nothing to keep), so the
+     world can wait for it before closing the archive (L13). A write already
+     out from Save is waited on rather than sent twice. */
+  const leaveNote = useCallback(async (): Promise<boolean> => {
     const note = open;
     const words = draft.trim();
-    if (!note || saving) return;
+    if (!note) return true;
+    if (saving) return writing.current ?? true;
     /* Not read yet (or the read failed): nothing typed can have reached the
        draft, and the preview is not the note — so leaving writes nothing. */
     const base = stored && stored.id === note.id ? stored.text : null;
@@ -489,21 +495,27 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        no words beside a photo or a file. A note that would end with neither
        is not written (the server refuses it too); its stored words stay, and
        the page said so while it was empty (`placeholder` below). */
-    if (base === null || words === base.trim() || !wordsCanStand(words, note.attachments.length)) { setOpen(null); return; }
+    if (base === null || words === base.trim() || !wordsCanStand(words, note.attachments.length)) { setOpen(null); return true; }
     setSaving(true);
     setSaveFailed(false);
-    try {
-      await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
-      if (!mounted.current) return;
-      /* The list holds what the page loaded, so it has to agree without a
-         refetch — otherwise going back reveals the old first line. */
-      setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: inspirationPreview(words, row.attachments) } : row)));
-      setOpen(null);
-    } catch {
-      if (mounted.current) setSaveFailed(true);
-    } finally {
-      if (mounted.current) setSaving(false);
-    }
+    const write = (async () => {
+      try {
+        await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
+        if (!mounted.current) return true;
+        /* The list holds what the page loaded, so it has to agree without a
+           refetch — otherwise going back reveals the old first line. */
+        setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: inspirationPreview(words, row.attachments) } : row)));
+        setOpen(null);
+        return true;
+      } catch {
+        if (mounted.current) setSaveFailed(true);
+        return false;
+      } finally {
+        if (mounted.current) setSaving(false);
+      }
+    })();
+    writing.current = write;
+    return write;
   }, [draft, open, saving, stored, profileId]);
 
   /**
@@ -577,8 +589,11 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     if (!stored || stored.id !== note.id || stored.text === null) return;
     setSaving(true);
     setSaveFailed(false);
+    let landed: (kept: boolean) => void = () => {};
+    writing.current = new Promise<boolean>((done) => { landed = done; });
     try {
       await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
+      landed(true);
       if (!mounted.current) return;
       /* Both copies, for the reason `leaveNote` gives about the list and the
          reason `attach` gives about the snapshot: the grid behind must not
@@ -589,6 +604,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       /* What is stored now, which is what dims the button again. */
       setStored((held) => (held && held.id === note.id ? { ...held, text: words } : held));
     } catch {
+      landed(false);
       if (mounted.current) setSaveFailed(true);
     } finally {
       if (mounted.current) setSaving(false);
@@ -923,7 +939,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
 
   const openId = open?.id ?? null;
   useEffect(() => {
-    onNoteOpen?.(openId === null ? null : () => void leaveNote());
+    onNoteOpen?.(openId === null ? null : () => leaveNote());
     return () => onNoteOpen?.(null);
   }, [openId, onNoteOpen, leaveNote]);
 

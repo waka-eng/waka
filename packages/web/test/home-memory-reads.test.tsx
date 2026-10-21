@@ -57,6 +57,7 @@ const S = vi.hoisted(() => ({
   /* the notes a clip was attached to, and whether the attach fails */
   finalized: [] as string[],
   failFinalize: false,
+  failWrite: false,
 }));
 
 const row = (id: string, text: string) => {
@@ -102,6 +103,7 @@ vi.mock("../src/lib/api", async (original) => ({
     S.written.push({ id, text: input.text });
     /* a write the case holds in flight lands only when it says so */
     if (S.holdWrite) await new Promise<void>((land) => { S.landWrite = land; });
+    if (S.failWrite) throw new Error("offline");
     S.store.set(id, input.text);
     const writtenAt = Date.now();
     S.writtenAt.set(id, writtenAt);
@@ -157,6 +159,7 @@ beforeEach(() => {
   S.writtenAt = new Map();
   S.finalized = [];
   S.failFinalize = false;
+  S.failWrite = false;
 });
 afterEach(() => world?.unmount());
 
@@ -499,4 +502,40 @@ it("closing the archive while recording, when the upload fails, stays on the not
   expect(document.body.textContent).toContain("Couldn’t upload this attachment.");
   await pressClose();
   expect(archiveOpen(), "a second Close, with nothing recording, closes").toBe(false);
+});
+
+
+/* ═══ THE ARCHIVE DOES NOT CLOSE WHILE ITS NOTE'S WRITE IS OUT (L13) ══════
+   `docs/plans/card-and-archive.md`, rule 3. Closing used to fire the write
+   and leave at once, so the card could read the note — and seed its edit —
+   before the archive's words had landed, and then save over them. */
+const ARCHIVE_WORDS = "something I kept, 2 — written in the archive.";
+it("closing the archive waits for its note's save, so the card's next edit starts from those words", { timeout: 30_000 }, async () => {
+  await openByAddress("own-2");
+  const page = await openInArchive(here, "something I kept, 2");
+  /* rule 2: whatever of the card is still drawn under the archive, pressing
+     its words opens no edit */
+  const under = card()?.querySelector<HTMLElement>("p.jar-panel-text");
+  if (under) await act(async () => under.click());
+  expect(editBox(), "no card edit opens while the archive is open").toBeNull();
+  S.holdWrite = true;
+  await setText(page, ARCHIVE_WORDS);
+  await pressClose();
+  expect(archiveOpen(), "still open while its write is out").toBe(true);
+  await act(async () => S.landWrite!());
+  for (let turn = 0; turn < 10; turn += 1) { await world.step(4); await wait(20); }
+  expect(archiveOpen(), "closed once the write landed").toBe(false);
+  await pressWords();
+  expect(editBox()?.value).toBe(ARCHIVE_WORDS);
+});
+
+it("closing the archive when its note's save fails stays on the note and says so", { timeout: 30_000 }, async () => {
+  await openByAddress("own-2");
+  const page = await openInArchive(here, "something I kept, 2");
+  S.failWrite = true;
+  await setText(page, ARCHIVE_WORDS);
+  await pressClose();
+  expect(archiveOpen(), "the archive stayed").toBe(true);
+  expect(world.container.querySelector<HTMLTextAreaElement>(".waka-note-page")?.value).toBe(ARCHIVE_WORDS);
+  expect(document.body.textContent).toContain("That didn’t save. Your words are still here.");
 });
