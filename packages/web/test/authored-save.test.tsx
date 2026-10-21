@@ -24,7 +24,7 @@ function Probe({ owner = scope, operation = 'inspiration' as const }) {
   return <span>{latest.phase}</span>;
 }
 beforeEach(() => {
-  vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear();
+  vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear(); sessionStorage.clear();
   Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
@@ -140,6 +140,55 @@ it('a page loaded in a background tab re-sends on its first visible moment', asy
   await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
   expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1); expect(rows.size).toBe(1);
   expect(latest.pending).toBeNull(); expect(records()).toHaveLength(0);
+});
+
+function otherTab() {
+  const tab: { save?: ReturnType<typeof useAuthoredSave> } = {};
+  const where = document.createElement('div'); document.body.append(where); const at = createRoot(where);
+  function ProbeB() { tab.save = useAuthoredSave({ scope, operation: 'inspiration', onResolved: resolved, onRemoved: removed }); return null; }
+  return { tab, open: () => act(async () => at.render(<ProbeB />)), close: async () => { await act(async () => at.unmount()); where.remove(); } };
+}
+
+it('two tabs + online: only the tab that created the save re-POSTs it', async () => {
+  const rows = server();
+  vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 0, message: 'Failed to fetch' }));
+  const b = otherTab();
+  try {
+    await b.open(); // B mounted first: its snapshot of this tab's own ids is empty
+    await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+    await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: null })); }); // B adopts the journal, reading only
+    expect(b.tab.save?.pending).not.toBeNull(); expect(createInspiration).toHaveBeenCalledOnce();
+    vi.mocked(fetchInspirationSaveRequest).mockImplementation(async (id) => {
+      const row = rows.get(id); if (!row) throw missing();
+      return { requestId: id, operation: 'inspiration', inspirationId: row.id, reflectionId: null, processing: { id: 'r', profileId: scope.profileId, inspirationId: row.id, materialRevision: '1', jobId: 'j', requestVersion: '1' }, createdAt: row.createdAt };
+    });
+    vi.mocked(fetchInspiration).mockImplementation(async (id) => [...rows.values()].find((row) => row.id === id)!);
+    await act(async () => { window.dispatchEvent(new Event('online')); });
+    expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1); expect(rows.size).toBe(1);
+    expect(latest.pending).toBeNull();
+  } finally { await b.close(); }
+});
+
+it("a different tab loading never re-POSTs a journal it did not create", async () => {
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => root.unmount()); root = createRoot(host);
+  sessionStorage.clear(); // a new tab: its own sessionStorage
+  await act(async () => root.render(<Probe />));
+  await act(async () => { window.dispatchEvent(new Event('online')); });
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(latest.phase).toBe('uncertain'); expect(records()).toHaveLength(1);
+});
+
+it("the owner's success refresh never POSTs another tab's journal", async () => {
+  let finish!: (value: ApiInspiration) => void;
+  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const mine = JSON.parse(localStorage.getItem(records()[0]!)!), theirs = { ...mine, requestId: crypto.randomUUID(), createdAt: mine.createdAt + 1 };
+  localStorage.setItem(records()[0]!.replace(mine.requestId, theirs.requestId), JSON.stringify(theirs)); // another tab's journal
+  await act(async () => { window.dispatchEvent(new Event('online')); }); // owed while A's POST is in flight
+  await act(async () => { finish(source); });
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(ids()).toEqual(new Set([mine.requestId]));
+  expect(latest.pending?.requestId).toBe(theirs.requestId); expect(latest.busy).toBe(false);
 });
 
 it('focus still only reads a pending save; it does not re-send', async () => {

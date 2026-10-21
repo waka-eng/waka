@@ -62,11 +62,24 @@ function persist(prefix: string, intent: AuthoredSaveIntent) {
   if (localStorage.getItem(key) !== raw) throw new Error('Pending save was not retained');
 }
 
+/* REQUEST IDS THIS TAB CREATED. sessionStorage is per tab and survives a
+   reload of that tab only, so a resend is limited to this tab's own saves.
+   Read once at first mount into memory; written on start(). */
+const OWN_SAVES = 'waka:authoredSave:own';
+function readOwn(): Set<string> {
+  try { const ids = JSON.parse(sessionStorage.getItem(OWN_SAVES) ?? '[]'); return new Set(Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : []); }
+  catch { return new Set(); }
+}
+function writeOwn(ids: Set<string>) {
+  try { sessionStorage.setItem(OWN_SAVES, JSON.stringify([...ids].slice(-20))); } catch { /* resend after reload is a convenience */ }
+}
+
 /** One visible pending intent, with separate durable keys for simultaneous
- * tabs. Focus and storage events only READ. Page load, `online` and an explicit
- * retry POST the immutable intent (read from disk on load) under its original
- * identity, after verifying the server supports it; the server dedupes on that
- * identity. See docs/plans/save-recovery.md. */
+ * tabs. Focus and storage events only READ. First page load and `online`
+ * re-POST a journal THIS TAB created (read from disk) under its original
+ * identity, and an explicit retry POSTs the immutable intent, after verifying
+ * the server supports it; the server dedupes on that identity. Another tab's
+ * journal is only read. See docs/plans/save-recovery.md. */
 export function useAuthoredSave(options: {
   scope: ProfileStorageScope | null; operation: AuthoredSaveInput['operation']; inspirationId?: string; enabled?: boolean;
   journal?:string;
@@ -90,6 +103,8 @@ export function useAuthoredSave(options: {
       flight). The next scan that can run performs it: focus/visibility, or
       the end of the in-flight run. In memory only. */
   const resendOwed = useRef(false);
+  const own = useRef<Set<string> | null>(null);
+  const isOwn = (intent: AuthoredSaveIntent | null | undefined) => Boolean(intent && own.current?.has(intent.requestId));
 
   const run = useCallback(async (intent: AuthoredSaveIntent, write: boolean, pressed = write) => {
     const owner = live.current, key = owner.prefix;
@@ -171,7 +186,7 @@ export function useAuthoredSave(options: {
       } else setPhase(error instanceof ApiError && error.code === 'save_protocol_unavailable' ? 'unsupported' : 'uncertain');
     } finally {
       window.clearTimeout(timeout); controller.signal.removeEventListener('abort', rejectAborted); controller.abort();
-      if (owns()) { working.current = false; setBusy(false); if (!intentRef.current || resendOwed.current) refresh.current(); }
+      if (owns()) { working.current = false; setBusy(false); if (!intentRef.current || (resendOwed.current && isOwn(intentRef.current))) refresh.current(); }
       else if (mounted.current && !working.current) setBusy(false);
     }
   }, []);
@@ -181,17 +196,20 @@ export function useAuthoredSave(options: {
     const at = live.current;
     if (owe) resendOwed.current = true;
     if (!mounted.current || working.current || !at.prefix || !at.scope || at.enabled === false || document.hidden) return;
-    const send = resendOwed.current; resendOwed.current = false;
-    if (intentRef.current) { void run(intentRef.current, send, false); return; }
+    // The owed resend is consumed only here, by this tab, for its own journal.
+    const owed = (intent: AuthoredSaveIntent) => { const send = resendOwed.current && isOwn(intent); if (send) resendOwed.current = false; return send; };
+    if (intentRef.current) { void run(intentRef.current, owed(intentRef.current), false); return; }
     try {
       const found = readIntents(at.prefix, at.scope, at.operation);
-      if (found.intents[0]) { intentRef.current = found.intents[0]; setPending(found.intents[0]); void run(found.intents[0], send, false); }
-      else if (found.invalid) setPhase('invalid');
+      const next = found.intents.find(isOwn) ?? found.intents[0];
+      if (next) { intentRef.current = next; setPending(next); void run(next, owed(next), false); }
+      else { resendOwed.current = false; if (found.invalid) setPhase('invalid'); }
     } catch { setPhase('storage_error'); }
   }, [run]);
   refresh.current = scan;
 
   useEffect(() => {
+    if (!own.current) own.current = readOwn();
     mounted.current = true; epoch.current += 1; abort.current?.abort(); working.current = false;
     intentRef.current = null; setPending(null); setBusy(false); setPhase('idle'); scan(true);
     const onFocus = () => scan();
@@ -217,6 +235,7 @@ export function useAuthoredSave(options: {
       const copy = JSON.parse(JSON.stringify(input)) as AuthoredSaveInput;
       const intent: AuthoredSaveIntent = { ...copy, ...at.scope, version: 1, requestId: crypto.randomUUID(), createdAt: Date.now(), checksum: checksum(copy) };
       persist(at.prefix, intent); // no request may precede durable ownership/words
+      resendOwed.current = false; own.current?.add(intent.requestId); writeOwn(own.current ?? new Set([intent.requestId]));
       intentRef.current = intent; setPending(intent); void run(intent, true);
       return true;
     } catch { setPhase('storage_error'); return false; }
