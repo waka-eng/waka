@@ -1,22 +1,18 @@
 # Back from layers: the "catch Back" attempt, and why it was withdrawn
 
-**Problem.** A layer is a state with no address of its own, such as a saved note open inside the
-archive, or the settings/info corner card. Back from it skips the layer and leaves the address
-beneath it. Earlier attempts gave each layer its own history entry. Each of those failed (see
-`docs/known-issues.md`):
-- a same-URL entry re-ran Home's view restore;
-- a replace dropped the entry's mark;
-- stale entries became dead Back presses;
-- stepping back over a reloaded entry crossed into the previous document;
-- rebasing under a router replace needed an asynchronous silent pop, which a second replace or a
-  push could race;
-- stacked layers left entries that no listener owned.
+**Problem.** A layer is a state with no address of its own. On dev the layers are review, the
+open memory/detail panel, a saved note open inside the archive, and the settings/info corner
+card. Back from a layer skips it and leaves the address beneath it. Earlier attempts gave each layer its own history entry. Each of those failed (see
+`docs/known-issues.md`). A same-URL entry re-ran Home's view restore. A replace dropped the
+entry's mark. Stale entries became dead Back presses. Stepping back over a reloaded entry crossed
+into the previous document. Rebasing under a router replace needed an asynchronous silent pop,
+which a second replace or a push could race. Stacked layers left entries that no listener owned.
 
 **This attempt (`claude/followup-back`, withdrawn; no code shipped).** It added no entry per layer.
 The plan was for a module-level `popstate` listener to catch the person's one-step Back while a
 layer was open. It would `pushState` back an exact copy of the entry they were on (router state,
-key and idx) and close the topmost registered layer. Only the saved note was ever registered.
-The corner card was never wired, and review no longer exists on dev. In jsdom the tests passed for
+key and idx) and close the topmost registered layer. Only the saved note was ever registered;
+review, the detail panel and the corner card were never wired. In jsdom the tests passed for
 these cases: Back from a note returns to the list, the next Back leaves the archive, a reload has
 no marker to strip, and a replace has nothing above it to rebase. Stacking (one layer closed per
 Back) was shown only with synthetic layers in a unit test, never with two real layers.
@@ -32,7 +28,9 @@ Back) was shown only with synthetic layers in a unit test, never with two real l
 2. **Chrome's history-manipulation intervention.** A `pushState` made inside a `popstate` handler
    has no user activation of its own. Chrome then marks the entry the push was made from (N-1)
    as skippable. For the saved note, N-1 is Home, so a later Back skips Home. For a layer opened
-   directly over Home, N-1 is the entry before Home, and a later Back can leave WAKA.
+   directly over Home, N-1 is the entry before Home, and a later Back can leave WAKA. That only
+   happens when Home was reached by an in-app navigation. On the root entry, Back is
+   cross-document and raises no `popstate`.
 3. **Forward history is lost.** Pushing from entry N-1 discards every forward entry, not just the
    one the pop came from. Back then Forward no longer works, and anything further forward is gone.
 
@@ -46,9 +44,11 @@ tested there.
 
 - **Router-level integration, not a side listener.** The layer has to be something the router
   owns: a real address (a query param such as `note=<id>`, read by the router and ignored by
-  Home's view restore when only that param differs), or a data router's blocker/`unstable_usePrompt`-style
-  hook that decides before the location commits. Listener order must be guaranteed by
-  construction, not by the order modules load.
+  Home's view restore when only that param differs). Listener order must be guaranteed by
+  construction, not by the order modules load. A data router's blocker is not a drop-in
+  replacement. It reverts a blocked POP with `history.go(-delta)`/`go(delta)` without a user
+  gesture, which has the same Chrome-intervention exposure. It would also mean migrating from
+  `<BrowserRouter>` to a data router. Real addresses remain the likely shape.
 - **No `pushState` or `go()` outside a user gesture.** Entries are created only in response to a
   press. Back must only ever pop, never pop-then-push.
 - **Replace under a layer becomes the router's ordinary case** once the layer is a real address.
