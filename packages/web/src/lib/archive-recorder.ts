@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-import { finalizeAttachment, presignAttachment, uploadToPresignedUrl } from "./api";
+import { attachToNote } from "./attach-to-note";
 import { useAudioRecording } from "./use-audio-recording";
 
 /**
@@ -59,19 +59,7 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   const send = useCallback(async (file: File, to: ClipTarget) => {
     setSending(to);
     try {
-      const pre = await presignAttachment(
-        { filename: file.name, contentType: file.type || "application/octet-stream", size: file.size },
-        undefined,
-        ...(to.profileId ? [{ profile: to.profileId }] as const : []),
-      );
-      await uploadToPresignedUrl(pre.uploadUrl, file, pre.headers);
-      await finalizeAttachment({
-        type: "file",
-        inspirationId: to.noteId,
-        key: pre.key,
-        name: file.name,
-        ...(file.type ? { contentType: file.type } : {}),
-      });
+      await attachToNote(file, { noteId: to.noteId, profileId: to.profileId, type: "file" });
       landedSeq.current += 1;
       setLanded({ target: to, seq: landedSeq.current });
     } catch {

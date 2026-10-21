@@ -48,15 +48,13 @@ import { NoteTools } from "./NoteTools";
 import {
   attachmentPreviewImageUrl,
   deleteInspiration,
-  finalizeAttachment,
   forgetDeletedInspiration,
   listDeletedInspirations,
   restoreInspiration,
   type ApiDeletedInspiration,
-  presignAttachment,
   updateInspiration,
-  uploadToPresignedUrl,
 } from "../lib/api";
+import { attachToNote } from "../lib/attach-to-note";
 import { useFirstVisit } from "../lib/first-visit";
 import type { ArchiveRecorder } from "../lib/archive-recorder";
 import { canKeep, type KeepReadiness } from "../lib/keep-ready";
@@ -719,21 +717,13 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       const file = verdict && asFile
         ? (chosen.type === verdict.contentType ? chosen : new File([chosen], chosen.name, { type: verdict.contentType, lastModified: chosen.lastModified }))
         : await inspectInspirationPhoto(chosen);
-      const pre = await presignAttachment(
-        { filename: file.name, contentType: file.type || "application/octet-stream", size: file.size },
-        undefined,
-        ...(profileId ? [{ profile: profileId }] as const : []),
-      );
-      await uploadToPresignedUrl(pre.uploadUrl, file, pre.headers);
-      await finalizeAttachment({
+      await attachToNote(file, {
+        noteId: note.id,
+        profileId: profileId ?? null,
         /* A STATEMENT ABOUT BYTES THAT WERE READ, on the photo side: the
            sniffer returns one of seven image types or throws, so there is
            no third answer left to guess at. */
         type: asFile ? "file" : "image",
-        inspirationId: note.id,
-        key: pre.key,
-        name: file.name,
-        ...(file.type ? { contentType: file.type } : {}),
       });
       if (!mounted.current) return;
       /* The open note is a snapshot, so it is re-pointed at the row that
