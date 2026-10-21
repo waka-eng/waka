@@ -5,7 +5,7 @@ import { useAudioRecording } from "./use-audio-recording";
 
 /**
  * ═══ THE ARCHIVE'S RECORDER, OWNED BY THE PAGE THAT OUTLIVES THE ARCHIVE ═══
- * L12 (`docs/known-issues.md`, fixed 2026-10-21). The archive's note page had
+ * L12, fixed 2026-10-21 (`docs/plans/card-and-archive.md`). The note page had
  * its own `useAudioRecording`, so closing the archive mid-recording (Close,
  * Escape, the top-of-mind row, Back, a cold link's close, a wall switch that
  * remounts it by key) unmounted the recorder with it. A browser delivers
