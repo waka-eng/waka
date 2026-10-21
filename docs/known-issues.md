@@ -1420,6 +1420,32 @@ for one press. (Escape, the bar's rows and the note's own close already commit a
   top" sees a stale answer.
 
 ---
+## Small usability follow-ups set aside from `claude/fix-usability`
+
+**Status:** open. Tried on the branch and reverted to `origin/dev`'s behaviour in review. (The photo
+× and the attachment drawer's × that were also here are fixed on `claude/followup-small-ui`.)
+
+- **The recording/dictation line in the bar (audit f2afcbe2, desk/106).** Stop now stays in the
+  microphone's own seat, but the state line beside it is still in the bar's row, as on dev: when it
+  appears the centred bar widens and the row shifts, and its 14rem cap cuts the cloud disclosure
+  ("Your browser sends speech to its own …"). The tried fix lifted the line off the row into a
+  caption over the bar (out of flow, wrapping, `pointer-events: none` except its Cancel) and was set
+  aside for its own change. Whatever lands must keep the one shared clock (`clockWords`) and the
+  single announced "Recording" (`LiveWord`).
+
+  A second attempt (2026-10-19, `claude/followup-small-ui`: the line as an absolutely-positioned
+  `--live` caption above the bar, the slot made static while it was up, and the caption excluded
+  from the ≤440px state-line wrap rules) was reverted to dev in review for these cases:
+  - **The bar breaks at 320–390px during an audio recording.** Excluded from the ≤440px rules that
+    give a state line its own row and widen the bar to `100vw - 16px`, the row no longer wrapped,
+    and Keep and Close overlapped.
+  - **The opaque caption covers dictated words.** Its `--waka-raised` ground sat over the field
+    being dictated into, so the words appearing were hidden under the disclosure.
+  - **The ＋ and ⋯ menus rise into the same space** and overlapped the caption (a follow-up commit
+    faded the caption while a menu was open; reverted with it).
+
+---
+
 ## Principles after a dismissed signal (follow-up)
 
 **Status:** open, set aside from `claude/fix-api-bugs`. `dismissProfileSignal`

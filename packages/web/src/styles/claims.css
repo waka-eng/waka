@@ -498,8 +498,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    (audit f2afcbe2: Speak at x=675, Stop at x=561). The control now keeps its
    size and place and says it is listening with light — lit, and breathing
    slowly, which is motion that explains (it is live) rather than decorates.
-   The clock rides in the bar's caption (`.waka-dock-state--live`); Cancel
-   is its own row item beside Stop. */
+   The clock and Cancel ride in the bar's state line beside it. */
 .waka-dock-tool--live {
   color: var(--ink);
   background: radial-gradient(closest-side, color-mix(in srgb, var(--jar-live, var(--moon-warm)) 34%, transparent), transparent);
@@ -649,46 +648,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   font-size: var(--t-meta);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* THE BAR'S CAPTION WHILE THE MICROPHONE IS OPEN (audit f2afcbe2,
-   desk/106). Still the bar's — it sits 12px above the bar's top edge and
-   leaves with the bar — but out of the row, so it can never widen the bar
-   or move Stop and Cancel under a pointer, and free to wrap, so the cloud
-   disclosure is read in full rather than cut at 14rem.
-
-   ANCHORED TO THE BAR, NOT THE SLOT. `.waka-dock-slot` is positioned, and a
-   caption centred on the slot ran off a 320px screen; while the caption is
-   up the slot steps back to static, so the containing block is the bar
-   itself (fixed, centred on the screen) and the caption is centred on the
-   screen too, never wider than it less the bar's own 16px gutters.
-
-   A STATUS LINE, NOT A CONTROL: presses fall through it to whatever is
-   under it (the note, the words), and it holds no button. */
-.waka-dock-slot:has(> .waka-dock-making > .waka-dock-state--live) {
-  position: static;
-}
-.waka-dock-state.waka-dock-state--live {
-  position: absolute;
-  bottom: calc(100% + var(--sp-12));
-  left: 50%;
-  transform: translateX(-50%);
-  width: max-content;
-  max-width: min(26rem, calc(100vw - var(--sp-32)));
-  padding: var(--sp-6) var(--sp-12);
-  border-radius: var(--r-pill);
-  background: var(--waka-raised);
-  overflow: visible;
-  white-space: normal;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
-/* THE ＋ AND ⋯ MENUS RISE INTO THE SAME SPACE (review). While one is open
-   the caption steps out of sight so the two never overlap; opacity, not
-   visibility, so "Recording" stays in the accessibility tree. */
-.waka-dock:has(.waka-add-menu) .waka-dock-state--live {
-  opacity: 0;
 }
 
 /* ═══ THE WAY OUT OF AN ARMED DELETE, BESIDE THE QUESTION ══════════════
@@ -902,18 +861,18 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
      tools, wrapping to a second line rather than clipping. */
   /* The dock is fixed and shrink-to-fit, so it is told its width outright —
      measured, a basis-0 group otherwise sized it to its narrowest column. */
-  .waka-dock:has(.waka-dock-making > .waka-dock-state:not(.waka-dock-state--live)) {
+  .waka-dock:has(.waka-dock-making > .waka-dock-state) {
     width: calc(100vw - var(--sp-16));
   }
-  .waka-dock-slot:has(> .waka-dock-making > .waka-dock-state:not(.waka-dock-state--live)) {
+  .waka-dock-slot:has(> .waka-dock-making > .waka-dock-state) {
     flex: 1 1 auto;
   }
-  .waka-dock-making:has(> .waka-dock-state:not(.waka-dock-state--live)) {
+  .waka-dock-making:has(> .waka-dock-state) {
     flex: 1 1 0;
     flex-wrap: wrap;
     justify-content: center;
   }
-  .waka-dock-making > .waka-dock-state:not(.waka-dock-state--live) {
+  .waka-dock-making > .waka-dock-state {
     order: -1;
     flex: 1 0 100%;
     max-width: none;
