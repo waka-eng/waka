@@ -1169,6 +1169,19 @@ holds, and to survive duplicated tabs, staged attachments and retries. Three att
 draft, dropping attachments on fork, duplicate sends), so it was taken out of that PR. **To be fixed
 in a dedicated PR.**
 
+**Cases (2026-10-21, `docs/plans/drafts-after-reload.md`).** Every new mount triggers it, not only
+a reload: closing and reopening the chat, or switching conversations, also gets a fresh writer.
+(1) A restored draft is edited, which forks it; the fork is sent and confirmed, and the original
+returns. (2) Two mounts before sending leave a chain (original, fork, fork); clearing only the
+draft this mount restored still leaves the first. (3) Words of the restored draft are changed or
+deleted before sending, so no rule keyed by the sent words matches it. (4) A restored share card is
+changed, which forks it; the fork is discarded and the original returns (the picker lists both
+beforehand). Not affected: sending or discarding an unedited restored draft, drafts with
+attachments (carried, not forked), pending drafts (can't be edited). The design note weighs four
+storage-only rules. Each one either leaves case 3 or 4 open, or deletes the stored copy of a draft
+an idle open tab still shows. A per-tab `sessionStorage` writer breaks on duplicated tabs. **No code
+change shipped on `claude/followup-drafts`.** Closing it means accepting one of those residuals.
+
 ---
 
 ### L13. Card ↔ archive concurrent edits of the same note *(pre-existing on dev; open)*
