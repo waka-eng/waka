@@ -1333,14 +1333,22 @@ of raw `history` entries, so Back, replace and reload are the router's ordinary 
 **Status:** partly fixed in `claude/followup-save-recovery`; design in `docs/plans/save-recovery.md`.
 
 **Fixed there.** The composer no longer jams after a save loses its network (usability audit at
-f2afcbe2): mount, focus, `online`, storage events and Retry re-POST the journal read from disk under
-its original id, which the server dedupes (idempotent on (profile, request id); a concurrent same-id
-POST gets 409 `save_in_progress` and is retried on the next event). A journal leaves disk only when
-its id lands, is refused (400, or 409 `save_request_conflict`, which now offers the words back), is
-removed (410) or is discarded — never on 404, 5xx or a timeout, so gateway-vs-app 5xx and "not found
-is not did not land" no longer need answers. Two tabs re-sending the same id make one inspiration;
-a tab whose journal another tab settled reads it once and lets go. Background sends no longer
-report a press (`initiated`).
+f2afcbe2): a press, Retry and page load re-POST the journal read from disk under its original id,
+which the server dedupes (idempotent on (profile, request id)); focus and `online` do too for a
+journal this tab sent or whose persisted `sentAt` is over 30s old. 409 `save_in_progress` is "still
+saving": the tab stays busy and re-sends the same id with a short backoff until it lands or is
+refused. A journal leaves disk only when its id lands, is refused (400, or 409
+`save_request_conflict`, which now offers the words back), is removed (410) or is discarded — never
+on 404, 5xx or a timeout, so gateway-vs-app 5xx and "not found is not did not land" no longer need
+answers. Two tabs re-sending the same id make one inspiration; a tab whose journal another tab
+settled reads it once and lets go. The tab that pressed acknowledges (`initiated`, kept in memory
+only) however the save lands; other tabs and page loads do not.
+
+**A tab must not adopt a journal while its owner is still open.** Handled by timing, not by
+coordination: a storage event only READS the status (its writer is open and sending), and focus
+re-sends another tab's journal only once its `sentAt` is 30s stale. A page load still re-sends at
+once; if the owner is mid-send the server answers 409 `save_in_progress` or a replay, never a
+second copy.
 
 **Still open** — each case below broke at least one earlier attempt:
 
