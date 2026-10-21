@@ -684,6 +684,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
+/* THE ＋ AND ⋯ MENUS RISE INTO THE SAME SPACE (review). While one is open
+   the caption steps out of sight so the two never overlap; opacity, not
+   visibility, so "Recording" stays in the accessibility tree. */
+.waka-dock:has(.waka-add-menu) .waka-dock-state--live {
+  opacity: 0;
+}
 
 /* ═══ THE WAY OUT OF AN ARMED DELETE, BESIDE THE QUESTION ══════════════
    The bar asks "Delete this?" and this is the other answer. It lives

@@ -153,6 +153,18 @@ describe("the recording line is the bar's caption, off the row (desk/106)", () =
       expect(selector).toContain(":not(.waka-dock-state--live)");
     }
   });
+  /* The ＋ and ⋯ menus rise into the caption's space (both render
+     `.waka-add-menu` only while open), so the caption steps out of sight
+     while one is up — by opacity, so "Recording" stays announced. */
+  it("steps out of sight while the ＋ or ⋯ menu is open", () => {
+    const css = sheet("claims.css");
+    const hide = rules(css, (s) => s === ".waka-dock:has(.waka-add-menu) .waka-dock-state--live").map(([, b]) => b).join("\n");
+    expect(hide).toMatch(/opacity:\s*0/);
+    for (const file of ["components/AddMenu.tsx", "components/NoteTools.tsx"]) {
+      const source = readFileSync(resolve(STYLES, "..", file), "utf8");
+      expect(source, file).toMatch(/\{(?:menu\.)?open \? \([\s\S]{0,400}className="waka-add-menu/);
+    }
+  });
 });
 
 describe("every small control takes a 44px press (#18)", () => {
