@@ -51,8 +51,9 @@ tested there.
   construction, not by the order modules load.
 - **No `pushState` or `go()` outside a user gesture.** Entries are created only in response to a
   press. Back must only ever pop, never pop-then-push.
-- **Replace under a layer and closing an archive over a note** still have to be answered without
-  async rebasing. That is the open case for the address approach (`docs/known-issues.md`).
+- **Replace under a layer becomes the router's ordinary case** once the layer is a real address.
+  The replace rewrites the layer's own entry, there is no hidden entry beneath it to rebase, and
+  no async pop is needed (`docs/known-issues.md`, "Likely shape of a fix").
 - **Real-device testing before review:** an iOS Safari edge-swipe (snapshot and swipe-back),
   Chrome desktop and Android Back (including the intervention, with and without a prior
   gesture), long-press Back history, Forward after Back, reload with a layer open, and a cold

@@ -1333,9 +1333,11 @@ The principles status cache is keyed by the profile its readers render for
 **Status:** open follow-up (2026-10-17). `claude/fix-dead-ends` shipped and then withdrew
 `lib/back-closes.ts` (`useBackCloses`), which made Back close review and the settings/info card
 by pushing a tagged same-address history entry. Three review rounds kept finding defects in the
-same mechanism, so it was removed rather than patched again. As on `origin/dev`, **Back with
-review or the settings/info card open leaves the page** (on a phone, the edge swipe leaves
-WAKA). Any reattempt has to answer these open cases before it ships:
+same mechanism, so it was removed rather than patched again. Review has since been removed
+from the product. The layers on `origin/dev` are the saved note inside the archive (next entry)
+and the settings/info card. As on `origin/dev`, **Back with the settings/info card open leaves
+the page** (on a phone, the edge swipe leaves WAKA). Any reattempt has to answer these open
+cases before it ships:
 
 - **Reload with a layer open.** The pushed entry survives the reload on top of an identical
   page entry. Stepping back over it crosses into the pre-reload document (a second full load);
@@ -1345,7 +1347,8 @@ WAKA). Any reattempt has to answer these open cases before it ships:
   `?open=`) rewrites the layer's entry, not the page entry beneath; Back can then restore the
   pre-replace address. Rebasing it needs an asynchronous silent pop, and a second replace or a
   push during that pop races it.
-- **Stacked layers.** Review and the corner card can be open together; each pushing its own
+- **Stacked layers.** The corner card can be open over the archive with a saved note open in it.
+  Each layer pushing its own
   entry, closing in a different order than opening, or a navigation from inside one, leaves
   entries no listener owns.
 - **Catching Back instead of adding entries** (`claude/followup-back`, withdrawn 2026-10-21; see
@@ -1353,8 +1356,9 @@ WAKA). Any reattempt has to answer these open cases before it ships:
   the topmost layer. Only the saved note was registered; the corner card was never wired. It
   cannot work as built:
   - **Listener order.** `Home` is `lazy()`, so `BrowserRouter`'s listener is registered first and
-    commits every pop before the catch runs. Each caught Back leaves the router at N-1 while the
-    URL is pushed back to N.
+    hears every pop first and has already taken location N-1 before the catch runs. It commits
+    that location later, inside `startTransition` (see "Event order" under the saved-note entry).
+    Each caught Back leaves the router at N-1 while the URL is pushed back to N.
   - **Chrome's intervention.** A `pushState` inside `popstate` has no user activation, so Chrome
     marks the entry it was made from (N-1) as skippable. For the note, that entry is Home. For a
     layer over Home, it is the entry before Home, and a later Back can leave WAKA.
@@ -1447,8 +1451,10 @@ for one press. (Escape, the bar's rows and the note's own close already commit a
 - **Event order.** Home's own `popstate` listener commits the note before the router commits the popped
   location (a transition), so code that reads the rendered location to decide "is my entry still on
   top" sees a stale answer.
-- **A Back catch with no note entry** (`claude/followup-back`, withdrawn). It passed jsdom but
-  fails in a real browser: lazy-route listener order, Chrome's intervention, lost forward history.
+- **A Back catch with no note entry** (`claude/followup-back`, withdrawn). It broke in three ways.
+  Lazy-route listener order and lost forward history can both be tested in jsdom; its unit suite
+  missed them because it imported the module directly. Only Chrome's intervention needs a real
+  browser to show.
   See "Layer history under replace/reload" and `docs/plans/back-from-layers.md`.
 
 ---
