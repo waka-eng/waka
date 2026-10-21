@@ -1,5 +1,44 @@
 # Back from layers: the "catch Back" attempt, and why it was withdrawn
 
+**Update (`claude/note-address`, 2026-10-21): the saved note now has a real address.** Opening a
+note in the archive pushes `?open=saves&note=<id>`; Back pops to the list and the next Back leaves
+the archive, through the router's ordinary history. No `popstate` catching, no `pushState` outside
+a press. What it took, beyond the param (`lib/view-location.ts`, `lib/use-view-navigation.ts`,
+`SavesOverlay`'s `note`/`onNoteAddress`, `Home`):
+
+- `note=` is read and written only beside `open=saves`, so it cannot ride onto another page.
+- The pushed entry records `noteFrom` (the list's address) and which page load pushed it.
+  `closeNote` (the on-screen way back, a delete, an unchanged close) is `navigate(-1)` when the
+  list is beneath, a replace to the list on a cold link. `closeOpen` from a note steps over both
+  entries (`go(-2)`) when the archive has an origin; without one (cold `?open=saves`, or the dock's
+  new-note → All inspirations path, which replaces) it steps back onto the list and rewrites the
+  list to the world.
+- **Replace under the note, answered:** a replace that drops the note (the bar moving you on)
+  first steps back onto the list and replaces that, so no list entry is left to reopen the archive.
+  The step is a traversal, made only when the list is this document's (a pre-reload entry would
+  be a full load and the act would be lost; then it replaces in place). A replace that keeps the
+  note but rewrites the rest is refused, so the list never holds a stale address; the
+  canonicaliser records again once the note closes.
+- Home's view restore skips an entry that differs from the applied one only by `note=`.
+- Leaving the address commits the note through `commitOpenNote` (the popstate listener, plus an
+  effect for traversals that raise no `popstate`); its identity guard makes them one write.
+- **Event order, in real browsers:** the pop reaches Home's listener before the router lands, so
+  the note let go of by the pop must not also be "closed on screen" (that was a second Back, past
+  the list, in both engines). A close is ignored while a pop or a traversal from that entry is
+  still landing.
+
+Verified in Chromium and WebKit (`pnpm e2e:back-from-a-note`: production build, `/api` stubbed in
+the page): archive → note → Back (list) → Back (archive closed); Back/Forward reopens the note;
+reload with a note open keeps it and Back still reaches the list then Home then the page before;
+Forward history intact after the walk; Back from an edited note sends one PATCH; `history.length`
+never grows on any Back or close. **Not covered:** real iPhone edge-swipe, Android system Back,
+long-press Back. **Still open, pre-existing:** closing the archive opened by the dock (new note →
+All inspirations, a replace) leaves no origin, so its close replaces the list with `/` and the next
+Back is a same-URL step; from a note it is the same, no worse. Review, the settings/info card,
+`prov` and the share sheet are unchanged and still address-less.
+
+---
+
 **Problem.** A layer is a state with no address of its own: on dev, review, the claim-roots sheet
 (`prov`, over review), the share sheet (`thingShare`), a saved note in the archive, and the
 settings/info card. Back skips the layer. (The memory/detail panel has an address,
