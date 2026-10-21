@@ -205,11 +205,7 @@ function MediaTile({
       ) : null}
       <button type="button" className="jar-tile-x" disabled={disabled}
         title={wrong || undefined}
-        aria-label={removeLabel} onClick={onRemove}>
-        {/* the 28px corner you SEE; the button around it is the 44px press
-            (see `.jar-tile-x` in chrome.css) */}
-        <span className="jar-tile-x-face" aria-hidden="true">×</span>
-      </button>
+        aria-label={removeLabel} onClick={onRemove}>×</button>
     </li>
   );
 }

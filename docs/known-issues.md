@@ -1246,6 +1246,12 @@ before review's own Escape (which ends the sitting), and another handler already
 `preventDefault` on Escape, so a bubble-phase listener that respects `defaultPrevented` never
 fired. Resolve by deciding which layer owns Escape while both are up, in one place.
 
+The first attempt also tried a separate capture-phase `window` listener that called
+`stopPropagation`. That cannot stop the other capture listeners on `window` (only
+`stopImmediatePropagation` can), so which layer closed depended on the order the listeners were
+registered. Exactly one layer, the innermost, must close per press, decided by a handler that checks
+what is open. It must never depend on listener order.
+
 A second attempt (2026-10-19, `claude/followup-small-ui`) put a `timeOpen` check first in review's
 capture-phase Escape handler and was withdrawn in review for three cases a fix must also cover:
 - **A faded rail swallows Escape.** While `.jar-dial--away` has faded the rail out, `timeOpen` is
@@ -1422,27 +1428,65 @@ for one press. (Escape, the bar's rows and the note's own close already commit a
 ---
 ## Small usability follow-ups set aside from `claude/fix-usability`
 
-**Status:** open. Tried on the branch and reverted to `origin/dev`'s behaviour in review. (The photo
-× and the attachment drawer's × that were also here are fixed on `claude/followup-small-ui`.)
+**Status:** open. Each was tried twice — on `claude/fix-usability`, then on
+`claude/followup-small-ui` (2026-10-19) — and every attempt was reverted to `origin/dev`'s behaviour
+in review. No code shipped. Every case found is listed so the next attempt starts from the full set.
 
-- **The recording/dictation line in the bar (audit f2afcbe2, desk/106).** Stop now stays in the
-  microphone's own seat, but the state line beside it is still in the bar's row, as on dev: when it
-  appears the centred bar widens and the row shifts, and its 14rem cap cuts the cloud disclosure
-  ("Your browser sends speech to its own …"). The tried fix lifted the line off the row into a
-  caption over the bar (out of flow, wrapping, `pointer-events: none` except its Cancel) and was set
-  aside for its own change. Whatever lands must keep the one shared clock (`clockWords`) and the
-  single announced "Recording" (`LiveWord`).
-
-  A second attempt (2026-10-19, `claude/followup-small-ui`: the line as an absolutely-positioned
-  `--live` caption above the bar, the slot made static while it was up, and the caption excluded
-  from the ≤440px state-line wrap rules) was reverted to dev in review for these cases:
-  - **The bar breaks at 320–390px during an audio recording.** Excluded from the ≤440px rules that
-    give a state line its own row and widen the bar to `100vw - 16px`, the row no longer wrapped,
-    and Keep and Close overlapped.
-  - **The opaque caption covers dictated words.** Its `--waka-raised` ground sat over the field
-    being dictated into, so the words appearing were hidden under the disclosure.
-  - **The ＋ and ⋯ menus rise into the same space** and overlapped the caption (a follow-up commit
-    faded the caption while a menu was open; reverted with it).
+- **The photo ×'s tap target (`.jar-tile-x`; audit f2afcbe2: 28×28 on a 390×844 phone).**
+  - *Attempt 1, a 44px `::after` hit box.* The tile has `overflow: hidden`, so the box was clipped
+    back to the tile and did nothing. Centred on the ×, it also covered part of the photo, so a press
+    meant to open the photo would remove it.
+  - *Attempt 2: the tile stopped clipping. The button itself became 44px, standing 16px past the
+    tile's top/right edge, with the 28px drawn corner as a child span. The shelf gap and end padding
+    became 16px + 1px.* What went wrong:
+    - The press must reach *away* from the picture and must not land on a neighbouring tile. The
+      gap has to be at least the reach. With fractional tile widths, an exact 16px gap shares a
+      device pixel with the next row's photo. The top row's reach has the same problem with the
+      field above it (its resize grip).
+    - The button cannot be rounded: Chromium hit-tests `border-radius`, so a radius cuts its own
+      press back. That is why the drawn corner had to be a child.
+    - **The wider gap and padding cost a column.** At 390px the shelf dropped from 3 columns to 2,
+      and the notepad grew about 230px taller.
+- **The attachment drawer's × (`.waka-drawer-items button`, 20×20; 24×24 under `pointer: coarse`).**
+  - *Attempt 1, a centred 44px `::after` hit box.* It spilled onto the filename and the
+    "upload failed" line beside the ×, so a tap meant to read either one removed the attachment,
+    with no undo.
+  - *Attempt 2: the button itself became 44px. Across the row it stayed in flow, so it could not
+    cover the name or the failure line. A negative block margin of −12px kept the pill's height. The
+    coarse 24px floor was removed, and the short-viewport (≤520px tall) scroller got 8px of block
+    padding with 16px more `max-height`, so the reach was not clipped.* What went wrong:
+    - **Stacked rows overlap.** Each × reaches about 7px past its pill into the 8px gap between
+      wrapped rows. Two ×s at the same x in adjacent rows overlap, so a press there removes the
+      wrong attachment.
+    - **932×430: the drawer toggle is back under the 56px chrome row.** The 16px given back to the
+      short-viewport scroller undid part of the 28px that the `max-height: 520px` block recovers.
+    - A border radius of 50% makes the 44px hit area a circle. That is acceptable, but it is not a
+      44px square.
+  - A real fix needs room in the row and between rows, or an undo, before the target can grow.
+- **The recording/dictation line in the bar (audit f2afcbe2, desk/106).** Stop stays in the
+  microphone's own seat, but the state line beside it is in the bar's row, as on dev. When it
+  appears, the centred bar widens and the row shifts, and its 14rem cap cuts off the cloud
+  disclosure ("Your browser sends speech to its own …"). Whatever lands must keep the one shared
+  clock (`clockWords`), the single announced "Recording" (`LiveWord`), and Cancel and Stop as their
+  own ≥44px row buttons.
+  - *Attempt 1: the line became a caption over the bar (out of flow, wrapping,
+    `pointer-events: none`, with Cancel inside the caption).* It was set aside. Cancel inside a
+    clipped or ellipsized state line had already been cut to about 17px, which is why Cancel is now
+    a row item.
+  - *Attempt 2: the line became an absolutely-positioned `.waka-dock-state--live` caption above the
+    bar. The slot was made `position: static` while the caption was up, so it anchored to the bar
+    rather than the off-centre slot. The caption was excluded from the ≤440px state-line wrap
+    rules. A follow-up faded it while the ＋ or ⋯ menu was open.* What went wrong:
+    - **The bar breaks at 320–390px during an audio recording.** Out of the ≤440px rules that give
+      a state line its own row and widen the bar to `100vw - 16px`, the row no longer wrapped, and
+      Keep and Close overlapped.
+    - **The opaque caption covers dictated words.** Its `--waka-raised` ground sat over the field
+      being dictated into, hiding the words as they appeared.
+    - **The ＋ and ⋯ menus rise into the same space** and overlapped the caption. Fading the caption
+      while `.waka-add-menu` was open (using opacity, so "Recording" stayed announced) addressed only
+      this one case.
+    - A caption anchored to the positioned `.waka-dock-slot` is centred on the slot, not the
+      screen, and runs off a 320px screen.
 
 ---
 

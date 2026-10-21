@@ -122,64 +122,16 @@ describe("Cancel recording is its own bar item, beside Stop (review)", () => {
 describe("every small control takes a 44px press (#18)", () => {
   it("each named control carries a hit box at least 44 on each side", () => {
     const css = sheet("claims.css");
+    // Not the photo's ×: its tile clips overflow, so a box past it does nothing (known issue).
+    expect(rules(css, (s) => s === ".jar-tile-x::after")).toHaveLength(0);
+    // Nor the attachment drawer's ×: a 44px box spilled onto the filename and
+    // the failure line, removing the attachment with no undo (review).
+    expect(rules(css, (s) => s === ".waka-drawer-items button::after")).toHaveLength(0);
     for (const control of [".waka-dock-undo", ".chat-with-choice", ".chat-send", ".jar-harvest-skip", ".waka-held-open"]) {
       const box = rules(css, (s) => s === `${control}::after`).map(([, b]) => b).join("\n");
       expect(box, control).toMatch(/width:\s*max\(100%,\s*44px\)/);
       expect(box, control).toMatch(/height:\s*max\(100%,\s*44px\)/);
     }
-  });
-  /* The photo's × (audit f2afcbe2: 28x28 on a 390x844 phone). An overlay box
-     was clipped by the tile and, centred, covered the photo. So the BUTTON is
-     44 and reaches 16px past the tile's top/right edge into the shelf's gap,
-     the tile no longer clips, and the gap and the shelf's end padding hold
-     that reach so it never lands on a neighbouring tile or scrolls the
-     notepad sideways. Measured in Chromium at 320-1440 wide: the whole 44
-     box takes the press, and no point of a photo or a file tile outside the
-     ×'s own 28px corner does. */
-  it("the photo's × is a 44px button that reaches away from the picture", () => {
-    const css = sheet("chrome.css");
-    const body = (selector: string) => rules(css, (s) => s === selector).map(([, b]) => b).join("\n");
-    expect(rules(css, (s) => s.startsWith(".jar-tile-x::"))).toHaveLength(0);
-    expect(body(".jar-tile"), "the tile clips the ×'s press").not.toMatch(/overflow\s*:\s*hidden/);
-    const x = rules(css, (s) => s === ".jar-tile-x" || s === ".jar-inspiration-composer .jar-tile-x")
-      .filter(([sel]) => !sel.includes("retry")).map(([, b]) => b).join("\n");
-    for (const prop of ["width", "height", "min-width", "min-height"]) {
-      expect(x, prop).toMatch(new RegExp(`(^|[^-])${prop}:\\s*var\\(--sp-44\\)`));
-    }
-    expect(x).toMatch(/top:\s*calc\(-1 \* var\(--sp-16\)\)/);
-    expect(x).toMatch(/right:\s*calc\(-1 \* var\(--sp-16\)\)/);
-    expect(x, "the drawn corner must stay where the old 28px one was").toMatch(/padding:\s*var\(--sp-16\) var\(--sp-16\) 0 0/);
-    expect(x, "a rounded 44 box hit-tests rounded").toMatch(/border-radius:\s*0;/);
-    const shelf = body(".jar-shelf");
-    expect(shelf).toMatch(/gap:\s*calc\(var\(--sp-16\) \+ 1px\)/);
-    // and the top row's reach clears the field above by the same pixel (review)
-    expect(shelf).toMatch(/margin:\s*calc\(var\(--sp-16\) \+ 1px\) 0 0/);
-    expect(shelf).toMatch(/padding:\s*0 var\(--sp-16\) 0 0/);
-    const tsx = readFileSync(resolve(STYLES, "..", "components/InspirationComposer.tsx"), "utf8");
-    expect(tsx).toContain('<span className="jar-tile-x-face" aria-hidden="true">×</span>');
-  });
-  /* The attachment drawer's × was 20x20. A centred overlay box spilled onto
-     the filename and the "upload failed" line, so the BUTTON is 44 itself:
-     in flow across the row (the name and the failure line are pushed aside,
-     never under it) and given back to the pill's height by a negative block
-     margin, with no smaller floor on a touch screen. Where the list scrolls
-     (a phone on its side) the scroller's own padding holds the 7px reach so
-     it is not clipped. Measured in Chromium at 320-1440: no point of a name
-     or a failure line reaches the ×. */
-  it("the attachment drawer's × is a 44px button that never covers its row", () => {
-    const css = sheet("claims.css");
-    expect(rules(css, (s) => s.startsWith(".waka-drawer-items button::"))).toHaveLength(0);
-    const all = rules(css, (s) => s === ".waka-drawer-items button");
-    for (const [, body] of all) {
-      for (const m of body.matchAll(/min-(?:width|height):\s*([^;]+);/g)) expect(m[1], "a floor under 44").toBe("var(--sp-44)");
-    }
-    const own = all.map(([, b]) => b).join("\n");
-    expect(own).toMatch(/min-width:\s*var\(--sp-44\)/);
-    expect(own).toMatch(/min-height:\s*var\(--sp-44\)/);
-    expect(own).toMatch(/margin-block:\s*calc\(\(20px - var\(--sp-44\)\) \/ 2\)/);
-    expect(own, "a horizontal negative margin would pull the failure line under it").not.toMatch(/margin(-inline|-left|-right)?:\s*-|margin:\s*\S+\s+-/);
-    const short = /@media \(max-height: 520px\)\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
-    expect(short).toMatch(/\.waka-drawer-items\s*\{[^}]*padding-block:\s*var\(--sp-8\)/);
   });
   it("the saves search input fills its 44px row", () => {
     const input = rules(sheet("claims.css"), (s) => s === ".waka-over-search").map(([, b]) => b).join("\n");
