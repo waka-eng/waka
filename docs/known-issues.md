@@ -1360,8 +1360,10 @@ cases before it ships:
     that location later, inside `startTransition` (see "Event order" under the saved-note entry).
     Each caught Back leaves the router at N-1 while the URL is pushed back to N.
   - **Chrome's intervention.** A `pushState` inside `popstate` has no user activation, so Chrome
-    marks the entry it was made from (N-1) as skippable. For the note, that entry is Home. For a
-    layer over Home, it is the entry before Home, and a later Back can leave WAKA. That second
+    marks the entry it was made from (N-1) as skippable. For the note, that entry is wherever the
+    archive was opened from (`openFrom`): Home, a conversation or another destination. From a cold
+    `/?open=saves` link the archive is the root entry, and Back is cross-document. For a layer
+    over Home, it is the entry before Home, and a later Back can leave WAKA. That second
     case needs Home to have been reached by an in-app navigation. On the root entry, Back is
     cross-document and raises no `popstate`, so nothing is pushed.
   - **Forward history.** Pushing from N-1 wipes all forward history.
