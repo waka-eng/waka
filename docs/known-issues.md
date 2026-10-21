@@ -1282,8 +1282,10 @@ archive is not.
 
 **Found on `claude/followup-card-archive`, 2026-10-21.** The clip is lost on every way out of the
 archive. A browser's `MediaRecorder` delivers its last chunk and `stop` in a later task. By then the
-overlay has unmounted, and the hook's unmount cleanup has bumped its epoch, so `onstop` drops the
-clip deliberately. Whether the note-change effect runs before the unmount depends on render
+overlay has unmounted. The hook's unmount cleanup (`use-audio-recording.ts`) has set `mounted.current
+= false` and bumped its epoch, and `onstop` refuses the clip on either check. Even past those
+checks, the clip's callback is `SavesOverlay`'s `attach`, which sets the overlay's state and reports
+its failure through a surface that is gone. Whether the note-change effect runs before the unmount depends on render
 scheduling, and it doesn't change this outcome.
 
 - **Close, Escape, the top-of-mind row.** These go through Home's `leaveOpen`, which commits the
@@ -1294,7 +1296,10 @@ scheduling, and it doesn't change this outcome.
   the switch unmounts and remounts it, with no `popstate` and no Close.
 
 **Conclusion.** A fix must save the clip from the overlay's (or the hook's) unmount path itself. It
-must not rely on the note-change effect or on a history listener.
+must not rely on the note-change effect or on a history listener. It has to get past both of
+`onstop`'s checks, `mounted.current` and the epoch, and hand the clip to a callback Home owns (for
+example a Home-level finalize that reports through Home). Changing the epoch handling alone is not
+enough.
 
 **Tried and reverted: hold the close until the clip is attached.** `SavesOverlay` handed Home a
 finisher, and Close, Escape and the top-of-mind row awaited it, later with a 20 s deadline. Three

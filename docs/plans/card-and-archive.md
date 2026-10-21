@@ -48,10 +48,13 @@ Escape, ↩), and each round found another.
   outlives both surfaces, never through the surface that just unmounted.
 - **A clip that outlives the archive.** The recorder hands the clip over
   after unmount, and Home owns the upload and its failure line (L12). The
-  recorder's `stop` arrives in a later task, after the overlay has unmounted
-  and the hook has bumped its epoch, so the clip is lost on every close. It
-  has to be saved from the overlay's or the hook's unmount path itself, not
-  from the note-change effect or a history listener. Back already commits
+  recorder's `stop` arrives in a later task, after the overlay has unmounted.
+  By then `onstop` refuses the clip on both `mounted.current` and the epoch,
+  so the clip is lost on every close. It has to be saved from the overlay's
+  or the hook's unmount path itself, not from the note-change effect or a
+  history listener. The save must get past both checks and hand the clip to
+  a callback Home owns, not to `SavesOverlay`'s `attach`, which reports
+  through a surface that is gone. Back already commits
   through Home's `popstate` listener, so don't add a second one there. A wall
   switch remounts the overlay by its key, with no popstate and no Close.
 - **A read that cannot overtake its door's write.** The archive's way-out
