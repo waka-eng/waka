@@ -1350,12 +1350,20 @@ WAKA). Any reattempt has to answer these open cases before it ships:
   entries no listener owns.
 - **Catching Back instead of adding entries** (`claude/followup-back`, withdrawn 2026-10-21; see
   `docs/plans/back-from-layers.md`). A `popstate` listener re-pushed the current entry and closed
-  the topmost layer. It cannot work as built. `Home` is `lazy()`, so `BrowserRouter`'s listener
-  is registered first and commits the pop before the catch runs, which leaves the URL and the
-  router out of sync. A `pushState` inside `popstate` has no user activation, so Chrome's
-  history-manipulation intervention can make a later Back skip Home and leave WAKA. Pushing from
-  N-1 also wipes all forward history. Any reattempt must be integrated at the router level and
-  tested on real devices (iOS edge-swipe, Chrome desktop and Android Back) before review.
+  the topmost layer. Only the saved note was registered; the corner card was never wired. It
+  cannot work as built:
+  - **Listener order.** `Home` is `lazy()`, so `BrowserRouter`'s listener is registered first and
+    commits every pop before the catch runs. Each caught Back leaves the router at N-1 while the
+    URL is pushed back to N.
+  - **Chrome's intervention.** A `pushState` inside `popstate` has no user activation, so Chrome
+    marks the entry it was made from (N-1) as skippable. For the note, that entry is Home. For a
+    layer over Home, it is the entry before Home, and a later Back can leave WAKA.
+  - **Forward history.** Pushing from N-1 wipes all forward history.
+  - **The corner card is out of reach of any catch.** It mostly sits on the root entry, and a
+    cross-document Back raises no `popstate`, so the card needs a real address.
+
+  Any reattempt must be integrated at the router level and tested on real devices (iOS
+  edge-swipe, Chrome desktop and Android Back) before review.
 
 Likely shape of a fix: make the layers real addresses (a query param the router owns) instead
 of raw `history` entries, so Back, replace and reload are the router's ordinary cases.
