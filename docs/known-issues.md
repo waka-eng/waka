@@ -1288,11 +1288,19 @@ words:
 - **Changed words.** `leaveNote` awaits `updateInspiration` before `setOpen(null)`, so the note
   never changes before the overlay unmounts. The recording is ended by the hook's unmount cleanup,
   not by the note-change effect.
-- **Unchanged words.** `setOpen(null)` runs first, the note-change effect stops the recording, and
+- **Unchanged words.** `setOpen(null)` runs first. The note-change effect stops the recording before
+  the unmount only when `closeOpen` goes back through history (`navigate(-1)`). On a cold
+  `/?open=saves` link, `closeOpen` replaces the address in the same handler as `setOpen(null)`.
+  The overlay then unmounts in that one render, and only the hook's unmount cleanup ends the
+  recorder. So even a close with unchanged words can lose the clip. When the effect does run first,
   the overlay still unmounts before the clip arrives.
 
-Either way a fix must save the clip from the unmount path. The browser's Back and a wall switch
-from the corner unmount the archive from outside React.
+Two more routes skip every handler. The browser's Back unmounts the archive from outside React. A
+wall switch (Me / My agent) changes the overlay's React key, which includes the owner's profile id,
+so React unmounts and remounts it with no popstate and no Close.
+
+**Conclusion.** A fix must save the clip from the overlay's (or the hook's) unmount path itself.
+Neither a history listener nor the note-change effect covers every close.
 
 **Tried and reverted: hold the close until the clip is attached.** `SavesOverlay` handed Home a
 finisher, and Close, Escape and the top-of-mind row awaited it, later with a 20 s deadline. Three

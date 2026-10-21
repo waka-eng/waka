@@ -47,7 +47,11 @@ Escape, ↩), and each round found another.
   way out, the way the archive does. Report a failure through Home, which
   outlives both surfaces, never through the surface that just unmounted.
 - **A clip that outlives the archive.** The recorder hands the clip over
-  after unmount, and Home owns the upload and its failure line (L12).
+  after unmount, and Home owns the upload and its failure line (L12). It has
+  to be saved from the overlay's or the hook's unmount path itself. Neither a
+  history listener nor the note-change effect covers every close: a cold
+  `/?open=saves` close replaces the address in one render, and a wall switch
+  remounts the overlay by its key with no popstate and no Close.
 - **A read that cannot overtake its door's write.** The archive's way-out
   write must land before the card seeds an edit of the same note. Order the
   writes per note in one place both doors call, without making reads wait on
