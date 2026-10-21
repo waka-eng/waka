@@ -102,6 +102,46 @@ it('reload re-sends a pending save from disk under its original id and words: on
   expect(localStorage.getItem(key)).toBeNull(); expect(latest.pending).toBeNull(); expect(latest.busy).toBe(false);
 });
 
+const hide = (hidden: boolean) => Object.defineProperty(document, 'hidden', { configurable: true, value: hidden });
+
+it('online while hidden: the resend is owed, and happens when the tab is visible again', async () => {
+  const rows = server();
+  vi.mocked(createInspiration).mockRejectedValueOnce(new ApiError({ status: 0, message: 'Failed to fetch' }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  hide(true);
+  await act(async () => { window.dispatchEvent(new Event('online')); });
+  expect(createInspiration).toHaveBeenCalledOnce(); expect(latest.pending).not.toBeNull();
+  hide(false);
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1); expect(rows.size).toBe(1);
+  expect(latest.pending).toBeNull(); expect(latest.busy).toBe(false); expect(records()).toHaveLength(0);
+});
+
+it('online while a POST is stalled: once it times out, the owed resend happens', async () => {
+  const rows = server();
+  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise(() => {}));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => { window.dispatchEvent(new Event('online')); });
+  expect(createInspiration).toHaveBeenCalledOnce();
+  await act(async () => vi.advanceTimersByTimeAsync(15_000));
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1); expect(rows.size).toBe(1);
+  expect(latest.pending).toBeNull(); expect(latest.busy).toBe(false); expect(records()).toHaveLength(0);
+});
+
+it('a page loaded in a background tab re-sends on its first visible moment', async () => {
+  const rows = server();
+  vi.mocked(createInspiration).mockRejectedValueOnce(new Error('Lost response'));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  await act(async () => root.unmount()); root = createRoot(host);
+  hide(true);
+  await act(async () => root.render(<Probe />));
+  expect(createInspiration).toHaveBeenCalledOnce();
+  hide(false);
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(ids().size).toBe(1); expect(rows.size).toBe(1);
+  expect(latest.pending).toBeNull(); expect(records()).toHaveLength(0);
+});
+
 it('focus still only reads a pending save; it does not re-send', async () => {
   vi.mocked(createInspiration).mockRejectedValue(new Error('Lost response'));
   await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });

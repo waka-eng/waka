@@ -13,6 +13,8 @@ Reconnecting and reloading only READ `GET /inspirations/save-requests/:id`; it a
 
 - **Page load** reads the journal from disk and re-POSTs it under its original id and body.
 - **`online`** re-POSTs this tab's pending journal under the same id.
+- If the tab is hidden or a run is in flight, that resend is owed (an in-memory flag) and runs on
+  the next scan that can: focus/visibility, or the end of the in-flight run.
 - **Retry** is unchanged from dev (re-POSTs the in-memory intent, same id).
 - Focus and storage events still only READ, exactly as on dev. Load/online sends are not presses
   (`initiated=false`); Save and Retry are.

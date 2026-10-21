@@ -86,6 +86,10 @@ export function useAuthoredSave(options: {
   const working = useRef(false), mounted = useRef(false), epoch = useRef(0);
   const abort = useRef<AbortController | null>(null);
   const refresh = useRef<() => void>(() => {});
+  /** A load/`online` resend that could not run yet (tab hidden, or a run in
+      flight). The next scan that can run performs it: focus/visibility, or
+      the end of the in-flight run. In memory only. */
+  const resendOwed = useRef(false);
 
   const run = useCallback(async (intent: AuthoredSaveIntent, write: boolean, pressed = write) => {
     const owner = live.current, key = owner.prefix;
@@ -167,15 +171,17 @@ export function useAuthoredSave(options: {
       } else setPhase(error instanceof ApiError && error.code === 'save_protocol_unavailable' ? 'unsupported' : 'uncertain');
     } finally {
       window.clearTimeout(timeout); controller.signal.removeEventListener('abort', rejectAborted); controller.abort();
-      if (owns()) { working.current = false; setBusy(false); if (!intentRef.current) refresh.current(); }
+      if (owns()) { working.current = false; setBusy(false); if (!intentRef.current || resendOwed.current) refresh.current(); }
       else if (mounted.current && !working.current) setBusy(false);
     }
   }, []);
 
-  // `send`: page load and `online` re-POST under the same id; never a press.
-  const scan = useCallback((send = false) => {
+  // `owe`: page load and `online` owe a re-POST under the same id; never a press.
+  const scan = useCallback((owe = false) => {
     const at = live.current;
+    if (owe) resendOwed.current = true;
     if (!mounted.current || working.current || !at.prefix || !at.scope || at.enabled === false || document.hidden) return;
+    const send = resendOwed.current; resendOwed.current = false;
     if (intentRef.current) { void run(intentRef.current, send, false); return; }
     try {
       const found = readIntents(at.prefix, at.scope, at.operation);
