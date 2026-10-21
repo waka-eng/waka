@@ -1557,10 +1557,12 @@ body .login-shell .login-footer {
      scrolls sideways for it. The margin above is the same 16 for the top
      row. The extra pixel is for tiles whose width is fractional: at an
      exact 16 the reach and the next tile met on a shared device pixel, and
-     the hit test gave that row of the neighbour's photo to the ×. */
+     the hit test gave that row of the neighbour's photo to the ×. The
+     margin above takes the same pixel, so the top row's reach never shares
+     a device pixel with the field above (its resize grip). */
   gap: calc(var(--sp-16) + 1px);
   list-style: none;
-  margin: var(--sp-16) 0 0;
+  margin: calc(var(--sp-16) + 1px) 0 0;
   padding: 0 var(--sp-16) 0 0;
 }
 

@@ -200,6 +200,8 @@ describe("every small control takes a 44px press (#18)", () => {
     expect(x, "a rounded 44 box hit-tests rounded").toMatch(/border-radius:\s*0;/);
     const shelf = body(".jar-shelf");
     expect(shelf).toMatch(/gap:\s*calc\(var\(--sp-16\) \+ 1px\)/);
+    // and the top row's reach clears the field above by the same pixel (review)
+    expect(shelf).toMatch(/margin:\s*calc\(var\(--sp-16\) \+ 1px\) 0 0/);
     expect(shelf).toMatch(/padding:\s*0 var\(--sp-16\) 0 0/);
     const tsx = readFileSync(resolve(STYLES, "..", "components/InspirationComposer.tsx"), "utf8");
     expect(tsx).toContain('<span className="jar-tile-x-face" aria-hidden="true">×</span>');
