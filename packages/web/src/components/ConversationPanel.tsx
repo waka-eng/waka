@@ -93,6 +93,7 @@ import {dictationAvailable,useDictation} from '../lib/use-dictation';
 import {ApiError,fetchPrinciples,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type ConversationDraftAttachment,type StoredConversationDraft} from '../lib/conversation-drafts';
+import {clearDraftLineage,recordDraftFork} from '../lib/draft-lineage';
 import {AddMenu} from './AddMenu';
 import {MessageAttachments} from './MessageAttachments';
 import {discardMessageAttachment,fetchAttachmentUrl,uploadMessageAttachment} from '../lib/api/attachments';
@@ -243,7 +244,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     try{if(owner.signal.aborted)throw new Error('Conversation request stopped');const value=await Promise.race([work(request.signal),canceled]);if(request.signal.aborted||owner.signal.aborted)throw new Error('Conversation request stopped');return value;}
     finally{window.clearTimeout(timer);owner.signal.removeEventListener('abort',abort);request.signal.removeEventListener('abort',stopped);}
   };
-  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{receipt.current=storeConversationDraft(scope,journal,next,receipt.current);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
+  /* A FORK IS WRITTEN DOWN (L10): when this store lands under a new key, the
+     draft it replaced is recorded, so a confirmed send clears both. */
+  const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{const before=receipt.current;receipt.current=storeConversationDraft(scope,journal,next,before);recordDraftFork(receipt.current.key,before);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
   const observe=(next:ApiConversation)=>{
     if(conversationRef.current?.id===next.id&&conversationRef.current.profileId===next.profileId&&conversationRef.current.revision>next.revision)next=conversationRef.current;
     conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);
@@ -255,7 +258,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        forever the day the copy drifted.) */
     const pending=draftRef.current;
     if(pending?.pending&&next.messages.some(message=>message.id===pending.id)){
-      try{if(receipt.current)clearConversationDraft(receipt.current);}catch{setStorageFailed(true);}
+      try{if(receipt.current){clearConversationDraft(receipt.current);clearDraftLineage(receipt.current.key);}}catch{setStorageFailed(true);}
       receipt.current=undefined;draftRef.current=null;setDraft(null);setError(null);
       if(!id){onCreated?.(next);onChoose(next.id);}
     }
