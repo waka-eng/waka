@@ -1416,9 +1416,19 @@ The principles status cache is keyed by the profile its readers render for
 **Status:** open follow-up (2026-10-17). `claude/fix-dead-ends` shipped and then withdrew
 `lib/back-closes.ts` (`useBackCloses`), which made Back close review and the settings/info card
 by pushing a tagged same-address history entry. Three review rounds kept finding defects in the
-same mechanism, so it was removed rather than patched again. As on `origin/dev`, **Back with
-review or the settings/info card open leaves the page** (on a phone, the edge swipe leaves
-WAKA). Any reattempt has to answer these open cases before it ships:
+same mechanism, so it was removed rather than patched again. The address-less layers on
+`origin/dev` are:
+- review;
+- the claim-roots sheet (`prov`), which opens over review;
+- the share sheet (`thingShare`, `ShareSheet`);
+- the saved note inside the archive (next entry);
+- the settings/info card.
+
+The memory/detail panel is not on this list. It already has an address (`/inspirations/:id` or
+`?inspiration=<id>`, pushed when it opens and replaced when it closes), so Back from it works
+through the router. As on `origin/dev`, **Back with review or the settings/info card open leaves
+the page** (on a phone, the edge swipe leaves WAKA). Any reattempt has to answer these open
+cases before it ships:
 
 - **Reload with a layer open.** The pushed entry survives the reload on top of an identical
   page entry. Stepping back over it crosses into the pre-reload document (a second full load);
@@ -1428,12 +1438,39 @@ WAKA). Any reattempt has to answer these open cases before it ships:
   `?open=`) rewrites the layer's entry, not the page entry beneath; Back can then restore the
   pre-replace address. Rebasing it needs an asynchronous silent pop, and a second replace or a
   push during that pop races it.
-- **Stacked layers.** Review and the corner card can be open together; each pushing its own
-  entry, closing in a different order than opening, or a navigation from inside one, leaves
-  entries no listener owns.
+- **Stacked layers.** These can be open together:
+  - the claim-roots sheet over review;
+  - review and the corner card;
+  - the archive, a saved note in it, and the corner card.
+
+  When each pushes its own entry, closing them in a different order than they opened, or
+  navigating from inside one, leaves entries no listener owns.
+- **Catching Back instead of adding entries** (`claude/followup-back`, withdrawn 2026-10-21; see
+  `docs/plans/back-from-layers.md`). A `popstate` listener re-pushed the current entry and closed
+  the topmost layer. Only the saved note was registered; the corner card was never wired. It
+  cannot work as built:
+  - **Listener order.** `Home` is `lazy()`, so `BrowserRouter`'s listener is registered first and
+    hears every pop first and has already taken location N-1 before the catch runs. It commits
+    that location later, inside `startTransition` (see "Event order" under the saved-note entry).
+    Each caught Back leaves the router at N-1 while the URL is pushed back to N.
+  - **Chrome's intervention.** A `pushState` inside `popstate` has no user activation, so Chrome
+    marks the entry it was made from (N-1) as skippable. For the note, that entry is wherever the
+    archive was opened from (`openFrom`): Home, a conversation or another destination. From a cold
+    `/?open=saves` link the archive is the root entry, and Back is cross-document. For a layer
+    over Home, it is the entry before Home, and a later Back can leave WAKA. That second
+    case needs Home to have been reached by an in-app navigation. On the root entry, Back is
+    cross-document and raises no `popstate`, so nothing is pushed.
+  - **Forward history.** Pushing from N-1 wipes all forward history.
+  - **The corner card is out of reach of any catch.** It mostly sits on the root entry, and a
+    cross-document Back raises no `popstate`, so the card needs a real address.
+
+  Any reattempt must be integrated at the router level and tested on real devices (iOS
+  edge-swipe, Chrome desktop and Android Back) before review.
 
 Likely shape of a fix: make the layers real addresses (a query param the router owns) instead
-of raw `history` entries, so Back, replace and reload are the router's ordinary cases.
+of raw `history` entries, so Back and reload are the router's ordinary cases. Even then, a replace
+under a pushed layer leaves the page entry beneath it holding the pre-replace address. Either
+rewrite both entries, or forbid address-changing replaces while a layer is pushed.
 
 ---
 
@@ -1514,6 +1551,11 @@ for one press. (Escape, the bar's rows and the note's own close already commit a
 - **Event order.** Home's own `popstate` listener commits the note before the router commits the popped
   location (a transition), so code that reads the rendered location to decide "is my entry still on
   top" sees a stale answer.
+- **A Back catch with no note entry** (`claude/followup-back`, withdrawn). It broke in three ways.
+  The unit suite imported the module directly, which is why it missed the lazy-route listener
+  order. Lost forward history was a separate gap in the tests, and jsdom can cover it. Only
+  Chrome's intervention needs a real browser to show.
+  See "Layer history under replace/reload" and `docs/plans/back-from-layers.md`.
 
 ---
 ## Small usability follow-ups set aside from `claude/fix-usability`
