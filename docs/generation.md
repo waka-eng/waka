@@ -789,6 +789,13 @@ excluded. The daily sweep stays in place and production's cadence is unchanged.
 Recovery never creates a second job or resets its attempt budget; ambiguous
 conversation dispatches retain their existing refusal-to-redispatch guard.
 Exhausted stale leases raise operational counts instead of being revived.
+The claim never reclaims a lease whose final attempt is spent. A worker that
+died during that attempt would leave the row `running` forever, so the daily
+scheduled run settles such a lease once it is 24 hours old. No worker can
+still hold a lease that old: the Lambda times out at 14 minutes. The row
+becomes `failed` (`abandoned_lease`), visible and re-runnable, and its attempts
+are not reset. If a newer request was flagged on it (`rerun_requested`), it
+becomes that request instead: pending, with a normal attempt budget.
 
 The claim rechecks the runnable predicate on its locked base row and update
 target, not only the earlier fairness-ranking snapshot. A row that another
@@ -818,6 +825,15 @@ minted a duplicate signal):
   re-runnable. Derivation is safe to retry by construction: evidence is
   unique per (signal, inspiration), and a re-extracted statement lands in
   the dedupe band of anything the earlier attempt already minted.
+- **The answer had the wrong shape.** An extraction reply that parses but
+  fails its schema throws `MalformedModelOutputError`. It is never "no
+  candidates", which would mark the capture derived-with-nothing for good.
+  It gets **one retry per request version**, tracked in
+  `background_jobs.malformed_retry_version`. A second malformed answer for
+  that version fails the job with `malformed_model_output`. At temperature 0
+  one backend mostly repeats the same reply, so this caps the cost at two
+  calls, while a provider-routed retry can still reach a backend that answers.
+  A new enqueue bumps the version, so edited input gets its own retry.
 
 Whole-artifact synthesis and declaration routing throw on **both** absences
 — an artifact must never record a decision the model did not make.

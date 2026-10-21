@@ -417,6 +417,23 @@ export class ModelDidNotAnswerError extends Error {
   }
 }
 
+/**
+ * The model answered, but not in the shape asked for. Not "nothing here" (that
+ * would mark the capture derived-with-nothing for good), and not the ordinary
+ * retry budget either: at temperature 0 one backend mostly repeats the same
+ * reply, while a provider-routed retry may reach a backend that answers. The
+ * drain gives it one retry per request version (`malformed_retry_version`),
+ * then fails the job with `malformed_model_output`.
+ */
+export class MalformedModelOutputError extends ModelDidNotAnswerError {
+  readonly reason = "malformed_model_output" as const;
+  constructor(task: string, cause?: unknown) {
+    super(task, cause);
+    this.name = "MalformedModelOutputError";
+    this.message = `malformed_model_output: ${this.message}`;
+  }
+}
+
 /** One follow-up grounded in the inspiration and the person's saved answers. */
 export interface ReflectionQuestionInput {
   preferredLocale: SupportedLocale;

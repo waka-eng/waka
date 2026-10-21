@@ -161,7 +161,7 @@ import { applySignalSupportReview } from './signal-support-apply.js';
 import { SupportSourceUnavailableError } from './signal-support-review.js';
 import { isRetiredGroupWork, retiredGroupWork, withoutLegacyGroupDestination } from './retired-group-work.js';
 import { bindInspirationSupportReading } from './inspiration-processing.js';
-import { getDefaultModelProvider } from "./model-provider.js";
+import { getDefaultModelProvider, MalformedModelOutputError } from "./model-provider.js";
 import { InspirationProcessingUnavailableError, recordInspirationProcessingRequest, recordInspirationReadingResult, type InspirationProcessingReceipt } from "./inspiration-processing.js";
 import {
   type AccountModelUsage,
@@ -937,7 +937,13 @@ export async function drainBackgroundJobs(
         });
         continue;
       }
-      const exhausted = job.attempts >= job.maxAttempts;
+      // Malformed output gets one retry per request version, then is terminal:
+      // a second identical temperature-0 answer is not worth a third call.
+      // Keyed to request_version (not last_error), so new input earns its own
+      // retry and an unrelated failure in between changes nothing.
+      const malformedRetrySpent = err instanceof MalformedModelOutputError
+        && job.malformedRetryVersion !== null && job.malformedRetryVersion === job.requestVersion;
+      const exhausted = job.attempts >= job.maxAttempts || malformedRetrySpent;
       const failedAt = clock();
       await store.markFailedOrPending(job, err, exhausted, failedAt);
       if (exhausted) result.failed += 1;
@@ -1445,6 +1451,52 @@ export async function readBackgroundJobRecoveryState(database:Pick<ReturnType<ty
 }
 
 /**
+ * How long a final-attempt lease must sit before the daily sweep may settle
+ * it. The claim's attempt ceiling stops an exhausted lease being reclaimed,
+ * so a final attempt whose worker died (rather than threw) would stay
+ * `running` forever. The worker Lambda times out at 14 minutes (AWS caps it at
+ * 15), and in-process drains never receive the scheduled event — a lease this
+ * old has no live holder, so settling it cannot fail work still being done.
+ */
+export const ABANDONED_LEASE_SECONDS = 24 * 60 * 60;
+const MAX_ABANDONED_LEASES_PER_SWEEP = 100;
+
+/**
+ * Daily housekeeping only — never on the drain path. An abandoned final
+ * attempt goes `failed` (visible, explicitly re-runnable), attempts untouched.
+ * A row whose `rerun_requested` was set by a newer enqueue (which already
+ * bumped `request_version`) becomes that newer request instead — pending, a
+ * normal attempt budget — exactly as `markJobFailedOrPending` treats a flagged
+ * job whose last attempt threw. Returns rows settled.
+ */
+export async function settleAbandonedExhaustedLeases(database:Pick<ReturnType<typeof getDb>,'execute'>=getDb(),now=new Date()):Promise<number>{
+  const nowIso=now.toISOString();
+  const rows=await database.execute(sql`
+    UPDATE background_jobs AS job
+    SET status=CASE WHEN job.rerun_requested THEN 'pending'::background_job_status ELSE 'failed'::background_job_status END,
+        locked_at=CASE WHEN job.rerun_requested THEN NULL ELSE job.locked_at END,
+        run_after=CASE WHEN job.rerun_requested THEN ${nowIso}::timestamptz ELSE job.run_after END,
+        attempts=CASE WHEN job.rerun_requested THEN 0 ELSE job.attempts END,
+        last_error=CASE WHEN job.rerun_requested THEN NULL
+          ELSE 'abandoned_lease: the final attempt''s worker never finished it' END,
+        rerun_requested=false,
+        result=NULL,
+        updated_at=${nowIso}::timestamptz
+    WHERE job.id IN (
+      SELECT candidate.id FROM background_jobs candidate
+      WHERE candidate.status='running'::background_job_status
+        AND candidate.attempts>=candidate.max_attempts
+        AND candidate.locked_at<${nowIso}::timestamptz-(${ABANDONED_LEASE_SECONDS}||' seconds')::interval
+        AND candidate.type::text IN (${sql.join(backgroundJobTypeValues.map(type=>sql`${type}`),sql`, `)})
+      ORDER BY candidate.locked_at
+      LIMIT ${MAX_ABANDONED_LEASES_PER_SWEEP}
+      FOR UPDATE SKIP LOCKED)
+      AND job.status='running'::background_job_status AND job.attempts>=job.max_attempts
+    RETURNING job.id`);
+  return (rows as unknown as unknown[]).length;
+}
+
+/**
  * Rank by longest-unserved profile/kind, never-served first, then oldest due
  * and created. Claim and budget peek share both order and eligibility.
  * `started_at` survives completion so a just-served kind steps behind another
@@ -1659,6 +1711,7 @@ async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Pro
       job.request_version AS "requestVersion",
       job.completed_version AS "completedVersion",
       job.rerun_requested AS "rerunRequested",
+      job.malformed_retry_version::text AS "malformedRetryVersion",
       job.status,
       job.attempts,
       job.max_attempts AS "maxAttempts",
@@ -1676,7 +1729,8 @@ async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Pro
 
   const result = rows as unknown as ClaimedBackgroundJob[];
   const job = result[0];
-  return job ? { ...job, requestVersion: BigInt(job.requestVersion), completedVersion: BigInt(job.completedVersion) } : null;
+  return job ? { ...job, requestVersion: BigInt(job.requestVersion), completedVersion: BigInt(job.completedVersion),
+    malformedRetryVersion: job.malformedRetryVersion === null ? null : BigInt(job.malformedRetryVersion) } : null;
 }
 
 async function markJobSucceeded(job: BackgroundJob, completion: BackgroundJobResult | null): Promise<boolean> {
@@ -1751,6 +1805,11 @@ async function markJobFailedOrPending(
         last_error = CASE WHEN rerun_requested THEN NULL ELSE ${sanitizeError(err)} END,
         attempts = CASE WHEN rerun_requested THEN 0 ELSE attempts END,
         rerun_requested = false,
+        -- The version this attempt read has now spent its one malformed retry.
+        -- A newer request (rerun flag, or any later enqueue) carries a higher
+        -- request_version, so it is not charged for this one.
+        malformed_retry_version = CASE WHEN ${err instanceof MalformedModelOutputError}
+          THEN ${job.requestVersion.toString()}::bigint ELSE malformed_retry_version END,
         result = NULL,
         updated_at = ${now.toISOString()}::timestamptz
     WHERE id = ${job.id}::uuid AND status = 'running'

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handler, isScheduledEvent } from "./background-worker.js";
 import { sweepStaleStagedAttachments } from "./lib/conversation-attachments.js";
 import { sweepDeletedShelf } from "./lib/deleted-shelf.js";
-import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgroundJobRetry,hasNearTermRequestedReading,type BackgroundJobRetryWake } from "./lib/queue.js";
+import { runBackgroundJobWorker,readBackgroundJobRecoveryState,settleAbandonedExhaustedLeases,hasNearTermBackgroundJobRetry,hasNearTermRequestedReading,type BackgroundJobRetryWake } from "./lib/queue.js";
 
 /** WHAT THIS MOCKS, AND WHY: `runBackgroundJobWorker` supplies completed pass
  * counts; `readBackgroundJobRecoveryState` supplies eligibility counts. SQL
@@ -16,6 +16,7 @@ vi.mock("./lib/queue.js", async original => ({
   ...await original<typeof import('./lib/queue.js')>(),
   runBackgroundJobWorker: vi.fn(),
   readBackgroundJobRecoveryState:vi.fn(),
+  settleAbandonedExhaustedLeases:vi.fn(),
   hasNearTermBackgroundJobRetry:vi.fn(),
   hasNearTermRequestedReading:vi.fn(),
 }));
@@ -36,6 +37,7 @@ vi.mock("./lib/db.js", async original => ({
 beforeEach(() => {
   vi.mocked(sweepStaleStagedAttachments).mockReset().mockResolvedValue(0);
   vi.mocked(sweepDeletedShelf).mockReset().mockResolvedValue(0);
+  vi.mocked(settleAbandonedExhaustedLeases).mockReset().mockResolvedValue(0);
   // `mockReset` and not `clearAllMocks`, because the tests below queue
   // one-shot results with `mockResolvedValueOnce`. Clearing only forgets the
   // calls; an unconsumed one-shot survives into the next test and answers a
@@ -192,12 +194,25 @@ describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads"
     expect(isScheduledEvent({ source: "aws.events", "detail-type": "Something Else" })).toBe(false);
     await handler();
     await handler({ mode: "enqueue" });
+    await handler({ mode: "recovery" });
     expect(sweepStaleStagedAttachments).not.toHaveBeenCalled();
     expect(sweepDeletedShelf).not.toHaveBeenCalled();
+    expect(settleAbandonedExhaustedLeases, "never on the drain or recovery path").not.toHaveBeenCalled();
     await handler(scheduled);
     expect(sweepStaleStagedAttachments).toHaveBeenCalledTimes(1);
     expect(sweepDeletedShelf).toHaveBeenCalledTimes(1);
+    expect(settleAbandonedExhaustedLeases).toHaveBeenCalledTimes(1);
     expect(runBackgroundJobWorker).toHaveBeenCalledTimes(3);
+  });
+  it("a failed abandoned-lease settle never costs the other sweeps or the queue its pass", async () => {
+    vi.mocked(settleAbandonedExhaustedLeases).mockRejectedValueOnce(new Error("db down"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await expect(handler(scheduled)).resolves.toMatchObject({ passes: 1 });
+    expect(sweepDeletedShelf).toHaveBeenCalledTimes(1);
+    expect(sweepStaleStagedAttachments).toHaveBeenCalledTimes(1);
+    expect(runBackgroundJobWorker).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith("[abandoned-lease-sweep] failed", "db down");
+    warn.mockRestore();
   });
   it("a failed staged-upload sweep never costs the queue its pass", async () => {
     vi.mocked(sweepStaleStagedAttachments).mockRejectedValueOnce(new Error("bucket down"));

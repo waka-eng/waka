@@ -18,7 +18,7 @@
  * re-arming itself is a Lambda that runs until its timeout, every time.
  */
 
-import { runBackgroundJobWorker,readBackgroundJobRecoveryState,hasNearTermBackgroundJobRetry,readBackgroundJobWakeReferences,hasNearTermRequestedReading,collectReadingWakeReferences,type BackgroundJobRetryWake } from "./lib/queue.js";
+import { runBackgroundJobWorker,readBackgroundJobRecoveryState,settleAbandonedExhaustedLeases,hasNearTermBackgroundJobRetry,readBackgroundJobWakeReferences,hasNearTermRequestedReading,collectReadingWakeReferences,type BackgroundJobRetryWake } from "./lib/queue.js";
 import {QUEUE_RECOVERY_LIMITS,recordQueueRecovery} from './lib/queue-recovery.js';
 import {sweepDeletedShelf} from './lib/deleted-shelf.js';
 import {sweepStaleStagedAttachments} from './lib/conversation-attachments.js';
@@ -48,14 +48,17 @@ export function isScheduledEvent(event:unknown):boolean{
 }
 
 /**
- * The daily run's housekeeping, apart from the queue: the deleted shelf's
- * expired copies, for the people who never open it again
- * (`sweepDeletedShelf`), and chat uploads staged for a message never sent,
- * past their week (`sweepStaleStagedAttachments`). Each sweep's failure is
- * logged and swallowed — one never stops the other, and neither costs the
+ * The daily run's housekeeping: final-attempt leases whose worker died
+ * (`settleAbandonedExhaustedLeases` — here, once a day, never on the drain
+ * path), the deleted shelf's expired copies, for the people who never open it
+ * again (`sweepDeletedShelf`), and chat uploads staged for a message never
+ * sent, past their week (`sweepStaleStagedAttachments`). Each sweep's failure
+ * is logged and swallowed — one never stops another, and none costs the
  * queue its pass.
  */
 async function runScheduledSweeps(now=new Date()){
+  try{const settled=await settleAbandonedExhaustedLeases(getDb(),now);if(settled)console.info('[abandoned-lease-sweep]',JSON.stringify({settled}));}
+  catch(error){console.warn('[abandoned-lease-sweep] failed',error instanceof Error?error.message:String(error));}
   try{const swept=await sweepDeletedShelf(getDb(),now);if(swept)console.info('[deleted-shelf-sweep]',JSON.stringify({swept}));}
   catch(error){console.warn('[deleted-shelf-sweep] failed',error instanceof Error?error.message:String(error));}
   try{const swept=await sweepStaleStagedAttachments(getDb(),now,sweepAttachmentObjects);if(swept)console.info('[staged-attachment-sweep]',JSON.stringify({swept}));}
