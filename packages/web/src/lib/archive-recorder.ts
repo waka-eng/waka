@@ -42,11 +42,23 @@ export interface ClipFailure {
 
 /** `blocked`: another recorder on the page (the notepad's) is recording or
     finishing — one microphone at a time, so `start` refuses while it is. */
+const noteKey = (noteId: string, profileId: string | null) => `${profileId ?? ""}\u0000${noteId}`;
+
 export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   const blocked = Boolean(options.blocked);
   const target = useRef<ClipTarget | null>(null);
   const [forNote, setForNote] = useState<ClipTarget | null>(null);
-  const [sending, setSending] = useState<ClipTarget | null>(null);
+  /* EVERY UPLOAD IN FLIGHT, COUNTED PER NOTE (review, 2026-10-21). One
+     `sending` slot meant a second clip's upload overwrote the first's, so
+     the first note stopped saying "Uploading…" while its clip was still on
+     its way, and the first to finish cleared the other's. */
+  const [inFlight, setInFlight] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const bump = useCallback((key: string, by: 1 | -1) => setInFlight((was) => {
+    const next = new Map(was);
+    const count = (next.get(key) ?? 0) + by;
+    if (count > 0) next.set(key, count); else next.delete(key);
+    return next;
+  }), []);
   const [landed, setLanded] = useState<{ target: ClipTarget; seq: number } | null>(null);
   const [failures, setFailuresState] = useState<ClipFailure[]>([]);
   const failuresRef = useRef<ClipFailure[]>([]);
@@ -57,7 +69,8 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   const failureSeq = useRef(0), landedSeq = useRef(0);
 
   const send = useCallback(async (file: File, to: ClipTarget) => {
-    setSending(to);
+    const key = noteKey(to.noteId, to.profileId);
+    bump(key, 1);
     try {
       await attachToNote(file, { noteId: to.noteId, profileId: to.profileId, type: "file" });
       landedSeq.current += 1;
@@ -67,9 +80,12 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
       const id = failureSeq.current;
       setFailures((all) => [...all, { id, file, target: to }]);
     } finally {
-      setSending((was) => (was === to ? null : was));
+      bump(key, -1);
     }
-  }, [setFailures]);
+  }, [bump, setFailures]);
+  /** Whether a clip is on its way to this note in this archive. */
+  const isSending = useCallback((noteId: string, profileId: string | null) =>
+    inFlight.has(noteKey(noteId, profileId)), [inFlight]);
 
   /* The clip's note is read when the clip is handed over, which is before a
      next recording can begin: `start` refuses while one is finishing.
@@ -104,7 +120,7 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   }, [send, setFailures]);
   const dismiss = useCallback((id: number) => setFailures((all) => all.filter((item) => item.id !== id)), [setFailures]);
 
-  return { ...recorder, start, blocked, forNote, sending, landed, failures, retry, dismiss };
+  return { ...recorder, start, blocked, forNote, isSending, landed, failures, retry, dismiss };
 }
 
 export type ArchiveRecorder = ReturnType<typeof useArchiveRecorder>;

@@ -663,7 +663,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const [attachingFor, setAttachingFor] = useState<string | null>(null);
   const [attachFailedFor, setAttachFailedFor] = useState<string | null>(null);
   const attaching = Boolean(open) && (attachingFor === open?.id
-    || (recorder.sending?.noteId === open?.id && (recorder.sending?.profileId ?? null) === (profileId ?? null)));
+    || (open ? recorder.isSending(open.id, profileId ?? null) : false));
   const attachFailed = Boolean(open) && attachFailedFor === open?.id;
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
      the button that opens it, and that button is in the bar now — see
