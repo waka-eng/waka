@@ -69,7 +69,7 @@ import { DialogSurface, leaveAsModal } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
-import { EMPTY_VIEW, resolveViewWall, viewHref, type ViewLocation, type ViewOpen } from '../lib/view-location';
+import { EMPTY_VIEW, readViewLocation, resolveViewWall, viewHref, type ViewLocation, type ViewOpen } from '../lib/view-location';
 import { InspirationSearch } from '../components/InspirationSearch';
 
 import { useDismissAway } from "../lib/dismiss";
@@ -2477,6 +2477,28 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     window.addEventListener("popstate", popped);
     return () => window.removeEventListener("popstate", popped);
   }, [commitOpenNote]);
+  /* ═══ THE OPEN NOTE IS AN ADDRESS NOW (`?open=saves&note=<id>`) ═══════
+     So Back from a note pops to the archive's list and the next Back leaves
+     the archive — the router's ordinary history, with no entry of our own
+     (`docs/plans/back-from-layers.md`). Opening pushes the note's address;
+     closing on screen returns through it; a note the archive does not hold
+     is dropped from the address in place.
+
+     LEAVING THE ADDRESS COMMITS THE NOTE, by whatever route it was left.
+     The pop listener above hears a browser Back first; this hears the rest
+     (a router traversal that raised no `popstate`, a replace) — and the
+     identity guard in `commitOpenNote` makes the two one write. */
+  const noteInAddress = viewNavigation.view?.open === 'saves' ? viewNavigation.view.note : null;
+  useEffect(() => { if (!noteInAddress) commitOpenNote(); }, [noteInAddress, commitOpenNote]);
+  const noteAddressChanged = useCallback((change: 'open' | 'close' | 'missing', id: string) => {
+    const nav = viewNavigationRef.current;
+    if (nav.view?.open !== 'saves') return;
+    if (change === 'open') { if (nav.view.note !== id) nav.write({ ...nav.view, note: id }); }
+    else if (nav.view.note === id) {
+      if (change === 'close') nav.closeNote();
+      else nav.write({ ...nav.view, note: null }, { replace: true });
+    }
+  }, []);
   /* The field shows what you typed while you are typing and the account's
      own name the rest of the time, so another tab renaming you is not
      overwritten by a stale field — and nothing is held here that the
@@ -7378,6 +7400,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
     inspirationSave.phase === 'idle' && atNow && !inField && !inSky && !reflectOpen && !editing.open);
 
   const appliedViewKey = useRef<string | null>(null), viewRequest = useRef(0);
+  /** The address the world last finished applying (or was told it already shows). */
+  const appliedViewHref = useRef<string | null>(null);
   const canonicalizeViewRef = useRef(false);
   const [viewSettled, setViewSettled] = useState(0);
   const latestViewKey = useRef(viewNavigation.key); latestViewKey.current = viewNavigation.key;
@@ -7385,12 +7409,22 @@ const RETRY_READ_LIMIT_MS = 20_000;
   useEffect(() => {
     if (phase !== 'ready' || appliedViewKey.current === viewNavigation.key) return;
     const desired = viewNavigation.view;
+    const applied = appliedViewHref.current, hrefAt = viewNavigation.href;
     if (viewNavigation.own.current === viewNavigation.href) {
-      viewNavigation.own.current = null; appliedViewKey.current = viewNavigation.key; restoringViewRef.current = false; return;
+      viewNavigation.own.current = null; appliedViewKey.current = viewNavigation.key; appliedViewHref.current = hrefAt; restoringViewRef.current = false; return;
+    }
+    /* AN ENTRY THAT DIFFERS ONLY BY THE OPEN NOTE costs no restore pass. A
+       note opening, Back to the list, Forward into it again: the world behind
+       the archive has not moved, and re-applying it (clearing the selection,
+       re-seeking the camera) for a page inside the archive would be the world
+       moving when the person did not move it. */
+    const noteless = (href: string) => { const [path = '/', search] = href.split('?'); const read = readViewLocation(path, search ? `?${search}` : ''); return read ? viewHref({ ...read, note: null }) : href; };
+    if (desired && applied !== null && applied !== hrefAt && noteless(applied) === noteless(hrefAt)) {
+      appliedViewKey.current = viewNavigation.key; appliedViewHref.current = hrefAt; restoringViewRef.current = false; return;
     }
     const target = desired && (desired.wallId === storageScope?.profileId ? walls.find((wall) => wall.kind === 'self') : resolveViewWall(desired, walls));
     if (!target && desired?.wallId && agentRoster === null) return;
-    if (!target || !desired) { setNavigationProblem('unavailable'); appliedViewKey.current = viewNavigation.key; restoringViewRef.current = false; return; }
+    if (!target || !desired) { setNavigationProblem('unavailable'); appliedViewKey.current = viewNavigation.key; appliedViewHref.current = null; restoringViewRef.current = false; return; }
     const serial = ++viewRequest.current, key = viewNavigation.key, controller = new AbortController();
     let timer = 0, stage = 'wall', loading = false, canceled = false;
     const current = () => !canceled && !controller.signal.aborted && viewRequest.current === serial && latestViewKey.current === key;
@@ -7400,7 +7434,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     setSeek(desired.find ? viewNavigation.query : null);
     setPick(desired.principleId);
     setMouthOpen(desired.compose);
-    const finish = () => { if (current()) { appliedViewKey.current = key; restoringViewRef.current = false; canonicalizeViewRef.current = true; setViewSettled((value) => value + 1); } };
+    const finish = () => { if (current()) { appliedViewKey.current = key; appliedViewHref.current = hrefAt; restoringViewRef.current = false; canonicalizeViewRef.current = true; setViewSettled((value) => value + 1); } };
     const run = async () => {
       if (!current()) return;
       const sim = simApiRef.current;
@@ -7484,7 +7518,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
        that belongs to a surface over the world rather than to the world, and
        the pattern is the reminder: a new one has to join this list on the day
        it is added, or it will appear to work and then undo itself. */
-    open:viewNavigation.view?.open??null };
+    open:viewNavigation.view?.open??null,
+    /* The note open in the archive is one of those surfaces: carried, or
+       the canonicaliser would erase its address a tick after it opened. */
+    note:viewNavigation.view?.note??null };
   const observedHref = viewHref(observedView), observedRef = useRef(observedView); observedRef.current = observedView;
   useEffect(() => {
     if (phase !== 'ready' || restoringViewRef.current || navigationProblem) return;
@@ -11910,6 +11947,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
           following an old reference here. */}
       {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
         onNoteOpen={savedNoteChanged}
+        note={viewNavigation.view.note}
+        onNoteAddress={noteAddressChanged}
         onNewSave={startNewInspiration}
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}

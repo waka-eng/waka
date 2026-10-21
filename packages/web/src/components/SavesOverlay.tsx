@@ -93,7 +93,20 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true, note: noteAddress, onNoteAddress }: {
+  /**
+   * WHICH NOTE THE ADDRESS SAYS IS OPEN (`?open=saves&note=<id>`), when the
+   * caller gives the note an address. The address leads: a row press asks
+   * for it (`onNoteAddress('open', id)`), Back and Forward change it, a cold
+   * link or a reload arrives with it — and this surface opens or lets go of
+   * the note to agree. Letting go on screen (the return press, a delete, an
+   * unchanged close) asks for the address back (`'close'`); an address naming
+   * a note this archive does not hold is dropped (`'missing'`). Leaving the
+   * address is what commits the words — the caller's `commitOpenNote`, the
+   * same exit every other way out takes.
+   */
+  note?: string | null;
+  onNoteAddress?: (change: 'open' | 'close' | 'missing', id: string) => void;
   locale: SupportedLocale;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
@@ -900,6 +913,37 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     return () => onNoteOpen?.(null);
   }, [openId, onNoteOpen, leaveNote]);
 
+  /* ═══ THE NOTE AND ITS ADDRESS AGREE ═══════════════════════════════════
+     Two directions, and one guard between them. A note let go of on screen
+     asks for its address back; until the address has moved, the address
+     still names it, and without `letGo` the second effect would read that as
+     "open this note" and reopen what was just closed. */
+  const addressed = onNoteAddress !== undefined;
+  const tellAddress = useRef(onNoteAddress); tellAddress.current = onNoteAddress;
+  const letGo = useRef<string | null>(null);
+  const wasOpen = useRef<string | null>(null);
+  useEffect(() => {
+    const was = wasOpen.current;
+    wasOpen.current = openId;
+    if (!addressed || !was || openId === was) return;
+    if (noteAddress === was) { letGo.current = was; tellAddress.current?.("close", was); }
+  }, [openId, addressed, noteAddress]);
+  useEffect(() => {
+    if (!addressed) return;
+    if (letGo.current !== null && letGo.current !== noteAddress) letGo.current = null;
+    if (!noteAddress || open || letGo.current === noteAddress) return;
+    const row = rows.find((item) => item.id === noteAddress);
+    if (row) { openNote(row); return; }
+    /* Not in this archive (deleted, another owner's, a stale link): the
+       address stops naming it rather than promising a page it cannot open. */
+    if (phase === "ready") tellAddress.current?.("missing", noteAddress);
+  }, [addressed, noteAddress, open, rows, phase, openNote]);
+  /** A row press: the note opens here and now, and its address is pushed. */
+  const pressNote = useCallback((row: Inspiration) => {
+    openNote(row);
+    tellAddress.current?.("open", row.id);
+  }, [openNote]);
+
   /* Case-folded substring over the preview, which is what a person reading the
      grid can actually see. Matching text they cannot read would return cards
      with no visible reason for being there. */
@@ -1598,7 +1642,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                     return (
                       <li key={row.id}>
                         <button type="button" className="waka-list-row"
-                          onClick={() => openNote(row)}>
+                          onClick={() => pressNote(row)}>
                           <span className="waka-list-lead">{lead}</span>
                           <span className="waka-list-meta">
                             {/* WHICH ONE THIS IS, AND IT IS A NAME RATHER THAN
