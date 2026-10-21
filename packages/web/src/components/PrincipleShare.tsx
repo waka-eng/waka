@@ -3,6 +3,7 @@ import {fetchPrinciples,fetchPrincipleStatements,type ApiPrinciple,type ApiPrinc
 import type {ProfileStorageScope} from '../lib/profile-storage';
 import {ArtifactLayoutError,renderShareCard,type PrincipleArtifactContent} from '../lib/principle-artifact';
 import {readPrincipleArtifactDrafts,storePrincipleArtifactDraft,clearPrincipleArtifactDraft,recoverPrincipleArtifactDrafts,type PrincipleArtifactDraft,type StoredPrincipleArtifactDraft} from '../lib/principle-artifact-drafts';
+import {clearDraftLineage,recordDraftFork} from '../lib/draft-lineage';
 import {formatMessage,t,type SupportedLocale} from '../lib/locales';
 import {dateStamp} from '../lib/words';
 import {DialogSurface} from './DialogSurface';
@@ -50,6 +51,10 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const [rows,setRows]=useState<ApiPrinciple[]|null>(null),[loadFailed,setLoadFailed]=useState(false),[attempt,setAttempt]=useState(0);
   const [draft,setDraft]=useState<StoredPrincipleArtifactDraft|null>(null),[drafts,setDrafts]=useState<StoredPrincipleArtifactDraft[]>([]),[storageFailed,setStorageFailed]=useState(false);
   const current=useRef<StoredPrincipleArtifactDraft|null>(null),writer=useRef(crypto.randomUUID());
+  /* THE STORED CARD AN UNSAVED FORK REPLACES (L10). Held until the fork is
+     first stored — which may be the "Keep draft" retry after a failed write —
+     and then recorded, so discarding the fork discards it too. */
+  const forkedFrom=useRef<StoredPrincipleArtifactDraft|null>(null);
   const [preview,setPreview]=useState<{key:string;url:string;blob:Blob;fallbackFont:boolean;words:string}|null>(null),[renderError,setRenderError]=useState<string|null>(null);
   const [renderAttempt,setRenderAttempt]=useState(0);
   const [editingWords,setEditingWords]=useState(false),[customizing,setCustomizing]=useState(false);
@@ -88,8 +93,8 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const update=(value:PrincipleArtifactDraft)=>{
     if(busy)return;
     let next={...value,updatedAt:Date.now()},previous=current.current;
-    if(next.writer!==writer.current){next={...next,id:crypto.randomUUID(),writer:writer.current};previous=null;}
-    try{const saved=storePrincipleArtifactDraft(scope,id,next,previous??undefined);useDraft(saved);setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
+    if(next.writer!==writer.current){next={...next,id:crypto.randomUUID(),writer:writer.current};if(previous?.key)forkedFrom.current=previous;previous=null;}
+    try{const saved=storePrincipleArtifactDraft(scope,id,next,previous??undefined);recordDraftFork(saved.key,forkedFrom.current);forkedFrom.current=null;useDraft(saved);setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
     catch{useDraft({...previous??{key:'',raw:''},value:next});setStorageFailed(true);}
   };
   const change=draft?.value.mode==='change';
@@ -145,7 +150,10 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const {busy,notice,setNotice,canShare,download,share}=useShareImage(ready?preview?.blob??null:null,filenames);
   const discard=()=>{
     if(busy||!draft||!source||!window.confirm(say('worldShareDiscardConfirm')))return;
-    try{clearPrincipleArtifactDraft(draft);useDraft({key:'',raw:'',value:fresh(source)});setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
+    try{clearPrincipleArtifactDraft(draft);clearDraftLineage(draft.key);
+      /* A fork never stored yet still replaces the card it came from. */
+      const origin=forkedFrom.current;forkedFrom.current=null;if(origin){clearPrincipleArtifactDraft(origin);clearDraftLineage(origin.key);}
+      useDraft({key:'',raw:'',value:fresh(source)});setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
     catch{setStorageFailed(true);}
   };
   return <>
@@ -181,7 +189,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
           <details className="jar-share-customize" open={customizing} onToggle={event=>setCustomizing(event.currentTarget.open)}><summary>{say('worldShareCustomize')}</summary>
           {rows.length>1?<label>{say('worldShareChoose')}<select value={source.id} disabled={busy||storageFailed} onChange={event=>onChoose(event.target.value)}>{rows.map(row=><option key={row.id} value={row.id}>{row.statement}</option>)}</select></label>:null}
           <label>{say('worldShareType')}<select value={draft.value.mode??'card'} disabled={busy} onChange={event=>update({...draft.value,mode:event.target.value as 'card'|'change'})}><option value="card">{say('worldShareCard')}</option><option value="change">{say('worldShareChange')}</option></select></label>
-          {drafts.length>1?<label>{say('worldShareDrafts')}<select value={draft.key} disabled={busy||storageFailed} onChange={event=>{const row=drafts.find(item=>item.key===event.target.value);if(row)useDraft(row);}}>{drafts.map((row,index)=><option key={row.key} value={row.key}>{index+1}. {row.value.entries[0].text.slice(0,45)}</option>)}</select></label>:null}
+          {drafts.length>1?<label>{say('worldShareDrafts')}<select value={draft.key} disabled={busy||storageFailed} onChange={event=>{const row=drafts.find(item=>item.key===event.target.value);if(row){forkedFrom.current=null;useDraft(row);}}}>{drafts.map((row,index)=><option key={row.key} value={row.key}>{index+1}. {row.value.entries[0].text.slice(0,45)}</option>)}</select></label>:null}
           {change?<>
             {historyFailed?<p role="alert">{say('worldShareHistoryFailed')} <button type="button" onClick={()=>setHistoryAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button></p>:
               !statements?<p role="status">{say('worldReviewChecking')}</p>:!after||!earlier.length?<p>{say('worldShareNoHistory')}</p>:<>
