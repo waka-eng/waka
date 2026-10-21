@@ -100,6 +100,17 @@ it("keeps each note's upload its own while two are in flight", async () => {
   expect(recorder.isSending("a", "agent")).toBe(false);
 });
 
+it("hands back the same recorder while nothing about it changed", async () => {
+  const before = renders.length;
+  await act(async () => root.render(<Probe tick={1} />));
+  await act(async () => root.render(<Probe tick={2} />));
+  expect(renders.length, "the probe did not re-render").toBeGreaterThan(before);
+  expect(renders[renders.length - 1], "a re-render of the page made a new recorder object").toBe(renders[before - 1]);
+  /* and a change is a new object */
+  await recordOnto("a");
+  expect(renders[renders.length - 1]).not.toBe(renders[before - 1]);
+});
+
 it("warns before the page is left while a clip is still uploading, and not after", async () => {
   const leave = () => {
     const event = new Event("beforeunload", { cancelable: true });

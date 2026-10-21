@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { attachToNote } from "./attach-to-note";
 import { useAudioRecording } from "./use-audio-recording";
@@ -42,6 +42,7 @@ export interface ClipFailure {
 
 /** `blocked`: another recorder on the page (the notepad's) is recording or
     finishing — one microphone at a time, so `start` refuses while it is. */
+const askForMicrophone = () => navigator.mediaDevices.getUserMedia({ audio: true });
 const noteKey = (noteId: string, profileId: string | null) => `${profileId ?? ""}\u0000${noteId}`;
 
 export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
@@ -109,7 +110,7 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   const recorder = useAudioRecording((file) => {
     const to = target.current;
     if (to) void send(file, to);
-  });
+  }, askForMicrophone);
 
   const recorderStart = recorder.start, phase = recorder.phase;
   /* NO AWAIT BEFORE THE MICROPHONE IS ASKED FOR — the iOS rule. `start` is
@@ -131,7 +132,16 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   }, [send, setFailures]);
   const dismiss = useCallback((id: number) => setFailures((all) => all.filter((item) => item.id !== id)), [setFailures]);
 
-  return { ...recorder, start, blocked, forNote, isSending, landed, failures, retry, dismiss };
+  /* ONE OBJECT WHILE NOTHING CHANGES (review, 2026-10-21), so what the
+     archive builds from it (`useMemo` there) is not rebuilt on every render
+     of `Home`. The microphone request is passed as a module constant above:
+     the hook's default is a fresh arrow each render, which made its `start`
+     — and so this object — new every time. */
+  const { phase: recorderPhase, seconds, error, notice, stop, cancel, clear } = recorder;
+  return useMemo(() => ({
+    phase: recorderPhase, seconds, error, notice, stop, cancel, clear,
+    start, blocked, forNote, isSending, landed, failures, retry, dismiss,
+  }), [recorderPhase, seconds, error, notice, stop, cancel, clear, start, blocked, forNote, isSending, landed, failures, retry, dismiss]);
 }
 
 export type ArchiveRecorder = ReturnType<typeof useArchiveRecorder>;
