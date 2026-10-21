@@ -63,8 +63,10 @@ function persist(prefix: string, intent: AuthoredSaveIntent) {
 }
 
 /** One visible pending intent, with separate durable keys for simultaneous
- * tabs. Mount/focus only READ. An explicit retry may POST the immutable intent
- * using its original identity, after verifying the server supports it. */
+ * tabs. Focus and storage events only READ. Page load, `online` and an explicit
+ * retry POST the immutable intent (read from disk on load) under its original
+ * identity, after verifying the server supports it; the server dedupes on that
+ * identity. See docs/plans/save-recovery.md. */
 export function useAuthoredSave(options: {
   scope: ProfileStorageScope | null; operation: AuthoredSaveInput['operation']; inspirationId?: string; enabled?: boolean;
   journal?:string;
@@ -85,7 +87,7 @@ export function useAuthoredSave(options: {
   const abort = useRef<AbortController | null>(null);
   const refresh = useRef<() => void>(() => {});
 
-  const run = useCallback(async (intent: AuthoredSaveIntent, write: boolean) => {
+  const run = useCallback(async (intent: AuthoredSaveIntent, write: boolean, pressed = write) => {
     const owner = live.current, key = owner.prefix;
     if (!mounted.current || working.current || !key || !owner.scope || owner.enabled === false || (document.hidden && !write)) return;
     if (intent.rejected) { setPhase('rejected'); return; }
@@ -141,7 +143,7 @@ export function useAuthoredSave(options: {
         timeout = window.setTimeout(() => { controller.abort(); reject(new Error('Save check timed out')); }, 15_000);
       })]);
       current();
-      const afterSettlement = await live.current.onResolved(intent, result, write);
+      const afterSettlement = await live.current.onResolved(intent, result, pressed);
       current();
       // Cleanup follows matching-draft settlement; a crash before cleanup can
       // only cause a read/replay, never a newly identified copy of these words.
@@ -166,16 +168,18 @@ export function useAuthoredSave(options: {
     } finally {
       window.clearTimeout(timeout); controller.signal.removeEventListener('abort', rejectAborted); controller.abort();
       if (owns()) { working.current = false; setBusy(false); if (!intentRef.current) refresh.current(); }
+      else if (mounted.current && !working.current) setBusy(false);
     }
   }, []);
 
-  const scan = useCallback(() => {
+  // `send`: page load and `online` re-POST under the same id; never a press.
+  const scan = useCallback((send = false) => {
     const at = live.current;
     if (!mounted.current || working.current || !at.prefix || !at.scope || at.enabled === false || document.hidden) return;
-    if (intentRef.current) { void run(intentRef.current, false); return; }
+    if (intentRef.current) { void run(intentRef.current, send, false); return; }
     try {
       const found = readIntents(at.prefix, at.scope, at.operation);
-      if (found.intents[0]) { intentRef.current = found.intents[0]; setPending(found.intents[0]); void run(found.intents[0], false); }
+      if (found.intents[0]) { intentRef.current = found.intents[0]; setPending(found.intents[0]); void run(found.intents[0], send, false); }
       else if (found.invalid) setPhase('invalid');
     } catch { setPhase('storage_error'); }
   }, [run]);
@@ -183,11 +187,14 @@ export function useAuthoredSave(options: {
 
   useEffect(() => {
     mounted.current = true; epoch.current += 1; abort.current?.abort(); working.current = false;
-    intentRef.current = null; setPending(null); setBusy(false); setPhase('idle'); scan();
+    intentRef.current = null; setPending(null); setBusy(false); setPhase('idle'); scan(true);
     const onFocus = () => scan();
+    const onOnline = () => scan(true);
     const onStorage = (event: StorageEvent) => { if (!event.key || event.key.startsWith(prefix ?? '\0')) scan(); };
     window.addEventListener('focus', onFocus); document.addEventListener('visibilitychange', onFocus); window.addEventListener('storage', onStorage);
+    window.addEventListener('online', onOnline);
     return () => {
+      window.removeEventListener('online', onOnline);
       mounted.current = false; epoch.current += 1; abort.current?.abort(); working.current = false;
       window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); window.removeEventListener('storage', onStorage);
     };
