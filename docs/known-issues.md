@@ -1233,10 +1233,18 @@ inspirations) ends that edit; whatever had been typed and not saved is gone, wit
 while pinning that an archive save cannot land on an open card edit (`home-memory-reads.test.tsx`),
 which this behaviour is what guarantees. Not introduced by the P0 branch.
 
-**Found on `claude/followup-card-archive`, 2026-10-21.** The archive is reached from the card
-through the bar: Inspiration (which opens a new note), then All inspirations. The typing is already
-gone on the first press. Chat drops it the same way. So does any change of selection: an orb tap,
-an address, the browser's Back. All of them run `leaveWordsRef`, which calls `editing.leave()`.
+**Found on `claude/followup-card-archive`, 2026-10-21.** Two doors lead from the card to the
+archive, and both drop the typing:
+
+- **The page menu's archive row.** It is `VIEWS {what: "saves"}` in `page-menu.ts`, which calls
+  `openOverHome('saves')`. It opens the archive in one press straight from the card. The view
+  effect then runs `setSelectedId(null)`, the selection change runs `leaveWordsRef`, and that
+  calls `editing.leave()`.
+- **The bar.** Inspiration opens a new note, then All inspirations opens the archive. The typing
+  is already gone on the first press.
+
+Chat drops the typing the same way. So does any other change of selection: an orb tap, an address,
+the browser's Back. All of them run `leaveWordsRef`, which calls `editing.leave()`.
 
 **Tried and reverted: refuse the press.** While the card held changed words, or a save in flight,
 bar rows, menu rows (`openOverHome`) and chat (`openTalk`) were refused. The card said "Save or
@@ -1274,10 +1282,17 @@ archive is not.
 
 **Found on `claude/followup-card-archive`, 2026-10-21.** A browser's recorder fires its last chunk
 and `stop` in a later task, so the unmount always wins. The hook's cleanup also bumps its epoch,
-which makes `onstop` drop the clip deliberately. The bar's Close calls `commitOpenNote()` before
-`openOverHome(null)`. That closes the note first, which also stops the recording through the
-note-change effect, and the overlay is gone before the clip arrives. The browser's Back and a wall
-switch from the corner unmount the archive from outside React.
+which makes `onstop` drop the clip deliberately. What ends the recording depends on the note's
+words:
+
+- **Changed words.** `leaveNote` awaits `updateInspiration` before `setOpen(null)`, so the note
+  never changes before the overlay unmounts. The recording is ended by the hook's unmount cleanup,
+  not by the note-change effect.
+- **Unchanged words.** `setOpen(null)` runs first, the note-change effect stops the recording, and
+  the overlay still unmounts before the clip arrives.
+
+Either way a fix must save the clip from the unmount path. The browser's Back and a wall switch
+from the corner unmount the archive from outside React.
 
 **Tried and reverted: hold the close until the clip is attached.** `SavesOverlay` handed Home a
 finisher, and Close, Escape and the top-of-mind row awaited it, later with a 20 s deadline. Three
