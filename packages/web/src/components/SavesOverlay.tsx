@@ -351,11 +351,14 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   }, [ownArchive]);
   useEffect(() => { void loadShelf(); }, [loadShelf]);
 
+  const forgetNote = recorder.forget;
   const commitErase = useCallback((pending: { row: Inspiration; at: number }, leaving = false) => {
     /* On an agent's archive the delete names the agent's profile; the
        request outlives the tab when it is sent as the page goes. */
     void deleteInspiration(pending.row.id, { ...(profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
-      .then(() => loadShelf())
+      /* a clip that failed to attach to this note has nowhere to go now:
+         Home's line says so, with no Try again (review, 2026-10-22) */
+      .then(() => { forgetNote(pending.row.id, profileId ?? null); return loadShelf(); })
       .catch(() => {
         if (!mounted.current) return;
         setRows((all) => all.some((row) => row.id === pending.row.id) ? all
@@ -363,7 +366,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         setTotal((count) => count === null ? count : count + 1);
         setEraseFailed(true);
       });
-  }, [loadShelf, ownArchive, profileId]);
+  }, [forgetNote, loadShelf, ownArchive, profileId]);
 
   const flushErase = useCallback((leaving = false) => {
     const pending = pendingErase.current;
@@ -1384,6 +1387,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           eraseConfirmLabel={say("worldDeleteItAnyway")}
           cancelEraseLabel={say("worldNotNow")}
           erasePending={!ownArchive && askingErase === open.id}
+          /* NOT WHILE ITS CLIP IS ON ITS WAY (review, 2026-10-22): deleting
+             the note mid-upload leaves the clip nowhere to land */
+          eraseDisabled={recorder.isSending(open.id, profileId ?? null)}
           onCancelErase={() => setAskingErase(null)}
           onErase={() => {
             /* NEVER A LIVE MICROPHONE WITH NO STOP: the recording belongs to

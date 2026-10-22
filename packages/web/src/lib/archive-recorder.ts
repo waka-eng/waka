@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ApiError } from "./api";
 import { attachToNote } from "./attach-to-note";
 import type { MessageKey } from "./i18n";
 import { useAudioRecording } from "./use-audio-recording";
@@ -78,10 +79,16 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
       await attachToNote(file, { noteId: to.noteId, profileId: to.profileId, type: "file" });
       landedSeq.current += 1;
       setLanded({ target: to, seq: landedSeq.current });
-    } catch {
+    } catch (reason) {
       failureSeq.current += 1;
       const id = failureSeq.current;
-      setFailures((all) => [...all, { id, file, target: to }]);
+      /* THE NOTE IS GONE (review, 2026-10-22): a 404 or 410 means there is
+         nothing to attach to, so Try again would only fail again. The line
+         says why, with × only. */
+      const gone = reason instanceof ApiError && (reason.status === 404 || reason.status === 410);
+      setFailures((all) => [...all, gone
+        ? { id, file: null, target: to, reason: "worldRecordingNoteDeleted" as const }
+        : { id, file, target: to }]);
     } finally {
       bump(key, -1);
     }
@@ -164,6 +171,11 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
     /* a recording that never became a clip has nothing to send again */
     if (found.file) void send(found.file, found.target);
   }, [send, setFailures]);
+  /* A NOTE DELETED HERE takes its unattached clips with it: their lines stop
+     offering Try again and say the note was deleted. */
+  const forget = useCallback((noteId: string, profileId: string | null) => setFailures((all) => all.map((item) =>
+    item.file && item.target.noteId === noteId && item.target.profileId === profileId
+      ? { id: item.id, file: null, target: item.target, reason: "worldRecordingNoteDeleted" as const } : item)), [setFailures]);
   const dismiss = useCallback((id: number) => setFailures((all) => all.filter((item) => item.id !== id)), [setFailures]);
 
   /* ONE OBJECT WHILE NOTHING CHANGES (review, 2026-10-21), so what the
@@ -174,8 +186,8 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   const { phase: recorderPhase, seconds, error, notice, stop, cancel, clear } = recorder;
   return useMemo(() => ({
     phase: recorderPhase, seconds, error, notice, stop, cancel, clear,
-    start, stopIfLive, setViewing, blocked, forNote, isSending, landed, failures, retry, dismiss,
-  }), [recorderPhase, seconds, error, notice, stop, cancel, clear, start, stopIfLive, setViewing, blocked, forNote, isSending, landed, failures, retry, dismiss]);
+    start, stopIfLive, setViewing, blocked, forNote, isSending, landed, failures, retry, forget, dismiss,
+  }), [recorderPhase, seconds, error, notice, stop, cancel, clear, start, stopIfLive, setViewing, blocked, forNote, isSending, landed, failures, retry, forget, dismiss]);
 }
 
 export type ArchiveRecorder = ReturnType<typeof useArchiveRecorder>;

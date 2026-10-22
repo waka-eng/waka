@@ -53,11 +53,21 @@ const S = vi.hoisted(() => ({
   emptyClip: false,
   /* a note the list read gives an attachment the open card has not seen */
   attachedOnRead: null as string | null,
+  /* finalize answers that the note is gone */
+  noteGone: false,
+  /* finalize waits until the case lets it answer */
+  holdFinalize: null as null | (() => void),
+  holding: false,
+  deleted: [] as string[],
 }));
 
-vi.mock("../src/lib/api", async (original) => ({
-  ...await original<typeof import("../src/lib/api")>(),
+vi.mock("../src/lib/api", async (original) => {
+  const actual = await original<typeof import("../src/lib/api")>();
+  return {
+  ...actual,
   ...apiMockFrom(FACTS),
+  deleteInspiration: async (id: string) => { S.deleted.push(id); },
+  listDeletedInspirations: async () => [],
   fetchProfiles: vi.fn(async () => [{ id: "agent-1", name: "My helper", type: "agent", createdAt: "2026-08-01T00:00:00.000Z" }]),
   presignAttachment: async (input: { filename: string }, _signal?: AbortSignal, options?: { profile?: string }) => {
     S.presigned.push(options?.profile);
@@ -65,11 +75,14 @@ vi.mock("../src/lib/api", async (original) => ({
   },
   uploadToPresignedUrl: async () => undefined,
   finalizeAttachment: async (input: { inspirationId: string }) => {
+    if (S.holding) await new Promise<void>((answer) => { S.holdFinalize = answer; });
+    if (S.noteGone) throw new actual.ApiError({ status: 404, message: "Inspiration not found" });
     if (S.failFinalize > 0) { S.failFinalize -= 1; throw new Error("offline"); }
     S.finalized.push(input.inspirationId);
     return { id: "att-1" };
   },
-}));
+  };
+});
 vi.mock("../src/lib/data", async (original) => ({
   ...await original<typeof import("../src/lib/data")>(),
   ...dataMockFrom(FACTS),
@@ -117,7 +130,7 @@ beforeEach(() => {
   window.localStorage.clear();
   /* the notepad's draft store, so its Record can be pressed */
   (globalThis as { indexedDB?: IDBFactory }).indexedDB = new IDBFactory();
-  Object.assign(S, { presigned: [], finalized: [], failFinalize: 0, undelivered: [], recorders: 0, emptyClip: false, attachedOnRead: null });
+  Object.assign(S, { presigned: [], finalized: [], failFinalize: 0, undelivered: [], recorders: 0, emptyClip: false, attachedOnRead: null, noteGone: false, holdFinalize: null, holding: false, deleted: [] });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   vi.stubGlobal("MediaRecorder", Recorder);
   Object.defineProperty(window.navigator, "mediaDevices", {
@@ -376,4 +389,60 @@ it("says on Home that a recording failed after the archive closed, and keeps say
     "there is no clip to try again with").toBe(false);
   await openArchive();
   expect(line(), "opening the archive cleared Home's line").toBeTruthy();
+});
+
+/* ═══ A CLIP WHOSE NOTE IS GONE IS NOT OFFERED AGAIN (review, 2026-10-22) ═══
+   The server answering 404/410, or the note deleted here, means there is
+   nothing to attach to: Try again could only fail again. The line says the
+   note was deleted, with × only. And while a clip is on its way to a note,
+   that note cannot be deleted. */
+const tryAgainOn = (line: Element | null) => [...(line?.querySelectorAll("button") ?? [])].some((button) => button.textContent === "Try again");
+
+it("says the recording couldn't be kept when the server no longer has its note", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-1");
+  S.noteGone = true;
+  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await settle();
+  await deliverStops();
+  const line = q(".waka-clip-failed");
+  expect(line, "the lost clip was said nowhere").toBeTruthy();
+  expect(line!.textContent).toContain("The note was deleted, so the recording couldn’t be kept.");
+  expect(tryAgainOn(line), "Try again was offered for a note that is gone").toBe(false);
+});
+
+it("stops offering Try again once the clip's note is deleted here", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-1");
+  S.failFinalize = 1;
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await deliverStops();
+  expect(tryAgainOn(q(".waka-clip-failed")), "the failed clip offered no Try again").toBe(true);
+  await act(async () => q<HTMLButtonElement>('#waka-note-tools [aria-label="Delete"]')!.click());
+  /* past Undo's moment, the delete is sent */
+  await act(async () => { await vi.advanceTimersByTimeAsync(7000); });
+  await settle(4);
+  expect(S.deleted).toEqual(["own-1"]);
+  const line = q(".waka-clip-failed");
+  expect(line?.textContent).toContain("The note was deleted, so the recording couldn’t be kept.");
+  expect(tryAgainOn(line), "Try again was still offered for a deleted note").toBe(false);
+});
+
+it("does not let a note be deleted while its clip is on its way", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-1");
+  S.holding = true;
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await deliverStops();
+  const erase = () => q<HTMLButtonElement>('#waka-note-tools [aria-label="Delete"]');
+  expect(erase(), "the note's Delete is gone").toBeTruthy();
+  expect(erase()!.disabled, "Delete was offered over a clip still uploading to this note").toBe(true);
+  S.holding = false;
+  await act(async () => { S.holdFinalize?.(); });
+  await settle(4);
+  expect(S.finalized).toEqual(["own-1"]);
+  expect(erase()!.disabled, "Delete stayed off after the clip landed").toBe(false);
 });
