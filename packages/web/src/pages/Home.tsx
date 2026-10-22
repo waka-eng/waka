@@ -7603,10 +7603,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
         const note = words.length > 32 ? `${words.slice(0, 31).trimEnd()}…` : words;
         return (
           <div className="waka-clip-failed" role="alert" data-jar-chrome="1" data-jar-interactive="1">
-            <span className="waka-clip-failed-words">{note
-              ? formatMessage(locale, 'worldRecordingAttachFailed', { note })
+            <span className="waka-clip-failed-words">{failure.reason
+              /* the recorder's own failure: there is no clip to try again */
+              ? note ? formatMessage(locale, 'worldRecordingProblemFor', { note, problem: say(failure.reason) }) : say(failure.reason)
+              : note ? formatMessage(locale, 'worldRecordingAttachFailed', { note })
               : say('worldRecordingAttachFailedUntitled')}</span>
-            <button type="button" className="waka-clip-failed-retry" onClick={() => archiveRecorder.retry(failure.id)}>{say('surfaceUnavailableRetry')}</button>
+            {failure.file ? <button type="button" className="waka-clip-failed-retry" onClick={() => archiveRecorder.retry(failure.id)}>{say('surfaceUnavailableRetry')}</button> : null}
             <button type="button" className="waka-clip-failed-close" aria-label={say('worldClose')} onClick={() => archiveRecorder.dismiss(failure.id)}>×</button>
           </div>
         );

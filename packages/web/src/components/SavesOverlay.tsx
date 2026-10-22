@@ -805,6 +805,16 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        still said when that note is opened again, and never on another */
     clearRecording();
   }, [open?.id, clearRecording]);
+  /* WHICH NOTE THIS SURFACE IS SHOWING, told to the recorder, so a
+     recording's own failure on any other note — or after this surface has
+     gone — is said on `Home`'s line rather than nowhere. Clearing the
+     recorder's line above never touches that one: it is `Home`'s. */
+  const setViewing = recorder.setViewing;
+  const viewingId = open?.id ?? null;
+  useEffect(() => {
+    setViewing(viewingId === null ? null : { noteId: viewingId, profileId: profileId ?? null });
+    return () => setViewing(null);
+  }, [viewingId, profileId, setViewing]);
 
 
   /**

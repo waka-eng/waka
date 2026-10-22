@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { attachToNote } from "./attach-to-note";
+import type { MessageKey } from "./i18n";
 import { useAudioRecording } from "./use-audio-recording";
 
 /**
@@ -34,17 +35,18 @@ export interface ClipTarget {
   profileId: string | null;
 }
 
-export interface ClipFailure {
-  id: number;
-  file: File;
-  target: ClipTarget;
-}
+/** A clip that did not attach (`file`, which Try again sends again), or a
+    recording that never became a clip (`reason`, the recorder's own
+    catalogue key — empty, too large, interrupted, denied). */
+export type ClipFailure =
+  | { id: number; target: ClipTarget; file: File; reason?: undefined }
+  | { id: number; target: ClipTarget; file: null; reason: MessageKey };
 
-/** `blocked`: another recorder on the page (the notepad's) is recording or
-    finishing — one microphone at a time, so `start` refuses while it is. */
 const askForMicrophone = () => navigator.mediaDevices.getUserMedia({ audio: true });
 const noteKey = (noteId: string, profileId: string | null) => `${profileId ?? ""}\u0000${noteId}`;
 
+/** `blocked`: another recorder on the page (the notepad's) is recording or
+    finishing — one microphone at a time, so `start` refuses while it is. */
 export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   const blocked = Boolean(options.blocked);
   const target = useRef<ClipTarget | null>(null);
@@ -106,7 +108,7 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
      callback settles, and `finishing` is what holds the other recorder off
      — so awaiting the upload would hold the notepad's microphone off for a
      network round trip after this one's had already been released. The
-     upload reports through `sending`, `landed` and `failures` instead. */
+     upload reports through `isSending`, `landed` and `failures` instead. */
   const recorder = useAudioRecording((file) => {
     const to = target.current;
     if (to) void send(file, to);
@@ -132,11 +134,35 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   const recorderStop = recorder.stop;
   const stopIfLive = useCallback(() => { if (live.current) void recorderStop(); }, [recorderStop]);
 
+  /* ═══ THE RECORDER'S OWN FAILURES, WHEN NOBODY IS LOOKING AT THE NOTE ══
+     Review, 2026-10-21. An empty, too-large, interrupted or refused
+     recording sets the hook's `error`, which the archive says in its bar —
+     on the note the recording was made on. Arriving after the archive has
+     closed (the clip is handed over in a later task), or while another note
+     or another wall is showing, it was said nowhere. So the archive tells
+     this hook which note it is showing (`setViewing`), and an error for any
+     other note goes to the caller's failure list, and the hook's own line is
+     cleared so it does not follow the person onto the next note. */
+  const viewing = useRef<{ noteId: string; profileId: string | null } | null>(null);
+  const setViewing = useCallback((note: { noteId: string; profileId: string | null } | null) => { viewing.current = note; }, []);
+  const recorderError = recorder.error, recorderClear = recorder.clear;
+  useEffect(() => {
+    const to = target.current;
+    if (!recorderError || !to) return;
+    const seen = viewing.current;
+    if (seen && seen.noteId === to.noteId && seen.profileId === to.profileId) return;
+    failureSeq.current += 1;
+    const id = failureSeq.current;
+    setFailures((all) => [...all, { id, file: null, target: to, reason: recorderError }]);
+    recorderClear();
+  }, [recorderError, recorderClear, setFailures]);
+
   const retry = useCallback((id: number) => {
     const found = failuresRef.current.find((item) => item.id === id);
     if (!found) return;
     setFailures((all) => all.filter((item) => item.id !== id));
-    void send(found.file, found.target);
+    /* a recording that never became a clip has nothing to send again */
+    if (found.file) void send(found.file, found.target);
   }, [send, setFailures]);
   const dismiss = useCallback((id: number) => setFailures((all) => all.filter((item) => item.id !== id)), [setFailures]);
 
@@ -148,8 +174,8 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   const { phase: recorderPhase, seconds, error, notice, stop, cancel, clear } = recorder;
   return useMemo(() => ({
     phase: recorderPhase, seconds, error, notice, stop, cancel, clear,
-    start, stopIfLive, blocked, forNote, isSending, landed, failures, retry, dismiss,
-  }), [recorderPhase, seconds, error, notice, stop, cancel, clear, start, stopIfLive, blocked, forNote, isSending, landed, failures, retry, dismiss]);
+    start, stopIfLive, setViewing, blocked, forNote, isSending, landed, failures, retry, dismiss,
+  }), [recorderPhase, seconds, error, notice, stop, cancel, clear, start, stopIfLive, setViewing, blocked, forNote, isSending, landed, failures, retry, dismiss]);
 }
 
 export type ArchiveRecorder = ReturnType<typeof useArchiveRecorder>;

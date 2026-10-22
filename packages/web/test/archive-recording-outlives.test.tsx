@@ -49,6 +49,8 @@ const S = vi.hoisted(() => ({
   /* `stop` deliveries the browser has not made yet */
   undelivered: [] as Array<() => void>,
   recorders: 0,
+  /* the browser hands over a clip with nothing in it */
+  emptyClip: false,
   /* a note the list read gives an attachment the open card has not seen */
   attachedOnRead: null as string | null,
 }));
@@ -96,7 +98,7 @@ class Recorder {
   stop(): void {
     this.state = "inactive";
     S.undelivered.push(() => {
-      this.ondataavailable?.({ data: new Blob(["fixture audio"], { type: this.mimeType }) });
+      this.ondataavailable?.({ data: new Blob(S.emptyClip ? [] : ["fixture audio"], { type: this.mimeType }) });
       void this.onstop?.();
     });
   }
@@ -115,7 +117,7 @@ beforeEach(() => {
   window.localStorage.clear();
   /* the notepad's draft store, so its Record can be pressed */
   (globalThis as { indexedDB?: IDBFactory }).indexedDB = new IDBFactory();
-  Object.assign(S, { presigned: [], finalized: [], failFinalize: 0, undelivered: [], recorders: 0, attachedOnRead: null });
+  Object.assign(S, { presigned: [], finalized: [], failFinalize: 0, undelivered: [], recorders: 0, emptyClip: false, attachedOnRead: null });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   vi.stubGlobal("MediaRecorder", Recorder);
   Object.defineProperty(window.navigator, "mediaDevices", {
@@ -349,4 +351,29 @@ it("re-points the open note only when the clip landed on it", async () => {
   await deliverStops();
   expect(S.finalized).toEqual(["own-1"]);
   expect(field()?.placeholder, "a clip for another note re-pointed this one").toBeTruthy();
+});
+
+/* ═══ A RECORDING THAT FAILS AFTER THE ARCHIVE CLOSED IS SAID ON HOME (review)
+   The recorder's own failures (empty, too large, interrupted, denied) were
+   said only in the archive's bar. One that arrives after the archive has
+   gone — the clip is handed over in a later task — was said nowhere. It
+   goes to Home's line now, and opening the archive again does not clear it. */
+it("says on Home that a recording failed after the archive closed, and keeps saying it when the archive reopens", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-2");
+  S.emptyClip = true;
+  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await settle();
+  expect(archiveOpen()).toBe(false);
+  await deliverStops();
+  expect(S.finalized, "an empty clip was attached").toEqual([]);
+  const line = () => q(".waka-clip-failed");
+  expect(line(), "the recording's failure was said nowhere once the archive had gone").toBeTruthy();
+  expect(line()!.textContent).toContain("something I kept, 2");
+  expect(line()!.textContent).toContain("Nothing was recorded. Please try again.");
+  expect([...line()!.querySelectorAll("button")].some((button) => button.textContent === "Try again"),
+    "there is no clip to try again with").toBe(false);
+  await openArchive();
+  expect(line(), "opening the archive cleared Home's line").toBeTruthy();
 });
