@@ -6,6 +6,10 @@
  * contributes 0.5^(age / 7 days), the sum saturates through
  * 1 − e^(−activity / SAVING_LIGHT_SCALE) — and these cases pin what it must
  * say, never how it says it on screen.
+ *
+ * WHAT THIS MOCKS, AND WHY (gate G6). Nothing. `savingLight` is a pure
+ * function of timestamps and a clock, and the clock is passed in, so there is
+ * no layer between the test and the shipped code to replace.
  */
 import { describe, expect, it } from "vitest";
 
