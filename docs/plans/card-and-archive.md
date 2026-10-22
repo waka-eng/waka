@@ -97,5 +97,30 @@ recorder never has to unmount at all.
   again, ×) and both directions of one-microphone. Standalone archive suites
   mount it through `test/helpers/archive.tsx`, which supplies the recorder.
 
+**After `/code-review` (2026-10-22), each its own commit with a test:**
+
+- **One attach helper.** `lib/attach-to-note.ts` (`attachToNote`) is the
+  presign/upload/finalize both the archive's photo door and the recorder call.
+- **Uploads per note.** In-flight uploads are counted per note and owner
+  (`isSending(noteId, profileId)`), so two concurrent clips keep their own
+  "Uploading…" and neither clears the other.
+- **`beforeunload` while uploading.** The recorder's own warning ends at
+  idle; `useArchiveRecorder` warns while any clip upload is in flight.
+- **One object.** The returned recorder is memoized, and the microphone
+  request is a module constant, so the hook's `start` is stable.
+- **Re-point only the landed note.** A clip landing on note A no longer swaps
+  an open note B's card for the list's copy.
+- **Unmount stop from the press.** `start` marks the recorder live
+  synchronously and the archive's unmount calls `stopIfLive()`, so Record and
+  leaving in one commit never leave a live microphone.
+- **Recorder errors reach Home.** The archive tells the recorder which note
+  it shows (`setViewing`). An empty, too-large, interrupted or refused
+  recording for any other note, or after the archive closed, goes to Home's
+  line ("Your recording for "<note>": …", × only). Reopening the archive
+  does not clear it.
+- **Residual: L14** (`docs/known-issues.md`). An account or profile switch
+  remounts `HomeExperience` and drops a pending clip and its line. Not
+  restructured.
+
 Still open from the L13 entry: `finalizeAttachment` for an inspiration sends
 no `?profile=`. The lifted recorder keeps the calls the archive made before.
