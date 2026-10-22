@@ -849,6 +849,13 @@ export interface FieldAudit {
    * smallest thing that would have gone to zero.
    */
   provenanceCount: number;
+  /**
+   * The companion's aura on this wall: `reading` is how much this wall's
+   * owner has been saving (`savingLight`), `lit` the eased reach the aura is
+   * drawn at. Numbers for the test only — the page renders them as light,
+   * never as numerals.
+   */
+  aura: { reading: number; lit: number };
   /* `ground` AND `company` ARE GONE FROM THE PUBLISHED SHAPE. `ground` named
      whose memories were standing in front of you and was null — yours — on
      every wall that was not a room's; `company` listed the painted member
@@ -1834,11 +1841,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          into a quiet stretch and brightens over a live one. */
       insp: 0,
       inspNow: 0,
-      /* `saving` is how much YOU have been saving lately — `savingLight` over
-         your own saves at the dial's time — and it is what drives the aura's
-         reach (`lit`). `savingNow` eases toward whichever wall's reading the
-         camera stands on: yours at home, the agent's own on its wall. */
-      saving: 0,
+      /* `savingNow` is the aura's reach (`lit`): it eases toward
+         `wallSaving` for whichever wall the camera stands on — how much YOU
+         have been saving at home, how much the agent has on its wall. */
       savingNow: 0,
       flare: 0,
       y: 0,
@@ -2471,8 +2476,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       /** its own aliveness: the memories IT kept, and how alive they still are */
       insp: number;
       inspNow: number;
-      /** how much IT has been saving lately — the aura's reach on its wall */
-      saving: number;
       yaw: number;
       /** where its attention rests: + down into the field, − up at its sky */
       lat: number;
@@ -2530,8 +2533,19 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       const quality = sum / k;
       const volume = Math.sqrt(Math.min(n, 8) / 8);
       res.insp = clamp01(quality * volume);
-      res.saving = savingLight(savedAt(res.wall.id), TRef.current);
     }
+
+    /**
+     * HOW MUCH EACH WALL'S OWNER HAS BEEN SAVING, KEYED BY WALL ID ("" is
+     * yours). Read from the scene index, which every run builds from its
+     * whole list, so an agent's wall has its reading the moment its saves are
+     * loaded — NOT only after `tryWakeWall` has made it a resident. Keying it
+     * on the resident went dark after any rebuild on an agent's wall
+     * (`residents` starts empty each run). Refreshed in `computeInspiration`.
+     */
+    const wallSaving = new Map<string, number>();
+    /** The aura's reach right now: the eased saving reading, plus the flare. */
+    const auraLit = () => clamp01(companion.savingNow + companion.flare * 0.5);
 
     /** When each memory standing on a wall at the dial's time was saved. */
     function* savedAt(wallId: string): Generator<number> {
@@ -2555,7 +2569,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         sprites: bakeBeing(pal, `${w.kind}:${w.id}`, being, true, true),
         insp: 0,
         inspNow: 0,
-        saving: 0,
         yaw: 0,
         /* it is looking down at its own memories when you find it */
         lat: 0.34,
@@ -3739,7 +3752,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          flat 0.12 on top (`freshLit`); a save today now counts in full inside
          `savingLight`, so that lift is part of the reading rather than a
          second one beside it. */
-      companion.saving = savingLight(savedAt(""), TRef.current);
+      wallSaving.clear();
+      for (const key of scenes.keys()) wallSaving.set(key, savingLight(savedAt(key), TRef.current));
       for (const res of residents.values()) residentInsp(res);
     }
 
@@ -4023,7 +4037,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        * saving." `savingNow` is `savingLight` over this wall's own saves (see
        * lib/aliveness). Each note's colour is still its aliveness.
        */
-      const lit = clamp01(companion.savingNow + companion.flare * 0.5);
+      const lit = auraLit();
       const bodyLit = clamp01(0.55 + lit * 0.45);
       /* Whose form it is wearing where the camera is right now — the body, the
          silhouette its features clip to, and the halo, all from one place so
@@ -4852,9 +4866,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          decays; it blinks; and when it is genuinely inspired, motes rise. */
       companion.inspNow = view.reduced ? companion.insp : lerp(companion.inspNow, companion.insp, 1 - Math.pow(0.02, dt));
       {
-        const here = curWall();
-        const want =
-          here.kind === "agent" ? (residents.get(here.col)?.saving ?? 0) : companion.saving;
+        const want = wallSaving.get(curWall().id) ?? 0;
         companion.savingNow = view.reduced ? want : lerp(companion.savingNow, want, 1 - Math.pow(0.02, dt));
       }
       /* THE GLASSES GO ON OVER ABOUT 0.6s, and the face goes into thought
@@ -6521,6 +6533,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           wallKind: curWall().kind,
           wallId: curWall().id,
           provenanceCount: poster.provenance.size,
+          aura: {
+            reading: Number((wallSaving.get(curWall().id) ?? 0).toFixed(3)),
+            lit: Number(auraLit().toFixed(3)),
+          },
           col: trip.col,
           travelling: trip.active,
           lastGo: lastGoRef.current,
