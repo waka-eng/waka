@@ -1290,6 +1290,27 @@ waiting, and report a failure through Home. See `docs/plans/card-and-archive.md`
 
 ---
 
+### L14. Switching account or profile drops an archive clip still uploading, and its failure line *(residual of the L12 fix; open)*
+**Noted on `claude/recorder-in-home`, 2026-10-22** · `packages/web/src/pages/Home.tsx`, `packages/web/src/lib/archive-recorder.ts` · severity low
+
+**What.** L12's fix moved the archive's recorder into `HomeExperience`, which outlives the
+archive. `HomeExperience` itself is keyed by `profileStorageKey(storageScope, "world")`, so a
+sign-out, an account switch or a change of the signed-in profile unmounts it on purpose: the old
+world's caches, readers and writers go with it. That takes the archive recorder too. A clip still
+being handed over or uploading at that moment is dropped, and so is any line on Home's failure list
+(`.waka-clip-failed`). An upload already sent may still finish on the server; nothing on screen
+says so.
+
+**Why not fixed here.** Keeping the recorder across an identity change means lifting it above the
+keyed boundary, into a component that outlives the person it was recording for. The review chose
+not to restructure that boundary for this fix. The window is small: the identity has to change
+during the second or so between Stop and the upload's answer, or while a failure line is up.
+
+**Follow-up.** If it matters, hold pending clips and failures above `HomeExperience`, keyed by the
+profile they belong to, and show them again only to that profile.
+
+---
+
 ## Added after the audit: room-derived text outlives the memory it came from
 
 **Status:** accepted for phase 1 of the room retirement (2026-10-17), open until the room data
