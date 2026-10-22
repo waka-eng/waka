@@ -71,6 +71,19 @@ it('throws the aura wide on your wall after a busy week of saving', async () => 
   expect(aura.lit, 'the drawn reach never eased up to the reading').toBeGreaterThanOrEqual(0.55);
 });
 
+it('sends motes up off a bright aura, on the same reach that draws them', async () => {
+  /* Emission read the field's aliveness while drawing read the saving reach,
+     so a busy saver whose notes are not yet "alive" emitted nothing at all. */
+  world = await mountWorld(FACTS); await settle();
+  expect(world.audit().aura.lit).toBeGreaterThan(0.55);
+  let rising = 0;
+  for (let turn = 0; turn < 20 && rising === 0; turn += 1) {
+    await world.step(30);
+    rising = world.audit().aura.rising;
+  }
+  expect(rising, 'a bright aura sent nothing up').toBeGreaterThan(0);
+});
+
 it("reads the agent's own saving on its wall, after the rebuild its bundle causes", async () => {
   world = await mountWorld(FACTS); await settle();
   const toAgent = face('My agent');

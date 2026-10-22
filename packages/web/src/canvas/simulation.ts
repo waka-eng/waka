@@ -157,6 +157,9 @@ import type { Evidence, Inspiration, Signal } from "../lib/data";
 
 /** Drifting dust motes — the atmosphere, not decoration. */
 const MOTES = 40;
+/** The aura's reach past which inspiration visibly comes off the companion —
+    one threshold, read by both the emission and the drawing of those motes. */
+const MOTES_RISE_AT = 0.55;
 /** Dim sparkle points scattered in the deep background. */
 const SPARKS = 26;
 /* The theme-hash gradient pairs are GONE. An orb's colour said which theme its
@@ -852,10 +855,10 @@ export interface FieldAudit {
   /**
    * The companion's aura on this wall: `reading` is how much this wall's
    * owner has been saving (`savingLight`), `lit` the eased reach the aura is
-   * drawn at. Numbers for the test only — the page renders them as light,
-   * never as numerals.
+   * drawn at, `rising` how many motes are coming off it right now. Numbers
+   * for the test only — the page renders them as light, never as numerals.
    */
-  aura: { reading: number; lit: number };
+  aura: { reading: number; lit: number; rising: number };
   /* `ground` AND `company` ARE GONE FROM THE PUBLISHED SHAPE. `ground` named
      whose memories were standing in front of you and was null — yours — on
      every wall that was not a room's; `company` listed the painted member
@@ -4232,7 +4235,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         }
 
         /* inspiration coming off it, literally */
-        if (!view.reduced && lit > 0.55) {
+        if (!view.reduced && lit > MOTES_RISE_AT) {
           for (let i = 0; i < 10; i++) {
             if (upA[i] <= 0) continue;
             ctx!.globalAlpha = upA[i] * 0.5;
@@ -5031,7 +5034,11 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           companion.blink = 1;
         }
         if (companion.blink > 0) companion.blink = Math.max(0, companion.blink - dt / 0.12);
-        const strong = clamp01(companion.inspNow + companion.flare * 0.5) > 0.55;
+        /* THE SAME `lit` THE MOTES ARE DRAWN ON. Emission read the field's
+           aliveness while drawing read the saving-based reach, so a heavy
+           saver with a quiet field emitted none, and motes emitted under a
+           dim aura were never drawn. */
+        const strong = auraLit() > MOTES_RISE_AT;
         for (let i = 0; i < 10; i++) {
           if (upA[i] > 0) {
             upY[i] -= dt * 26;
@@ -6536,6 +6543,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           aura: {
             reading: Number((wallSaving.get(curWall().id) ?? 0).toFixed(3)),
             lit: Number(auraLit().toFixed(3)),
+            rising: upA.reduce((n, a) => n + (a > 0 ? 1 : 0), 0),
           },
           col: trip.col,
           travelling: trip.active,
