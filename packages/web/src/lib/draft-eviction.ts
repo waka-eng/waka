@@ -69,6 +69,7 @@
  * localStorage sweeps follow: logout itself can never fail for this.
  */
 import { clearAllConversationDrafts } from './conversation-drafts';
+import { clearDraftLineageRecords } from './draft-lineage';
 import { clearInspirationDrafts } from './inspiration-draft-store';
 import { profileStorageKey, writeProfileText, type ProfileStorageScope } from './profile-storage';
 
@@ -123,6 +124,9 @@ export function clearUnsentDrafts(scope: ProfileStorageScope | null): Promise<vo
      being unable to tidy up is not a reason to leave the person signed in. */
   try { writeProfileText(scope, 'draft', ''); } catch { /* best effort */ }
   try { clearAllConversationDrafts(scope); } catch { /* best effort */ }
+  /* The per-tab record of which chat drafts this tab forked: keys and
+     fingerprints only, but this account's all the same. */
+  clearDraftLineageRecords(scope);
   for (const prefix of UNSENT_KEY_PREFIXES) {
     try { clearPrefix(scope, prefix); } catch { /* best effort */ }
   }

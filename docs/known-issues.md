@@ -1154,39 +1154,27 @@ deliberately-broken security check. One auditor reported leaving
   concurrent runs.
 - Give each reviewing agent its own worktree or clone.
 
-### L10. A sent chat message or discarded share card can come back after a reload *(open follow-up)*
-**Open** · `packages/web/src/components/ConversationPanel.tsx`, `PrincipleShare.tsx` · severity low
+### L10. A sent chat message or discarded share card can come back after a reload *(chat fixed on `claude/drafts-lineage`; cards left as dev; residuals open)*
+**Residuals open** · `packages/web/src/lib/draft-lineage.ts`, `components/ConversationPanel.tsx` · severity low
 
-**What.** Chat and share-card drafts are stamped with a writer id minted per mount, and an edit to a
-draft from another writer is forked under a new key so two tabs never overwrite each other. A reload
-is a new mount, so the first keystroke after it forks the restored draft; sending (or discarding)
-the fork clears only the fork's key, and the next reload restores the original — words already
-sent, back in the box.
+**What was fixed (chat).** Every new mount is a new draft writer, so a restored draft forks on its
+first change and sending the fork used to leave the original behind. This tab now records each chat
+fork in sessionStorage (modelled on `OWN_SAVES`, PR #452), and a confirmed send clears the recorded
+line by compare-and-delete. Covered: an existing chat and the next new chat
+(`new:<principleId|general>`), chains of forks across mounts, edited words, attaching the first photo.
+A fork is linked only when this tab itself stored the original (a per-tab set of the keys it
+stored with a fingerprint of its bytes, kept across this tab's reloads, never the words; cleared at sign-out), so a draft another tab wrote is never touched.
 
-**Why it is open.** Fixing it needs to tell this tab's own earlier draft from one an open tab still
-holds, and to survive duplicated tabs, staged attachments and retries. Three attempts in the
-`claude/fix-web-bugs` review rounds each traded it for something worse (deleting an open tab's
-draft, dropping attachments on fork, duplicate sends), so it was taken out of that PR. **To be fixed
-in a dedicated PR.**
+**Left as dev behaviour (share cards).** Discard clears only the card on screen, so a forked card's
+original stays. That is deliberate: the original is visible and choosable in the Drafts picker, a
+card the person may be keeping, not words already sent. See `docs/plans/drafts-after-reload.md`.
 
-**Cases (2026-10-21, `docs/plans/drafts-after-reload.md`).** Every new mount triggers it, not only
-a reload: closing and reopening the chat, or switching conversations, also gets a fresh writer.
-(1) A restored draft is edited, which forks it; the fork is sent and confirmed, and the original
-stays on disk. In an existing chat it returns on that chat's next mount. In a new chat (stored
-under `new:<principleId|general>`) the send moves to the new conversation, so it returns in the
-NEXT new chat. (2) Two mounts before sending leave a chain (original, fork, fork); clearing only
-the draft this mount restored still leaves the first. (3) Words of the restored draft are changed
-or deleted before sending, so no rule keyed by the sent words matches it. (4) A restored share card
-forks and the fork is discarded, and the original returns (the picker lists both beforehand). It
-forks either when you change a setting, or in change mode with no edit, when the mount effect fills
-a null `beforeStatementId`. Not affected: sending an unedited restored chat draft, discarding an
-unforked card, drafts with attachments (carried, not forked), pending drafts (can't be edited).
-The design note weighs four storage-only rules. Clearing or moving the original deletes a draft an
-idle open tab still shows. Sweeping the sent words misses case 3 and cards. The viable candidate is
-a per-tab `sessionStorage` writer, the same identity saves already use (`OWN_SAVES`, PR #452). It
-leaves duplicated tabs, plus drafts from a closed tab or an earlier browser session, which still
-fork. **No code change shipped on `claude/followup-drafts`.** Closing it means accepting one of
-those residuals.
+**Still open.** (i) A duplicated tab copies the list, so either copy may clear what the other forked
+from. (ii) A tab that has closed (or a browser restart) loses its list, so a fork made there leaves
+its original to come back. (iii) Forks stored before this shipped come back once. (iv) A draft another
+tab wrote, restored here, edited and sent, stays on disk and comes back on this chat's next mount.
+(v) A draft this tab wrote that another open tab is showing unedited is cleared when this tab sends
+its fork; that tab keeps the (already sent) words only if it edits before reloading or closing.
 
 ---
 
