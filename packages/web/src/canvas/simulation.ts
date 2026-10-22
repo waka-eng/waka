@@ -111,10 +111,11 @@ import {
 } from "../space/inspiration/orb";
 import type { Provenance } from "../space/top-of-mind/board";
 import { homeActivityLayout } from "../lib/home-activity-layout";
-import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
+import { clamp, clamp01, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import { isEditableTarget, isNativeSurface } from "../lib/surface-input";
 import { formatMessage, t, type MessageKey, type SupportedLocale } from "../lib/locales";
 import { monthTag } from "../lib/words";
+import { savingLight } from "../lib/aliveness";
 import type { AgentBundle } from "../lib/agent-contract";
 import type { Evidence, Inspiration, Signal } from "../lib/data";
 /**
@@ -1833,10 +1834,13 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          into a quiet stretch and brightens over a live one. */
       insp: 0,
       inspNow: 0,
+      /* `saving` is how much YOU have been saving lately — `savingLight` over
+         your own saves at the dial's time — and it is what drives the aura's
+         reach (`lit`). `savingNow` eases toward whichever wall's reading the
+         camera stands on: yours at home, the agent's own on its wall. */
+      saving: 0,
+      savingNow: 0,
       flare: 0,
-      /** Something was captured today: a steady lift, never a pulse. */
-      freshLit: 0,
-      freshToday: false,
       y: 0,
       size: 110,
 
@@ -2467,6 +2471,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       /** its own aliveness: the memories IT kept, and how alive they still are */
       insp: number;
       inspNow: number;
+      /** how much IT has been saving lately — the aura's reach on its wall */
+      saving: number;
       yaw: number;
       /** where its attention rests: + down into the field, − up at its sky */
       lat: number;
@@ -2524,6 +2530,12 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       const quality = sum / k;
       const volume = Math.sqrt(Math.min(n, 8) / 8);
       res.insp = clamp01(quality * volume);
+      res.saving = savingLight(savedAt(res.wall.id), TRef.current);
+    }
+
+    /** When each memory standing on a wall at the dial's time was saved. */
+    function* savedAt(wallId: string): Generator<number> {
+      for (const b of sceneBalls(wallId)) if (b.active && !b.leaving) yield b.capturedMs;
     }
 
     /**
@@ -2543,6 +2555,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         sprites: bakeBeing(pal, `${w.kind}:${w.id}`, being, true, true),
         insp: 0,
         inspNow: 0,
+        saving: 0,
         yaw: 0,
         /* it is looking down at its own memories when you find it */
         lat: 0.34,
@@ -3722,14 +3735,11 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       let sum = 0;
       for (let i = 0; i < k; i++) sum += top[i];
       companion.insp = clamp01(sum / k);
-      const dayStart = TRef.current - DAY_MS;
-      companion.freshToday = false;
-      for (const b of list) {
-        if (b.active && !b.leaving && b.capturedMs >= dayStart) {
-          companion.freshToday = true;
-          break;
-        }
-      }
+      /* The aura reads saving, not aliveness. A capture today used to add a
+         flat 0.12 on top (`freshLit`); a save today now counts in full inside
+         `savingLight`, so that lift is part of the reading rather than a
+         second one beside it. */
+      companion.saving = savingLight(savedAt(""), TRef.current);
       for (const res of residents.values()) residentInsp(res);
     }
 
@@ -4001,13 +4011,19 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        *
        * So the split. `bodyLit` has a floor under it and never reads as
        * fading: breath, blink, look-arounds and the body's own light are the
-       * creature's, unconditionally. `lit` stays exactly what it was and now
-       * governs only its REACH — how far the aura carries, how much comes off
-       * it. A quiet archive is a companion sitting close to itself; a live one
-       * throws light across the room. What changed is what it can see, not
-       * whether it is alive.
+       * creature's, unconditionally. `lit` governs only its REACH — how far
+       * the aura carries, how much comes off it. A quiet stretch is a
+       * companion sitting close to itself; a busy one throws light across the
+       * room. What changed is what it can see, not whether it is alive.
+       *
+       * AND SINCE 2026-10-21 THE REACH IS YOUR SAVING, NOT THE FIELD. It read
+       * the top-eight aliveness, which spends only a quarter of its range on
+       * freshness, so it stayed faint for nearly everyone. The founder: "the
+       * brightness should reflect how much inspirations the person has been
+       * saving." `savingNow` is `savingLight` over this wall's own saves (see
+       * lib/aliveness). Each note's colour is still its aliveness.
        */
-      const lit = clamp01(companion.inspNow + companion.flare * 0.5 + companion.freshLit);
+      const lit = clamp01(companion.savingNow + companion.flare * 0.5);
       const bodyLit = clamp01(0.55 + lit * 0.45);
       /* Whose form it is wearing where the camera is right now — the body, the
          silhouette its features clip to, and the halo, all from one place so
@@ -4835,6 +4851,12 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       /* the companion. Its glow eases toward the real signal; its flare
          decays; it blinks; and when it is genuinely inspired, motes rise. */
       companion.inspNow = view.reduced ? companion.insp : lerp(companion.inspNow, companion.insp, 1 - Math.pow(0.02, dt));
+      {
+        const here = curWall();
+        const want =
+          here.kind === "agent" ? (residents.get(here.col)?.saving ?? 0) : companion.saving;
+        companion.savingNow = view.reduced ? want : lerp(companion.savingNow, want, 1 - Math.pow(0.02, dt));
+      }
       /* THE GLASSES GO ON OVER ABOUT 0.6s, and the face goes into thought
          with them — the squint and the lens's magnification ride the same
          value, so nothing about the expression snaps. Under reduced motion
@@ -4898,12 +4920,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         companion.mood *= Math.pow(0.5, (dt * 1000) / MOOD_HALF_LIFE_MS);
         if (Math.abs(companion.mood) < 0.002) companion.mood = 0;
       }
-      /* Something was captured today. That is a STATE, and states render —
-         so it is a steady offset under the companion's light, not a twitch.
-         (It used to flash every six seconds: the layout brightening itself
-         some six hundred times an hour with no hand involved anywhere, which
-         is the same crime as a camera move on panel-open.) */
-      companion.freshLit = companion.freshToday ? 0.12 : 0;
       if (!view.reduced) {
         /* Something is forming above: every nine seconds or so it looks up,
            and every fourteen it sends a mote that way. The companion is how
