@@ -60,7 +60,6 @@
  * stub keeps a font CDN outage from being reported as a broken journey.
  */
 import { type Browser, type BrowserContext, type Page, type Route } from "playwright";
-import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
 import { openTheNotepad, saveAnInspiration } from "./keep";
 import { openAMemory } from "./open-a-memory";
@@ -225,7 +224,7 @@ async function openSettings(page: Page, base: string): Promise<void> {
      The click did not throw, which is why this needed a browser to find. */
   if ((await page.locator(".waka-over").count()) > 0) {
     await page
-      .locator(".waka-dock-item", { hasText: /^Now$/ })
+      .getByRole("button", { name: "Close", exact: true })
       .first()
       .click({ timeout: 8_000 });
     await page.waitForTimeout(1_200);
@@ -243,7 +242,7 @@ async function openSettings(page: Page, base: string): Promise<void> {
  * rather than by index because the order of the three is a design decision.
  */
 async function openSettingsGroup(page: Page, name: RegExp): Promise<boolean> {
-  const row = page.locator(".waka-settings-row", { hasText: name }).first();
+  const row = page.getByRole("button", { name }).first();
   if ((await row.count()) === 0) return false;
   await row.click({ timeout: 8_000 });
   await page.waitForTimeout(600);
@@ -300,10 +299,10 @@ async function countInArchive(page: Page, base: string): Promise<number> {
       await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(6_000);
     }
-    await page
-      .locator(".waka-dock-item", { hasText: /^Inspirations$/ })
-      .first()
-      .click({ timeout: 10_000 });
+    if (!(await page.locator(".waka-over").count())) {
+      await openTheNotepad(page);
+      await page.getByRole("button", { name: "All inspirations", exact: true }).click();
+    }
     await page.waitForTimeout(3_000);
     const read = (await page.evaluate(() => {
       const el = document.querySelector(".jar-saved-count");
@@ -326,7 +325,7 @@ async function countInArchive(page: Page, base: string): Promise<number> {
        (That journey is gone — see its tombstone — and the group with it;
        the overlay-swallows-the-click defect this guards against is not.) */
     await page
-      .locator(".waka-dock-item", { hasText: /^Now$/ })
+      .getByRole("button", { name: "Close", exact: true })
       .first()
       .click({ timeout: 8_000 });
     await page.waitForTimeout(1_200);
@@ -461,7 +460,7 @@ const JOURNEYS: Journey[] = [
       }));
       /* An empty world must still SAY something — #262 exists because it used
          to say nothing at all, which reads as broken rather than as new. */
-      const speaks = /nothing is forming yet|forming/i.test(state.text);
+      const speaks = /Nothing kept to come back to yet/i.test(state.text) && /Save an inspiration/.test(state.text);
       const ok = state.path === "/" && state.canvases > 0 && speaks;
       return {
         ok,
@@ -511,109 +510,20 @@ const JOURNEYS: Journey[] = [
 
   {
     id: "first-keep",
-    name: "the very first memory a person keeps appears in the field",
-    /* The keep itself is what this rests on. With the POST failing there is
-       nothing to appear, so the field stays dark and the journey fails —
-       which is also exactly what it looks like when the bug is present. */
+    name: "the first memory opens without reloading",
     breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/inspirations" && m === "POST"),
     run: async (page, base) => {
       await signUp(page, base);
-
-      /* Read the FIELD off the canvas rather than the DOM. There is nothing in
-         the DOM to read: an orb is painted, and the whole claim of this
-         journey is about paint. The band is the bottom quarter, which is where
-         `assignHomes` fits the ground. */
-      const fieldLight = () =>
-        page.evaluate(() => {
-          const c = document.querySelector("canvas");
-          if (!c) return null;
-          const g = c.getContext("2d");
-          if (!g) return null;
-          const y = Math.floor(c.height * 0.72);
-          const h = Math.floor(c.height * 0.26);
-          const d = g.getImageData(0, y, c.width, h).data;
-          let sum = 0;
-          let n = 0;
-          for (let i = 0; i < d.length; i += 4 * 17) {
-            sum += (d[i]! + d[i + 1]! + d[i + 2]!) / 3;
-            n += 1;
-          }
-          return Math.round((sum / n) * 100) / 100;
-        });
-
-      const before = await fieldLight();
-      if (before === null) return { ok: false, detail: "no canvas to read the field from" };
-
-      /* THE MOUTH BY ITS CLASS, NOT BY ITS WORDS. The resting phrase has been
-         renamed twice — "Keep something" then "Capture inspiration" (founder,
-         2026-08-25) — and it is not even a constant: the slot carries the
-         companion's line whenever the creature has just spoken, so a
-         text-matched selector misses on a run where the greeting happens to
-         be showing. `.jar-mouth-rest` is what the control IS. */
-      await openTheNotepad(page);
-      await page.waitForTimeout(900);
-      await page.fill(
-        /* The mouth's own label, which matches its visible placeholder — an
-           accessible name that does not is its own bug. It has read "something
-           worth keeping" and "keep something" before now; a selector naming a
-           label the product no longer has does not fail loudly, it times out
-           for thirty seconds and reports the journey broken. Kept as the label
-           rather than the class BECAUSE the accessible name is the claim: a
-           person using a screen reader has to be told what this field is.
-
-           ═══ AND `:visible`, BECAUSE TWO TEXTAREAS WEAR THIS NAME ═════════
-           The closed composer slot (`Home.tsx:8307`, `.jar-mouth-rest
-           .jar-keep-box`) and the open composer (`InspirationComposer.tsx:336`,
-           `.jar-composer-text`) BOTH carry `worldCaptureInspiration`. The slot
-           comes first in the DOM and is `visibility: hidden` while the mouth
-           is open, so this filled the invisible one: sixty retries of
-           "element is not visible", thirty seconds, and a journey reported
-           broken on a product that was fine. Two controls sharing one
-           accessible name is arguably the product's bug and is reported as
-           such rather than fixed here; `:visible` is what makes this step
-           ask about the field a person is actually typing into. */
-        'textarea[aria-label="Capture inspiration"]:visible',
-        `a lift button that dims once it has heard you ${uniq()}`,
-      );
-      /* ═══ THE SAVE IS THE DOCK'S CHECK, NOT `Enter` ══════════════════════
-         This pressed `Enter`, which is what the CLOSED slot takes
-         (`Home.tsx:8345`: plain Enter, no shift, calls `keepIt`). The OPEN
-         composer does not: `onMouthKey` returns immediately unless ctrl or
-         meta is held (`Home.tsx:5337`) and stops propagation besides, so
-         `Enter` here saved NOTHING. The journey then waited five seconds and
-         reported `fieldLight 0.07 -> 0.07` — a confident false finding that
-         the product does not light the field on a first keep, for a keep that
-         was never made. A loud timeout would have been kinder.
-
-         `.waka-dock-tool--keep` is the control a person actually presses
-         (founder: "let's just have a save icon"), and it is what
-         `saveAnInspiration` presses for every other journey in this file. */
-      await page.locator(".waka-dock-tool--keep").waitFor({ state: "visible", timeout: 8_000 });
-      await page.locator(".waka-dock-tool--keep").first().click();
-      await page.waitForTimeout(5_000);
-
-      const after = await fieldLight();
-      /* Measured 2026-08-23 on a brand-new account: the field reads ~0.07
-         empty, ~0.05 after the first keep WHEN THE BUG IS PRESENT — the orb
-         exists and is simply not drawn until something re-solves the ground —
-         and ~1.95 once the page is RELOADED. So the three states are well
-         separated and the absolute floor is what tells them apart: 0.5 sits
-         six times over the empty frame and three times under the reload.
-
-         THE RATIO IS THE BRITTLE HALF, and it was ×10. It multiplies a
-         near-zero baseline, so an empty frame that reads 0.09 instead of 0.07
-         moves the bar from 0.7 to 0.9 and a genuine, visible, seven-fold rise
-         to 0.63 is reported as "the first memory does not appear in the
-         field". It is ×5 now: still a real relative claim, no longer a
-         measurement of how dark this particular empty frame happened to be.
-
-         A fresh orb is DIMMER than the same orb after a reload, and that is
-         the product being honest rather than a shortfall: nothing has been
-         read from a memory one second old, so it carries nothing and is drawn
-         carrying nothing. The re-light when the distillation pass lands is
-         what gives it whatever it turns out to hold up. */
-      const ok = after !== null && after > before * 5 && after > 0.5;
-      return { ok, detail: `fieldLight ${before} -> ${after} (reload shows ~1.95)` };
+      const phrase = `a lift button that dims once it has heard you ${uniq()}`;
+      await saveAnInspiration(page, phrase);
+      // Save returns to the reading. Its lower canvas quarter no longer
+      // displays the field, so verify the new memory through its actual door.
+      const opened = await openAMemory(page, phrase);
+      const text = opened ? await page.locator(".jar-panel-text").innerText() : "";
+      return {
+        ok: opened && text.includes(phrase),
+        detail: `first saved memory opened without reloading=${opened && text.includes(phrase)}`,
+      };
     },
   },
 
@@ -733,10 +643,7 @@ const JOURNEYS: Journey[] = [
       }
       await page.fill('input[placeholder="Which words do you remember?"]', needle);
       await page.waitForTimeout(3_500);
-      const verdict = (await page.evaluate(
-        () => document.querySelector(".jar-seek")?.textContent ?? "",
-      )) as string;
-      const found = !/nothing here says that/i.test(verdict);
+      const found = await page.locator(".jar-search-results button").filter({ hasText: needle }).count() > 0;
       return {
         ok: found,
         detail: `found=${found} needle=${needle}; the world answered "/" after ${answeredMs}ms`,
@@ -932,7 +839,7 @@ const JOURNEYS: Journey[] = [
 
   {
     id: "agent-ground",
-    name: "an agent's ground holds its own keeps, on camera",
+    name: "an agent loads its archive on demand and finds its own memories",
     breaks: (ctx) =>
       breakRoute(ctx, (p, m) => p === "/api/inspirations" && m === "GET"),
     run: async (page, base) => {
@@ -975,8 +882,8 @@ const JOURNEYS: Journey[] = [
                                door into the field now */
       await signUp(page, base);
       await openSettings(page, base);
-      if (!(await openSettingsGroup(page, /^Memories/i))) {
-        return { ok: false, detail: "the account card has no Memories group to make an agent in" };
+      if (!(await openSettingsGroup(page, /^Agent profiles$/i))) {
+        return { ok: false, detail: "Settings has no Agent profiles page" };
       }
       await page.fill(".waka-settings-add input[type=text]", "GroundScout");
       await page.locator(".waka-settings-add button").first().click({ timeout: 8_000 });
@@ -997,7 +904,7 @@ const JOURNEYS: Journey[] = [
         const listed = await fetch("/api/profiles", { credentials: "include" });
         const body = (await listed.json()) as { profiles?: Array<{ id: string; name: string }> };
         const agent = (body.profiles ?? []).find((row) => row.name === "GroundScout");
-        if (!agent) return 0;
+        if (!agent) return null;
         let made = 0;
         for (const text of rows) {
           const res = await fetch(`/api/inspirations?profile=${agent.id}`, {
@@ -1008,12 +915,17 @@ const JOURNEYS: Journey[] = [
           });
           if (res.ok) made += 1;
         }
-        return made;
-      }, texts)) as number;
-      if (seeded !== texts.length) {
-        return { ok: false, detail: `the agent was given ${seeded} of ${texts.length} keeps` };
+        return { profileId: agent.id, count: made };
+      }, texts)) as { profileId: string; count: number } | null;
+      if (!seeded || seeded.count !== texts.length) {
+        return { ok: false, detail: `the agent was given ${seeded?.count ?? 0} of ${texts.length} keeps` };
       }
 
+      let archiveRequests = 0;
+      page.on("request", request => {
+        const url = new URL(request.url());
+        if (url.pathname === "/api/inspirations" && url.searchParams.get("profile") === seeded.profileId) archiveRequests += 1;
+      });
       /* STAND IN THE AGENT'S FORM. Pressing the face you are already on is
          specified to do nothing, so the one that is NOT standing is pressed. */
       await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
@@ -1028,6 +940,7 @@ const JOURNEYS: Journey[] = [
         () => (document.querySelector(".jar-char-face--standing") as HTMLElement | null)?.innerText?.trim() ?? "",
       )) as string;
 
+      if (archiveRequests !== 0) return { ok: false, detail: `the reading fetched ${archiveRequests} agent archive pages before opening the archive` };
       const held = await countInArchive(page, base);
       if (held !== texts.length) {
         return { ok: false, detail: `standing in "${standing}", the archive says it holds ${held}, not ${texts.length}` };
@@ -1047,23 +960,10 @@ const JOURNEYS: Journey[] = [
       const allListed = texts.every((t) => reach.some((r) => r.includes(t.slice(0, 20))));
       if (!allListed) return { ok: false, detail: `reach holds ${reach.length}, not the three` };
 
-      /* and the light: the ground's canvas must actually paint them. A wall
-         whose data is perfect and whose camera looks elsewhere fails HERE. */
-      const lit = await page.evaluate(() => {
-        const c = document.querySelector("canvas");
-        if (!c) return -1;
-        const g = c.getContext("2d");
-        if (!g) return -1;
-        const img = g.getImageData(0, 0, c.width, c.height).data;
-        let n = 0;
-        for (let i = 0; i < img.length; i += 40) {
-          if (img[i]! + img[i + 1]! + img[i + 2]! > 150) n++;
-        }
-        return n;
-      });
+      const openedText = await page.locator(".jar-panel-text").innerText();
       return {
-        ok: lit > 200,
-        detail: `standing in "${standing}", the archive holds ${held}, the reach holds ${reach.length}, litSamples=${lit}`,
+        ok: texts.some(text => openedText.includes(text)),
+        detail: `standing in "${standing}", zero archive reads before opening; archive=${held}, search=${reach.length}, own memory opened`,
       };
     },
   },
@@ -1627,6 +1527,9 @@ const JOURNEYS: Journey[] = [
             alpha: number;
           }> = [];
           const cardOpen = document.querySelectorAll(".jar-panel").length > 0;
+          const colorCanvas = document.createElement("canvas");
+          colorCanvas.width = colorCanvas.height = 1;
+          const colorContext = colorCanvas.getContext("2d", { willReadFrequently: true })!;
           for (const el of Array.from(document.querySelectorAll<HTMLElement>("body *"))) {
             /* only elements carrying their OWN words — a wrapper inherits its
                child's problem and would report the same sentence twice */
@@ -1653,9 +1556,12 @@ const JOURNEYS: Journey[] = [
             while (walk) {
               const wcs = getComputedStyle(walk);
               through *= Number(wcs.opacity === "" ? 1 : wcs.opacity);
-              const parts = (wcs.backgroundColor.match(/[\d.]+/g) ?? []).map(Number);
+              colorContext.clearRect(0, 0, 1, 1);
+              colorContext.fillStyle = wcs.backgroundColor;
+              colorContext.fillRect(0, 0, 1, 1);
+              const parts = colorContext.getImageData(0, 0, 1, 1).data;
               if (parts.length >= 3) {
-                const a = parts.length > 3 ? parts[3]! : 1;
+                const a = parts[3]! / 255;
                 if (a > 0) layers.push([parts[0]!, parts[1]!, parts[2]!, a * through]);
               }
               walk = walk.parentElement;
@@ -1672,8 +1578,11 @@ const JOURNEYS: Journey[] = [
               bb = lb! * la! + bb * (1 - la!);
             }
 
-            const fgParts = (cs.color.match(/[\d.]+/g) ?? []).map(Number);
-            const fa = (fgParts.length > 3 ? fgParts[3]! : 1) * through;
+            colorContext.clearRect(0, 0, 1, 1);
+            colorContext.fillStyle = cs.color;
+            colorContext.fillRect(0, 0, 1, 1);
+            const fgParts = colorContext.getImageData(0, 0, 1, 1).data;
+            const fa = (fgParts[3]! / 255) * through;
             const fr = fgParts[0]! * fa + br * (1 - fa);
             const fg = fgParts[1]! * fa + bg2 * (1 - fa);
             const fb = fgParts[2]! * fa + bb * (1 - fa);
@@ -1747,238 +1656,57 @@ const JOURNEYS: Journey[] = [
 
   {
     id: "entry-actions",
-    name: "you can answer back to what the machine decided about you",
-    /* WHAT THIS IS FOR. `every-workflow-works.md` carried E2 — "Entry actions
-       — read again, say in my words, not this, undo" — as proven by
-       **nothing**. Writing this found out why it needed proving.
-
-       All four sat at `opacity: 0` with `pointer-events: none`, revealed by
-       `.jar-hq:hover .jar-board-acts`. `.jar-hq` carries
-       `pointer-events: none` so the world underneath stays draggable, and an
-       element that takes no pointer CANNOT MATCH `:hover`. So on every
-       desktop the four things a person can do about the one sentence the
-       machine has concluded about them were in the DOM and unreachable. Only
-       the `@media (hover: none)` fallback made them work, which is why they
-       worked on a phone.
-
-       That is finding 14 exactly, in a second place. Fixing finding 14 patched
-       `.jar-edge` and never swept the file for the other rule that shared the
-       selector — one grep would have found it.
-
-       SO THIS ASSERTS HIT-TESTING, NOT STYLE. `elementFromPoint` at each
-       control's own centre has to come back as that control. That catches
-       `opacity: 0`, an inherited `pointer-events: none`, and anything lying
-       on top of it — including whatever the next version of this mistake
-       turns out to be, which will not be named `.jar-edge` either. */
+    name: "a generated reading can be shared and discussed in chat",
+    // The current reading speaks above the creature. Its visible actions
+    // replaced the old poster toolbar; test the controls a person can use.
     breaks: async (ctx) => {
       await ctx.addInitScript(() => {
         window.addEventListener("load", () => {
           const style = document.createElement("style");
-          style.setAttribute("data-sabotage", "acts-unreachable");
-          /* THE SABOTAGE THE FIX OUTLIVED. It reproduced the defect exactly as
-             it shipped — `opacity: 0; pointer-events: none` on the CONTAINER —
-             and the fix for that defect was a rule giving every control inside
-             headquarters `pointer-events: auto` back. A child re-enabling the
-             pointer beats a parent refusing it, and opacity was never a
-             hit-test property at all, so from the day the product was fixed
-             this sabotage could not reach the thing it aims at: the buttons
-             stayed hit-testable, the journey passed, and it has been
-             decoration ever since. CI told us on its first ever run
-             (2026-08-27) — "survived sabotage; this journey is decoration".
-
-             What a sabotage must break is the CLAIM, not a historical
-             stylesheet: the claim is that the four verbs can be pressed, so
-             it takes the pointer away from the verbs themselves. */
-          style.textContent =
-            ".jar-board-act { pointer-events: none !important; }";
+          style.textContent = ".jar-char-bubble-act--quiet { pointer-events: none !important; }";
           document.head.appendChild(style);
         });
       });
     },
     run: async (page, base) => {
       await signUp(page, base);
-
-      /* A board needs something to read. Four unrelated thoughts is what
-         `e2e:cold-start` proves is enough — a top of mind is built from
-         FORMING signals, so this does not have to wait out the promotion bar
-         at three evidence each. */
-      const SITTING = [
+      // Requires the real model and background worker. A missing generated
+      // reading fails explicitly instead of claiming these actions passed.
+      for (const text of [
         "I want to spend a month somewhere I do not speak the language.",
         "The best conversations I have are the ones where nobody is trying to be useful.",
         "I keep buying notebooks I never write in.",
         "I would rather be early and wrong than late and certain.",
-      ];
-      for (const text of SITTING) await keepInWorld(page, base, text);
-
+      ]) await saveAnInspiration(page, text);
+      // Re-enter the reading after the post-save invitation to chat.
       await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-
-      /* CLOSE ANYTHING STANDING OVER THE BOARD BEFORE MEASURING, AND KNOW
-         WHAT PUTS IT THERE.
-
-         Seen once in a full sweep on 2026-08-25 and written up then as not
-         reproducible alone: all three verbs reported unreachable with "the
-         press lands on div.jar-panel.jar-panel--in" — a reading card,
-         centred, lying over them. The guess at the time was a card left open
-         by an earlier journey, since the account is reused; an Escape here
-         was the fix and it passed for two days.
-
-         CI FOUND THE REAL ONE on 2026-08-27, reporting the same failure with
-         `p.jar-ask--after.jar-panel-foot` — a card's FOOT — over two of the
-         verbs. Nothing left it open. THE WORLD OPENS IT ITSELF: the arrival
-         greeting glides to the newest memory 1.4s after the world is ready
-         and lets it go 2.6s after that, so for four seconds of every arrival
-         with something new in it a card is legitimately centred over the
-         board. This journey saves four memories and then arrives, which
-         means it walks into that window every single time. It passed locally
-         only because a fast machine finishes the greeting before the poster
-         band has finished opening; a slower one does not, and the two orders
-         are equally correct.
-
-         So the Escape at the start was aimed at the wrong suspect. What this
-         case claims is that the four verbs can be pressed on a board with
-         nothing over it, and the greeting is a thing over it — a real one,
-         by design, that a person waits out. The walk waits it out too, and
-         the waiting lives in `arrival.ts` rather than here: `phone` raced the
-         same four seconds and read it as "no memory could be opened", so it
-         is a fact about arriving at this world and not a fact about this
-         journey. A timing none of them control is now one they wait for
-         rather than race. */
-      const standing = await settleAfterArrival(page);
-      if (standing) {
-        return {
-          ok: false,
-          detail: `something stayed open over the board after Escape: .${standing}`,
-        };
+      const bubble = page.locator(".jar-char-bubble").filter({ has: page.locator(".jar-char-bubble-of") });
+      const share = bubble.getByRole("button", { name: "Share it", exact: true });
+      const deadline = Date.now() + 180_000;
+      let reviewed = 0;
+      while (!(await share.isVisible()) && Date.now() < deadline) {
+        const review = page.getByRole("button", { name: "Dive into review", exact: true });
+        const accept = page.getByRole("button", { name: "True", exact: true });
+        const leave = page.getByRole("button", { name: "Exit review mode", exact: true });
+        if (await review.isVisible()) await review.click();
+        else if (await accept.isVisible() && await accept.isEnabled()) {
+          await accept.click(); reviewed += 1;
+        } else if (await leave.isVisible() && !(await accept.isVisible())) await leave.click();
+        await page.waitForTimeout(1_200);
       }
-
-      /* The board arrives out of band. Poll rather than sleep, and say so if
-         it never comes — a walk with no board proves nothing about buttons
-         that only exist beside one. */
-      let appeared = false;
-      for (let i = 0; i < 60; i += 1) {
-        /* ASK THE POSTER FIRST. The four verbs sat permanently under the
-           ambition until 2026-08-25, when the founder had them folded into
-           the poster's own press: a resting page is a sentence, not a
-           sentence with a toolbar bolted to it. They open where the grounds
-           and the history already open, so this journey now does what a
-           person does — press the words, then answer them. */
-        /* Only when it is shut: the poster TOGGLES, so pressing it on every
-           poll would open the band and close it again on the next pass. */
-        await page
-          .evaluate(() => {
-            const poster = document.querySelector<HTMLElement>(
-              'h1.jar-poster[data-jar-chrome="1"]',
-            );
-            if (poster && poster.getAttribute("aria-expanded") !== "true") poster.click();
-          })
-          .catch(() => {});
-        appeared = await page.evaluate(
-          () => document.querySelectorAll(".jar-board-act").length >= 3,
-        );
-        if (appeared) {
-          /* LET IT COME TO REST BEFORE MEASURING. The band the poster opens
-             arrives on a curve, and `elementFromPoint` during that arrival
-             answers about a layout that is still moving — which reported
-             three of the four verbs as unhittable at full opacity. What this
-             journey asks is whether a person can hit them, and a person aims
-             at a page that has stopped. */
-          await page.waitForTimeout(1_200);
-          break;
-        }
-        await page.waitForTimeout(2_000);
-      }
-      if (!appeared) {
-        return {
-          ok: false,
-          detail: "no board arrived within 120s — there was nothing to answer back to",
-        };
-      }
-
-      const reachable = await page.evaluate(() => {
-        const acts = Array.from(document.querySelectorAll<HTMLElement>(".jar-board-act"));
-        return acts.map((el) => {
-          const r = el.getBoundingClientRect();
-          const cx = Math.round(r.left + r.width / 2);
-          const cy = Math.round(r.top + r.height / 2);
-          const hit = document.elementFromPoint(cx, cy);
-          return {
-            label: (el.innerText || "").trim(),
-            /* a span, not a button, is the "Held up" state — present and
-               deliberately not pressable, so it is reported, not required */
-            pressable: el.tagName === "BUTTON",
-            onScreen: r.width > 0 && r.height > 0,
-            opacity: Number(getComputedStyle(el).opacity),
-            /* the real question: if a person aimed here, would they hit it */
-            hit: hit === el || (hit !== null && el.contains(hit)),
-            /* AND WHAT THEY HIT INSTEAD. "cannot be hit at its own centre" is
-               a symptom with no suspect: the fix is always something lying
-               over it, and naming that thing is the difference between a
-               report and a search. */
-            hitBy:
-              hit === null
-                ? "(nothing)"
-                : `${hit.tagName.toLowerCase()}.${(hit.className || "").toString().trim().split(/\s+/).join(".")}`,
-          };
-        });
-      });
-
-      const problems: string[] = [];
-      if (reachable.length < 3) problems.push(`only ${reachable.length} entry actions rendered`);
-      for (const act of reachable) {
-        if (!act.onScreen) problems.push(`"${act.label}" has no box`);
-        else if (!act.hit) {
-          problems.push(
-            `"${act.label}" cannot be hit at its own centre (opacity ${act.opacity}) — ` +
-              `the press lands on ${act.hitBy}`,
-          );
-        }
-      }
-
-      /* AND ONE OF THEM IS ACTUALLY PRESSED. Reachable is not the same as
-         wired: "Read it again" must open its confirmation, which is also the
-         one action that previews its consequence before committing to it. */
-      if (problems.length === 0) {
-        const readAgain = reachable.find((a) => /read it again/i.test(a.label));
-        if (!readAgain) problems.push("no 'read it again' among the entry actions");
-        else {
-          for (const el of await page.$$(".jar-board-act")) {
-            if (/read it again/i.test((await el.innerText()).trim())) {
-              await el.click();
-              break;
-            }
-          }
-          await page.waitForTimeout(900);
-          const confirmed = await page.evaluate(() => ({
-            warn: document.querySelector(".jar-board-warn")?.textContent?.trim() ?? "",
-            acts: Array.from(document.querySelectorAll(".jar-board-act")).map((e) =>
-              (e.textContent || "").trim(),
-            ),
-          }));
-          if (confirmed.warn.length === 0) {
-            problems.push("'read it again' did not say what would change before changing it");
-          }
-          /* Backed out rather than committed: a regeneration is a model call,
-             and what this journey is about is whether the control reaches its
-             own machinery at all. */
-          for (const el of await page.$$(".jar-board-act")) {
-            if (/leave it/i.test((await el.textContent()) ?? "")) {
-              await el.click();
-              break;
-            }
-          }
-          await page.waitForTimeout(500);
-        }
-      }
-
-      return {
-        ok: problems.length === 0,
-        detail:
-          problems.length === 0
-            ? `${reachable.length} entry actions, all hit-testable — ${reachable
-                .map((a) => a.label.toLowerCase())
-                .join(", ")}; "read it again" previews its consequence`
-            : problems.slice(0, 4).join("; "),
-      };
+      if (!(await share.isVisible())) return { ok: false, detail: `no reading after reviewing ${reviewed} generated patterns` };
+      const reading = await bubble.locator(".jar-char-bubble-reading").innerText();
+      if (!reading.trim()) return { ok: false, detail: "the generated reading is empty" };
+      await share.click({ timeout: 8_000 });
+      await page.locator(".jar-thing-share .jar-share-card img").waitFor({ state: "visible", timeout: 15_000 });
+      const shared = await page.locator(".jar-share-inline").inputValue();
+      if (shared !== reading) return { ok: false, detail: "the share card changed the selected reading" };
+      await page.locator(".jar-thing-share").getByRole("button", { name: "Close", exact: true }).click();
+      await bubble.getByRole("button", { name: "Let’s chat about it", exact: true }).click({ timeout: 8_000 });
+      await page.locator('.chat-message[data-role="user"]').waitFor({ state: "visible", timeout: 15_000 });
+      const sent = await page.locator('.chat-message[data-role="user"] .chat-bubble').innerText();
+      await page.locator('.chat-message[data-role="assistant"] .chat-bubble').waitFor({ state: "visible", timeout: 120_000 });
+      return { ok: sent === reading, detail: `reviewed ${reviewed} patterns; generated reading rendered as a share card and opened a chat with a real assistant reply` };
     },
   },
 
