@@ -185,3 +185,20 @@ it('lets motes already in the air finish their rise when the reach drops', async
   await settle(10);
   expect(world.audit().aura.rising).toBe(0);
 });
+
+it("already knows the agent wall's reading before you walk onto it", async () => {
+  /* Its memories are only switched on once you arrive, and the reading used
+     to count only switched-on ones — so every wall but yours read dark until
+     the crossing ended, and the light eased up from nothing each time. */
+  world = await mountWorld(FACTS); await settle();
+  const toAgent = face('My agent');
+  await act(async () => { toAgent!.click(); });
+  await settle(20);
+  const back = face('Me');
+  expect(back, 'the creature offers no way back to your form').toBeTruthy();
+  await act(async () => { back!.click(); });
+  await settle(20);
+  const { wallKind, aura } = world.audit();
+  expect(wallKind).toBe('self');
+  expect(aura.byWall['agent-busy'], "the agent wall read dark while you stood on your own").toBeGreaterThanOrEqual(0.6);
+});

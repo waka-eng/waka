@@ -859,7 +859,7 @@ export interface FieldAudit {
    * `risingDrawn` how many of them the last frame drew. Numbers for the test
    * only — the page renders them as light, never as numerals.
    */
-  aura: { reading: number; lit: number; rising: number; risingDrawn: number };
+  aura: { reading: number; lit: number; rising: number; risingDrawn: number; byWall: Record<string, number> };
   /* `ground` AND `company` ARE GONE FROM THE PUBLISHED SHAPE. `ground` named
      whose memories were standing in front of you and was null — yours — on
      every wall that was not a room's; `company` listed the painted member
@@ -2553,9 +2553,15 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     /** The aura's reach right now: the eased saving reading, plus the flare. */
     const auraLit = () => clamp01(companion.savingNow + companion.flare * 0.5);
 
-    /** When each memory standing on a wall at the dial's time was saved. */
+    /**
+     * When each loaded memory on a wall was saved. NOT filtered on `active`:
+     * only the wall you are standing on has its memories switched on, so that
+     * filter left every other wall reading zero until you arrived and the
+     * light eased up from dark on every crossing. The dial's time still
+     * bounds it — `savingLight` skips a save stamped after `TRef`.
+     */
     function* savedAt(wallId: string): Generator<number> {
-      for (const b of sceneBalls(wallId)) if (b.active && !b.leaving) yield b.capturedMs;
+      for (const b of sceneBalls(wallId)) if (!b.leaving) yield b.capturedMs;
     }
 
     /**
@@ -6560,6 +6566,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             lit: Number(auraLit().toFixed(3)),
             rising: upA.reduce((n, a) => n + (a > 0 ? 1 : 0), 0),
             risingDrawn: upDrawn,
+            byWall: Object.fromEntries([...wallSaving].map(([id, v]) => [id, Number(v.toFixed(3))])),
           },
           col: trip.col,
           travelling: trip.active,
