@@ -66,18 +66,25 @@ async function openConnections(locale: SettingsPanelProps["locale"] = "en-US", a
   await act(async () => root.render(<SettingsPanel {...props} locale={locale} activeProfileId={activeProfileId} />));
   await act(async () => button(locale === "en-US" ? "Sessions" : "연결된 기기").click());
 }
+async function openProfile(id = 'profile-1') {
+  await act(async () => host.querySelector<HTMLButtonElement>(`[data-profile-id="${id}"]`)!.click());
+}
 
-it("loads only when opened and lists the bound profile, activity and expiry without offering the current browser", async () => {
+it("summarizes connections by profile and keeps device details off the overview", async () => {
   await act(async () => root.render(<SettingsPanel {...props} />));
   expect(requests).toEqual([]);
   await openConnections();
-  expect(host.textContent).toContain("Work laptop");
   expect(host.textContent).toContain("Work agent");
+  expect(host.textContent).toContain("Agent profile · 1 connection");
+  expect(host.textContent).not.toContain("Work laptop");
+  expect(host.textContent).not.toContain("Last used");
+  expect(host.textContent).not.toContain("Current browser");
+  expect(host.querySelectorAll(".waka-session-list li")).toHaveLength(1);
+  await openProfile();
+  expect(host.textContent).toContain("Work laptop");
   expect(host.textContent).toContain("Last used");
   expect(host.textContent).toContain("Expires");
-  expect(host.textContent).toContain("Profile");
-  expect(host.textContent).toContain("Work agent · Agent profile");
-  expect(host.textContent).toContain("Access");
+  expect(host.textContent).toContain("Read and write only this agent’s own memory");
   expect(host.textContent).toContain("Signed in");
   expect(host.textContent).not.toContain("Current browser");
   expect(host.querySelectorAll(".waka-session-list li")).toHaveLength(1);
@@ -97,8 +104,29 @@ it("enters a Sessions subpage and returns to Settings with focus on its navigati
   expect(document.activeElement).toBe(host.querySelector('[data-settings-target="sessions"]'));
 });
 
+it('groups repeated logins without mixing profiles or disconnecting another device', async () => {
+  rows.push({ ...session('second-device'), deviceLabel: 'Second laptop' },
+    { ...session('another-session'), deviceLabel: 'Another device', profile: { id: 'profile-2', name: 'anotherone', type: 'agent' } });
+  await openConnections();
+  expect(host.querySelectorAll('.waka-session-profile-row')).toHaveLength(2);
+  expect(host.textContent).toContain('2 connections');
+  await openProfile();
+  expect(document.activeElement).toBe(host.querySelector('.waka-session-list-heading h3'));
+  expect(host.querySelectorAll('.waka-session-card')).toHaveLength(2);
+  expect(host.textContent).not.toContain('Another device');
+  await act(async () => button('Disconnect').click());
+  await act(async () => button('Disconnect').click());
+  expect(host.textContent).toContain('Second laptop');
+  expect(requests.filter(row => row.method === 'DELETE')).toEqual([{ path: '/api/sessions/agent-session', method: 'DELETE' }]);
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back to connections"]')!.click());
+  expect(document.activeElement).toBe(host.querySelector('[data-profile-id="profile-1"]'));
+  expect(host.querySelector('[data-profile-id="profile-1"]')?.textContent).toContain('1 connection');
+  expect(host.querySelector('[data-profile-id="profile-2"]')).not.toBeNull();
+});
+
 it("keeps the connection when disconnect fails, then revokes only its session on retry", async () => {
   await openConnections();
+  await openProfile();
   await act(async () => button("Disconnect").click());
   expect(host.textContent).toContain("The profile and its memory stay saved");
   expect(document.activeElement).toBe(host.querySelector(".waka-session-confirm p"));
@@ -130,18 +158,22 @@ it("distinguishes a failed load from an empty list and refreshes after an extern
   expect(host.textContent).not.toContain("Only this browser is signed in");
   failRead = false;
   await act(async () => button("Refresh").click());
-  expect(host.textContent).toContain("Work laptop");
+  expect(host.textContent).toContain("1 connection");
   rows.push({ ...session("new-session"), deviceLabel: "New laptop" });
   await act(async () => button("Refresh").click());
+  expect(host.querySelectorAll('.waka-session-profile-row')).toHaveLength(1);
+  expect(host.textContent).toContain('2 connections');
+  await openProfile();
   expect(host.textContent).toContain("New laptop");
 });
 
 it("shows expired sessions honestly and provides setup in Korean", async () => {
   rows[1]!.expiresAt = "2020-01-01T00:00:00Z";
   await openConnections("ko-KR");
+  expect(host.textContent).toContain('연결 1개');
+  await openProfile();
   expect(host.textContent).toContain("만료됨");
   expect(host.textContent).toContain("MCP 설정");
-  expect(host.textContent).toContain("로그인이 만료되어 접근할 수 없어요");
   expect(host.querySelector('button[aria-label="Work laptop 연결 해제"]')).not.toBeNull();
 });
 
@@ -168,6 +200,8 @@ it("guides installation, browser consent and a real MCP check as separate steps 
   expect(host.textContent).toContain("Use WAKA to list the profiles I can access");
   rows.push({ ...session("new-session"), deviceLabel: "Claude Code (Work laptop)" });
   await act(async () => button("View connections").click());
+  expect(host.textContent).toContain('2 connections');
+  await openProfile();
   expect(host.textContent).toContain("Claude Code (Work laptop)");
   expect(host.querySelector('button[aria-pressed="true"]')?.textContent).toBe("Manage");
 });
