@@ -261,9 +261,40 @@ export function carryOf(input: {
 export const BULB_FLOOR = 0.12;
 
 /* `bulbGlow` IS GONE — the character's light from days-since-last-kept,
-   called by nothing. The creature's brightness comes from the FIELD now
-   (`lit`, which the frame loop derives from what is alive in it), which is
-   the same idea measured from the material rather than from a clock: a
-   quiet fortnight dims it because nothing in the jar is bright, not because
-   a timer said so. `BULB_FLOOR` and `FIELD_DECAY_HALF_LIFE_DAYS` stay —
-   they are read by what replaced it. */
+   called by nothing. What replaced it first was the FIELD (the mean
+   aliveness of the eight most alive notes), and that was faint for almost
+   every account: aliveness spends only `FIELD_RECENCY_WEIGHT` of its range
+   on freshness, so a busy week barely moved it. `savingLight` below replaced
+   that in turn. */
+
+/**
+ * THE CHARACTER'S REACH IS HOW MUCH YOU HAVE BEEN SAVING (founder,
+ * 2026-10-21: "the brightness should reflect how much inspirations the person
+ * has been saving").
+ *
+ * Every save adds light that halves every `FIELD_DECAY_HALF_LIFE_DAYS` — the
+ * same week the field dims in, for the reason the bulb note above gives: "the
+ * field dims in a week" and "you dim in a week" are one statement and should
+ * not be tunable apart. The sum is then saturated, `1 − e^(−activity / K)`,
+ * because past a busy week the difference between busy and very busy is not
+ * something light should try to say.
+ *
+ * `SAVING_LIGHT_SCALE` is K. Five saves spread over the past seven days sum to
+ * about 3.5–3.8 and read at roughly two thirds; five today read at about three
+ * quarters; one today at about a quarter; nothing for a month sits near dark.
+ * It drives only the aura's reach — each note's own light is still its
+ * aliveness — and it is never shown as a number.
+ */
+export const SAVING_LIGHT_SCALE = 3.5;
+
+/** Saves' timestamps (ms) and "now" (the dial's time) → reach in [0, 1).
+    A save stamped after `nowMs` has not happened yet at that time. */
+export function savingLight(savedMs: Iterable<number>, nowMs: number): number {
+  let activity = 0;
+  for (const at of savedMs) {
+    const ageDays = (nowMs - at) / 86_400_000;
+    if (!(ageDays >= 0)) continue;
+    activity += Math.pow(0.5, ageDays / FIELD_DECAY_HALF_LIFE_DAYS);
+  }
+  return 1 - Math.exp(-activity / SAVING_LIGHT_SCALE);
+}

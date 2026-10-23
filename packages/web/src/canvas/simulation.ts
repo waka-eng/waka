@@ -111,10 +111,11 @@ import {
 } from "../space/inspiration/orb";
 import type { Provenance } from "../space/top-of-mind/board";
 import { homeActivityLayout } from "../lib/home-activity-layout";
-import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
+import { clamp, clamp01, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import { isEditableTarget, isNativeSurface } from "../lib/surface-input";
 import { formatMessage, t, type MessageKey, type SupportedLocale } from "../lib/locales";
 import { monthTag } from "../lib/words";
+import { savingLight } from "../lib/aliveness";
 import type { AgentBundle } from "../lib/agent-contract";
 import type { Evidence, Inspiration, Signal } from "../lib/data";
 /**
@@ -156,6 +157,9 @@ import type { Evidence, Inspiration, Signal } from "../lib/data";
 
 /** Drifting dust motes — the atmosphere, not decoration. */
 const MOTES = 40;
+/** The aura's reach past which inspiration visibly comes off the companion —
+    one threshold, read by both the emission and the drawing of those motes. */
+const MOTES_RISE_AT = 0.55;
 /** Dim sparkle points scattered in the deep background. */
 const SPARKS = 26;
 /* The theme-hash gradient pairs are GONE. An orb's colour said which theme its
@@ -848,6 +852,14 @@ export interface FieldAudit {
    * smallest thing that would have gone to zero.
    */
   provenanceCount: number;
+  /**
+   * The companion's aura on this wall: `reading` is how much this wall's
+   * owner has been saving (`savingLight`), `lit` the eased reach the aura is
+   * drawn at, `rising` how many motes are coming off it right now and
+   * `risingDrawn` how many of them the last frame drew. Numbers for the test
+   * only — the page renders them as light, never as numerals.
+   */
+  aura: { reading: number; lit: number; rising: number; risingDrawn: number; byWall: Record<string, number> };
   /* `ground` AND `company` ARE GONE FROM THE PUBLISHED SHAPE. `ground` named
      whose memories were standing in front of you and was null — yours — on
      every wall that was not a room's; `company` listed the painted member
@@ -1833,10 +1845,11 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          into a quiet stretch and brightens over a live one. */
       insp: 0,
       inspNow: 0,
+      /* `savingNow` is the aura's reach (`lit`): it eases toward
+         `wallSaving` for whichever wall the camera stands on — how much YOU
+         have been saving at home, how much the agent has on its wall. */
+      savingNow: 0,
       flare: 0,
-      /** Something was captured today: a steady lift, never a pulse. */
-      freshLit: 0,
-      freshToday: false,
       y: 0,
       size: 110,
 
@@ -1930,6 +1943,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     const upX = new Float32Array(10);
     const upY = new Float32Array(10);
     const upA = new Float32Array(10);
+    /** how many of those were drawn on the last frame — for the audit */
+    let upDrawn = 0;
     const riseX = new Float32Array(4);
     const riseY = new Float32Array(4);
     const riseA = new Float32Array(4);
@@ -2524,6 +2539,29 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       const quality = sum / k;
       const volume = Math.sqrt(Math.min(n, 8) / 8);
       res.insp = clamp01(quality * volume);
+    }
+
+    /**
+     * HOW MUCH EACH WALL'S OWNER HAS BEEN SAVING, KEYED BY WALL ID ("" is
+     * yours). Read from the scene index, which every run builds from its
+     * whole list, so an agent's wall has its reading the moment its saves are
+     * loaded — NOT only after `tryWakeWall` has made it a resident. Keying it
+     * on the resident went dark after any rebuild on an agent's wall
+     * (`residents` starts empty each run). Refreshed in `computeInspiration`.
+     */
+    const wallSaving = new Map<string, number>();
+    /** The aura's reach right now: the eased saving reading, plus the flare. */
+    const auraLit = () => clamp01(companion.savingNow + companion.flare * 0.5);
+
+    /**
+     * When each loaded memory on a wall was saved. NOT filtered on `active`:
+     * only the wall you are standing on has its memories switched on, so that
+     * filter left every other wall reading zero until you arrived and the
+     * light eased up from dark on every crossing. The dial's time still
+     * bounds it — `savingLight` skips a save stamped after `TRef`.
+     */
+    function* savedAt(wallId: string): Generator<number> {
+      for (const b of sceneBalls(wallId)) if (!b.leaving) yield b.capturedMs;
     }
 
     /**
@@ -3722,14 +3760,12 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       let sum = 0;
       for (let i = 0; i < k; i++) sum += top[i];
       companion.insp = clamp01(sum / k);
-      const dayStart = TRef.current - DAY_MS;
-      companion.freshToday = false;
-      for (const b of list) {
-        if (b.active && !b.leaving && b.capturedMs >= dayStart) {
-          companion.freshToday = true;
-          break;
-        }
-      }
+      /* The aura reads saving, not aliveness. A capture today used to add a
+         flat 0.12 on top (`freshLit`); a save today now counts in full inside
+         `savingLight`, so that lift is part of the reading rather than a
+         second one beside it. */
+      wallSaving.clear();
+      for (const key of scenes.keys()) wallSaving.set(key, savingLight(savedAt(key), TRef.current));
       for (const res of residents.values()) residentInsp(res);
     }
 
@@ -3796,8 +3832,13 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          what is actually true instead. */
       if (trip.inspCol > 0 && trip.inspCol < 4)
         return pick(["worldSayYoung1", "worldSayYoung2"]);
-      if (companion.insp > 0.55) return "";
-      if (companion.insp > 0.22)
+      /* THE WORDS READ THE LIGHT THEY STAND BESIDE. These keyed on the
+         field's aliveness while the glow reads saving, so a bright companion
+         after a busy week could say "Quiet lately". Same `auraLit`, so what
+         it says and how far it shines can never disagree. */
+      const shine = auraLit();
+      if (shine > 0.55) return "";
+      if (shine > 0.22)
         return pick(["worldSayWarm1", "worldSayWarm2"]);
       return pick(["worldSayQuiet1", "worldSayQuiet2", "worldSayQuiet3"]);
     }
@@ -4001,13 +4042,19 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        *
        * So the split. `bodyLit` has a floor under it and never reads as
        * fading: breath, blink, look-arounds and the body's own light are the
-       * creature's, unconditionally. `lit` stays exactly what it was and now
-       * governs only its REACH — how far the aura carries, how much comes off
-       * it. A quiet archive is a companion sitting close to itself; a live one
-       * throws light across the room. What changed is what it can see, not
-       * whether it is alive.
+       * creature's, unconditionally. `lit` governs only its REACH — how far
+       * the aura carries, how much comes off it. A quiet stretch is a
+       * companion sitting close to itself; a busy one throws light across the
+       * room. What changed is what it can see, not whether it is alive.
+       *
+       * AND SINCE 2026-10-21 THE REACH IS YOUR SAVING, NOT THE FIELD. It read
+       * the top-eight aliveness, which spends only a quarter of its range on
+       * freshness, so it stayed faint for nearly everyone. The founder: "the
+       * brightness should reflect how much inspirations the person has been
+       * saving." `savingNow` is `savingLight` over this wall's own saves (see
+       * lib/aliveness). Each note's colour is still its aliveness.
        */
-      const lit = clamp01(companion.inspNow + companion.flare * 0.5 + companion.freshLit);
+      const lit = auraLit();
       const bodyLit = clamp01(0.55 + lit * 0.45);
       /* Whose form it is wearing where the camera is right now — the body, the
          silhouette its features clip to, and the halo, all from one place so
@@ -4202,9 +4249,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         }
 
         /* inspiration coming off it, literally */
-        if (!view.reduced && lit > 0.55) {
+        /* NOT GATED ON `lit`. Only EMISSION is: a mote already in the air
+           finishes its rise and fades on its own `upA`, so when the reach
+           drops under `MOTES_RISE_AT` no new ones leave and the ones in
+           flight go out over what is left of their climb — not all at once,
+           which is a light switching off with no hand on it. */
+        upDrawn = 0;
+        if (!view.reduced) {
           for (let i = 0; i < 10; i++) {
             if (upA[i] <= 0) continue;
+            upDrawn++;
             ctx!.globalAlpha = upA[i] * 0.5;
             ctx!.drawImage(pal.mote, charSX + upX[i] - 3, cyC + upY[i] - 3, 6, 6);
           }
@@ -4835,6 +4889,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       /* the companion. Its glow eases toward the real signal; its flare
          decays; it blinks; and when it is genuinely inspired, motes rise. */
       companion.inspNow = view.reduced ? companion.insp : lerp(companion.inspNow, companion.insp, 1 - Math.pow(0.02, dt));
+      {
+        const want = wallSaving.get(curWall().id) ?? 0;
+        companion.savingNow = view.reduced ? want : lerp(companion.savingNow, want, 1 - Math.pow(0.02, dt));
+      }
       /* THE GLASSES GO ON OVER ABOUT 0.6s, and the face goes into thought
          with them — the squint and the lens's magnification ride the same
          value, so nothing about the expression snaps. Under reduced motion
@@ -4898,12 +4956,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         companion.mood *= Math.pow(0.5, (dt * 1000) / MOOD_HALF_LIFE_MS);
         if (Math.abs(companion.mood) < 0.002) companion.mood = 0;
       }
-      /* Something was captured today. That is a STATE, and states render —
-         so it is a steady offset under the companion's light, not a twitch.
-         (It used to flash every six seconds: the layout brightening itself
-         some six hundred times an hour with no hand involved anywhere, which
-         is the same crime as a camera move on panel-open.) */
-      companion.freshLit = companion.freshToday ? 0.12 : 0;
       if (!view.reduced) {
         /* Something is forming above: every nine seconds or so it looks up,
            and every fourteen it sends a mote that way. The companion is how
@@ -5003,7 +5055,11 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           companion.blink = 1;
         }
         if (companion.blink > 0) companion.blink = Math.max(0, companion.blink - dt / 0.12);
-        const strong = clamp01(companion.inspNow + companion.flare * 0.5) > 0.55;
+        /* THE SAME `lit` THE MOTES ARE DRAWN ON. Emission read the field's
+           aliveness while drawing read the saving-based reach, so a heavy
+           saver with a quiet field emitted none, and motes emitted under a
+           dim aura were never drawn. */
+        const strong = auraLit() > MOTES_RISE_AT;
         for (let i = 0; i < 10; i++) {
           if (upA[i] > 0) {
             upY[i] -= dt * 26;
@@ -6505,6 +6561,13 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           wallKind: curWall().kind,
           wallId: curWall().id,
           provenanceCount: poster.provenance.size,
+          aura: {
+            reading: Number((wallSaving.get(curWall().id) ?? 0).toFixed(3)),
+            lit: Number(auraLit().toFixed(3)),
+            rising: upA.reduce((n, a) => n + (a > 0 ? 1 : 0), 0),
+            risingDrawn: upDrawn,
+            byWall: Object.fromEntries([...wallSaving].map(([id, v]) => [id, Number(v.toFixed(3))])),
+          },
           col: trip.col,
           travelling: trip.active,
           lastGo: lastGoRef.current,
