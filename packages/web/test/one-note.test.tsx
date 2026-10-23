@@ -55,6 +55,10 @@
  * `helpers/note-top-row` is not a seam either: it is a DOM query over the
  * tree this suite rendered itself, shared with `inspiration-composer.test.tsx`
  * so the two ask the top row the same question.
+ *
+ * `helpers/archive` plays `Home`'s part: the archive's recorder lives in
+ * `Home` now (L12), so the archive is mounted with the real
+ * `useArchiveRecorder` handed to it, as `Home` mounts it.
  */
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -63,7 +67,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { pressesInTopRow } from "./helpers/note-top-row";
 import { InspirationComposer } from "../src/components/InspirationComposer";
 import { DOCK_SLOT } from "../src/components/NoteTools";
-import { SavesOverlay } from "../src/components/SavesOverlay";
+import { Archive } from "./helpers/archive";
 
 /** Every write the explicit Save has made, newest last. */
 const written: Array<{ id: string; text: string }> = [];
@@ -157,7 +161,7 @@ async function newNote(): Promise<void> {
 async function savedNote(onNoteOpen = vi.fn()): Promise<void> {
   await act(async () =>
     root.render(
-      <SavesOverlay locale="en-US" title="Your Inspirations" onClose={vi.fn()} onNoteOpen={onNoteOpen} />,
+      <Archive locale="en-US" title="Your Inspirations" onClose={vi.fn()} onNoteOpen={onNoteOpen} />,
     ),
   );
   for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {

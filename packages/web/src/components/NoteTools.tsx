@@ -49,6 +49,10 @@ export function NoteTools(props: {
   attaching: boolean;
   saving: boolean;
   recording: ReturnType<typeof useAudioRecording>;
+  /** Record cannot start: another recorder on the page is running. */
+  recordDisabled?: boolean;
+  /** Delete cannot be pressed: a clip is still on its way to this note. */
+  eraseDisabled?: boolean;
   /** Said in the bar when a write or the recorder failed, in the reader's
       language; empty is the success state. */
   failed: string;
@@ -153,7 +157,7 @@ export function NoteTools(props: {
   const erase = (
     <button type="button" className="waka-dock-tool waka-dock-tool--erase"
       aria-label={props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel}
-      disabled={props.saving}
+      disabled={props.saving || props.eraseDisabled}
       onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
   );
   /* ═══ AN ARMED DELETE IS THE WHOLE BAR FOR ITS MOMENT ═════════════════
@@ -191,7 +195,7 @@ export function NoteTools(props: {
         {stopClock}
         <button ref={confirm} type="button" className="waka-dock-tool waka-dock-tool--erase"
           aria-label={props.eraseConfirmLabel ?? props.eraseLabel}
-          disabled={props.saving}
+          disabled={props.saving || props.eraseDisabled}
           onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
         <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onCancelErase}>
           {props.cancelEraseLabel}
@@ -245,7 +249,7 @@ export function NoteTools(props: {
     <>
       {supportedRecordingType() ? (
         props.recording.phase === "idle" ? (
-          <button type="button" className="waka-dock-tool" disabled={busy}
+          <button type="button" className="waka-dock-tool" disabled={busy || props.recordDisabled}
             aria-label={props.recordLabel}
             onClick={() => void props.recording.start()}><HomeActionIcon kind="record" /></button>
         ) : (
@@ -358,7 +362,8 @@ export function NoteTools(props: {
       <MoreMenu label={props.moreLabel ?? "More"} disabled={props.saving}
         rows={[
           ...(props.onShare && props.shareLabel ? [{ label: props.shareLabel, icon: "share" as const, act: props.onShare }] : []),
-          { label: props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel, icon: "erase" as const, act: props.onErase },
+          /* the folded Delete is held off by the same rule as the bar's */
+          ...(props.eraseDisabled ? [] : [{ label: props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel, icon: "erase" as const, act: props.onErase }]),
         ]} />
       {/* ONE LINE, THE SAME SLOT THE NOTEPAD'S STATE USES. Founder: "states
           should show and disappear in the bottom bar only." */}
