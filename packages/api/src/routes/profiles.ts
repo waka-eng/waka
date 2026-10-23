@@ -8,8 +8,8 @@
  * memory rather than as a lens over the person's.
  *
  * Administering profiles is an account-owner act. A human-profile session is
- * that owner; an agent-bound session can see which profiles exist (it needs
- * to know what it may read) but cannot create, rename, or delete one — an
+ * that owner; an agent-bound session sees only its own profile and cannot
+ * create, rename, or delete one — an
  * agent that could mint itself new memories, or remove the human's, would be
  * administering the account rather than working inside it.
  */
@@ -67,13 +67,14 @@ export const profilesRoutes = new Hono<AuthEnv>();
 
 profilesRoutes.use("*", requireAuth);
 
-/** Every profile the account owns, human first. */
+/** Account owners see every profile; restricted credentials see only their own. */
 profilesRoutes.get("/", async (c) => {
   const session = c.get("session");
   const rows = await getDb()
     .select()
     .from(profiles)
-    .where(eq(profiles.accountId, session.profile.accountId))
+    .where(and(eq(profiles.accountId, session.profile.accountId),
+      session.profile.type === "agent" || session.keyScoped ? eq(profiles.id, session.profile.id) : undefined))
     .orderBy(profiles.type, profiles.createdAt);
 
   return c.json({ profiles: rows.map(serializeProfile) });
@@ -88,8 +89,7 @@ profilesRoutes.get("/", async (c) => {
  * deleted the person's. See `humanSessionsOnly` in lib/middleware.ts for why
  * the inline form kept losing its `keyScoped` half.
  *
- * GET stays open to an agent session on purpose: it has to know which
- * profiles exist to know what it may read.
+ * GET stays open to an agent session, scoped to that session’s own profile.
  */
 profilesRoutes.post("/", humanSessionsOnly, async (c) => {
   const session = c.get("session");

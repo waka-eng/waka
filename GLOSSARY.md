@@ -34,6 +34,9 @@ before it gets a name anywhere else.
 | Version keeping | `versions[]` (soft-invalidate, never delete) | **seasons** | who you were last season — kept, never erased | Version history (invalidate-don't-delete) | reserved |
 | Shared space | `space`, `membership` | **campfire** | a memory you tend together | Governed shared spaces | reserved |
 | Access control | `permissions` | **door** | you decide whose door opens | Access control | reserved |
+| A person's memory owner | `profiles.type = human` | Personal profile | your profile owns your personal memory | Human profile | **today** |
+| An agent's memory owner | `profiles.type = agent` | Agent profile | each agent profile owns one separate agent memory | Agent profile | **today** |
+| A device or MCP client's access | `sessions.profile_id` | Session | a connection acting as one profile; disconnecting preserves its memory | Profile-bound session | **today** |
 | Native single-use sign-in handoff | `mobile_login_codes` | No new public name | finish signing in to your personal account | M2 implementation |
 | Decay / retirement | `dormant_at` | **setting** | a signal long unused sets like dusk | Decay / retirement policy | reserved |
 | Suppression (owner-refused pattern) | `dismissed_at`, `suppressions` — `anchor_signal_id`, `candidate_statement` | **refused ground** | the ground will refuse anything this close from now on | Suppression record (logged, reversible, deletes nothing) | **today** |

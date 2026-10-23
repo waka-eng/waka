@@ -8,6 +8,7 @@
  *   ------------------------     ------------------------
  *   auth.ts                      auth.ts          /api/auth
  *   profiles.ts                  profiles.ts      /api/profiles
+ *   sessions.ts                  sessions.ts      /api/sessions
  *   inspirations.ts              inspirations.ts  /api/inspirations   (layer 1)
  *   attachments.ts               attachments.ts   /api/attachments
  *   signals.ts                   signals.ts       /api/signals        (layer 2)
@@ -22,10 +23,11 @@
  * SIX ROWS CAME OUT OF THAT TABLE and are listed here rather than silently
  * dropped, because the table is the one place the two sides of the wire are
  * written down together and a reader needs to know these were removed, not
- * forgotten: `sessions.ts`, `keeper-keys.ts`, `agent-grants.ts` and
+ * forgotten: `keeper-keys.ts`, `agent-grants.ts` and
  * `consultations.ts`. Their surfaces went with the settings cut — see
  * `SettingsPanel`'s header for which five sections did not survive it — and
  * the route files they named are gone too.
+ * The sessions client is restored for the Settings device list and disconnect.
  *
  * AND `groups.ts` / `/api/groups`, on 2026-10-12. Founder: "방 없애" —
  * remove rooms. Nine route files on the server and twelve verbs on this side
@@ -72,6 +74,7 @@ export type { ApiFieldErrors, ApiProfileType, ProfileScoped } from "./http";
 
 export * from "./auth";
 export * from "./profiles";
+export * from "./sessions";
 export * from "./inspirations";
 export * from "./inspiration-processing";
 /* `review-sessions`, `review-dialogue` and `review-processing` are GONE

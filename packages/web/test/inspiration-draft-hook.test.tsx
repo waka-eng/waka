@@ -13,7 +13,7 @@ import { loadInspirationDraft, writeInspirationDraft } from '../src/lib/inspirat
 
 const scope = { accountId: 'draft-owner', profileId: 'draft-profile' };
 let hook: ReturnType<typeof useInspirationDraft>, root: Root, host: HTMLDivElement;
-function Harness() { hook = useInspirationDraft(scope); return null; }
+function Harness({profile = scope.profileId}: {profile?: string}) { hook = useInspirationDraft({...scope, profileId:profile}); return null; }
 beforeEach(async () => {
   vi.stubGlobal('indexedDB', new IDBFactory()); vi.stubGlobal('Blob', Blob);
   localStorage.clear(); sessionStorage.clear();
@@ -114,4 +114,26 @@ it('keeps a note that is not the conflict, and says a failed fork', async () => 
   expect(note.key).toBe('worldComposerUploadFailed');
   await forkDraftAndClear({ fork: async () => { throw new Error('disk'); }, clearConflict, sayProblem });
   expect(note).toEqual({ key: 'worldDraftKeepFailed', conflict: false });
+});
+
+it('keeps text, files, and pending links separate when switching agent profiles', async () => {
+  await act(async () => { hook.setText('Human draft'); await hook.flush(); });
+  const switchTo = async (profile: string) => {
+    await act(async () => root.render(<Harness profile={profile} />));
+    await vi.waitFor(async () => { await act(async () => undefined); expect(hook.ready).toBe(true); });
+  };
+  await switchTo('noah');
+  expect(hook.draft.text).toBe(''); expect(hook.draft.media).toEqual([]);
+  await act(async () => {
+    hook.setText('Noah draft'); hook.setLinkText('https://example.test/noah');
+    hook.setMedia([{id:'noah-file', type:'file', blob:new Blob(['Noah bytes'])}]); await hook.flush();
+  });
+  await switchTo('another');
+  expect(hook.draft).toMatchObject({text:'', media:[]});
+  expect(hook.draft.linkText ?? '').toBe('');
+  await act(async () => { hook.setText('Another draft'); await hook.flush(); });
+  await switchTo('noah');
+  expect(hook.draft.text).toBe('Noah draft'); expect(hook.draft.linkText).toBe('https://example.test/noah');
+  expect(hook.draft.media.map(file => file.id)).toEqual(['noah-file']);
+  await switchTo(scope.profileId); expect(hook.draft.text).toBe('Human draft');
 });

@@ -35,7 +35,7 @@ When genuinely uncertain, answer "independent". A duplicate stays visible and
 can be merged; a wrong merge or a phantom conflict cannot be seen at all.`;
 if(process.argv.includes('--list')){console.log(JSON.stringify({pairs:groups.reduce((n,g)=>n+g.rows.length,0),groups},null,2));process.exit(0);}
 assert.ok(process.argv.includes('--live'));
-assert.equal(OPENROUTER_GENERATION_MODEL,'deepseek/deepseek-v4.1-flash','Use the configured Principle model, not an unreviewed override');
+assert.equal(OPENROUTER_GENERATION_MODEL,'deepseek/deepseek-v4.1-flash-1017','Use the configured Principle model, not an unreviewed override');
 const env=parse(await readFile('/Users/agi/nextsteps/waka/.env.local','utf8'));assert.ok(env.OPENROUTER_API_KEY);
 process.env.OPENROUTER_API_KEY=env.OPENROUTER_API_KEY;process.env.WAKA_MODEL_PRINCIPLE_JUDGE=OPENROUTER_GENERATION_MODEL;delete process.env.DB_CONNECTION_URL;
 let calls=0,costUsd=0,stopped=false;const requests:Array<Record<string,unknown>>=[],baseline:Array<Record<string,unknown>>=[],candidate:Array<Record<string,unknown>>=[];

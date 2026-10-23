@@ -1132,14 +1132,14 @@ claims or claim full source completion. Discovery runs only after current
 coverage is complete. Reading dependencies created by a batch attach to the
 matching unfinished source receipts, without marking those receipts derived.
 
-One prompt, two roads: generation defaults to DeepSeek V4.1 Flash on
+One prompt, two roads: generation defaults to DeepSeek V4.1 Flash 1017 on
 OpenRouter when `OPENROUTER_API_KEY` is present, and falls back
 to Gemini without it. Embeddings never switch roads — the stored vectors and
 every cosine threshold above live in `gemini-embedding-001`'s space.
 
 Top of Mind, Principles, signal extraction/support/judging, reflection,
 Review questions/derivation, declaration routing, and Talk with WAKA all
-default to `deepseek/deepseek-v4.1-flash`. Deployment configuration explicitly
+default to `deepseek/deepseek-v4.1-flash-1017`. Deployment configuration explicitly
 sets `OPENROUTER_GENERATION_MODEL` for API and worker; dev also sets `WAKA_MODEL_CHAT` to the
 same model. Deployment verification checks both. Per-task model overrides
 remain available; no OpenRouter key still selects the Gemini provider rather
@@ -1151,7 +1151,7 @@ is not part of this text-generation switch.
 
 | Constant | Value | One line |
 |---|---|---|
-| `OPENROUTER_GENERATION_MODEL` | deepseek/deepseek-v4.1-flash | All OpenRouter generation tasks — the default road |
+| `OPENROUTER_GENERATION_MODEL` | deepseek/deepseek-v4.1-flash-1017 | All OpenRouter generation tasks — the default road |
 | `OPENROUTER_MAX_OUTPUT_TOKENS` | 8192 | Bound on every answer — a small JSON artifact, never an essay; with reasoning declined, a truncated verdict cannot masquerade as "nothing here" |
 | `OPENROUTER_CHAT_URL` | https://openrouter.ai/api/v1/chat/completions | The second road's endpoint |
 | `GEMINI_GENERATION_MODEL` | gemini-3.1-flash-lite | Vision, and the whole road when no OpenRouter key is set |

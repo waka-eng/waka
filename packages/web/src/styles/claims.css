@@ -4669,6 +4669,39 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   flex: 0 1 auto;
   min-width: 0;
   position: static;
+  overflow-x: auto;
+}
+
+.waka-corners > .jar-char-form > .jar-char-face {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+.waka-profile-portrait {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.waka-profile-portrait .waka-companion {
+  width: var(--waka-companion-size);
+  height: var(--waka-companion-size);
+  margin: 0;
+}
+
+/* MEASURED at 359px: three portraits plus names crowded the settings controls.
+   Compact spacing and a text-only Me keep both named agents visible. */
+@media (max-width: 480px) {
+  .waka-corners > .jar-char-form > .jar-char-face {
+    gap: var(--sp-4);
+    padding-inline: var(--sp-6);
+  }
+  .jar-char-form > .jar-char-face:first-child .waka-profile-portrait {
+    display: none;
+  }
 }
 
 /* THE READING IN THE BUBBLE. Wider than the pencil's bubble because it holds
@@ -5385,6 +5418,13 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    would run off the edge of a phone. */
 .waka-account { right: 0; }
 
+.waka-account--settings {
+  width: min(26rem, calc(100vw - var(--sp-32)));
+  height: 36rem;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
 .waka-account header {
   display: flex;
   align-items: baseline;
@@ -5491,34 +5531,45 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   color: var(--ink);
 }
 
-/* ═══ THE SETTINGS PANEL ════════════════════════════════════════════════
-   Founder: "I want all setting-related stuff to be only accessible through
-   the drop down and not be its own thing."
-
-   IT IS A PANEL, NOT A PAGE IN A CORNER, and the difference is enforced by
-   two things rather than by restraint. The groups are DISCLOSURES with one
-   open at a time, so the tallest state is one group plus five rows; and the
-   card it sits in caps at the viewport and scrolls, so a long agent roster
-   cannot push the sign-out off the bottom of the screen. That cap used to
-   be declared here and was six pixels short because it could not see the
-   card's own padding — it lives on `.waka-account` now, where the whole
-   offset is in one sum.
-
-   WIDER THAN THE CARD IT REPLACES. 22rem held a name and an address; it
-   does not hold a handle field with two switches under it. 26rem is the
-   door's measure, which is this product's existing answer to "a column of
-   controls and nothing else". */
+/* Settings subpages share a fixed frame; only their content scrolls.
+   The outer account surface still owns the viewport height limit. */
 .waka-settings {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  /* THE CARD DECIDES THE MEASURE AND NOW THE HEIGHT TOO — see
-     `.waka-account` above, where 26rem and the viewport bound are both set,
-     and why. A second width here is the thing that overflowed sideways; a
-     second max-height is what overflowed downwards, because the inner
-     element cannot see the padding and the offset that sit outside it. One
-     scroller on the surface, nested in nothing. */
   width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.waka-settings .waka-settings-heading {
+  flex: 0 0 auto;
+  min-height: var(--waka-corner);
+  justify-content: flex-start;
+  gap: var(--sp-8);
+  color: var(--ink);
+}
+
+.waka-settings-heading h2 {
+  margin: 0;
+  font: inherit;
+}
+
+.waka-settings-heading button {
+  width: var(--waka-corner);
+  min-height: var(--waka-corner);
+  text-align: center;
+}
+
+.waka-settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .waka-settings-who {
@@ -5528,9 +5579,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   overflow-wrap: anywhere;
 }
 
-/* A GROUP'S ROW IS ITS CONTROL. Full width, so the whole line is the press
-   — a disclosure whose target is only its own text is the "aim at it"
-   failure the scrim note already names one surface along. */
+/* Each full-width row enters a Settings subpage. */
 .waka-settings-group {
   border-top: 1px solid var(--line);
   margin-top: var(--sp-8);
@@ -5580,6 +5629,156 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    a duplicate, would have stayed indefinitely with every gate green. That is
    the third time tonight a stylesheet outlived its markup in silence. */
 
+.waka-mcp-setup {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  font-size: var(--t-meta);
+  line-height: 1.5;
+}
+
+.waka-settings-body:has(> .waka-mcp-setup) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.waka-mcp-setup > div:not(.waka-session-actions) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.waka-mcp-setup > .waka-session-actions {
+  flex: 0 0 auto;
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--line);
+}
+
+.waka-mcp-setup h3 {
+  margin: var(--sp-8) 0;
+  font-size: var(--t-ui);
+  font-weight: 500;
+}
+
+.waka-session-tabs {
+  display: flex;
+  gap: var(--sp-4);
+  padding-bottom: var(--sp-8);
+  border-bottom: 1px solid var(--line);
+}
+
+.waka-session-tabs button {
+  flex: 1;
+  min-height: var(--waka-corner);
+  padding: 0 var(--sp-12);
+  border-radius: var(--r-pill);
+  text-align: center;
+  font-size: var(--t-meta);
+}
+
+.waka-session-tabs button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+}
+
+.waka-session-list-heading,
+.waka-session-card-heading,
+.waka-session-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+}
+
+.waka-session-list-heading h3 {
+  margin: 0;
+  font-size: var(--t-meta);
+  font-weight: 500;
+}
+
+.waka-session-actions > button:last-child {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+}
+
+.waka-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  margin: var(--sp-8) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.waka-session-card {
+  padding: var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: var(--t-meta);
+  overflow-wrap: anywhere;
+}
+
+.waka-session-card-heading {
+  align-items: flex-start;
+}
+
+.waka-session-card-heading strong {
+  font-weight: 500;
+}
+
+.waka-session-card-heading > span {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.waka-session-empty,
+.waka-session-confirm {
+  padding: var(--sp-8) 0;
+  font-size: var(--t-meta);
+  line-height: 1.5;
+}
+
+.waka-session-command,
+.waka-session-prompt {
+  margin: var(--sp-12) 0;
+  padding: var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.waka-session-command > span {
+  display: block;
+}
+
+.waka-mcp-commands {
+  margin: var(--sp-8) 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.waka-session-info {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-8) var(--sp-12);
+  margin: var(--sp-12) 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--t-meta);
+  line-height: 1.5;
+}
+
+.waka-session-info dt {
+  color: var(--muted);
+}
+
+.waka-session-info dd {
+  margin: 0;
+}
+
 .waka-settings-rows {
   display: flex;
   flex-direction: column;
@@ -5591,6 +5790,17 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 .waka-settings-rows li,
 .waka-settings-add {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+.waka-settings-rows .waka-agent-profile {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.waka-agent-profile-fields {
   display: flex;
   align-items: center;
   gap: var(--sp-8);

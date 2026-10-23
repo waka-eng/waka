@@ -149,6 +149,7 @@ interface ConsentBinding {
   sessionId: string;
   callback: string;
   state: string;
+  requestedProfileId: string;
 }
 
 function consentSecret(): string {
@@ -168,10 +169,11 @@ async function consentSignature(binding: ConsentBinding, expiresAt: number): Pro
     ["sign"],
   );
   const payload = [
-    "waka.cli_consent.v1",
+    "waka.cli_consent.v2",
     binding.sessionId,
     binding.callback,
     binding.state,
+    binding.requestedProfileId,
     String(expiresAt),
   ].join("\n");
   const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
@@ -232,6 +234,7 @@ function renderConsentPage(input: {
   candidates: Array<{ id: string; name: string; type: ProfileType }>;
   preselectedId: string;
   consentToken: string;
+  requestedProfileId: string;
 }): string {
   const asking = input.deviceLabel
     ? `${escapeHtml(input.deviceLabel)} on this machine`
@@ -242,8 +245,8 @@ function renderConsentPage(input: {
       const label = profile.name.trim() || (profile.type === "human" ? "You" : "Agent");
       const hint =
         profile.type === "human"
-          ? "Your own memory — everything you capture and everything WAKA distils from it."
-          : "This agent's own memory, kept separate from yours.";
+          ? "Personal profile: your personal memory. This connection has full account access, including all your profiles and settings."
+          : "Agent profile: read and write only this profile’s memory. No access to your personal memory or other agents’ memory.";
       return `
         <label class="choice">
           <input type="radio" name="profileId" value="${escapeHtml(profile.id)}"${
@@ -293,11 +296,13 @@ function renderConsentPage(input: {
   <form method="post" action="/api/auth/cli/consent">
     <input type="hidden" name="callback" value="${escapeHtml(input.callback)}" />
     <input type="hidden" name="state" value="${escapeHtml(input.state)}" />
+    <input type="hidden" name="requestedProfileId" value="${escapeHtml(input.requestedProfileId)}" />
     <input type="hidden" name="device" value="${escapeHtml(input.deviceLabel ?? "")}" />
     <input type="hidden" name="consent" value="${escapeHtml(input.consentToken)}" />
 
     <fieldset>
-      <legend>Which memory should it use?</legend>
+      <legend>Which profile should this connection act as?</legend>
+      <p>Each profile owns its own memory. Choose your personal profile or a named agent profile.</p>
       ${options}
     </fieldset>
 
@@ -308,9 +313,8 @@ function renderConsentPage(input: {
   </form>
 
   <p class="note">
-    The connection lasts 30 days and can be revoked without affecting this browser.
-    It can read and add to the memory you choose; only a connection bound to your own
-    profile can change or delete what is already there.
+    The connection lasts 30 days. End it in Settings → Sessions without affecting this browser.
+    Disconnecting preserves the profile and its memory.
   </p>
 </body>
 </html>`;
@@ -337,7 +341,7 @@ export const cliAuthRoutes = new Hono<AuthEnv>();
  * function is here for, and it is the one both routes lean on.
  *
  * The `write` filter is a second, narrower rule — an agent-bound session may
- * read the human profile but must never mint a credential that *acts* as it.
+ * only act as its own profile.
  * Both routes now refuse an agent session at the door, so no request that
  * reaches this helper can exercise that filter any more. It stays rather
  * than being deleted because it is keyed off the access matrix instead of a
@@ -369,7 +373,7 @@ export async function bindableProfiles(
 
   /* The WHERE proved every row is this account's (NULL never equals an id),
      so a room's mind cannot appear here; the narrow states that for the
-     types. Write never rides a grant, so the sync matrix answers alone. */
+     types. The access matrix alone decides which profile may be bound. */
   return rows.flatMap((row) => {
     const held = asAccountProfile(row);
     if (!held) return [];
@@ -386,8 +390,8 @@ export async function bindableProfiles(
  * expected to already be signed into, and the JSON error is enough for the
  * CLI to tell them so.
  *
- * Nothing is minted here. `profile` preselects a choice; the person confirms
- * it on the page.
+ * Nothing is minted here. `profile` locks the requested choice; the person
+ * confirms it on the page. Omitting it lets the person choose a profile.
  */
 /*
  * humanSessionsOnly, for the reason account erasure and public handles have
@@ -449,12 +453,10 @@ cliAuthRoutes.get("/start", requireAuth, humanSessionsOnly, async (c) => {
   }
 
   const requested = (c.req.query("profile") ?? "").trim().toLowerCase();
-  const preselected =
-    candidates.find(
-      (row) => row.id === requested || row.name.toLowerCase() === requested,
-    ) ??
-    candidates.find((row) => row.id === session.profile.id) ??
-    candidates[0]!;
+  const matches = requested ? candidates.filter(row => row.id === requested || row.name.toLowerCase() === requested) : [];
+  if (requested && matches.length !== 1) return c.json({ error: "Choose one existing profile by its exact ID" }, 400);
+  const preselected = matches[0] ?? candidates.find(row => row.id === session.profile.id) ?? candidates[0]!;
+  const requestedProfileId = requested ? preselected.id : "";
 
   const deviceLabel =
     (c.req.query("device") ?? "").trim().slice(0, MAX_DEVICE_LABEL_LENGTH) || null;
@@ -465,12 +467,14 @@ cliAuthRoutes.get("/start", requireAuth, humanSessionsOnly, async (c) => {
       callback: callback.toString(),
       state,
       deviceLabel,
-      candidates,
+      candidates: requestedProfileId ? [preselected] : candidates,
+      requestedProfileId,
       preselectedId: preselected.id,
       consentToken: await signConsentToken({
         sessionId: session.sessionId,
         callback: callback.toString(),
         state,
+        requestedProfileId,
       }),
     }),
   );
@@ -541,6 +545,7 @@ cliAuthRoutes.post("/consent", requireAuth, humanSessionsOnly, async (c) => {
     sessionId: session.sessionId,
     callback: callback.toString(),
     state,
+    requestedProfileId: readField("requestedProfileId"),
   });
   if (!consentOk) {
     return c.json({ error: "Consent expired — start the login again" }, 400);
@@ -548,8 +553,8 @@ cliAuthRoutes.post("/consent", requireAuth, humanSessionsOnly, async (c) => {
 
   const candidates = await bindableProfiles(session);
   const target = candidates.find((row) => row.id === readField("profileId"));
-  if (!target) {
-    return c.json({ error: "Unknown profile" }, 400);
+  if (!target || (readField("requestedProfileId") && target.id !== readField("requestedProfileId"))) {
+    return c.json({ error: "Unknown or mismatched profile" }, 400);
   }
 
   const deviceLabel = readField("device").trim().slice(0, MAX_DEVICE_LABEL_LENGTH) || null;
@@ -634,7 +639,7 @@ cliAuthRoutes.post("/exchange", async (c) => {
   // The email comes from the account behind the bound profile — the CLI
   // shows it so the person can see which login they just connected.
   const profileRows = await db
-    .select({ id: profiles.id, email: accounts.email })
+    .select({ id: profiles.id, name: profiles.name, type: profiles.type, email: accounts.email })
     .from(profiles)
     .innerJoin(accounts, eq(accounts.id, profiles.accountId))
     .where(eq(profiles.id, row.profileId))
@@ -661,5 +666,6 @@ cliAuthRoutes.post("/exchange", async (c) => {
     token,
     expiresAt: new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString(),
     user: { email: profile.email },
+    profile: { id: profile.id, name: profile.name, type: profile.type },
   });
 });

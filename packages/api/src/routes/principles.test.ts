@@ -149,11 +149,11 @@ describe("the matrix", () => {
     expect(await res.json()).toEqual({ principles: [] });
   });
 
-  it("lets an agent session read its human's principles", async () => {
+  it("refuses an agent session reading its human's principles", async () => {
     mockState.session = AGENT_SESSION;
     mockState.db = makeDb([[], []]);
     const res = await createApp().request(`/api/principles?profile=${HUMAN_PROFILE_ID}`);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
   });
 
   /** Principles are curation; capture does not extend to them. */

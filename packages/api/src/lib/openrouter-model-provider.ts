@@ -9,8 +9,8 @@
  * is written once and cannot drift between providers; what changes per road
  * is transport and model id, nothing else.
  *
- * Model selection: `deepseek/deepseek-v4.1-flash` for every task (owner
- * request, 2026-10-05), overridable per task by env so a future eval can move
+ * Model selection: `deepseek/deepseek-v4.1-flash-1017` for every task (owner
+ * request, 2026-10-22), overridable per task by env so a future eval can move
  * one task without moving the rest:
  *
  *   WAKA_MODEL_EXTRACT · WAKA_MODEL_JUDGE · WAKA_MODEL_SYNTHESIZE

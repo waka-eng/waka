@@ -86,7 +86,7 @@ import { ArchiveRecorderProvider, useArchiveClips } from '../lib/archive-recorde
 import { InspirationComposer } from '../components/InspirationComposer';
 import { attachmentLabel } from '../lib/attachment-label';
 import { Menu } from '../components/Menu';
-import { usePageMenu, wallAgnosticView } from '../lib/page-menu';
+import { usePageMenu } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
@@ -98,7 +98,7 @@ import { ReviewEvidence } from '../components/ReviewEvidence';
 import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
-import type { CreateInspirationRequest } from '../lib/api';
+import type { ApiOwnedProfile, CreateInspirationRequest } from '../lib/api';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
 import { wordsCanStand } from '../lib/note-words';
 import { inspirationPreview } from '../lib/inspiration-preview';
@@ -130,6 +130,7 @@ import { HarvestReasons } from "../components/HarvestReasons";
 import { AgentPick } from "../components/AgentPick";
 import { ConversationsOverlay } from "../components/ConversationsOverlay";
 import { ConversationPanel, CHAT_TOOLS_SLOT } from "../components/ConversationPanel";
+import { ProfilePortrait } from "../components/ProfilePortrait";
 import type { ApiConversation } from "../lib/api/conversations";
 import { useMeasured } from "../canvas/measured";
 /* THE CANVAS SIDE OF `SimApi`, which used to be 5,637 lines of this file.
@@ -731,7 +732,19 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
 }
 
 function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null }): JSX.Element {
-  const composerDraft = useInspirationDraft(storageScope);
+  const viewNavigation = useViewNavigation(storageScope ? `${storageScope.accountId}:${storageScope.profileId}` : 'fixture');
+  const viewNavigationRef = useRef(viewNavigation); viewNavigationRef.current = viewNavigation;
+  const restoringViewRef = useRef(true), requestedViewRef = useRef(viewNavigation.view);
+  requestedViewRef.current = viewNavigation.view;
+  const [atWall, setAtWall] = useState<Space>({ kind: "self", id: "", name: SELF_WALL_NAME, col: 0 });
+  const requestedProfileId = viewNavigation.view?.wallId;
+  const memoryProfileId = restoringViewRef.current && requestedProfileId && requestedProfileId.toLowerCase() !== 'me'
+    ? requestedProfileId : atWall.kind === 'agent' ? atWall.id : storageScope?.profileId;
+  const memoryScope = useMemo(() => storageScope && memoryProfileId ? {
+    accountId: storageScope.accountId, profileId: memoryProfileId,
+  } : null, [storageScope, memoryProfileId]);
+  const memoryScopeRef = useRef(memoryScope); memoryScopeRef.current = memoryScope;
+  const composerDraft = useInspirationDraft(memoryScope);
   const [preparingInspiration, setPreparingInspiration] = useState(false);
   const [uploadingMediaId, setUploadingMediaId] = useState<string | null>(null);
   const [checkingFiles, setCheckingFiles] = useState(false);
@@ -758,11 +771,12 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   useLayoutEffect(() => { blockArchive(notepadLive); }, [notepadLive, blockArchive]);
   const notepadRecordBlocked = archiveClips.active;
   const startNotepadRecording = () => { if (!notepadRecordBlocked) void recording.start(); };
-  useEffect(() => () => { composerEpoch.current += 1; fileOwnerEpoch.current += 1; uploadController.current?.abort(); }, []);
-  const viewNavigation = useViewNavigation(storageScope ? `${storageScope.accountId}:${storageScope.profileId}` : 'fixture');
-  const viewNavigationRef = useRef(viewNavigation); viewNavigationRef.current = viewNavigation;
-  const restoringViewRef = useRef(true), requestedViewRef = useRef(viewNavigation.view);
-  requestedViewRef.current = viewNavigation.view;
+  useEffect(() => {
+    preparingInspirationRef.current = false;
+    setPreparingInspiration(false); setUploadingMediaId(null); setCheckingFiles(false);
+    checkingFilesCount.current = 0;
+    return () => { composerEpoch.current += 1; fileOwnerEpoch.current += 1; uploadController.current?.abort(); };
+  }, [memoryScope?.profileId]);
   const navigationInteraction = useRef(0);
   useEffect(() => {
     const interacted = () => { navigationInteraction.current += 1; };
@@ -1029,9 +1043,9 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   // Home/Capture can be ready before this independent request has finished.
   const [readingLoadPhase, setReadingLoadPhase] = useState<"loading" | "ready" | "failed">("loading");
   const retryReadingLoadRef = useRef<() => void>(() => {});
-  const sourceProcessing = useInspirationProcessing(storageScope);
+  const sourceProcessing = useInspirationProcessing(memoryScope);
   const inspirationSaveHandlers = useRef<Pick<Parameters<typeof useAuthoredSave>[0], 'onResolved' | 'onRemoved' | 'onEditRejected'> | null>(null);
-  const inspirationSave = useAuthoredSave({ scope: storageScope, operation: 'inspiration', enabled: phase === 'ready' && !offline && composerDraft.ready,
+  const inspirationSave = useAuthoredSave({ scope: memoryScope, operation: 'inspiration', enabled: phase === 'ready' && !offline && composerDraft.ready,
     onResolved: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); return inspirationSaveHandlers.current.onResolved(...args); },
     onRemoved: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); inspirationSaveHandlers.current.onRemoved(...args); },
     onEditRejected: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); inspirationSaveHandlers.current.onEditRejected?.(...args); },
@@ -1591,8 +1605,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      setter declared above the state it set, crossing a declaration-order
      boundary that only existed because a room's members were fetched far
      below and drawn by a frame loop installed far above. */
-  /** Which wall the camera is standing on. Discrete, pushed from the loop. */
-  const [atWall, setAtWall] = useState<Space>({ kind: "self", id: "", name: SELF_WALL_NAME, col: 0 });
   /**
    * WHERE YOU ARE STANDING, KEPT OUTSIDE THE LOOP.
    *
@@ -1758,7 +1770,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      at whatever a legacy storage key held — the same shape as the `onPast`
      prop that file's own header records. A control nobody can reach,
      deciding something on every save. */
-  const [mouthOpen, setMouthOpen] = useState(() => readProfileText(storageScope, "draft") !== "");
+  const [mouthOpen, setMouthOpen] = useState(() => readProfileText(memoryScope, "draft") !== "");
   /* The attachment drawer's disclosure. Open on arrival of a file — you just
      dropped it and the one thing you want is to see that it landed — and
      collapsible from there, which is the only state the pattern's count
@@ -2559,6 +2571,20 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     updateLocale: next => auth ? auth.updatePreferredLocale(next) : Promise.resolve(),
     settleMs: NAME_SETTLE_MS,
   });
+  const onAgentProfilesChange = useCallback((profiles: ApiOwnedProfile[]) => {
+    const roster = profiles.filter(profile => profile.type === 'agent');
+    setAgentRoster(previous => previous?.length === roster.length && previous.every((profile, i) =>
+      profile.id === roster[i].id && profile.name === roster[i].name && profile.createdAt === roster[i].createdAt
+    ) ? previous : roster);
+    setAgents(previous => {
+      if (!previous) return previous;
+      const next = previous.flatMap(bundle => {
+        const profile = roster.find(profile => profile.id === bundle.agent.id);
+        return profile ? [profile.name === bundle.agent.name ? bundle : { ...bundle, agent: { ...bundle.agent, name: profile.name } }] : [];
+      });
+      return next.length === previous.length && next.every((bundle, i) => bundle === previous[i]) ? previous : next;
+    });
+  }, []);
   const settingsCard = auth ? {
     name: settingsWrites.name,
     nameBusy: settingsWrites.nameBusy,
@@ -2566,6 +2592,8 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     failed: settingsWrites.failed,
     onName: settingsWrites.onName,
     onLocale: settingsWrites.onLocale,
+    onAgentProfilesChange,
+    activeProfileId: memoryScope?.profileId,
     /* ═══ THE PUBLIC PAGE IS NO LONGER OFFERED ════════════════════════
        Founder: "everything regarding public and private should also not be
        a thing in this new experience."
@@ -2688,10 +2716,17 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     out.push({ kind: "self", id: "", name: SELF_WALL_NAME, col: 0 });
     return out;
   }, [agentRoster]);
-  /* The one agent this account has, if it has one. Only its existence and
-     its column are needed here — the creature's form switch is a toggle
-     between your own wall and that one. */
-  const agentWall = walls.find(w => w.kind === 'agent') ?? null;
+  /* List profiles in creation order; chat follows the selected agent. */
+  const agentWalls = walls.filter(w => w.kind === 'agent').reverse();
+  const agentWall = agentWalls.find(w => w.id === atWall.id) ?? agentWalls[0] ?? null;
+  const conversationScope = useMemo(() => storageScope ? {
+    accountId: storageScope.accountId,
+    profileId: viewNavigation.view?.wallId ?? storageScope.profileId,
+  } : null, [storageScope, viewNavigation.view?.wallId]);
+  const conversationAgent = agentRoster?.find(profile => profile.id === conversationScope?.profileId);
+  const conversationProfile = conversationScope?.profileId === storageScope?.profileId
+    ? { name: auth?.profile?.name ?? say('worldWallMe'), type: 'human' as const }
+    : conversationAgent ? { name: conversationAgent.name, type: 'agent' as const } : null;
   const wallsRef = useRef<Space[]>([]);
   wallsRef.current = walls;
   const agentsRef = useRef<AgentBundle[]>([]);
@@ -3034,7 +3069,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   }, [atWall, applyAgentBundles]);
 
   const pushArrived = useCallback((w: Space) => {
-    setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
+    setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id && prev.name === w.name && prev.col === w.col ? prev : w));
   }, []);
   const pushArrivedRef = useRef(pushArrived);
   pushArrivedRef.current = pushArrived;
@@ -4990,7 +5025,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const openTalk = useCallback((id: string | null) => {
     const nav = viewNavigationRef.current;
     nav.write(
-      { ...EMPTY_VIEW, conversationId: id ?? 'new' },
+      { ...EMPTY_VIEW, wallId: atWallRef.current.kind === 'agent' ? atWallRef.current.id : null, conversationId: id ?? 'new' },
       standingAway(nav.view) ? { replace: true } : {},
     );
   }, []);
@@ -5353,28 +5388,38 @@ const RETRY_READ_LIMIT_MS = 20_000;
   };
   inspirationSaveHandlers.current = {
     onResolved: async (intent, result, initiated) => {
-      if (intent.operation !== 'inspiration') return;
+      if (intent.operation !== 'inspiration' || intent.profileId !== memoryScopeRef.current?.profileId) return;
       const currentDraft = composerDraft.current.current;
       const preserveNewer = intent.draft ? currentDraft.id !== intent.draft.id || currentDraft.revision !== intent.draft.revision : currentDraft.media.length > 0;
       await composerDraft.settle(intent.draft, result.inspiration.id);
-      const remaining = preserveNewer ? composerDraft.current.current.text : settleInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
+      if (intent.profileId !== memoryScopeRef.current?.profileId) throw new Error('Save owner changed');
+      const remaining = preserveNewer ? composerDraft.current.current.text : settleInspirationDraft(profileStorageKey(memoryScope, 'draft'), intent.input.text, draftRef.current);
       draftRef.current = remaining; setDraft(remaining); setMouthNote('');
       const made = result.inspiration, detail = toInspirationDetail(made);
-      const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
-      const revision = ++sourceListMutationRef.current;
-      detailsRef.current.set(made.id, detail);
       const displayText = detail.preview;
-      if (!known && !result.recovered) birthInspiration(made.id, displayText, Date.parse(made.createdAt), made.id);
-      setInspirations((previous) => {
-        if (previous?.some((item) => item.id === made.id)) return previous.map((item) => item.id === made.id ? detail : item);
-        return !result.recovered ? [...(previous ?? []), detail] : previous;
-      });
-      // A resumed older save may be outside the initially loaded field. Read
-      // its actual total rather than incrementing an already-counted memory.
-      if (!known && result.recovered) void loadInspirations(intent.profileId).then((field) => {
-        if (!readingMountedRef.current || sourceListMutationRef.current !== revision) return;
-        setInspirations(field.inspirations); setFieldBeyond(beyondOf(field));
-      }).catch(() => undefined);
+      if (intent.profileId === storageScope?.profileId) {
+        const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
+        const revision = ++sourceListMutationRef.current;
+        detailsRef.current.set(made.id, detail);
+        if (!known && !result.recovered) birthInspiration(made.id, displayText, Date.parse(made.createdAt), made.id);
+        setInspirations((previous) => {
+          if (previous?.some((item) => item.id === made.id)) return previous.map((item) => item.id === made.id ? detail : item);
+          return !result.recovered ? [...(previous ?? []), detail] : previous;
+        });
+        // A resumed older save may be outside the initially loaded field. Read
+        // its actual total rather than incrementing an already-counted memory.
+        if (!known && result.recovered) void loadInspirations(intent.profileId).then((field) => {
+          if (!readingMountedRef.current || sourceListMutationRef.current !== revision) return;
+          setInspirations(field.inspirations); setFieldBeyond(beyondOf(field));
+        }).catch(() => undefined);
+      } else {
+        const profile = agentRoster?.find(profile => profile.id === intent.profileId);
+        if (profile) {
+          void loadAgentBundle(profile).then(bundle => {
+            if (intent.profileId === memoryScopeRef.current?.profileId) applyAgentBundles(new Map([[profile.id, bundle]]));
+          }).catch(() => undefined);
+        }
+      }
       if (result.processing) sourceProcessing.track(made.id, result.processing);
       // Legacy text-only intents may still be in the journal. New bundle
       // intents have already committed all requested attachment rows.
@@ -5401,20 +5446,20 @@ const RETRY_READ_LIMIT_MS = 20_000;
            how the character jumps up and down, but for a few sec, make that
            say 'I'm inspired!' and the CTA should be let's chat about it." The
            bubble's act is the chat about THIS save (see the bubble below). */
-        setCharSay(atWallRef.current.kind === 'self' ? say('worldImInspired') : say('worldSavedToYourWall'));
-        if(initiated&&storageScope)setRecentInspiration({owner:`${storageScope.accountId}:${storageScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
+        setCharSay(atWallRef.current.kind === 'self' ? say('worldImInspired') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
+        if(initiated&&memoryScope)setRecentInspiration({owner:`${memoryScope.accountId}:${memoryScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
         viewNavigationRef.current.closeComposer();
       } };
     },
     onRemoved: async (intent) => {
       if (intent.operation !== 'inspiration') return;
       await composerDraft.settle(intent.draft, intent.acknowledged?.inspirationId ?? 'removed');
-      const remaining = settleInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
+      const remaining = settleInspirationDraft(profileStorageKey(memoryScope, 'draft'), intent.input.text, draftRef.current);
       draftRef.current = remaining; setDraft(remaining);
     },
     onEditRejected: (intent) => {
       if (intent.operation !== 'inspiration') return;
-      const draft = restoreInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
+      const draft = restoreInspirationDraft(profileStorageKey(memoryScope, 'draft'), intent.input.text, draftRef.current);
       draftRef.current = draft; setDraft(draft); setMouthOpen(true); setCharSay('');
     },
   };
@@ -5422,8 +5467,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
   // The immutable, owned intent is durable before anything is sent. A newer
   // draft can be written meanwhile, but cannot replace an unresolved save.
   const uploadDraftFiles = async (media: InspirationDraftMedia[], controller: AbortController, current: () => void) => {
-    if (!storageScope) throw new DraftProblem('worldComposerUploadFailed');
-    await uploadInspirationMedia({ media, profileId: storageScope.profileId, signal: controller.signal,
+    if (!memoryScope) throw new DraftProblem('worldComposerUploadFailed');
+    await uploadInspirationMedia({ media, profileId: memoryScope.profileId, signal: controller.signal,
       assertCurrent: current, uploading: setUploadingMediaId,
       persist: async (id, update) => {
         current();
@@ -5679,7 +5724,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     }
     if (offlineRef.current) {
       birthInspiration(`kept-${Date.now().toString(36)}`, text, Date.now());
-      draftRef.current = ''; writeProfileText(storageScope, 'draft', ''); setDraft(''); setMouthOpen(false); return;
+      draftRef.current = ''; writeProfileText(memoryScope, 'draft', ''); setDraft(''); setMouthOpen(false); return;
     }
     preparingInspirationRef.current = true; setPreparingInspiration(true); setMouthNote('');
     const epoch = ++composerEpoch.current, controller = new AbortController(); uploadController.current = controller;
@@ -6189,7 +6234,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, []);
   const [talking, setTalking] = useState(false);
   const talkAbout = useCallback(async (kept: { id: string; text: string }) => {
-    const profileId = storageScope?.profileId;
+    const profileId = memoryScope?.profileId;
     if (!profileId || talking) return;
     setTalking(true);
     try {
@@ -6200,7 +6245,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         requestReply: true,
       });
       setRecentInspiration(null);
-      navigate(`/chat/${conversationId}`);
+      navigate(viewHref({ ...EMPTY_VIEW, wallId: profileId === storageScope?.profileId ? null : profileId, conversationId }));
     } catch {
       /* The keep itself already landed — this failed to open a room to talk
          about it in, which is a different and much smaller thing to say. */
@@ -6208,8 +6253,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
     } finally {
       setTalking(false);
     }
-  }, [navigate, say, storageScope?.profileId, talking]);
-  const inspirationOwner=storageScope?`${storageScope.accountId}:${storageScope.profileId}`:null;
+  }, [navigate, say, memoryScope?.profileId, storageScope?.profileId, talking]);
+  const inspirationOwner=memoryScope?`${memoryScope.accountId}:${memoryScope.profileId}`:null;
   const visibleInspiration=recentInspiration?.owner===inspirationOwner?recentInspiration:null;
 
   useEffect(() => {
@@ -11895,31 +11940,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
            are a history rather than a depth of your own material, which is
            why they never sat among the three and why this corner is where
            they belong. */
-        /* ═══ AND ON A SURFACE WITH NO OWNER, NEITHER FACE IS LIT ═══════
-           Founder: "When user clicks on chat, don't select any of me nor my
-           agent because here it doesn't matter — what's selected. For
-           inspirations it does, for now it does, but for chats it doesn't,
-           so don't select anything."
-
-           `wallAgnosticView` holds which surfaces those are and the whole
-           argument for it, including the check that chats really are
-           unscoped in practice rather than only in feel. What is worth
-           saying HERE is the part that is about this markup: WHERE YOU ARE
-           STANDING AND WHICH FACE IS LIT STOP BEING ONE FACT.
-
-           They were the same boolean, used for two jobs — the appearance and
-           the decision not to travel — and separating them is the whole
-           change. `here` still answers "is the creature already wearing this
-           form", so pressing the face you are already on still does nothing;
-           a single boolean would have made a press on "Me" while on Me fire
-           `goToWall(0)` and move a camera nobody asked to move. `lit` is
-           allowed to say nothing on a page where whose-material is not a
-           question being asked. */
         left={agentWall ? (
-              <span className="jar-char-form" role="group" aria-label={say('worldWallMyAgent')}>
-                {([null, agentWall] as const).map(wall => {
-                  const here = wall ? atWall.kind === 'agent' : atWall.kind !== 'agent';
-                  const lit = here && !wallAgnosticView(viewNavigation.view);
+              <span className="jar-char-form" role="group" aria-label={say('worldProfileSwitcher')}>
+                {[null, ...agentWalls].map(wall => {
+                  const here = wall ? atWall.kind === 'agent' && atWall.id === wall.id : atWall.kind !== 'agent';
+                  const lit = here;
                   return (
                     <button
                       key={wall ? wall.id : 'me'}
@@ -11935,7 +11960,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                          question the moment nothing slides either way. */
                       onClick={() => { if (!here) simApiRef.current?.goToWall(wall ? wall.col : 0, true); }}
                     >
-                      {say(wall ? 'worldWallMyAgent' : 'worldWallMe')}
+                      <ProfilePortrait agentId={wall?.id} />
+                      {wall ? wall.name : say('worldWallMe')}
                     </button>
                   );
                 })}
@@ -11961,7 +11987,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           onQuery={setSeek} onClose={() => setSeek(null)} onPick={openSearchResult} />
       ) : null}
       {storageScope&&viewNavigation.view?.principleId&&viewNavigation.view.sharePrinciple?<PrincipleShare
-        key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.principleId}`} scope={storageScope}
+        key={`${conversationScope?.accountId}:${conversationScope?.profileId}:${viewNavigation.view.principleId}`} scope={conversationScope ?? storageScope}
         id={viewNavigation.view.principleId} name={auth?.profile?.name??''} locale={locale} onClose={viewNavigation.closeShare}
         onChoose={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true},{replace:true})}/>:null}
       {thingShare ? (
@@ -12019,7 +12045,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         ownArchive={atWall.kind!=='agent'}
-        title={say(atWall.kind==='agent'?'worldAgentField':'worldMenuField')}
+        title={atWall.kind==='agent'?formatMessage(locale,'worldProfileInspirations',{name:atWall.name}):say('worldMenuField')}
         focus={savesFocus} onClearFocus={() => setSavesFocus(null)}
         /* THE SWITCH IS IN THE CORNER, AND IT ALWAYS WAS. Founder: "if the
            user changes it in the modal, then the page behind it should also
@@ -12034,20 +12060,20 @@ const RETRY_READ_LIMIT_MS = 20_000;
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
         name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
-        title={say(atWall.kind==='agent'?'worldAgentPrinciples':'worldPrinciplesShortcut')}
+        title={atWall.kind==='agent'?formatMessage(locale,'worldProfilePrinciples',{name:atWall.name}):say('worldPrinciplesShortcut')}
         whose={atWall.kind==='agent'?'agent':'own'}
         onClose={leaveOpen}
         /* Opening one REPLACES the overlay rather than stacking on it: the
            principle's own surface is the next thing to read, not a sheet on
            top of a sheet, and `closeOpen` would otherwise have to know which
            of two things it was closing. */
-        onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
+        onOpen={id=>viewNavigation.write({...EMPTY_VIEW,wallId:atWall.kind==='agent'?atWall.id:null,section:'sky',principleId:id})}
         /* STRAIGHT TO THE ARTIFACT, skipping the principle's own surface.
            The card already shows what would be shared; the share surface is
            the larger version of that same card. Routing through the
            principle page first made a person confirm a choice they had
            already made by pressing share. */
-        onShare={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true})}
+        onShare={id=>viewNavigation.write({...EMPTY_VIEW,wallId:atWall.kind==='agent'?atWall.id:null,section:'sky',principleId:id,sharePrinciple:true})}
         /* What the creature said on the waiting page, talked about. */
         /* NOT ON AN AGENT'S WALL (review, 2026-10-16): talkAbout posts the
            creature's line as YOUR first message, and on an agent's ground that
@@ -12056,27 +12082,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
         onChat={atWall.kind==='agent'?undefined:said => { void talkAbout({ id: '', text: said }); }}
         crossing={principlesCrossing}
         onCrossed={() => setPrinciplesCrossing(null)}/>:null}
-      {/* ═══ CHATS DO NOT HAVE AN OWNER THE WAY AN ARCHIVE DOES ══════════
-          Founder: "I don't think there should be a difference between me and
-          my agent's chat. Inspiration, sure. But I don't see a reason why
-          that should change."
-
-          Right, and the split was not only unmotivated, it was incoherent:
-          this LIST was scoped to whichever wall you were standing on while
-          `ConversationPanel` below has always taken `storageScope` — the
-          account's own profile. So standing on an agent's wall showed you a
-          list of its conversations and then opened them under yours. Two
-          answers to "whose talk is this" on one path.
-
-          An archive genuinely has two owners — your material is yours and
-          its material is its own, which is why saving on an agent's wall is
-          refused outright. A conversation is with WAKA, and changing which
-          face it is wearing is not a change of who is talking. One list, one
-          scope, matching the panel that was already right. */}
-      {storageScope&&viewNavigation.view?.open==='conversations'?<ConversationsOverlay
-        key={`${storageScope.accountId}:${storageScope.profileId}:talks`}
-        locale={locale} profileId={storageScope.profileId}
-        title={say('worldOpenConversations')}
+      {/* Chats, their drafts, and their memory all belong to the profile in the address. */}
+      {conversationScope&&conversationProfile&&viewNavigation.view?.open==='conversations'?<ConversationsOverlay
+        key={`${conversationScope.accountId}:${conversationScope.profileId}:talks`}
+        locale={locale} profileId={conversationScope.profileId}
+        title={formatMessage(locale, 'worldProfileChats', { name: conversationProfile.name })}
         onClose={leaveOpen}
         onOpen={id=>openTalk(id)}/>:null}
 
@@ -12102,9 +12112,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
           bug: leaving is dismissal, the world is still behind, and there is
           no destination to look up. The visible close below is the whole
           mechanism. */}
-      {storageScope&&viewNavigation.view?.conversationId?(()=>{
+      {conversationScope&&conversationProfile&&viewNavigation.view?.conversationId?(()=>{
         const talkId=viewNavigation.view.conversationId==='new'?null:viewNavigation.view.conversationId;
-        const owner=`${storageScope.accountId}:${storageScope.profileId}`;
+        const owner=`${conversationScope.accountId}:${conversationScope.profileId}`;
         if(committedTalk.current&&(committedTalk.current.owner!==owner||committedTalk.current.row.id!==talkId))committedTalk.current=null;
         return <div className="waka-page">
           {/* THE BAR IS THIS SURFACE'S WAY OUT, SAID IN THE MARKUP.
@@ -12172,16 +12182,16 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   held. An empty header above a conversation would be a
                   reserved row for nothing. */}
             <ConversationPanel key={`${owner}:${talkId??'new'}:${viewNavigation.view.principleId??''}`}
-              scope={storageScope} id={talkId}
+              scope={conversationScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
-              agent={agentWall ? { id: agentWall.id, name: agentWall.name } : null}
+              profile={conversationProfile}
               /* The bar's middle group, lent for the mic and the ＋. */
               toolsSlot={CHAT_TOOLS_SLOT}
-              onCreated={row=>{if(row.profileId===storageScope.profileId)committedTalk.current={owner,row};}}
+              onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};}}
               /* `replace` on the new-to-id hop so dismissing does not land
                  back on the blank conversation you just started. */
-              onChoose={next=>{if(next!==talkId)viewNavigation.write({...EMPTY_VIEW,conversationId:next??'new'},{replace:!talkId&&Boolean(next)});}}/>
+              onChoose={next=>{if(next!==talkId)viewNavigation.write({...EMPTY_VIEW,wallId:viewNavigation.view?.wallId??null,conversationId:next??'new'},{replace:!talkId&&Boolean(next)});}}/>
           </DialogSurface>
         </div>;
       })():null}

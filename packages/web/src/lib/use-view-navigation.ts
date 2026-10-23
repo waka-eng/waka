@@ -165,7 +165,7 @@ export function useViewNavigation(scope: string | null) {
     const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
     own.current=null;
     if(stored?.scope===current.scope&&stored.conversationFrom) current.navigate(-1);
-    else current.navigate(viewHref({...EMPTY_VIEW}),{replace:true});
+    else current.navigate(viewHref({...EMPTY_VIEW,wallId:before.wallId}),{replace:true});
   },[]);
   return { view, href, key: location.key, query, write, closeComposer,closeShare,closeOpen,closeConversation,closeNote, own };
 }

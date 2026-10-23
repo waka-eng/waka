@@ -26,11 +26,11 @@ import {recordModelUsage} from './model-usage.js';
 
 export const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-/** The default for every generation task (owner request, 2026-10-05).
-    Use the explicit V4.1 model ID, not a floating `-latest` alias. A model
+/** The default for every generation task (owner request, 2026-10-22).
+    Pin the October 17 V4.1 snapshot, not a floating `-latest` alias. A model
     change is an owner decision with verification, never a silent upgrade. */
 export const OPENROUTER_GENERATION_MODEL =
-  process.env.OPENROUTER_GENERATION_MODEL ?? "deepseek/deepseek-v4.1-flash";
+  process.env.OPENROUTER_GENERATION_MODEL ?? "deepseek/deepseek-v4.1-flash-1017";
 
 export function getOpenRouterApiKey(): string | null {
   const key = process.env.OPENROUTER_API_KEY?.trim();

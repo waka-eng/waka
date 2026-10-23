@@ -149,7 +149,8 @@ const offlineNow=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
 const refusalOf=(reason:unknown):MessageKey=>reason instanceof PhotoRefused?reason.reason
   :reason instanceof FileRefused?(reason.reason==='too_large'?'worldAttachTooLarge':reason.reason==='empty'?'worldPhotoEmpty':'worldAttachUnsupported'):'worldAttachFailed';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,agent=null,toolsSlot}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,agent=null,profile=null,toolsSlot}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;
+  profile?:{name:string;type:'human'|'agent'}|null;
   /** The account's agent, when it has one: a new chat may talk with it, or with both. */
   agent?:{id:string;name:string}|null;
   /** The id of an element the page's bar lends for the mic and the ＋ (`CHAT_TOOLS_SLOT`).
@@ -163,6 +164,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const [talkWith,setTalkWith]=useState<'mine'|'agent'|'both'>('mine');
   /* One object per agent, so the creature is not re-drawn on every keystroke. */
   const agentForm=useMemo(()=>agent?agentBeing(agent.id):null,[agent?.id]);
+  const profileForm=useMemo(()=>profile?.type==='agent'?agentBeing(scope.profileId):undefined,[scope.profileId,profile?.type]);
   const journal=id??`new:${initialPrincipleId??'general'}`;
   const initial=initialConversation?.id===id&&initialConversation.profileId===scope.profileId?initialConversation:null;
   const bootstrap=useRef(initial);
@@ -679,6 +681,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       {focusFailed?<p className="chat-notice" role="alert">{say('worldPrincipleUnavailable')} <button type="button" onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button></p>:null}
       <div className="jar-conversation-body chat-scroll" ref={body} onScroll={()=>{const node=body.current;if(!node)return;nearBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80;try{sessionStorage.setItem(scrollKey,JSON.stringify({top:node.scrollTop,nearBottom:nearBottom.current,...(conversationRef.current?.messageWindowStart!==undefined?{messageWindowStart:conversationRef.current.messageWindowStart}:{})}));}catch{/* The transcript remains available. */}}}>
         <div className="chat-transcript">
+          {profile?<p className="chat-profile">{formatMessage(locale,'worldProfileMemory',{name:profile.name})}</p>:null}
           {/* The transcript's own top edge, not a feature beside it: a window
               of thirty messages that cannot reach the thirty before it is a
               transcript with its beginning cut off. */}
@@ -716,17 +719,17 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                   yours, your agent in its own pixel form, or the two of
                   you side by side. */}
               <span className="chat-opening-beings">
-                {talkWith!=='agent'?<Companion size={64}/>:null}
+                 {talkWith!=='agent'?<Companion size={64} being={profileForm} cool={profile?.type==='agent'} pixel={profile?.type==='agent'} label={profile?.name??'WAKA'}/>:null}
                 {agent&&agentForm&&talkWith!=='mine'?<Companion size={talkWith==='both'?52:64} being={agentForm} cool pixel label={agent.name}/>:null}
               </span>
-              <p>{say(talkWith==='agent'?'worldConversationOpeningAgent':talkWith==='both'?'worldConversationOpeningBoth':'worldConversationOpening')}</p>
+               <p>{profile?formatMessage(locale,'worldProfileConversationOpening',{name:profile.name}):say(talkWith==='agent'?'worldConversationOpeningAgent':talkWith==='both'?'worldConversationOpeningBoth':'worldConversationOpening')}</p>
               {agent&&!id&&!initialPrincipleId?(
                 <div className="chat-with" role="group" aria-label={say('worldChatWithLabel')}>
                   {(['mine','agent','both'] as const).map(choice=>(
                     <button key={choice} type="button" aria-pressed={talkWith===choice}
                       className={`chat-with-choice${talkWith===choice?' chat-with-choice--on':''}`}
                       onClick={()=>setTalkWith(choice)}>
-                      {say(choice==='mine'?'worldChatWithMe':choice==='agent'?'worldChatWithAgent':'worldChatWithBoth')}
+                      {choice==='agent'?agent.name:say(choice==='mine'?'worldChatWithMe':'worldChatWithBoth')}
                     </button>
                   ))}
                 </div>

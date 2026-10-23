@@ -93,6 +93,7 @@ function verbsOffered(): string[] {
  * product wires it". `RULED:` means there is no way back and here is why.
  */
 const REGISTER: Record<string, string> = {
+  revokeSession: "RULED: disconnect ends a credential without deleting memory; reconnect requires fresh consent through the login instructions in Settings",
   // the archive
   createInspiration: "deleteInspiration",
   deleteInspiration: "restoreInspiration",

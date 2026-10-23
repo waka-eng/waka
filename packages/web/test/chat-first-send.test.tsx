@@ -107,7 +107,7 @@ it('offers me, my agent or both before the first message, and starts the chat wi
   withAgent.value={id:agentId,name:'Demo Agent'};
   await render();
   const choices=[...host.querySelectorAll('.chat-with-choice')].map(node=>node.textContent);
-  expect(choices).toEqual(['Me','My agent','Both']);
+  expect(choices).toEqual(['Me','Demo Agent','Both']);
   await act(async()=>([...host.querySelectorAll<HTMLButtonElement>('.chat-with-choice')].find(node=>node.textContent==='Both'))!.click());
   await ask('What do we each think?');
   expect(vi.mocked(createConversation).mock.calls[0]![5]).toEqual({perspective:'both',agentId});

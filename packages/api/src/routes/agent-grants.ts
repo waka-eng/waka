@@ -1,34 +1,16 @@
-/**
- * `/api/agent-grants` — the hand on the sibling door.
- *
- * goal: no-quiet-corners, Phase 6 (register item 5). The explicit,
- * human-granted, revocable pairing that lets one agent session read a
- * sibling agent's memory. Human-session-only on every verb: granting is
- * the account holder's decision, and so is closing the door again.
- *
- * Grants list beside credentials and behave like them: read live on every
- * request (`lib/sibling-grants.ts`), so revocation takes effect on the
- * very next request. Revocation is a timestamp, not a delete — who could
- * read whom, and when that ended, is a record this goal keeps.
- */
+/** Historical read-grant records. Agent sessions are now isolated to their
+ * own profile. Account owners can list/revoke old records, but creating a
+ * cross-profile grant is retired and no record grants memory access. */
 
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import { agentReadGrants, profiles } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
-import { validationDetails } from "../lib/validation.js";
 
 type WakaDb = ReturnType<typeof getDb>;
-
-const createGrantSchema = z
-  .object({
-    granteeProfileId: z.string().uuid("granteeProfileId must be a uuid"),
-    targetProfileId: z.string().uuid("targetProfileId must be a uuid"),
-  })
-  .strict();
 
 const grantParamsSchema = z.object({
   grantId: z.string().uuid("grantId must be a uuid"),
@@ -86,55 +68,9 @@ export function createAgentGrantRoutes(deps: AgentGrantRouteDependencies = {}): 
     );
   });
 
-  routes.post("/", async (c) => {
-    const rawBody = await c.req.json().catch(() => null);
-    const parsed = createGrantSchema.safeParse(rawBody);
-    if (!parsed.success) {
-      return c.json(
-        { error: "Invalid grant", details: validationDetails(parsed.error) },
-        400,
-      );
-    }
-    const { granteeProfileId, targetProfileId } = parsed.data;
-    if (granteeProfileId === targetProfileId) {
-      return c.json({ error: "An agent needs no grant to read itself" }, 400);
-    }
+  // Historical grants can be listed or revoked; new grants cannot bypass profile isolation.
+  routes.post("/", c => c.json({ error: "Agent connections access only their own profile; cross-profile grants are retired" }, 410));
 
-    const db = getDatabase();
-    const session = c.get("session");
-    const agents = await accountAgentIds(db, session.profile.accountId);
-    // Both sides must be the account's own agents. The human profile is
-    // never a grant target (the matrix already serves that case) and a
-    // foreign profile answers exactly like one that does not exist.
-    if (!agents.has(granteeProfileId) || !agents.has(targetProfileId)) {
-      return c.json({ error: "Profile not found" }, 404);
-    }
-
-    const [existing] = await db
-      .select()
-      .from(agentReadGrants)
-      .where(
-        and(
-          eq(agentReadGrants.granteeProfileId, granteeProfileId),
-          eq(agentReadGrants.targetProfileId, targetProfileId),
-          isNull(agentReadGrants.revokedAt),
-        ),
-      )
-      .limit(1);
-    if (existing) return c.json({ grant: toView(existing) }, 200);
-
-    const [created] = await db
-      .insert(agentReadGrants)
-      .values({
-        granteeProfileId,
-        targetProfileId,
-        grantedByProfileId: session.profile.id,
-      })
-      .returning();
-    return c.json({ grant: toView(created!) }, 201);
-  });
-
-  /** Close the door: revoked, effective on the next request, kept as record. */
   routes.delete("/:grantId", async (c) => {
     const params = grantParamsSchema.safeParse(c.req.param());
     if (!params.success) return c.json({ error: "Grant not found" }, 404);

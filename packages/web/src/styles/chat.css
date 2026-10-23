@@ -123,6 +123,13 @@
   text-align: left;
 }
 
+.chat-profile {
+  color: var(--ink-muted);
+  font-size: var(--t-ui);
+  text-align: center;
+  margin: 0 0 var(--sp-16);
+}
+
 /* One quiet control register for the whole surface. The composer's send
    button opts back out below — it is the only filled control here, exactly
    as it is the only filled control on the home screen. */

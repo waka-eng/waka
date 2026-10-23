@@ -151,7 +151,8 @@ export function agentBeing(id: string): Being {
     [2.2, 0.016], /* buoyant lead */
   ] as const);
   return {
-    aspect: pick(id, "asp", [1.02, 1.08, 1.23, 1.32]), /* 1.15 reserved */
+    // Keep each profile's family stable; stronger proportions stay legible on the pixel grid.
+    aspect: pick(id, "asp", [0.9, 1.12, 1.3, 1.44]), /* 1.15 reserved */
     dome: pick(id, "dome", [
       [0.1, 0.14],
       [0.16, 0.2],

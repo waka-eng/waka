@@ -106,7 +106,7 @@ export function auditDevOperations({api,worker,now=Date.now(),awsRead,maxLogPage
     catch{report.failures.push('runtime_policy_failed');}
     report.configuration.apiWorkerDatabaseIdentical=typeof environments.api.database==='string'&&!!environments.api.database&&
       environments.api.database===environments.worker.database;
-    report.configuration.chatModelsMatch=['api','worker'].every(role=>environments[role].environment?.WAKA_MODEL_CHAT==='deepseek/deepseek-v4.1-flash');
+    report.configuration.chatModelsMatch=['api','worker'].every(role=>environments[role].environment?.WAKA_MODEL_CHAT==='deepseek/deepseek-v4.1-flash-1017');
     report.configuration.restrictivePrivacyOverrides=['api','worker'].every(role=>
       environments[role].environment?.WAKA_OPENROUTER_DATA_COLLECTION==='deny'&&environments[role].environment?.WAKA_OPENROUTER_REQUIRE_ZDR==='1');
     if(!report.configuration.apiWorkerDatabaseIdentical)report.failures.push('runtime_database_mismatch');

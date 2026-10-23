@@ -5,7 +5,7 @@ import {expect,it,vi} from 'vitest';
 import {auditDevOperations,devAuditReadFailure,readDevLogPages,summarizeDevEvents,validateDevAuditTargets} from '../../../scripts/dev-operations-audit.mjs';
 const api='waka-development-ApiFunction-efwcwxdn',worker='waka-development-BackgroundWorkerFunction-xxbrbmcx';
 const environment={PUBLIC_WEB_URL:'https://dev.waka.im',PUBLIC_API_URL:'https://dev.waka.im',NODE_ENV:'production',WAKA_STAGE:'development',WAKA_TRUSTED_PROXY_HOPS:null,
-  OPENROUTER_GENERATION_MODEL:'deepseek/deepseek-v4.1-flash',WAKA_MODEL_CHAT:'deepseek/deepseek-v4.1-flash'};
+  OPENROUTER_GENERATION_MODEL:'deepseek/deepseek-v4.1-flash-1017',WAKA_MODEL_CHAT:'deepseek/deepseek-v4.1-flash-1017'};
 it('refuses production, missing or flag-bearing targets before AWS access',()=>{
   const awsRead=vi.fn();
   for(const name of ['waka-production-ApiFunction-aaa',undefined,'--profile=PRIVATE'])

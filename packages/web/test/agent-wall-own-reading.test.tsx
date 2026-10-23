@@ -3,7 +3,9 @@
  * and `loadTopOfMind` answers by PROFILE — the owner has one top of mind and
  * their agent another, which is the whole point: the bug only shows when both
  * exist and differ. `lib/api` supplies the boot reads, `lib/api/principles`
- * principle reads, `lib/auth-context` the session. `helpers/render-home` and
+ * principle reads, `lib/api/profiles` the Settings roster mutations,
+ * `lib/api/conversations` profile-owned chat storage, and
+ * `lib/auth-context` the session. `helpers/render-home` and
  * `helpers/canvas-stub` replace canvas/viewport/clock/randomness; the real
  * world, the real form switch and the real agent bundle loader all run.
  * Appearance/SQL are not claimed.
@@ -16,14 +18,23 @@
  * took its place. It now holds the agent's own, in the agent's first person.
  */
 import { act } from 'react';
+import { useLocation } from 'react-router-dom';
+import type { ApiOwnedProfile } from '../src/lib/api/profiles';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressDockRow, closeOverlay, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { ApiError, createInspiration } from '../src/lib/api';
+import { listConversations, createConversation, type ApiConversation } from '../src/lib/api/conversations';
 
 const FACTS = vi.hoisted(() => ({
   inspirations: [{ id: 'kept', text: 'Something I kept', daysAgo: 1 }],
   groups: [] as never[],
 }));
+const CAPTURES = vi.hoisted(() => ({ rows: [] as Array<{id:string;profileId:string;text:string}> }));
+const CHATS = vi.hoisted(() => ({ rows: [] as ApiConversation[] }));
+const PROFILES = vi.hoisted(() => ({ rows: null as ApiOwnedProfile[] | null }));
+const NOAH_SAYS = vi.hoisted(() => 'I remember the decisions Noah made.');
+const ANOTHER_SAYS = vi.hoisted(() => 'I remember the decisions Another made.');
 const OWNER_SAYS = vi.hoisted(() => 'The owner keeps returning to slow mornings.');
 const AGENT_SAYS = vi.hoisted(() => 'I keep the version that survives the runtime.');
 /* NEWER, UNPINNED, AND FIRST IN THE LIST — the entry a "newest by date" or
@@ -55,9 +66,15 @@ vi.mock('../src/lib/data', async original => {
   });
   return {
     ...await original<typeof import('../src/lib/data')>(), ...dataMockFrom(FACTS),
+    loadInspirations: async (profile?: string) => dataMockFrom({inspirations:[
+      ...(PROFILES.rows && profile?.startsWith('agent-') ? [{id:`${profile}-note`,text:`Only ${profile} kept this`,daysAgo:1}] : FACTS.inspirations),
+      ...CAPTURES.rows.filter(row=>row.profileId===(profile??VIEWER_ID)).map(row=>({...row,daysAgo:0})),
+    ]}).loadInspirations(),
     /* yours when no profile (or yours) is named; the agent's otherwise */
     loadTopOfMind: async (profile?: string) =>
-      HOLD.on && profile === 'agent-held'
+      profile === 'agent-noah' ? board([entry('noah-lead', NOAH_SAYS, true, 1)])
+      : profile === 'agent-another' ? board([entry('another-lead', ANOTHER_SAYS, true, 1)])
+      : HOLD.on && profile === 'agent-held'
         ? HOLD.reading === 'hang' ? new Promise<never>(() => {})
           : HOLD.reading === 'defer'
             ? new Promise<ReturnType<typeof board>>((resolve) => {
@@ -73,11 +90,42 @@ vi.mock('../src/lib/data', async original => {
 });
 vi.mock('../src/lib/api', async original => ({
   ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),
+  createInspiration: vi.fn(async (input:{text:string}, options:{profile:string}) => {
+    const row={id:crypto.randomUUID(),profileId:options.profile,text:input.text};CAPTURES.rows.push(row);
+    return {...row,kind:'note',source:'app',visibility:'private',attachments:[],reflections:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  }),
+  fetchInspirationSaveRequest: vi.fn(async()=>{throw new ApiError({status:404,code:'save_not_found',message:'Not saved yet'});}),
   fetchPrinciples: vi.fn(async () => []),
   fetchTheWeather: vi.fn(async () => ({ told: null, antechamber: [], days: [] })),
-  fetchProfiles: vi.fn(async () => HOLD.on
+  fetchProfiles: vi.fn(async () => PROFILES.rows ?? (HOLD.on
     ? [{ id: 'agent-held', name: 'Held agent', type: 'agent', createdAt: '2026-08-01T00:00:00.000Z' }]
-    : []),
+    : [])),
+}));
+vi.mock('../src/lib/api/profiles', async original => ({
+  ...await original<typeof import('../src/lib/api/profiles')>(),
+  fetchProfiles: vi.fn(async () => PROFILES.rows ?? []),
+  createProfile: vi.fn(async (name: string) => {
+    const profile: ApiOwnedProfile = { id: 'agent-new', accountId: 'account-1', name, type: 'agent', avatarUrl: null, preferredLocale: 'en-US', createdAt: '2026-10-22T00:00:00Z' };
+    PROFILES.rows = [...(PROFILES.rows ?? []), profile];
+    return profile;
+  }),
+  renameProfile: vi.fn(async (id: string, name: string) => {
+    PROFILES.rows = (PROFILES.rows ?? []).map(profile => profile.id === id ? { ...profile, name } : profile);
+    return PROFILES.rows.find(profile => profile.id === id)!;
+  }),
+  deleteProfile: vi.fn(async (id: string) => { PROFILES.rows = (PROFILES.rows ?? []).filter(profile => profile.id !== id); }),
+}));
+
+vi.mock('../src/lib/api/conversations', async original => ({
+  ...await original<typeof import('../src/lib/api/conversations')>(),
+  listConversations: vi.fn(async (profileId: string) => ({profileId, conversations:CHATS.rows.filter(row=>row.profileId===profileId).map(row=>({id:row.id,profileId,revision:row.revision,preview:row.messages[0]?.content??'',updatedAt:row.updatedAt})),generationEnabled:false})),
+  createConversation: vi.fn(async (profileId: string, id: string, _signal:unknown, _principle:unknown, first:{id:string;content:string}) => {
+    const row:ApiConversation={id,profileId,revision:1,generationEnabled:false,createdAt:'2026-10-22T00:00:00Z',updatedAt:'2026-10-22T00:00:00Z',messages:[{id:first.id,profileId,conversationId:id,role:'user',position:1,content:first.content,createdAt:'2026-10-22T00:00:00Z'}]};
+    CHATS.rows.push(row); return row;
+  }),
+  fetchConversation: vi.fn(async (profileId:string,id:string) => {
+    const row=CHATS.rows.find(row=>row.profileId===profileId&&row.id===id);if(!row)throw new Error('Wrong profile');return row;
+  }),
 }));
 vi.mock('../src/lib/auth-context', async original => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
@@ -88,7 +136,7 @@ vi.mock('../src/lib/auth-context', async original => {
 let world: MountedWorld;
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
-afterEach(() => { world?.unmount(); vi.useRealTimers(); Object.assign(HOLD, { on: false, reading: 'hang', locale: 'en-US', release: null, deferSays: '' }); });
+afterEach(() => { PROFILES.rows = null; CHATS.rows = []; CAPTURES.rows = []; vi.mocked(createInspiration).mockClear(); vi.mocked(listConversations).mockClear(); vi.mocked(createConversation).mockClear(); world?.unmount(); vi.useRealTimers(); Object.assign(HOLD, { on: false, reading: 'hang', locale: 'en-US', release: null, deferSays: '' }); });
 
 async function settle() {
   for (let turn = 0; turn < 12; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
@@ -105,7 +153,7 @@ it("holds up the agent's own reading on its wall, never the owner's", async () =
   world = await mountWorld(FACTS); await settle();
   expect(bubble()?.textContent, 'the owner wall should say the owner\'s top of mind').toContain(OWNER_SAYS);
 
-  const toAgent = face('My agent');
+  const toAgent = face('Held agent');
   expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
   /* NO RENDER IN BETWEEN MAY PUT YOUR SENTENCE IN ITS FRAME. `chrome` is
      written in an effect after the wall changes, so a bubble that read it
@@ -146,7 +194,7 @@ it("holds up the agent's own reading on its wall, never the owner's", async () =
 it("says nothing on an agent's wall whose first load is still pending", async () => {
   HOLD.on = true;
   world = await mountWorld(FACTS); await settle();
-  const toAgent = face('My agent');
+  const toAgent = face('Held agent');
   expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
   await act(async () => { toAgent!.click(); });
   await settle();
@@ -161,7 +209,7 @@ it("says nothing on an agent's wall whose first load is still pending", async ()
 it("says nothing on an agent's wall whose reading failed to load", async () => {
   Object.assign(HOLD, { on: true, reading: 'fail' });
   world = await mountWorld(FACTS); await settle();
-  await act(async () => { face('My agent')!.click(); });
+  await act(async () => { face('Held agent')!.click(); });
   await settle();
   expect(world.audit().wallKind).toBe('agent');
   expect(bubble(), 'a failed read was told as "nothing formed"').toBeNull();
@@ -174,7 +222,7 @@ it("says nothing on an agent's wall whose reading failed to load", async () => {
 it("says an empty agent's resting line in Korean to a Korean reader", async () => {
   Object.assign(HOLD, { on: true, reading: 'empty', locale: 'ko-KR' });
   world = await mountWorld(FACTS); await settle();
-  const toAgent = face('내 에이전트');
+  const toAgent = face('Held agent');
   expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
   await act(async () => { toAgent!.click(); });
   await settle();
@@ -198,7 +246,7 @@ const reading = () => bubble()?.querySelector('.jar-char-bubble-reading')?.textC
 async function standOnHeldAgent() {
   Object.assign(HOLD, { on: true, reading: 'defer' });
   world = await mountWorld(FACTS); await settle();
-  await act(async () => { face('My agent')!.click(); });
+  await act(async () => { face('Held agent')!.click(); });
   await settle();
   expect(world.audit().wallKind).toBe('agent');
   expect(bubble(), 'the reading was released before the test released it').toBeNull();
@@ -399,4 +447,130 @@ it("starts a rebuild with no press held, so the next touch is accepted and rest 
   await touch('pointerup', 22);
   await settle();
   expect(simNow().isResting(), 'rest never came back after the new touch').toBe(true);
+});
+
+
+it('shows every named agent, keeps their memory separate, and syncs Settings changes without reloading', async () => {
+  PROFILES.rows = ['noah', 'another'].map((name, i) => ({
+    id: `agent-${name}`, accountId: 'account-1', name, type: 'agent', avatarUrl: null,
+    preferredLocale: 'en-US', createdAt: `2026-10-0${i + 1}T00:00:00Z`,
+  }));
+  world = await mountWorld(FACTS); await settle();
+  expect([...world.container.querySelectorAll('.jar-char-face')].map(node => node.textContent)).toEqual(['Me', 'noah', 'another']);
+  for (const [name, says] of [['noah', NOAH_SAYS], ['another', ANOTHER_SAYS]]) {
+    await act(async () => { face(name)!.click(); }); await settle();
+    expect(world.audit().wallId).toBe(`agent-${name}`);
+    expect(face(name)?.getAttribute('aria-pressed')).toBe('true');
+    expect(face(name === 'noah' ? 'another' : 'noah')?.getAttribute('aria-pressed')).toBe('false');
+    expect(reading()).toBe(says);
+    expect(bubble()?.textContent).not.toContain(OWNER_SAYS);
+  }
+
+  await act(async () => { world.container.querySelector<HTMLButtonElement>('.waka-corner--settings')!.click(); });
+  await act(async () => { world.container.querySelector<HTMLButtonElement>('[data-settings-target="agents"]')!.click(); });
+  const type = (input: HTMLInputElement, value: string) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  await act(async () => { type(world.container.querySelector<HTMLInputElement>('.waka-settings-add input')!, 'third'); });
+  await act(async () => { world.container.querySelector<HTMLButtonElement>('.waka-settings-add button')!.click(); });
+  await settle();
+  expect(face('third')).toBeTruthy();
+  expect(world.audit().wallId).toBe('agent-another');
+
+  const another = world.container.querySelectorAll<HTMLInputElement>('.waka-settings-rows input')[1];
+  await act(async () => { another.focus(); type(another, 'renamed'); another.blur(); });
+  await settle();
+  expect(face('another')).toBeUndefined();
+  expect(face('renamed')?.getAttribute('aria-pressed')).toBe('true');
+  expect(world.audit().wallId).toBe('agent-another');
+
+  const erase = async (name: string) => {
+    const input = [...world.container.querySelectorAll<HTMLInputElement>('.waka-settings-rows input')].find(input => input.value === name)!;
+    const button = input.closest('li')!.querySelector<HTMLButtonElement>('.waka-settings-erase')!;
+    await act(async () => { button.click(); });
+    await act(async () => { button.click(); });
+    await settle();
+  };
+  await erase('noah');
+  expect(face('noah')).toBeUndefined();
+  expect(world.audit().wallId, 'deleting another profile must not switch the selected agent when columns move').toBe('agent-another');
+  expect(reading()).toBe(ANOTHER_SAYS);
+  await erase('renamed');
+  expect(face('renamed')).toBeUndefined();
+  expect(world.audit().wallKind).toBe('self');
+  expect(face('Me')?.getAttribute('aria-pressed')).toBe('true');
+  expect(reading()).toBe(OWNER_SAYS);
+});
+
+
+it('isolates each agent’s inspirations, chat list, transcript, and chat URL', async () => {
+  PROFILES.rows = ['noah','another'].map((name,i)=>({id:`agent-${name}`,accountId:'account-1',name,type:'agent',avatarUrl:null,preferredLocale:'en-US',createdAt:`2026-10-0${i+1}T00:00:00Z`}));
+  let location:ReturnType<typeof useLocation>;
+  function LocationProbe(){location=useLocation();return null;}
+  world = await mountWorld(FACTS,{routerTools:<LocationProbe/>}); await settle();
+  const type=(field:HTMLTextAreaElement,value:string)=>{
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(field,value);
+    field.dispatchEvent(new Event('input',{bubbles:true}));
+  };
+  for(const name of ['noah','another']){
+    await act(async()=>face(name)!.click()); await settle();
+    await chooseFromMenu(world.container,'Inspirations'); await settle();
+    const archive=world.container.querySelector('.waka-over[data-jar-surface]')!;
+    expect(archive.textContent).toContain(`Only agent-${name} kept this`);
+    expect(archive.textContent).not.toContain(`Only agent-${name==='noah'?'another':'noah'} kept this`);
+    await closeOverlay(world.container); await settle();
+    expect(world.audit().wallId, 'closing inspirations must preserve its agent').toBe(`agent-${name}`);
+    await pressDockRow(world.container, 'Chat'); await settle();
+    expect(new URLSearchParams(location!.search).get('profile')).toBe(`agent-${name}`);
+    expect(world.container.querySelector('.chat-profile')?.textContent).toContain(name);
+    expect(world.container.querySelector('.chat-with')).toBeNull();
+    expect(listConversations).toHaveBeenLastCalledWith(`agent-${name}`,expect.any(AbortSignal));
+    expect(world.container.querySelector('.chat-transcript')?.textContent).not.toContain('Only noah chat');
+    await act(async()=>type(world.container.querySelector('.chat-input-label textarea')!,'Only '+name+' chat'));
+    await act(async()=>world.container.querySelector<HTMLButtonElement>('.chat-send')!.click()); await settle();
+    expect(vi.mocked(createConversation).mock.calls.at(-1)?.[0]).toBe(`agent-${name}`);
+    expect(world.container.querySelector('.chat-transcript')?.textContent).toContain('Only '+name+' chat');
+    expect(new URLSearchParams(location!.search).get('profile')).toBe(`agent-${name}`);
+    await pressDockRow(world.container, 'All chats'); await settle();
+    expect(listConversations).toHaveBeenLastCalledWith(`agent-${name}`,expect.any(AbortSignal));
+    const list=world.container.querySelector('.waka-over[data-jar-surface]')!;
+    expect(list.textContent).toContain('Only '+name+' chat');
+    expect(list.textContent).not.toContain('Only '+(name==='noah'?'another':'noah')+' chat');
+    await closeOverlay(world.container); await settle();
+  }
+  expect(CHATS.rows.map(row=>({profile:row.profileId,text:row.messages[0].content}))).toEqual([
+    {profile:'agent-noah',text:'Only noah chat'}, {profile:'agent-another',text:'Only another chat'},
+  ]);
+  world.unmount(); vi.mocked(listConversations).mockClear();
+  world=await mountWorld(FACTS,{initialEntries:[`/chat/${CHATS.rows[0].id}?profile=agent-noah`]}); await settle();
+  expect(world.audit().wallId).toBe('agent-noah');
+  expect(world.container.querySelector('.chat-transcript')?.textContent).toContain('Only noah chat');
+  expect(world.container.querySelector('.chat-transcript')?.textContent).not.toContain('Only another chat');
+  expect(vi.mocked(listConversations).mock.calls.every(([profile])=>profile==='agent-noah')).toBe(true);
+
+});
+
+it('saves a capture into the selected agent without adding it to the human or another agent', async () => {
+  PROFILES.rows = ['noah','another'].map((name,i)=>({id:`agent-${name}`,accountId:'account-1',name,type:'agent',avatarUrl:null,preferredLocale:'en-US',createdAt:`2026-10-0${i+1}T00:00:00Z`}));
+  world=await mountWorld(FACTS); await settle();
+  await act(async()=>face('noah')!.click()); await settle();
+  await pressDockRow(world.container,'Inspiration'); await settle();
+  const area=world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
+  await act(async()=>{
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,'A new Noah observation');
+    area.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  await act(async()=>world.container.querySelector<HTMLButtonElement>('button[aria-label="Save inspiration"]')!.click()); await settle();
+  expect(createInspiration).toHaveBeenCalledWith(expect.objectContaining({text:'A new Noah observation'}),expect.objectContaining({profile:'agent-noah'}));
+  expect(CAPTURES.rows.map(row=>row.profileId)).toEqual(['agent-noah']);
+  await chooseFromMenu(world.container,'Inspirations'); await settle();
+  expect(world.container.querySelector('.waka-over[data-jar-surface]')?.textContent).toContain('A new Noah observation');
+  await closeOverlay(world.container); await settle();
+  for(const name of ['another','Me']){
+    await act(async()=>face(name)!.click()); await settle();
+    await chooseFromMenu(world.container,'Inspirations'); await settle();
+    expect(world.container.querySelector('.waka-over[data-jar-surface]')?.textContent).not.toContain('A new Noah observation');
+    await closeOverlay(world.container); await settle();
+  }
 });
