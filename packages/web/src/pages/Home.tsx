@@ -1319,6 +1319,9 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /** The loop's own fallback line, reachable from a press. Assigned inside
       the frame effect, where it is written. */
   const sayLineRef = useRef<(() => string) | null>(null);
+  /** The loop's own flare, the one a canvas tap on the creature raises.
+      Assigned inside the frame effect; the press button calls it. */
+  const pressFlareRef = useRef<(() => void) | null>(null);
   const sayLineKeyRef = useRef<{ line: string; key: MessageKey } | null>(null);
   /** Which thing the next press says. */
   const creatureTurn = useRef(0);
@@ -4270,6 +4273,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         pushRestedRef,
         sayLineRef,
         sayLineKeyRef,
+        pressFlareRef,
         selectedIdRef,
         simApiRef,
         skyRef,
@@ -9477,6 +9481,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
               onPointerCancel={() => { creatureDrag.current = null; }}
               onClick={() => {
                 if (creatureDragged.current) { creatureDragged.current = false; return; }
+                /* THE PRESS LIGHTS THE CREATURE ITSELF, not only this disc.
+                   The canvas tap raises the loop's flare; this button sits
+                   over the creature and takes the press first, so without
+                   this the body never brightened on your own wall. Here and
+                   not in `creatureSpeaks`, because the canvas tap calls that
+                   too and has already raised its own flare. */
+                pressFlareRef.current?.();
                 creatureSpeaks();
               }}
             />

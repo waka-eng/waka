@@ -1189,6 +1189,10 @@ export interface SimulationOptions {
   paletteRef: MutableRefObject<Palette | null>;
   /** The loop's own fallback sentence, published for a press to read. Written 1x, at setup. */
   sayLineRef: MutableRefObject<(() => string) | null>;
+  /** Light the companion the way a tap on it does, for a press that landed
+      on the DOM button over it instead of the canvas. Written 1x, at setup;
+      nulled in the teardown. */
+  pressFlareRef: MutableRefObject<(() => void) | null>;
   /** Which catalogue line `sayLine` said last, and its words, so a caller
       can ask what KIND of line is showing without matching translations. */
   sayLineKeyRef: MutableRefObject<{ line: string; key: MessageKey } | null>;
@@ -1256,6 +1260,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     pushRestedRef,
     sayLineRef,
     sayLineKeyRef,
+    pressFlareRef,
     selectedIdRef,
     simApiRef,
     skyRef,
@@ -2570,6 +2575,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     const wallSaving = new Map<string, number>();
     /** The aura's reach right now: the eased saving reading, plus the flare. */
     const auraLit = () => clamp01(companion.savingNow + companion.flare * 0.5);
+    /** The same reach without the flare: what the saving says, not the
+        beat of light an event just added to it. See `sayLine`. */
+    const savingLit = () => clamp01(companion.savingNow);
 
     /**
      * When each loaded memory on a wall was saved. NOT filtered on `active`:
@@ -3807,6 +3815,19 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     /* EXPOSED TO THE COMPONENT, because the creature is pressed from the
        DOM and spoken from the loop. See `creatureSpeaks`. */
     sayLineRef.current = sayLine;
+    /* A PRESS SHINES. Founder: "clicking on the character should just make
+       it shine and bright." `tap()` below raises this flare when the canvas
+       takes the press — but `.jar-char-press` sits over the creature on your
+       own walls and takes every click first, so that branch only ran where
+       the button is not mounted, and on your own wall a press lit nothing
+       but a faint CSS gradient over an already warm-white body. Same value
+       as the tap, and like the tap it is not gated on reduced motion: it is
+       light, not movement, and it decays rather than animates. */
+    function pressFlare() {
+      companion.flare = 1;
+      wake();
+    }
+    pressFlareRef.current = pressFlare;
     function sayLine(): string {
       /* PARKED, NOT SCRUBBING. This read `scrubbingRef` — true only while a
          finger was on the rail — so the line existed for the duration of a
@@ -3852,9 +3873,14 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         return pick(["worldSayYoung1", "worldSayYoung2"]);
       /* THE WORDS READ THE LIGHT THEY STAND BESIDE. These keyed on the
          field's aliveness while the glow reads saving, so a bright companion
-         after a busy week could say "Quiet lately". Same `auraLit`, so what
-         it says and how far it shines can never disagree. */
-      const shine = auraLit();
+         after a busy week could say "Quiet lately". The same saving reading
+         the aura is drawn from — WITHOUT THE FLARE, because the flare is the
+         press that asked for this sentence. A press lights the creature
+         (`pressFlareRef`), and reading that light back here pushed a dim
+         wall over the silence line: every press on a quiet archive came out
+         mute. The flare is an event and decays in 0.7s; the sentence is
+         about the disposition under it. */
+      const shine = savingLit();
       if (shine > 0.55) return "";
       if (shine > 0.22)
         return pick(["worldSayWarm1", "worldSayWarm2"]);
@@ -6645,6 +6671,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          settling between this teardown and the next build — or after the
          page itself unmounted — read a dead loop's rest and wall. */
       if (simApiRef.current === api) simApiRef.current = null;
+      if (pressFlareRef.current === pressFlare) pressFlareRef.current = null;
       /* AND THE PRESS IT WAS HOLDING IS SETTLED, NOT JUST FORGOTTEN. The next
          build starts with no press (see `Carry`), so whatever that press owed
          the layout is paid here, BEFORE the camera is carried: a drag, or a
