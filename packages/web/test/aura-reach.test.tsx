@@ -54,11 +54,26 @@ vi.mock('../src/lib/auth-context', async original => {
 let world: MountedWorld;
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
-afterEach(() => { world?.unmount(); vi.useRealTimers(); });
+const BUSY_WEEK = FACTS.inspirations.slice();
+afterEach(() => { world?.unmount(); vi.useRealTimers(); FACTS.inspirations = BUSY_WEEK.slice(); });
 
 async function settle(turns = 12) {
   for (let turn = 0; turn < turns; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
+/* the creature's own sentence, as `speech-on-switch` reads it */
+const speech = () => world.container
+  .querySelector('.jar-char-bubble:not(.jar-char-bubble--review) .jar-char-bubble-reading[role="status"]')?.textContent?.trim() ?? null;
+const press = () => world.container.querySelector<HTMLButtonElement>('.jar-char-press');
+const QUIET = ['Quiet lately', 'It has been quiet', 'Nothing new in a while'];
+const WARM = ['Something is still warm from last week', 'Last week is still holding on'];
+const FRONTIER = ['Some of these still hold nothing up', 'There are memories here nothing rests on'];
+async function ask(): Promise<string | null> {
+  expect(press(), 'the creature has nothing to press').toBeTruthy();
+  await act(async () => { press()!.click(); });
+  await settle(4);
+  return speech();
+}
+
 const face = (label: string) =>
   [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-face')]
     .find(button => button.textContent?.trim() === label);
@@ -116,4 +131,23 @@ it("reads the agent's own saving on its wall, after the rebuild its bundle cause
   expect(after.wallKind).toBe('agent');
   expect(after.aura.reading).toBeGreaterThanOrEqual(0.6);
   expect(after.aura.lit, 'the rebuild on the agent wall put its light out').toBeGreaterThanOrEqual(0.55);
+});
+
+it('never calls a bright companion quiet: its words read the same light as its glow', async () => {
+  world = await mountWorld(FACTS); await settle();
+  expect(world.audit().aura.lit).toBeGreaterThan(0.55);
+  const said = await ask();
+  expect(QUIET, `a bright aura said "${said}"`).not.toContain(said);
+  expect(WARM, `a bright aura said "${said}"`).not.toContain(said);
+});
+
+it('says it has been quiet when nothing has been saved in weeks', async () => {
+  FACTS.inspirations = [30, 31, 32, 33, 34].map((daysAgo) => ({ id: `old-${daysAgo}`, text: `Something old ${daysAgo}`, daysAgo }));
+  /* "now" is the newest save, so the quiet stretch is the time since it:
+     one save today keeps the dial on today while the rest are weeks old */
+  FACTS.inspirations.push({ id: 'today-but-alone', text: 'One today', daysAgo: 0 });
+  world = await mountWorld(FACTS); await settle();
+  expect(world.audit().aura.lit).toBeLessThanOrEqual(0.55);
+  const said = await ask();
+  expect([...QUIET, ...WARM, ...FRONTIER], `a dim aura said "${said}"`).toContain(said);
 });

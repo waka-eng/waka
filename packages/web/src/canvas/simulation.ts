@@ -3823,8 +3823,13 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          what is actually true instead. */
       if (trip.inspCol > 0 && trip.inspCol < 4)
         return pick(["worldSayYoung1", "worldSayYoung2"]);
-      if (companion.insp > 0.55) return "";
-      if (companion.insp > 0.22)
+      /* THE WORDS READ THE LIGHT THEY STAND BESIDE. These keyed on the
+         field's aliveness while the glow reads saving, so a bright companion
+         after a busy week could say "Quiet lately". Same `auraLit`, so what
+         it says and how far it shines can never disagree. */
+      const shine = auraLit();
+      if (shine > 0.55) return "";
+      if (shine > 0.22)
         return pick(["worldSayWarm1", "worldSayWarm2"]);
       return pick(["worldSayQuiet1", "worldSayQuiet2", "worldSayQuiet3"]);
     }
