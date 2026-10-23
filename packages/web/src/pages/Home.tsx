@@ -2503,8 +2503,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     if (nav.view?.open !== 'saves') return;
     if (change === 'open') { if (nav.view.note !== id) nav.write({ ...nav.view, note: id }); }
     else if (nav.view.note === id && poppedFrom.current !== nav.key) {
-      if (change === 'close') nav.closeNote();
-      else nav.write({ ...nav.view, note: null }, { replace: true });
+      /* Both are the note leaving its address onto the list: a step back
+         when the list is the entry beneath (so a deleted note's repair
+         never leaves the list twice in history), a replace otherwise. */
+      nav.closeNote();
     }
   }, []);
   /* The field shows what you typed while you are typing and the account's

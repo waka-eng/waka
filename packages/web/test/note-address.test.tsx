@@ -217,3 +217,19 @@ it('a note reopened after a Back-during-save can still be closed on screen', asy
   expect(params().get('note')).toBeNull();
   expect(listRow()).toBeTruthy();
 });
+
+/* FORWARD INTO A NOTE THAT IS GONE. Its address is repaired by stepping
+   back onto the list beneath, not by rewriting the note's entry into a
+   second copy of the list — so one Back still leaves the archive. */
+it('Forward into a deleted note steps back onto the list, and one Back leaves the archive', async () => {
+  const scope = `account-1:${VIEWER_ID}`;
+  world = await mountWorld(FACTS, { initialEntries: [
+    '/', { pathname: '/', search: '?open=saves', state: { wakaView: { scope, query: '', openFrom: '/' } } } as never,
+    { pathname: '/', search: '?open=saves&note=gone', state: { wakaView: { scope, query: '', openFrom: '/', noteFrom: '/?open=saves' } } } as never,
+  ], routerTools: <RouterTools/> }); await settle();
+  expect(params().get('open')).toBe('saves');
+  expect(params().get('note')).toBeNull();
+  expect(listRow()).toBeTruthy();
+  await back();
+  expect(params().get('open'), 'a second list entry was left behind').toBeNull();
+});
