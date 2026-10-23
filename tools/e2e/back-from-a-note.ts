@@ -46,6 +46,10 @@ const NOTES = [
   { id: '33333333-3333-4333-8333-333333333333', text: 'a quieter start to a project', days: 9 },
 ];
 const NOTE = NOTES[0]!;
+/** Notes the fixture has "deleted": gone from the list, 404 on read. */
+const gone = new Set<string>();
+/** While set, a PATCH waits on it — a save still running. */
+let holdSaves: Promise<void> | null = null;
 const ORIGINAL = NOTES.map((row) => row.text);
 const at = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 const summary = (n: typeof NOTE) => ({ id: n.id, textPreview: n.text, kind: 'note', source: 'web', visibility: 'private',
@@ -67,10 +71,10 @@ function answer(method: string, path: string, search: URLSearchParams, sent: str
     return { status: 200, body: {} };
   }
   if (path === '/api/auth/me') return { status: 200, body: viewer };
-  if (path === '/api/inspirations') return { status: 200, body: { inspirations: NOTES.map(summary), total: NOTES.length } };
+  if (path === '/api/inspirations') { const kept = NOTES.filter((row) => !gone.has(row.id)); return { status: 200, body: { inspirations: kept.map(summary), total: kept.length } }; }
   if (path === '/api/inspirations/snapshot') return { status: 200, body: { profileId: search.get('profile') ?? PROFILE, total: NOTES.length, fingerprint: null } };
   const one = /^\/api\/inspirations\/([^/]+)$/.exec(path);
-  if (one) { const n = NOTES.find((row) => row.id === one[1]); return n ? { status: 200, body: { inspiration: detail(n) } } : { status: 404, body: { error: 'not found' } }; }
+  if (one) { const n = NOTES.find((row) => row.id === one[1] && !gone.has(row.id)); return n ? { status: 200, body: { inspiration: detail(n) } } : { status: 404, body: { error: 'not found' } }; }
   unknown.add(`${method} ${path}`);
   return { status: 404, body: { error: 'not in this fixture' } };
 }
@@ -115,11 +119,12 @@ async function openArchive(page: Page): Promise<void> {
 }
 
 async function walk(engine: BrowserType, name: string, origin: string): Promise<{ name: string; failures: string[]; steps: Step[] }> {
-  NOTES.forEach((row, index) => { row.text = ORIGINAL[index]!; });
+  NOTES.forEach((row, index) => { row.text = ORIGINAL[index]!; }); gone.clear(); holdSaves = null;
   const browser = await engine.launch({ headless: !headed });
   const context = await browser.newContext({ viewport: { width: 1280, height: 860 } });
   await context.route(/\/api\//, async (route: Route) => {
     const url = new URL(route.request().url());
+    if (route.request().method() === 'PATCH' && holdSaves) await holdSaves;
     const { status, body } = answer(route.request().method(), url.pathname, url.searchParams, route.request().postData());
     await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
   });
@@ -256,6 +261,58 @@ async function walk(engine: BrowserType, name: string, origin: string): Promise<
     check(fromNote.closed.url === baseline.closed.url && fromNote.after.length === baseline.after.length + 1,
       `Escape from a note closed to ${fromNote.closed.url} (len=${fromNote.after.length}) vs the list's ${baseline.closed.url} (len=${baseline.after.length})`);
     if (baseline.after.url !== '/start.html') console.log(`  [${name}] note: Back after closing the archive from the LIST lands on ${baseline.after.url}, not the entry before Home — pre-existing, the dock opens the archive by replacing the new note's entry, so the archive has no origin to return to`);
+
+    /* 7. Forward into a note deleted meanwhile: the address is repaired by
+          stepping back onto the list, so one Back still leaves the archive. */
+    {
+      const tab = await context.newPage();
+      await tab.goto(`${origin}/start.html`, { waitUntil: 'domcontentloaded' });
+      await tab.goto(`${origin}/`, { waitUntil: 'networkidle' }); await tab.waitForTimeout(1500);
+      await openArchive(tab);
+      await tab.locator('.waka-list-row').nth(2).click(); await tab.locator('textarea.waka-note-page').waitFor({ timeout: 10_000 });
+      await tab.goBack(); await tab.waitForTimeout(700);
+      await tab.goBack(); await tab.waitForTimeout(700);
+      gone.add(NOTES[2]!.id);
+      await tab.goForward(); await tab.locator('.waka-list-row').first().waitFor({ timeout: 10_000 });
+      await tab.goForward();
+      const repaired = await look(tab, 'Forward into a deleted note');
+      await tab.goBack({ waitUntil: 'domcontentloaded' });
+      const out = await look(tab, 'Back after the repair');
+      steps.push(repaired, out);
+      check(repaired.list && !repaired.note && q(repaired).get('open') === 'saves' && !q(repaired).get('note'), `Forward into a deleted note did not land on the list (at ${repaired.url})`);
+      check(!q(out).get('open') && !out.list, `Back after the repair did not leave the archive (at ${out.url}) — the list was left twice`);
+      gone.clear();
+      await tab.close();
+    }
+
+    /* 8. A save still running across Back and Forward, then the note is
+          opened again and closed on screen: it closes, and stays closed. */
+    {
+      const tab = await context.newPage();
+      await tab.goto(`${origin}/start.html`, { waitUntil: 'domcontentloaded' });
+      await tab.goto(`${origin}/`, { waitUntil: 'networkidle' }); await tab.waitForTimeout(1500);
+      await openArchive(tab);
+      await tab.locator('.waka-list-row').first().click();
+      const words = tab.locator('textarea.waka-note-page');
+      await words.waitFor({ timeout: 10_000 });
+      await tab.waitForFunction(() => (document.querySelector<HTMLTextAreaElement>('textarea.waka-note-page')?.value ?? '').length > 0);
+      let release: () => void = () => undefined;
+      holdSaves = new Promise((done) => { release = done; });
+      await words.fill(`${await words.inputValue()} — and later, rain`);
+      await tab.goBack(); await tab.waitForTimeout(700);
+      release(); holdSaves = null; await tab.waitForTimeout(1000);
+      await tab.goForward(); await words.waitFor({ timeout: 10_000 });
+      const reopened = await look(tab, 'Forward after a Back-during-save');
+      await tab.getByRole('button', { name: 'Back', exact: true }).first().click();
+      const closed = await look(tab, 'on-screen Back after that');
+      await tab.waitForTimeout(1200);
+      const still = await look(tab, '…and a moment later');
+      steps.push(reopened, closed, still);
+      check(reopened.note && q(reopened).get('note') !== null, 'Forward after a Back-during-save did not reopen the note');
+      check(closed.list && !closed.note && !q(closed).get('note'), 'the on-screen way back did not close a note reopened after a Back-during-save');
+      check(still.list && !still.note, 'the note reopened itself after being closed on screen');
+      await tab.close();
+    }
   } catch (error) {
     failures.push(`walk threw: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`);
   } finally {
