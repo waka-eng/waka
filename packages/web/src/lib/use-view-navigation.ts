@@ -2,13 +2,8 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { EMPTY_VIEW, readViewLocation, viewHref, type ViewLocation } from './view-location';
 
-interface StoredView { scope: string; query: string; composerFrom?: string;shareFrom?:string;conversationFrom?:string;openFrom?:string;noteFrom?:string;noteDoc?:string }
-/* WHICH PAGE LOAD PUSHED AN ENTRY. An entry pushed before a reload belongs to
-   the pre-reload document, so stepping back onto it is a full page load, not
-   a pop this document hears. Anything that steps back and then acts on the
-   entry it lands on may only do so when that entry is this document's. */
-const DOCUMENT = Math.random().toString(36).slice(2);
-/** How long a step back may take to land before what waits on it runs anyway. */
+interface StoredView { scope: string; query: string; composerFrom?: string;shareFrom?:string;conversationFrom?:string;openFrom?:string;noteFrom?:string }
+/** How long a traversal may take to land before a close stops waiting on it. */
 const POP_LIMIT_MS = 1500;
 type WriteOptions = { replace?: boolean; query?: string; observed?: boolean };
 /** Router owns browser history; the world owns rendering and restoration. */
@@ -18,62 +13,30 @@ export function useViewNavigation(scope: string | null) {
   const view = useMemo(() => readViewLocation(location.pathname, location.search), [href]);
   const own = useRef<string | null>(null);
   const latest = useRef({ location, navigate, scope }); latest.current = { location, navigate, scope };
-  /* ═══ A STEP BACK OVER THE NOTE, THEN THE ACT ══════════════════════════
-     An open saved note is its own entry (`note=`), pushed over the archive's
-     list. A REPLACE made from it that drops the note — the bar moving you to
-     chats, the archive closing on a cold link — would rewrite only the note's
-     entry and leave the list's entry beneath it, so the next Back would
-     reopen the archive you just left. So the act steps back over the note
-     first (a traversal, which adds no entry and needs no gesture) and runs
-     once the router has landed on the list. One slot: a second act asked for
-     while the step is in flight replaces the first rather than stepping
-     again. */
-  const afterPop = useRef<{ from: string; run: () => void; timer: number } | null>(null);
-  /* Set while a late act runs where it stands, so it does not ask to step
-     back a second time. */
-  const overNote = useRef(false);
-  /* THE ENTRY A TRAVERSAL WAS ASKED FROM, until the router lands elsewhere.
+  /* THE ENTRY BEING LEFT (a traversal, or the archive's closing replace), until the router lands elsewhere.
      Leaving the archive from a note commits the note on the way, and the
      note letting go asks for its own close — which, arriving while the
      archive's step is still in flight, would be a second step back (seen in
      Chromium: Escape from a note walked one entry too far). A close asked
      for while a traversal from this entry is under way is already answered. */
   const traversal = useRef<{ from: string; at: number } | null>(null);
-  const traverse = (delta: number) => { traversal.current = { from: latest.current.location.key, at: Date.now() }; latest.current.navigate(delta); };
+  /** Mark that this entry is being left (a traversal, or a replace that closes the archive). */
+  const leaving = () => { traversal.current = { from: latest.current.location.key, at: Date.now() }; };
+  const traverse = (delta: number) => { leaving(); latest.current.navigate(delta); };
   /** Whether a traversal asked from `key` may still land (one that never
       does stops counting, so a close is never a dead press for good). */
   const traversing = (key: string) => Boolean(traversal.current && traversal.current.from === key && Date.now() - traversal.current.at < POP_LIMIT_MS);
-  useEffect(() => {
-    if (traversal.current?.from !== location.key) traversal.current = null;
-    const waiting = afterPop.current;
-    if (!waiting || waiting.from === location.key) return;
-    afterPop.current = null; window.clearTimeout(waiting.timer); waiting.run();
-  }, [location.key]);
-  useEffect(() => () => { if (afterPop.current) window.clearTimeout(afterPop.current.timer); afterPop.current = null; }, []);
-  const stepBackThen = useCallback((run: () => void) => {
-    const waiting = afterPop.current;
-    if (waiting) { waiting.run = run; return; }
-    const from = latest.current.location.key;
-    /* A step that never lands (nothing heard it) must not hold every later
-       write hostage: the act then runs where it stands. */
-    const timer = window.setTimeout(() => { if (afterPop.current?.from === from) { const late = afterPop.current; afterPop.current = null; overNote.current = true; try { late.run(); } finally { overNote.current = false; } } }, POP_LIMIT_MS);
-    afterPop.current = { from, run, timer };
-    traverse(-1);
-  }, []);
-  /** Whether the entry under this one is the archive's list, pushed by this
-      page load — the only case a step back can be followed by an act. */
+  useEffect(() => { if (traversal.current?.from !== location.key) traversal.current = null; }, [location.key]);
+  /** Whether this entry is an open note pushed over the archive's list. */
   const noteOverList = (current: typeof latest.current, before: ViewLocation | null, stored: StoredView | undefined) =>
-    Boolean(before?.note && stored?.scope === current.scope && stored.noteDoc === DOCUMENT
-      && stored.noteFrom === viewHref({ ...before, note: null }));
+    Boolean(before?.note && stored?.scope === current.scope && stored.noteFrom === viewHref({ ...before, note: null }));
   const query = (() => {
     const state = location.state as { wakaView?: StoredView } | null;
     return scope && state?.wakaView?.scope === scope && typeof state.wakaView.query === 'string' ? state.wakaView.query.slice(0, 200) : '';
   })();
-  const writeRef = useRef<(next: ViewLocation, options?: WriteOptions) => void>(() => undefined);
   const write = useCallback((next: ViewLocation, options: WriteOptions = {}) => {
     const current = latest.current;
     if (!current.scope) return;
-    if (afterPop.current) { afterPop.current.run = () => writeRef.current(next, options); return; }
     const to = viewHref(next);
     const previous = current.location.pathname + current.location.search;
     if (to === previous && options.query === undefined) return;
@@ -81,15 +44,14 @@ export function useViewNavigation(scope: string | null) {
     const stored = (current.location.state as { wakaView?: StoredView } | null)?.wakaView;
     const [toPath = '/', toSearch] = to.split('?');
     const nextNote = readViewLocation(toPath, toSearch ? `?${toSearch}` : '')?.note ?? null;
-    if (options.replace && !overNote.current && noteOverList(current, before, stored)) {
-      /* Dropping the note: step back onto the list, then replace THAT. */
-      if (!nextNote) { own.current = null; stepBackThen(() => writeRef.current(next, options)); return; }
-      /* Keeping a note but rewriting the rest would leave the list's entry
-         beneath holding the old address (Back would restore the old wall,
-         section or time). Refused: such a rewrite waits until the note is
-         closed and the list is on top, where it is made again. */
-      if (viewHref({ ...next, note: null }) !== stored!.noteFrom) return;
-    }
+    /* A REPLACE UNDER AN OPEN NOTE. One that drops the note (the bar moving
+       you on, the archive closing with no origin) replaces the note's own
+       entry, so no note entry is left in Forward history. One that keeps the
+       note but rewrites the rest would leave the list's entry beneath holding
+       the old address (Back would restore the old wall, section or time), so
+       it is refused; the canonicaliser makes it again once the note closes
+       and the list is on top. */
+    if (options.replace && nextNote && noteOverList(current, before, stored) && viewHref({ ...next, note: null }) !== stored!.noteFrom) return;
     own.current = options.observed ? to : null;
     const composerFrom = next.compose ? (!before?.compose && !options.replace ? previous
       : stored?.scope === current.scope ? stored.composerFrom : undefined) : undefined;
@@ -101,17 +63,18 @@ export function useViewNavigation(scope: string | null) {
        close. Writing `open:null` forward instead would leave a Back that
        reopens the thing you just dismissed. */
     const openFrom=next.open?(!before?.open&&!options.replace?previous:stored?.scope===current.scope?stored.openFrom:undefined):undefined;
-    /* THE LIST A NOTE WAS OPENED OVER, and which page load pushed it — so
-       closing the note is a return through history (Back agrees with the
-       on-screen close), and a step back is only followed by an act when it
-       stays inside this document. A replace that moves between notes keeps
-       the list it was opened over. */
-    const pushedNote = Boolean(nextNote && !options.replace);
-    const noteFrom = nextNote ? (pushedNote ? previous : stored?.scope === current.scope ? stored.noteFrom : undefined) : undefined;
-    const noteDoc = noteFrom ? (pushedNote ? DOCUMENT : stored?.noteDoc) : undefined;
-    current.navigate(to, { replace: options.replace, state: { wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}),...(shareFrom?{shareFrom}:{}),...(conversationFrom?{conversationFrom}:{}),...(openFrom?{openFrom}:{}),...(noteFrom?{noteFrom}:{}),...(noteDoc?{noteDoc}:{}) } } });
+    /* THE LIST A NOTE WAS OPENED OVER, so closing the note is a return
+       through history (Back agrees with the on-screen close). Set only by the
+       push that opens a note from the archive's list — not by a push made
+       while a note is already open (the canonicaliser), whose entry beneath
+       is not the list — and stored canonically, so the comparisons made
+       against `viewHref` agree with it. A replace that moves between notes
+       keeps the list it was opened over. */
+    const listHref = before ? viewHref({ ...before, note: null }) : null;
+    const opensFromList = Boolean(nextNote && !options.replace && before?.open === 'saves' && !before.note && listHref === viewHref({ ...next, note: null }));
+    const noteFrom = nextNote ? (opensFromList ? listHref! : options.replace && stored?.scope === current.scope ? stored.noteFrom : undefined) : undefined;
+    current.navigate(to, { replace: options.replace, state: { wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}),...(shareFrom?{shareFrom}:{}),...(conversationFrom?{conversationFrom}:{}),...(openFrom?{openFrom}:{}),...(noteFrom?{noteFrom}:{}) } } });
   }, []);
-  writeRef.current = write;
   /**
    * PUTTING DOWN AN OPEN SAVED NOTE, onto the list it was opened over.
    *
@@ -124,12 +87,12 @@ export function useViewNavigation(scope: string | null) {
    */
   const closeNote = useCallback(() => {
     const current = latest.current, before = readViewLocation(current.location.pathname, current.location.search);
-    if (!before?.note || afterPop.current || traversing(current.location.key)) return;
+    if (!before?.note || traversing(current.location.key)) return;
     const stored = (current.location.state as { wakaView?: StoredView } | null)?.wakaView;
     const to = viewHref({ ...before, note: null });
     own.current = null;
     if (stored?.scope === current.scope && stored.noteFrom === to) traverse(-1);
-    else writeRef.current({ ...before, note: null }, { replace: true });
+    else write({ ...before, note: null }, { replace: true });
   }, []);
   const closeComposer = useCallback(() => {
     const current = latest.current;
@@ -167,23 +130,17 @@ export function useViewNavigation(scope: string | null) {
   const closeOpen=useCallback(()=>{
     const current=latest.current,before=readViewLocation(current.location.pathname,current.location.search);
     if(!before?.open)return;
-    if(afterPop.current){afterPop.current.run=()=>closeOpenRef.current();return;}
     if(traversing(current.location.key))return;
     const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
     own.current=null;
-    /* FROM AN OPEN NOTE, closing the archive is TWO entries: the note's and
-       the list's beneath it. Both are stepped over in one traversal when the
-       archive itself was opened from somewhere; from a cold `?open=saves`
-       link (no origin) the step lands on the list and the list is then
-       rewritten to the world, so no entry is left that reopens it. */
-    if(before.note&&stored?.scope===current.scope&&stored.noteFrom===viewHref({...before,note:null})){
-      if(stored.openFrom){traverse(-2);return;}
-      if(!overNote.current&&noteOverList(current,before,stored)){stepBackThen(()=>closeOpenRef.current());return;}
-    }
+    /* FROM AN OPEN NOTE, closing the archive is TWO entries when the archive
+       was opened from somewhere: the note's and the list's beneath it, stepped
+       over in one traversal. With no origin, the note's own entry is replaced
+       by the world below (no note entry is left in Forward history). */
+    if(noteOverList(current,before,stored)&&stored!.openFrom){traverse(-2);return;}
     if(stored?.scope===current.scope&&stored.openFrom) traverse(-1);
-    else current.navigate(viewHref({...before,open:null}),{replace:true});
+    else{leaving();current.navigate(viewHref({...before,open:null}),{replace:true});}
   },[]);
-  const closeOpenRef=useRef(closeOpen);closeOpenRef.current=closeOpen;
   /**
    * PUTTING DOWN A CONVERSATION, WHICH IS NOT PUTTING DOWN AN OVERLAY — and
    * assuming it was is how its close button died.

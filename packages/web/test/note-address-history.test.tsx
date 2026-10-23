@@ -23,10 +23,11 @@ import { useViewNavigation } from '../src/lib/use-view-navigation';
 import { EMPTY_VIEW } from '../src/lib/view-location';
 
 let host: HTMLDivElement, root: Root;
-let nav: ReturnType<typeof useViewNavigation>, go: ReturnType<typeof useNavigate>, here = '';
+let nav: ReturnType<typeof useViewNavigation>, go: ReturnType<typeof useNavigate>, here = '', noteFrom: string | undefined;
 function Probe() {
   nav = useViewNavigation('me'); go = useNavigate();
   const location = useLocation(); here = location.pathname + location.search;
+  noteFrom = (location.state as { wakaView?: { noteFrom?: string } } | null)?.wakaView?.noteFrom;
   return null;
 }
 async function mount(entries: string[]) {
@@ -75,23 +76,54 @@ it('closing the archive from an open note steps over both entries to where it wa
   await run(() => go(1)); expect(here).toBe('/?open=saves');
 });
 
-it('from a cold archive link, closing from a note leaves no list entry underneath to reopen it', async () => {
+it('from a cold archive link, closing from a note replaces the note entry, leaving no note in Forward', async () => {
   await mount(['/?open=saves']);
   await run(() => nav.write({ ...nav.view!, note: 'kept' }));
   await run(() => nav.closeOpen());
   expect(here).toBe('/');
-  /* The entry the list stood in is the world now; there is no Back into the archive. */
-  await run(() => go(-1));
+  /* No dead note entry ahead. */
+  await run(() => go(1));
   expect(here).toBe('/');
+  /* The list the person did visit is still behind. */
+  await run(() => go(-1));
+  expect(here).toBe('/?open=saves');
 });
 
-it('a replace that drops the note (the bar moving you on) rewrites the list, not just the note', async () => {
+it('a replace that drops the note (the bar moving you on) replaces the note entry itself', async () => {
   await homeArchiveNote();
   await run(() => nav.write({ ...nav.view!, open: 'claims', note: null }, { replace: true }));
   expect(here).toBe('/?open=claims');
-  /* Back goes where the archive was opened from — not into the archive. */
+  /* Nothing ahead: the note's entry became the destination. */
+  await run(() => go(1));
+  expect(here).toBe('/?open=claims');
   await run(() => go(-1));
-  expect(here).toBe('/');
+  expect(here).toBe('/?open=saves');
+});
+
+/* Only the push that opens a note FROM THE LIST records the list as its
+   return. A push made while a note is already open (the canonicaliser
+   recording a moved world) stands on a note entry, not the list. */
+it('a push made while a note is open records no list beneath it', async () => {
+  await homeArchiveNote();
+  await run(() => nav.write({ ...nav.view!, section: 'sky' }));
+  expect(here).toBe('/?view=sky&open=saves&note=kept');
+  expect(noteFrom).toBeUndefined();
+  /* So closing the note there rewrites to its list rather than stepping
+     back onto the other note entry. */
+  await run(() => nav.closeNote());
+  expect(here).toBe('/?view=sky&open=saves');
+  await run(() => go(-1)); expect(here).toBe('/?open=saves&note=kept');
+});
+
+/* The return is stored canonically. A list reached by a non-canonical
+   address (`view=top` is the default and is not written) still counts as
+   the list beneath, so closing the note is a step back, not a rewrite. */
+it('a list reached by a non-canonical address is still the return of the note opened over it', async () => {
+  await mount(['/', '/?open=saves&view=top']);
+  await run(() => nav.write({ ...nav.view!, note: 'kept' }));
+  await run(() => nav.closeNote());
+  expect(here).toBe('/?open=saves&view=top');
+  await run(() => go(-1)); expect(here).toBe('/');
 });
 
 it('a replace that keeps the note but rewrites the rest is refused, so the list beneath never goes stale', async () => {
