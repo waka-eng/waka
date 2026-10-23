@@ -227,7 +227,7 @@ describe.skipIf(!HAS_KEY)("extraction, on the bench", () => {
       await persist();
       if(guarded)globalThis.fetch=async(input,init)=>{
         const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
-        expect(url.origin).toBe('https://openrouter.ai');expect(JSON.parse(String(init?.body)).model).toBe('deepseek/deepseek-v4.1-flash');
+        expect(url.origin).toBe('https://openrouter.ai');expect(JSON.parse(String(init?.body)).model).toBe('deepseek/deepseek-v4.1-flash-1017');
         const request=JSON.parse(String(init?.body)),maximumCostUsd=(Buffer.byteLength(String(init?.body),'utf8')+256)*.3/1000000+request.max_tokens*1.2/1000000;
         if(stopped||calls>=20||costUsd+pendingUpperUsd+maximumCostUsd>.1){stopped=true;throw new Error('Extraction evaluation bound reached');}calls++;pendingUpperUsd+=maximumCostUsd;
         const row:Record<string,unknown>={phase:'dispatching',costUsd:null,maximumCostUsd};attempts.push(row);await persist();

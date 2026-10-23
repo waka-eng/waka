@@ -933,6 +933,7 @@ export interface FieldAudit {
 export interface Carry {
   cam: unknown;
   trip: unknown;
+  walls?: readonly Space[];
   /* A HELD PRESS IS NOT CARRIED. It was, so a rebuild under a finger would
      not read as a release — but a build that returned early (no data yet)
      tore the listeners down, the finger's pointerup went nowhere, and the
@@ -1531,6 +1532,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
 
     /* not zero: the loop resumes where the last one was, or was going */
     const resumedAt = headingRef.current;
+    const wallRoster = wallsRef.current;
+    let rosterChanged = false;
 
     /**
      * A CROSSING FROM ONE WALL TO THE NEXT.
@@ -1570,6 +1573,21 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     if (carryRef.current) {
       Object.assign(cam, carryRef.current.cam as Partial<typeof cam>);
       Object.assign(trip, carryRef.current.trip as Partial<typeof trip>);
+      const previousWalls = carryRef.current.walls;
+      rosterChanged = Boolean(previousWalls && (previousWalls.length !== wallRoster.length || previousWalls.some((wall, i) =>
+        wall.id !== wallRoster[i]?.id || wall.kind !== wallRoster[i]?.kind || wall.name !== wallRoster[i]?.name || wall.col !== wallRoster[i]?.col
+      )));
+      if (rosterChanged) {
+        // Columns can change after deleting a profile. Preserve identity, not its old position.
+        const previousWall = previousWalls?.find(wall => wall.col === trip.col);
+        const currentWall = wallRoster.find(wall => wall.kind === previousWall?.kind && wall.id === previousWall.id);
+        trip.col = currentWall?.col ?? 0;
+        trip.active = false;
+        trip.awaitingWake = false;
+        headingRef.current = null;
+        cam.xBack = false;
+        cam.aiming = false;
+      }
       /* A REBUILD CAN COME FROM THE WALLS THEMSELVES CHANGING — `walls` is on
          the dependency list. A crossing whose start or destination no longer
          exists is not resumable, and resuming it would aim the camera at a
@@ -5766,7 +5784,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     }
     /* Resumed mid-journey: nobody ran the arrival, so run it now — the wall
        needs its ground solved, poured and woken exactly as a glide would. */
-    if (resumedAt !== null) arriveColumn();
+    if (resumedAt !== null || rosterChanged) arriveColumn();
     /*
      * A WALL THAT HAS NOT WOKEN YET HAS TO KEEP TRYING, AND THE ROOM IS THE
      * REASON THIS LINE EXISTS AT ALL.
@@ -6658,6 +6676,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       carryRef.current = {
         cam: { ...cam },
         trip: { ...trip },
+        walls: wallRoster,
         companion: { ...companion },
         primed: view.primed,
         /*

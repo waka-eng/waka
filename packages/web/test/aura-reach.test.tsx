@@ -108,7 +108,7 @@ it('sends motes up off a bright aura, on the same reach that draws them', async 
 
 it("reads the agent's own saving on its wall, after the rebuild its bundle causes", async () => {
   world = await mountWorld(FACTS); await settle();
-  const toAgent = face('My agent');
+  const toAgent = face('Busy agent');
   expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
   await act(async () => { toAgent!.click(); });
   await settle(20);
@@ -170,7 +170,7 @@ it('lets motes already in the air finish their rise when the reach drops', async
     rising = world.audit().aura.rising;
   }
   expect(rising, 'a bright aura sent nothing up').toBeGreaterThan(0);
-  await act(async () => { face('My agent')!.click(); });
+  await act(async () => { face('Busy agent')!.click(); });
   /* frame by frame until the reach is under the line, then look */
   let dipped: ReturnType<MountedWorld['audit']>['aura'] | null = null;
   for (let frame = 0; frame < 400 && !dipped; frame += 1) {
@@ -191,7 +191,7 @@ it("already knows the agent wall's reading before you walk onto it", async () =>
      to count only switched-on ones — so every wall but yours read dark until
      the crossing ended, and the light eased up from nothing each time. */
   world = await mountWorld(FACTS); await settle();
-  const toAgent = face('My agent');
+  const toAgent = face('Busy agent');
   await act(async () => { toAgent!.click(); });
   await settle(20);
   const back = face('Me');

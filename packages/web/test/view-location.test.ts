@@ -82,3 +82,16 @@ it('reads and writes the open saved note only beside the archive', () => {
   expect(viewHref({ ...EMPTY_VIEW, note: 'kept-1' })).toBe('/');
   expect(viewHref({ ...EMPTY_VIEW, open: 'saves', note: null })).toBe('/?open=saves');
 });
+
+it('keeps the profile in conversation and principle URLs across reloads', () => {
+  for (const view of [
+    {...EMPTY_VIEW, wallId:'noah-id', conversationId:'new'},
+    {...EMPTY_VIEW, wallId:'another-id', conversationId:'existing-chat'},
+    {...EMPTY_VIEW, wallId:'noah-id', conversationId:'new', principleId:'principle-id'},
+    {...EMPTY_VIEW, wallId:'noah-id', section:'sky' as const, principleId:'principle-id', sharePrinciple:true},
+  ]) {
+    const url = new URL(viewHref(view), 'https://waka.example');
+    expect(readViewLocation(url.pathname, url.search)).toEqual(view);
+    expect(url.searchParams.get('profile')).toBe(view.wallId);
+  }
+});

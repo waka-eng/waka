@@ -8,14 +8,14 @@ const ci=readFileSync(new URL('../../../.github/workflows/ci.yml',import.meta.ur
 it('gates enablement by the existing dev-stage predicate and an operator off switch',()=>{
   expect(sst).toContain('const isDevelopmentDomain = $app.stage === "development" || $app.stage === "dev"');
   expect(sst).toContain('WAKA_CONVERSATION_REPLIES: isDevelopmentDomain && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0"');
-  expect(sst).toContain('...(isDevelopmentDomain\n        ? {\n            WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash"');
+  expect(sst).toContain('...(isDevelopmentDomain\n        ? {\n            WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash-1017"');
 });
 it('pins the deployed and evaluated chat model to the same DeepSeek version',()=>{
-  expect(workflow).toContain('.chatModel == "deepseek/deepseek-v4.1-flash"');
-  expect(ci).toContain('WAKA_MODEL_CHAT: deepseek/deepseek-v4.1-flash');
-  expect(ci).toContain('--expected-model=deepseek/deepseek-v4.1-flash');
-  expect(sst).toContain('OPENROUTER_GENERATION_MODEL: "deepseek/deepseek-v4.1-flash"');
-  expect(workflow).toContain('.generationModel == "deepseek/deepseek-v4.1-flash"');
+  expect(workflow).toContain('.chatModel == "deepseek/deepseek-v4.1-flash-1017"');
+  expect(ci).toContain('WAKA_MODEL_CHAT: deepseek/deepseek-v4.1-flash-1017');
+  expect(ci).toContain('--expected-model=deepseek/deepseek-v4.1-flash-1017');
+  expect(sst).toContain('OPENROUTER_GENERATION_MODEL: "deepseek/deepseek-v4.1-flash-1017"');
+  expect(workflow).toContain('.generationModel == "deepseek/deepseek-v4.1-flash-1017"');
   expect(workflow).not.toContain('google/gemini-3.8-flash');
 });
 it('uses the same environment for API and background worker',()=>{

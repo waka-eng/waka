@@ -7,13 +7,12 @@
  * audit (2026-08-29) found ~20 `?profile=` routes with no refusal coverage
  * at all — this file is that coverage, as a contract:
  *
- *   1. AGENT → THE HUMAN PROFILE: reads pass the boundary (conditioning);
+ *   1. AGENT → THE HUMAN PROFILE: reads and writes are refused;
  *      every non-read verb is 403, and the refusal comes from the BOUNDARY,
  *      not from entity lookup — a probe against ids that do not exist still
  *      answers 403, proving the matrix is consulted before anything else.
  *   2. AGENT → UNGRANTED SIBLING: everything is 403.
- *   3. GRANTED SIBLING: reads open, writes still 403 — a grant opens
- *      reading only (founder ruling, 2026-08-29).
+ *   3. GRANTED SIBLING: everything remains 403; historical grants do not widen access.
  *   4. ANOTHER ACCOUNT'S PROFILE: everything is 404, never 403 — existence
  *      is not confirmed across the account wall, whoever asks.
  *
@@ -202,31 +201,13 @@ describe("the profile boundary, route by route", () => {
     await t.truncateAll();
   });
 
-  it("an agent reads the human's layers, and changes nothing in them", async () => {
+  it("an agent cannot read or change the human's layers", async () => {
     const { human, scout } = await seedAccount();
-
-    for (const probe of READS) {
-      const res = await probeRequest(scout, probe, human.profileId);
-      expect(
-        res.status,
-        `${probe.name}: the conditioning read must pass the boundary`,
-      ).not.toBe(403);
-      if (!probe.path.includes(GHOST)) {
-        // Ghost-id probes may honestly 404 on the entity; a list or artifact
-        // read of a real profile has nothing to be missing.
-        expect(res.status, `${probe.name}: a surface read serves`).toBeLessThan(300);
-      }
-    }
-
     const before = await writtenState();
-    for (const probe of WRITES) {
-      const res = await probeRequest(scout, probe, human.profileId);
-      expect(
-        res.status,
-        `${probe.name}: a non-read verb on the human is refused at the boundary, before existence`,
-      ).toBe(403);
+    for (const probe of [...READS, ...WRITES]) {
+      expect((await probeRequest(scout, probe, human.profileId)).status, probe.name).toBe(403);
     }
-    expect(await writtenState(), "and the tables are exactly as they were").toBe(before);
+    expect(await writtenState()).toBe(before);
   });
 
   it("an ungranted sibling is a closed door, read and write alike", async () => {
@@ -240,7 +221,7 @@ describe("the profile boundary, route by route", () => {
     expect(await writtenState()).toBe(before);
   });
 
-  it("a grant opens reading only — writes stay refused", async () => {
+  it("historical grants cannot open another agent’s memory", async () => {
     const { human, scout, courier } = await seedAccount();
     await t.sql`
       INSERT INTO agent_read_grants (grantee_profile_id, target_profile_id, granted_by_profile_id)
@@ -248,7 +229,7 @@ describe("the profile boundary, route by route", () => {
 
     for (const probe of READS) {
       const res = await probeRequest(scout, probe, courier.profileId);
-      expect(res.status, `${probe.name}: granted sibling read passes`).not.toBe(403);
+      expect(res.status, `${probe.name}: granted siblings are still isolated`).toBe(403);
     }
     const before = await writtenState();
     for (const probe of WRITES) {

@@ -69,7 +69,7 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
     } else if (segments[0] === 'inspirations' && segments.length === 2 && id(segments[1]!)) {
       view.inspirationId = segments[1]!;
     } else if(segments[0]==='chat'&&segments.length===2&&id(segments[1]!)){
-      view.conversationId=segments[1];view.principleId=view.conversationId==='new'?id(params.get('principle')):null;return view;
+      view.conversationId=segments[1];view.wallId=id(params.get('profile'));view.principleId=view.conversationId==='new'?id(params.get('principle')):null;return view;
     /* `/review/:id` AND ITS `?thought=` DEEP LINK ARE GONE (2026-10-10),
        with the five components the founder folded into one correction field.
        An address that reads cleanly and resolves to nothing is the worst of
@@ -77,7 +77,7 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
        bookmark now returns null here and the app says the link is
        unavailable, in words, rather than opening an empty world. */
     } else if(segments[0]==='principles'&&id(segments[1]??null)&&(segments.length===2||segments.length===3&&segments[2]==='share')){
-      view.principleId=segments[1];view.sharePrinciple=segments.length===3;view.section='sky';return view;
+      view.principleId=segments[1];view.wallId=id(params.get('profile'));view.sharePrinciple=segments.length===3;view.section='sky';return view;
     } else return null;
   }
   view.inspirationId ??= id(params.get('inspiration'));
@@ -100,8 +100,13 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
 }
 
 export function viewHref(view: ViewLocation): string {
-  if(view.conversationId)return `/chat/${encodeURIComponent(view.conversationId)}${view.conversationId==='new'&&view.principleId?`?principle=${encodeURIComponent(view.principleId)}`:''}`;
-  if(view.principleId)return `/principles/${encodeURIComponent(view.principleId)}${view.sharePrinciple?'/share':''}`;
+  if(view.conversationId || view.principleId) {
+    const params = new URLSearchParams();
+    if(view.wallId) params.set('profile',view.wallId);
+    if(view.conversationId==='new'&&view.principleId) params.set('principle',view.principleId);
+    const path = view.conversationId ? `/chat/${encodeURIComponent(view.conversationId)}` : `/principles/${encodeURIComponent(view.principleId!)}${view.sharePrinciple?'/share':''}`;
+    return path + (params.size ? `?${params}` : '');
+  }
   const path = view.wallId ? `/w/${encodeURIComponent(view.wallId)}${view.label ? `/${encodeURIComponent(view.label.trim().toLowerCase().replace(/\s+/g, '-'))}` : ''}` : '/';
   const params = new URLSearchParams();
   if (view.section !== 'top' || view.inspirationId) params.set('view', view.section);

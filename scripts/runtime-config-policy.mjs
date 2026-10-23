@@ -12,7 +12,7 @@ export function verifyRuntimeConfiguration(config,stage){
     }
     if(env.NODE_ENV!=='production'||env.WAKA_INSECURE_COOKIES==='1')throw new Error(`${name} cookie security configuration is unsafe`);
     if(env.WAKA_STAGE!==stage)throw new Error(`${name} stage tag does not match the requested stage`);
-    if(env.OPENROUTER_GENERATION_MODEL!=='deepseek/deepseek-v4.1-flash')throw new Error(`${name} generation model is not the approved pin`);
+    if(env.OPENROUTER_GENERATION_MODEL!=='deepseek/deepseek-v4.1-flash-1017')throw new Error(`${name} generation model is not the approved pin`);
     if(env.WAKA_ENRICHMENT_ALLOWED_HOSTS?.trim())throw new Error(`${name} enrichment allowlist must not include fixture/private-address overrides`);
   }
   const raw=config.api.WAKA_TRUSTED_PROXY_HOPS;

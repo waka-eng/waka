@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DraftProblem, draftProblem } from './draft-problem';
 import type { MessageKey } from './i18n';
 import { loadInspirationDraft, newInspirationDraft, settleInspirationMediaDraft, writeInspirationDraft,
@@ -9,16 +9,19 @@ import { profileStorageKey, readProfileText, writeProfileText, type ProfileStora
  * overwrite another tab's words or files. `error` is a catalogue key (see
  * `lib/draft-problem`); empty is the success state. */
 export function useInspirationDraft(scope: ProfileStorageScope | null) {
+  const pointer = profileStorageKey(scope, 'activeInspirationDraft');
+  const seed = useMemo(() => newInspirationDraft(readProfileText(scope, 'draft')), [pointer]);
+  const [loadedPointer, setLoadedPointer] = useState(pointer);
   const [draft, setDraft] = useState(() => newInspirationDraft(readProfileText(scope, 'draft')));
   const [ready, setReady] = useState(false), [available, setAvailable] = useState(false), [error, setError] = useState<MessageKey | ''>('');
-  const live = useRef(draft); live.current = draft;
+  const live = useRef(draft); live.current = loadedPointer === pointer ? draft : seed;
   const owner = useRef(scope); owner.current = scope;
   const alive = useRef(true), generation = useRef(0), queue = useRef<InspirationDraft[]>([]);
   const running = useRef<Promise<void> | null>(null), supported = useRef(false), blocked = useRef(false);
-  const pointer = profileStorageKey(scope, 'activeInspirationDraft');
   useEffect(() => {
     alive.current = true; const epoch = ++generation.current;
     queue.current = []; running.current = null; supported.current = false; blocked.current = false;
+    live.current = seed; setDraft(seed); setLoadedPointer(pointer);
     setReady(false); setAvailable(false); setError('');
     if (!scope) { setReady(true); return () => { alive.current = false; generation.current += 1; }; }
     let preferred: string | undefined;
@@ -123,5 +126,5 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
     forking.current = run;
     return run;
   }, [forkOnce]);
-  return { draft, current: live, ready, available, error, setText, setMedia, setLinkText, setRecordingCandidate, chooseRecording, flush, settle, fork };
+  return { draft: loadedPointer === pointer ? draft : seed, current: live, ready: ready && loadedPointer === pointer, available, error, setText, setMedia, setLinkText, setRecordingCandidate, chooseRecording, flush, settle, fork };
 }

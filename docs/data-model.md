@@ -32,7 +32,7 @@ principles are a growing set per profile.
 - Each account can have **agent profiles**: separate stacks that agents
   use as *their own* memory (observations, lessons, working knowledge).
   The schema supports N agent profiles per account (each typed and named);
-  the product starts by offering one.
+  the UI lists each named agent profile separately.
 - The human is admin of every profile in their account: they can see and
   edit everything, including an agent profile's memory.
 
@@ -126,13 +126,19 @@ Every session acts *as* exactly one profile:
 
 ### What an agent session may do
 
-A session bound to an agent profile gets:
+A session bound to an agent profile gets (isolation ruling, 2026-10-22):
+
+MCP connections use separate credential directories and an expected profile ID.
+Login with a requested profile must bind exactly that profile, never silently
+fall back to the human profile or another agent. The client verifies the actual
+session profile before accessing memory; server authorization enforces the same
+boundary even for direct requests. Historical read grants do not widen it.
 
 | Target | Allowed |
 |---|---|
 | Its own agent profile | Full read/write: capture, curate signals, edit its top of mind, declare and curate its own principles |
-| The account's human profile | **Read only**: top of mind, signals, and principles — the conditioning use case, an agent acting for the person reading how they choose. It writes NOTHING there, captures included: what an agent generates stays wholly in its own stack, so nothing an agent saves can move the human's inspirations, signals, or top of mind (founder ruling, 2026-08-29, decision log below — retires the read+capture default of 2026-08-15; relaying is the person keeping the memory themselves) |
-| A sibling agent's profile | **Read only, and only through an explicit grant** (`agent_read_grants`, `POST /api/agent-grants`): human-granted, one-directional, revocable — revocation takes effect on the next request, and the revoked grant stays as record. Ungranted, the door is closed; and no grant opens capture — agents' generated memories never mix (same 2026-08-29 ruling). The open default retired 2026-08-24 with `goals/no-quiet-corners.md` Phase 6 (the flip is the founder's ruling of 2026-08-23, decision log below) |
+| The account's human profile | No access: an agent connection reads and writes only its bound profile |
+| A sibling agent's profile | No access, including when an older `agent_read_grants` row exists |
 | Other accounts | Nothing |
 
 The human-profile session can do everything in every profile of the
@@ -175,6 +181,11 @@ that reply request in the same transaction. Opening a new-chat composer does
 not create an empty conversation. Client-generated conversation/message IDs
 survive uncertain outcomes; a changed first-message replay conflicts.
 
+The selected profile owns its chat list, messages, drafts, and saved takeaways,
+as well as its memory layers. Agent chat links carry the profile ID so reloads
+retain that owner. New chats use that profile's memory alone. Changing the
+selected profile never moves an existing conversation or merges its messages.
+
 A conversation may start from an owned, currently readable Principle via
 `initial_principle_id`. This prioritizes the current wording in context without
 inventing a user message. Its profile-bearing foreign key clears only the source
@@ -182,13 +193,15 @@ ID on deletion, preserving conversation history. Merely opening a conversation
 does not request a reply.
 
 `conversations.perspective` (migration 0075) says whose memory the replies
-stand on: `mine` (the person's own saves, and every chat before the column),
+stand on: `mine` (the owning profile's saves, and every chat before the column),
 `agent`, or `both`, each source labelled with whose it is. `agent_profile_id`
 names which agent and is set only when the chat is started by the account's
 human profile with one of that account's agents; anything else is refused.
 The ownership is checked again on every read, and if the agent is gone
 (`ON DELETE SET NULL`) or no longer the account's, the chat quietly reads the
-person's own memory. The conversation itself stays the person's either way.
+person's own memory. This explicit perspective mechanism is retained for
+existing human-owned conversations; the profile-scoped UI starts new chats with `mine` and does not
+automatically read another profile's memory.
 
 Milestone 6 adds `conversation_reply_requests`, separate from user messages.
 One pending/running reply is allowed per conversation. An initial request or

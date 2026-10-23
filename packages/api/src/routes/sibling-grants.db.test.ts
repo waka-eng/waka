@@ -103,13 +103,13 @@ describe("the sibling door: granted reads, refused without, revoked on the next 
     const res = await readSignalsOf(scout, courier);
     expect(res.status).toBe(403);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toContain("No grant");
+    expect(body.error).toContain("Not permitted");
   });
 
   it("needs no grant for the paths the product is made of", async () => {
     const { human, scout, courier } = await seedHousehold();
     // The agent reading its human: the conditioning case.
-    expect((await readSignalsOf(scout, human)).status).toBe(200);
+    expect((await readSignalsOf(scout, human)).status).toBe(403);
     // The agent reading itself.
     expect((await readSignalsOf(scout, scout)).status).toBe(200);
     // The human reading any of its agents: the account's admin.
@@ -117,21 +117,13 @@ describe("the sibling door: granted reads, refused without, revoked on the next 
     expect((await readSignalsOf(human, courier)).status).toBe(200);
   });
 
-  it("a human-granted sibling reads; revocation closes the door on the next request", async () => {
+  it("historical grants remain manageable but never open another profile", async () => {
     const { human, scout, courier } = await seedHousehold();
 
-    const granted = await appFor(human).request("/api/agent-grants", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        granteeProfileId: scout.profileId,
-        targetProfileId: courier.profileId,
-      }),
-    });
-    expect(granted.status).toBe(201);
-    const { grant } = (await granted.json()) as { grant: { id: string } };
+    const [grant] = await t.sql`INSERT INTO agent_read_grants(grantee_profile_id,target_profile_id,granted_by_profile_id)
+      VALUES(${scout.profileId},${courier.profileId},${human.profileId}) RETURNING id`;
 
-    expect((await readSignalsOf(scout, courier)).status).toBe(200);
+    expect((await readSignalsOf(scout, courier)).status).toBe(403);
     // Undirected it is not: the grant opens one direction only.
     expect((await readSignalsOf(courier, scout)).status).toBe(403);
 
@@ -167,7 +159,7 @@ describe("the sibling door: granted reads, refused without, revoked on the next 
     expect(res.status).toBe(403);
   });
 
-  it("a grant cannot name the human profile or a foreign profile", async () => {
+  it("new cross-profile grants cannot be created", async () => {
     const { human, scout } = await seedHousehold();
     const other = await seedHousehold();
 
@@ -179,7 +171,7 @@ describe("the sibling door: granted reads, refused without, revoked on the next 
         targetProfileId: human.profileId,
       }),
     });
-    expect(toHuman.status, "the human profile is never a grant target").toBe(404);
+    expect(toHuman.status, "new read grants are retired").toBe(410);
 
     const foreign = await appFor(human).request("/api/agent-grants", {
       method: "POST",
@@ -189,6 +181,6 @@ describe("the sibling door: granted reads, refused without, revoked on the next 
         targetProfileId: other.courier.profileId,
       }),
     });
-    expect(foreign.status, "a foreign agent answers like one that does not exist").toBe(404);
+    expect(foreign.status, "retired grants expose no profile access").toBe(410);
   });
 });

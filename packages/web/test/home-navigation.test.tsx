@@ -503,7 +503,7 @@ it('changes form in place instead of travelling to the agent', async () => {
   const face = (label: string) =>
     [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-face')]
       .find(button => button.textContent?.trim() === label);
-  const toAgent = face('My agent');
+  const toAgent = face('Ouroboros maintainer');
   expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
 
   /* ONE FRAME. `step(0)` advances the world without letting a crossing run,
@@ -547,7 +547,7 @@ it('changes form in place instead of travelling to the agent', async () => {
  * at chats, and would have deleted a distinction the founder said still
  * matters ("For inspirations it does, for now it does").
  */
-it('lights neither face on the chats page, and still lights one on the archive', async () => {
+it('identifies the owner on the chats page and the archive', async () => {
   const faces = () =>
     [...world!.container.querySelectorAll<HTMLButtonElement>('.jar-char-face')]
       .map(button => ({
@@ -558,8 +558,8 @@ it('lights neither face on the chats page, and still lights one on the archive',
 
   world = await mountWorld(FACTS, { initialEntries: ['/?open=conversations'], routerTools: <RouterTools /> });
   await settle();
-  expect(faces(), 'the switcher may not be removed, only unlit').toHaveLength(2);
-  expect(faces().filter(face => face.lit)).toEqual([]);
+  expect(faces(), 'the switcher keeps Me and every agent available').toHaveLength(3);
+  expect(faces().filter(face => face.lit).map(face => face.name)).toEqual(['Me']);
 
   await act(async () => world!.unmount());
   world = await mountWorld(FACTS, { initialEntries: ['/?open=saves'], routerTools: <RouterTools /> });

@@ -61,13 +61,11 @@ export const conversations=pgTable('conversations',{
    * let you select if you want to chat with me vs my agent or both
    * perspectives."
    *
-   * The conversation is still the person's — one list, one owner, per the
-   * earlier ruling that "there should be no difference between me and my
-   * agent's chat". What changes is the material the reply stands on: the
-   * person's own saves ('mine', and every chat before this column), the
-   * agent's ('agent'), or both, each source labelled with whose it is
-   * ('both'). `agentProfileId` names which agent; if it is gone, the chat
-   * quietly reads the person's own memory again.
+   * The owning profile has its own transcript, chat list and drafts. The
+   * default 'mine' reads only that profile's memory, including when the owner
+   * is an agent. Existing human-owned chats may explicitly select 'agent' or
+   * 'both'; agentProfileId names that account's agent, and removal falls back
+   * to the owning human profile. Changing perspective never moves a chat.
    */
   perspective:text('perspective').$type<ConversationPerspective>().notNull().default('mine'),
   agentProfileId:uuid('agent_profile_id').references(()=>profiles.id,{onDelete:'set null'}),

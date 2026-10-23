@@ -32,7 +32,7 @@ const url=new URL(process.env.DB_CONNECTION_URL??'');assert.ok(['localhost','127
 process.env.NODE_ENV='test';process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION;delete process.env.AWS_LAMBDA_FUNCTION_NAME;
 if(!noNetwork){const env=parse(await readFile('/Users/agi/nextsteps/waka/.env.local','utf8'));assert.ok(env.OPENROUTER_API_KEY);process.env.OPENROUTER_API_KEY=env.OPENROUTER_API_KEY;}
 else{delete process.env.OPENROUTER_API_KEY;delete process.env.GEMINI_API_KEY;}
-assert.equal(OPENROUTER_GENERATION_MODEL,'deepseek/deepseek-v4.1-flash');
+assert.equal(OPENROUTER_GENERATION_MODEL,'deepseek/deepseek-v4.1-flash-1017');
 let calls=0,costUsd=0,stopped=false;const requests:Array<Record<string,unknown>>=[],journeys:Array<Record<string,any>>=[];
 const caseContext=new AsyncLocalStorage<string>();
 const concurrency=Number(process.argv.find(arg=>arg.startsWith('--concurrency='))?.slice(14)??'1');

@@ -167,7 +167,7 @@ describe("GET /api/signals", () => {
     expect(listSignals).not.toHaveBeenCalled();
   });
 
-  it("lets an agent session read the account's human profile", async () => {
+  it("refuses an agent session reading the account's human profile", async () => {
     const listSignals = vi.fn(async () => [summary]);
     const loadProfile = vi.fn(async () => ({ id: humanProfileId, accountId, type: "human" as const }));
     const app = new Hono();
@@ -183,12 +183,8 @@ describe("GET /api/signals", () => {
 
     const response = await app.request(`/api/signals?profile=${humanProfileId}`);
 
-    expect(response.status).toBe(200);
-    expect(listSignals).toHaveBeenCalledWith(expect.anything(), {
-      profileId: humanProfileId,
-      status: undefined,
-      limit: 80,
-    });
+    expect(response.status).toBe(403);
+    expect(listSignals).not.toHaveBeenCalled();
   });
 
   it("answers a cross-account profile as not-found, not forbidden", async () => {

@@ -280,7 +280,7 @@ describe("GET /api/auth/cli/start", () => {
     expect(html).toContain("user@example.com");
   });
 
-  it("offers every profile the session may bind, and preselects the named one", async () => {
+  it("locks a requested profile instead of offering a different identity", async () => {
     mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
 
     const res = await createApp().request(
@@ -289,7 +289,7 @@ describe("GET /api/auth/cli/start", () => {
     );
     const html = await res.text();
 
-    expect(html).toContain('value="profile-human"');
+    expect(html).not.toContain('name="profileId" value="profile-human"');
     expect(html).toContain('value="profile-agent"');
     expect(html).toMatch(/value="profile-agent"\s+checked/);
   });
@@ -560,7 +560,7 @@ describe("POST /api/auth/cli/exchange", () => {
 
   it("exchanges a valid code for a session bound to the code's profile", async () => {
     mockState.db = makeDb(
-      [[{ id: "profile-agent", email: "user@example.com" }]],
+      [[{ id: "profile-agent", name: "Scout", type: "agent", email: "user@example.com" }]],
       [
         [
           {
@@ -643,4 +643,20 @@ describe("POST /api/auth/cli/exchange", () => {
     const body = (await second.json()) as { error: string };
     expect(body.error).toMatch(/invalid or already-used/i);
   });
+});
+
+it('refuses an unknown requested profile rather than silently connecting the human', async () => {
+  mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
+  const response = await createApp().request(startUrl({callback:CALLBACK,state:'strict',profile:'missing-agent'}));
+  expect(response.status).toBe(400);
+  expect(mockState.db.insertValues).not.toHaveBeenCalled();
+});
+it('cannot change the requested profile or remove its signed binding at consent', async () => {
+  mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW],[HUMAN_ROW, AGENT_ROW]]);
+  const response = await createApp().request(startUrl({callback:CALLBACK,state:'strict',profile:'profile-agent'}));
+  const fields = readFormFields(await response.text());
+  expect(fields.requestedProfileId).toBe('profile-agent');
+  expect((await postConsent({...fields,profileId:'profile-human'})).status).toBe(400);
+  expect((await postConsent({...fields,requestedProfileId:'',profileId:'profile-human'})).status).toBe(400);
+  expect(mockState.db.insertValues).not.toHaveBeenCalled();
 });

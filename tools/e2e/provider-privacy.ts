@@ -5,7 +5,7 @@ import {callOpenRouter} from '../../packages/api/src/lib/openrouter-http.js';
 assert.ok(process.argv.includes('--live'),'Pass --live for one paid synthetic call');
 assert.ok(process.env.OPENROUTER_API_KEY,'Supply the approved evaluation key explicitly');
 process.env.WAKA_OPENROUTER_DATA_COLLECTION='deny';process.env.WAKA_OPENROUTER_REQUIRE_ZDR='1';
-const model='deepseek/deepseek-v4.1-flash',path=`work/conversation-eval/privacy-${Date.now()}.json`;
+const model='deepseek/deepseek-v4.1-flash-1017',path=`work/conversation-eval/privacy-${Date.now()}.json`;
 const network=globalThis.fetch,requests:Array<Record<string,unknown>>=[];
 let costUsd=0,output:unknown=null,error:string|null=null;
 const save=(finished=false)=>writeEvaluationSnapshot(path,{model,maxCalls:1,maxCostUsd:.1,calls:requests.length,costUsd,

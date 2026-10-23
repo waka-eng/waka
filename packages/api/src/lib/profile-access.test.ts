@@ -6,14 +6,8 @@
  * because this function is the whole of "what can an agent do to my memory?"
  * and a gap in it is not visible from any single route's tests.
  *
- * Since no-quiet-corners Phase 6 the matrix answers in three words:
- * `allowed`, `denied`, or `sibling_grant_required` — the last being the
- * founder-ruled flip (2026-08-23, signed in data-model.md's decision log):
- * an agent reaching for a SIBLING agent's memory goes through an explicit,
- * human-granted, revocable grant, checked live by `profileAccessError`.
- * The grant's own behavior — granted reads, refused without, revocation on
- * the next request — is pinned on real Postgres in
- * `sibling-grants.db.test.ts`; this file pins the pure matrix.
+ * Agent sessions are isolated to their bound profile, for every operation.
+ * Historical sibling grants cannot widen that boundary.
  */
 
 import { describe, expect, it } from "vitest";
@@ -74,9 +68,9 @@ describe("an agent-profile session works inside its own memory", () => {
   });
 });
 
-describe("an agent-profile session may only READ the human profile", () => {
-  it("may read it — the conditioning case, no grant needed", () => {
-    expect(resolveProfileAccess(agentSession, ownProfile, "read")).toBe("allowed");
+describe("an agent-profile session cannot access the human profile", () => {
+  it("may not read it — only its own profile is reachable", () => {
+    expect(resolveProfileAccess(agentSession, ownProfile, "read")).toBe("denied");
   });
 
   /* The 2026-08-29 ruling: what an agent generates stays wholly in its own
@@ -92,10 +86,10 @@ describe("an agent-profile session may only READ the human profile", () => {
   });
 });
 
-describe("the sibling door has a hand on it — the ruled flip", () => {
-  it("a sibling read goes through the grant, never through the matrix alone", () => {
+describe("sibling agent profiles remain isolated", () => {
+  it("a sibling read is denied regardless of historical grants", () => {
     expect(resolveProfileAccess(agentSession, siblingAgent, "read")).toBe(
-      "sibling_grant_required",
+      "denied",
     );
   });
 

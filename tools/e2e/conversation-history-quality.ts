@@ -8,7 +8,7 @@ import {createOpenRouterModelProvider} from '../../packages/api/src/lib/openrout
 import {writeEvaluationSnapshot} from './evaluation-journal.js';
 assert.ok(process.argv.includes('--live'));
 const target=new URL(process.env.DB_CONNECTION_URL??'');assert.ok(['127.0.0.1','localhost'].includes(target.hostname)&&/test|disposable/i.test(target.pathname)&&!target.searchParams.has('options'));
-const model='deepseek/deepseek-v4.1-flash';process.env.WAKA_MODEL_CHAT=model;
+const model='deepseek/deepseek-v4.1-flash-1017';process.env.WAKA_MODEL_CHAT=model;
 assert.ok(process.env.OPENROUTER_API_KEY,'Set OPENROUTER_API_KEY explicitly; this evaluator loads no env file.');
 process.env.NODE_ENV='test';process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';
 const path=`work/conversation-eval/history-${Date.now()}.json`,requests:Array<Record<string,unknown>>=[],results:Array<Record<string,unknown>>=[];

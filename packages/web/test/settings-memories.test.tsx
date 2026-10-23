@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * SETTINGS › MEMORIES LISTS AGENTS, AND SAYS WHICH ACT FAILED.
+ * SETTINGS › AGENT PROFILES LISTS AGENTS, AND SAYS WHICH ACT FAILED.
  *
  * Audit f2afcbe2 (desk/51, desk/52): the list offered the person's OWN human
  * profile as a memory to rename and delete, and a failed delete said "Your
@@ -29,23 +29,34 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.resetAllMocks(); });
 
-async function openMemories() {
+async function openAgentProfiles() {
   await act(async () => root.render(<SettingsPanel locale="en-US" email="you@example.test" name="Mobi" onName={vi.fn()} onLocale={vi.fn()}
     busy={false} failed={false} onSignOut={vi.fn()} onDeleteAccount={vi.fn(async () => {})} onClose={vi.fn()} />));
-  const toggle = [...host.querySelectorAll<HTMLButtonElement>(".waka-settings-row")].find((b) => b.textContent?.includes("Memories"))!;
+  const toggle = [...host.querySelectorAll<HTMLButtonElement>(".waka-settings-row")].find((b) => b.textContent?.includes("Agent profiles"))!;
   await act(async () => { toggle.click(); });
   await act(async () => { await Promise.resolve(); });
 }
 
-it("lists agent memories only, never the person's own profile", async () => {
-  await openMemories();
+it("lists agent profiles only, never the person's own profile", async () => {
+  await openAgentProfiles();
   const names = [...host.querySelectorAll<HTMLInputElement>(".waka-settings-rows input")].map((input) => input.defaultValue);
   expect(names).toEqual(["Work agent"]);
+  expect(host.textContent).toContain("Agent memory: Work agent");
+  expect(host.textContent).toContain("Each agent has its own look, inspirations, top of mind, principles, and chats");
+});
+
+it("cancels a pending delete confirmation when returning to Settings", async () => {
+  await openAgentProfiles();
+  await act(async () => host.querySelector<HTMLButtonElement>(".waka-settings-erase")!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Back to Settings"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[data-settings-target="agents"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>(".waka-settings-erase")!.click());
+  expect(deleteProfile).not.toHaveBeenCalled();
 });
 
 it("says the delete failed, not that the list failed to load", async () => {
   vi.mocked(deleteProfile).mockRejectedValue(new Error("nope"));
-  await openMemories();
+  await openAgentProfiles();
   const erase = host.querySelector<HTMLButtonElement>(".waka-settings-erase")!;
   await act(async () => { erase.click(); });
   await act(async () => { erase.click(); });

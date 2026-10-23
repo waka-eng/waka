@@ -60,52 +60,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import type { MenuItem } from "../components/Menu";
 import type { SupportedLocale } from "./locales";
 import { setStanding, useStanding, type Standing } from "./standing";
-import { readViewLocation, type ViewLocation, type ViewOpen } from "./view-location";
-
-/**
- * ═══ THE SURFACES THAT HAVE NO OWNER, SO NOTHING MAY BE LIT AS THEIRS ════
- *
- * Founder: "When user clicks on chat, don't select any of me nor my agent
- * because here it doesn't matter — what's selected. For inspirations it
- * does, for now it does, but for chats it doesn't, so don't select
- * anything."
- *
- * THE THIRD QUESTION HAS NO ANSWER TO WHOSE. The file's own doctrine, three
- * paragraphs up, already said this and the screen was not obeying it:
- * conversations "are not a depth of your material and not an owner; they are
- * a history, which is why they never sat right among the three". A history
- * belongs to the account, not to a face the account is wearing.
- *
- * AND THE DATA LAYER AGREES, which was checked rather than assumed, because
- * hiding a real distinction would be worse than the lit button. Chats ARE
- * profile-scoped in transport — `listConversations(profile)` calls
- * `/conversations?profile=…`, every row carries a `profileId`, and the
- * client throws if a row comes back under another one. But there is only one
- * profile this product ever passes: `Home` hands `ConversationsOverlay` and
- * `ConversationPanel` `storageScope.profileId`, which is `auth.profile.id` —
- * the signed-in person's own — on every wall, and the comment at that call
- * site already says why: "A conversation is with WAKA, and changing which
- * face it is wearing is not a change of who is talking. One list, one
- * scope." So standing as the agent cannot change one row on these two
- * surfaces, and a lit "Me" was the switcher claiming a scope it does not
- * have. Light is this product's meaning channel; lighting one of two faces
- * means "this is whose you are looking at", and here nothing is.
- *
- * NOT HIDDEN, DIMMED TO NEITHER. Founder: do not remove the switcher. It is
- * still the way to change form, and a control that vanishes on two of the
- * views is a worse version of the same problem — the person has to learn
- * where it went. It stands there with neither face lit, which is the honest
- * reading: both are available, neither is being shown.
- *
- * THE LIST AND THE CONVERSATION BOTH, and that is not belt-and-braces. The
- * `Menu` currently hides itself outright while `conversationId` is set, so
- * only the list is visibly wrong today — but the hiding is a layout decision
- * about a full-bleed surface, and the day it changes, a lit face comes back
- * on a page that was never scoped. The rule is about what the view IS.
- */
-export function wallAgnosticView(view: ViewLocation | null | undefined): boolean {
-  return view?.open === "conversations" || Boolean(view?.conversationId);
-}
+import { readViewLocation, type ViewOpen } from "./view-location";
 
 export interface PageMenu {
   /** WHICH. The top-centre switcher: the same material at three depths. */

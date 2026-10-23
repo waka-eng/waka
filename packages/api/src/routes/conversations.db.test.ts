@@ -19,6 +19,25 @@ async function fixture(keyScoped=false){
   const send=(path:string,body:unknown)=>app.request('/conversations'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const id=randomUUID();return {app,send,id,accountId:account.id as string,profileId:profile.id as string};
 }
+it('isolates chat lists and messages between the human and two agents in the same account',async()=>{
+  const f=await fixture();
+  const agents=await t.sql<{id:string;name:string}[]>`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','noah'),(${f.accountId},'agent','another') RETURNING id,name`;
+  const owners=[{id:f.profileId,name:'Me'},...agents];
+  const chats=owners.map(owner=>({...owner,chat:randomUUID()}));
+  for(const owner of chats){
+    expect((await f.send(`?profile=${owner.id}`,{id:owner.chat,firstMessage:{id:randomUUID(),content:`Only ${owner.name}`}})).status).toBe(200);
+  }
+  for(const owner of chats){
+    const body=await(await f.app.request(`/conversations?profile=${owner.id}`)).json() as any;
+    expect(body.conversations.map((row:any)=>({id:row.id,profileId:row.profileId,preview:row.preview}))).toEqual([{id:owner.chat,profileId:owner.id,preview:`Only ${owner.name}`}]);
+    for(const other of chats.filter(other=>other.id!==owner.id)){
+      expect((await f.app.request(`/conversations/${other.chat}?profile=${owner.id}`)).status).toBe(404);
+      expect((await f.send(`/${other.chat}/messages?profile=${owner.id}`,{id:randomUUID(),revision:1,content:'Wrong profile'})).status).toBe(404);
+    }
+  }
+  expect(await t.sql`SELECT id FROM conversation_messages`).toHaveLength(3);
+  expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
+});
 it('stores ordered words once, rejects changed replay and never requests an assistant response',async()=>{
   const f=await fixture();expect((await f.send('',{id:f.id})).status).toBe(200);expect((await f.send('',{id:f.id})).status).toBe(200);
   const message={id:randomUUID(),content:'I need room to think.',revision:0};

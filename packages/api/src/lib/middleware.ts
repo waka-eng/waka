@@ -21,7 +21,7 @@ import { looksLikeAgentKey, lookupAgentKeySession } from "./agent-key-auth.js";
 import { looksLikeKeeperKey, lookupKeeperKeySession } from "./keeper-key-auth.js";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./auth.js";
 import { type AuthenticatedSession, lookupSession } from "./session.js";
-import { hasLiveSiblingGrant } from "./sibling-grants.js";
+import type { getDb } from "./db.js";
 
 export interface AuthEnv {
   Variables: {
@@ -130,8 +130,8 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
 /**
  * THIS IS A PERSON'S DECISION, NOT AN AGENT'S.
  *
- * `docs/data-model.md` grants an agent-bound session read on the human
- * profile and full access only to its own (2026-08-29 ruling) — never the
+ * `docs/data-model.md` restricts an agent-bound session to its own
+ * profile (2026-10-22 isolation ruling) — never the
  * power to act on the ACCOUNT. Every owner surface honours that (profiles.ts, sessions.ts,
  * groups.ts) except the one that cannot be undone: `DELETE /api/auth/me` was
  * mounted on `requireAuth` alone and never read `session.profile.type`, so a
@@ -226,7 +226,7 @@ export function asAccountProfile<
   return row as T & { accountId: string; type: "human" | "agent" };
 }
 
-export type ProfileAccessVerdict = "allowed" | "denied" | "sibling_grant_required";
+export type ProfileAccessVerdict = "allowed" | "denied";
 
 /**
  * May this session perform `operation` on `target`?
@@ -234,21 +234,8 @@ export type ProfileAccessVerdict = "allowed" | "denied" | "sibling_grant_require
  * - A session acting as its own profile may do anything to it.
  * - A **human**-profile session is the account's admin: full access to every
  *   profile the account owns, including its agents' memories.
- * - An **agent**-profile session may READ the account's human profile — the
- *   conditioning case: an agent acting for the person reads their top of
- *   mind and principles. It may not write anything there, captures
- *   included. What an agent generates stays wholly in the agent's own
- *   stack, so nothing an agent saves can ever move the human's signals or
- *   top of mind (founder ruling, 2026-08-29, signed in docs/data-model.md's
- *   decision log — it retires the 2026-08-15 read+capture default; the
- *   relaying case is served by the human keeping the memory themselves).
- * - An **agent** session READING a SIBLING agent's memory needs an
- *   explicit, human-granted, revocable grant — the matrix answers
- *   `sibling_grant_required` and `profileAccessError` reads the live grant
- *   rows. Grants open reading only: capture across agents is denied under
- *   the same ruling, so no grant can mix one agent's generated memory into
- *   another's. The open default retired with `goals/no-quiet-corners.md`
- *   Phase 6 (founder-ruled 2026-08-23): no flag, no dark machinery.
+ * - An **agent**-profile session reads and writes only its bound profile.
+ *   Human memory, siblings and historical read grants cannot widen it.
  * - Nothing reaches across accounts, ever.
  */
 export function resolveProfileAccess(
@@ -268,37 +255,16 @@ export function resolveProfileAccess(
   }
   if (target.id === session.profile.id) return "allowed";
   if (session.profile.type === "human") return "allowed";
-  // Agent session, some other profile in the same account: reading is the
-  // only verb that can cross, and toward a sibling only through a grant.
-  if (operation !== "read") return "denied";
-  if (target.type === "human") return "allowed";
-  return "sibling_grant_required";
+  return "denied";
 }
 
-/**
- * The handler form: null on success, or the 403 body to return. Async since
- * the sibling flip — a `sibling_grant_required` verdict is answered from
- * the live grant rows, read now rather than cached, so revocation takes
- * effect on the very next request.
- */
+/** The handler form, retaining the async route contract. */
 export async function profileAccessError(
-  db: Parameters<typeof hasLiveSiblingGrant>[0],
+  _db: Pick<ReturnType<typeof getDb>, "select">,
   session: AuthenticatedSession,
   target: ProfileAccessTarget,
   operation: ProfileOperation,
 ): Promise<{ error: string } | null> {
-  const verdict = resolveProfileAccess(session, target, operation);
-  if (verdict === "allowed") return null;
-  if (verdict === "sibling_grant_required") {
-    const granted = await hasLiveSiblingGrant(db, {
-      granteeProfileId: session.profile.id,
-      targetProfileId: target.id,
-    });
-    if (granted) return null;
-    return {
-      error:
-        "No grant to read this agent's memory — the account holder can open that door",
-    };
-  }
-  return { error: "Not permitted for this profile" };
+  return resolveProfileAccess(session, target, operation) === "allowed"
+    ? null : { error: "Not permitted for this profile" };
 }

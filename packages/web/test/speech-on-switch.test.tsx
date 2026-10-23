@@ -117,7 +117,7 @@ it('drops a weather answer that was asked for on the wall you just left', async 
   expect(speech(), 'the answer cannot have arrived yet — it is still held').toBeNull();
 
   /* SWITCH FORM WHILE THE ANSWER IS STILL IN FLIGHT. */
-  const toAgent = face('My agent');
+  const toAgent = face('Ouroboros maintainer');
   expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
   await act(async () => { toAgent!.click(); });
   await world.step(0);
@@ -149,7 +149,7 @@ it('clears a sentence already on screen when the form changes', async () => {
   await settle();
   expect(speech(), 'the creature never spoke, so there is nothing to clear').toBeTruthy();
 
-  await act(async () => { face('My agent')!.click(); });
+  await act(async () => { face('Ouroboros maintainer')!.click(); });
   await world.step(0);
   await act(async () => { await vi.advanceTimersByTimeAsync(0); });
   expect(speech(), 'the bubble stayed on through the turn').toBeNull();
@@ -167,7 +167,7 @@ it('still answers a press made after the switch', async () => {
   vi.mocked(fetchTheWeather).mockResolvedValue(WEATHER);
   world = await mountWorld(FACTS); await settle();
 
-  await act(async () => { face('My agent')!.click(); });
+  await act(async () => { face('Ouroboros maintainer')!.click(); });
   await world.step(0);
   await settle();
   /* BACK TO YOUR OWN FORM, because the press target is deliberately absent on
@@ -249,7 +249,7 @@ it('drops the away-window line when the form changed before it spoke', async () 
   /* SWITCH FORM INSIDE THE GREETING'S OWN BEAT. No held promise is needed
      here, which is the difference from the press race above: the delay is a
      timer this product set itself, so the window is open on every run. */
-  const toAgent = face('My agent');
+  const toAgent = face('Ouroboros maintainer');
   expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
   await act(async () => { toAgent!.click(); });
   await world.step(0);

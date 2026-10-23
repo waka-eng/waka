@@ -499,7 +499,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
               <HowItWorksPanel locale={locale} />
             </span>
           ) : settings ? (
-            <span className="waka-account">
+            <span className="waka-account waka-account--settings">
               <button type="button" className="waka-account-close" onClick={close}>{t(locale, "worldClose")}</button>
               <SettingsPanel {...settings} locale={locale}
                 email={account?.email ?? null}

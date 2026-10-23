@@ -4,7 +4,7 @@ import {afterEach,expect,it,vi} from 'vitest';
 import {callOpenRouter} from './openrouter-http.js';
 import {fetchModelWithTimeout} from './gemini-http.js';
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();vi.unstubAllEnvs();});
-const request={model:'deepseek/deepseek-v4.1-flash',messages:[{role:'user' as const,content:'PRIVATE_INPUT'}]};
+const request={model:'deepseek/deepseek-v4.1-flash-1017',messages:[{role:'user' as const,content:'PRIVATE_INPUT'}]};
 it('records one priced OpenRouter envelope even when its answer is unusable',async()=>{
   vi.stubEnv('OPENROUTER_API_KEY','SYNTHETIC_KEY');vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({usage:{cost:.002,prompt_tokens:50,completion_tokens:10},choices:[{message:{content:'not JSON'}}]}))));
   const write=vi.spyOn(process.stdout,'write').mockImplementation(()=>true);
