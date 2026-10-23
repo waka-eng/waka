@@ -12,6 +12,10 @@
  * is `api/src/routes/inspirations-deleted.db.test.ts` on real SQL. The dock
  * the note's tools portal into is stood up as the bare element `Home`
  * lends, since the world around it is not what is being asserted.
+ *
+ * `helpers/archive` plays `Home`'s part: the archive's recorder lives in
+ * `Home` now (L12), so the archive is mounted with the real
+ * `useArchiveRecorder` handed to it, as `Home` mounts it.
  */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -51,7 +55,7 @@ afterEach(() => {
 });
 
 async function mount() {
-  const { SavesOverlay } = await import("../src/components/SavesOverlay");
+  const { Archive } = await import("./helpers/archive");
   const { DOCK_SLOT } = await import("../src/components/NoteTools");
   dock = document.createElement("span");
   dock.id = DOCK_SLOT;
@@ -59,7 +63,7 @@ async function mount() {
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
-  await act(async () => { root!.render(createElement(SavesOverlay, { locale: "en-US", title: "Your inspirations", onClose: () => undefined })); });
+  await act(async () => { root!.render(createElement(Archive, { locale: "en-US", title: "Your inspirations", onClose: () => undefined })); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 }
 const leads = () => [...host!.querySelectorAll(".waka-list-lead")].map((node) => node.textContent);

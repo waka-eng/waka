@@ -48,17 +48,15 @@ import { NoteTools } from "./NoteTools";
 import {
   attachmentPreviewImageUrl,
   deleteInspiration,
-  finalizeAttachment,
   forgetDeletedInspiration,
   listDeletedInspirations,
   restoreInspiration,
   type ApiDeletedInspiration,
-  presignAttachment,
   updateInspiration,
-  uploadToPresignedUrl,
 } from "../lib/api";
+import { attachToNote } from "../lib/attach-to-note";
 import { useFirstVisit } from "../lib/first-visit";
-import { useAudioRecording } from "../lib/use-audio-recording";
+import { useArchiveRecorderContext } from "../lib/archive-recorder";
 import { canKeep, type KeepReadiness } from "../lib/keep-ready";
 import { archiveChapter, dateWords } from "../lib/words";
 import { ShareSheet, inspirationShareTarget, type ShareTarget } from "./ShareSheet";
@@ -186,6 +184,12 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   onNewSave?: () => void;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
+  /* THE ARCHIVE'S RECORDER, OWNED BY THE CALLER (L12), read from the
+     provider `Home` mounts around its world (`ArchiveRecorderProvider`). It
+     outlives this surface, so a clip still finishing when the archive closes
+     or remounts is attached to the note it was made on, and a failure is
+     reported by `Home`. This surface only shows it and presses it. */
+  const recorder = useArchiveRecorderContext();
   /* Scoped to whose archive this is: being new to your own is not being new
      to your agent's. */
   const newHere = useFirstVisit(profileId ? { accountId: "p", profileId } : null, "saves");
@@ -361,19 +365,38 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   }, [ownArchive]);
   useEffect(() => { void loadShelf(); }, [loadShelf]);
 
+  const forgetNote = recorder.forget, unforgetNote = recorder.unforget, markDeleting = recorder.setDeleting, dropForGood = recorder.drop;
+  /* A DELETE BEGINS: no clip is sent to the note until it is undone,
+     refused or sent, and its lines say it was deleted (review, 2026-10-22). */
+  const beginDelete = useCallback((id: string) => {
+    markDeleting(id, profileId ?? null, true);
+    forgetNote(id, profileId ?? null);
+  }, [forgetNote, markDeleting, profileId]);
   const commitErase = useCallback((pending: { row: Inspiration; at: number }, leaving = false) => {
+    beginDelete(pending.row.id);
     /* On an agent's archive the delete names the agent's profile; the
        request outlives the tab when it is sent as the page goes. */
     void deleteInspiration(pending.row.id, { ...(profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
-      .then(() => loadShelf())
+      /* sent: a clip for this note waits on Home's line for a restore —
+         EXCEPT ON AN AGENT'S ARCHIVE (review, 2026-10-22), which keeps no
+         deleted shelf: nothing can bring the note back, so its clip is let
+         go and the line says the note was deleted for good, × only. */
+      .then(() => {
+        markDeleting(pending.row.id, profileId ?? null, false);
+        if (!ownArchive) dropForGood(pending.row.id, profileId ?? null);
+        return loadShelf();
+      })
       .catch(() => {
+        /* refused: the note is still there, and so are its clips' chances */
+        markDeleting(pending.row.id, profileId ?? null, false);
+        unforgetNote(pending.row.id, profileId ?? null);
         if (!mounted.current) return;
         setRows((all) => all.some((row) => row.id === pending.row.id) ? all
           : [...all.slice(0, pending.at), pending.row, ...all.slice(pending.at)]);
         setTotal((count) => count === null ? count : count + 1);
         setEraseFailed(true);
       });
-  }, [loadShelf, ownArchive, profileId]);
+  }, [beginDelete, dropForGood, loadShelf, markDeleting, ownArchive, profileId, unforgetNote]);
 
   const flushErase = useCallback((leaving = false) => {
     const pending = pendingErase.current;
@@ -409,45 +432,53 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       if (mounted.current) setUndoable(null);
       flushErase();
     }, UNDO_MS);
+    beginDelete(row.id);
     pendingErase.current = { row, at, timer };
     focusUndoNext.current = true;
     setUndoable(row);
-  }, [flushErase, rows]);
+  }, [beginDelete, flushErase, rows]);
 
   const undoErase = useCallback(() => {
     const pending = pendingErase.current;
     if (!pending) return;
     window.clearTimeout(pending.timer);
     pendingErase.current = null;
+    markDeleting(pending.row.id, profileId ?? null, false);
+    unforgetNote(pending.row.id, profileId ?? null);
     setRows((all) => all.some((row) => row.id === pending.row.id) ? all
       : [...all.slice(0, pending.at), pending.row, ...all.slice(pending.at)]);
     setTotal((count) => count === null ? count : count + 1);
     setUndoable(null);
-  }, []);
+  }, [markDeleting, profileId, unforgetNote]);
 
   const bringBack = useCallback(async (item: ApiDeletedInspiration) => {
     setShelfFailed(false);
     try {
       await restoreInspiration(item.id);
+      /* back from the shelf under the same id: its clips can land again */
+      unforgetNote(item.id, profileId ?? null);
       if (!mounted.current) return;
       setShelf((all) => all.filter((row) => row.id !== item.id));
       void load();
     } catch {
       if (mounted.current) setShelfFailed(true);
     }
-  }, [load]);
+  }, [load, profileId, unforgetNote]);
 
+  const dropNote = recorder.drop;
   const forget = useCallback(async (item: ApiDeletedInspiration) => {
     if (forgetting !== item.id) { setForgetting(item.id); return; }
     setForgetting(null);
     setShelfFailed(false);
     try {
       await forgetDeletedInspiration(item.id);
+      /* gone for good: now, and only now, its clips cannot be kept */
+      dropNote(item.id, profileId ?? null);
       if (mounted.current) setShelf((all) => all.filter((row) => row.id !== item.id));
     } catch {
       if (mounted.current) setShelfFailed(true);
     }
-  }, [forgetting]);
+  }, [dropNote, forgetting, profileId]);
 
   /**
    * LEAVING THE NOTE IS WHAT SAVES IT.
@@ -677,15 +708,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      that note's — another open note never shows or is disabled by them. */
   const [attachingFor, setAttachingFor] = useState<string | null>(null);
   const [attachFailedFor, setAttachFailedFor] = useState<string | null>(null);
-  const attaching = Boolean(open) && attachingFor === open?.id;
+  const attaching = Boolean(open) && (attachingFor === open?.id
+    || (open ? recorder.isSending(open.id, profileId ?? null) : false));
   const attachFailed = Boolean(open) && attachFailedFor === open?.id;
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
      the button that opens it, and that button is in the bar now — see
      `NoteTools`, which owns both. */
-  const attach = useCallback(async (chosen: File, came: "photo" | "recording" | "file" = "photo", target?: Inspiration | null) => {
-    /* `target`: the note a recording was STARTED on — a clip belongs to it,
-       whichever note is open when the recorder hands the clip over. */
-    const note = target ?? open;
+  const attach = useCallback(async (chosen: File, came: "photo" | "file" = "photo") => {
+    /* A RECORDING DOES NOT COME THROUGH HERE ANY MORE (L12): the caller's
+       recorder attaches its own clip (`lib/archive-recorder.ts`), because it
+       outlives this surface and this callback does not. */
+    const note = open;
     if (!note) return;
     setAttachingFor(note.id);
     setAttachFailedFor((was) => (was === note.id ? null : was));
@@ -729,22 +762,14 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       const asFile = verdict?.kind === "file";
       const file = verdict && asFile
         ? (chosen.type === verdict.contentType ? chosen : new File([chosen], chosen.name, { type: verdict.contentType, lastModified: chosen.lastModified }))
-        : came === "recording" ? chosen : await inspectInspirationPhoto(chosen);
-      const pre = await presignAttachment(
-        { filename: file.name, contentType: file.type || "application/octet-stream", size: file.size },
-        undefined,
-        ...(profileId ? [{ profile: profileId }] as const : []),
-      );
-      await uploadToPresignedUrl(pre.uploadUrl, file, pre.headers);
-      await finalizeAttachment({
+        : await inspectInspirationPhoto(chosen);
+      await attachToNote(file, {
+        noteId: note.id,
+        profileId: profileId ?? null,
         /* A STATEMENT ABOUT BYTES THAT WERE READ, on the photo side: the
            sniffer returns one of seven image types or throws, so there is
            no third answer left to guess at. */
-        type: came === "recording" || asFile ? "file" : "image",
-        inspirationId: note.id,
-        key: pre.key,
-        name: file.name,
-        ...(file.type ? { contentType: file.type } : {}),
+        type: asFile ? "file" : "image",
       });
       if (!mounted.current) return;
       /* The open note is a snapshot, so it is re-pointed at the row that
@@ -759,42 +784,89 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       if (mounted.current) setAttachingFor((was) => (was === note.id ? null : was));
     }
   }, [load, open, profileId]);
-  /* The same recorder the notepad uses, handed a different destination —
-     and naming the door it comes through, so `attach` does not try to read
-     a sound file as a photograph. */
   /* ═══ A RECORDING IS BOUND TO THE NOTE IT STARTED ON (review, 2026-10-17)
      The recorder used to hand its clip to whatever note was open when it
      stopped — so recording on one note, leaving it, and opening another put
-     the first note's clip on the second. The note is captured when the
-     recording starts, the clip is attached to that note, and leaving that
-     note (Back, Close, or opening another) stops the recording there and
-     then, so it is attached to the note it was made on. */
-  const recordingFor = useRef<Inspiration | null>(null);
-  const recording = useAudioRecording((clip) => attach(clip, "recording", recordingFor.current));
-  const recordingPhase = recording.phase;
-  /* captured as a recording begins (the phase leaves `idle`) and kept until
-     the next one begins, so the clip handed over after it stops still knows
-     its note */
-  const lastPhase = useRef(recordingPhase);
+     the first note's clip on the second. The note (and this archive's
+     owner) is handed to the recorder when the recording starts, and leaving
+     that note (Back, Close, or opening another) stops the recording there
+     and then, so it is attached to the note it was made on.
+
+     THE RECORDER IS THE CALLER'S (L12, 2026-10-21). It lived here, and
+     closing or remounting the archive mid-recording unmounted it before the
+     browser delivered `stop`, so the clip was refused. It lives in `Home`
+     now; this surface stops it on the way out (below), and the clip lands
+     in `Home`, which attaches it and reports a failure itself. */
+  const recordingPhase = recorder.phase;
+  const recordingOn = recorder.forNote?.noteId ?? null;
+  /* `NoteTools` presses `start()` with no note; this one names the note it
+     is pressed on, inside the tap (no await before the microphone). */
+  const recording = useMemo(() => ({
+    ...recorder,
+    start: async () => { if (open) await recorder.start(open, profileId ?? null); },
+  }), [recorder, open, profileId]);
+  const stopRecording = recorder.stop;
   useEffect(() => {
-    if (lastPhase.current === "idle" && recordingPhase !== "idle") recordingFor.current = open;
-    lastPhase.current = recordingPhase;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recordingPhase]);
-  const stopRecording = recording.stop;
-  useEffect(() => {
-    const bound = recordingFor.current;
-    if (bound && bound.id !== open?.id && recordingPhase !== "idle") void stopRecording();
+    if (recordingOn && recordingOn !== open?.id && recordingPhase !== "idle") void stopRecording();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open?.id]);
+  /* NEVER A LIVE MICROPHONE WITH NO STOP. The Stop is in this surface's
+     bar, so however the archive is left — Close, Escape, the top-of-mind
+     row, Back, a cold link's close, a wall switch remounting it by key —
+     the recording stops here, and the caller attaches what was recorded.
+
+     DECIDED BY THE RECORDER, NOT BY THIS SURFACE'S LAST RENDER (review,
+     2026-10-21). Record pressed and the archive closed before the next
+     render committed read the old "idle" here, so nothing was stopped and
+     the microphone arrived with no Stop on screen. `stopIfLive` reads a
+     mark the press itself sets. */
+  const stopIfLive = recorder.stopIfLive;
+  const leaving = useRef(stopIfLive);
+  leaving.current = stopIfLive;
+  useEffect(() => () => leaving.current(), []);
+  /* A CLIP THAT LANDED ON A NOTE IN THIS ARCHIVE is shown on it: the list
+     is read again and the open note re-pointed at the row that now carries
+     it. Only a landing after this surface mounted — its own first read
+     already holds anything earlier. And ONLY THAT NOTE is re-pointed
+     (review, 2026-10-21): a clip for one note landing while another is open
+     must not swap the open note's card for the list's copy of it. */
+  /* EVERY LANDING SINCE THE LAST LOOK (review, 2026-10-22), not only the
+     latest: two clips landing in one render — the open note's, then
+     another's — used to leave the open note stale. */
+  const landings = recorder.landed;
+  const latestLanding = landings.length ? landings[landings.length - 1]!.seq : 0;
+  const seenLanded = useRef(latestLanding);
+  useEffect(() => {
+    const fresh = landings.filter((item) => item.seq > seenLanded.current);
+    seenLanded.current = latestLanding;
+    const here = new Set(fresh
+      .filter((item) => (item.target.profileId ?? null) === (profileId ?? null))
+      .map((item) => item.target.noteId));
+    if (here.size === 0) return;
+    void load().then((rowsNow) => {
+      if (!mounted.current || !rowsNow) return;
+      setOpen((card) => (card && here.has(card.id) ? rowsNow.find((row) => row.id === card.id) ?? card : card));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestLanding]);
   /* ONE NOTE'S FAILURE IS NOT ANOTHER'S. Opening a different note clears the
      last one's upload failure and the recorder's error line. */
-  const clearRecording = recording.clear;
+  const clearRecording = recorder.clear;
   useEffect(() => {
     /* an upload failure is keyed by its note (`attachFailedFor`): it is
        still said when that note is opened again, and never on another */
     clearRecording();
   }, [open?.id, clearRecording]);
+  /* WHICH NOTE THIS SURFACE IS SHOWING, told to the recorder, so a
+     recording's own failure on any other note — or after this surface has
+     gone — is said on `Home`'s line rather than nowhere. Clearing the
+     recorder's line above never touches that one: it is `Home`'s. */
+  const setViewing = recorder.setViewing;
+  const viewingId = open?.id ?? null;
+  useEffect(() => {
+    setViewing(viewingId === null ? null : { noteId: viewingId, profileId: profileId ?? null });
+    return () => setViewing(null);
+  }, [viewingId, profileId, setViewing]);
 
 
   /**
@@ -1374,6 +1446,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           attaching={attaching}
           saving={saving}
           recording={recording}
+          /* the notepad's recorder is running under this page: one
+             microphone at a time */
+          recordDisabled={recorder.blocked}
           failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : ""}
           /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
              state (founder: "states should show and disappear in the bottom
@@ -1408,13 +1483,20 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           eraseConfirmLabel={say("worldDeleteItAnyway")}
           cancelEraseLabel={say("worldNotNow")}
           erasePending={!ownArchive && askingErase === open.id}
+          /* NOT WHILE ITS CLIP IS ON ITS WAY (review, 2026-10-22): deleting
+             the note mid-upload leaves the clip nowhere to land */
+          eraseDisabled={recorder.isSending(open.id, profileId ?? null)}
           onCancelErase={() => setAskingErase(null)}
           onErase={() => {
             /* NEVER A LIVE MICROPHONE WITH NO STOP: the recording belongs to
                the note being deleted, so it is cancelled with it (review,
                2026-10-17). An agent's archive asks first — the Stop stays in
                that bar — and cancels on the confirming press. */
-            const silence = () => { if (recording.phase !== "idle") void recording.cancel(); };
+            /* ONLY A RECORDING MADE ON THIS NOTE (review, 2026-10-22): the
+               recorder is shared, and another note's clip still being handed
+               over is that note's, not this delete's. */
+            const recordingHere = recorder.forNote?.noteId === open.id && (recorder.forNote?.profileId ?? null) === (profileId ?? null);
+            const silence = () => { if (recording.phase !== "idle" && recordingHere) void recording.cancel(); };
             if (ownArchive) { silence(); eraseOpen(open); return; }
             if (askingErase !== open.id) { setAskingErase(open.id); return; }
             silence();

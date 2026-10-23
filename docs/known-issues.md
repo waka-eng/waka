@@ -1215,8 +1215,8 @@ removed. The races it was chasing, all present on `origin/dev`:
 - Making the close wait for that write was tried and reverted, with these defects: the archive
   flickered while waiting; a closer captured before the wait dropped words cleared during it; a
   late close shut a note opened since; a write that never answered held the archive open; and the
-  20 s deadline added for that closed the archive over a write still running. See L12 for the
-  recording half.
+  20 s deadline added for that closed the archive over a write still running. The recording
+  half (L12) is fixed: see `docs/plans/card-and-archive.md`.
 - Refusing presses away from a card with a save in flight was tried (L11). It closed the first race
   for in-app presses, and was reverted with L11.
 - The field refresh (third bullet above) was not attempted. It needs either the cross-surface
@@ -1278,54 +1278,24 @@ waiting, and report a failure through Home. See `docs/plans/card-and-archive.md`
 
 ---
 
-### L12. Closing the archive mid-recording loses the recording *(pre-existing; open)*
-**Noted on `claude/fix-save-truncation`, 2026-10-18** · `packages/web/src/components/SavesOverlay.tsx` · severity low
+### L14. Switching account or profile drops an archive clip still uploading, and its failure line *(residual of the L12 fix; open)*
+**Noted on `claude/recorder-in-home`, 2026-10-22** · `packages/web/src/pages/Home.tsx`, `packages/web/src/lib/archive-recorder.ts` · severity low
 
-**What.** A recording started on a saved note in the archive is lost if the archive itself is closed
-(Close, Escape) while it runs: the overlay unmounts with the recorder, and the clip is never handed
-over. Same on `origin/dev`. Leaving the NOTE (Back, or opening another note) is handled on this
-branch — the recording stops and attaches to the note it was made on — but unmounting the whole
-archive is not.
+**What.** L12's fix moved the archive's recorder into `HomeExperience`, which outlives the
+archive. `HomeExperience` itself is keyed by `profileStorageKey(storageScope, "world")`, so a
+sign-out, an account switch or a change of the signed-in profile unmounts it on purpose: the old
+world's caches, readers and writers go with it. That takes the archive recorder too. A clip still
+being handed over or uploading at that moment is dropped, and so is any line on Home's failure list
+(`.waka-clip-failed`). An upload already sent may still finish on the server; nothing on screen
+says so.
 
-**Found on `claude/followup-card-archive`, 2026-10-21.** The clip is lost on every way out of the
-archive. A browser's `MediaRecorder` delivers its last chunk and `stop` in a later task. By then the
-overlay has unmounted. The hook's unmount cleanup (`use-audio-recording.ts`) has set `mounted.current
-= false` and bumped its epoch, and `onstop` refuses the clip on either check. Even past those
-checks, the clip's callback is `SavesOverlay`'s `attach`, which sets the overlay's state and reports
-its failure through a surface that is gone. Whether the note-change effect runs before the unmount depends on render
-scheduling, and it doesn't change this outcome.
+**Why not fixed here.** Keeping the recorder across an identity change means lifting it above the
+keyed boundary, into a component that outlives the person it was recording for. The review chose
+not to restructure that boundary for this fix. The window is small: the identity has to change
+during the second or so between Stop and the upload's answer, or while a failure line is up.
 
-- **Close, Escape, the top-of-mind row.** These go through Home's `leaveOpen`, which commits the
-  note and then closes.
-- **The browser's Back.** Home's `popstate` listener does run `commitOpenNote`, and so
-  `leaveNote`, but nothing there saves the clip. A fix must not add a second `popstate` commit.
-- **A wall switch (Me / My agent).** The overlay's React key includes the owner's profile id, so
-  the switch unmounts and remounts it, with no `popstate` and no Close.
-
-**Conclusion.** A fix must save the clip from the overlay's (or the hook's) unmount path itself. It
-must not rely on the note-change effect or on a history listener. It has to get past both of
-`onstop`'s checks, `mounted.current` and the epoch, and hand the clip to a callback Home owns (for
-example a Home-level finalize that reports through Home). Changing the epoch handling alone is not
-enough.
-
-**Tried and reverted: hold the close until the clip is attached.** `SavesOverlay` handed Home a
-finisher, and Close, Escape and the top-of-mind row awaited it, later with a 20 s deadline. Three
-review rounds found:
-
-- the archive flickered while the close waited, then came back;
-- a closer captured before the wait went stale, so words cleared during the wait were dropped;
-- a clip that failed to attach to a note already left was reported nowhere, and the close silently
-  did nothing;
-- a close that answered late closed a note opened since;
-- the recorder's own error path (empty or too-large clip) was reported as attached;
-- a list re-read failing after the attach landed was reported as a failed upload, and flipped the
-  archive to its failed page;
-- an upload that never answered held the archive open, until a deadline was added. The deadline
-  then closed the archive over an upload still running.
-
-**Follow-up.** Make the clip outlive the overlay, and do not hold the close. The recorder hands the
-clip over after unmount, and Home owns the upload and its failure line. See
-`docs/plans/card-and-archive.md`.
+**Follow-up.** If it matters, hold pending clips and failures above `HomeExperience`, keyed by the
+profile they belong to, and show them again only to that profile.
 
 ---
 

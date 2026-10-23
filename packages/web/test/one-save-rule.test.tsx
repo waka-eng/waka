@@ -70,6 +70,10 @@
  *   `supportedRecordingType()` finds a format, and jsdom implements none of it.
  *   The real `useAudioRecording`, the real `SavesOverlay`, the real `NoteTools`
  *   and the real `keep-ready.ts` all run.
+ *
+ * `helpers/archive` plays `Home`'s part: the archive's recorder lives in
+ * `Home` now (L12), so the archive is mounted with the real
+ * `useArchiveRecorder` handed to it, as `Home` mounts it.
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -79,7 +83,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DOCK_SLOT } from "../src/components/NoteTools";
-import { SavesOverlay } from "../src/components/SavesOverlay";
+import { Archive } from "./helpers/archive";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "../src");
@@ -190,7 +194,7 @@ afterEach(async () => {
 /** The archive, with its one row opened. */
 async function openTheSavedNote(): Promise<void> {
   await act(async () => root.render(
-    <SavesOverlay locale="en-US" title="Your Inspirations" onClose={vi.fn()} onNoteOpen={vi.fn()} />,
+    <Archive locale="en-US" title="Your Inspirations" onClose={vi.fn()} onNoteOpen={vi.fn()} />,
   ));
   for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {
     await act(async () => { await Promise.resolve(); });
@@ -350,7 +354,7 @@ it("cancels a running recording when the note is deleted", async () => {
 it("stops a recording when its note is left, and attaches the clip to that note", async () => {
   const onNoteOpen = vi.fn();
   await act(async () => root.render(
-    <SavesOverlay locale="en-US" title="Your Inspirations" onClose={vi.fn()} onNoteOpen={onNoteOpen} />,
+    <Archive locale="en-US" title="Your Inspirations" onClose={vi.fn()} onNoteOpen={onNoteOpen} />,
   ));
   for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {
     await act(async () => { await Promise.resolve(); });

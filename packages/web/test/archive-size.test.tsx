@@ -61,6 +61,10 @@
  * `helpers/canvas-stub` and `helpers/render-home`: the parts of a browser a
  * test cannot have for real. The simulation itself is NOT mocked — the same
  * effects and the same layout pass run here as ship.
+ *
+ * `helpers/archive` plays `Home`'s part: the archive's recorder lives in
+ * `Home` now (L12), so the archive is mounted with the real
+ * `useArchiveRecorder` handed to it, as `Home` mounts it.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -164,7 +168,7 @@ let root: Root | null = null;
 let host: HTMLElement | null = null;
 
 async function doorText(): Promise<string> {
-  const { SavesOverlay } = await import("../src/components/SavesOverlay");
+  const { Archive } = await import("./helpers/archive");
   const { AuthProvider } = await import("../src/lib/auth-context");
   host = document.createElement("div");
   document.body.appendChild(host);
@@ -177,7 +181,7 @@ async function doorText(): Promise<string> {
         createElement(
           AuthProvider,
           null,
-          createElement(SavesOverlay, {
+          createElement(Archive, {
             locale: "en-US",
             /* `undefined` is "mine", which is what every case here is about.
                The profile is the caller's to supply precisely so that an
