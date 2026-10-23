@@ -57,6 +57,8 @@ const S = vi.hoisted(() => ({
   attachedOnRead: null as string | null,
   /* finalize answers that the note is gone */
   noteGone: false,
+  /* finalize answers that the uploaded object is missing (an upload problem) */
+  objectMissing: 0,
   /* finalize waits until the case lets it answer */
   holdFinalize: null as null | (() => void),
   holding: false,
@@ -79,6 +81,7 @@ vi.mock("../src/lib/api", async (original) => {
   finalizeAttachment: async (input: { inspirationId: string }) => {
     if (S.holding) await new Promise<void>((answer) => { S.holdFinalize = answer; });
     if (S.noteGone) throw new actual.ApiError({ status: 404, message: "Inspiration not found" });
+    if (S.objectMissing > 0) { S.objectMissing -= 1; throw new actual.ApiError({ status: 404, message: "S3 object not found at the supplied key. Did the PUT succeed?" }); }
     if (S.failFinalize > 0) { S.failFinalize -= 1; throw new Error("offline"); }
     S.finalized.push(input.inspirationId);
     return { id: "att-1" };
@@ -140,7 +143,7 @@ beforeEach(() => {
   window.localStorage.clear();
   /* the notepad's draft store, so its Record can be pressed */
   (globalThis as { indexedDB?: IDBFactory }).indexedDB = new IDBFactory();
-  Object.assign(S, { presigned: [], finalized: [], failFinalize: 0, undelivered: [], recorders: 0, emptyClip: false, attachedOnRead: null, noteGone: false, holdFinalize: null, holding: false, deleted: [] });
+  Object.assign(S, { presigned: [], finalized: [], failFinalize: 0, undelivered: [], recorders: 0, emptyClip: false, attachedOnRead: null, noteGone: false, objectMissing: 0, holdFinalize: null, holding: false, deleted: [] });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   vi.stubGlobal("MediaRecorder", Recorder);
   Object.defineProperty(window.navigator, "mediaDevices", {
@@ -420,6 +423,23 @@ it("says the recording couldn't be kept when the server no longer has its note",
   expect(line, "the lost clip was said nowhere").toBeTruthy();
   expect(line!.textContent).toContain("The note was deleted, so the recording couldn’t be kept.");
   expect(tryAgainOn(line), "Try again was offered for a note that is gone").toBe(false);
+});
+
+it("keeps the clip and offers Try again when finalize cannot find the uploaded object", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-1");
+  S.objectMissing = 1;
+  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await settle();
+  await deliverStops();
+  const line = q(".waka-clip-failed");
+  expect(line?.textContent, "an upload problem was said as a deleted note").toContain("Couldn’t attach your recording to “something I kept, 1”.");
+  expect(tryAgainOn(line), "the clip was dropped over an upload problem").toBe(true);
+  const retry = [...line!.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Try again")!;
+  await act(async () => retry.click());
+  await settle(4);
+  expect(S.finalized, "Try again did not attach the kept clip").toEqual(["own-1"]);
 });
 
 it("stops offering Try again once the clip's note is deleted here", async () => {

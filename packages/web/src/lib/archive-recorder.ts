@@ -1,7 +1,6 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { ApiError } from "./api";
-import { attachToNote } from "./attach-to-note";
+import { attachToNote, NoteGoneError } from "./attach-to-note";
 import type { MessageKey } from "./i18n";
 import { useAudioRecording } from "./use-audio-recording";
 
@@ -82,10 +81,11 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
     } catch (reason) {
       failureSeq.current += 1;
       const id = failureSeq.current;
-      /* THE NOTE IS GONE (review, 2026-10-22): a 404 or 410 means there is
-         nothing to attach to, so Try again would only fail again. The line
-         says why, with × only. */
-      const gone = reason instanceof ApiError && (reason.status === 404 || reason.status === 410);
+      /* THE NOTE IS GONE (review, 2026-10-22): only finalize saying its
+         note is not there (`NoteGoneError`). Any other 404 — presign's, the
+         PUT's, finalize's "S3 object not found" — is a failed upload, kept
+         with its file and offered again. */
+      const gone = reason instanceof NoteGoneError;
       setFailures((all) => [...all, gone
         ? { id, file: null, target: to, reason: "worldRecordingNoteDeleted" as const }
         : { id, file, target: to }]);

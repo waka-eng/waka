@@ -1,4 +1,17 @@
-import { finalizeAttachment, presignAttachment, uploadToPresignedUrl } from "./api";
+import { ApiError, finalizeAttachment, presignAttachment, uploadToPresignedUrl } from "./api";
+
+/**
+ * THE NOTE ITSELF IS GONE — and only that (review, 2026-10-22). Finalize's
+ * parent lookup answers 404 "Inspiration not found" when the note is not
+ * there (deleted, or never this account's), and a 410 is the server's
+ * "this was deleted" everywhere it says so. Every other 404 is about the
+ * upload, not the note: presign's, the bucket's PUT, and finalize's own
+ * "S3 object not found" — those are a failed upload, worth trying again.
+ */
+export class NoteGoneError extends Error {
+  constructor(readonly cause: ApiError) { super(cause.message); this.name = "NoteGoneError"; }
+}
+const PARENT_GONE = "Inspiration not found";
 
 /**
  * ═══ ONE WAY A FILE BECOMES AN ATTACHMENT ON A SAVED NOTE ═══════════════
@@ -21,11 +34,18 @@ export async function attachToNote(
     ...(to.profileId ? [{ profile: to.profileId }] as const : []),
   );
   await uploadToPresignedUrl(pre.uploadUrl, file, pre.headers);
-  await finalizeAttachment({
-    type: to.type,
-    inspirationId: to.noteId,
-    key: pre.key,
-    name: file.name,
-    ...(file.type ? { contentType: file.type } : {}),
-  });
+  try {
+    await finalizeAttachment({
+      type: to.type,
+      inspirationId: to.noteId,
+      key: pre.key,
+      name: file.name,
+      ...(file.type ? { contentType: file.type } : {}),
+    });
+  } catch (reason) {
+    if (reason instanceof ApiError && (reason.status === 410 || (reason.status === 404 && reason.message === PARENT_GONE))) {
+      throw new NoteGoneError(reason);
+    }
+    throw reason;
+  }
 }
