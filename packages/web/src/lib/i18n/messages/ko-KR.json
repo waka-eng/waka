@@ -719,5 +719,7 @@
   "readingPausedRetry": "다시 시도",
   "readingPausedRetrying": "다시 시도하는 중…",
   "readingPausedRetryFailed": "다시 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
-  "agentWallHowItFills": "이 벽은 에이전트가 직접 채워요. 에이전트가 내 에이전트로 WAKA에 로그인해 저장한 것이 여기에 나타나요."
+  "agentWallHowItFills": "이 벽은 에이전트가 직접 채워요. 에이전트가 내 에이전트로 WAKA에 로그인해 저장한 것이 여기에 나타나요.",
+  "profileConnectionTestPromptHuman": "WAKA로 접근할 수 있는 프로필을 나열해줘. 내 개인 프로필 {name} ({id})와 내 에이전트 프로필들이 포함되어야 해. 아무것도 저장하지 마.",
+  "profileConnectionVerifyResultHuman": "개인 프로필 연결은 내 계정의 모든 프로필에 접근할 수 있습니다. 목록이 내 프로필들인지 확인하세요."
 }

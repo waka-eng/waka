@@ -207,6 +207,30 @@ describe("the gate: a member's erasure and the room's record, side by side", () 
     await t.truncateAll();
   });
 
+  it("retries a rolled-back worker deadlock without repeating object deletion", async () => {
+    const owner = await seedPerson('Busy');
+    const transaction = vi.spyOn(t.db, 'transaction');
+    transaction.mockRejectedValueOnce(Object.assign(new Error('wrapped query error'), { cause: { code: '40P01' } }));
+    const deleteObjects = vi.fn(async () => undefined);
+    try {
+      await eraseAccount(owner.accountId, { db: t.db as never, deleteAttachmentObjects: deleteObjects });
+      expect(transaction).toHaveBeenCalledTimes(2);
+      expect(deleteObjects).toHaveBeenCalledTimes(1);
+      expect(await t.sql`SELECT id FROM accounts WHERE id = ${owner.accountId}`).toHaveLength(0);
+    } finally { transaction.mockRestore(); }
+  });
+
+  it("stops after three deadlocks and leaves the account available for retry", async () => {
+    const owner = await seedPerson('Still busy');
+    const deadlock = Object.assign(new Error('deadlock'), { code: '40P01' });
+    const transaction = vi.spyOn(t.db, 'transaction').mockRejectedValue(deadlock);
+    try {
+      await expect(eraseAccount(owner.accountId, { db: t.db as never, deleteAttachmentObjects: async () => undefined })).rejects.toBe(deadlock);
+      expect(transaction).toHaveBeenCalledTimes(3);
+      expect(await t.sql`SELECT id FROM accounts WHERE id = ${owner.accountId}`).toHaveLength(1);
+    } finally { transaction.mockRestore(); }
+  });
+
   it("keeps the approved record whole — as departed marks — while the person's own stack goes", async () => {
     const g = await seedGroup();
     // A third seat, so one no is a live hand rather than the answer that

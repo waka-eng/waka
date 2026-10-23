@@ -112,6 +112,8 @@ it("reads the agent's own saving on its wall, after the rebuild its bundle cause
   expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
   await act(async () => { toAgent!.click(); });
   await settle(20);
+  // Agent fields now load on entry, independently of their reading.
+  await world.toField(); await settle();
   const { aura, wallKind, present } = world.audit();
   expect(wallKind).toBe('agent');
   expect(present, "the agent's saves never landed on its wall").toBeGreaterThan(0);
@@ -194,6 +196,7 @@ it("already knows the agent wall's reading before you walk onto it", async () =>
   const toAgent = face('Busy agent');
   await act(async () => { toAgent!.click(); });
   await settle(20);
+  await world.toField(); await settle();
   const back = face('Me');
   expect(back, 'the creature offers no way back to your form').toBeTruthy();
   await act(async () => { back!.click(); });

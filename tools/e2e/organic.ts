@@ -591,6 +591,7 @@ export async function mintAgentToken(browser: Session, profileId: string): Promi
     state: field("state"),
     device: field("device"),
     consent: field("consent"),
+    requestedProfileId: field("requestedProfileId"),
     profileId,
   });
 

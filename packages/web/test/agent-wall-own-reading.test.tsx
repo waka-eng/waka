@@ -23,7 +23,9 @@ import type { ApiOwnedProfile } from '../src/lib/api/profiles';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressDockRow, closeOverlay, VIEWER_ID, type MountedWorld } from './helpers/render-home';
-import { ApiError, createInspiration } from '../src/lib/api';
+import { ApiError, createInspiration, fetchPrinciples, updatePrinciple } from '../src/lib/api';
+import { fetchPrincipleRead } from '../src/lib/api/principles';
+import { loadInspirations, loadSignals, loadTopOfMind } from '../src/lib/data';
 import { listConversations, createConversation, type ApiConversation } from '../src/lib/api/conversations';
 
 const FACTS = vi.hoisted(() => ({
@@ -33,6 +35,7 @@ const FACTS = vi.hoisted(() => ({
 const CAPTURES = vi.hoisted(() => ({ rows: [] as Array<{id:string;profileId:string;text:string}> }));
 const CHATS = vi.hoisted(() => ({ rows: [] as ApiConversation[] }));
 const PROFILES = vi.hoisted(() => ({ rows: null as ApiOwnedProfile[] | null }));
+const ARCHIVE = vi.hoisted(() => ({ holdFor: '', release: null as (() => void) | null }));
 const NOAH_SAYS = vi.hoisted(() => 'I remember the decisions Noah made.');
 const ANOTHER_SAYS = vi.hoisted(() => 'I remember the decisions Another made.');
 const OWNER_SAYS = vi.hoisted(() => 'The owner keeps returning to slow mornings.');
@@ -66,12 +69,17 @@ vi.mock('../src/lib/data', async original => {
   });
   return {
     ...await original<typeof import('../src/lib/data')>(), ...dataMockFrom(FACTS),
-    loadInspirations: async (profile?: string) => dataMockFrom({inspirations:[
+    loadInspirations: vi.fn(async (profile?: string) => {
+      const field = await dataMockFrom({inspirations:[
       ...(PROFILES.rows && profile?.startsWith('agent-') ? [{id:`${profile}-note`,text:`Only ${profile} kept this`,daysAgo:1}] : FACTS.inspirations),
       ...CAPTURES.rows.filter(row=>row.profileId===(profile??VIEWER_ID)).map(row=>({...row,daysAgo:0})),
-    ]}).loadInspirations(),
+      ]}).loadInspirations();
+      if (profile && profile === ARCHIVE.holdFor) await new Promise<void>(resolve => { ARCHIVE.release = resolve; });
+      return field;
+    }),
+    loadSignals: vi.fn(async () => []),
     /* yours when no profile (or yours) is named; the agent's otherwise */
-    loadTopOfMind: async (profile?: string) =>
+    loadTopOfMind: vi.fn(async (profile?: string) =>
       profile === 'agent-noah' ? board([entry('noah-lead', NOAH_SAYS, true, 1)])
       : profile === 'agent-another' ? board([entry('another-lead', ANOTHER_SAYS, true, 1)])
       : HOLD.on && profile === 'agent-held'
@@ -85,7 +93,7 @@ vi.mock('../src/lib/data', async original => {
           : board([entry('agent-newer', AGENT_NEWER, false, 1), entry('agent-lead', AGENT_SAYS, true, 3)])
       : profile && profile !== VIEWER_ID
         ? board([entry('agent-newer', AGENT_NEWER, false, 1), entry('agent-lead', AGENT_SAYS, true, 3)])
-        : board([entry('owner-lead', OWNER_SAYS, false, 2)]),
+        : board([entry('owner-lead', OWNER_SAYS, false, 2)])),
   };
 });
 vi.mock('../src/lib/api', async original => ({
@@ -96,6 +104,7 @@ vi.mock('../src/lib/api', async original => ({
   }),
   fetchInspirationSaveRequest: vi.fn(async()=>{throw new ApiError({status:404,code:'save_not_found',message:'Not saved yet'});}),
   fetchPrinciples: vi.fn(async () => []),
+  updatePrinciple: vi.fn(),
   fetchTheWeather: vi.fn(async () => ({ told: null, antechamber: [], days: [] })),
   fetchProfiles: vi.fn(async () => PROFILES.rows ?? (HOLD.on
     ? [{ id: 'agent-held', name: 'Held agent', type: 'agent', createdAt: '2026-08-01T00:00:00.000Z' }]
@@ -136,7 +145,7 @@ vi.mock('../src/lib/auth-context', async original => {
 let world: MountedWorld;
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
-afterEach(() => { PROFILES.rows = null; CHATS.rows = []; CAPTURES.rows = []; vi.mocked(createInspiration).mockClear(); vi.mocked(listConversations).mockClear(); vi.mocked(createConversation).mockClear(); world?.unmount(); vi.useRealTimers(); Object.assign(HOLD, { on: false, reading: 'hang', locale: 'en-US', release: null, deferSays: '' }); });
+afterEach(() => { PROFILES.rows = null; CHATS.rows = []; CAPTURES.rows = []; vi.mocked(createInspiration).mockClear(); vi.mocked(listConversations).mockClear(); vi.mocked(createConversation).mockClear(); world?.unmount(); vi.useRealTimers(); Object.assign(HOLD, { on: false, reading: 'hang', locale: 'en-US', release: null, deferSays: '' }); ARCHIVE.holdFor = ''; ARCHIVE.release = null; vi.mocked(loadInspirations).mockClear(); vi.mocked(loadTopOfMind).mockClear(); vi.mocked(loadSignals).mockClear(); });
 
 async function settle() {
   for (let turn = 0; turn < 12; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
@@ -145,6 +154,97 @@ const face = (label: string) =>
   [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-face')]
     .find(button => button.textContent?.trim() === label);
 const bubble = () => world.container.querySelector('.jar-char-bubble:not(.jar-char-bubble--review)');
+
+function twoAgents() {
+  PROFILES.rows = ['noah', 'another'].map(name => ({ id: `agent-${name}`, accountId: 'account-1', name,
+    type: 'agent', avatarUrl: null, preferredLocale: 'en-US', createdAt: '2026-08-01T00:00:00Z' }));
+}
+
+it('shows the agent reading without fetching its archive, then loads the archive when opened', async () => {
+  twoAgents(); ARCHIVE.holdFor = 'agent-noah';
+  world = await mountWorld(FACTS); await settle();
+  await act(async () => face('noah')!.click()); await settle();
+  expect(reading()).toBe(NOAH_SAYS);
+  expect(vi.mocked(loadInspirations).mock.calls.filter(([id]) => id === 'agent-noah')).toHaveLength(0);
+  expect(world.container.querySelector('.jar-wall-empty'), 'an unread archive must not be called empty').toBeNull();
+  await chooseFromMenu(world.container, 'Inspirations'); await settle();
+  expect(vi.mocked(loadInspirations).mock.calls.filter(([id]) => id === 'agent-noah')).toHaveLength(1);
+  expect(ARCHIVE.release).not.toBeNull();
+  await act(async () => ARCHIVE.release!()); await settle();
+  const archive = world.container.querySelector('.waka-over[data-jar-surface]')!;
+  expect(archive.textContent).toContain('Only agent-noah kept this');
+  expect(archive.textContent).not.toContain('Only agent-another kept this');
+});
+
+it('loads the canvas field on entry and keeps it through a reading refresh', async () => {
+  twoAgents();
+  world = await mountWorld(FACTS); await settle();
+  await act(async () => face('noah')!.click()); await settle();
+  await world.toField(); await settle();
+  expect(world.audit().present).toBe(1);
+  expect(vi.mocked(loadInspirations).mock.calls.filter(([id]) => id === 'agent-noah')).toHaveLength(1);
+  await act(async () => simNow().toTop()); await settle();
+  await act(async () => face('Me')!.click()); await settle();
+  const clock = Date.now;
+  try {
+    Date.now = () => clock() + 61_000;
+    await act(async () => face('noah')!.click()); await settle();
+    expect(reading()).toBe(NOAH_SAYS);
+    expect(vi.mocked(loadInspirations).mock.calls.filter(([id]) => id === 'agent-noah')).toHaveLength(1);
+    expect(world.audit().present).toBe(1);
+  } finally { Date.now = clock; }
+});
+
+it('aborts a delayed field read when leaving its agent and ignores its late response', async () => {
+  twoAgents(); ARCHIVE.holdFor = 'agent-noah';
+  world = await mountWorld(FACTS); await settle();
+  await act(async () => face('noah')!.click()); await settle();
+  await world.toField(); await settle();
+  const signal = vi.mocked(loadInspirations).mock.calls.find(([id]) => id === 'agent-noah')?.[1]?.signal;
+  expect(signal?.aborted).toBe(false);
+  await act(async () => face('another')!.click()); await settle();
+  expect(signal?.aborted).toBe(true);
+  await act(async () => ARCHIVE.release!()); await settle();
+  expect(world.audit().wallId).toBe('agent-another');
+  await act(async () => simNow().toTop()); await settle();
+  expect(reading()).toBe(ANOTHER_SAYS);
+  expect(world.container.querySelector('.jar-reach')?.textContent ?? '').not.toContain('agent-noah');
+});
+
+it.each(['another', 'Me'])('refreshes only the active profile (%s) after returning to the tab', async active => {
+  twoAgents();
+  world = await mountWorld(FACTS); await settle();
+  for (const name of ['noah', 'another']) {
+    await act(async () => face(name)!.click()); await settle();
+  }
+  if (active === 'Me') { await act(async () => face('Me')!.click()); await settle(); }
+  else {
+    const next = (await loadTopOfMind('agent-another'))!;
+    vi.mocked(loadTopOfMind).mockResolvedValueOnce({ ...next, entries: next.entries.map(entry => ({ ...entry, body: 'A refreshed agent reading.' })) });
+  }
+  vi.mocked(loadInspirations).mockClear(); vi.mocked(loadTopOfMind).mockClear(); vi.mocked(loadSignals).mockClear();
+  let visibility: DocumentVisibilityState = 'hidden';
+  const spy = vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
+  const clock = Date.now;
+  try {
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+    Date.now = () => clock() + 45_000; visibility = 'visible';
+    await act(async () => document.dispatchEvent(new Event('visibilitychange'))); await settle();
+    if (active === 'another') {
+      expect(vi.mocked(loadTopOfMind).mock.calls.map(([id]) => id)).toEqual(['agent-another']);
+      expect(vi.mocked(loadSignals).mock.calls.map(([id]) => id)).toEqual(['agent-another']);
+      expect(loadInspirations).not.toHaveBeenCalled();
+      expect(reading()).toBe('A refreshed agent reading.');
+    } else {
+      expect(loadInspirations).toHaveBeenCalledTimes(1);
+      expect(loadSignals).toHaveBeenCalledTimes(1);
+      for (const load of [loadInspirations, loadSignals, loadTopOfMind]) {
+        expect(vi.mocked(load).mock.calls.every(([id]) => !id || id === VIEWER_ID)).toBe(true);
+      }
+      expect(reading()).toBe(OWNER_SAYS);
+    }
+  } finally { Date.now = clock; spy.mockRestore(); }
+});
 
 it("holds up the agent's own reading on its wall, never the owner's", async () => {
   /* a REAL agent, so its bundle is a first load from these mocks — the dev
@@ -573,4 +673,44 @@ it('saves a capture into the selected agent without adding it to the human or an
     expect(world.container.querySelector('.waka-over[data-jar-surface]')?.textContent).not.toContain('A new Noah observation');
     await closeOverlay(world.container); await settle();
   }
+});
+
+
+it('keeps agent principle detail, curation, and share cards bound to their profile', async () => {
+  PROFILES.rows = ['noah','another'].map((name,i)=>({id:`agent-${name}`,accountId:'account-1',name,type:'agent',avatarUrl:null,preferredLocale:'en-US',createdAt:`2026-10-0${i+1}T00:00:00Z`}));
+  const rows = ['first','second'].map((id,rank)=>({id,statement:`Noah principle ${id}`,statementRevision:'1',type:'maxim' as const,state:'held' as const,origin:'minted' as const,rank,locked:false,heldSince:null,conflictsWithId:null,citedSignals:[],createdAt:'2026-10-22T00:00:00Z'}));
+  vi.mocked(fetchPrincipleRead).mockImplementation(async profile=>({principles:profile==='agent-noah'?rows:[],status:{phase:'ready',eligible:false,signalCount:0,topOfMindCount:0}}));
+  vi.mocked(fetchPrinciples).mockImplementation(async options=>options?.profile==='agent-noah'?rows:[]);
+  vi.mocked(updatePrinciple).mockImplementation(async(id,statement)=>{const row=rows.find(row=>row.id===id)!;Object.assign(row,{statement,locked:true});return row;});
+  let location:ReturnType<typeof useLocation>;
+  function LocationProbe(){location=useLocation();return null;}
+  world=await mountWorld(FACTS,{initialEntries:['/principles/first?profile=agent-noah'],routerTools:<LocationProbe/>});await settle();
+  expect(location!.pathname).toBe('/principles/first');
+  expect(new URLSearchParams(location!.search).get('profile')).toBe('agent-noah');
+  expect(world.container.querySelector('.jar-principles-list')?.textContent).toContain('Noah principle first');
+  const edit=world.container.querySelector<HTMLButtonElement>('button[aria-label="Edit wording"]')!;
+  await act(async()=>edit.click());
+  await act(async()=>{
+    const area=world.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="This principle in your own words"]')!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,'Noah corrected words');
+    area.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-ask button')].find(button=>button.textContent==='Save')!.click());await settle();
+  expect(updatePrinciple).toHaveBeenLastCalledWith('first','Noah corrected words',expect.objectContaining({profile:'agent-noah',expectedStatementRevision:'1'}));
+  await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principle-actions button')].find(button=>button.textContent==='Make a share card')!.click());await settle();
+  expect(location!.pathname).toBe('/principles/first/share');
+  expect(world.container.querySelector('.jar-share-name')?.textContent).toContain('noah');
+  expect(world.container.querySelector('.jar-share-name')?.textContent).not.toContain('You');
+  const choose=[...world.container.querySelectorAll<HTMLSelectElement>('select')].find(select=>[...select.options].some(option=>option.value==='second'))!;
+  await act(async()=>{choose.value='second';choose.dispatchEvent(new Event('change',{bubbles:true}));});await settle();
+  expect(location!.pathname).toBe('/principles/second/share');
+  expect(new URLSearchParams(location!.search).get('profile')).toBe('agent-noah');
+  expect(world.container.querySelector('.jar-share-name')?.textContent).toContain('noah');
+  world.unmount();
+  world=await mountWorld(FACTS,{initialEntries:['/chat/new?profile=agent-noah&principle=first'],routerTools:<LocationProbe/>});await settle();
+  expect(location!.pathname).toBe('/chat/new');
+  expect(new URLSearchParams(location!.search).get('profile')).toBe('agent-noah');
+  expect(new URLSearchParams(location!.search).get('principle')).toBe('first');
+  vi.mocked(fetchPrincipleRead).mockResolvedValue({principles:[],status:{phase:'ready',eligible:false,signalCount:0,topOfMindCount:0}});
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);
 });

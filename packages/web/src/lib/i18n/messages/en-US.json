@@ -719,5 +719,7 @@
   "readingPausedRetry": "Retry",
   "readingPausedRetrying": "Retrying…",
   "readingPausedRetryFailed": "Couldn’t restart it. Try again in a moment.",
-  "agentWallHowItFills": "Your agent fills this wall itself: when it signs in to WAKA as your agent, what it saves appears here."
+  "agentWallHowItFills": "Your agent fills this wall itself: when it signs in to WAKA as your agent, what it saves appears here.",
+  "profileConnectionTestPromptHuman": "Use WAKA to list the profiles I can access. It should include my personal profile {name} ({id}) and my agent profiles. Do not save anything.",
+  "profileConnectionVerifyResultHuman": "A personal-profile connection can access every profile in your account. Check that the listed profiles belong to you."
 }

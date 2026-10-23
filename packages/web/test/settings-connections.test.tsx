@@ -181,7 +181,7 @@ it("guides installation, browser consent and a real MCP check as separate steps 
   await openConnections();
   await act(async () => button("Set up MCP").click());
   expect(host.textContent).toContain("Step 1 of 3");
-  expect(host.querySelector("pre")?.textContent).toContain("git clone");
+  expect(host.querySelector("pre")?.textContent).toContain("git clone --branch dev");
   expect(host.textContent).not.toContain("--device");
   await act(async () => button("Copy command").click());
   expect(copied[0]).toContain("pnpm install");
@@ -247,4 +247,17 @@ it('starts MCP setup with the agent currently selected in the world',async()=>{
   expect(host.querySelector('select')?.value).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
   expect(host.querySelector('pre')?.textContent).toContain('Claude Code · anotherone');
   expect(host.querySelector('pre')?.textContent).not.toContain('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+});
+
+it('explains that a personal MCP connection can list every profile in the account', async () => {
+  await openConnections();
+  await act(async()=>button('Set up MCP').click());
+  await act(async()=>button('Reconnect an existing setup').click());
+  await act(async()=>{
+    const select=host.querySelector('select')!;select.value='cccccccc-cccc-4ccc-8ccc-cccccccccccc';select.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  await act(async()=>button('Next: Check connection').click());
+  expect(host.querySelector('blockquote')?.textContent).toContain('and my agent profiles');
+  expect(host.textContent).toContain('can access every profile in your account');
+  expect(host.textContent).not.toContain('Only the selected profile should be listed');
 });

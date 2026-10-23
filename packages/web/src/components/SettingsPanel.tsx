@@ -499,8 +499,10 @@ function SessionSetup({ locale, onDone, activeProfileId }: { locale: SupportedLo
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, [step]);
   const apiUrl = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, "");
+  const hostname = new URL(apiUrl).hostname;
+  const mcpBranch = ['localhost', '127.0.0.1', '[::1]', 'dev.waka.im'].includes(hostname) ? 'dev' : 'main';
   const commands = [
-    "git clone https://github.com/waka-eng/waka-mcp.git\ncd waka-mcp\npnpm install",
+    `git clone --branch ${mcpBranch} https://github.com/waka-eng/waka-mcp.git\ncd waka-mcp\npnpm install`,
     selected ? `WAKA_HOME=${profileHome} WAKA_PROFILE_ID=${quote(selected.id)} pnpm run login -- ${quote(apiUrl)} --profile ${quote(selected.id)} --device ${quote(`Claude Code · ${selected.name}`)}` : '',
     selected ? `claude mcp add --scope user ${quote(`waka-${selected.id}`)} -- env WAKA_HOME=${profileHome} WAKA_PROFILE_ID=${quote(selected.id)} npx tsx "$PWD/src/server.ts"` : '',
   ];
@@ -531,8 +533,8 @@ function SessionSetup({ locale, onDone, activeProfileId }: { locale: SupportedLo
       </> : <>
         <p>{say("profileConnectionRegisterHint")}</p>{selected ? <CommandBlock locale={locale} command={commands[2]!} /> : null}
         <p>{say("profileConnectionVerifyHint")}</p>
-        <blockquote className="waka-session-prompt">{formatMessage(locale, "profileConnectionTestPrompt", { name: selected?.name ?? "", id: selected?.id ?? "" })}</blockquote>
-        <p className="waka-settings-note">{say("profileConnectionVerifyResult")}</p>
+        <blockquote className="waka-session-prompt">{formatMessage(locale, selected?.type === 'human' ? "profileConnectionTestPromptHuman" : "profileConnectionTestPrompt", { name: selected?.name ?? "", id: selected?.id ?? "" })}</blockquote>
+        <p className="waka-settings-note">{say(selected?.type === 'human' ? "profileConnectionVerifyResultHuman" : "profileConnectionVerifyResult")}</p>
       </>}
     </div>
     <div className="waka-session-actions">

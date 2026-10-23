@@ -265,7 +265,7 @@ it('keeps the selected principle and its route after editing, so Back returns to
   await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(editor,'Leave unhurried time for thought.');editor.dispatchEvent(new Event('input',{bubbles:true}));});
   await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principles-list--personal button')].find(button=>button.textContent==='Save')!.click());await settle();
   expect(location.pathname).toBe('/principles/principle-one');expect(world.container.textContent).toContain('Make a share card');
-  expect(updatePrinciple).toHaveBeenCalledWith('principle-one','Leave unhurried time for thought.');
+  expect(updatePrinciple).toHaveBeenCalledWith('principle-one','Leave unhurried time for thought.', expect.objectContaining({ profile: VIEWER_ID }));
   await navigate(-1);expect(location.pathname+location.search).toBe('/');
 });
 it('shows principle management only after choosing the words to read',async()=>{

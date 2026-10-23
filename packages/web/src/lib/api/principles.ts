@@ -76,16 +76,16 @@ export async function fetchPrincipleStatements(id:string,profileId:string,signal
    landing after it, an answer from before a sign-out) needed its own rule. */
 
 /** GET /principles/status. */
-export async function fetchPrincipleStatus(): Promise<ApiPrincipleStatus> {
-  return (await getJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/status"), "Principles status could not be loaded")).status;
+export async function fetchPrincipleStatus(profile?: string): Promise<ApiPrincipleStatus> {
+  return (await getJson<{ status: ApiPrincipleStatus }>(apiPath(`/principles/status${profile ? `?profile=${encodeURIComponent(profile)}` : ""}`), "Principles status could not be loaded")).status;
 }
 
-export async function fetchPrincipleRead(): Promise<{
+export async function fetchPrincipleRead(profile?: string): Promise<{
   principles: ApiPrinciple[]; status: ApiPrincipleStatus;
 }> {
   const [rows, status] = await Promise.all([
-    getJson<{ principles: ApiPrinciple[] }>(apiPath("/principles"), "Principles could not be loaded"),
-    fetchPrincipleStatus(),
+    getJson<{ principles: ApiPrinciple[] }>(apiPath(`/principles${profile ? `?profile=${encodeURIComponent(profile)}` : ""}`), "Principles could not be loaded"),
+    fetchPrincipleStatus(profile),
   ]);
   return { principles: rows.principles, status };
 }
@@ -122,11 +122,11 @@ export async function fetchPrinciples(options:ProfileScoped={},signal?:AbortSign
 export async function updatePrinciple(
   principleId: string,
   statement: string,
-  options?:{profile:string;expectedStatementRevision:string;signal?:AbortSignal},
+  options?:{profile:string;expectedStatementRevision?:string;signal?:AbortSignal},
 ): Promise<ApiPrinciple> {
   const body = await patchJson<{ principle: ApiPrinciple }>(
     apiPath(`/principles/${encodeURIComponent(principleId)}${options?`?profile=${encodeURIComponent(options.profile)}`:''}`),
-    { statement,...(options?{expectedStatementRevision:options.expectedStatementRevision}:{}) },
+    { statement,...(options?.expectedStatementRevision?{expectedStatementRevision:options.expectedStatementRevision}:{}) },
     "That principle could not be updated",
     options?.signal,
   );
@@ -135,9 +135,9 @@ export async function updatePrinciple(
 }
 
 /** DELETE /principles/:id. */
-export async function deletePrinciple(principleId: string): Promise<void> {
+export async function deletePrinciple(principleId: string, profile?: string): Promise<void> {
   await requestVoid(
-    apiPath(`/principles/${encodeURIComponent(principleId)}`),
+    apiPath(`/principles/${encodeURIComponent(principleId)}${profile ? `?profile=${encodeURIComponent(profile)}` : ""}`),
     "DELETE",
     undefined,
     "That principle could not be removed",
@@ -145,9 +145,9 @@ export async function deletePrinciple(principleId: string): Promise<void> {
 }
 
 /** POST /principles/reorder — the whole order; sticky against generation. */
-export async function reorderPrinciples(order: string[]): Promise<ApiPrinciple[]> {
+export async function reorderPrinciples(order: string[], profile?: string): Promise<ApiPrinciple[]> {
   const body = await postJson<{ principles: ApiPrinciple[] }>(
-    apiPath("/principles/reorder"),
+    apiPath(`/principles/reorder${profile ? `?profile=${encodeURIComponent(profile)}` : ""}`),
     { order },
     "That order could not be saved",
   );
@@ -155,16 +155,16 @@ export async function reorderPrinciples(order: string[]): Promise<ApiPrinciple[]
 }
 
 /** POST /feedback with a not_true verdict — marks the principle contested. */
-export async function disputePrinciple(principleId: string, targetRevision?: string): Promise<void> {
+export async function disputePrinciple(principleId: string, targetRevision?: string, profile?: string): Promise<void> {
   await requestVoid(
     apiPath("/feedback"),
     "POST",
-    { targetType: "principle", targetId: principleId, value: "not_true", ...(targetRevision ? { targetRevision } : {}) },
+    { targetType: "principle", targetId: principleId, value: "not_true", ...(targetRevision ? { targetRevision } : {}), ...(profile ? { profile } : {}) },
     "That dispute could not be recorded",
   );
 }
 
-export async function undoPrincipleDispute(principleId: string, disputeId: string): Promise<void> {
-  await requestVoid(apiPath(`/principles/${encodeURIComponent(principleId)}/disputes/${encodeURIComponent(disputeId)}`),
+export async function undoPrincipleDispute(principleId: string, disputeId: string, profile?: string): Promise<void> {
+  await requestVoid(apiPath(`/principles/${encodeURIComponent(principleId)}/disputes/${encodeURIComponent(disputeId)}${profile ? `?profile=${encodeURIComponent(profile)}` : ""}`),
     "DELETE", undefined, "That dispute could not be undone");
 }

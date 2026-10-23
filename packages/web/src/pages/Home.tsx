@@ -234,7 +234,6 @@ import {
   loadInspiration,
   loadInspirations,
   beyondOf,
-  EMPTY_FIELD,
   loadTopOfMind,
   loadTopOfMindVersion,
   loadSignal,
@@ -246,6 +245,7 @@ import {
   type Evidence,
   type Signal,
   type TopOfMind,
+  type FieldLoad,
 } from "../lib/data";
 import { RECEIPTS } from "../lib/receipts";
 import { useOptionalAuth } from "../lib/auth-context";
@@ -481,9 +481,8 @@ async function loadAgentRoster(): Promise<{
 }
 
 /**
- * One agent's wall, rebuilt from its own layers — used for every wall at
- * load, and again for one wall each time travel toward it begins, so the
- * ground an arrival finds is as current as the archive underneath it.
+ * One agent's reading and patterns. Its archive is read separately, only
+ * when the person opens the archive or enters the canvas field.
  */
 async function loadAgentBundle(
   p: {
@@ -501,16 +500,14 @@ async function loadAgentBundle(
            became no foot at all until a minute and another travel lined up.
            Strict mode lets the failure THROW, so the refresher keeps what
            it has and retries on the next approach instead. */
-        const [field, signals, tom] = opts.strict
-          ? await Promise.all([loadInspirations(p.id), loadSignals(p.id), loadTopOfMind(p.id)])
+        const [signals, tom] = opts.strict
+          ? await Promise.all([loadSignals(p.id), loadTopOfMind(p.id)])
           : await Promise.all([
-              loadInspirations(p.id).catch(() => EMPTY_FIELD),
               loadSignals(p.id).catch(() => [] as Signal[]),
               /* forgiving, but not silent: the caller must be able to
                  tell "formed nothing" from "could not ask" */
               loadTopOfMind(p.id).catch(() => { opts.onReadingFailed?.(); return null; }),
             ]);
-        const inspirations = field.inspirations;
         const entries = (tom?.entries ?? []).slice().sort((a, b) => a.createdMs - b.createdMs);
         const lead = tom?.entries.find((e) => e.pinned) ?? tom?.entries[0] ?? null;
         const iso = (ms: number) => new Date(ms).toISOString();
@@ -527,12 +524,7 @@ async function loadAgentBundle(
             id: p.id,
             name: p.name,
             kind: "agent" as const,
-            /* the profile row carries no creation time; its oldest memory is
-               the honest stand-in, and an agent that has kept nothing has no
-               date because it has no history yet */
-            createdAt: inspirations.length
-              ? iso(Math.min(...inspirations.map((c) => c.capturedMs)))
-              : "",
+            createdAt: p.createdAt,
           },
           /* THE DIAL NEEDS REAL DATES OR IT SCRUBS NOTHING. Each entry of the
              board is a moment this agent said something about itself, so the
@@ -550,26 +542,29 @@ async function loadAgentBundle(
                 evidenceSignalIds: [],
               })),
           },
-          inspirations: inspirations.map((c) => ({
-            id: c.id,
-            agentId: p.id,
-            /* the canon's own distinction: content the agent initiated versus
-               content a person relayed through it */
-            origin: c.source === "agent" ? ("agent" as const) : ("human" as const),
-            textPreview: c.preview,
-            /* no pattern has quoted it from here: the quote belongs to the
-               evidence row, which this wall does not fetch */
-            quote: null,
-            kind: c.kind,
-            capturedAt: iso(c.capturedMs),
-            updatedAt: iso(c.updatedMs),
-            producedBy: null,
-          })),
-          /* the same ceiling as every other ground: an agent that has kept
-             more than the walk follows says so rather than reporting the
-             length of what arrived */
-          inspirationTotal: field.total,
+          // Visiting the reading does not walk the archive. The archive
+          // overlay owns its read; the canvas loads its field on entry.
+          inspirations: [],
         };
+}
+
+function agentField(profileId: string, field: FieldLoad): Pick<AgentBundle, 'inspirations' | 'inspirationTotal'> {
+  const iso = (ms: number) => new Date(ms).toISOString();
+  return {
+    inspirations: field.inspirations.map((c) => ({
+      id: c.id,
+      agentId: profileId,
+      origin: c.source === "agent" ? "agent" : "human",
+      textPreview: c.preview,
+      // Quotes belong to evidence, which this summary does not fetch.
+      quote: null,
+      kind: c.kind,
+      capturedAt: iso(c.capturedMs),
+      updatedAt: iso(c.updatedMs),
+      producedBy: null,
+    })),
+    inspirationTotal: field.total,
+  };
 }
 
 
@@ -953,9 +948,12 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
    * it, `/principles` was the only layer with no address in the world at all,
    * and the menu existed largely to carry it.
    */
-  const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
-  const [principlesRead,setPrinciplesRead]=useState(false);
-  const acceptPrinciples=useCallback((rows:ApiPrinciple[])=>{setPrinciples(rows);setPrinciplesRead(true);},[]);
+  const [principleMemory, setPrincipleMemory] = useState<{ profileId: string | undefined; rows: ApiPrinciple[]; read: boolean }>({ profileId: undefined, rows: [], read: false });
+  const principles = principleMemory.profileId === memoryProfileId ? principleMemory.rows : [];
+  const principlesRead = principleMemory.profileId === memoryProfileId && principleMemory.read;
+  const acceptPrinciples = useCallback((rows: ApiPrinciple[]) => {
+    if (memoryScopeRef.current?.profileId === memoryProfileId) setPrincipleMemory({ profileId: memoryProfileId, rows, read: true });
+  }, [memoryProfileId]);
   /**
    * LAYER FOUR BECOMES SOMETHING YOU CAN ANSWER, not only read.
    *
@@ -987,6 +985,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   },[pick,pickedPrincipleExists,viewNavigation.view?.sharePrinciple]);
   const [pDraft, setPDraft] = useState<{ id: string; text: string } | null>(null);
   const [pGoing, setPGoing] = useState<string | null>(null);
+  useEffect(() => { setPDraft(null); setPGoing(null); setPRoots(null); }, [memoryProfileId]);
   /**
    * WHAT A PRINCIPLE GREW FROM — the one edge the world could not draw.
    *
@@ -2906,6 +2905,11 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
       boundary (observed as a wall that says six and lights none). Travel is
       when the refresh is ASKED for; arrival is when it may land. */
   const pendingAgentBundlesRef = useRef<Map<string, AgentBundle>>(new Map());
+  const pendingAgentFieldsRef = useRef(new Map<string, FieldLoad>());
+  // Explicit active-profile reading refreshes may also land at rest.
+  const agentLandOnRestRef = useRef(new Set<string>());
+  const agentFieldReadAtRef = useRef(new Map<string, number>());
+  const [agentFieldRevision, setAgentFieldRevision] = useState(0);
   /** Which agents' last landed bundle could not read their top of mind. The
       first load is forgiving — a failed read becomes an empty board rather
       than no wall — so an empty bundle alone cannot tell "has formed nothing"
@@ -2926,6 +2930,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     if (!homeMountedRef.current) return;
     const failed = new Map<string, boolean>();
     for (const id of fresh.keys()) {
+      agentLandOnRestRef.current.delete(id);
       failed.set(id, pendingReadingFailedRef.current.get(id) === true);
       pendingReadingFailedRef.current.delete(id);
     }
@@ -2934,7 +2939,10 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
       const replaced = (prev ?? []).map((a) => {
         const f = left.get(a.agent.id);
         left.delete(a.agent.id);
-        return f ?? a;
+        // Reading refreshes carry no archive. Keep a previously loaded field.
+        return f ? (f.inspirationTotal === undefined
+          ? { ...f, inspirations: a.inspirations, inspirationTotal: a.inspirationTotal }
+          : f) : a;
       });
       /* anything left is a FIRST load — the wall's memory arriving at all */
       return [...replaced, ...left.values()];
@@ -2974,10 +2982,18 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      and `navigationState().wall`. Never `atWallRef`, which is React's echo
      of the last arrival and a render behind it. A FIRST load is a pending
      bundle whose agent is not in `agents` yet — a refresh has a wall to
-     stand on until the next arrival; a first load has nothing. */
+     stand on until the next arrival; a first load has nothing.
+     Explicit tab-return refreshes and requested fields may also land here;
+     both still wait for the loop's own rest edge. */
   const landFirstLoadOn = useCallback((wall: Space) => {
     if (!homeMountedRef.current || wall.kind !== "agent") return;
-    if (agentsRef.current.some((a) => a.agent.id === wall.id)) return;
+    const field = pendingAgentFieldsRef.current.get(wall.id);
+    if (field) {
+      pendingAgentFieldsRef.current.delete(wall.id);
+      setAgents(previous => (previous ?? []).map(agent => agent.agent.id === wall.id
+        ? { ...agent, ...agentField(wall.id, field) } : agent));
+    }
+    if (agentsRef.current.some((a) => a.agent.id === wall.id) && !agentLandOnRestRef.current.has(wall.id)) return;
     const fresh = pendingAgentBundlesRef.current.get(wall.id);
     if (!fresh) return;
     pendingAgentBundlesRef.current.delete(wall.id);
@@ -2987,21 +3003,35 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
       needs no entry here — the bundle's presence in `agents` is readiness. */
   const agentFirstLoadRef = useRef<Map<string, "pending" | "failed">>(new Map());
   const loadAgentWall = useCallback(
-    (agentId: string) => {
+    (agentId: string, refreshActive = false) => {
       const entry = (agentRoster ?? []).find((r) => r.id === agentId);
-      if (!entry || agentRefreshBusyRef.current.has(agentId)) return;
-      if (pendingAgentBundlesRef.current.has(agentId)) return;
+      if (!entry) return;
+      if (refreshActive) agentLandOnRestRef.current.add(agentId);
+      if (agentRefreshBusyRef.current.has(agentId)) return;
+      if (pendingAgentBundlesRef.current.has(agentId)) {
+        if (refreshActive) {
+          const sim = simApiRef.current;
+          const here = sim?.isResting() ? sim.navigationState().wall : null;
+          if (here?.kind === 'agent' && here.id === agentId) landFirstLoadOn(here);
+        }
+        return;
+      }
       const loaded = (agents ?? []).some((a) => a.agent.id === agentId);
       if (loaded) {
         /* REFRESH posture: strict, throttled, keep-last-good on failure. */
         const last = agentRefreshedAtRef.current.get(agentId) ?? 0;
-        if (Date.now() - last < 60_000) return;
+        if (!refreshActive && Date.now() - last < 60_000) return;
         agentRefreshedAtRef.current.set(agentId, Date.now());
         agentRefreshBusyRef.current.add(agentId);
         void loadAgentBundle(entry, { strict: true })
           .then((fresh) => {
             pendingAgentBundlesRef.current.set(agentId, fresh);
             pendingReadingFailedRef.current.set(agentId, false);
+            if (agentLandOnRestRef.current.has(agentId)) {
+              const sim = simApiRef.current;
+              const here = sim?.isResting() ? sim.navigationState().wall : null;
+              if (here?.kind === 'agent' && here.id === agentId) landFirstLoadOn(here);
+            }
           })
           .catch(() => {
             /* keep the last good ground, and let the very next approach
@@ -3040,6 +3070,27 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     },
     [agentRoster, agents, landFirstLoadOn],
   );
+  const loadAgentWallRef = useRef(loadAgentWall);
+  loadAgentWallRef.current = loadAgentWall;
+
+  const agentFieldOwner = inField && atWall.kind === 'agent' && !viewNavigation.view?.open
+    ? atWall.id : null;
+  const agentFieldReady = Boolean(agentFieldOwner && agents?.some(a => a.agent.id === agentFieldOwner));
+  useEffect(() => {
+    if (!agentFieldOwner || !agentFieldReady || offlineRef.current) return;
+    if (Date.now() - (agentFieldReadAtRef.current.get(agentFieldOwner) ?? 0) < 60_000) return;
+    const controller = new AbortController();
+    const mutation = sourceListMutationRef.current;
+    void loadInspirations(agentFieldOwner, { signal: controller.signal }).then(field => {
+      if (controller.signal.aborted || !homeMountedRef.current || mutation !== sourceListMutationRef.current) return;
+      pendingAgentFieldsRef.current.set(agentFieldOwner, field);
+      agentFieldReadAtRef.current.set(agentFieldOwner, Date.now());
+      const sim = simApiRef.current;
+      const here = sim?.isResting() ? sim.navigationState().wall : null;
+      if (here?.kind === 'agent' && here.id === agentFieldOwner) landFirstLoadOn(here);
+    }).catch(() => { /* Keep the previous field; another entry retries. */ });
+    return () => controller.abort();
+  }, [agentFieldOwner, agentFieldReady, agentFieldRevision, landFirstLoadOn]);
 
   /**
    * Warm a wall, whatever kind it is. An agent refetches its own layers; your
@@ -3065,11 +3116,13 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      settles in place instead of shearing a travel apart. */
   useEffect(() => {
     const pending = pendingAgentBundlesRef.current;
-    if (pending.size === 0) return;
-    const fresh = new Map(pending);
-    pending.clear();
-    applyAgentBundles(fresh);
-  }, [atWall, applyAgentBundles]);
+    if (pending.size > 0) {
+      const fresh = new Map(pending);
+      pending.clear();
+      applyAgentBundles(fresh);
+    }
+    landFirstLoadOn(atWall);
+  }, [atWall, applyAgentBundles, landFirstLoadOn]);
 
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id && prev.name === w.name && prev.col === w.col ? prev : w));
@@ -3406,6 +3459,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
       /* the fixture has no server to ask, and a signed-out visitor has no
          business making three requests that will all 401 */
       if (offlineRef.current) return;
+      const activeProfile = memoryScopeRef.current?.profileId;
+      if (activeProfile && activeProfile !== storageScope?.profileId) {
+        agentFieldReadAtRef.current.delete(activeProfile);
+        setAgentFieldRevision(value => value + 1);
+        loadAgentWallRef.current(activeProfile, true);
+        return;
+      }
       /* THE SAME GUARD AS THE FIRST READ AND THE RECOVERED-SAVE READ. A save
          or a delete made while this list was in flight is not in it, and
          writing it over the field would drop the new memory or bring back the
@@ -3419,17 +3479,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
           setFieldBeyond(beyondOf(field));
         }),
         loadAgentRoster().then(({ roster }) => setAgentRoster(roster)),
-        /* only walls whose memory is already held refresh; the rest load on
-           approach as ever. Strict + at rest, so a failure changes nothing. */
-        ...agentsRef.current.map((a) =>
-          loadAgentBundle(a.agent, { strict: true })
-            .then((fresh) => {
-              setAgents((prev) =>
-                (prev ?? []).map((x) => (x.agent.id === fresh.agent.id ? fresh : x)),
-              );
-            })
-            .catch(() => undefined),
-        ),
         readSkyRef.current(),
       ]);
       // Recheck the displayed artifact, not a newer headline behind an open
@@ -5418,6 +5467,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
         }).catch(() => undefined);
       } else {
         const profile = agentRoster?.find(profile => profile.id === intent.profileId);
+        sourceListMutationRef.current += 1;
+        agentFieldReadAtRef.current.delete(intent.profileId);
+        pendingAgentFieldsRef.current.delete(intent.profileId);
         if (profile) {
           void loadAgentBundle(profile).then(bundle => {
             if (intent.profileId === memoryScopeRef.current?.profileId) applyAgentBundles(new Map([[profile.id, bundle]]));
@@ -6621,8 +6673,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
      decided there (declaring re-ranks, disputing can change a state), and a
      list this short is not worth a reconciliation that can disagree with it. */
   const reloadPrinciples = useCallback(async () => {
-    const rows = await fetchPrinciples();
-    setPrinciples(rows);
+    const profileId = memoryScopeRef.current?.profileId;
+    const rows = await fetchPrinciples(profileId ? { profile: profileId } : {});
+    if (memoryScopeRef.current?.profileId === profileId) setPrincipleMemory({ profileId, rows, read: true });
   }, []);
 
   /**
@@ -6646,20 +6699,20 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const text = draft.text.trim();
     if (text === "") return;
     setPBusy(true);
-    void updatePrinciple(draft.id, text)
+    void updatePrinciple(draft.id, text, memoryScope ? { profile: memoryScope.profileId, expectedStatementRevision: principles.find(row => row.id === draft.id)?.statementRevision } : undefined)
       .then(() => reloadPrinciples())
       .then(() => {
         setPDraft(null);
       })
       .catch((err) => setCharSay(whyFailed(err, say("worldNotSaved"))))
       .finally(() => setPBusy(false));
-  }, [pDraft, pBusy, reloadPrinciples, whyFailed]);
+  }, [pDraft, pBusy, reloadPrinciples, whyFailed, memoryScope, principles]);
 
   const disputeThisPrinciple = useCallback(
     (id: string, disputeId?: string, targetRevision?: string) => {
       if (pBusy) return;
       setPBusy(true);
-      (disputeId ? undoPrincipleDispute(id, disputeId) : disputePrinciple(id, targetRevision))
+      (disputeId ? undoPrincipleDispute(id, disputeId, memoryScopeRef.current?.profileId) : disputePrinciple(id, targetRevision, memoryScopeRef.current?.profileId))
         .then(() => reloadPrinciples())
         .catch((err) => {
           if ((err as { code?: string })?.code === 'feedback_target_changed') void reloadPrinciples();
@@ -6674,7 +6727,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     (id: string) => {
       if (pBusy) return;
       setPBusy(true);
-      deletePrinciple(id)
+      deletePrinciple(id, memoryScopeRef.current?.profileId)
         .then(() => reloadPrinciples())
         .then(() => {
           setPGoing(null);
@@ -6699,12 +6752,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
       if (at < 0 || to < 0 || to >= order.length) return;
       order.splice(to, 0, ...order.splice(at, 1));
       setPBusy(true);
-      reorderPrinciples(order)
-        .then((rows) => setPrinciples(rows))
+      reorderPrinciples(order, memoryScopeRef.current?.profileId)
+        .then(acceptPrinciples)
         .catch((err) => setCharSay(whyFailed(err, say("worldOrderNotSaved"))))
         .finally(() => setPBusy(false));
     },
-    [pBusy, principles, whyFailed],
+    [pBusy, principles, whyFailed, acceptPrinciples],
   );
 
   /* ═══ THE AGENT-KEY EFFECTS AND VERBS ARE GONE — THEY COULD NOT FIRE ══
@@ -7591,8 +7644,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
     inspirationId: selectedViewBall?.sigId ?? selectedId,
     reflectionId: reflectOpen ? (requestedViewRef.current?.inspirationId === (selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
     find: seek !== null, compose: mouthOpen,
-    principleId:atWall.kind==='self'&&inSky?pick:null,
-    sharePrinciple:atWall.kind==='self'&&inSky&&(viewNavigation.view?.sharePrinciple??false),conversationId:viewNavigation.view?.conversationId??null,
+    principleId:viewNavigation.view?.conversationId==='new'?viewNavigation.view.principleId:inSky?pick:null,
+    sharePrinciple:inSky&&(viewNavigation.view?.sharePrinciple??false),conversationId:viewNavigation.view?.conversationId??null,
     /* WHAT IS HELD UP IS NOT SOMETHING THE WORLD OBSERVES, so it is carried
        rather than derived — the same as the review, the conversation and the
        share above it.
@@ -7827,19 +7880,20 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         heading — and the sky is the layer's ONE home now:
                         the verbs live here too (founder, 2026-09-01: retire
                         "how you choose"; the wall line predated a sky that
-                        could hold anything). Your own wall's sky only:
-                        another wall's keeps the forming words until sharing
-                        values is designed on purpose. */}
-                    {w.kind === "self" ? <PrincipleRead
-                      key={`${auth?.profile?.id}:${spaceKey(w)}`}
+                        could hold anything). The active profile owns these
+                        rows, including when its human owner opens an agent. */}
+                    {here ? <PrincipleRead
+                      key={`${memoryProfileId}:${spaceKey(w)}`}
+                      profileId={w.kind === "agent" ? w.id : undefined}
+                      name={w.name}
                       active={here && !offlineRef.current}
                       locale={locale}
                       onRead={acceptPrinciples}
                     /> : null}
-                    {w.kind==='self'&&pick&&principlesRead&&!principles.some(row=>row.id===pick)?<p role="status" className="jar-values-sub">
-                      {say('worldPrincipleUnavailable')} <button type="button" onClick={()=>{setPick(null);viewNavigation.write({...EMPTY_VIEW,section:'sky'},{replace:true});}}>{say('worldPrinciplesBack')}</button>
+                    {here&&pick&&principlesRead&&!principles.some(row=>row.id===pick)?<p role="status" className="jar-values-sub">
+                      {say('worldPrincipleUnavailable')} <button type="button" onClick={()=>{setPick(null);viewNavigation.write({...EMPTY_VIEW,wallId:atWall.kind==='agent'?atWall.id:null,section:'sky'},{replace:true});}}>{say('worldPrinciplesBack')}</button>
                     </p>:null}
-                    {w.kind === "self" && principles.length > 0 ? (
+                    {here && principles.length > 0 ? (
                       <>
                         {/* THE LAYER, NOT THE NAME — the same ruling the board
                             follows ("this should always say TOP OF MIND at the
@@ -7915,7 +7969,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                               aria-expanded={pick === pr.id}
                               onClick={() => {
                                 const selected=pick===pr.id?null:pr.id;setPick(selected);
-                                viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:selected});
+                                viewNavigation.write({...EMPTY_VIEW,wallId:atWall.kind==='agent'?atWall.id:null,section:'sky',principleId:selected});
                               }}
                             >
                               {pr.statement}
@@ -7993,8 +8047,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                           ) : null}
                           {pick === pr.id && !pDraft ? (
                             <div className="jar-ask jar-principle-actions">
-                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:pr.id,sharePrinciple:true})}>{say('worldSharePrinciple')}</button>:null}
-                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new',principleId:pr.id})}>{say('worldTalkAboutThis')}</button>:null}
+                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,wallId:atWall.kind==='agent'?atWall.id:null,section:'sky',principleId:pr.id,sharePrinciple:true})}>{say('worldSharePrinciple')}</button>:null}
+                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,wallId:atWall.kind==='agent'?atWall.id:null,conversationId:'new',principleId:pr.id})}>{say('worldTalkAboutThis')}</button>:null}
                               {pr.citedSignals.length > 0 ? (
                                 <>
                                   <button
@@ -8080,7 +8134,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       ))}
                     </ul>
                       </>
-                    ) : w.kind === "agent" ? (
+                    ) : !here && w.kind === "agent" ? (
                       <>
                         <p className="jar-values-lead">
                           {formatMessage(locale, "worldValuesLeadOther", { name: w.name })}
@@ -8975,7 +9029,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     given nothing genuinely is waiting on YOU, and that is a
                     fact about what to do next rather than a description of
                     the emptiness. */}
-                {ready && c?.empty && !c?.formingAlt && w.kind === "agent" ? (
+                {ready && c?.empty && !c?.formingAlt && w.kind === "agent" &&
+                  agents?.some(a => a.agent.id === w.id && a.inspirationTotal === 0 && !a.direction.current) ? (
                   <p className="jar-wall-empty">
                     {say("worldAgentEmptyGive")}
                     {/* THE LINE NAMED A WAIT AND NOT THE WAY. "Give me
@@ -11999,8 +12054,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
       ) : null}
       {storageScope&&viewNavigation.view?.principleId&&viewNavigation.view.sharePrinciple?<PrincipleShare
         key={`${conversationScope?.accountId}:${conversationScope?.profileId}:${viewNavigation.view.principleId}`} scope={conversationScope ?? storageScope}
-        id={viewNavigation.view.principleId} name={auth?.profile?.name??''} locale={locale} onClose={viewNavigation.closeShare}
-        onChoose={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true},{replace:true})}/>:null}
+        id={viewNavigation.view.principleId} name={conversationProfile?.name??''} locale={locale} onClose={viewNavigation.closeShare}
+        onChoose={id=>viewNavigation.write({...EMPTY_VIEW,wallId:viewNavigation.view?.wallId??null,section:'sky',principleId:id,sharePrinciple:true},{replace:true})}/>:null}
       {thingShare ? (
         <ShareSheet target={thingShare} locale={locale} onClose={() => setThingShare(null)} />
       ) : null}

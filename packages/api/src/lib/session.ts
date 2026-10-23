@@ -11,12 +11,14 @@
  * binding — see `resolveProfileAccess` in ./middleware.ts.
  */
 
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, lt } from "drizzle-orm";
 
 import { accounts, profiles, sessions, type ProfileType } from "../db/index.js";
 import { SESSION_TTL_SECONDS } from "./auth.js";
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale, type SupportedLocale } from "./locales.js";
+
+const SESSION_ACTIVITY_INTERVAL_MS = 60_000;
 
 /** SHA-256 hex digest via WebCrypto — available in Node 20 and on Lambda. */
 export async function hashSessionToken(token: string): Promise<string> {
@@ -130,6 +132,7 @@ export async function lookupSession(token: string): Promise<AuthenticatedSession
   const rows = await db
     .select({
       sessionId: sessions.id,
+      lastSeenAt: sessions.lastSeenAt,
       profileId: profiles.id,
       profileType: profiles.type,
       profileName: profiles.name,
@@ -146,15 +149,20 @@ export async function lookupSession(token: string): Promise<AuthenticatedSession
   if (rows.length === 0) return null;
   const row = rows[0]!;
 
-  // Best-effort touch; a write failure here must not turn a successful read
-  // into a 500.
-  void db
-    .update(sessions)
-    .set({ lastSeenAt: new Date() })
-    .where(eq(sessions.id, row.sessionId))
-    .catch(() => {
-      // swallow: lastSeenAt is informational only
-    });
+  // Activity is informational: one touch per minute avoids a row write on
+  // every poll or parallel page read. Authorization above is always fresh.
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - SESSION_ACTIVITY_INTERVAL_MS);
+  if (row.lastSeenAt < staleBefore) {
+    void db
+      .update(sessions)
+      .set({ lastSeenAt: now })
+      // Recheck in SQL so simultaneous stale reads only update the row once.
+      .where(and(eq(sessions.id, row.sessionId), lt(sessions.lastSeenAt, staleBefore)))
+      .catch(() => {
+        // A best-effort activity write must not turn authentication into a 500.
+      });
+  }
 
   return {
     sessionId: row.sessionId,

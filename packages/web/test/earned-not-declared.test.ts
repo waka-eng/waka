@@ -99,7 +99,7 @@ describe("a value is earned, never typed", () => {
        forever. Reordering posts to the same collection with a suffix and must
        be found, and so must the two verbs that DO act on a principle. */
     const blob = [...sources.values()].join("\n");
-    expect(blob).toMatch(/apiPath\(`\/principles\/reorder`\)|apiPath\("\/principles\/reorder"\)/);
+    expect(blob).toMatch(/apiPath\(`\/principles\/reorder(?:`|\$\{)|apiPath\("\/principles\/reorder"\)/);
     expect(blob).toMatch(/\bupdatePrinciple\b/);
     expect(blob).toMatch(/\bdeletePrinciple\b/);
     expect(sources.size).toBeGreaterThan(50);

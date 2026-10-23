@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchPrincipleRead, requestPrincipleRead, type ApiPrinciple, type ApiPrincipleStatus } from "../lib/api/principles";
-import { t, type SupportedLocale } from "../lib/i18n";
+import { formatMessage, t, type SupportedLocale } from "../lib/i18n";
 
 /**
- * Your own principles: the sky's lead line and one status sentence. Only the
+ * The selected profile's principles: a lead line and status. Only the
  * active view polls. (Rooms' principles left with rooms, 2026-10-12.)
  */
-export function PrincipleRead({ active, locale, onRead }: {
-  active: boolean; locale: SupportedLocale;
+export function PrincipleRead({ active, locale, onRead, profileId, name }: {
+  active: boolean; locale: SupportedLocale; profileId?: string; name?: string;
   onRead?: (rows: ApiPrinciple[]) => void;
 }) {
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
@@ -30,7 +30,7 @@ export function PrincipleRead({ active, locale, onRead }: {
       window.clearTimeout(timer);
       running = true;
       try {
-        const result = await fetchPrincipleRead();
+        const result = await (profileId ? fetchPrincipleRead(profileId) : fetchPrincipleRead());
         if (disposed) return;
         setRows(result.principles);
         onReadRef.current?.(result.principles);
@@ -39,7 +39,9 @@ export function PrincipleRead({ active, locale, onRead }: {
         consecutiveFailures = 0;
         delay = result.status.phase === "processing" || result.status.phase === "pending"
           ? 10_000 : 60_000;
-        if (!ensured && ((result.status.eligible && !result.status.supportPending && result.status.phase === 'pending') ||
+        // Refresh requests act as the session's profile. An agent shown by
+        // its human owner waits for its own worker rather than refreshing the human.
+        if (!profileId && !ensured && ((result.status.eligible && !result.status.supportPending && result.status.phase === 'pending') ||
           ((result.status.eligible || result.status.supportPending) && result.status.phase === 'failed' && attempt > retriedAttempt.current))) {
           const retry = attempt > retriedAttempt.current;
           retriedAttempt.current = attempt;
@@ -66,7 +68,7 @@ export function PrincipleRead({ active, locale, onRead }: {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
     };
-  }, [active, locale, attempt]);
+  }, [active, locale, attempt, profileId]);
   const error = failed || status?.phase === "failed";
   const visibleRows = rows;
   const message = error ? status?.supportPending ? 'worldSupportCheckFailed' : "worldPrinciplesError"
@@ -77,7 +79,7 @@ export function PrincipleRead({ active, locale, onRead }: {
     : status.topOfMindCount < 1 ? "worldPrinciplesNeedRead"
     : "worldPrinciplesNoCandidate";
   return <>
-    {visibleRows.length === 0 ? <p className="jar-values-lead">{t(locale, "worldValuesLeadSelf")}</p> : null}
+    {visibleRows.length === 0 ? <p className="jar-values-lead">{profileId && name ? formatMessage(locale, "worldValuesLeadOther", { name }) : t(locale, "worldValuesLeadSelf")}</p> : null}
     {visibleRows.length === 0 || error || status?.phase === "processing" ?
       <p className="jar-values-sub" role={error ? "alert" : status?.phase === "processing" ? "status" : undefined}>
         {t(locale, message)}

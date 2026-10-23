@@ -407,10 +407,6 @@ export function beyondOf(field: FieldLoad): number {
   return Math.max(0, field.total - field.inspirations.length);
 }
 
-/** Nothing arrived, and nothing is behind it either — the shape a failed
-    walk falls back to, so a caller never has to invent a total. */
-export const EMPTY_FIELD: FieldLoad = { inspirations: [], total: 0, short: false };
-
 export async function loadInspirations(profile?:string,options?:{scope?:ProfileStorageScope;signal?:AbortSignal;onFirstPage?:(field:FieldLoad)=>void}):Promise<FieldLoad>{
   if(!options?.scope)return (await loadInspirationPages(profile,options?.signal,options?.onFirstPage)).data;
   const target=profile??options.scope.profileId;

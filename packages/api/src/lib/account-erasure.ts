@@ -138,7 +138,7 @@ export async function eraseAccount(
 
   await (deps.deleteAttachmentObjects ?? deleteAttachmentObjectsFromS3)(attachmentKeys);
 
-  await db.transaction(async (tx) => {
+  const eraseRows = () => db.transaction(async (tx) => {
     if (profileIds.length > 0) {
       /* THE DOOR IS MARKED BEFORE THE SEAT GOES. Erasing is leaving every
          room at once; the ledger records it the way `leaveGroup` would, and
@@ -261,4 +261,18 @@ export async function eraseAccount(
 
     await tx.delete(accounts).where(eq(accounts.id, accountId));
   });
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await eraseRows();
+      break;
+    } catch (error) {
+      // A publishing worker can hold a source while the account cascade
+      // holds its profile. Postgres rolls back one entire transaction; retry
+      // that transaction after the worker can finish. Object deletion above
+      // remains outside the retry and the rolled-back room changes repeat safely.
+      const failure = error as { code?: string; cause?: { code?: string } };
+      if ((failure.cause?.code ?? failure.code) !== '40P01' || attempt >= 2) throw error;
+      await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+    }
+  }
 }
