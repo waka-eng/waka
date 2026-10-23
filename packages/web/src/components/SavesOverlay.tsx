@@ -56,7 +56,7 @@ import {
 } from "../lib/api";
 import { attachToNote } from "../lib/attach-to-note";
 import { useFirstVisit } from "../lib/first-visit";
-import type { ArchiveRecorder } from "../lib/archive-recorder";
+import { useArchiveRecorderContext } from "../lib/archive-recorder";
 import { canKeep, type KeepReadiness } from "../lib/keep-ready";
 import { archiveChapter, dateWords } from "../lib/words";
 import { ShareSheet, inspirationShareTarget, type ShareTarget } from "./ShareSheet";
@@ -91,13 +91,8 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true, recorder }: {
+export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true }: {
   locale: SupportedLocale;
-  /** THE ARCHIVE'S RECORDER, OWNED BY THE CALLER (L12). It outlives this
-      surface, so a clip still finishing when the archive closes or remounts
-      is attached by the caller to the note it was made on, and a failure is
-      reported by the caller. This surface only shows it and presses it. */
-  recorder: ArchiveRecorder;
   /** Whether this is the person's own archive. The deleted shelf is theirs
       alone, so it is not read on an agent's archive; deleting there still
       works, and the request names the agent's profile. */
@@ -176,6 +171,12 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   onNewSave?: () => void;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
+  /* THE ARCHIVE'S RECORDER, OWNED BY THE CALLER (L12), read from the
+     provider `Home` mounts around its world (`ArchiveRecorderProvider`). It
+     outlives this surface, so a clip still finishing when the archive closes
+     or remounts is attached to the note it was made on, and a failure is
+     reported by `Home`. This surface only shows it and presses it. */
+  const recorder = useArchiveRecorderContext();
   /* Scoped to whose archive this is: being new to your own is not being new
      to your agent's. */
   const newHere = useFirstVisit(profileId ? { accountId: "p", profileId } : null, "saves");

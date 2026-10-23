@@ -14,7 +14,9 @@
  * produces and jsdom does not), and assert the clip reached the note it was
  * made on, under the profile it was made under.
  *
- * WHAT THIS MOCKS, AND WHY (gate G6). `lib/data` and `lib/api` through the
+ * WHAT THIS MOCKS, AND WHY (gate G6). `lib/use-inspiration-draft` is passed
+ * through unchanged and only counted: it runs once per render of Home's
+ * world, which is the render counter one case needs. `lib/data` and `lib/api` through the
  * shared builders in `helpers/render-home`, with the attachment calls
  * recorded (and the finalize made to fail when a case says). `fetchProfiles`
  * answers with one agent, so a wall switch has somewhere to go.
@@ -92,6 +94,14 @@ vi.mock("../src/lib/data", async (original) => ({
       ? { ...row, attachments: [{ id: "att-x", type: "file" as const, label: "Recording.webm" }] } : row) };
   },
 }));
+/* A RENDER COUNTER FOR HOME. `useInspirationDraft` is called once per render
+   of Home's world and nowhere else, so counting its calls counts those
+   renders without putting a counter in the product. */
+const renders = vi.hoisted(() => ({ home: 0 }));
+vi.mock("../src/lib/use-inspiration-draft", async (original) => {
+  const actual = await original<typeof import("../src/lib/use-inspiration-draft")>();
+  return { ...actual, useInspirationDraft: (...args: Parameters<typeof actual.useInspirationDraft>) => { renders.home += 1; return actual.useInspirationDraft(...args); } };
+});
 vi.mock("../src/lib/auth-context", async (original) => {
   const session = { status: "authenticated", account: { id: "account-1", email: "you@example.test" },
     profile: { id: VIEWER_ID, name: "You", type: "human" }, profiles: [], refresh: async () => undefined, signOut: async () => undefined };
@@ -445,4 +455,24 @@ it("does not let a note be deleted while its clip is on its way", async () => {
   await settle(4);
   expect(S.finalized).toEqual(["own-1"]);
   expect(erase()!.disabled, "Delete stayed off after the clip landed").toBe(false);
+});
+
+/* ═══ THE RECORDING'S CLOCK DOES NOT RE-RENDER HOME (review, 2026-10-22) ═══
+   With the recorder in Home, its per-second clock re-rendered the whole of
+   Home's world — twelve thousand lines — every second of every recording.
+   The ticking state lives in a provider only the archive reads; Home hears
+   only what changes rarely (a phase, a failure). */
+it("keeps the archive recording's clock from re-rendering Home every second", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-1");
+  const clock = () => q('#waka-note-tools .waka-dock-state span[aria-hidden="true"]')?.textContent;
+  const before = renders.home, startedAt = clock();
+  for (let second = 0; second < 5; second += 1) {
+    await world.step(60);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  }
+  expect(clock(), "the clock never ticked, so this proved nothing").not.toBe(startedAt);
+  expect(renders.home - before, "Home re-rendered with the recording's clock").toBeLessThan(3);
 });

@@ -49,7 +49,7 @@ vi.mock("../src/lib/api", async (original) => ({
 import { useState } from "react";
 import { DOCK_SLOT } from "../src/components/NoteTools";
 import { SavesOverlay } from "../src/components/SavesOverlay";
-import { useArchiveRecorder, type ArchiveRecorder } from "../src/lib/archive-recorder";
+import { ArchiveRecorderProvider, useArchiveRecorder, type ArchiveRecorder } from "../src/lib/archive-recorder";
 
 class Recorder {
   static isTypeSupported = (): boolean => true;
@@ -150,12 +150,13 @@ it("warns before the page is left while a clip is still uploading, and not after
    the recorder live itself now, and the archive asks it. */
 it("stops a recording whose Record and the archive's leaving land in one commit", async () => {
   let hide: () => void = () => undefined;
-  function Host() {
-    const owned = useArchiveRecorder();
+  /* the provider stays; only the archive inside it goes */
+  function Toggle() {
     const [shown, setShown] = useState(true);
     hide = () => setShown(false);
-    return shown ? <SavesOverlay locale="en-US" title="Your Inspirations" onClose={() => undefined} recorder={owned} /> : null;
+    return shown ? <SavesOverlay locale="en-US" title="Your Inspirations" onClose={() => undefined} /> : null;
   }
+  const Host = () => <ArchiveRecorderProvider><Toggle /></ArchiveRecorderProvider>;
   const slot = document.createElement("span");
   slot.id = DOCK_SLOT;
   document.body.append(slot);

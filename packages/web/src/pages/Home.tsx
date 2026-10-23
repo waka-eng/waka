@@ -82,7 +82,7 @@ import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { useSettingsWrites } from '../lib/use-settings-writes';
 import { DraftProblem, draftProblem, forkDraftAndClear } from '../lib/draft-problem';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
-import { useArchiveRecorder } from '../lib/archive-recorder';
+import { ArchiveRecorderProvider, useArchiveClips } from '../lib/archive-recorder';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { attachmentLabel } from '../lib/attachment-label';
 import { Menu } from '../components/Menu';
@@ -720,7 +720,17 @@ export default function HomePage(): JSX.Element {
   return <HomeExperience key={profileStorageKey(storageScope, "world") ?? "anonymous"} storageScope={storageScope} />;
 }
 
+/* THE ARCHIVE'S RECORDER AROUND THE WORLD, NOT IN IT (review, 2026-10-22):
+   its clock ticks every second while it records, and as the world's own
+   state that re-rendered the whole of it each time. As a provider around it,
+   a tick re-renders the provider and its readers; the world is `children`
+   and is left alone. Inside this keyed boundary, so an identity change still
+   takes the recorder with the old world (L14). */
 function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | null }): JSX.Element {
+  return <ArchiveRecorderProvider><HomeScreen storageScope={storageScope} /></ArchiveRecorderProvider>;
+}
+
+function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null }): JSX.Element {
   const composerDraft = useInspirationDraft(storageScope);
   const [preparingInspiration, setPreparingInspiration] = useState(false);
   const [uploadingMediaId, setUploadingMediaId] = useState<string | null>(null);
@@ -732,13 +742,21 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const recording = useAudioRecording(file => onRecorded.current(file));
   /* THE ARCHIVE'S RECORDER LIVES HERE TOO (L12), not in `SavesOverlay`: this
      page outlives the archive, so a clip still finishing when the archive
-     closes or remounts is attached to its note and its failure said here. */
+     closes or remounts is attached to its note and its failure said here.
+     It sits in `ArchiveRecorderProvider` around this world (see
+     `HomeExperience`), so its per-second clock re-renders the archive only;
+     this world reads `useArchiveClips`, which changes a few times a
+     recording. */
   /* ONE MICROPHONE AT A TIME. The archive can stand over an open notepad
      (`?compose=1&open=saves`), so both recorders can be on screen; each
      refuses to start while the other is recording or finishing, and its
      Record is disabled while it would refuse. */
-  const archiveRecorder = useArchiveRecorder({ blocked: recording.phase !== 'idle' });
-  const notepadRecordBlocked = archiveRecorder.phase !== 'idle';
+  const archiveClips = useArchiveClips();
+  const notepadLive = recording.phase !== 'idle', blockArchive = archiveClips.setBlocked;
+  /* before paint, so the archive's Record is refused in the same frame the
+     notepad's microphone is asked for */
+  useLayoutEffect(() => { blockArchive(notepadLive); }, [notepadLive, blockArchive]);
+  const notepadRecordBlocked = archiveClips.active;
   const startNotepadRecording = () => { if (!notepadRecordBlocked) void recording.start(); };
   useEffect(() => () => { composerEpoch.current += 1; fileOwnerEpoch.current += 1; uploadController.current?.abort(); }, []);
   const viewNavigation = useViewNavigation(storageScope ? `${storageScope.accountId}:${storageScope.profileId}` : 'fixture');
@@ -7597,8 +7615,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
           went with it. This line is this page's: it names the note the clip
           was made on, stays until Try again lands it or × lets it go, and
           says one failure at a time (the next waits behind it). */}
-      {archiveRecorder.failures[0] ? (() => {
-        const failure = archiveRecorder.failures[0];
+      {archiveClips.failures[0] ? (() => {
+        const failure = archiveClips.failures[0];
         const words = failure.target.label.trim().replace(/\s+/g, ' ');
         const note = words.length > 32 ? `${words.slice(0, 31).trimEnd()}…` : words;
         return (
@@ -7608,8 +7626,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
               ? note ? formatMessage(locale, 'worldRecordingProblemFor', { note, problem: say(failure.reason) }) : say(failure.reason)
               : note ? formatMessage(locale, 'worldRecordingAttachFailed', { note })
               : say('worldRecordingAttachFailedUntitled')}</span>
-            {failure.file ? <button type="button" className="waka-clip-failed-retry" onClick={() => archiveRecorder.retry(failure.id)}>{say('surfaceUnavailableRetry')}</button> : null}
-            <button type="button" className="waka-clip-failed-close" aria-label={say('worldClose')} onClick={() => archiveRecorder.dismiss(failure.id)}>×</button>
+            {failure.file ? <button type="button" className="waka-clip-failed-retry" onClick={() => archiveClips.retry(failure.id)}>{say('surfaceUnavailableRetry')}</button> : null}
+            <button type="button" className="waka-clip-failed-close" aria-label={say('worldClose')} onClick={() => archiveClips.dismiss(failure.id)}>×</button>
           </div>
         );
       })() : null}
@@ -11958,7 +11976,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
            buttons saying the same two words, which stood here while the
            corner's pair stood behind this sheet's own left edge, clipped to
            "MY AGE". The act survives; the duplicate does not. */
-        recorder={archiveRecorder}
         onClose={leaveOpen}/>:null}
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}

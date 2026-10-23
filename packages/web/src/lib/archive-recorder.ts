@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ApiError } from "./api";
 import { attachToNote } from "./attach-to-note";
@@ -191,3 +191,51 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
 }
 
 export type ArchiveRecorder = ReturnType<typeof useArchiveRecorder>;
+
+/* ═══ THE CLOCK STAYS OUT OF HOME (review, 2026-10-22) ════════════════════
+   `Home` owning the recorder meant its per-second clock re-rendered all of
+   Home's world every second of every recording. The recorder lives in this
+   provider instead, which `Home` mounts AROUND its world: when the clock
+   ticks only the provider and the context's readers re-render (the archive),
+   because the world is the provider's `children` and does not change.
+
+   TWO CONTEXTS, BY HOW OFTEN THEY CHANGE. The archive reads the whole
+   recorder. `Home` reads `ArchiveClips` — whether the archive's microphone is
+   in use, the failure list, and a way to say the notepad's is — which changes
+   a handful of times per recording, never per second. */
+export interface ArchiveClips {
+  /** The archive's recorder is not idle: the notepad must not start. */
+  active: boolean;
+  failures: ClipFailure[];
+  retry: (id: number) => void;
+  dismiss: (id: number) => void;
+  /** Tell the archive's recorder the notepad's is live (one microphone). */
+  setBlocked: (blocked: boolean) => void;
+}
+
+const RecorderContext = createContext<ArchiveRecorder | null>(null);
+const ClipsContext = createContext<ArchiveClips | null>(null);
+
+export function ArchiveRecorderProvider({ children }: { children?: ReactNode }): JSX.Element {
+  const [blocked, setBlocked] = useState(false);
+  const recorder = useArchiveRecorder({ blocked });
+  const active = recorder.phase !== "idle";
+  const { failures, retry, dismiss } = recorder;
+  const clips = useMemo<ArchiveClips>(() => ({ active, failures, retry, dismiss, setBlocked }), [active, failures, retry, dismiss]);
+  return createElement(RecorderContext.Provider, { value: recorder },
+    createElement(ClipsContext.Provider, { value: clips }, children));
+}
+
+/** The whole recorder, ticking clock included — the archive's. */
+export function useArchiveRecorderContext(): ArchiveRecorder {
+  const recorder = useContext(RecorderContext);
+  if (!recorder) throw new Error("useArchiveRecorderContext needs an ArchiveRecorderProvider above it");
+  return recorder;
+}
+
+/** What `Home` needs from the archive's recorder, and nothing that ticks. */
+export function useArchiveClips(): ArchiveClips {
+  const clips = useContext(ClipsContext);
+  if (!clips) throw new Error("useArchiveClips needs an ArchiveRecorderProvider above it");
+  return clips;
+}
