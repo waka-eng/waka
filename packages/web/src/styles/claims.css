@@ -5694,6 +5694,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 
 .waka-session-list-heading h3 {
+  flex: 1;
   margin: 0;
   font-size: var(--t-meta);
   font-weight: 500;
@@ -5707,18 +5708,51 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-session-list {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-12);
+  gap: 0;
   margin: var(--sp-8) 0;
   padding: 0;
   list-style: none;
 }
 
 .waka-session-card {
-  padding: var(--sp-12);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  padding: var(--sp-12) 0;
+  border-bottom: 1px solid var(--line);
   font-size: var(--t-meta);
   overflow-wrap: anywhere;
+}
+
+.waka-session-profile-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--sp-12) 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.waka-session-profile-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: var(--sp-4);
+  overflow-wrap: anywhere;
+  font-size: var(--t-meta);
+}
+
+.waka-session-profile-copy strong {
+  font-weight: 500;
+}
+
+.waka-session-profile-copy > span,
+.waka-session-profile-row > span:last-child {
+  color: var(--muted);
 }
 
 .waka-session-card-heading {

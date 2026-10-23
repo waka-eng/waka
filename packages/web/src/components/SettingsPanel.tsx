@@ -339,11 +339,22 @@ function AgentConnections({ locale, activeProfileId }: { locale: SupportedLocale
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [view, setView] = useState<"manage" | "setup">("manage");
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const list = useRef<HTMLUListElement>(null);
   const confirmation = useRef<HTMLParagraphElement>(null);
   const previousConfirmation = useRef<string | null>(null);
+  const profileHeading = useRef<HTMLHeadingElement>(null);
+  const previousProfile = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedProfileId !== null) profileHeading.current?.focus();
+    else if (previousProfile.current !== null) {
+      const row = list.current?.querySelector<HTMLButtonElement>(`[data-profile-id="${previousProfile.current}"]`);
+      (row ?? profileHeading.current)?.focus();
+    }
+    previousProfile.current = selectedProfileId;
+  }, [selectedProfileId]);
   useEffect(() => {
     if (confirm !== null) confirmation.current?.focus();
     else if (previousConfirmation.current !== null) list.current?.querySelector<HTMLButtonElement>(`[data-session-id="${previousConfirmation.current}"]`)?.focus();
@@ -377,6 +388,7 @@ function AgentConnections({ locale, activeProfileId }: { locale: SupportedLocale
       if (alive.current) {
         setSessions((rows) => rows?.filter((row) => row.id !== session.id) ?? null);
         setConfirm(null);
+        if (!sessions?.some(row => !row.current && row.id !== session.id && row.profile.id === session.profile.id)) setSelectedProfileId(null);
         setNotice(formatMessage(locale, "profileConnectionDisconnected", { name: session.deviceLabel || say("profileConnectionUnnamed") }));
       }
     } catch {
@@ -388,22 +400,33 @@ function AgentConnections({ locale, activeProfileId }: { locale: SupportedLocale
 
   // The current browser already has Sign out. Never offer to disconnect it here.
   const others = sessions?.filter((row) => !row.current);
+  const groups = new Map<string, { profile: ApiSession['profile']; sessions: ApiSession[] }>();
+  for (const session of others ?? []) {
+    const group = groups.get(session.profile.id) ?? { profile: session.profile, sessions: [] };
+    group.sessions.push(session);
+    groups.set(session.profile.id, group);
+  }
+  const selected = selectedProfileId ? groups.get(selectedProfileId) : undefined;
   const date = (value: string) => new Date(value).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
 
   return <>
     <div className="waka-session-tabs" role="group" aria-label={say("profileConnectionViews")}>
-      <button type="button" aria-pressed={view === "manage"} onClick={() => { setView("manage"); setConfirm(null); }}>{say("profileConnectionsManage")}</button>
+      <button type="button" aria-pressed={view === "manage"} onClick={() => { setView("manage"); setConfirm(null); setSelectedProfileId(null); }}>{say("profileConnectionsManage")}</button>
       <button type="button" aria-pressed={view === "setup"} onClick={() => { setView("setup"); setConfirm(null); }}>{say("profileConnectionSetup")}</button>
     </div>
     {error ? <span className="waka-account-failed" role="alert">{error}</span> : null}
     {view === "setup" ? <SessionSetup locale={locale} activeProfileId={activeProfileId} onDone={() => { setView("manage"); void load(); }} /> : <>
     <div className="waka-session-list-heading">
-      <h3>{say("profileConnectionsDevices")}</h3>
+      {selected ? <button type="button" className="waka-settings-erase" aria-label={say('profileConnectionsBack')}
+        onClick={() => { setSelectedProfileId(null); setConfirm(null); }}>←</button> : null}
+      <h3 ref={profileHeading} tabIndex={-1}>{selected?.profile.name ?? say("profileConnectionsDevices")}</h3>
       <button type="button" className="waka-settings-erase" disabled={loading || busy !== null} onClick={() => void load()}>
         {say("profileConnectionsRefresh")}
       </button>
     </div>
-    <p className="waka-settings-note">{say("profileConnectionsHint")}</p>
+    <p className="waka-settings-note">{selected
+      ? say(selected.profile.type === 'agent' ? 'profileConnectionAgentAccess' : 'profileConnectionHumanAccess')
+      : say("profileConnectionsHint")}</p>
     {notice ? <p className="waka-settings-note" role="status">{notice}</p> : null}
     {loading ? <p className="waka-settings-note" role="status">{say("worldInspirationsLoad")}</p> : null}
     {others?.length === 0 && !loading ? <div className="waka-session-empty">
@@ -411,7 +434,19 @@ function AgentConnections({ locale, activeProfileId }: { locale: SupportedLocale
       <button type="button" className="waka-settings-erase" onClick={() => setView("setup")}>{say("profileConnectionConnect")}</button>
     </div> : null}
     <ul ref={list} className="waka-session-list" aria-busy={loading}>
-      {others?.map((session) => {
+      {!selected ? [...groups.values()].map(({ profile, sessions: connections }) => <li key={profile.id}>
+        <button type="button" className="waka-session-profile-row" data-profile-id={profile.id}
+          aria-label={formatMessage(locale, 'profileConnectionsForProfile', { name: profile.name })}
+          onClick={() => setSelectedProfileId(profile.id)}>
+          <ProfilePortrait agentId={profile.type === 'agent' ? profile.id : undefined} />
+          <span className="waka-session-profile-copy">
+            <strong>{profile.name}</strong>
+            <span>{say(profile.type === 'agent' ? 'profileConnectionAgentProfile' : 'profileConnectionPersonalProfile')} · {formatMessage(locale,
+              connections.length === 1 ? 'profileConnectionsCountOne' : 'profileConnectionsCount', { count: connections.length })}</span>
+          </span>
+          <span aria-hidden="true">›</span>
+        </button>
+      </li>) : selected.sessions.map((session) => {
         const expired = new Date(session.expiresAt).getTime() <= Date.now();
         const name = session.deviceLabel || say("profileConnectionUnnamed");
         return <li key={session.id} className="waka-session-card">
@@ -420,9 +455,6 @@ function AgentConnections({ locale, activeProfileId }: { locale: SupportedLocale
             <span>{say(expired ? "profileConnectionExpired" : "profileConnectionSignedIn")}</span>
           </div>
           <dl className="waka-session-info">
-            <dt>{say("profileConnectionProfile")}</dt><dd>{session.profile.name} · {say(session.profile.type === "agent" ? "profileConnectionAgentProfile" : "profileConnectionPersonalProfile")}</dd>
-            <dt>{say("profileConnectionAccessLabel")}</dt><dd>{say(expired ? "profileConnectionNoAccess"
-              : session.profile.type === "agent" ? "profileConnectionAgentAccess" : "profileConnectionHumanAccess")}</dd>
             <dt>{say("profileConnectionLastUsed")}</dt><dd>{date(session.lastSeenAt)}</dd>
             <dt>{say("profileConnectionExpires")}</dt><dd>{date(session.expiresAt)}</dd>
           </dl>
@@ -441,7 +473,6 @@ function AgentConnections({ locale, activeProfileId }: { locale: SupportedLocale
         </li>;
       })}
     </ul>
-    <p className="waka-settings-note">{say("profileConnectionRenewHint")}</p>
     </>}
   </>;
 }
