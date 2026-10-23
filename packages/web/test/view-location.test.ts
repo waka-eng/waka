@@ -68,3 +68,17 @@ it('round-trips private conversation identity without claiming the single-segmen
   for(const conversationId of ['list','conversation-id']){const view={...EMPTY_VIEW,conversationId};expect(readViewLocation(viewHref(view))).toEqual(view);}
   expect(readViewLocation('/chat')).toBeNull();expect(readViewLocation('/chat/conversation-id','?text=private')?.conversationId).toBe('conversation-id');
 });
+/* THE SAVED NOTE HAS AN ADDRESS, and only inside the archive: `note=` beside
+   any other `open` (or none) is not read and never written, so a note cannot
+   ride along onto a page that has no archive to open it in. */
+it('reads and writes the open saved note only beside the archive', () => {
+  const view = readViewLocation('/', '?open=saves&note=kept-1');
+  expect(view).toMatchObject({ open: 'saves', note: 'kept-1' });
+  expect(viewHref(view!)).toBe('/?open=saves&note=kept-1');
+  expect(readViewLocation('/', '?note=kept-1')).toMatchObject({ open: null, note: null });
+  expect(readViewLocation('/', '?open=claims&note=kept-1')).toMatchObject({ open: 'claims', note: null });
+  expect(readViewLocation('/', '?open=saves&note=%3Cscript%3E')).toMatchObject({ open: 'saves', note: null });
+  expect(viewHref({ ...EMPTY_VIEW, open: 'claims', note: 'kept-1' })).toBe('/?open=claims');
+  expect(viewHref({ ...EMPTY_VIEW, note: 'kept-1' })).toBe('/');
+  expect(viewHref({ ...EMPTY_VIEW, open: 'saves', note: null })).toBe('/?open=saves');
+});

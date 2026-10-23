@@ -1446,8 +1446,10 @@ same mechanism, so it was removed rather than patched again. The address-less la
 - review;
 - the claim-roots sheet (`prov`), which opens over review;
 - the share sheet (`thingShare`, `ShareSheet`);
-- the saved note inside the archive (next entry);
 - the settings/info card.
+
+The saved note inside the archive left this list on `claude/note-address` (2026-10-21): it has a
+real address, `?open=saves&note=<id>` (see "Back from an open saved note" below).
 
 The memory/detail panel is not on this list. It already has an address (`/inspirations/:id` or
 `?inspiration=<id>`, pushed when it opens and replaced when it closes), so Back from it works
@@ -1547,7 +1549,39 @@ other tab ever does. Effect re-runs only read. Retry, focus and storage events b
 ---
 ## Back from an open saved note (follow-up)
 
-**Status:** open, deliberately not fixed in `claude/fix-usability`. Opening a saved note inside the
+**Status:** fixed on `claude/note-address` (2026-10-21) by giving the note a real address,
+`?open=saves&note=<id>`; design and answers in `docs/plans/back-from-layers.md` (top section).
+Back from a note shows the list and the next Back leaves the archive; Forward reopens it; a reload
+or a cold link opens it; a link to a note the archive does not hold drops `note=` in place.
+Checked in Chromium and WebKit (`pnpm e2e:back-from-a-note`) and in jsdom
+(`test/note-address.test.tsx`, `test/note-address-history.test.tsx`).
+
+How the cases below were answered: the note's entry is a real address, so no same-URL entry
+exists and Home's restore skips an entry differing only by `note=`; the canonicaliser carries
+`note=` like `open=`, and a replace that would rewrite the rest under the note is refused; there
+are no stale entries of our own (Forward into a note that was deleted drops `note=`; a replace that
+drops the note replaces the note's own entry); closing the archive from a note steps over both
+entries (or, with no origin, replaces the note entry with the world); the commit is `commitOpenNote` on leaving the address; and a close is ignored while a pop
+from that entry is still landing (the event-order case, seen as a double Back in both engines
+before it was fixed).
+
+**Still open:**
+- **Not tested on devices:** iPhone Safari edge-swipe, Android system Back, long-press Back menus.
+  Playwright's `goBack` is the browser's own Back, not a gesture.
+- **A note that cannot close.** If Back leaves the note's address while its save fails, the note
+  stays on screen with its words and the failure line while the address shows the list; the next
+  Back leaves the archive, and the words are lost if the retry it makes fails too (as on dev).
+- **Back after leaving from a note returns to the list.** A replace that drops the note (the bar
+  moving you on, Escape with no archive origin) replaces the note's entry, so the list stays
+  behind it and the next Back reopens the archive's list (chosen in review over leaving a note
+  entry in Forward history).
+- **Pre-existing, not the note's:** the dock opens the archive by replacing the new note's entry,
+  so the archive has no origin; closing it from the list replaces the list with `/` and the next
+  Back is a same-URL step (measured in both engines).
+
+What follows is the record from before the fix.
+
+**Before this fix:** deliberately not fixed in `claude/fix-usability`. Opening a saved note inside the
 archive (`?open=saves`) does not touch history, exactly as on `origin/dev`
 (`SavesOverlay.tsx`, `use-view-navigation.ts`). A note-history mechanism was tried and cut after
 review found three regressions in it.
