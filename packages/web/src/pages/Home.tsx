@@ -7433,6 +7433,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const target = desired && (desired.wallId === storageScope?.profileId ? walls.find((wall) => wall.kind === 'self') : resolveViewWall(desired, walls));
     if (!target && desired?.wallId && agentRoster === null) return;
     if (!target || !desired) { setNavigationProblem('unavailable'); appliedViewKey.current = viewNavigation.key; appliedViewHref.current = null; restoringViewRef.current = false; return; }
+    /* A PASS IS UNDER WAY, so nothing is applied until it finishes: an entry
+       that differs from the last applied one only by `note=` must not skip a
+       restore that never completed (a note opened, or a Back, mid-pass). */
+    appliedViewHref.current = null;
     const serial = ++viewRequest.current, key = viewNavigation.key, controller = new AbortController();
     let timer = 0, stage = 'wall', loading = false, canceled = false;
     const current = () => !canceled && !controller.signal.aborted && viewRequest.current === serial && latestViewKey.current === key;
