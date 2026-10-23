@@ -202,3 +202,57 @@ it("already knows the agent wall's reading before you walk onto it", async () =>
   expect(wallKind).toBe('self');
   expect(aura.byWall['agent-busy'], "the agent wall read dark while you stood on your own").toBeGreaterThanOrEqual(0.6);
 });
+
+/* ═══ A PRESS ON THE CREATURE LIGHTS THE CREATURE ═══════════════════════════
+   Founder: "debug why no light when clicking on the character." The canvas
+   tap raised the loop's flare, but `.jar-char-press` sits over the creature on
+   your own wall and takes the click first, so the body never brightened —
+   only a faint CSS gradient faded in over it. These read the loop's own
+   numbers: the reach it drew with, before and after the press. */
+const OLD_WEEKS = () => {
+  FACTS.inspirations = [30, 31, 32, 33, 34].map((daysAgo) => ({ id: `old-${daysAgo}`, text: `Something old ${daysAgo}`, daysAgo }));
+  FACTS.inspirations.push({ id: 'today-but-alone', text: 'One today', daysAgo: 0 });
+};
+
+it('brightens the creature itself when its press button is clicked, then lets it settle', async () => {
+  OLD_WEEKS();
+  world = await mountWorld(FACTS); await settle();
+  const before = world.audit().aura.lit;
+  expect(before, 'the wall should start dim enough for a flare to show').toBeLessThanOrEqual(0.55);
+  expect(press(), 'the creature has nothing to press').toBeTruthy();
+  await act(async () => { press()!.click(); });
+  await world.step(1);
+  const lit = world.audit().aura.lit;
+  expect(lit - before, `a press moved the reach from ${before} to ${lit}`).toBeGreaterThanOrEqual(0.4);
+  /* the flare is an event: 0.7s later it is gone and the reading is back */
+  await world.step(60);
+  expect(Math.abs(world.audit().aura.lit - before), 'the press left the creature lit').toBeLessThan(0.05);
+});
+
+it('a drag to Principles does not light the creature on the swallowed click', async () => {
+  OLD_WEEKS();
+  world = await mountWorld(FACTS); await settle();
+  const before = world.audit().aura.lit;
+  const button = press()!;
+  await act(async () => {
+    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 7, clientX: 100, clientY: 100 }));
+    button.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 7, clientX: 400, clientY: 102 }));
+    button.click();
+  });
+  await world.step(1);
+  expect(world.audit().aura.lit - before, 'the click a drag swallows still flared').toBeLessThan(0.1);
+});
+
+it("still speaks on a dim wall while the press's own flare is up", async () => {
+  /* `sayLine` read the drawn reach, flare included — so the press that asked
+     for a sentence pushed a quiet wall over the silence line and came out
+     mute. Timers only, no frames: the flare is still at full when the grace
+     timer reaches for the loop's line. */
+  OLD_WEEKS();
+  world = await mountWorld(FACTS); await settle();
+  await act(async () => { press()!.click(); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+  expect(world.audit().aura.lit, 'the flare had already decayed; this test is not testing it').toBeGreaterThan(0.55);
+  const said = speech();
+  expect([...QUIET, ...WARM, ...FRONTIER], `a dim wall pressed said "${said}"`).toContain(said);
+});
