@@ -112,7 +112,7 @@ const q = (step: Step) => new URLSearchParams(step.url.split('?')[1] ?? '');
     new note (its address lands first), whose bar offers All inspirations,
     which replaces the new note's entry with the archive's. */
 async function openArchive(page: Page): Promise<void> {
-  await page.locator('.waka-dock button.waka-dock-item', { hasText: /^Inspiration$/ }).first().click();
+  await page.locator('.waka-dock button.waka-dock-item', { hasText: /^New inspiration$/ }).first().click();
   await page.waitForURL(/compose=1/, { timeout: 10_000 });
   await page.locator('.waka-dock button.waka-dock-item[aria-label="All inspirations"], .waka-dock button.waka-dock-item:has-text("All inspirations")').first().click({ timeout: 10_000 });
   await page.locator('.waka-list-row').first().waitFor({ timeout: 10_000 });

@@ -138,7 +138,7 @@ const savesStarted = () => vi.mocked(fetchInspirationSaveRequest).mock.calls.len
 async function openNotepad(words = ''): Promise<void> {
   world = await mountWorld(FACTS); await settle();
   const inspiration = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item')]
-    .find(row => row.textContent?.trim() === 'Inspiration');
+    .find(row => row.textContent?.trim() === 'New inspiration');
   expect(inspiration, 'the bar offers no Inspiration row').toBeTruthy();
   await act(async () => inspiration!.click()); await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad did not open').toBeTruthy();

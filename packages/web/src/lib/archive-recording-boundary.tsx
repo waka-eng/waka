@@ -10,11 +10,11 @@ export function ArchiveRecordingBoundary({ children }: { children: ReactNode }):
   const auth = useOptionalAuth();
   const accountId = auth?.account?.id, profileId = auth?.profile?.id;
   const active = accountId && profileId ? `${accountId}:${profileId}` : null;
-  const owners = useRef(new Map<string, string>());
-  if (active && profileId) owners.current.set(active, profileId);
+  const owners = useRef(new Map<string, { accountId: string; profileId: string }>());
+  if (active && accountId && profileId) owners.current.set(active, { accountId, profileId });
   return <Fragment>
-    {[...owners.current].map(([key, ownerProfileId]) => <ArchiveRecorderProvider key={key}
-      enabled={key === active} ownerProfileId={ownerProfileId}>
+    {[...owners.current].map(([key, owner]) => <ArchiveRecorderProvider key={key}
+      enabled={key === active} ownerProfileId={owner.profileId} ownerAccountId={owner.accountId}>
       {key === active ? children : null}
     </ArchiveRecorderProvider>)}
     {!active ? children : null}

@@ -32,7 +32,7 @@ import {readConversationDrafts} from '../src/lib/conversation-drafts';
 import {ApiError} from '../src/lib/api/http';
 vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),fetchPrinciples:vi.fn()}));
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),stopConversationReply:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
-const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn();
+const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn(),history=vi.fn();
 /* THE SAME JOB, DONE BY THE RULE THAT CAN DO IT SYMMETRICALLY.
    This asked `.jar-conversation-body` in `chrome.css` for
    `padding-inline-end: var(--sp-8)` — a gutter on the END side only, to keep
@@ -64,7 +64,7 @@ beforeEach(()=>{vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clear
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers();});
-const mount=(conversationId:string|null=id,owner=scope)=>act(async()=>root.render(<ConversationPanel key={`${owner.accountId}:${owner.profileId}:${conversationId}`} scope={owner} id={conversationId} locale="en-US" onChoose={choose}/>));
+const mount=(conversationId:string|null=id,owner=scope)=>act(async()=>root.render(<ConversationPanel key={`${owner.accountId}:${owner.profileId}:${conversationId}`} scope={owner} id={conversationId} locale="en-US" onChoose={choose} onHistory={history}/>));
 /* BY NAME, NOT BY INK. Send and Stop are circular icon-only buttons now —
    the shape the reference ships and the founder asked for — so they carry
    no text content at all. The `aria-label` is what they are CALLED, and it
@@ -85,6 +85,33 @@ const click=(label:string)=>act(async()=>{
 const named=()=>[...host.querySelectorAll('button')].map(b=>b.getAttribute('aria-label')??b.textContent);
 const type=(content:string)=>act(async()=>{const area=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,content);area.dispatchEvent(new Event('input',{bubbles:true}));});
 const tick=(ms=2000)=>act(async()=>vi.advanceTimersByTimeAsync(ms));
+it('keeps a limit-refused draft editable and opens history instead of offering a futile retry',async()=>{
+  vi.mocked(createConversation).mockRejectedValueOnce(new ApiError({status:429,code:'conversation_limit_reached',message:'Conversation limit reached.'}));
+  await mount(null);await type('Keep my question');await click('Send');
+  expect(host.querySelector('[role="alert"]')!.textContent).toContain('100-chat limit');
+  expect(host.querySelector('textarea')!.disabled).toBe(false);
+  expect(named()).not.toContain('Retry this message');
+  expect(named()).not.toContain('Check saved messages');
+  expect((host.querySelector('[aria-label="Send"]') as HTMLButtonElement).disabled).toBe(true);
+  expect(readConversationDrafts(scope,'new:general')[0]?.value).toMatchObject({content:'Keep my question',pending:false});
+  await type('My edited question');await click('All chats');expect(history).toHaveBeenCalledOnce();
+  // Returning from history remounts the composer, retaining the draft. After
+  // making room, the same first-send identity is safe to submit again.
+  await mount(id);await mount(null);
+  expect(host.querySelector('textarea')!.value).toBe('My edited question');
+  vi.mocked(createConversation).mockImplementationOnce(async(_profile,conversationId,_signal,_principle,first)=>({...stored,id:conversationId,revision:1,generationEnabled:false,
+    messages:[{id:first!.id,content:first!.content,profileId:scope.profileId,conversationId,position:1,role:'user',createdAt:stored.createdAt}]}));
+  await click('Send');expect(createConversation).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(createConversation).mock.calls[1]![1]).toBe(vi.mocked(createConversation).mock.calls[0]![1]);
+  expect(readConversationDrafts(scope,'new:general')).toEqual([]);
+});
+it('does not mistake a transient 429 for a definite chat-limit refusal',async()=>{
+  vi.mocked(createConversation).mockRejectedValueOnce(new ApiError({status:429,message:'Try later'}));
+  await mount(null);await type('An uncertain send');await click('Send');
+  expect(named()).toContain('Retry this message');
+  expect(named()).not.toContain('All chats');
+  expect(readConversationDrafts(scope,'new:general')[0]?.value.pending).toBe(true);
+});
 function completeReply(){stored={...stored,revision:stored.revision+1,messages:[...stored.messages,{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:stored.revision+1,role:'assistant',content:'Consider the conditions of the choice.',followUpQuestion:'Which condition matters most today?',replyRequestId:replyId,memoryChanged:false,citations:[{index:0,kind:'principle',id:'principle',available:true}],createdAt:'2026-10-03T01:00:01Z'}]};replyState={...replyState,phase:'ready',revision:stored.revision};}
 /* ── FOUR TOMBSTONES: CORRECTING A REPLY, AND THE FOOTNOTES UNDER IT ────────
    `restores the correction target with its draft and sends it as a new

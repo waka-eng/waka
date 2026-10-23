@@ -31,7 +31,7 @@ const storedContent=(content:string)=>content.trim().length>0?content:'';
 const sameAttachments=(existing:ReadonlyArray<{id:string}>,requested:string[]|undefined)=>
   existing.map(row=>row.id).sort().join()===[...(requested??[])].sort().join();
 type ConversationEnv=AuthEnv&{Variables:{conversationProfileId:string}};
-class ConversationError extends Error{constructor(message:string,readonly status:400|404|409|410|429){super(message);}}
+class ConversationError extends Error{constructor(message:string,readonly status:400|404|409|410|429,readonly code?:string){super(message);}}
 type MessageWindow={from?:number;limit?:number};
 function messageWindow(from?:string,limit?:string):MessageWindow|undefined{
   if(from===undefined&&limit===undefined)return undefined;
@@ -105,7 +105,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
   routes.use('*',async(c,next)=>{c.header('Cache-Control','private, no-store');await next();});
   routes.use('*',deps.authMiddleware??requireAuth,humanSessionsOnly);
   routes.onError((error,c)=>{
-    if(error instanceof ConversationError)return c.json({error:error.message},error.status);
+    if(error instanceof ConversationError)return c.json({error:error.message,...(error.code?{code:error.code}:{})},error.status);
     if(error instanceof ConversationReplyError)return c.json({error:error.message},error.status);
     if(error instanceof ConversationAttachmentError)return c.json(error.body(),error.status);
     const code=(error as {code?:string;cause?:{code?:string}}).cause?.code??(error as {code?:string}).code;
@@ -114,17 +114,21 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     return c.json({error:'The conversation could not be updated.'},500);
   });
   routes.use('*',async(c,next)=>{
-    const query=profileQuerySchema.extend({from:z.string().optional(),limit:z.string().optional()}).safeParse(c.req.query());if(!query.success)return c.json({error:'Invalid profile'},400);
+    const query=profileQuerySchema.extend({from:z.string().optional(),limit:z.string().optional(),q:z.string().max(200).optional()}).safeParse(c.req.query());if(!query.success)return c.json({error:'Invalid profile'},400);
     const target=await resolveTargetProfile(database(),c.get('session'),query.data.profile,c.req.method==='GET'?'read':'write');
     if(!target.ok)return c.json(target.body,target.status);c.set('conversationProfileId',target.profileId);await next();
   });
   routes.get('/',async c=>{
     const profileId=c.get('conversationProfileId');
+    const query=(c.req.query('q')??'').trim().toLowerCase();
+    const matches=sql`strpos(lower(m.content),${query})>0`;
+    const search=query ? sql`exists (SELECT 1 FROM conversation_messages m WHERE m.profile_id=${profileId}::uuid AND m.conversation_id=conversations.id AND ${matches})` : undefined;
     const rows=await database().select({id:conversations.id,profileId:conversations.profileId,updatedAt:conversations.updatedAt,revision:conversations.revision,
+      ...(query ? {match:sql<string>`(SELECT substring(m.content from greatest(1,strpos(lower(m.content),${query})-40) for 180) FROM conversation_messages m WHERE m.profile_id=${profileId}::uuid AND m.conversation_id=conversations.id AND ${matches} ORDER BY m.position LIMIT 1)`} : {}),
       preview:sql<string>`coalesce((SELECT left(trim(m.content),120) FROM conversation_messages m
         WHERE m.profile_id=${profileId}::uuid AND m.conversation_id=conversations.id AND m.role='user' AND length(trim(m.content))>0
         ORDER BY CASE WHEN trim(m.content) IN (${sql.join(CONVERSATION_STARTERS.map(value=>sql`${value}`),sql`, `)}) THEN 1 ELSE 0 END,m.position LIMIT 1),'')`})
-      .from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt))).orderBy(desc(conversations.updatedAt),asc(conversations.id)).limit(CONVERSATION_LIMITS.conversations);
+      .from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt),search)).orderBy(desc(conversations.updatedAt),asc(conversations.id)).limit(CONVERSATION_LIMITS.conversations);
     return c.json({profileId,conversations:rows,...conversationCapabilities()});
   });
   routes.post('/',async c=>{
@@ -175,7 +179,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
         return windowedConversation(current,window,input.data.firstMessage?.id);
       }
       const [count]=await tx.select({n:sql<number>`count(*)::int`}).from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt)));
-      if(count.n>=CONVERSATION_LIMITS.conversations)throw new ConversationError('Conversation limit reached. Delete an old conversation first.',429);
+      if(count.n>=CONVERSATION_LIMITS.conversations)throw new ConversationError('Conversation limit reached. Delete an old conversation first.',429,'conversation_limit_reached');
       if(input.data.principleId){const [source]=await tx.select({id:principles.id}).from(principles).where(and(eq(principles.profileId,profileId),eq(principles.id,input.data.principleId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)));if(!source)throw new ConversationError('This principle is not available.',404);}
       if(input.data.inspirationId)await requireOwnedInspiration(tx,profileId,input.data.inspirationId);
       const first=input.data.firstMessage;

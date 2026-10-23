@@ -57,6 +57,7 @@ export function NoteTools(props: {
       language; empty is the success state. */
   failed: string;
   uploading: string;
+  status?: string;
   /** THE NOTE'S FULL TEXT IS STILL BEING READ. A saved note is opened from a
       list row that carries only a 220-character preview, so the words are
       read in full before they can be edited (see `stored` in
@@ -374,6 +375,8 @@ export function NoteTools(props: {
         <span className="waka-dock-state" role="alert">{props.failed}</span>
       ) : props.attaching ? (
         <span className="waka-dock-state" role="status">{props.uploading}</span>
+      ) : props.status ? (
+        <span className="waka-dock-state" role="status">{props.status}</span>
       ) : null}
     </>,
     slot,

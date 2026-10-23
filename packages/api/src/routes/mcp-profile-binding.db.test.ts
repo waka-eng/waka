@@ -57,9 +57,12 @@ it('binds Noah and anotherone tokens to their exact profiles and refuses every c
     expect(identity.profile.id).toBe(agent.id);
     const roster = await (await app.request('/api/profiles',{headers:headers(credential.token)})).json() as any;
     expect(roster.profiles.map((row:any) => row.id)).toEqual([agent.id]);
+    expect(roster.profiles[0].hasInspirations).toBe(false);
     const inspirationResponse = await app.request('/api/inspirations',{method:'POST',headers:headers(credential.token),body:JSON.stringify({text:`Only ${agent.name} remembers this`})});
     expect(inspirationResponse.status).toBe(201);
     expect((await inspirationResponse.json() as any).inspiration.profileId).toBe(agent.id);
+    const updated = await (await app.request('/api/profiles',{headers:headers(credential.token)})).json() as any;
+    expect(updated.profiles[0].hasInspirations).toBe(true);
   }
   const agents = owners.filter(row => row.type === 'agent');
   await t.sql`INSERT INTO agent_read_grants(grantee_profile_id,target_profile_id,granted_by_profile_id)

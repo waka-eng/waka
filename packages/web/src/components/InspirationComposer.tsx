@@ -228,6 +228,7 @@ function MediaPreview({ item, recording = false, label }: { item: InspirationDra
   return null;
 }
 export function InspirationComposer(props: {
+  owner?: string;
   text: string; media: InspirationDraftMedia[]; locale: SupportedLocale;
   linkText: string; onLinkText: (value:string)=>void;
   ready: boolean; fileDraftsAvailable: boolean; busy: boolean; error: string; uploadingId: string | null;
@@ -337,7 +338,7 @@ export function InspirationComposer(props: {
      dragging out of the WINDOW gives a null `relatedTarget`, which
      `contains` reports as outside, so that case still clears. */
   const overheadOff = () => setOverhead(false);
-  return <DialogSurface className="jar-seek jar-inspiration-composer" motion="modal" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
+  return <DialogSurface className="jar-seek jar-inspiration-composer" modal={false} motion="modal" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
     data-dropping={overhead ? '1' : undefined}
     onDragOver={event => {
       if (!event.dataTransfer.types.includes('Files')) return;
@@ -361,7 +362,7 @@ export function InspirationComposer(props: {
         NO TRAILING VERB HERE. A note that does not exist yet cannot be
         deleted; the slot is for a verb ABOUT the note and a new one has
         none. */}
-    <NotePage locale={props.locale} whenMs={when.current}>
+    <NotePage locale={props.locale} whenMs={when.current} owner={props.owner}>
     <div className="jar-composer-body">
     <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={4} value={props.text} readOnly={props.busy || !props.ready || props.recording.phase !== 'idle'}
       aria-label={say('worldCaptureInspiration')} placeholder={say('worldCapturePrompt')}

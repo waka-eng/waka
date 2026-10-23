@@ -36,11 +36,11 @@
  *     them in as the attacker.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 
-import { accounts, profiles, sessions } from "../db/index.js";
+import { accounts, agentKeys, cliLoginCodes, keeperKeys, mobileLoginCodes, profiles, sessions } from "../db/index.js";
 import {
   buildSessionCookie,
   signSessionToken,
@@ -578,26 +578,32 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
        * password and genuinely owns the address recovers it the same way
        * anyone does, having now proven the address once.
        */
-      const hadPassword = found.passwordHash !== null;
-      await db
-        .update(accounts)
-        .set({
+      const linked = await db.transaction(async (tx) => {
+        // Re-read under a lock so concurrent callbacks cannot revoke the
+        // first callback's new session using a stale password snapshot.
+        const [current] = await tx.select({ passwordHash: accounts.passwordHash, googleSub: accounts.googleSub })
+          .from(accounts).where(eq(accounts.id, found.id)).limit(1).for("update");
+        if (!current || current.googleSub && current.googleSub !== claims.sub) return false;
+        const hadPassword = current.passwordHash !== null;
+        const now = new Date();
+        await tx.update(accounts).set({
           googleSub: claims.sub,
           ...(hadPassword ? { passwordHash: null } : {}),
-          updatedAt: new Date(),
-        })
-        .where(eq(accounts.id, found.id));
-      if (hadPassword) {
-        /* one statement, and the set of profiles is resolved by the database
-           rather than round-tripped — sessions hang off profiles, and every
-           profile of this account is standing on the credential just dropped */
-        await db.delete(sessions).where(
-          inArray(
-            sessions.profileId,
-            db.select({ id: profiles.id }).from(profiles).where(eq(profiles.accountId, found.id)),
-          ),
-        );
-      }
+          updatedAt: now,
+        }).where(eq(accounts.id, found.id));
+        if (hadPassword) {
+          // Revoke every credential derived from the unverified password,
+          // including codes that could mint sessions. Commit with the link.
+          const ownedProfiles = tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.accountId, found.id));
+          await tx.delete(sessions).where(inArray(sessions.profileId, ownedProfiles));
+          await tx.update(keeperKeys).set({ revokedAt: now }).where(and(inArray(keeperKeys.profileId, ownedProfiles), isNull(keeperKeys.revokedAt)));
+          await tx.update(agentKeys).set({ revokedAt: now }).where(and(inArray(agentKeys.profileId, ownedProfiles), isNull(agentKeys.revokedAt)));
+          await tx.delete(cliLoginCodes).where(inArray(cliLoginCodes.profileId, ownedProfiles));
+          await tx.delete(mobileLoginCodes).where(inArray(mobileLoginCodes.profileId, ownedProfiles));
+        }
+        return true;
+      });
+      if (!linked) return failTo("account_conflict");
       identity = {
         accountId: found.id,
         email: found.email,

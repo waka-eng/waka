@@ -14,7 +14,7 @@
  * administering the account rather than working inside it.
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, getTableColumns } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -71,13 +71,13 @@ profilesRoutes.use("*", requireAuth);
 profilesRoutes.get("/", async (c) => {
   const session = c.get("session");
   const rows = await getDb()
-    .select()
+    .select({ ...getTableColumns(profiles), hasInspirations: sql<boolean>`exists (select 1 from inspirations i where i.profile_id = profiles.id)` })
     .from(profiles)
     .where(and(eq(profiles.accountId, session.profile.accountId),
       session.profile.type === "agent" || session.keyScoped ? eq(profiles.id, session.profile.id) : undefined))
     .orderBy(profiles.type, profiles.createdAt);
 
-  return c.json({ profiles: rows.map(serializeProfile) });
+  return c.json({ profiles: rows.map(row => ({ ...serializeProfile(row), hasInspirations: row.hasInspirations })) });
 });
 
 /*

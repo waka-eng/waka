@@ -49,6 +49,23 @@ it('stores ordered words once, rejects changed replay and never requests an assi
   const history=await (await f.app.request('/conversations')).json() as any;expect(history.conversations).toHaveLength(1);expect(history.conversations[0].preview).toBe(message.content);
   expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
 });
+it('explains the per-profile chat cap and accepts the same draft after a chat is deleted',async()=>{
+  const f=await fixture(),other=await fixture();
+  await t.sql`INSERT INTO conversations(id,profile_id) SELECT gen_random_uuid(),${f.profileId} FROM generate_series(1,100)`;
+  const draft={id:f.id,firstMessage:{id:randomUUID(),content:'Keep this draft until there is room.'}};
+  const refused=await f.send('',draft);
+  expect(refused.status).toBe(429);
+  expect(await refused.json()).toMatchObject({code:'conversation_limit_reached'});
+  expect(await t.sql`SELECT id FROM conversations WHERE id=${f.id}`).toHaveLength(0);
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE id=${draft.firstMessage.id}`).toHaveLength(0);
+  expect((await other.send('',{id:other.id})).status).toBe(200);
+  const [existing]=await t.sql`SELECT id FROM conversations WHERE profile_id=${f.profileId} LIMIT 1`;
+  expect((await f.send(`/${existing.id}/messages`,{id:randomUUID(),content:'Existing chats still work.',revision:0})).status).toBe(200);
+  expect((await f.app.request(`/conversations/${existing.id}`,{method:'DELETE'})).status).toBe(200);
+  const retried=await f.send('',draft);
+  expect(retried.status).toBe(200);
+  expect((await retried.json() as any).conversation.messages[0].content).toBe(draft.firstMessage.content);
+});
 it('names starter-led threads after the first human topic without copying assistant text',async()=>{
   const f=await fixture(),other=await fixture();await f.send('',{id:f.id});
   await f.send(`/${f.id}/messages`,{id:randomUUID(),content:'Help me think through a choice.',revision:0});
@@ -279,4 +296,17 @@ it('treats an identical retry as the same create, for your own memory and after 
   expect((await f.send('',{id:f.id,perspective:'agent',agentId:agent.id})).status).toBe(200);
   await t.sql`DELETE FROM profiles WHERE id=${agent.id}`;
   expect((await f.send('',{id:f.id,perspective:'agent',agentId:agent.id})).status,'the same retry after the agent went').toBe(200);
+});
+
+it('searches later chat messages literally and only within the selected profile',async()=>{
+  const f=await fixture(),other=await fixture();
+  await f.send('',{id:f.id,firstMessage:{id:randomUUID(),content:'Opening topic'}});
+  await f.send(`/${f.id}/messages`,{id:randomUUID(),revision:1,content:'A later thought about 50%_complete work.'});
+  await other.send('',{id:other.id,firstMessage:{id:randomUUID(),content:'PRIVATE 50%_complete'}});
+  const body=await(await f.app.request('/conversations?q=50%25_complete')).json() as any;
+  expect(body.conversations).toHaveLength(1);
+  expect(body.conversations[0]).toMatchObject({id:f.id,preview:'Opening topic',match:'A later thought about 50%_complete work.'});
+  expect(JSON.stringify(body)).not.toContain('PRIVATE');
+  expect((await(await f.app.request('/conversations?q=50xcomplete')).json() as any).conversations).toEqual([]);
+  expect((await f.app.request('/conversations?q='+ 'a'.repeat(201))).status).toBe(400);
 });

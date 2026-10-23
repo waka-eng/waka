@@ -60,12 +60,14 @@ export interface NotePageProps {
   whenMs: number;
   /** One verb ABOUT this note — Delete on a saved one, nothing on a new. */
   trailing?: ReactNode;
+  owner?: string;
   children: ReactNode;
 }
 
 export function NotePage({
   locale,
   whenMs,
+  owner,
   trailing,
   children,
 }: NotePageProps): JSX.Element {
@@ -106,7 +108,7 @@ export function NotePage({
             was on the page the founder said they preferred. On an empty new
             note it is the only thing that exists yet; on a saved one it is
             what tells you which evening this was. Same slot either way. */}
-        <span className="jar-note-when">{momentStamp(whenMs, locale)}</span>
+        <span className="jar-note-when">{owner ? <span className="jar-note-owner">{owner}</span> : null}{momentStamp(whenMs, locale)}</span>
         {trailing ? <span className="jar-note-verb">{trailing}</span> : null}
       </div>
       {children}

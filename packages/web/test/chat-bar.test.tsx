@@ -81,7 +81,7 @@ const row = (name: string) => [...world!.container.querySelectorAll<HTMLButtonEl
 /** A new chat, opened the way a person opens one: the bar's Chat on Now. */
 async function aNewChat(): Promise<void> {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-  const chat = row('Chat');
+  const chat = row('New chat');
   expect(chat, 'Now offers no Chat in the bar').toBeTruthy();
   await act(async () => chat!.click()); await settle();
   expect(location.pathname, 'Chat on Now did not open a new chat').toBe('/chat/new');
@@ -172,10 +172,10 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
     await act(async () => close!.click()); await settle();
     expect(location.pathname, 'Close left the chat up').not.toContain('/chat/');
     expect(open(), 'Close on a chat went somewhere other than home').toBeNull();
-    expect(barShape(world!.container), 'home is not back to the two words').toEqual(['Inspiration', 'Chat']);
+    expect(barShape(world!.container), 'home is not back to creation and history').toEqual(['New inspiration', 'New chat', 'All inspirations', 'All chats']);
     expect(world!.container.querySelector('.chat-composer'), 'the chat\'s composer outlived the chat').toBeNull();
 
-    await act(async () => row('Chat')!.click()); await settle();
+    await act(async () => row('New chat')!.click()); await settle();
     const allChats = row('All chats');
     expect(allChats, 'a chat offers no way to the chats list').toBeTruthy();
     await act(async () => allChats!.click()); await settle();
@@ -186,6 +186,21 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
     expect(barShape(world!.container)).toEqual(['↩', '│', 'Close']);
   });
 
+  it('returns from history to the same principle-started draft', async () => {
+    const principleId='11111111-1111-4111-8111-111111111111';
+    world=await mountWorld(FACTS,{initialEntries:[`/chat/new?principle=${principleId}`],routerTools:<RouterTools/>});await settle();
+    const field=await chatField(world.container);
+    await act(async()=>{
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(field,'Keep this question with its starting point.');
+      field.dispatchEvent(new Event('input',{bubbles:true}));
+    });
+    await act(async()=>row('All chats')!.click());await settle();
+    expect(open()).toBe('conversations');
+    await act(async()=>world!.container.querySelector<HTMLButtonElement>('.waka-dock button[aria-label="Back"]')!.click());await settle();
+    expect(new URLSearchParams(location.search).get('principle')).toBe(principleId);
+    expect((await chatField(world.container)).value).toBe('Keep this question with its starting point.');
+  });
+
   /* THE GLYPHS IN FRONT OF THE TWO WORDS (founder, 2026-10-18: "add + icon in
      front of Inspiration, and chat icon in front of Chat at bottom bar").
      Decorative: hidden from assistive tech, so each row's name is still its
@@ -193,8 +208,8 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
      "All chats", which opens a list. */
   it('draws a plus before Inspiration and a chat bubble before Chat, hidden, names unchanged', async () => {
     world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-    expect(barShape(world!.container)).toEqual(['Inspiration', 'Chat']);
-    for (const [name, kind] of [['Inspiration', 'plus'], ['Chat', 'chat']] as const) {
+    expect(barShape(world!.container)).toEqual(['New inspiration', 'New chat', 'All inspirations', 'All chats']);
+    for (const [name, kind] of [['New inspiration', 'plus'], ['New chat', 'chat']] as const) {
       const button = row(name);
       expect(button, `no bar row reads ${name}`).toBeTruthy();
       const glyphs = button!.querySelectorAll('svg');
@@ -207,7 +222,7 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
       expect(button!.firstElementChild, `the ${kind} glyph is not in front of ${name}`).toBe(glyph);
       expect(button!.hasAttribute('aria-label'), `${name} gained an aria-label over its word`).toBe(false);
     }
-    await act(async () => row('Chat')!.click()); await settle();
+    await act(async () => row('New chat')!.click()); await settle();
     expect(row('All chats')?.querySelector('svg'), 'All chats wears the new-chat glyph').toBeNull();
   });
 });

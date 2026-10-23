@@ -644,7 +644,7 @@ async function pressKey(container: HTMLElement, key: string): Promise<void> {
  */
 export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
   if (label === "Inspirations" || label === "Your inspirations") {
-    await pressDockRow(container, "Inspiration");
+    await pressDockRow(container, "New inspiration");
     await pressDockRowWhenItAppears(container, "All inspirations", "a new note's All inspirations");
     return;
   }
@@ -674,7 +674,7 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
  * header above it, since nothing sits in a corner any more.
  */
 export async function pressChatCorner(container: HTMLElement): Promise<void> {
-  await pressDockRow(container, "Chat");
+  await pressDockRow(container, "New chat");
   await pressDockRowWhenItAppears(container, "All chats", "a new chat's All chats");
 }
 

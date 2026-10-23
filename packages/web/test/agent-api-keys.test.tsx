@@ -1,3 +1,6 @@
+/** WHAT THIS MOCKS, AND WHY (gate G6): `fetch` supplies profile, session,
+ * and key responses without real credentials. React renders the real settings
+ * controls; tests exercise creation, one-time secret display and revocation. */
 // @vitest-environment jsdom
 // Mock only fetch and the clipboard: exercise the real settings navigation
 // and API client without minting credentials on a user's account.

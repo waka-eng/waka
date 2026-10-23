@@ -149,7 +149,7 @@ const offlineNow=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
 const refusalOf=(reason:unknown):MessageKey=>reason instanceof PhotoRefused?reason.reason
   :reason instanceof FileRefused?(reason.reason==='too_large'?'worldAttachTooLarge':reason.reason==='empty'?'worldPhotoEmpty':'worldAttachUnsupported'):'worldAttachFailed';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,agent=null,profile=null,toolsSlot}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory,agent=null,profile=null,toolsSlot}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
   profile?:{name:string;type:'human'|'agent'}|null;
   /** The account's agent, when it has one: a new chat may talk with it, or with both. */
   agent?:{id:string;name:string}|null;
@@ -173,6 +173,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   /* True when the notice is about words that never left this device — the
      notice's own button then sends them again rather than re-reading. */
   const [unsent,setUnsent]=useState(false);
+  const [limitReached,setLimitReached]=useState(false);
   const [mobile,setMobile]=useState(()=>window.matchMedia?.('(max-width:760px)').matches??false);
   const [earlierBusy,setEarlierBusy]=useState(false),[earlierFailed,setEarlierFailed]=useState(false);
   const prependScroll=useRef<{height:number;top:number}|null>(null);
@@ -399,7 +400,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     void refresh();return()=>lifecycle.current.abort();
   },[scope.accountId,scope.profileId,id,initialPrincipleId]);
   const save=async()=>{
-    if(working.current||loading||(generationEnabled===null&&!error)||awaitingReply||reply.terminal||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
+    if(working.current||loading||limitReached||(generationEnabled===null&&!error)||awaitingReply||reply.terminal||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
     /* A draft kept before its agent was recorded waits for the agent to load,
        rather than starting a chat on your own memory instead. */
     if(!id&&draftRef.current.talkWith&&!draftRef.current.agentId&&!agent)return;
@@ -470,6 +471,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       if(mine(owner)){observe(next);setError(null);setUnsent(false);setAttachNote(null);if(id)reply.check();}
     }catch(reason){
       if(!mine(owner))return;
+      if(!id&&reason instanceof ApiError&&reason.status===429&&reason.code==='conversation_limit_reached'){
+        // A definite refusal created nothing. Keep the draft editable instead
+        // of journalling an uncertain send that retries forever.
+        const current=draftRef.current;
+        if(current?.id===intent.id)keep({...current,pending:false,updatedAt:Date.now()});
+        setLimitReached(true);setUnsent(false);setError(say('worldConversationLimitReached'));
+        return;
+      }
       /* ═══ A PHOTO THAT IS NO LONGER THERE ════════════════════════════
          A draft can outlive what it carries: the daily sweep takes a staged
          upload after seven days, and another tab's × takes one at once. The
@@ -611,6 +620,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
    * eight `||`s were not.
    */
   const whyNoSend = storageFailed ? 'worldConversationDraftFailed' as const
+    : limitReached ? 'worldConversationLimitReached' as const
     /* GONE (404/410) IS GONE: never a Send onto a deleted conversation. The
        notice offers a new chat instead. */
     : reply.terminal === 'gone' ? 'worldConversationReplyGone' as const
@@ -658,7 +668,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         it was, on a product whose other screens have one bar and two corner
         buttons. The corners are the navigation here as everywhere. */}
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
-      {error?<div className="chat-notice" role="alert">{error} {(unsent&&!draft?.pending&&Boolean(draft?.content.trim()||draft?.attachments?.length))||(draft?.pending&&(!id||conversation))?
+      {error?<div className="chat-notice" role="alert">{error} {limitReached
+        ? onHistory?<button type="button" onClick={onHistory}>{say('worldAllChats')}</button>:null
+        : (unsent&&!draft?.pending&&Boolean(draft?.content.trim()||draft?.attachments?.length))||(draft?.pending&&(!id||conversation))?
         /* RETRY ONLY WHERE IT WORKS (review): `save` stops for every reason
            `whyNoSend` names, so a Retry beside one of them was a button that
            did nothing. A conversation that is GONE offers its way out — a new

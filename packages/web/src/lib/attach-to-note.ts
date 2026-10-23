@@ -28,22 +28,28 @@ export async function attachToNote(
   file: File,
   to: { noteId: string; profileId: string | null; type: "image" | "file" },
   canContinue: () => boolean = () => true,
+  recovery?: { uploadedKey?: string; onUploaded: (key: string) => Promise<void> },
 ): Promise<void> {
   const checkOwner = () => { if (!canContinue()) throw new Error("Recording owner is no longer signed in"); };
   checkOwner();
-  const pre = await presignAttachment(
-    { filename: file.name, contentType: file.type || "application/octet-stream", size: file.size },
-    undefined,
-    ...(to.profileId ? [{ profile: to.profileId }] as const : []),
-  );
-  checkOwner();
-  await uploadToPresignedUrl(pre.uploadUrl, file, pre.headers);
+  let key = recovery?.uploadedKey;
+  if (!key) {
+    const pre = await presignAttachment(
+      { filename: file.name, contentType: file.type || "application/octet-stream", size: file.size },
+      undefined,
+      ...(to.profileId ? [{ profile: to.profileId }] as const : []),
+    );
+    checkOwner();
+    await uploadToPresignedUrl(pre.uploadUrl, file, pre.headers);
+    key = pre.key;
+    await recovery?.onUploaded(key);
+  }
   checkOwner();
   try {
     await finalizeAttachment({
       type: to.type,
       inspirationId: to.noteId,
-      key: pre.key,
+      key,
       name: file.name,
       ...(file.type ? { contentType: file.type } : {}),
     });

@@ -441,6 +441,7 @@ function markPassages(
  * invented memories into a real archive, and it is not made twice.
  */
 interface AgentRosterEntry {
+  hasInspirations?: boolean;
   id: string;
   name: string;
   createdAt: string;
@@ -465,7 +466,7 @@ async function loadAgentRoster(): Promise<{
     .catch(() => []);
   if (real.length > 0) {
     return {
-      roster: real.map((p) => ({ id: p.id, name: p.name, createdAt: p.createdAt })),
+      roster: real.map((p) => ({ id: p.id, name: p.name, createdAt: p.createdAt, hasInspirations: p.hasInspirations })),
       mockBundles: null,
     };
   }
@@ -2217,7 +2218,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /** Which bar row the page's own groups (rules, tools, Close) hang off. */
   const barOwner: 'inspiration' | 'talk' | 'return' | null = making ?? (listing ? 'return' : null);
   /** Where a list was opened from by the bar's "All …", so ↩ can go back there (see the dock). */
-  const listOrigin = useRef<{ kind: 'note' } | { kind: 'chat'; id: string } | null>(null);
+  const listOrigin = useRef<{ kind: 'note' } | { kind: 'chat'; id: string; principleId?: string | null } | null>(null);
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
   const [principlesCrossing, setPrinciplesCrossing] = useState<{ going: 'in' | 'out'; home: CreatureSpot | null } | null>(null);
   if (crossSeen.open !== principlesOpen || crossSeen.now !== atNowView) {
@@ -2576,7 +2577,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const onAgentProfilesChange = useCallback((profiles: ApiOwnedProfile[]) => {
     const roster = profiles.filter(profile => profile.type === 'agent');
     setAgentRoster(previous => previous?.length === roster.length && previous.every((profile, i) =>
-      profile.id === roster[i].id && profile.name === roster[i].name && profile.createdAt === roster[i].createdAt
+      profile.id === roster[i].id && profile.name === roster[i].name && profile.hasInspirations === roster[i].hasInspirations && profile.createdAt === roster[i].createdAt
     ) ? previous : roster);
     setAgents(previous => {
       if (!previous) return previous;
@@ -2587,6 +2588,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
       return next.length === previous.length && next.every((bundle, i) => bundle === previous[i]) ? previous : next;
     });
   }, []);
+  const [agentSetup, setAgentSetup] = useState<{ id: string; sequence: number } | null>(null);
   const settingsCard = auth ? {
     name: settingsWrites.name,
     nameBusy: settingsWrites.nameBusy,
@@ -4203,8 +4205,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
   /* AND THE RESTING LINE IS THE AGENT'S AT NOW, from `wallChromeNow`, for the
      same reason `agentSays` is not `chrome`: `chrome.formingAlt` is written
      an effect late and at the dial's T. */
+  const agentIsEmpty = standingAsAgent && !agentBundleMissing && !agentSays && !standingBundle?.topOfMind.notes.length &&
+    (standingBundle?.inspirationTotal === 0 || (standingBundle?.inspirationTotal === undefined && agentRoster?.find(profile => profile.id === atWall.id)?.hasInspirations === false));
   const restingWord = standingAsAgent
-    ? wallChromeNow.get(spaceKey(atWall))?.formingAlt ?? say("worldFormingNothingAdopted")
+    ? agentIsEmpty ? say("worldAgentNoMemories") : wallChromeNow.get(spaceKey(atWall))?.formingAlt ?? say("worldFormingNothingAdopted")
     : say(inspirations?.length || fieldBeyond ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
 
   /**
@@ -5054,7 +5058,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
        draft is untouched — `closeComposer` keeps the words, and the archive's
        own new-note button opens straight back onto them. */
     nav.write(
-      { ...(nav.view ?? EMPTY_VIEW), open: what, compose: false, conversationId: null },
+      { ...(nav.view ?? EMPTY_VIEW), open: what, compose: false, conversationId: null,
+        ...(nav.view?.conversationId ? { principleId: null } : {}) },
       standingAway(nav.view) ? { replace: true } : {},
     );
   }, [leaveOpen]);
@@ -5075,10 +5080,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
    * browser Back explicitly is not — "a list is not an exit. Browser Back is
    * not an exit."
    */
-  const openTalk = useCallback((id: string | null) => {
+  const openTalk = useCallback((id: string | null, principleId: string | null = null) => {
     const nav = viewNavigationRef.current;
     nav.write(
-      { ...EMPTY_VIEW, wallId: atWallRef.current.kind === 'agent' ? atWallRef.current.id : null, conversationId: id ?? 'new' },
+      { ...EMPTY_VIEW, wallId: atWallRef.current.kind === 'agent' ? atWallRef.current.id : null, conversationId: id ?? 'new', principleId: id ? null : principleId },
       standingAway(nav.view) ? { replace: true } : {},
     );
   }, []);
@@ -5479,6 +5484,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
       if (result.processing) sourceProcessing.track(made.id, result.processing);
       // Legacy text-only intents may still be in the journal. New bundle
       // intents have already committed all requested attachment rows.
+      setAgentRoster(previous => previous?.map(profile => profile.id === intent.profileId ? { ...profile, hasInspirations: true } : profile) ?? null);
       const links = Array.from(new Set(made.text.match(/https?:\/\/[^\s<>"')]+/g) ?? []));
       for (const url of intent.input.attachments ? [] : links) {
         const linkKey = `${made.id}:${url}`;
@@ -5502,7 +5508,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            how the character jumps up and down, but for a few sec, make that
            say 'I'm inspired!' and the CTA should be let's chat about it." The
            bubble's act is the chat about THIS save (see the bubble below). */
-        setCharSay(atWallRef.current.kind === 'self' ? say('worldImInspired') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
+        setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
         if(initiated&&memoryScope)setRecentInspiration({owner:`${memoryScope.accountId}:${memoryScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
         viewNavigationRef.current.closeComposer();
       } };
@@ -5732,7 +5738,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
     || (dictation.error === 'dictation-failed' ? say('worldComposerDictateFailed') : '')
     || (!composerDraft.ready ? say('worldComposerOpening') : '')
     || (uploadingMediaId ? say('worldComposerUploading') : '')
-    || (recording.phase === 'idle' && recording.notice ? say(recording.notice) : '');
+    || (recording.phase === 'idle' && recording.notice ? say(recording.notice) : '')
+    || (preparingInspiration || inspirationSave.busy ? say('worldSaving') : draft.trim() || inputMedia.length ? say('worldDraftWord') : '');
 
   const keepIt = useCallback(async () => {
     let text = draftRef.current.trim();
@@ -7774,7 +7781,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         const note = words.length > 32 ? `${words.slice(0, 31).trimEnd()}…` : words;
         return (
           <div className="waka-clip-failed" role="alert" data-jar-chrome="1" data-jar-interactive="1">
-            <span className="waka-clip-failed-words">{failure.reason
+            <span className="waka-clip-failed-words">{failure.storageFailed ? say("worldRecordingDraftUnavailable") : failure.reason
               /* the recorder's own failure: there is no clip to try again */
               ? note ? formatMessage(locale, 'worldRecordingProblemFor', { note, problem: say(failure.reason) }) : say(failure.reason)
               : note ? formatMessage(locale, 'worldRecordingAttachFailed', { note })
@@ -9841,7 +9848,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
                               work; the person standing on its wall cannot
                               write into it, so the offer would be a door to
                               a notepad that saves to somebody else. */}
-                          {standingAsAgent ? null : (
+                          {standingAsAgent ? (
+                            <>
+                              <span className="jar-char-bubble-of">{say('worldAgentEmptyHelp')}</span>
+                              <span className="jar-char-bubble-acts">
+                                <button type="button" className="jar-char-bubble-act" onClick={startNewInspiration}>{say('worldDockSaves')}</button>
+                                <button type="button" className="jar-char-bubble-act" onClick={() => setAgentSetup({ id: atWall.id, sequence: Date.now() })}>{say('worldAgentConnect')}</button>
+                              </span>
+                            </>
+                          ) : (
                             <span className="jar-char-bubble-acts">
                               <button type="button" className="jar-char-bubble-act"
                                 onClick={startNewInspiration}>
@@ -10229,7 +10244,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 says it now ("I'm inspired!", with the chat as its act). */}
           </div>
         </div>
-        {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
+        {mouthOpen ? <InspirationComposer owner={conversationProfile ? formatMessage(locale, "worldSavingToProfile", { name: conversationProfile.name }) : undefined} text={draft} media={inputMedia}
           linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
           recordingCandidate={composerDraft.draft.recordingCandidate}
           onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => sayMouthProblem(draftProblem(reason))); }}
@@ -11441,7 +11456,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           navigation always visible." A conversation is a page like the rest
           of them now, so it keeps the bar like the rest of them. */}
       {phase==='ready'&&!viewNavigation.view?.sharePrinciple ? (
-        <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
+        <nav className={`waka-dock${atNowView && !reviewing ? ' waka-dock--home' : ''}`} aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
             /* "HOME" IS NOT A PLACE IN THIS PRODUCT. Founder: "I don't like
                the word 'home', so maybe just the home should be a light bulb
@@ -11527,7 +11542,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 if (close) { close(); return; }
                 const origin = listOrigin.current;
                 listOrigin.current = null;
-                if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id);
+                if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id, origin.principleId);
                 else { openOverHome(null); if (origin?.kind === 'note') startNewInspiration(); }
               } }] : []),
             ...(making === 'talk' || listing || (reviewing && !making) ? [] : [{ id: 'inspiration', label: 'worldDockSaves' as const,
@@ -11584,9 +11599,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
               go: () => {
                 commitOpenNote();
                 /* On a chat this is "All chats". */
-                if (making === 'talk') { listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new' }; openOverHome('conversations'); }
+                if (making === 'talk') { listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new', principleId: viewNavigation.view?.principleId }; openOverHome('conversations'); }
                 else openTalk(null);
               } }]),
+            ...(atNowView && !reviewing ? [
+              { id: 'inspiration-history', label: 'worldBackToAll' as const, here: false,
+                go: () => { listOrigin.current = null; openOverHome('saves'); } },
+              { id: 'chat-history', label: 'worldAllChats' as const, here: false,
+                go: () => { listOrigin.current = null; openOverHome('conversations'); } },
+            ] : []),
           ]).map(item => (
             /* THE SHEET HANGS OFF THE PLUS, not off the middle of the screen.
                Founder, with a screenshot: "this not being aligned with the +
@@ -12035,6 +12056,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             ) : null}
         account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
         settings={settingsCard}
+        agentSetup={agentSetup}
         onSignOut={auth ? () => { void auth.logout(); } : undefined}
         /* AND HIDDEN WHILE A SAVED NOTE IS OPEN, which `mouthOpen` already
            does for a new one. Founder: "it should go to the same exact UI
@@ -12103,15 +12125,16 @@ const RETRY_READ_LIMIT_MS = 20_000;
           `HowItWorksPanel.tsx`, which names all three. Nothing in this file
           reaches any of them; this paragraph is the pointer for anyone
           following an old reference here. */}
-      {storageScope&&viewNavigation.view?.open==='saves'?<SavesOverlay
+      {conversationScope&&conversationProfile&&viewNavigation.view?.open==='saves'?<SavesOverlay
         onNoteOpen={savedNoteChanged}
         note={viewNavigation.view.note}
         onNoteAddress={noteAddressChanged}
         onNewSave={startNewInspiration}
-        key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:saves`}
-        locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
-        ownArchive={atWall.kind!=='agent'}
-        title={atWall.kind==='agent'?formatMessage(locale,'worldProfileInspirations',{name:atWall.name}):say('worldMenuField')}
+        key={`${conversationScope.accountId}:${conversationScope.profileId}:saves`}
+        scope={conversationScope} ownerName={conversationProfile.name}
+        locale={locale} profileId={conversationScope.profileId}
+        ownArchive={conversationProfile.type==='human'}
+        title={conversationProfile.type==='agent'?formatMessage(locale,'worldProfileInspirations',{name:conversationProfile.name}):say('worldMenuField')}
         focus={savesFocus} onClearFocus={() => setSavesFocus(null)}
         /* THE SWITCH IS IN THE CORNER, AND IT ALWAYS WAS. Founder: "if the
            user changes it in the modal, then the page behind it should also
@@ -12252,6 +12275,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
               profile={conversationProfile}
+              onHistory={()=>{listOrigin.current={kind:'chat',id:talkId??'new',principleId:viewNavigation.view?.principleId};openOverHome('conversations');}}
               /* The bar's middle group, lent for the mic and the ＋. */
               toolsSlot={CHAT_TOOLS_SLOT}
               onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};}}

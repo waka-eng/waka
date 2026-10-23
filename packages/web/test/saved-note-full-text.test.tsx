@@ -167,7 +167,7 @@ it("keeps all 1,000 characters through open → edit → Save", async () => {
   await answer(true);
   expect(page().readOnly).toBe(false);
   expect(page().value).toBe(LONG);
-  expect(bar()).toBe("");
+  expect(bar()).toBe("Saved");
 
   await type(`${LONG} And one more sentence.`);
   expect(save().disabled).toBe(false);
@@ -334,7 +334,7 @@ it("keeps one note's upload failure on that note: not on the next, still on its 
   const other = [...host.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((b) => (b.textContent ?? "").includes("an older note"))!;
   await act(async () => other.click());
   await answer(true);
-  expect(bar(), "not on the next note opened").toBe("");
+  expect(bar(), "not on the next note opened").toBe("Saved");
   await act(async () => closer!());
   const own = [...host.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((b) => !(b.textContent ?? "").includes("an older note"))!;
   await act(async () => own.click());
@@ -382,7 +382,7 @@ it("keeps one note's upload off another note's bar", async () => {
   const other = [...host.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((b) => (b.textContent ?? "").includes("an older note"))!;
   await act(async () => other.click());
   await answer(true);
-  expect(bar(), "and not on the next note").toBe("");
+  expect(bar(), "and not on the next note").toBe("Saved");
   expect(slot.querySelector<HTMLButtonElement>('[aria-label="Add photo or file"]')?.disabled, "whose tools it does not hold").toBe(false);
 });
 

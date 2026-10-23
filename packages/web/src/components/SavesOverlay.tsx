@@ -70,6 +70,8 @@ import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { inspectInspirationPhoto } from "../lib/inspiration-photo";
 import { inspectAttachmentFile } from "../lib/api/file-accept";
 import { inspirationPreview } from "../lib/inspiration-preview";
+import { readNoteEdit, writeNoteEdit, clearNoteEdit } from "../lib/note-edit-drafts";
+import type { ProfileStorageScope } from "../lib/profile-storage";
 import { wordsCanStand } from "../lib/note-words";
 
 type Phase = "loading" | "ready" | "failed";
@@ -91,7 +93,7 @@ function pictureOf(row: Inspiration): string | null {
   return image ? attachmentPreviewImageUrl(image.id) : null;
 }
 
-export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true, note: noteAddress, onNoteAddress }: {
+export function SavesOverlay({ locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true, note: noteAddress, onNoteAddress }: {
   /**
    * WHICH NOTE THE ADDRESS SAYS IS OPEN (`?open=saves&note=<id>`), when the
    * caller gives the note an address. The address leads: a row press asks
@@ -103,6 +105,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
    * address is what commits the words — the caller's `commitOpenNote`, the
    * same exit every other way out takes.
    */
+  scope?: ProfileStorageScope | null;
+  ownerName?: string;
   note?: string | null;
   onNoteAddress?: (change: 'open' | 'close' | 'missing', id: string) => void;
   locale: SupportedLocale;
@@ -236,6 +240,18 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      no "editing" flag any more because there is no mode to be in. `draft` is
      seeded when a note opens and written back when it closes. */
   const [draft, setDraft] = useState("");
+  const editRevision = useRef<string | null>(null);
+  const [editUnavailable, setEditUnavailable] = useState(false);
+  const [editConflict, setEditConflict] = useState(false);
+  const clearEdit = useCallback((id: string, revision: string | null) => {
+    try { clearNoteEdit(scope, id, revision); } catch { /* keep recovery if cleanup fails */ }
+  }, [scope]);
+  useEffect(() => {
+    if (!editUnavailable) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [editUnavailable]);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [open, setOpen] = useState<Inspiration | null>(null);
@@ -515,6 +531,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     const note = open;
     const words = draft.trim();
     if (!note || saving) return;
+    if (editConflict) { setOpen(null); return; }
     /* Not read yet (or the read failed): nothing typed can have reached the
        draft, and the preview is not the note — so leaving writes nothing. */
     const base = stored && stored.id === note.id ? stored.text : null;
@@ -524,10 +541,13 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        is not written (the server refuses it too); its stored words stay, and
        the page said so while it was empty (`placeholder` below). */
     if (base === null || words === base.trim() || !wordsCanStand(words, note.attachments.length)) { setOpen(null); return; }
+    const revision = editRevision.current;
     setSaving(true);
     setSaveFailed(false);
     try {
       await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
+      clearEdit(note.id, revision);
+      editRevision.current = null;
       if (!mounted.current) return;
       /* The list holds what the page loaded, so it has to agree without a
          refetch — otherwise going back reveals the old first line. */
@@ -538,7 +558,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     } finally {
       if (mounted.current) setSaving(false);
     }
-  }, [draft, open, saving, stored, profileId]);
+  }, [draft, open, saving, stored, profileId, editConflict, clearEdit]);
 
   /**
    * ═══ AND NOW THERE IS A SAVE TO PRESS, WITH THE NET STILL UNDER IT ═════
@@ -609,10 +629,13 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
        the same fact asked at the write, so no future change to that field can
        make a preview reach the server. */
     if (!stored || stored.id !== note.id || stored.text === null) return;
+    const revision = editRevision.current;
     setSaving(true);
     setSaveFailed(false);
     try {
       await updateInspiration(note.id, { text: words }, profileId ? { profile: profileId } : {});
+      clearEdit(note.id, revision);
+      editRevision.current = null;
       if (!mounted.current) return;
       /* Both copies, for the reason `leaveNote` gives about the list and the
          reason `attach` gives about the snapshot: the grid behind must not
@@ -622,12 +645,14 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       setOpen((card) => (card && card.id === note.id ? { ...card, preview: inspirationPreview(words, card.attachments) } : card));
       /* What is stored now, which is what dims the button again. */
       setStored((held) => (held && held.id === note.id ? { ...held, text: words } : held));
+      setEditConflict(false);
+      setEditUnavailable(false);
     } catch {
       if (mounted.current) setSaveFailed(true);
     } finally {
       if (mounted.current) setSaving(false);
     }
-  }, [draft, open, saving, stored, profileId]);
+  }, [draft, open, saving, stored, profileId, editConflict, clearEdit]);
 
   /* Whether the address has left the open note since it first named it
      (see "WHETHER THE ADDRESS HAS LEFT THE OPEN NOTE" below). */
@@ -652,13 +677,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       .then((detail) => {
         if (!mounted.current || controller.signal.aborted) return;
         setStored((held) => (held && held.id === id ? { id, text: detail.text, failed: false } : held));
-        setDraft(detail.text);
+        const recovered = readNoteEdit(scope, id);
+        editRevision.current = recovered?.revision ?? null;
+        setDraft(recovered?.text ?? detail.text);
+        setEditConflict(Boolean(recovered && recovered.base !== detail.text && recovered.text !== detail.text));
+        setEditUnavailable(false);
       })
       .catch(() => {
         if (!mounted.current || controller.signal.aborted) return;
         setStored((held) => (held && held.id === id ? { id, text: null, failed: true } : held));
       });
-  }, [profileId]);
+  }, [profileId, scope]);
   const openNote = useCallback((row: Inspiration) => {
     /* Opened fresh, by a press or by its address: no departure yet. */
     addressFor.current = { id: row.id, named: false, left: false };
@@ -916,11 +945,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       /* Empty is something to keep only beside an attachment — the one rule
          both doors ask (`lib/note-words.ts`). */
       && wordsCanStand(draft, open?.attachments.length ?? 0),
-    /* `ready` IS THE DRAFT STORE HAVING OPENED — "before that there is
-       nowhere to write". This page has no draft store: the words live in
-       React state and the destination is a row that already exists, so there
-       is nowhere for this to be false. `open` carries the only readiness this
-       page has, and `hasWords` above already requires it. */
+    // Saved-note recovery writes synchronously. A failed local write must
+    // not prevent saving to the server; hasWords requires the full note.
     ready: true,
     saving,
     /* UPLOADING IS NOT A SAVE CONFLICT HERE, and this is the one field where
@@ -1449,7 +1475,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
           /* the notepad's recorder is running under this page: one
              microphone at a time */
           recordDisabled={recorder.blocked}
-          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : ""}
+          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : editUnavailable ? say("worldNoteDraftUnavailable") : editConflict ? say("worldNoteDraftConflict") : ""}
+          status={saving ? say("worldSaving") : loaded ? say(draft.trim() !== stored?.text?.trim() ? "worldDraftWord" : "worldSavedWord") : ""}
           /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
              state (founder: "states should show and disappear in the bottom
              bar only"). See `stored`. */
@@ -1586,6 +1613,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
             <NotePage
               locale={locale}
               whenMs={open.capturedMs}
+              owner={ownerName ? formatMessage(locale, "worldSavingToProfile", { name: ownerName }) : undefined}
             >
               {pictureOf(open) ? (
                 <img className="waka-sheet-picture" src={pictureOf(open)!} alt="" />
@@ -1609,7 +1637,17 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                 placeholder={loaded && open.attachments.length === 0 ? say("worldNoteNeedsSomething") : undefined}
                 aria-busy={!loaded && !stored?.failed}
                 aria-label={say("worldCaptureInspiration")}
-                onChange={(event) => { setDraft(event.target.value); setSaveFailed(false); }}
+                onChange={(event) => {
+                  const text = event.target.value;
+                  setDraft(text); setSaveFailed(false);
+                  try {
+                    const saved = text.trim() === stored?.text?.trim()
+                      ? (clearNoteEdit(scope, open.id, editRevision.current), null)
+                      : writeNoteEdit(scope, open.id, stored?.text ?? '', text, editRevision.current);
+                    editRevision.current = saved?.revision ?? null;
+                    setEditUnavailable(false);
+                  } catch { setEditUnavailable(true); }
+                }}
               />
 
               {/* WHAT YOU KEPT IT FROM. A saved link reached this page as a

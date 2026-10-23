@@ -143,6 +143,7 @@ export interface MenuProps {
   settings?: Omit<SettingsPanelProps, "locale" | "email" | "onSignOut" | "onClose"> | null;
   /** Leaving. Absent on a surface that cannot sign out. */
   onSignOut?: () => void;
+  agentSetup?: { id: string; sequence: number } | null;
   /**
    * WHOSE GROUND YOU ARE STANDING ON — the top-left corner's whole job.
    *
@@ -162,7 +163,7 @@ export interface MenuProps {
   hidden?: boolean;
 }
 
-export function Menu({ locale, items, current, label, left, account, settings, onSignOut, hidden }: MenuProps): JSX.Element | null {
+export function Menu({ locale, items, current, label, left, account, settings, onSignOut, hidden, agentSetup }: MenuProps): JSX.Element | null {
   /* THE SWITCHER'S OWN OPEN STATE IS GONE WITH THE SHEET IT OPENED. The
      three rungs are laid out rather than listed (see `.waka-rungs`), so there
      is nothing to expand, nothing to focus into, nothing to close on Escape
@@ -182,6 +183,8 @@ export function Menu({ locale, items, current, label, left, account, settings, o
    * apart.
    */
   const [corner, setCorner] = useState<null | "settings" | "info">(null);
+  const [setupId, setSetupId] = useState<string | undefined>();
+  useEffect(() => { if (agentSetup) { setSetupId(agentSetup.id); setCorner('settings'); } }, [agentSetup]);
   const account_open = corner === "settings";
   useEffect(() => {
     if (hidden) setCorner(null);
@@ -440,7 +443,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
           className="waka-corner waka-corner--settings"
           aria-label={t(locale, "worldSettingsOpen")}
           aria-expanded={account_open}
-          onClick={() => setCorner((value) => (value === "settings" ? null : "settings"))}
+          onClick={() => { setSetupId(undefined); setCorner((value) => (value === "settings" ? null : "settings")); }}
         >
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
             <path
@@ -501,7 +504,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
           ) : settings ? (
             <span className="waka-account waka-account--settings">
               <button type="button" className="waka-account-close" onClick={close}>{t(locale, "worldClose")}</button>
-              <SettingsPanel {...settings} locale={locale}
+              <SettingsPanel {...settings} locale={locale} initialAgentId={setupId}
                 email={account?.email ?? null}
                 onSignOut={onSignOut ?? (() => undefined)}
                 onClose={close} />

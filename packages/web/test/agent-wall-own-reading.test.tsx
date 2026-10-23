@@ -160,6 +160,26 @@ function twoAgents() {
     type: 'agent', avatarUrl: null, preferredLocale: 'en-US', createdAt: '2026-08-01T00:00:00Z' }));
 }
 
+it('opens history directly for the standing agent without starting a note or conversation', async () => {
+  twoAgents();
+  world = await mountWorld(FACTS); await settle();
+  const dock = (label: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock button')]
+    .find(button => button.textContent?.trim() === label)!;
+  const close = async () => { await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-dock-item--close')!.click()); await settle(); };
+  for (const name of ['noah', 'another']) {
+    await act(async () => face(name)!.click()); await settle();
+    await act(async () => dock('All inspirations').click()); await settle();
+    const archive = world.container.querySelector('.waka-over[data-jar-surface]')!;
+    expect(archive.textContent).toContain(`Only agent-${name} kept this`);
+    expect(world.container.querySelector('textarea.jar-composer-text')).toBeNull();
+    await close();
+    await act(async () => dock('All chats').click()); await settle();
+    expect(vi.mocked(listConversations).mock.lastCall?.[0]).toBe(`agent-${name}`);
+    expect(createConversation).not.toHaveBeenCalled();
+    await close();
+  }
+});
+
 it('shows the agent reading without fetching its archive, then loads the archive when opened', async () => {
   twoAgents(); ARCHIVE.holdFor = 'agent-noah';
   world = await mountWorld(FACTS); await settle();
@@ -589,7 +609,8 @@ it('shows every named agent, keeps their memory separate, and syncs Settings cha
     const input = [...world.container.querySelectorAll<HTMLInputElement>('.waka-settings-rows input')].find(input => input.value === name)!;
     const button = input.closest('li')!.querySelector<HTMLButtonElement>('.waka-settings-erase')!;
     await act(async () => { button.click(); });
-    await act(async () => { button.click(); });
+    const confirm = [...input.closest('li')!.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent === 'Delete profile and memory')!;
+    await act(async () => { confirm.click(); });
     await settle();
   };
   await erase('noah');
@@ -621,7 +642,7 @@ it('isolates each agent’s inspirations, chat list, transcript, and chat URL', 
     expect(archive.textContent).not.toContain(`Only agent-${name==='noah'?'another':'noah'} kept this`);
     await closeOverlay(world.container); await settle();
     expect(world.audit().wallId, 'closing inspirations must preserve its agent').toBe(`agent-${name}`);
-    await pressDockRow(world.container, 'Chat'); await settle();
+    await pressDockRow(world.container, 'New chat'); await settle();
     expect(new URLSearchParams(location!.search).get('profile')).toBe(`agent-${name}`);
     expect(world.container.querySelector('.chat-profile')?.textContent).toContain(name);
     expect(world.container.querySelector('.chat-with')).toBeNull();
@@ -655,7 +676,7 @@ it('saves a capture into the selected agent without adding it to the human or an
   PROFILES.rows = ['noah','another'].map((name,i)=>({id:`agent-${name}`,accountId:'account-1',name,type:'agent',avatarUrl:null,preferredLocale:'en-US',createdAt:`2026-10-0${i+1}T00:00:00Z`}));
   world=await mountWorld(FACTS); await settle();
   await act(async()=>face('noah')!.click()); await settle();
-  await pressDockRow(world.container,'Inspiration'); await settle();
+  await pressDockRow(world.container,'New inspiration'); await settle();
   const area=world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
   await act(async()=>{
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,'A new Noah observation');

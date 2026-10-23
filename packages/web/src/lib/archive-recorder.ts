@@ -1,6 +1,8 @@
 import { Fragment, createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { attachToNote, NoteGoneError } from "./attach-to-note";
+import { loadArchiveClips, putArchiveClip, removeArchiveClip } from './archive-clip-store';
+import type { ProfileStorageScope } from './profile-storage';
 import type { MessageKey } from "./i18n";
 import { useAudioRecording } from "./use-audio-recording";
 
@@ -40,16 +42,18 @@ export interface ClipTarget {
     shelf brings the note back under the same id), or a recording that never
     became a clip (`file: null`, `reason` the recorder's own catalogue key —
     empty, too large, interrupted, denied). */
-export type ClipFailure =
+export type ClipFailure = { draftId?: string; uploadedKey?: string; storageFailed?: boolean } & (
   | { id: number; target: ClipTarget; file: File; reason?: "worldRecordingNoteDeleted" }
-  | { id: number; target: ClipTarget; file: null; reason: MessageKey };
+  | { id: number; target: ClipTarget; file: null; reason: MessageKey });
 
 const askForMicrophone = () => navigator.mediaDevices.getUserMedia({ audio: true });
 const noteKey = (noteId: string, profileId: string | null) => `${profileId ?? ""}\u0000${noteId}`;
 
 /** `blocked`: another recorder on the page (the notepad's) is recording or
     finishing — one microphone at a time, so `start` refuses while it is. */
-export function useArchiveRecorder(options: { blocked?: boolean; enabled?: boolean; ownerProfileId?: string } = {}) {
+export function useArchiveRecorder(options: { blocked?: boolean; enabled?: boolean; ownerProfileId?: string; ownerAccountId?: string } = {}) {
+  const scope = useMemo<ProfileStorageScope | null>(() => options.ownerAccountId && options.ownerProfileId
+    ? { accountId: options.ownerAccountId, profileId: options.ownerProfileId } : null, [options.ownerAccountId, options.ownerProfileId]);
   const enabled = options.enabled !== false;
   const enabledRef = useRef(enabled); enabledRef.current = enabled;
   const blocked = Boolean(options.blocked) || !enabled;
@@ -84,17 +88,42 @@ export function useArchiveRecorder(options: { blocked?: boolean; enabled?: boole
      deleted with it, silently. So it is not sent: its line says the note was
      deleted, keeps the file, and is offered again after Undo or a restore. */
   const deleting = useRef(new Set<string>());
-  const send = useCallback(async (file: File, to: ClipTarget) => {
+  const recovered = useRef(new Set<string>());
+  useEffect(() => {
+    if (!scope || !enabled) return;
+    let live = true;
+    void loadArchiveClips(scope).then(clips => {
+      if (!live) return;
+      for (const clip of clips) {
+        if (recovered.current.has(clip.id)) continue;
+        recovered.current.add(clip.id);
+        setFailures(all => [...all, { id: ++failureSeq.current, draftId: clip.id, file: clip.file, target: clip.target, uploadedKey: clip.uploadedKey }]);
+      }
+    }).catch(() => { /* no clip to recover; new recordings report persistence failures */ });
+    return () => { live = false; };
+  }, [scope, enabled, setFailures]);
+  const send = useCallback(async (file: File, to: ClipTarget, draftId: string = crypto.randomUUID(), uploadedKey?: string) => {
+    recovered.current.add(draftId);
+    let storageFailed = false;
     const key = noteKey(to.noteId, to.profileId);
-    if (deleting.current.has(key)) {
-      failureSeq.current += 1;
-      const id = failureSeq.current;
-      setFailures((all) => [...all, { id, file, target: to, reason: "worldRecordingNoteDeleted" as const }]);
-      return;
-    }
     bump(key, 1);
     try {
-      await attachToNote(file, { noteId: to.noteId, profileId: to.profileId ?? options.ownerProfileId ?? null, type: "file" }, () => enabledRef.current);
+      if (scope) {
+        try { await putArchiveClip(scope, { id: draftId, target: to, file, uploadedKey }); }
+        catch (error) { storageFailed = true; if (uploadedKey) throw error; }
+      }
+      if (deleting.current.has(key)) throw new Error('Note being deleted');
+      await attachToNote(file, { noteId: to.noteId, profileId: to.profileId ?? options.ownerProfileId ?? null, type: "file" }, () => enabledRef.current, {
+        uploadedKey,
+        onUploaded: async key => {
+          uploadedKey = key;
+          if (scope) {
+            try { await putArchiveClip(scope, { id: draftId, target: to, file, uploadedKey }); }
+            catch (error) { storageFailed = true; throw error; }
+          }
+        },
+      });
+      if (scope) await removeArchiveClip(scope, draftId);
       landedSeq.current += 1;
       const seq = landedSeq.current;
       setLanded((was) => [...was.slice(-31), { target: to, seq }]);
@@ -106,18 +135,16 @@ export function useArchiveRecorder(options: { blocked?: boolean; enabled?: boole
          PUT's, finalize's "S3 object not found" — is a failed upload, offered
          again as one. EITHER WAY THE FILE IS KEPT: a deleted note can be
          restored from the shelf under the same id, and Try again then lands. */
-      const gone = reason instanceof NoteGoneError;
+      const gone = reason instanceof NoteGoneError || deleting.current.has(key);
       setFailures((all) => [...all, gone
-        ? { id, file, target: to, reason: "worldRecordingNoteDeleted" as const }
-        : { id, file, target: to }]);
+        ? { id, draftId, uploadedKey, storageFailed, file, target: to, reason: "worldRecordingNoteDeleted" as const }
+        : { id, draftId, uploadedKey, storageFailed, file, target: to }]);
     } finally {
       bump(key, -1);
     }
-  }, [bump, setFailures, options.ownerProfileId]);
-  /* LEAVING THE PAGE MID-UPLOAD LOSES THE CLIP, so the page warns while
-     any is in flight (review, 2026-10-21). The hook warns while it records
-     or finishes; the upload is no longer awaited inside it (one microphone
-     at a time), so this is the warning for the part after. */
+  }, [bump, setFailures, options.ownerProfileId, scope]);
+  // Durable storage recovers completed clips. Keep the navigation warning
+  // during pending work too, including browsers where storage is unavailable.
   const uploading = inFlight.size > 0 || failures.some(failure => failure.file);
   useEffect(() => {
     if (!uploading) return;
@@ -191,14 +218,14 @@ export function useArchiveRecorder(options: { blocked?: boolean; enabled?: boole
     if (!found) return;
     setFailures((all) => all.filter((item) => item.id !== id));
     /* a recording that never became a clip has nothing to send again */
-    if (found.file) void send(found.file, found.target);
+    if (found.file) void send(found.file, found.target, found.draftId, found.uploadedKey);
   }, [send, setFailures]);
   /* A NOTE DELETED HERE: its unattached clips' lines say so and keep their
      file and Try again — the note can come back from the deleted shelf
      under the same id, and nothing should promise the clip is lost. */
   const forget = useCallback((noteId: string, profileId: string | null) => setFailures((all) => all.map((item) =>
     item.file && item.target.noteId === noteId && item.target.profileId === profileId
-      ? { id: item.id, file: item.file, target: item.target, reason: "worldRecordingNoteDeleted" as const } : item)), [setFailures]);
+      ? { ...item, reason: "worldRecordingNoteDeleted" as const } : item)), [setFailures]);
   /** The archive says a note's delete has begun (`true`) or is settled —
       undone, refused, or sent (`false`). */
   const setDeleting = useCallback((noteId: string, profileId: string | null, on: boolean) => {
@@ -208,13 +235,21 @@ export function useArchiveRecorder(options: { blocked?: boolean; enabled?: boole
      shelf: its clips' lines go back to plain upload failures. */
   const unforget = useCallback((noteId: string, profileId: string | null) => setFailures((all) => all.map((item) =>
     item.file && item.reason && item.target.noteId === noteId && item.target.profileId === profileId
-      ? { id: item.id, file: item.file, target: item.target } : item)), [setFailures]);
+      ? { ...item, reason: undefined } : item)), [setFailures]);
   /* THE NOTE IS DELETED FOR GOOD (off the shelf): nothing can bring it
      back, so its clips are let go and their lines say so, × only. */
-  const drop = useCallback((noteId: string, profileId: string | null) => setFailures((all) => all.map((item) =>
+  const drop = useCallback((noteId: string, profileId: string | null) => {
+    for (const item of failuresRef.current) if (scope && item.draftId && item.target.noteId === noteId && item.target.profileId === profileId) void removeArchiveClip(scope, item.draftId).catch(() => {});
+    setFailures((all) => all.map((item) =>
     item.file && item.target.noteId === noteId && item.target.profileId === profileId
-      ? { id: item.id, file: null, target: item.target, reason: "worldRecordingNoteErased" as const } : item)), [setFailures]);
-  const dismiss = useCallback((id: number) => setFailures((all) => all.filter((item) => item.id !== id)), [setFailures]);
+      ? { id: item.id, file: null, target: item.target, reason: "worldRecordingNoteErased" as const } : item));
+  }, [setFailures, scope]);
+  const dismiss = useCallback((id: number) => {
+    const item = failuresRef.current.find(item => item.id === id);
+    const remove = () => setFailures(all => all.filter(item => item.id !== id));
+    if (scope && item?.draftId) void removeArchiveClip(scope, item.draftId).then(remove).catch(() => {});
+    else remove();
+  }, [setFailures, scope]);
 
   /* ONE OBJECT WHILE NOTHING CHANGES (review, 2026-10-21), so what the
      archive builds from it (`useMemo` there) is not rebuilt on every render
@@ -254,9 +289,9 @@ export interface ArchiveClips {
 const RecorderContext = createContext<ArchiveRecorder | null>(null);
 const ClipsContext = createContext<ArchiveClips | null>(null);
 
-export function ArchiveRecorderProvider({ children, enabled, ownerProfileId }: { children?: ReactNode; enabled?: boolean; ownerProfileId?: string }): JSX.Element {
+export function ArchiveRecorderProvider({ children, enabled, ownerProfileId, ownerAccountId }: { children?: ReactNode; enabled?: boolean; ownerProfileId?: string; ownerAccountId?: string }): JSX.Element {
   const [blocked, setBlocked] = useState(false);
-  const recorder = useArchiveRecorder({ blocked, enabled, ownerProfileId });
+  const recorder = useArchiveRecorder({ blocked, enabled, ownerProfileId, ownerAccountId });
   const active = recorder.phase !== "idle";
   const { failures, retry, dismiss } = recorder;
   const clips = useMemo<ArchiveClips>(() => ({ active, failures, retry, dismiss, setBlocked }), [active, failures, retry, dismiss]);

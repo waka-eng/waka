@@ -302,6 +302,14 @@
   pointer-events: auto;
 }
 
+/* Keep creation and history one press away, paired in two columns on phones. */
+.waka-dock--home {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  border-radius: var(--sp-24);
+}
+.waka-dock--home .waka-dock-item { width: 100%; }
+
 /* ═══ A SHARE SHEET HAS ITS OWN WAY OUT, SO THE BAR STEPS ASIDE ═══════════
    The sheet is modal (a backdrop, its own Close) and runs nearly the full
    height of a short window, so at 1280x720 the bar sat on top of the

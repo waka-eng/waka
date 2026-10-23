@@ -9,7 +9,7 @@ export async function openTheNotepad(page: Page, { touch = false }: { touch?: bo
   if (await page.locator('.waka-over').count()) {
     await press(page.getByRole('button', { name: 'Close', exact: true }));
   }
-  await press(page.locator('.waka-dock-item').filter({ hasText: /^Inspiration$/ }));
+  await press(page.locator('.waka-dock-item').filter({ hasText: /^New inspiration$/ }));
   await page.locator('.jar-composer-text').waitFor({ state: 'visible', timeout: 8_000 });
 }
 

@@ -13,10 +13,13 @@
  * through here, as `one-save-rule.test.tsx` does.
  * `lib/auth-context` supplies changing identities to exercise the real
  * recording boundary through sign-out and sign-in.
+ * `indexedDB` is fake-indexeddb, with real transactions and owner keys.
  * `MediaRecorder` and `navigator.mediaDevices` are pieces of browser jsdom
  * lacks; this stub hands its clip over on `stop` at once, which is enough
  * here because the hook stays mounted throughout.
  */
+import { IDBFactory } from "fake-indexeddb";
+import { loadArchiveClips } from "../src/lib/archive-clip-store";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -28,6 +31,7 @@ const S = vi.hoisted(() => ({
   live: new Set<unknown>(),
   viewer: null as null | { account: { id: string }; profile: { id: string } },
   delayedStop: false,
+  failFinalize: false,
   deliveries: [] as Array<() => void>,
 }));
 
@@ -54,7 +58,11 @@ vi.mock("../src/lib/api", async (original) => ({
     });
   }),
   uploadToPresignedUrl: async () => undefined,
-  finalizeAttachment: async (input: { inspirationId: string }) => { S.finalized.push(input.inspirationId); return { id: "att" }; },
+  finalizeAttachment: async (input: { inspirationId: string }) => {
+    S.finalized.push(input.inspirationId);
+    if (S.failFinalize) throw new Error('Response interrupted');
+    return { id: "att" };
+  },
 }));
 
 import { useState } from "react";
@@ -90,8 +98,9 @@ function Probe({ tick }: { tick: number }) { recorder = useArchiveRecorder(); re
 let host: HTMLDivElement, root: Root;
 beforeEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  Object.assign(S, { held: [], finalized: [], presignedProfiles: [], live: new Set(), viewer: null, delayedStop: false, deliveries: [] });
+  Object.assign(S, { held: [], finalized: [], presignedProfiles: [], live: new Set(), viewer: null, delayedStop: false, failFinalize: false, deliveries: [] });
   renders = [];
+  vi.stubGlobal("indexedDB", new IDBFactory());
   vi.stubGlobal("MediaRecorder", Recorder);
   Object.defineProperty(window.navigator, "mediaDevices", {
     configurable: true,
@@ -206,6 +215,7 @@ async function changeOwner(viewer: typeof S.viewer) {
 it('pauses a delayed upload across an account switch and offers it only to its original owner', async () => {
   await changeOwner(ownerA);
   await recordOnto('private-note');
+  await act(async () => { await vi.waitFor(() => expect(S.held).toHaveLength(1)); });
   await changeOwner(ownerB);
   await act(async () => S.held[0]!.land());
   expect(S.finalized).toEqual([]);
@@ -215,9 +225,9 @@ it('pauses a delayed upload across an account switch and offers it only to its o
   expect(recorder.failures).toHaveLength(1);
   expect(recorder.failures[0]!.file?.size).toBeGreaterThan(0);
   await act(async () => recorder.retry(recorder.failures[0]!.id));
-  await act(async () => S.held[1]!.land());
-  expect(S.finalized).toEqual(['private-note']);
-  expect(recorder.failures).toHaveLength(0);
+  await act(async () => { await vi.waitFor(() => expect(S.held).toHaveLength(2)); S.held[1]!.land(); });
+  await act(async () => { await vi.waitFor(() => expect(S.finalized).toEqual(['private-note'])); });
+  await until(() => expect(recorder.failures).toHaveLength(0));
 });
 
 it('retains the delayed stop event after sign-out and releases the microphone', async () => {
@@ -227,6 +237,7 @@ it('retains the delayed stop event after sign-out and releases the microphone', 
   await changeOwner(null);
   expect(S.live.size).toBe(0);
   await act(async () => S.deliveries[0]!());
+  await act(async () => { await vi.waitFor(async () => expect(await loadArchiveClips({ accountId: 'account-a', profileId: 'profile-a' })).toHaveLength(1)); });
   expect(S.held).toHaveLength(0);
   await changeOwner(ownerB);
   expect(host.textContent).not.toContain('Private recording');
@@ -238,6 +249,54 @@ it('retains the delayed stop event after sign-out and releases the microphone', 
   window.dispatchEvent(leave);
   expect(leave.defaultPrevented).toBe(true);
   await act(async () => recorder.retry(recorder.failures[0]!.id));
-  expect(S.presignedProfiles).toEqual(['profile-a']);
+  await act(async () => { await vi.waitFor(() => expect(S.presignedProfiles).toEqual(['profile-a'])); });
   await act(async () => S.held[0]!.land());
+  await until(() => expect(recorder.isSending('private-note', null)).toBe(false));
+});
+
+async function until(check: () => void) {
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)); });
+    check();
+  });
+}
+
+it('recovers completed audio after a full remount only for its owner and retries the original target', async () => {
+  await changeOwner(ownerA);
+  await act(async () => { await recorder.start({ id: 'noah-note', preview: 'Noah recording' }, 'noah'); });
+  await act(async () => { await recorder.stop(); });
+  await act(async () => { await vi.waitFor(() => expect(S.held).toHaveLength(1)); S.held[0]!.fail(); });
+  await until(() => expect(recorder.failures).toHaveLength(1));
+  const before = await loadArchiveClips({ accountId: 'account-a', profileId: 'profile-a' });
+  expect(before[0]!.file.size).toBeGreaterThan(0);
+  await act(async () => root.unmount()); root = createRoot(host);
+  await changeOwner(ownerB);
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+  expect(recorder.failures).toHaveLength(0);
+  await changeOwner(ownerA);
+  await until(() => expect(recorder.failures).toHaveLength(1));
+  expect(recorder.failures[0]!.target).toMatchObject({ noteId: 'noah-note', profileId: 'noah' });
+  await act(async () => recorder.retry(recorder.failures[0]!.id));
+  await act(async () => { await vi.waitFor(() => expect(S.held).toHaveLength(2)); S.held[1]!.land(); });
+  await act(async () => { await vi.waitFor(async () => expect(await loadArchiveClips({ accountId: 'account-a', profileId: 'profile-a' })).toEqual([])); });
+  expect(S.presignedProfiles).toEqual(['noah', 'noah']);
+  expect(S.finalized).toEqual(['noah-note']);
+});
+
+it('reuses the persisted upload after an interrupted finalize response and reload', async () => {
+  S.failFinalize = true;
+  await changeOwner(ownerA);
+  await recordOnto('private-note');
+  await act(async () => { await vi.waitFor(() => expect(S.held).toHaveLength(1)); S.held[0]!.land(); });
+  await until(() => expect(recorder.failures).toHaveLength(1));
+  expect((await loadArchiveClips({ accountId: 'account-a', profileId: 'profile-a' }))[0]?.uploadedKey).toBe('k');
+  await act(async () => root.unmount()); root = createRoot(host);
+  await changeOwner(ownerA);
+  await until(() => expect(recorder.failures).toHaveLength(1));
+  S.failFinalize = false;
+  await act(async () => recorder.retry(recorder.failures[0]!.id));
+  await until(() => expect(recorder.isSending('private-note', null)).toBe(false));
+  expect(S.held).toHaveLength(1);
+  expect(S.finalized).toEqual(['private-note', 'private-note']);
+  expect(await loadArchiveClips({ accountId: 'account-a', profileId: 'profile-a' })).toEqual([]);
 });

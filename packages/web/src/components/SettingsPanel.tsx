@@ -108,6 +108,7 @@ export interface SettingsPanelProps {
   onSignOut: () => void;
   onDeleteAccount: () => Promise<void>;
   activeProfileId?: string;
+  initialAgentId?: string;
   onAgentProfilesChange?: (profiles: ApiOwnedProfile[]) => void;
   /** Called after any press that should put the panel away. */
   onClose: () => void;
@@ -118,7 +119,7 @@ type Open = null | "agents" | "sessions" | "danger";
 
 export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(props.locale, key), [props.locale]);
-  const [open, setOpen] = useState<Open>(null);
+  const [open, setOpen] = useState<Open>(props.initialAgentId ? "agents" : null);
   const [connectionProfile, setConnectionProfile] = useState<ApiOwnedProfile | null>(null);
   const panel = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -129,7 +130,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
     previous.current = open;
   }, [open]);
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   /* ═══ THE AGENTS, LOADED ONLY IF SOMEBODY OPENS THEM ═══════════════════
      Most people have one agent and never touch this. Fetching the roster
@@ -139,20 +140,59 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   useEffect(() => {
     if (agents !== null) props.onAgentProfilesChange?.(agents);
   }, [agents, props.onAgentProfilesChange]);
+  const openedInitialAgent = useRef(false);
+  useEffect(() => {
+    if (openedInitialAgent.current || !props.initialAgentId || !agents) return;
+    openedInitialAgent.current = true;
+    const profile = agents.find(profile => profile.id === props.initialAgentId);
+    if (profile) { setConnectionProfile(profile); setOpen('sessions'); }
+  }, [props.initialAgentId, agents]);
   const [agentTrouble, setAgentTrouble] = useState("");
+  const [agentLoadFailed, setAgentLoadFailed] = useState(false);
+  const [agentAttempt, setAgentAttempt] = useState(0);
   const [busyAgent, setBusyAgent] = useState<string | null>(null);
+  const [agentNames, setAgentNames] = useState<Record<string, string>>({});
+  const [nameStates, setNameStates] = useState<Record<string, 'dirty' | 'invalid' | 'failed' | 'saved'>>({});
+  const [eraseAgent, setEraseAgent] = useState<string | null>(null);
+  const erasePrompt = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (eraseAgent) erasePrompt.current?.focus(); }, [eraseAgent]);
   const [newAgent, setNewAgent] = useState("");
   useEffect(() => {
     if (open !== "agents" || agents !== null) return;
+    let current = true;
+    setAgentLoadFailed(false);
     fetchProfiles()
       /* AGENTS ONLY. `GET /profiles` returns every profile the account owns,
          and that includes the person's OWN human profile — which this list
          offered to rename as a memory and to delete as one (audit f2afcbe2,
          desk/51). Deleting yourself is the account card's job, behind its
          own typed confirmation, not a two-press row here. */
-      .then((rows) => { if (alive.current) setAgents(rows.filter((row) => row.type === "agent")); })
-      .catch(() => { if (alive.current) setAgentTrouble(say("profileAgentProfilesError")); });
-  }, [open, agents, say]);
+      .then((rows) => { if (current) setAgents(rows.filter((row) => row.type === "agent")); })
+      .catch(() => { if (current) setAgentLoadFailed(true); });
+    return () => { current = false; };
+  }, [open, agents, agentAttempt]);
+
+  const saveAgentName = async (agent: ApiOwnedProfile, value = agentNames[agent.id] ?? agent.name) => {
+    if (busyAgent) return;
+    const next = value.trim();
+    if (!next) { setNameStates(states => ({ ...states, [agent.id]: 'invalid' })); return; }
+    if (next === agent.name) { setNameStates(states => ({ ...states, [agent.id]: 'saved' })); return; }
+    setBusyAgent(`rename:${agent.id}`);
+    try {
+      const row = await renameProfile(agent.id, next);
+      if (!alive.current) return;
+      setAgents(rows => (rows ?? []).map(item => item.id === row.id ? { ...item, ...row } : item));
+      setAgentNames(names => ({ ...names, [agent.id]: row.name }));
+      setNameStates(states => ({ ...states, [agent.id]: 'saved' }));
+    } catch {
+      if (alive.current) setNameStates(states => ({ ...states, [agent.id]: 'failed' }));
+    } finally { if (alive.current) setBusyAgent(null); }
+  };
+
+  const cancelAgentDelete = (id: string) => {
+    setEraseAgent(null);
+    panel.current?.querySelector<HTMLButtonElement>(`[data-agent-delete="${id}"]`)?.focus();
+  };
 
   const addAgent = async () => {
     const name = newAgent.trim();
@@ -163,7 +203,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
       // Creating a profile never creates a credential. Keys are issued only
       // from that agent's Connections & API keys page, with a visible secret.
       if (!alive.current) return;
-      setAgents((rows) => [...(rows ?? []), made]);
+      setAgents((rows) => [...(rows ?? []), { ...made, hasInspirations: false }]);
       setNewAgent("");
     } catch (err) {
       if (alive.current) setAgentTrouble(err instanceof ApiError ? err.message : say("profileAgentProfilesError"));
@@ -181,7 +221,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
         {open !== null ? <button type="button" aria-label={say(connectionProfile ? 'profileAgentAccessBack' : "profileSettingsBack")}
           onClick={() => {
             setConfirmDelete(false);
-            setBusyAgent((value) => value?.startsWith("erase:") ? null : value);
+            setEraseAgent(null);
             setOpen(connectionProfile ? 'agents' : null);
             setConnectionProfile(null);
           }}><span aria-hidden="true">←</span></button> : null}
@@ -219,7 +259,10 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
       <Group id="agents" open={open} setOpen={setOpen} label={say("profileAgentProfilesTitle")}>
         <p className="waka-settings-note">{say("profileAgentProfilesHint")}</p>
         {agentTrouble ? <span className="waka-account-failed" role="alert">{agentTrouble}</span> : null}
-        {agents === null ? (
+        {agents === null && agentLoadFailed ? <>
+          <p className="waka-account-failed" role="alert">{say('profileAgentProfilesError')}</p>
+          <button type="button" className="waka-settings-erase" onClick={() => setAgentAttempt(attempt => attempt + 1)}>{say('worldRetry')}</button>
+        </> : agents === null ? (
           <p className="waka-settings-note" role="status">{say("worldInspirationsLoad")}</p>
         ) : (
           <>
@@ -229,35 +272,26 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
               <li key={agent.id} className="waka-agent-profile">
                 <div className="waka-agent-profile-fields">
                 <ProfilePortrait agentId={agent.id} size={32} />
-                <input type="text" defaultValue={agent.name} disabled={busyAgent === agent.id}
+                <input type="text" value={agentNames[agent.id] ?? agent.name} maxLength={80} disabled={busyAgent !== null}
                   aria-label={say("profileAgentProfileName")}
-                  onBlur={(event) => {
-                    const next = event.currentTarget.value.trim();
-                    if (!next || next === agent.name) return;
-                    setBusyAgent(agent.id);
-                    void renameProfile(agent.id, next)
-                      .then((row) => { if (alive.current) setAgents((rows) => (rows ?? []).map((r) => r.id === row.id ? row : r)); })
-                      .catch(() => { if (alive.current) setAgentTrouble(say("profileAgentProfileRenameError")); })
-                      .finally(() => { if (alive.current) setBusyAgent(null); });
-                  }} />
-                {/* ERASING AN AGENT TAKES ITS WHOLE ARCHIVE BY CASCADE, so
-                    it asks — in the product's own two-press shape rather
-                    than in a `window.confirm`, which the page it replaces
-                    used and which is the one dialog this product cannot
-                    style, cannot translate and cannot test. */}
-                <button type="button" className="waka-settings-erase" disabled={busyAgent === agent.id}
-                  onClick={() => {
-                    if (busyAgent !== `erase:${agent.id}`) { setBusyAgent(`erase:${agent.id}`); return; }
-                    setBusyAgent(agent.id);
-                    void deleteProfile(agent.id)
-                      .then(() => { if (alive.current) setAgents((rows) => (rows ?? []).filter((r) => r.id !== agent.id)); })
-                      /* Not "could not be loaded": the list loaded; it was
-                         the delete that failed, and the row is still here. */
-                      .catch(() => { if (alive.current) setAgentTrouble(say("profileAgentProfileDeleteError")); })
-                      .finally(() => { if (alive.current) setBusyAgent(null); });
-                  }}>
-                  {busyAgent === `erase:${agent.id}` ? say("profileAgentProfileDeleteConfirm") : say("profileAgentProfileDelete")}
+                  aria-invalid={nameStates[agent.id] === 'invalid'} aria-describedby={`agent-name-state-${agent.id}`}
+                  onChange={event => {
+                    setAgentNames(names => ({ ...names, [agent.id]: event.target.value }));
+                    setNameStates(states => ({ ...states, [agent.id]: 'dirty' }));
+                  }}
+                  onBlur={event => { if (event.currentTarget.value !== agent.name || nameStates[agent.id] === 'dirty') void saveAgentName(agent, event.currentTarget.value); }}
+                  onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} />
+                <button type="button" className="waka-settings-erase" disabled={busyAgent !== null} data-agent-delete={agent.id}
+                  onClick={() => { setEraseAgent(agent.id); setAgentTrouble(''); }}>
+                  {say("profileAgentProfileDelete")}
                 </button>
+                </div>
+                <div id={`agent-name-state-${agent.id}`}>
+                  {busyAgent === `rename:${agent.id}` ? <span className="waka-settings-note" role="status">{say('worldSaving')}</span>
+                    : nameStates[agent.id] ? <span className="waka-settings-note" role={['invalid', 'failed'].includes(nameStates[agent.id]) ? 'alert' : 'status'}>
+                      {say(nameStates[agent.id] === 'invalid' ? 'profileAgentNameRequired' : nameStates[agent.id] === 'failed' ? 'profileAgentNameNotSaved' : nameStates[agent.id] === 'saved' ? 'worldSavedWord' : 'profileAgentNameUnsaved')}
+                    </span> : null}
+                  {nameStates[agent.id] === 'failed' ? <button type="button" className="waka-settings-erase" disabled={busyAgent !== null} onClick={() => void saveAgentName(agent)}>{say('worldRetry')}</button> : null}
                 </div>
                 <p className="waka-settings-note">{formatMessage(props.locale, "profileAgentProfileMemory", { name: agent.name })}</p>
                 <button type="button" className="waka-settings-row" disabled={busyAgent !== null}
@@ -265,7 +299,19 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
                   onClick={() => { setConnectionProfile(agent); setOpen('sessions'); }}>
                   {say('profileAgentAccess')}<span aria-hidden="true">›</span>
                 </button>
-                {busyAgent === `erase:${agent.id}` ? <p className="waka-settings-note" role="status">{say("profileAgentProfileDeleteHint")}</p> : null}
+                {eraseAgent === agent.id ? <div className="waka-session-confirm">
+                  <p ref={erasePrompt} tabIndex={-1}>{formatMessage(props.locale, 'profileAgentDeleteNamed', { name: agent.name })}</p>
+                  <div className="waka-session-actions">
+                    <button type="button" className="waka-settings-erase" disabled={busyAgent !== null} onClick={() => cancelAgentDelete(agent.id)}>{say('profileConnectionCancel')}</button>
+                    <button type="button" className="waka-settings-erase" disabled={busyAgent !== null} onClick={() => {
+                      setBusyAgent(`delete:${agent.id}`); setAgentTrouble('');
+                      void deleteProfile(agent.id)
+                        .then(() => { if (alive.current) { setAgents(rows => (rows ?? []).filter(row => row.id !== agent.id)); setEraseAgent(null); } })
+                        .catch(() => { if (alive.current) setAgentTrouble(say('profileAgentProfileDeleteError')); })
+                        .finally(() => { if (alive.current) setBusyAgent(null); });
+                    }}>{say(busyAgent === `delete:${agent.id}` ? 'profileRemoving' : 'profileAgentProfileDeleteConfirm')}</button>
+                  </div>
+                </div> : null}
               </li>
             ))}
           </ul>
@@ -273,9 +319,9 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
         )}
         <div className="waka-settings-add">
           <input type="text" value={newAgent} placeholder={say("profileAgentProfileName")}
-            aria-label={say("profileAgentProfileName")} disabled={busyAgent === "new"}
+            aria-label={say("profileAgentProfileName")} disabled={agents === null || busyAgent !== null}
             onChange={(event) => setNewAgent(event.currentTarget.value)} />
-          <button type="button" disabled={busyAgent === "new" || !newAgent.trim()} onClick={() => void addAgent()}>
+          <button type="button" disabled={agents === null || busyAgent !== null || !newAgent.trim()} onClick={() => void addAgent()}>
             {say("profileAgentProfileCreate")}
           </button>
         </div>
@@ -316,7 +362,8 @@ function ProfileConnections({ locale, profile }: { locale: SupportedLocale; prof
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [view, setView] = useState<"connections" | "setup" | "keys">("connections");
+  const [view, setView] = useState<"connections" | "setup" | "keys" | "verify">("connections");
+  const [testSession, setTestSession] = useState<ApiSession | undefined>();
   const [confirm, setConfirm] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const list = useRef<HTMLUListElement>(null);
@@ -376,7 +423,8 @@ function ProfileConnections({ locale, profile }: { locale: SupportedLocale; prof
     </div> : null}
     {error ? <span className="waka-account-failed" role="alert">{error}</span> : null}
     {view === 'keys' && profile ? <AgentApiKeys key={profile.id} locale={locale} profile={profile} />
-      : view === 'setup' && profile ? <SessionSetup locale={locale} profile={profile}
+      : (view === 'setup' || view === 'verify') && profile ? <SessionSetup key={view} locale={locale} profile={profile}
+        connection={view === 'verify' ? testSession : undefined}
         onDone={() => { setView('connections'); void load(); }} /> : <>
     <div className="waka-session-list-heading">
       <h3>{say('profileConnectionsLive')}</h3>
@@ -399,12 +447,16 @@ function ProfileConnections({ locale, profile }: { locale: SupportedLocale; prof
         return <li key={session.id} className="waka-session-card">
           <div className="waka-session-card-heading">
             <strong>{name}</strong>
-            <span>{say("profileConnectionSignedIn")}</span>
+            <span>{say(profile ? session.verifiedAt ? 'profileMcpVerified' : 'profileMcpUnverified' : 'profileConnectionSignedIn')}</span>
           </div>
           <dl className="waka-session-info">
+            {profile && session.verifiedAt ? <><dt>{say('profileMcpLastVerified')}</dt><dd>{date(session.verifiedAt)}</dd></> : null}
             <dt>{say("profileConnectionLastUsed")}</dt><dd>{date(session.lastSeenAt)}</dd>
             <dt>{say("profileConnectionExpires")}</dt><dd>{date(session.expiresAt)}</dd>
           </dl>
+          {profile ? <button type="button" className="waka-settings-erase" disabled={loading || busy !== null}
+            aria-label={formatMessage(locale, 'profileMcpTestDevice', { name })}
+            onClick={() => { setTestSession(session); setConfirm(null); setView('verify'); }}>{say('profileMcpTest')}</button> : null}
           {confirm === session.id ? <div className="waka-session-confirm">
             <p ref={confirmation} tabIndex={-1}>{formatMessage(locale, "profileConnectionDisconnectHint", { name })}</p>
             <div className="waka-session-actions">
@@ -424,9 +476,9 @@ function ProfileConnections({ locale, profile }: { locale: SupportedLocale; prof
   </>;
 }
 
-function SessionSetup({ locale, onDone, profile: selected }: { locale: SupportedLocale; onDone: () => void; profile: ApiOwnedProfile }): JSX.Element {
+function SessionSetup({ locale, onDone, profile: selected, connection }: { locale: SupportedLocale; onDone: () => void; profile: ApiOwnedProfile; connection?: ApiSession }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(connection ? 2 : 0);
   const [installed, setInstalled] = useState(false);
   const [verification, setVerification] = useState<'idle' | 'checking' | 'waiting' | 'error' | 'verified'>('idle');
   const [verifiedDevice, setVerifiedDevice] = useState('');
@@ -453,16 +505,16 @@ function SessionSetup({ locale, onDone, profile: selected }: { locale: Supported
     try {
       const rows = await fetchSessions();
       if (request !== verificationRequest.current) return;
-      const connection = rows.find(row => !row.current && row.profile.id === selected.id &&
-        row.deviceLabel === `Claude Code · ${selected.name}` && new Date(row.expiresAt).getTime() > Date.now() &&
+      const verified = rows.find(row => !row.current && row.profile.id === selected.id &&
+        (connection ? row.id === connection.id : row.deviceLabel === `Claude Code · ${selected.name}`) && new Date(row.expiresAt).getTime() > Date.now() &&
         row.verifiedAt && new Date(row.verifiedAt).getTime() >= verificationStarted.current);
-      setVerifiedDevice(connection?.deviceLabel ?? '');
-      setVerification(connection ? 'verified' : 'waiting');
+      setVerifiedDevice(verified?.deviceLabel ?? '');
+      setVerification(verified ? 'verified' : 'waiting');
     } catch { if (request === verificationRequest.current) setVerification('error'); }
   };
   return <section className="waka-mcp-setup" aria-labelledby="waka-mcp-step">
-    <p className="waka-settings-note">{formatMessage(locale, "profileConnectionStep", { step: step + 1 - Number(installed), total: installed ? 2 : 3 })}</p>
-    <h3 id="waka-mcp-step" ref={heading} tabIndex={-1}>{say(step === 0 ? "profileConnectionInstallTitle" : step === 1 ? "profileConnectionLoginTitle" : "profileConnectionVerifyTitle")}</h3>
+    {!connection ? <p className="waka-settings-note">{formatMessage(locale, "profileConnectionStep", { step: step + 1 - Number(installed), total: installed ? 2 : 3 })}</p> : null}
+    <h3 id="waka-mcp-step" ref={heading} tabIndex={-1}>{say(connection ? 'profileMcpTest' : step === 0 ? "profileConnectionInstallTitle" : step === 1 ? "profileConnectionLoginTitle" : "profileConnectionVerifyTitle")}</h3>
     <div key={step}>
       {step === 0 ? <>
         <p>{say("profileConnectionInstallHint")}</p>
@@ -478,18 +530,22 @@ function SessionSetup({ locale, onDone, profile: selected }: { locale: Supported
         <p className="waka-settings-note">{say("profileConnectionApprove")}</p>
         <p className="waka-settings-note">{say("profileConnectionSharedLogin")}</p>
       </> : <>
-        <p>{say("profileConnectionRegisterHint")}</p>{selected ? <CommandBlock locale={locale} command={commands[2]!} /> : null}
-        <p>{say("profileConnectionVerifyHint")}</p>
+        {connection ? <p>{formatMessage(locale, 'profileMcpTestHint', { name: selected.name, device: connection.deviceLabel || say('profileConnectionUnnamed') })}</p> : <>
+          <p>{say("profileConnectionRegisterHint")}</p>{selected ? <CommandBlock locale={locale} command={commands[2]!} /> : null}
+          <p>{say("profileConnectionVerifyHint")}</p>
+        </>}
         <blockquote className="waka-session-prompt">{formatMessage(locale, selected?.type === 'human' ? "profileConnectionTestPromptHuman" : "profileConnectionTestPrompt", { name: selected?.name ?? "", id: selected?.id ?? "" })}</blockquote>
-        <p className="waka-settings-note">{say(selected?.type === 'human' ? "profileConnectionVerifyResultHuman" : "profileConnectionVerifyResult")}</p>
+        <p className="waka-settings-note">{say(connection ? 'profileMcpTestResult' : selected?.type === 'human' ? "profileConnectionVerifyResultHuman" : "profileConnectionVerifyResult")}</p>
       </>}
     </div>
     {step === 2 && verification !== 'idle' && verification !== 'checking' ? <p className="waka-settings-note" role={verification === 'error' ? 'alert' : 'status'}>
       {verification === 'verified' ? formatMessage(locale, 'profileConnectionVerified', { name: selected?.name ?? '', device: verifiedDevice })
-        : say(verification === 'error' ? 'profileConnectionCheckFailed' : 'profileConnectionNotVerified')}
+        : verification === 'waiting' && connection ? formatMessage(locale, 'profileMcpTestWaiting', { device: connection.deviceLabel || say('profileConnectionUnnamed') })
+          : say(verification === 'error' ? 'profileConnectionCheckFailed' : 'profileConnectionNotVerified')}
     </p> : null}
     <div className="waka-session-actions">
-      {step > 0 ? <button type="button" className="waka-settings-erase" onClick={() => { if (step === 1) setInstalled(false); setStep(step - 1); }}>{say("profileConnectionPrevious")}</button> : null}
+      {connection ? <button type="button" className="waka-settings-erase" onClick={onDone}>{say('profileConnectionCancel')}</button>
+        : step > 0 ? <button type="button" className="waka-settings-erase" onClick={() => { if (step === 1) setInstalled(false); setStep(step - 1); }}>{say("profileConnectionPrevious")}</button> : null}
       <button type="button" className="waka-settings-erase" disabled={(step > 0 && !selected) || verification === 'checking'}
         onClick={() => step === 2 ? verification === 'verified' ? onDone() : void checkConnection() : setStep(step + 1)}>
         {say(step === 0 ? "profileConnectionNextLogin" : step === 1 ? "profileConnectionNextVerify"

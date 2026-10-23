@@ -297,7 +297,7 @@ it("says on Home that a clip failed to attach after the archive closed, and Try 
   await act(async () => retry!.click());
   await settle(4);
   expect(S.finalized, "Try again did not attach the clip to the note it was made on").toEqual(["own-2"]);
-  expect(S.presigned).toEqual([VIEWER_ID, VIEWER_ID]);
+  expect(S.presigned, "retry reuses the uploaded object").toEqual([VIEWER_ID]);
   expect(q(".waka-clip-failed"), "the line stayed after the clip attached").toBeNull();
 });
 
@@ -317,7 +317,7 @@ it("does not let the notepad record while the archive's recording is still finis
   await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
   await settle();
   expect(archiveOpen()).toBe(false);
-  await pressDockRow(world.container, "Inspiration");
+  await pressDockRow(world.container, "New inspiration");
   await settle();
   const notepadRecord = () => q<HTMLButtonElement>('.waka-dock .waka-dock-tool[aria-label="Record"]');
   expect(notepadRecord(), "the notepad under the archive is not on screen").toBeTruthy();

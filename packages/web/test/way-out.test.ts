@@ -566,7 +566,7 @@ describe("every surface has a way out you can see", () => {
        the bar if the bar is actually up while it is open — which is exactly
        what was NOT true of a conversation until it was fixed, and exactly
        what being trapped feels like. */
-    const condition = /\{phase==='ready'&&([^?]*)\?[\s\S]{0,40}?<nav className="waka-dock"/.exec(home);
+    const condition = /\{phase==='ready'&&([^?]*)\?[\s\S]{0,40}?<nav className=\{`waka-dock/.exec(home);
     expect(condition, "the dock's render condition could not be found").toBeTruthy();
     expect(
       condition![1],

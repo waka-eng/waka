@@ -831,6 +831,14 @@ attachmentsRoutes.post("/", async (c) => {
        first statement, ahead of any row the enqueue below locks — the
        order every door keeps. */
     if (rowToInsert.s3Key) {
+      // A recovered recording retries the same object after an interrupted response.
+      // Authorize the parent above and hold the key lock before accepting a replay.
+      await lockAttachmentKeys(tx, [rowToInsert.s3Key]);
+      const [existing] = await tx.select(attachmentSelection).from(attachments).where(and(
+        eq(attachments.s3Key, rowToInsert.s3Key), eq(attachments.profileId, parent.profileId),
+        eq(attachments.inspirationId, parent.id), eq(attachments.type, rowToInsert.type),
+      )).limit(1);
+      if (existing) return { row: existing };
       try { await assertAttachmentKeysUnused(tx, [rowToInsert.s3Key]); }
       catch (error) { if (error instanceof InspirationAttachmentError) return { refused: error }; throw error; }
     }

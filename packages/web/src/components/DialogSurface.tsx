@@ -129,12 +129,11 @@ function focusableWithin(root: HTMLElement): HTMLElement[] {
  *
  * ── WHAT STAYS MODAL, AND WHY ──────────────────────────────────────────────
  *
- * Everything that did not move: the notepad and the composer (unsaved words,
- * and the audit's §2.1(d) wants them harder to leave by accident, not
- * easier), `InspirationSearch`, `PrincipleShare`, `ReadingChanges`, the
- * settings card and the
- * card that opens on one kept memory (`jar-panel`, z-70 — it opens INSIDE a
- * destination and genuinely is a thing on top of the thing you are in). A
+ * The full-page notepad is also nonmodal: its Save and Close live in the
+ * sibling dock. Unsaved words are recovered by the draft store.
+ * `InspirationSearch`, `PrincipleShare`, `ReadingChanges`, the settings
+ * card, and a kept-memory card (`jar-panel`, z-70) remain modal: each sits
+ * above a destination and owns the controls needed to leave it. A
  * confirmation is the clearest case of all: it exists to be answered, so
  * trapping Tab is the correct statement about it.
  *

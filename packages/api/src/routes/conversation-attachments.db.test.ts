@@ -268,7 +268,10 @@ it('the inspiration finalize keeps one stored object to one attachment, like cap
   const object=p.upload('application/pdf',300);
   expect((await p.post('/attachments',{inspirationId:source.id,type:'file',...object})).status).toBe(201);
   const again=await p.post('/attachments',{inspirationId:source.id,type:'file',...object});
-  expect(again.status).toBe(409);expect(await json(again)).toMatchObject({code:'attachment_already_attached'});
+  expect(again.status).toBe(201);
+  expect(await t.sql`SELECT id FROM attachments WHERE s3_key=${object.key}`).toHaveLength(1);
+  const [otherNote]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${p.agentId},'Another agent note') RETURNING id`;
+  expect((await p.post('/attachments',{inspirationId:otherNote.id,type:'file',...object})).status).toBe(409);
   // Nor can a note take an object a chat message already carries.
   const staged=(await json(await p.stage(randomUUID(),randomUUID()))).attachment;
   const [{s3_key:chatKey}]=await t.sql`SELECT s3_key FROM attachments WHERE id=${staged.id}`;
@@ -353,7 +356,8 @@ it('one stored object, one attachment, even when two doors finalize the same key
         expect(await Promise.race([pending.then(()=>'answered'),new Promise(resolve=>setTimeout(()=>resolve('waiting'),300))])).toBe('waiting');
         release();await held;
         const response=await pending;
-        expect(response.status).toBe(409);expect(await json(response)).toMatchObject({code:'attachment_already_attached'});
+        if(door==='inspiration') expect(response.status).toBe(201);
+        else { expect(response.status).toBe(409);expect(await json(response)).toMatchObject({code:'attachment_already_attached'}); }
         expect(await t.sql`SELECT id FROM attachments WHERE s3_key=${object.key}`).toHaveLength(1);
       }finally{release();await held.catch(()=>undefined);}
     }

@@ -36,6 +36,7 @@ export interface ApiOwnedProfile {
   type: ApiProfileType;
   name: string;
   avatarUrl: string | null;
+  hasInspirations?: boolean;
   preferredLocale: SupportedLocale;
   createdAt: string;
 }

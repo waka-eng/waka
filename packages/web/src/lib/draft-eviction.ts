@@ -131,6 +131,12 @@ export function clearUnsentDrafts(scope: ProfileStorageScope | null): Promise<vo
     try { clearPrefix(scope, prefix); } catch { /* best effort */ }
   }
 
+  // Saved-note edits can belong to any agent this account administers.
+  try {
+    const accountPrefix = `waka.profile:${encodeURIComponent(scope.accountId)}:`;
+    for (const key of Object.keys(localStorage)) if (key.startsWith(accountPrefix) && key.slice(accountPrefix.length).includes(':noteEdit:')) localStorage.removeItem(key);
+  } catch { /* logout still completes if device storage is unavailable */ }
+
   /* Everything above has already happened by the time this promise exists. */
   let evicting: Promise<unknown>;
   try { evicting = clearInspirationDrafts(scope); }

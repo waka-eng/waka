@@ -73,15 +73,10 @@
  * being unopenable. The count is what a reader checks the list against, so
  * it is kept honest rather than left to drift.)
  *
- *   REFUSED ON PURPOSE, AND MUST STAY REFUSED — the notepad and the
- *   composer, `components/InspirationComposer.tsx`. `DialogSurface`'s own
- *   header puts it in the list of what stays modal "(unsaved words, and the
- *   audit's §2.1(d) wants them harder to leave by accident, not easier)".
- *   A note is the one thing in this product a stray press must not end:
- *   leaving it commits, every way out is wired to commit, and none of those
- *   ways is a press on the dark behind the page. If press-away is ever
- *   lifted into `DialogSurface` for every modal surface, this one needs an
- *   opt-OUT in the same change.
+ *   The full-page notepad, `components/InspirationComposer.tsx`, does not
+ *   close on a press away. It is nonmodal so its sibling dock's Save and
+ *   Close remain available to assistive technology; Escape and the dock
+ *   still preserve the draft. It is therefore outside the modal-sheet ledger.
  *
  *   HOLDING WORDS SOMEBODY IS PARTWAY THROUGH TYPING — the archive's search
  *   (`components/InspirationSearch.tsx`), and only that now. Two others

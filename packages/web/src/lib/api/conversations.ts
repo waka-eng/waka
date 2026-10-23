@@ -12,7 +12,7 @@ export interface ApiConversation{id:string;profileId:string;revision:number;pers
      `conversation-context.ts`. Null is the ordinary case — WAKA reading from
      everything, which is what this product promises on its door. */
   initialInspiration?:{id:string;text:string}|null}
-export interface ConversationSummary{id:string;profileId:string;revision:number;updatedAt:string;preview:string}
+export interface ConversationSummary{id:string;profileId:string;revision:number;updatedAt:string;preview:string;match?:string}
 export interface ConversationReplyState{profileId:string;conversationId:string;messageId:string|null;requestId:string|null;phase:'idle'|'pending'|'running'|'ready'|'failed'|'stopped'|'stale';revision:number;failureCode:string|null;retryAfter:string|null;runAfter:string|null;canRetry:boolean;generationEnabled:boolean}
 const path=(profile:string,suffix='')=>apiPath(`/conversations${suffix}?profile=${encodeURIComponent(profile)}`);
 const windowPath=(profile:string,suffix:string,from?:number)=>path(profile,suffix)+(from!==undefined?`&from=${from}`:'&limit=30');
@@ -43,7 +43,7 @@ function checked(body:{conversation:ApiConversation;generationEnabled:boolean},p
     message.attachments.some(item=>!isApiMessageAttachment(item)||item.conversationId!==id||item.messageId!==message.id||item.staged))))throw invalid();
   return {...row,generationEnabled:body.generationEnabled};
 }
-export async function listConversations(profile:string,signal?:AbortSignal){const body=await getJson<{profileId:string;conversations:ConversationSummary[];generationEnabled:boolean}>(path(profile),'Could not load conversations.',signal);if(body?.profileId!==profile||typeof body.generationEnabled!=='boolean'||!Array.isArray(body.conversations)||body.conversations.length>100||body.conversations.some(row=>row.profileId!==profile||typeof row.id!=='string'||typeof row.preview!=='string'))throw invalid();return body;}
+export async function listConversations(profile:string,signal?:AbortSignal,query=''){const body=await getJson<{profileId:string;conversations:ConversationSummary[];generationEnabled:boolean}>(path(profile)+(query.trim()?`&q=${encodeURIComponent(query.trim())}`:''),'Could not load conversations.',signal);if(body?.profileId!==profile||typeof body.generationEnabled!=='boolean'||!Array.isArray(body.conversations)||body.conversations.length>100||body.conversations.some(row=>row.profileId!==profile||typeof row.id!=='string'||typeof row.preview!=='string'))throw invalid();return body;}
 export async function fetchConversation(profile:string,id:string,signal?:AbortSignal,from?:number){return checked(await readWindow(profile,`/${encodeURIComponent(id)}`,signal,from),profile,id);}
 /** `talkWith` picks whose memory the reply reads — see `conversations.perspective`
     on the server. Absent is the person's own, as every chat before it. */

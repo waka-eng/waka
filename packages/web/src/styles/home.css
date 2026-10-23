@@ -4118,6 +4118,7 @@
      which column each child belongs in is the same outcome with nothing to
      explain, and it survives the next change to what is in this row. */
   .jar-note-when { grid-column: 2; }
+  .jar-note-owner { display: block; white-space: normal; overflow-wrap: anywhere; max-width: min(70vw, 32rem); margin-bottom: 0.4rem; }
 
   /* ═══ THE ROW IS THE SAME HEIGHT WITH OR WITHOUT THE VERB ═════════════
      Measured in a browser: a new note's row was the date's own 18px and a

@@ -90,6 +90,32 @@ it("keeps MCP connections and keys under their agent without a Manage tab", asyn
   expect(host.querySelector("pre")).toBeNull();
 });
 
+it('shows verification history and tests the exact existing connection without reinstalling', async () => {
+  rows[1]!.verifiedAt = '2026-10-22T12:00:00Z';
+  rows.push({ ...session('unverified-session'), deviceLabel: 'Second laptop' });
+  await openConnections();
+  const cards = host.querySelectorAll('.waka-session-card');
+  expect(cards[0]?.textContent).toContain('MCP verified');
+  expect(cards[0]?.textContent).toContain('Last verified');
+  expect(cards[1]?.textContent).toContain('MCP not verified yet');
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Test connection for Work laptop"]')!.click());
+  expect(host.textContent).toContain('In Work laptop');
+  expect(host.querySelector('pre')).toBeNull();
+  expect(host.querySelector('blockquote')?.textContent).toContain(rows[1]!.profile.id);
+  expect(host.textContent).not.toContain('Install');
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('No new verification received');
+  rows[2]!.verifiedAt = new Date(Date.now() + 1000).toISOString();
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('No new verification received');
+  rows[1]!.verifiedAt = new Date(Date.now() + 1000).toISOString();
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('Verified for noah · Work laptop');
+  await act(async () => button('View connections').click());
+  expect(host.querySelector('.waka-session-card')?.textContent).toContain('Last verified');
+  expect(requests.every(request => request.method === 'GET')).toBe(true);
+});
+
 it("keeps personal sign-ins in account settings, with no agent list or setup controls", async () => {
   rows.push({ ...session('personal-browser'), profile: { id:'human', name:'Someone', type:'human' }, deviceLabel:'Other browser' });
   await act(async () => root.render(<SettingsPanel {...props} />));

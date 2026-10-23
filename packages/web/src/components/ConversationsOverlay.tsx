@@ -65,7 +65,7 @@ function lead(row: ConversationSummary): string {
 }
 
 function rest(row: ConversationSummary): string {
-  return plain(row).slice(1).join(" ");
+  return row.match ?? plain(row).join(" ").slice(80);
 }
 
 /**
@@ -98,6 +98,13 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
   onClose: () => void;
   onOpen: (conversationId: string | null) => void;
 }): JSX.Element {
+  const searchField = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(query.trim()), 200);
+    return () => clearTimeout(timer);
+  }, [query]);
   const [rows, setRows] = useState<ConversationSummary[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
   /**
@@ -140,7 +147,7 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
     if (!profileId) return;
     const controller = new AbortController();
     setPhase("loading");
-    void listConversations(profileId, controller.signal)
+    void listConversations(profileId, controller.signal, ...(search ? [search] as const : []))
       .then((body) => {
         if (!live.current || controller.signal.aborted) return;
         setRows(body.conversations);
@@ -150,7 +157,7 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
         if (live.current && !controller.signal.aborted) setPhase("failed");
       });
     return () => controller.abort();
-  }, [profileId, attempt]);
+  }, [profileId, attempt, search]);
 
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
 
@@ -225,6 +232,14 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
         <header className="waka-over-head">
           <h2 className="waka-over-title">{title}</h2>
         </header>
+        <div className="waka-over-find">
+          <span className="waka-over-find-glyph" aria-hidden="true" />
+          <input ref={searchField} className="waka-over-search" type="search" maxLength={200}
+            aria-label={say("worldChatsSearch")} placeholder={say("worldChatsSearch")}
+            value={query} onChange={event => setQuery(event.target.value)} />
+          {query ? <button type="button" className="waka-over-find-clear" aria-label={say("worldInspirationsSearchClear")}
+            onClick={() => { setQuery(''); searchField.current?.focus(); }} /> : null}
+        </div>
 
         {/* "NEW CHAT" WAS A BORDERED PILL AT THE TOP OF THIS ONE SURFACE,
             and it is gone. Its argument — "nothing led back, so starting one
@@ -247,6 +262,8 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
               {say("worldRetry")}
             </button>
           </>
+        ) : rows.length === 0 && search ? (
+          <p className="waka-over-status" role="status">{say("worldChatsNoMatches")}</p>
         ) : rows.length === 0 ? (
           /* Honest rather than empty: nothing has been talked about, which is
              a fact and not a failure. AND THE QUESTION IS A DOOR NOW. "What

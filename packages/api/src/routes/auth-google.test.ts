@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { accounts } from "../db/index.js";
+import { accounts, agentKeys, cliLoginCodes, keeperKeys, mobileLoginCodes, sessions } from "../db/index.js";
 
 const mockState = vi.hoisted(() => ({
   db: undefined as any,
@@ -80,7 +80,11 @@ function makeDb(selectResults: unknown[][]) {
     const chain: any = {};
     chain.from = vi.fn(() => chain);
     chain.where = vi.fn(() => ({
-      limit: vi.fn(async () => selectResults.shift() ?? []),
+      limit: vi.fn(() => {
+        const result: any = Promise.resolve(selectResults.shift() ?? []);
+        result.for = vi.fn(() => result);
+        return result;
+      }),
     }));
     return chain;
   });
@@ -132,6 +136,7 @@ function linkableAccountDb(passwordHash: string | null = null) {
   return makeDb([
     [],
     [{ id: "account-1", email: "user@example.com", googleSub: null, passwordHash }],
+    [{ googleSub: null, passwordHash }],
     [{ id: "profile-1", name: "Existing" }],
   ]);
 }
@@ -295,17 +300,18 @@ describe("linking a Google identity to an account that had a password", () => {
     ).toMatchObject({ googleSub: "google-sub-123", passwordHash: null });
   });
 
-  it("revokes the sessions that credential was already holding open", async () => {
+  it("revokes sessions, standing keys and pending sign-in codes together", async () => {
     const db = linkableAccountDb("argon2-hash-of-something");
     mockState.db = db;
     mockGoogleToken({ email_verified: true });
 
     await callbackRequest();
 
-    expect(
-      db.deleteCalls.length,
-      "an open session keeps the access that dropping the password removed",
-    ).toBeGreaterThan(0);
+    expect(db.transaction).toHaveBeenCalledOnce();
+    expect(db.deleteCalls.map((call: { table: unknown }) => call.table)).toEqual([sessions, cliLoginCodes, mobileLoginCodes]);
+    for (const table of [keeperKeys, agentKeys]) {
+      expect(db.setCalls.find((call: { table: unknown }) => call.table === table)?.values.revokedAt).toBeInstanceOf(Date);
+    }
   });
 
   it("leaves a Google-only account alone, having no password to drop", async () => {

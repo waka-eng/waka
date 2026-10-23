@@ -217,7 +217,7 @@ it('marks the file in flight and disables remove and retry during upload', async
 it('routes pasted and dropped files through the same validation callback, never during an upload', async () => {
   await mount(); const file = new File(['bytes'], 'photo.png', {type:'image/png'});
   const paste = () => { const event = new Event('paste', {bubbles:true,cancelable:true}); Object.defineProperty(event,'clipboardData',{value:{files:[file]}}); host.querySelector('textarea')!.dispatchEvent(event); };
-  const drop = () => { const event = new Event('drop', {bubbles:true,cancelable:true}); Object.defineProperty(event,'dataTransfer',{value:{files:[file]}}); host.querySelector('[role="dialog"]')!.dispatchEvent(event); };
+  const drop = () => { const event = new Event('drop', {bubbles:true,cancelable:true}); Object.defineProperty(event,'dataTransfer',{value:{files:[file]}}); host.querySelector('.jar-inspiration-composer')!.dispatchEvent(event); };
   await act(async () => { paste(); drop(); }); expect(props.onFiles).toHaveBeenCalledTimes(2);
   expect(props.onFiles).toHaveBeenCalledWith([file]);
   props.busy = true; await mount(); await act(async () => { paste(); drop(); }); expect(props.onFiles).toHaveBeenCalledTimes(2);
