@@ -7,19 +7,22 @@ a press. What it took, beyond the param (`lib/view-location.ts`, `lib/use-view-n
 `SavesOverlay`'s `note`/`onNoteAddress`, `Home`):
 
 - `note=` is read and written only beside `open=saves`, so it cannot ride onto another page.
-- The pushed entry records `noteFrom` (the list's address) and which page load pushed it.
-  `closeNote` (the on-screen way back, a delete, an unchanged close) is `navigate(-1)` when the
-  list is beneath, a replace to the list on a cold link. `closeOpen` from a note steps over both
-  entries (`go(-2)`) when the archive has an origin; without one (cold `?open=saves`, or the dock's
-  new-note → All inspirations path, which replaces) it steps back onto the list and rewrites the
-  list to the world.
+- The push that opens a note from the list records `noteFrom` (the list's canonical address);
+  pushes made while a note is open do not. `closeNote` (the on-screen way back, a delete, an
+  unchanged close) is `navigate(-1)` when the list is beneath, a replace to the list otherwise.
+  `closeOpen` from a note steps over both entries (`go(-2)`) when the archive has an origin;
+  without one (cold `?open=saves`, or the dock's new-note → All inspirations path, which
+  replaces) it replaces the note's own entry with the world.
 - **Replace under the note, answered:** a replace that drops the note (the bar moving you on)
-  first steps back onto the list and replaces that, so no list entry is left to reopen the archive.
-  The step is a traversal, made only when the list is this document's (a pre-reload entry would
-  be a full load and the act would be lost; then it replaces in place). A replace that keeps the
-  note but rewrites the rest is refused, so the list never holds a stale address; the
-  canonicaliser records again once the note closes.
-- Home's view restore skips an entry that differs from the applied one only by `note=`.
+  replaces the note's own entry, so no note entry is left in Forward history; the list stays
+  behind it, so Back from the destination returns to the list that was visited (review on
+  aa7206f7 chose this over stepping back onto the list first, which left the note ahead). A
+  replace that keeps the note but rewrites the rest is refused, so the list never holds a stale
+  address; the canonicaliser records again once the note closes.
+- Home's view restore skips an entry that differs from the applied one only by `note=`; a pass
+  under way clears the applied address, so an overtaken pass is never trusted.
+- A save still running when Back left the note and Forward returned to it does not count as an
+  on-screen close when it finishes; the note reopens from its address.
 - Leaving the address commits the note through `commitOpenNote` (the popstate listener, plus an
   effect for traversals that raise no `popstate`); its identity guard makes them one write.
 - **Event order, in real browsers:** the pop reaches Home's listener before the router lands, so
@@ -32,9 +35,10 @@ the page): archive → note → Back (list) → Back (archive closed); Back/Forw
 reload with a note open keeps it and Back still reaches the list then Home then the page before;
 Forward history intact after the walk; Back from an edited note sends one PATCH; `history.length`
 never grows on any Back or close. **Not covered:** real iPhone edge-swipe, Android system Back,
-long-press Back. **Still open, pre-existing:** closing the archive opened by the dock (new note →
-All inspirations, a replace) leaves no origin, so its close replaces the list with `/` and the next
-Back is a same-URL step; from a note it is the same, no worse. Review, the settings/info card,
+long-press Back. **Still open:** closing the archive opened by the dock (new note → All inspirations, a
+replace) leaves no origin: from the list its close replaces the list with `/` and the next Back is
+a same-URL step (pre-existing); from a note, Escape replaces the note entry, so the next Back
+reopens the archive's list (both engines). Review, the settings/info card,
 `prov` and the share sheet are unchanged and still address-less.
 
 ---

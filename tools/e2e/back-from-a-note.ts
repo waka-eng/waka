@@ -220,10 +220,11 @@ async function walk(engine: BrowserType, name: string, origin: string): Promise<
     check(sent.some((line) => line.includes(edited)), 'the write Back sent did not carry the edited words');
     check(committed.list && !committed.note && q(committed).get('open') === 'saves', 'Back from an edited note did not land on the list');
 
-    /* 6. Escape from an open note closes the archive in one press, and leaves
-          history exactly as Escape from the LIST does (the baseline, which
-          this change does not touch). Each on a fresh tab, so the two
-          histories are comparable entry for entry. */
+    /* 6. Escape from an open note closes the archive in one press. With no
+          archive origin (the dock's path) the note's own entry is replaced by
+          the world, so nothing is left in Forward history, and Back reaches
+          the list that was visited. Escape from the LIST is the baseline,
+          which this change does not touch. Each on a fresh tab. */
     const escapeFrom = async (fromNote: boolean) => {
       const tab = await context.newPage();
       await tab.goto(`${origin}/start.html`, { waitUntil: 'domcontentloaded' });
@@ -238,19 +239,22 @@ async function walk(engine: BrowserType, name: string, origin: string): Promise<
       const entries = await tab.evaluate(() => { const api = (window as { navigation?: { entries(): { url: string }[]; currentEntry: { index: number } } }).navigation;
         return api ? `${api.entries().map((entry, index) => `${index === api.currentEntry.index ? '*' : ''}${new URL(entry.url).pathname}${new URL(entry.url).search}`).join(' | ')}` : 'n/a'; });
       console.log(`  [${name}] entries after ${fromNote ? 'Escape from a note' : 'Escape from the list'}: ${entries}`);
+      await tab.goForward({ waitUntil: 'domcontentloaded' }).catch(() => null);
+      const ahead = await look(tab, fromNote ? 'Forward after Escape from a note' : 'Forward after Escape from the list (baseline)');
       await tab.goBack({ waitUntil: 'domcontentloaded' });
       const after = await look(tab, fromNote ? 'Back after Escape from a note' : 'Back after Escape from the list (baseline)');
-      steps.push(closed, after);
+      steps.push(closed, ahead, after);
       await tab.close();
-      return { closed, after };
+      return { closed, ahead, after };
     };
     const baseline = await escapeFrom(false), fromNote = await escapeFrom(true);
     check(!q(fromNote.closed).get('open') && !fromNote.closed.list && !fromNote.closed.note && fromNote.closed.url === home.url,
       `Escape from a note did not close the archive (at ${fromNote.closed.url})`);
-    /* Same landing, same Back; one entry longer, because the note's entry is
-       kept as forward history rather than destroyed. */
-    check(fromNote.closed.url === baseline.closed.url && fromNote.after.url === baseline.after.url && fromNote.after.length === baseline.after.length + 1,
-      `Escape from a note left different history than Escape from the list (${fromNote.after.url} len=${fromNote.after.length} vs ${baseline.after.url} len=${baseline.after.length})`);
+    check(fromNote.ahead.url === fromNote.closed.url, `Forward after Escape from a note went to ${fromNote.ahead.url} — a note entry was left ahead`);
+    check(fromNote.after.list && q(fromNote.after).get('open') === 'saves' && !q(fromNote.after).get('note'),
+      `Back after Escape from a note did not reach the list (at ${fromNote.after.url})`);
+    check(fromNote.closed.url === baseline.closed.url && fromNote.after.length === baseline.after.length + 1,
+      `Escape from a note closed to ${fromNote.closed.url} (len=${fromNote.after.length}) vs the list's ${baseline.closed.url} (len=${baseline.after.length})`);
     if (baseline.after.url !== '/start.html') console.log(`  [${name}] note: Back after closing the archive from the LIST lands on ${baseline.after.url}, not the entry before Home — pre-existing, the dock opens the archive by replacing the new note's entry, so the archive has no origin to return to`);
   } catch (error) {
     failures.push(`walk threw: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`);

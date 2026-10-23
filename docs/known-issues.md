@@ -1559,9 +1559,9 @@ Checked in Chromium and WebKit (`pnpm e2e:back-from-a-note`) and in jsdom
 How the cases below were answered: the note's entry is a real address, so no same-URL entry
 exists and Home's restore skips an entry differing only by `note=`; the canonicaliser carries
 `note=` like `open=`, and a replace that would rewrite the rest under the note is refused; there
-are no stale entries of our own (Forward into a note that was deleted drops `note=`); closing the
-archive from a note steps over both entries (or, with no origin, steps onto the list and rewrites
-it); the commit is `commitOpenNote` on leaving the address; and a close is ignored while a pop
+are no stale entries of our own (Forward into a note that was deleted drops `note=`; a replace that
+drops the note replaces the note's own entry); closing the archive from a note steps over both
+entries (or, with no origin, replaces the note entry with the world); the commit is `commitOpenNote` on leaving the address; and a close is ignored while a pop
 from that entry is still landing (the event-order case, seen as a double Back in both engines
 before it was fixed).
 
@@ -1571,12 +1571,13 @@ before it was fixed).
 - **A note that cannot close.** If Back leaves the note's address while its save fails, the note
   stays on screen with its words and the failure line while the address shows the list; the next
   Back leaves the archive, and the words are lost if the retry it makes fails too (as on dev).
-- **A pre-reload list beneath.** After a reload, the list's entry belongs to the old document. A
-  replace that drops the note (the bar moving you on) then rewrites the note's entry in place
-  instead of stepping back, so Back from there can reopen the archive's list (a full load).
+- **Back after leaving from a note returns to the list.** A replace that drops the note (the bar
+  moving you on, Escape with no archive origin) replaces the note's entry, so the list stays
+  behind it and the next Back reopens the archive's list (chosen in review over leaving a note
+  entry in Forward history).
 - **Pre-existing, not the note's:** the dock opens the archive by replacing the new note's entry,
-  so the archive has no origin; closing it replaces the list with `/` and the next Back is a
-  same-URL step (measured in both engines, from the list and from a note alike).
+  so the archive has no origin; closing it from the list replaces the list with `/` and the next
+  Back is a same-URL step (measured in both engines).
 
 What follows is the record from before the fix.
 
