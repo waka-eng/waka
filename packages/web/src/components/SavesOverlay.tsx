@@ -922,11 +922,25 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   const tellAddress = useRef(onNoteAddress); tellAddress.current = onNoteAddress;
   const letGo = useRef<string | null>(null);
   const wasOpen = useRef<string | null>(null);
+  /* WHETHER THE ADDRESS HAS LEFT THE OPEN NOTE since it first named it — a
+     Back while the note's save is still running. Letting go of that note
+     afterwards is the save finishing, not a close on screen, even if a
+     Forward has brought the address back to it by then: closing would step
+     back out of the note the person just walked forward into. The note then
+     reopens from its address like any Forward. */
+  const addressFor = useRef<{ id: string; named: boolean; left: boolean } | null>(null);
+  useEffect(() => {
+    if (!openId) return;
+    if (addressFor.current?.id !== openId) addressFor.current = { id: openId, named: false, left: false };
+    if (noteAddress === openId) addressFor.current.named = true;
+    else if (addressFor.current.named) addressFor.current.left = true;
+  }, [openId, noteAddress]);
   useEffect(() => {
     const was = wasOpen.current;
     wasOpen.current = openId;
     if (!addressed || !was || openId === was) return;
-    if (noteAddress === was) { letGo.current = was; tellAddress.current?.("close", was); }
+    const left = addressFor.current?.id === was && addressFor.current.left;
+    if (noteAddress === was && !left) { letGo.current = was; tellAddress.current?.("close", was); }
   }, [openId, addressed, noteAddress]);
   useEffect(() => {
     if (!addressed) return;

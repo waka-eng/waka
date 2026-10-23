@@ -123,7 +123,7 @@ it('a Back the browser delivers (popstate before the router lands) is one step, 
 
 /* Escape from a note closes the archive: the note commits on the way, and
    its letting go must not add a step of its own to the archive's. */
-it('Escape from a note closes the archive in one step and keeps the note as the forward entry', async () => {
+it('Escape from a note closes the archive in one step and leaves no note entry in Forward', async () => {
   world = await mountWorld(FACTS, { initialEntries: ['/?view=field', '/'], routerTools: <RouterTools/> }); await settle();
   await chooseFromMenu(world.container, 'Inspirations'); await settle();
   await act(async () => listRow()!.click()); await settle();
@@ -132,7 +132,30 @@ it('Escape from a note closes the archive in one step and keeps the note as the 
   expect(params().get('open'), 'Escape did not close the archive').toBeNull();
   expect(params().get('view'), 'Escape walked past where the archive was opened from').toBeNull();
   await forward();
-  expect(params().get('note'), 'the forward entry is not the note').toBe('kept');
+  expect(params().get('open'), 'a note entry was left in Forward history').toBeNull();
+});
+
+/* A SAVE STILL RUNNING WHEN THE PERSON WALKS FORWARD BACK INTO THE NOTE.
+   Back starts the commit; Forward brings the address back to the note; the
+   save then finishes and the note lets go. That is the save finishing, not a
+   close on screen — it must not step back out of the note the person just
+   walked into. */
+it('a save finishing after Back then Forward does not close the note the person walked back into', async () => {
+  let land: () => void = () => undefined;
+  vi.mocked(updateInspiration).mockImplementation(() => new Promise((done) => { land = () => done(undefined as never); }));
+  await openArchiveThenNote();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(page(), 'dusk on the hill, and then the rain');
+    page()!.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle();
+  await back();
+  expect(vi.mocked(updateInspiration)).toHaveBeenCalledTimes(1);
+  await forward();
+  expect(params().get('note')).toBe('kept');
+  await act(async () => { land(); }); await settle();
+  expect(params().get('note'), 'the finished save stepped back out of the note').toBe('kept');
+  expect(page(), 'the note is not on screen at its address').toBeTruthy();
 });
 
 it('Forward after Back reopens the note', async () => {
