@@ -73,8 +73,20 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   }, []);
   const failureSeq = useRef(0), landedSeq = useRef(0);
 
+  /* NOTES BEING DELETED (review, 2026-10-22): from the press of Delete,
+     through Undo's moment, until the server has answered. A clip sent to one
+     of them — a Try again from Home's line, say — would land and then be
+     deleted with it, silently. So it is not sent: its line says the note was
+     deleted, keeps the file, and is offered again after Undo or a restore. */
+  const deleting = useRef(new Set<string>());
   const send = useCallback(async (file: File, to: ClipTarget) => {
     const key = noteKey(to.noteId, to.profileId);
+    if (deleting.current.has(key)) {
+      failureSeq.current += 1;
+      const id = failureSeq.current;
+      setFailures((all) => [...all, { id, file, target: to, reason: "worldRecordingNoteDeleted" as const }]);
+      return;
+    }
     bump(key, 1);
     try {
       await attachToNote(file, { noteId: to.noteId, profileId: to.profileId, type: "file" });
@@ -180,6 +192,21 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   const forget = useCallback((noteId: string, profileId: string | null) => setFailures((all) => all.map((item) =>
     item.file && item.target.noteId === noteId && item.target.profileId === profileId
       ? { id: item.id, file: item.file, target: item.target, reason: "worldRecordingNoteDeleted" as const } : item)), [setFailures]);
+  /** The archive says a note's delete has begun (`true`) or is settled —
+      undone, refused, or sent (`false`). */
+  const setDeleting = useCallback((noteId: string, profileId: string | null, on: boolean) => {
+    if (on) deleting.current.add(noteKey(noteId, profileId)); else deleting.current.delete(noteKey(noteId, profileId));
+  }, []);
+  /* THE NOTE IS BACK — undone, a refused delete, or restored from the
+     shelf: its clips' lines go back to plain upload failures. */
+  const unforget = useCallback((noteId: string, profileId: string | null) => setFailures((all) => all.map((item) =>
+    item.file && item.reason && item.target.noteId === noteId && item.target.profileId === profileId
+      ? { id: item.id, file: item.file, target: item.target } : item)), [setFailures]);
+  /* THE NOTE IS DELETED FOR GOOD (off the shelf): nothing can bring it
+     back, so its clips are let go and their lines say so, × only. */
+  const drop = useCallback((noteId: string, profileId: string | null) => setFailures((all) => all.map((item) =>
+    item.file && item.target.noteId === noteId && item.target.profileId === profileId
+      ? { id: item.id, file: null, target: item.target, reason: "worldRecordingNoteErased" as const } : item)), [setFailures]);
   const dismiss = useCallback((id: number) => setFailures((all) => all.filter((item) => item.id !== id)), [setFailures]);
 
   /* ONE OBJECT WHILE NOTHING CHANGES (review, 2026-10-21), so what the
@@ -190,8 +217,8 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   const { phase: recorderPhase, seconds, error, notice, stop, cancel, clear } = recorder;
   return useMemo(() => ({
     phase: recorderPhase, seconds, error, notice, stop, cancel, clear,
-    start, stopIfLive, setViewing, blocked, forNote, isSending, landed, failures, retry, forget, dismiss,
-  }), [recorderPhase, seconds, error, notice, stop, cancel, clear, start, stopIfLive, setViewing, blocked, forNote, isSending, landed, failures, retry, forget, dismiss]);
+    start, stopIfLive, setViewing, blocked, forNote, isSending, landed, failures, retry, forget, setDeleting, unforget, drop, dismiss,
+  }), [recorderPhase, seconds, error, notice, stop, cancel, clear, start, stopIfLive, setViewing, blocked, forNote, isSending, landed, failures, retry, forget, setDeleting, unforget, drop, dismiss]);
 }
 
 export type ArchiveRecorder = ReturnType<typeof useArchiveRecorder>;

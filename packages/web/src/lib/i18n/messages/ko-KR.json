@@ -189,6 +189,7 @@
   "worldRecordingAttachFailed": "녹음을 “{note}”에 붙이지 못했어요.",
   "worldRecordingAttachFailedUntitled": "녹음을 노트에 붙이지 못했어요.",
   "worldRecordingCanceled": "녹음을 취소했어요.",
+  "worldRecordingNoteErased": "노트가 완전히 삭제되어 녹음을 남기지 못했어요.",
   "worldRecordingNoteDeleted": "노트가 삭제되었어요. 노트를 복원하면 녹음을 붙일 수 있어요.",
   "worldRecordingProblemFor": "“{note}” 녹음: {problem}",
   "worldRecordingDenied": "마이크 사용이 허용되지 않았어요. 브라우저에서 허용한 뒤 다시 시도해 주세요.",

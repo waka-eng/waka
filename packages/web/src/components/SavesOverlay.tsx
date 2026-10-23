@@ -352,22 +352,31 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   }, [ownArchive]);
   useEffect(() => { void loadShelf(); }, [loadShelf]);
 
-  const forgetNote = recorder.forget;
+  const forgetNote = recorder.forget, unforgetNote = recorder.unforget, markDeleting = recorder.setDeleting;
+  /* A DELETE BEGINS: no clip is sent to the note until it is undone,
+     refused or sent, and its lines say it was deleted (review, 2026-10-22). */
+  const beginDelete = useCallback((id: string) => {
+    markDeleting(id, profileId ?? null, true);
+    forgetNote(id, profileId ?? null);
+  }, [forgetNote, markDeleting, profileId]);
   const commitErase = useCallback((pending: { row: Inspiration; at: number }, leaving = false) => {
+    beginDelete(pending.row.id);
     /* On an agent's archive the delete names the agent's profile; the
        request outlives the tab when it is sent as the page goes. */
     void deleteInspiration(pending.row.id, { ...(profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
-      /* a clip that failed to attach to this note has nowhere to go now:
-         Home's line says so, with no Try again (review, 2026-10-22) */
-      .then(() => { forgetNote(pending.row.id, profileId ?? null); return loadShelf(); })
+      /* sent: a clip for this note waits on Home's line for a restore */
+      .then(() => { markDeleting(pending.row.id, profileId ?? null, false); return loadShelf(); })
       .catch(() => {
+        /* refused: the note is still there, and so are its clips' chances */
+        markDeleting(pending.row.id, profileId ?? null, false);
+        unforgetNote(pending.row.id, profileId ?? null);
         if (!mounted.current) return;
         setRows((all) => all.some((row) => row.id === pending.row.id) ? all
           : [...all.slice(0, pending.at), pending.row, ...all.slice(pending.at)]);
         setTotal((count) => count === null ? count : count + 1);
         setEraseFailed(true);
       });
-  }, [forgetNote, loadShelf, ownArchive, profileId]);
+  }, [beginDelete, loadShelf, markDeleting, ownArchive, profileId, unforgetNote]);
 
   const flushErase = useCallback((leaving = false) => {
     const pending = pendingErase.current;
@@ -403,45 +412,53 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       if (mounted.current) setUndoable(null);
       flushErase();
     }, UNDO_MS);
+    beginDelete(row.id);
     pendingErase.current = { row, at, timer };
     focusUndoNext.current = true;
     setUndoable(row);
-  }, [flushErase, rows]);
+  }, [beginDelete, flushErase, rows]);
 
   const undoErase = useCallback(() => {
     const pending = pendingErase.current;
     if (!pending) return;
     window.clearTimeout(pending.timer);
     pendingErase.current = null;
+    markDeleting(pending.row.id, profileId ?? null, false);
+    unforgetNote(pending.row.id, profileId ?? null);
     setRows((all) => all.some((row) => row.id === pending.row.id) ? all
       : [...all.slice(0, pending.at), pending.row, ...all.slice(pending.at)]);
     setTotal((count) => count === null ? count : count + 1);
     setUndoable(null);
-  }, []);
+  }, [markDeleting, profileId, unforgetNote]);
 
   const bringBack = useCallback(async (item: ApiDeletedInspiration) => {
     setShelfFailed(false);
     try {
       await restoreInspiration(item.id);
+      /* back from the shelf under the same id: its clips can land again */
+      unforgetNote(item.id, profileId ?? null);
       if (!mounted.current) return;
       setShelf((all) => all.filter((row) => row.id !== item.id));
       void load();
     } catch {
       if (mounted.current) setShelfFailed(true);
     }
-  }, [load]);
+  }, [load, profileId, unforgetNote]);
 
+  const dropNote = recorder.drop;
   const forget = useCallback(async (item: ApiDeletedInspiration) => {
     if (forgetting !== item.id) { setForgetting(item.id); return; }
     setForgetting(null);
     setShelfFailed(false);
     try {
       await forgetDeletedInspiration(item.id);
+      /* gone for good: now, and only now, its clips cannot be kept */
+      dropNote(item.id, profileId ?? null);
       if (mounted.current) setShelf((all) => all.filter((row) => row.id !== item.id));
     } catch {
       if (mounted.current) setShelfFailed(true);
     }
-  }, [forgetting]);
+  }, [dropNote, forgetting, profileId]);
 
   /**
    * LEAVING THE NOTE IS WHAT SAVES IT.

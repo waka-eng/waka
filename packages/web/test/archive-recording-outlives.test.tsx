@@ -468,6 +468,39 @@ it("says a clip's note was deleted here, and keeps the clip for its restore", as
   expect(tryAgainOn(line), "the clip was dropped with its note, though a restore can bring the note back").toBe(true);
 });
 
+/* While a delete is pending (Undo's moment, then the request), a Try again
+   from Home's line could still send the clip — to land and be deleted with
+   the note, silently. It is held instead; Undo brings the plain line back,
+   and Try again then lands. */
+it("does not send a clip to a note whose delete is pending, and lets Undo bring it back", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-1");
+  S.failFinalize = 1;
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await deliverStops();
+  const presignedBefore = S.presigned.length;
+  await act(async () => q<HTMLButtonElement>('#waka-note-tools [aria-label="Delete"]')!.click());
+  await settle(2);
+  const line = () => q(".waka-clip-failed");
+  expect(line()?.textContent, "the line did not say the note was deleted").toContain("The note was deleted. Restore it to attach the recording.");
+  const retry = () => [...(line()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find((button) => button.textContent === "Try again");
+  await act(async () => retry()!.click());
+  await settle(2);
+  expect(S.presigned.length, "Try again sent the clip to a note whose delete is pending").toBe(presignedBefore);
+  expect(line()?.textContent).toContain("The note was deleted. Restore it to attach the recording.");
+  /* Undo: the note is back, and so is the plain line */
+  const undo = [...document.querySelectorAll<HTMLButtonElement>(".waka-dock-undo")].find((button) => button.textContent === "Undo");
+  expect(undo, "no Undo").toBeTruthy();
+  await act(async () => undo!.click());
+  await settle(2);
+  expect(line()?.textContent).toContain("Couldn’t attach your recording to “something I kept, 1”.");
+  await act(async () => retry()!.click());
+  await settle(4);
+  expect(S.finalized, "after Undo, Try again did not attach the clip").toEqual(["own-1"]);
+  expect(S.deleted, "the undone delete was sent").toEqual([]);
+});
+
 /* Deleting a note cancels a recording made ON IT. It used to cancel the one
    shared recorder whatever note it was recording for, so deleting note B
    while note A's clip was still being handed over threw A's clip away. */
