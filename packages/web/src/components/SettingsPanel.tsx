@@ -399,7 +399,7 @@ function AgentConnections({ locale, activeProfileId }: { locale: SupportedLocale
   };
 
   // The current browser already has Sign out. Never offer to disconnect it here.
-  const others = sessions?.filter((row) => !row.current);
+  const others = sessions?.filter((row) => !row.current && new Date(row.expiresAt).getTime() > Date.now());
   const groups = new Map<string, { profile: ApiSession['profile']; sessions: ApiSession[] }>();
   for (const session of others ?? []) {
     const group = groups.get(session.profile.id) ?? { profile: session.profile, sessions: [] };
@@ -484,6 +484,16 @@ function SessionSetup({ locale, onDone, activeProfileId }: { locale: SupportedLo
   const [profiles, setProfiles] = useState<ApiOwnedProfile[]>([]);
   const [profileId, setProfileId] = useState('');
   const [profileError, setProfileError] = useState(false);
+  const [verification, setVerification] = useState<'idle' | 'checking' | 'waiting' | 'error' | 'verified'>('idle');
+  const [verifiedDevice, setVerifiedDevice] = useState('');
+  const verificationStarted = useRef(Date.now());
+  const verificationRequest = useRef(0);
+  useEffect(() => () => { verificationRequest.current += 1; }, []);
+  useEffect(() => {
+    verificationRequest.current += 1;
+    verificationStarted.current = Date.now();
+    setVerification('idle'); setVerifiedDevice('');
+  }, [profileId]);
   useEffect(() => {
     let live = true;
     void fetchProfiles().then(rows => {
@@ -503,9 +513,23 @@ function SessionSetup({ locale, onDone, activeProfileId }: { locale: SupportedLo
   const mcpBranch = ['localhost', '127.0.0.1', '[::1]', 'dev.waka.im'].includes(hostname) ? 'dev' : 'main';
   const commands = [
     `git clone --branch ${mcpBranch} https://github.com/waka-eng/waka-mcp.git\ncd waka-mcp\npnpm install`,
-    selected ? `WAKA_HOME=${profileHome} WAKA_PROFILE_ID=${quote(selected.id)} pnpm run login -- ${quote(apiUrl)} --profile ${quote(selected.id)} --device ${quote(`Claude Code · ${selected.name}`)}` : '',
-    selected ? `claude mcp add --scope user ${quote(`waka-${selected.id}`)} -- env WAKA_HOME=${profileHome} WAKA_PROFILE_ID=${quote(selected.id)} npx tsx "$PWD/src/server.ts"` : '',
+    selected ? `${installed ? 'git pull --ff-only\npnpm install\n' : ''}pnpm run build\nWAKA_HOME=${profileHome} WAKA_PROFILE_ID=${quote(selected.id)} pnpm run login -- ${quote(apiUrl)} --profile ${quote(selected.id)} --device ${quote(`Claude Code · ${selected.name}`)}` : '',
+    selected ? `${installed ? `claude mcp remove --scope user ${quote(`waka-${selected.id}`)} 2>/dev/null || true\n` : ''}claude mcp add --scope user ${quote(`waka-${selected.id}`)} -- env WAKA_HOME=${profileHome} WAKA_PROFILE_ID=${quote(selected.id)} WAKA_API_KEY='' node "$PWD/dist/src/server.js"` : '',
   ];
+  const checkConnection = async () => {
+    if (!selected) return;
+    const request = ++verificationRequest.current;
+    setVerification('checking');
+    try {
+      const rows = await fetchSessions();
+      if (request !== verificationRequest.current) return;
+      const connection = rows.find(row => !row.current && row.profile.id === selected.id &&
+        row.deviceLabel === `Claude Code · ${selected.name}` && new Date(row.expiresAt).getTime() > Date.now() &&
+        row.verifiedAt && new Date(row.verifiedAt).getTime() >= verificationStarted.current);
+      setVerifiedDevice(connection?.deviceLabel ?? '');
+      setVerification(connection ? 'verified' : 'waiting');
+    } catch { if (request === verificationRequest.current) setVerification('error'); }
+  };
   return <section className="waka-mcp-setup" aria-labelledby="waka-mcp-step">
     <p className="waka-settings-note">{formatMessage(locale, "profileConnectionStep", { step: step + 1 - Number(installed), total: installed ? 2 : 3 })}</p>
     <h3 id="waka-mcp-step" ref={heading} tabIndex={-1}>{say(step === 0 ? "profileConnectionInstallTitle" : step === 1 ? "profileConnectionLoginTitle" : "profileConnectionVerifyTitle")}</h3>
@@ -537,10 +561,16 @@ function SessionSetup({ locale, onDone, activeProfileId }: { locale: SupportedLo
         <p className="waka-settings-note">{say(selected?.type === 'human' ? "profileConnectionVerifyResultHuman" : "profileConnectionVerifyResult")}</p>
       </>}
     </div>
+    {step === 2 && verification !== 'idle' && verification !== 'checking' ? <p className="waka-settings-note" role={verification === 'error' ? 'alert' : 'status'}>
+      {verification === 'verified' ? formatMessage(locale, 'profileConnectionVerified', { name: selected?.name ?? '', device: verifiedDevice })
+        : say(verification === 'error' ? 'profileConnectionCheckFailed' : 'profileConnectionNotVerified')}
+    </p> : null}
     <div className="waka-session-actions">
       {step > 0 ? <button type="button" className="waka-settings-erase" onClick={() => { if (step === 1) setInstalled(false); setStep(step - 1); }}>{say("profileConnectionPrevious")}</button> : null}
-      <button type="button" className="waka-settings-erase" disabled={step === 1 && !selected} onClick={() => step === 2 ? onDone() : setStep(step + 1)}>
-        {say(step === 0 ? "profileConnectionNextLogin" : step === 1 ? "profileConnectionNextVerify" : "profileConnectionViewDevices")}
+      <button type="button" className="waka-settings-erase" disabled={(step > 0 && !selected) || verification === 'checking'}
+        onClick={() => step === 2 ? verification === 'verified' ? onDone() : void checkConnection() : setStep(step + 1)}>
+        {say(step === 0 ? "profileConnectionNextLogin" : step === 1 ? "profileConnectionNextVerify"
+          : verification === 'verified' ? "profileConnectionViewDevices" : verification === 'checking' ? 'profileConnectionChecking' : 'profileConnectionCheck')}
       </button>
     </div>
   </section>;

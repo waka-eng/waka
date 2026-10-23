@@ -8,6 +8,7 @@ export interface ApiSession {
   createdAt: string;
   lastSeenAt: string;
   expiresAt: string;
+  verifiedAt?: string | null;
 }
 
 export async function fetchSessions(): Promise<ApiSession[]> {

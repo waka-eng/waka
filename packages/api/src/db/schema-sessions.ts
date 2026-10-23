@@ -46,6 +46,8 @@ export const sessions = pgTable(
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Last explicit profile check made through the MCP verification tool. */
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
   },
   (table) => ({
     // The hottest read path in the API; uniqueness also guards the

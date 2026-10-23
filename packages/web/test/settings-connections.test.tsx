@@ -64,7 +64,7 @@ afterEach(async () => {
 });
 async function openConnections(locale: SettingsPanelProps["locale"] = "en-US", activeProfileId?: string) {
   await act(async () => root.render(<SettingsPanel {...props} locale={locale} activeProfileId={activeProfileId} />));
-  await act(async () => button(locale === "en-US" ? "Sessions" : "연결된 기기").click());
+  await act(async () => button(locale === "en-US" ? "Connections" : "연결").click());
 }
 async function openProfile(id = 'profile-1') {
   await act(async () => host.querySelector<HTMLButtonElement>(`[data-profile-id="${id}"]`)!.click());
@@ -93,7 +93,7 @@ it("summarizes connections by profile and keeps device details off the overview"
 
 it("enters a Sessions subpage and returns to Settings with focus on its navigation row", async () => {
   await openConnections();
-  expect(host.querySelector("h2")?.textContent).toBe("Sessions");
+  expect(host.querySelector("h2")?.textContent).toBe("Connections");
   expect(document.activeElement).toBe(host.querySelector("h2"));
   expect(host.querySelector("input[autocomplete='name']")).toBeNull();
   expect(host.querySelector('[data-settings-target="agents"]')).toBeNull();
@@ -167,14 +167,14 @@ it("distinguishes a failed load from an empty list and refreshes after an extern
   expect(host.textContent).toContain("New laptop");
 });
 
-it("shows expired sessions honestly and provides setup in Korean", async () => {
+it("hides expired sessions from the list and counts in Korean", async () => {
   rows[1]!.expiresAt = "2020-01-01T00:00:00Z";
   await openConnections("ko-KR");
-  expect(host.textContent).toContain('연결 1개');
-  await openProfile();
-  expect(host.textContent).toContain("만료됨");
+  expect(host.textContent).not.toContain('연결 1개');
+  expect(host.querySelectorAll('.waka-session-profile-row')).toHaveLength(0);
+  expect(host.textContent).not.toContain("만료됨");
   expect(host.textContent).toContain("MCP 설정");
-  expect(host.querySelector('button[aria-label="Work laptop 연결 해제"]')).not.toBeNull();
+  expect(host.querySelector('button[aria-label="Work laptop 연결 해제"]')).toBeNull();
 });
 
 it("guides installation, browser consent and a real MCP check as separate steps with copyable commands", async () => {
@@ -197,12 +197,14 @@ it("guides installation, browser consent and a real MCP check as separate steps 
   await act(async () => button("Next: Check connection").click());
   expect(host.textContent).toContain("Step 3 of 3");
   expect(host.querySelector("pre")?.textContent).toContain("claude mcp add");
-  expect(host.textContent).toContain("Use WAKA to list the profiles I can access");
-  rows.push({ ...session("new-session"), deviceLabel: "Claude Code (Work laptop)" });
+  expect(host.textContent).toContain("Use waka_verify_connection");
+  rows.push({ ...session("new-session"), deviceLabel: "Claude Code · noah",
+    profile: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'noah', type: 'agent' }, verifiedAt: new Date(Date.now() + 1000).toISOString() });
+  await act(async () => button("Check connection").click());
   await act(async () => button("View connections").click());
-  expect(host.textContent).toContain('2 connections');
-  await openProfile();
-  expect(host.textContent).toContain("Claude Code (Work laptop)");
+  expect(host.querySelectorAll('.waka-session-profile-row')).toHaveLength(2);
+  await openProfile('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  expect(host.textContent).toContain("Claude Code · noah");
   expect(host.querySelector('button[aria-pressed="true"]')?.textContent).toBe("Manage");
 });
 
@@ -215,6 +217,8 @@ it("lets existing installations reconnect with a pinned server entry without clo
   await act(async () => button("Next: Check connection").click());
   expect(host.textContent).toContain("Step 2 of 2");
   expect(host.querySelector("pre")?.textContent).toContain("WAKA_PROFILE_ID");
+  expect(host.querySelector("pre")?.textContent).toContain("claude mcp remove --scope user 'waka-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'");
+  expect(host.querySelector("pre")?.textContent).toContain("WAKA_API_KEY=''");
   expect(host.textContent).toContain("Restart Claude Code");
 });
 
@@ -237,7 +241,7 @@ it('generates separate pinned login and MCP commands for Noah and anotherone',as
   expect(server).toContain("waka-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
   expect(server).toContain("WAKA_PROFILE_ID='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'");
   expect(server).toContain('WAKA_HOME="$HOME/.waka/profiles/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"');
-  expect(host.querySelector('blockquote')?.textContent).toContain('only anotherone (bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb)');
+  expect(host.querySelector('blockquote')?.textContent).toContain('profileId "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"');
 });
 
 it('starts MCP setup with the agent currently selected in the world',async()=>{
@@ -257,7 +261,45 @@ it('explains that a personal MCP connection can list every profile in the accoun
     const select=host.querySelector('select')!;select.value='cccccccc-cccc-4ccc-8ccc-cccccccccccc';select.dispatchEvent(new Event('change',{bubbles:true}));
   });
   await act(async()=>button('Next: Check connection').click());
-  expect(host.querySelector('blockquote')?.textContent).toContain('and my agent profiles');
-  expect(host.textContent).toContain('can access every profile in your account');
+  expect(host.querySelector('blockquote')?.textContent).toContain('profileId "cccccccc-cccc-4ccc-8ccc-cccccccccccc"');
+  expect(host.textContent).toContain('full account access');
   expect(host.textContent).not.toContain('Only the selected profile should be listed');
+});
+
+
+it('requires a fresh verification for the selected profile and device', async () => {
+  await openConnections();
+  await act(async () => button('Set up MCP').click());
+  await act(async () => button('Reconnect an existing setup').click());
+  await act(async () => button('Next: Check connection').click());
+  const noah = { ...session('noah'), deviceLabel: 'Claude Code · noah',
+    profile: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'noah', type: 'agent' as const },
+    verifiedAt: '2020-01-01T00:00:00Z' };
+  rows.push(noah);
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('No new verification received');
+  noah.verifiedAt = new Date(Date.now() + 1000).toISOString();
+  noah.deviceLabel = 'A different app';
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('No new verification received');
+  noah.deviceLabel = 'Claude Code · noah';
+  noah.expiresAt = '2020-01-01T00:00:00Z';
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('No new verification received');
+  noah.expiresAt = '2099-01-01T00:00:00Z';
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('Verified for noah · Claude Code · noah');
+  await act(async () => button('Previous step').click());
+  await act(async () => {
+    const select = host.querySelector('select')!;
+    select.value = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await act(async () => button('Next: Check connection').click());
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('No new verification received');
+  expect(host.textContent).not.toContain('Verified for noah');
+  failRead = true;
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('Could not check the connection');
 });

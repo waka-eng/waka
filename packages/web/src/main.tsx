@@ -31,6 +31,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { RequireAuth } from "./components/RequireAuth";
 import { SurfaceBoundary } from "./components/SurfaceBoundary";
 import { AuthProvider } from "./lib/auth-context";
+import { ArchiveRecordingBoundary } from "./lib/archive-recording-boundary";
 import { installPreloadRecovery } from "./lib/preload-recovery";
 import LoginPage from "./pages/Login";
 import { Days } from "./pages/Days";
@@ -146,6 +147,7 @@ ReactDOM.createRoot(root).render(
       */}
       <AuthProvider>
         <MobileShell />
+        <ArchiveRecordingBoundary>
         <Routes>
           {MobileChecks && <Route path="/mobile-check" element={<Suspense fallback={null}><MobileChecks /></Suspense>} />}
           {/* EVERY ROUTE HAS A CRASH BOUNDARY, not only home. A render error
@@ -293,6 +295,7 @@ ReactDOM.createRoot(root).render(
           */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ArchiveRecordingBoundary>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,

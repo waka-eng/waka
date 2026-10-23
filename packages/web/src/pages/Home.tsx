@@ -82,7 +82,7 @@ import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { useSettingsWrites } from '../lib/use-settings-writes';
 import { DraftProblem, draftProblem, forkDraftAndClear } from '../lib/draft-problem';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
-import { ArchiveRecorderProvider, useArchiveClips } from '../lib/archive-recorder';
+import { ArchiveRecorderFallback, useArchiveClips } from '../lib/archive-recorder';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { attachmentLabel } from '../lib/attachment-label';
 import { Menu } from '../components/Menu';
@@ -720,10 +720,10 @@ export default function HomePage(): JSX.Element {
    its clock ticks every second while it records, and as the world's own
    state that re-rendered the whole of it each time. As a provider around it,
    a tick re-renders the provider and its readers; the world is `children`
-   and is left alone. Inside this keyed boundary, so an identity change still
-   takes the recorder with the old world (L14). */
+   and is left alone. The app-level recording boundary retains pending clips
+   for their original signed-in profile across identity changes. */
 function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | null }): JSX.Element {
-  return <ArchiveRecorderProvider><HomeScreen storageScope={storageScope} /></ArchiveRecorderProvider>;
+  return <ArchiveRecorderFallback><HomeScreen storageScope={storageScope} /></ArchiveRecorderFallback>;
 }
 
 function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null }): JSX.Element {

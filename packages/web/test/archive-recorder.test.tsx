@@ -11,6 +11,8 @@
  * so two uploads can be in flight at once and land in the order a case says.
  * `lib/data` — the one case that mounts the archive itself reads its one row
  * through here, as `one-save-rule.test.tsx` does.
+ * `lib/auth-context` supplies changing identities to exercise the real
+ * recording boundary through sign-out and sign-in.
  * `MediaRecorder` and `navigator.mediaDevices` are pieces of browser jsdom
  * lacks; this stub hands its clip over on `stop` at once, which is enough
  * here because the hook stays mounted throughout.
@@ -22,7 +24,15 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const S = vi.hoisted(() => ({
   held: [] as Array<{ land: () => void; fail: () => void }>,
   finalized: [] as string[],
+  presignedProfiles: [] as Array<string | undefined>,
   live: new Set<unknown>(),
+  viewer: null as null | { account: { id: string }; profile: { id: string } },
+  delayedStop: false,
+  deliveries: [] as Array<() => void>,
+}));
+
+vi.mock("../src/lib/auth-context", async (original) => ({
+  ...await original<typeof import("../src/lib/auth-context")>(), useOptionalAuth: () => S.viewer,
 }));
 
 vi.mock("../src/lib/data", async (original) => {
@@ -36,7 +46,8 @@ vi.mock("../src/lib/data", async (original) => {
 
 vi.mock("../src/lib/api", async (original) => ({
   ...await original<typeof import("../src/lib/api")>(),
-  presignAttachment: () => new Promise((land, fail) => {
+  presignAttachment: (_input: unknown, _signal?: AbortSignal, options?: { profile?: string }) => new Promise((land, fail) => {
+    S.presignedProfiles.push(options?.profile);
     S.held.push({
       land: () => land({ uploadUrl: "https://bucket.test/put", key: "k", headers: {}, profileId: "me", expiresAt: "" }),
       fail: () => fail(new Error("offline")),
@@ -49,7 +60,9 @@ vi.mock("../src/lib/api", async (original) => ({
 import { useState } from "react";
 import { DOCK_SLOT } from "../src/components/NoteTools";
 import { SavesOverlay } from "../src/components/SavesOverlay";
-import { ArchiveRecorderProvider, useArchiveRecorder, type ArchiveRecorder } from "../src/lib/archive-recorder";
+import { ArchiveRecorderProvider, useArchiveRecorder, useArchiveRecorderContext, type ArchiveRecorder } from "../src/lib/archive-recorder";
+
+import { ArchiveRecordingBoundary } from "../src/lib/archive-recording-boundary";
 
 class Recorder {
   static isTypeSupported = (): boolean => true;
@@ -62,8 +75,11 @@ class Recorder {
   stop(): void {
     this.state = "inactive";
     S.live.delete(this);
-    this.ondataavailable?.({ data: new Blob(["clip"], { type: this.mimeType }) });
-    void this.onstop?.();
+    const deliver = () => {
+      this.ondataavailable?.({ data: new Blob(["clip"], { type: this.mimeType }) });
+      void this.onstop?.();
+    };
+    if (S.delayedStop) S.deliveries.push(deliver); else deliver();
   }
 }
 
@@ -74,7 +90,7 @@ function Probe({ tick }: { tick: number }) { recorder = useArchiveRecorder(); re
 let host: HTMLDivElement, root: Root;
 beforeEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  Object.assign(S, { held: [], finalized: [], live: new Set() });
+  Object.assign(S, { held: [], finalized: [], presignedProfiles: [], live: new Set(), viewer: null, delayedStop: false, deliveries: [] });
   renders = [];
   vi.stubGlobal("MediaRecorder", Recorder);
   Object.defineProperty(window.navigator, "mediaDevices", {
@@ -174,4 +190,54 @@ it("stops a recording whose Record and the archive's leaving land in one commit"
   } finally {
     slot.remove();
   }
+});
+
+function OwnedProbe() {
+  recorder = useArchiveRecorderContext();
+  return <span>{recorder.failures.map(failure => failure.target.label).join(',')}</span>;
+}
+const ownerA = { account: { id: 'account-a' }, profile: { id: 'profile-a' } };
+const ownerB = { account: { id: 'account-b' }, profile: { id: 'profile-b' } };
+async function changeOwner(viewer: typeof S.viewer) {
+  S.viewer = viewer;
+  await act(async () => root.render(<ArchiveRecordingBoundary>{viewer ? <OwnedProbe /> : <span>Signed out</span>}</ArchiveRecordingBoundary>));
+}
+
+it('pauses a delayed upload across an account switch and offers it only to its original owner', async () => {
+  await changeOwner(ownerA);
+  await recordOnto('private-note');
+  await changeOwner(ownerB);
+  await act(async () => S.held[0]!.land());
+  expect(S.finalized).toEqual([]);
+  expect(recorder.failures).toHaveLength(0);
+  expect(host.textContent).not.toContain('private-note');
+  await changeOwner(ownerA);
+  expect(recorder.failures).toHaveLength(1);
+  expect(recorder.failures[0]!.file?.size).toBeGreaterThan(0);
+  await act(async () => recorder.retry(recorder.failures[0]!.id));
+  await act(async () => S.held[1]!.land());
+  expect(S.finalized).toEqual(['private-note']);
+  expect(recorder.failures).toHaveLength(0);
+});
+
+it('retains the delayed stop event after sign-out and releases the microphone', async () => {
+  await changeOwner(ownerA);
+  S.delayedStop = true;
+  await act(async () => recorder.start({ id: 'private-note', preview: 'Private recording' }, null));
+  await changeOwner(null);
+  expect(S.live.size).toBe(0);
+  await act(async () => S.deliveries[0]!());
+  expect(S.held).toHaveLength(0);
+  await changeOwner(ownerB);
+  expect(host.textContent).not.toContain('Private recording');
+  expect(recorder.failures).toHaveLength(0);
+  await changeOwner(ownerA);
+  expect(recorder.failures[0]!.target.profileId).toBeNull();
+  expect(recorder.failures[0]!.file?.size).toBeGreaterThan(0);
+  const leave = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(leave);
+  expect(leave.defaultPrevented).toBe(true);
+  await act(async () => recorder.retry(recorder.failures[0]!.id));
+  expect(S.presignedProfiles).toEqual(['profile-a']);
+  await act(async () => S.held[0]!.land());
 });

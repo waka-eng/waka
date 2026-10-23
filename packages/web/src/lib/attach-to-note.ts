@@ -27,13 +27,18 @@ const PARENT_GONE = "Inspiration not found";
 export async function attachToNote(
   file: File,
   to: { noteId: string; profileId: string | null; type: "image" | "file" },
+  canContinue: () => boolean = () => true,
 ): Promise<void> {
+  const checkOwner = () => { if (!canContinue()) throw new Error("Recording owner is no longer signed in"); };
+  checkOwner();
   const pre = await presignAttachment(
     { filename: file.name, contentType: file.type || "application/octet-stream", size: file.size },
     undefined,
     ...(to.profileId ? [{ profile: to.profileId }] as const : []),
   );
+  checkOwner();
   await uploadToPresignedUrl(pre.uploadUrl, file, pre.headers);
+  checkOwner();
   try {
     await finalizeAttachment({
       type: to.type,

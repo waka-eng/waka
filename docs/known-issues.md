@@ -1278,24 +1278,17 @@ waiting, and report a failure through Home. See `docs/plans/card-and-archive.md`
 
 ---
 
-### L14. Switching account or profile drops an archive clip still uploading, and its failure line *(residual of the L12 fix; open)*
-**Noted on `claude/recorder-in-home`, 2026-10-22** · `packages/web/src/pages/Home.tsx`, `packages/web/src/lib/archive-recorder.ts` · severity low
+### L14. Pending archive recordings across sign-out *(resolved, 2026-10-23)*
 
-**What.** L12's fix moved the archive's recorder into `HomeExperience`, which outlives the
-archive. `HomeExperience` itself is keyed by `profileStorageKey(storageScope, "world")`, so a
-sign-out, an account switch or a change of the signed-in profile unmounts it on purpose: the old
-world's caches, readers and writers go with it. That takes the archive recorder too. A clip still
-being handed over or uploading at that moment is dropped, and so is any line on Home's failure list
-(`.waka-clip-failed`). An upload already sent may still finish on the server; nothing on screen
-says so.
+`ArchiveRecordingBoundary` now owns one recorder per signed-in account/profile above
+route and Home identity boundaries. Sign-out stops the microphone, retains a delayed
+clip or failed upload in that tab, and pauses subsequent upload steps. Only the original
+signed-in profile sees the retry; its upload remains pinned to the original note and profile.
+An already-sent finalize may finish normally. Leaving the tab warns while a clip is pending.
 
-**Why not fixed here.** Keeping the recorder across an identity change means lifting it above the
-keyed boundary, into a component that outlives the person it was recording for. The review chose
-not to restructure that boundary for this fix. The window is small: the identity has to change
-during the second or so between Stop and the upload's answer, or while a failure line is up.
-
-**Follow-up.** If it matters, hold pending clips and failures above `HomeExperience`, keyed by the
-profile they belong to, and show them again only to that profile.
+Verified with delayed microphone-stop and presign responses across sign-out and an account
+switch in `packages/web/test/archive-recorder.test.tsx`. Recovery lasts for this tab's lifetime;
+it does not promise recovery after the browser is killed or the tab is discarded.
 
 ---
 

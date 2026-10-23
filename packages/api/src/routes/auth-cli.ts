@@ -52,7 +52,7 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
-import { accounts, cliLoginCodes, profiles, type ProfileType } from "../db/index.js";
+import { accounts, cliLoginCodes, profiles, sessions, type ProfileType } from "../db/index.js";
 import { SESSION_TTL_SECONDS, signSessionToken } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
 import {
@@ -313,7 +313,7 @@ function renderConsentPage(input: {
   </form>
 
   <p class="note">
-    The connection lasts 30 days. End it in Settings → Sessions without affecting this browser.
+    The connection lasts 30 days. End it in Settings → Connections without affecting this browser.
     Disconnecting preserves the profile and its memory.
   </p>
 </body>
@@ -332,6 +332,21 @@ export const renderConsentPageForPreview = renderConsentPage;
 // ---------------------------------------------------------------------------
 
 export const cliAuthRoutes = new Hono<AuthEnv>();
+
+/** An explicit MCP tool call proves which profile this connection acts as. */
+cliAuthRoutes.post("/verify", requireAuth, async (c) => {
+  const session = c.get("session");
+  const input = z.object({ profileId: z.string().uuid() }).strict().safeParse(await c.req.json().catch(() => null));
+  if (!input.success) return c.json({ error: "A profile ID is required" }, 400);
+  if (!c.req.header("authorization")?.startsWith("Bearer ") || session.keyScoped || input.data.profileId !== session.profile.id) {
+    return c.json({ error: "This connection does not match the selected profile" }, 403);
+  }
+  const verifiedAt = new Date();
+  const [verified] = await getDb().update(sessions).set({ verifiedAt })
+    .where(eq(sessions.id, session.sessionId)).returning({ id: sessions.id });
+  if (!verified) return c.json({ error: "Reconnect this profile before checking the connection" }, 401);
+  return c.json({ profile: { id: session.profile.id, name: session.profile.name, type: session.profile.type }, verifiedAt: verifiedAt.toISOString() });
+});
 
 /**
  * The profiles a session may issue a credential for.

@@ -15,7 +15,7 @@
  * reporting on the person rather than remembering for them.
  */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -56,13 +56,17 @@ sessionsRoutes.get("/", async (c) => {
       createdAt: sessions.createdAt,
       lastSeenAt: sessions.lastSeenAt,
       expiresAt: sessions.expiresAt,
+      verifiedAt: sessions.verifiedAt,
       profileId: profiles.id,
       profileName: profiles.name,
       profileType: profiles.type,
     })
     .from(sessions)
     .innerJoin(profiles, eq(profiles.id, sessions.profileId))
-    .where(eq(profiles.accountId, session.profile.accountId))
+    .where(and(
+      eq(profiles.accountId, session.profile.accountId),
+      gt(sessions.expiresAt, new Date()),
+    ))
     .orderBy(desc(sessions.lastSeenAt));
 
   return c.json({
@@ -74,6 +78,7 @@ sessionsRoutes.get("/", async (c) => {
       createdAt: row.createdAt.toISOString(),
       lastSeenAt: row.lastSeenAt.toISOString(),
       expiresAt: row.expiresAt.toISOString(),
+      verifiedAt: row.verifiedAt?.toISOString() ?? null,
     })),
   });
 });

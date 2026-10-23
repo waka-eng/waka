@@ -73,6 +73,17 @@ it('shows a permission failure without starting a recording', async () => {
   await act(async () => hook.start()); expect(hook.phase).toBe('idle'); expect(said(hook.error)).toContain('Microphone access');
   expect(saved).not.toHaveBeenCalled(); expect(Recorder.instances).toHaveLength(0);
 });
+it('records successfully after microphone permission is allowed and retried', async () => {
+  acquire.mockRejectedValueOnce(new DOMException('Denied', 'NotAllowedError'));
+  await act(async () => hook.start());
+  expect(hook.error).toBe('worldRecordingDenied');
+  await act(async () => hook.start());
+  expect(hook.error).toBe('');
+  expect(hook.phase).toBe('recording');
+  await act(async () => hook.stop());
+  expect(saved).toHaveBeenCalledOnce();
+  expect(stopTrack).toHaveBeenCalledOnce();
+});
 it('stops and keeps the clip at the configured duration limit', async () => {
   await act(async () => hook.start()); now = MAX_RECORDING_SECONDS * 1000;
   await act(async () => { await vi.advanceTimersByTimeAsync(250); });

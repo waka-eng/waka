@@ -554,6 +554,13 @@
       "when": 1792089665615,
       "tag": "0078_malformed_retry_version",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1792767061177,
+      "tag": "0079_session_verification",
+      "breakpoints": true
     }
   ]
 }

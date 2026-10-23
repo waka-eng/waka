@@ -1,4 +1,4 @@
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { attachToNote, NoteGoneError } from "./attach-to-note";
 import type { MessageKey } from "./i18n";
@@ -49,8 +49,10 @@ const noteKey = (noteId: string, profileId: string | null) => `${profileId ?? ""
 
 /** `blocked`: another recorder on the page (the notepad's) is recording or
     finishing — one microphone at a time, so `start` refuses while it is. */
-export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
-  const blocked = Boolean(options.blocked);
+export function useArchiveRecorder(options: { blocked?: boolean; enabled?: boolean; ownerProfileId?: string } = {}) {
+  const enabled = options.enabled !== false;
+  const enabledRef = useRef(enabled); enabledRef.current = enabled;
+  const blocked = Boolean(options.blocked) || !enabled;
   const target = useRef<ClipTarget | null>(null);
   const [forNote, setForNote] = useState<ClipTarget | null>(null);
   /* EVERY UPLOAD IN FLIGHT, COUNTED PER NOTE (review, 2026-10-21). One
@@ -92,7 +94,7 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
     }
     bump(key, 1);
     try {
-      await attachToNote(file, { noteId: to.noteId, profileId: to.profileId, type: "file" });
+      await attachToNote(file, { noteId: to.noteId, profileId: to.profileId ?? options.ownerProfileId ?? null, type: "file" }, () => enabledRef.current);
       landedSeq.current += 1;
       const seq = landedSeq.current;
       setLanded((was) => [...was.slice(-31), { target: to, seq }]);
@@ -111,12 +113,12 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
     } finally {
       bump(key, -1);
     }
-  }, [bump, setFailures]);
+  }, [bump, setFailures, options.ownerProfileId]);
   /* LEAVING THE PAGE MID-UPLOAD LOSES THE CLIP, so the page warns while
      any is in flight (review, 2026-10-21). The hook warns while it records
      or finishes; the upload is no longer awaited inside it (one microphone
      at a time), so this is the warning for the part after. */
-  const uploading = inFlight.size > 0;
+  const uploading = inFlight.size > 0 || failures.some(failure => failure.file);
   useEffect(() => {
     if (!uploading) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
@@ -159,6 +161,7 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
   useEffect(() => { if (phase === "idle") live.current = false; }, [phase]);
   const recorderStop = recorder.stop;
   const stopIfLive = useCallback(() => { if (live.current) void recorderStop(); }, [recorderStop]);
+  useEffect(() => { if (!enabled) { viewing.current = null; void recorderStop(); } }, [enabled, recorderStop]);
 
   /* ═══ THE RECORDER'S OWN FAILURES, WHEN NOBODY IS LOOKING AT THE NOTE ══
      Review, 2026-10-21. An empty, too-large, interrupted or refused
@@ -251,14 +254,21 @@ export interface ArchiveClips {
 const RecorderContext = createContext<ArchiveRecorder | null>(null);
 const ClipsContext = createContext<ArchiveClips | null>(null);
 
-export function ArchiveRecorderProvider({ children }: { children?: ReactNode }): JSX.Element {
+export function ArchiveRecorderProvider({ children, enabled, ownerProfileId }: { children?: ReactNode; enabled?: boolean; ownerProfileId?: string }): JSX.Element {
   const [blocked, setBlocked] = useState(false);
-  const recorder = useArchiveRecorder({ blocked });
+  const recorder = useArchiveRecorder({ blocked, enabled, ownerProfileId });
   const active = recorder.phase !== "idle";
   const { failures, retry, dismiss } = recorder;
   const clips = useMemo<ArchiveClips>(() => ({ active, failures, retry, dismiss, setBlocked }), [active, failures, retry, dismiss]);
   return createElement(RecorderContext.Provider, { value: recorder },
     createElement(ClipsContext.Provider, { value: clips }, children));
+}
+
+/** Standalone Home mounts (including previews) still get a recorder. */
+export function ArchiveRecorderFallback({ children }: { children: ReactNode }): JSX.Element {
+  const existing = useContext(RecorderContext);
+  return existing ? createElement(Fragment, null, children)
+    : createElement(ArchiveRecorderProvider, null, children);
 }
 
 /** The whole recorder, ticking clock included — the archive's. */
