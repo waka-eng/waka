@@ -365,7 +365,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
   }, [ownArchive]);
   useEffect(() => { void loadShelf(); }, [loadShelf]);
 
-  const forgetNote = recorder.forget, unforgetNote = recorder.unforget, markDeleting = recorder.setDeleting;
+  const forgetNote = recorder.forget, unforgetNote = recorder.unforget, markDeleting = recorder.setDeleting, dropForGood = recorder.drop;
   /* A DELETE BEGINS: no clip is sent to the note until it is undone,
      refused or sent, and its lines say it was deleted (review, 2026-10-22). */
   const beginDelete = useCallback((id: string) => {
@@ -377,8 +377,15 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     /* On an agent's archive the delete names the agent's profile; the
        request outlives the tab when it is sent as the page goes. */
     void deleteInspiration(pending.row.id, { ...(profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
-      /* sent: a clip for this note waits on Home's line for a restore */
-      .then(() => { markDeleting(pending.row.id, profileId ?? null, false); return loadShelf(); })
+      /* sent: a clip for this note waits on Home's line for a restore —
+         EXCEPT ON AN AGENT'S ARCHIVE (review, 2026-10-22), which keeps no
+         deleted shelf: nothing can bring the note back, so its clip is let
+         go and the line says the note was deleted for good, × only. */
+      .then(() => {
+        markDeleting(pending.row.id, profileId ?? null, false);
+        if (!ownArchive) dropForGood(pending.row.id, profileId ?? null);
+        return loadShelf();
+      })
       .catch(() => {
         /* refused: the note is still there, and so are its clips' chances */
         markDeleting(pending.row.id, profileId ?? null, false);
@@ -389,7 +396,7 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
         setTotal((count) => count === null ? count : count + 1);
         setEraseFailed(true);
       });
-  }, [beginDelete, loadShelf, markDeleting, ownArchive, profileId, unforgetNote]);
+  }, [beginDelete, dropForGood, loadShelf, markDeleting, ownArchive, profileId, unforgetNote]);
 
   const flushErase = useCallback((leaving = false) => {
     const pending = pendingErase.current;

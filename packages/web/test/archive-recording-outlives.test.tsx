@@ -492,6 +492,34 @@ it("says a clip's note was deleted here, and keeps the clip for its restore", as
    from Home's line could still send the clip — to land and be deleted with
    the note, silently. It is held instead; Undo brings the plain line back,
    and Try again then lands. */
+/* AN AGENT'S ARCHIVE KEEPS NO DELETED SHELF, so a delete there is final:
+   the restore line would promise a restore nothing can make, and every Try
+   again would fail. The clip is let go and the line says so, × only. */
+it("lets the clip go when its note is deleted on an agent's archive, which has no shelf", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await world.travelTo(new RegExp(AGENT_ID));
+  await settle();
+  expect(world.audit().wallKind).toBe("agent");
+  expect(archiveOpen(), "the agent's archive is not open").toBe(true);
+  await recordOn("own-1");
+  S.failFinalize = 1;
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await deliverStops();
+  expect(S.presigned, "the clip was not sent under the agent").toEqual([AGENT_ID]);
+  expect(tryAgainOn(q(".waka-clip-failed")), "the failed clip offered no Try again").toBe(true);
+  /* an agent's archive asks first, then deletes at once */
+  await act(async () => q<HTMLButtonElement>('#waka-note-tools [aria-label="Delete"]')!.click());
+  await settle(2);
+  await act(async () => q<HTMLButtonElement>('#waka-note-tools [aria-label="Delete it anyway"]')!.click());
+  await settle(4);
+  expect(S.deleted).toEqual(["own-1"]);
+  const line = q(".waka-clip-failed");
+  expect(line?.textContent).toContain("The note was deleted for good, so the recording couldn’t be kept.");
+  expect(line?.textContent, "the line promised a restore an agent's archive cannot make").not.toContain("Restore it");
+  expect(tryAgainOn(line), "Try again was offered for a note nothing can bring back").toBe(false);
+});
+
 it("does not send a clip to a note whose delete is pending, and lets Undo bring it back", async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
   await openArchive();
