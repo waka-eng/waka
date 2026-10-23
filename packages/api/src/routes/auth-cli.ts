@@ -48,11 +48,11 @@
  *   bearer credential never touches a URL.
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
-import { accounts, cliLoginCodes, profiles, sessions, type ProfileType } from "../db/index.js";
+import { accounts, agentKeys, cliLoginCodes, profiles, sessions, type ProfileType } from "../db/index.js";
 import { SESSION_TTL_SECONDS, signSessionToken } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
 import {
@@ -342,8 +342,14 @@ cliAuthRoutes.post("/verify", requireAuth, async (c) => {
     return c.json({ error: "This connection does not match the selected profile" }, 403);
   }
   const verifiedAt = new Date();
-  const [verified] = await getDb().update(sessions).set({ verifiedAt })
-    .where(eq(sessions.id, session.sessionId)).returning({ id: sessions.id });
+  // Standing agent keys have no session row. Their activity is shown on the
+  // agent's API keys page; normal sign-ins retain their explicit setup proof.
+  const [verified] = session.sessionId.startsWith('agent-key:')
+    ? await getDb().update(agentKeys).set({ lastUsedAt: verifiedAt })
+      .where(and(eq(agentKeys.id, session.sessionId.slice('agent-key:'.length)),
+        eq(agentKeys.profileId, session.profile.id), isNull(agentKeys.revokedAt))).returning({ id: agentKeys.id })
+    : await getDb().update(sessions).set({ verifiedAt })
+      .where(eq(sessions.id, session.sessionId)).returning({ id: sessions.id });
   if (!verified) return c.json({ error: "Reconnect this profile before checking the connection" }, 401);
   return c.json({ profile: { id: session.profile.id, name: session.profile.name, type: session.profile.type }, verifiedAt: verifiedAt.toISOString() });
 });

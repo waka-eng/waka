@@ -9,10 +9,11 @@ import { cliAuthRoutes } from './auth-cli.js';
 import { sessionsRoutes } from './sessions.js';
 import { signSessionToken } from '../lib/auth.js';
 import { createSessionRow } from '../lib/session.js';
+import { agentKeyRoutes } from './agent-keys.js';
 
 let fixture: TestDatabase;
 let human: string, agent: string, sibling: string, humanToken: string, agentToken: string;
-const app = new Hono().route('/api/auth/cli', cliAuthRoutes).route('/api/sessions', sessionsRoutes);
+const app = new Hono().route('/api/auth/cli', cliAuthRoutes).route('/api/sessions', sessionsRoutes).route('/api/agent-keys', agentKeyRoutes);
 beforeAll(async () => {
   fixture = await createTestDatabase(); state.db = fixture.db as unknown as ReturnType<typeof getDb>;
 });
@@ -64,4 +65,24 @@ it('does not count a browser cookie as an MCP verification', async () => {
     headers: { Cookie: `waka_session=${humanToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ profileId: human }) });
   expect(response.status).toBe(403);
+});
+
+it('verifies an agent API key only for its bound profile and refuses it after revocation', async () => {
+  const created = await app.request('/api/agent-keys', { method: 'POST',
+    headers: { Authorization: `Bearer ${humanToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profileId: agent, label: 'MCP test' }) });
+  expect(created.status).toBe(201);
+  const { key } = await created.json() as { key: { id: string; secret: string } };
+  expect((await verify(sibling, key.secret)).status).toBe(403);
+  expect((await verify(human, key.secret)).status).toBe(403);
+  const response = await verify(agent, key.secret);
+  expect(response.status).toBe(200);
+  expect((await response.json() as { profile: { id: string } }).profile.id).toBe(agent);
+  const listed = await app.request('/api/agent-keys', { headers: { Authorization: `Bearer ${humanToken}` } });
+  const { keys } = await listed.json() as { keys: Array<{ id: string; lastUsedAt: string | null; secret?: string }> };
+  expect(keys.find(row => row.id === key.id)?.lastUsedAt).toBeTruthy();
+  expect(keys[0]).not.toHaveProperty('secret');
+  expect((await list()).sessions.every(row => row.verifiedAt === null)).toBe(true);
+  expect((await app.request(`/api/agent-keys/${key.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${humanToken}` } })).status).toBe(200);
+  expect((await verify(agent, key.secret)).status).toBe(401);
 });
