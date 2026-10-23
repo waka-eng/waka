@@ -404,14 +404,15 @@ it("says on Home that a recording failed after the archive closed, and keeps say
   expect(line(), "opening the archive cleared Home's line").toBeTruthy();
 });
 
-/* ═══ A CLIP WHOSE NOTE IS GONE IS NOT OFFERED AGAIN (review, 2026-10-22) ═══
-   The server answering 404/410, or the note deleted here, means there is
-   nothing to attach to: Try again could only fail again. The line says the
-   note was deleted, with × only. And while a clip is on its way to a note,
-   that note cannot be deleted. */
+/* ═══ A CLIP WHOSE NOTE WAS DELETED WAITS FOR ITS RESTORE (review, 2026-10-22)
+   Finalize saying the note is not there, or the note deleted here, used to
+   drop the clip. But a deleted note can come back from the shelf under the
+   same id, so the clip is kept: the line says the note was deleted and how
+   to bring it back, and Try again lands once it is back. And while a clip
+   is on its way to a note, that note cannot be deleted. */
 const tryAgainOn = (line: Element | null) => [...(line?.querySelectorAll("button") ?? [])].some((button) => button.textContent === "Try again");
 
-it("says the recording couldn't be kept when the server no longer has its note", async () => {
+it("keeps the clip for a restore when the server no longer has its note", async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
   await openArchive();
   await recordOn("own-1");
@@ -421,8 +422,15 @@ it("says the recording couldn't be kept when the server no longer has its note",
   await deliverStops();
   const line = q(".waka-clip-failed");
   expect(line, "the lost clip was said nowhere").toBeTruthy();
-  expect(line!.textContent).toContain("The note was deleted, so the recording couldn’t be kept.");
-  expect(tryAgainOn(line), "Try again was offered for a note that is gone").toBe(false);
+  expect(line!.textContent).toContain("The note was deleted. Restore it to attach the recording.");
+  expect(tryAgainOn(line), "the clip was dropped, though the note can be restored").toBe(true);
+  /* the note is restored; Try again lands the same clip on it */
+  S.noteGone = false;
+  const retry = [...line!.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Try again")!;
+  await act(async () => retry.click());
+  await settle(4);
+  expect(S.finalized, "the restored note did not get its clip").toEqual(["own-1"]);
+  expect(q(".waka-clip-failed")).toBeNull();
 });
 
 it("keeps the clip and offers Try again when finalize cannot find the uploaded object", async () => {
@@ -442,7 +450,7 @@ it("keeps the clip and offers Try again when finalize cannot find the uploaded o
   expect(S.finalized, "Try again did not attach the kept clip").toEqual(["own-1"]);
 });
 
-it("stops offering Try again once the clip's note is deleted here", async () => {
+it("says a clip's note was deleted here, and keeps the clip for its restore", async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
   await openArchive();
   await recordOn("own-1");
@@ -456,8 +464,8 @@ it("stops offering Try again once the clip's note is deleted here", async () => 
   await settle(4);
   expect(S.deleted).toEqual(["own-1"]);
   const line = q(".waka-clip-failed");
-  expect(line?.textContent).toContain("The note was deleted, so the recording couldn’t be kept.");
-  expect(tryAgainOn(line), "Try again was still offered for a deleted note").toBe(false);
+  expect(line?.textContent).toContain("The note was deleted. Restore it to attach the recording.");
+  expect(tryAgainOn(line), "the clip was dropped with its note, though a restore can bring the note back").toBe(true);
 });
 
 it("does not let a note be deleted while its clip is on its way", async () => {

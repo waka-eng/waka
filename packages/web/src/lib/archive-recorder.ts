@@ -35,11 +35,13 @@ export interface ClipTarget {
   profileId: string | null;
 }
 
-/** A clip that did not attach (`file`, which Try again sends again), or a
-    recording that never became a clip (`reason`, the recorder's own
-    catalogue key — empty, too large, interrupted, denied). */
+/** A clip that did not attach (`file`, which Try again sends again — with
+    `reason` when its note was deleted, since a restore from the deleted
+    shelf brings the note back under the same id), or a recording that never
+    became a clip (`file: null`, `reason` the recorder's own catalogue key —
+    empty, too large, interrupted, denied). */
 export type ClipFailure =
-  | { id: number; target: ClipTarget; file: File; reason?: undefined }
+  | { id: number; target: ClipTarget; file: File; reason?: "worldRecordingNoteDeleted" }
   | { id: number; target: ClipTarget; file: null; reason: MessageKey };
 
 const askForMicrophone = () => navigator.mediaDevices.getUserMedia({ audio: true });
@@ -83,11 +85,12 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
       const id = failureSeq.current;
       /* THE NOTE IS GONE (review, 2026-10-22): only finalize saying its
          note is not there (`NoteGoneError`). Any other 404 — presign's, the
-         PUT's, finalize's "S3 object not found" — is a failed upload, kept
-         with its file and offered again. */
+         PUT's, finalize's "S3 object not found" — is a failed upload, offered
+         again as one. EITHER WAY THE FILE IS KEPT: a deleted note can be
+         restored from the shelf under the same id, and Try again then lands. */
       const gone = reason instanceof NoteGoneError;
       setFailures((all) => [...all, gone
-        ? { id, file: null, target: to, reason: "worldRecordingNoteDeleted" as const }
+        ? { id, file, target: to, reason: "worldRecordingNoteDeleted" as const }
         : { id, file, target: to }]);
     } finally {
       bump(key, -1);
@@ -171,11 +174,12 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
     /* a recording that never became a clip has nothing to send again */
     if (found.file) void send(found.file, found.target);
   }, [send, setFailures]);
-  /* A NOTE DELETED HERE takes its unattached clips with it: their lines stop
-     offering Try again and say the note was deleted. */
+  /* A NOTE DELETED HERE: its unattached clips' lines say so and keep their
+     file and Try again — the note can come back from the deleted shelf
+     under the same id, and nothing should promise the clip is lost. */
   const forget = useCallback((noteId: string, profileId: string | null) => setFailures((all) => all.map((item) =>
     item.file && item.target.noteId === noteId && item.target.profileId === profileId
-      ? { id: item.id, file: null, target: item.target, reason: "worldRecordingNoteDeleted" as const } : item)), [setFailures]);
+      ? { id: item.id, file: item.file, target: item.target, reason: "worldRecordingNoteDeleted" as const } : item)), [setFailures]);
   const dismiss = useCallback((id: number) => setFailures((all) => all.filter((item) => item.id !== id)), [setFailures]);
 
   /* ONE OBJECT WHILE NOTHING CHANGES (review, 2026-10-21), so what the

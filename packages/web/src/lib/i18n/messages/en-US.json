@@ -189,7 +189,7 @@
   "worldRecordingAttachFailed": "Couldn’t attach your recording to “{note}”.",
   "worldRecordingAttachFailedUntitled": "Couldn’t attach your recording to its note.",
   "worldRecordingCanceled": "Recording canceled.",
-  "worldRecordingNoteDeleted": "The note was deleted, so the recording couldn’t be kept.",
+  "worldRecordingNoteDeleted": "The note was deleted. Restore it to attach the recording.",
   "worldRecordingProblemFor": "Your recording for “{note}”: {problem}",
   "worldRecordingDenied": "Microphone access wasn’t allowed. Allow it in your browser and try again.",
   "worldRecordingDisconnected": "The microphone disconnected. Listen to the recording before saving.",
