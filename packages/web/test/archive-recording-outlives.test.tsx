@@ -229,6 +229,24 @@ it("attaches the clip to its note when the browser's Back leaves the archive mid
   expect(S.finalized, "the clip was lost with the archive").toEqual(["own-1"]);
 });
 
+/* A SAVED NOTE HAS ITS OWN ADDRESS NOW (#460), so the browser's Back from an
+   open note steps back to the list, with the archive still up. The note is
+   left mid-recording; the recording stops there and its clip still goes to
+   the Home-level recorder and onto the note it was made on. */
+it("attaches the clip to its note when the browser's Back leaves only the note", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-1");
+  await act(async () => { go(-1); });
+  await settle(2);
+  expect(archiveOpen(), "Back from a note should leave the note, not the archive").toBe(true);
+  expect(q(".waka-over--note"), "the note is still open after Back").toBeNull();
+  expect(q('.waka-dock-tool--live[aria-label="Stop recording"]'), "the recording is still live with its note gone").toBeNull();
+  await deliverStops();
+  expect(S.finalized, "the clip did not reach its note").toEqual(["own-1"]);
+  expect(S.presigned).toEqual([VIEWER_ID]);
+});
+
 it("attaches the clip when a cold link's archive is closed mid-recording (the replace close)", async () => {
   world = await mountWorld(FACTS, { initialEntries: ["/?open=saves"], routerTools: <RouterTools /> }); await settle();
   expect(archiveOpen()).toBe(true);
