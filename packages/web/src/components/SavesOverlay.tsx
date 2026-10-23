@@ -805,19 +805,25 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      already holds anything earlier. And ONLY THAT NOTE is re-pointed
      (review, 2026-10-21): a clip for one note landing while another is open
      must not swap the open note's card for the list's copy of it. */
-  const landedSeq = recorder.landed?.seq ?? 0;
-  const seenLanded = useRef(landedSeq);
+  /* EVERY LANDING SINCE THE LAST LOOK (review, 2026-10-22), not only the
+     latest: two clips landing in one render — the open note's, then
+     another's — used to leave the open note stale. */
+  const landings = recorder.landed;
+  const latestLanding = landings.length ? landings[landings.length - 1]!.seq : 0;
+  const seenLanded = useRef(latestLanding);
   useEffect(() => {
-    if (landedSeq === seenLanded.current) return;
-    seenLanded.current = landedSeq;
-    const landedOn = recorder.landed?.target;
-    if (!landedOn || (landedOn.profileId ?? null) !== (profileId ?? null)) return;
-    void load().then((fresh) => {
-      if (!mounted.current || !fresh) return;
-      setOpen((card) => (card && card.id === landedOn.noteId ? fresh.find((row) => row.id === card.id) ?? card : card));
+    const fresh = landings.filter((item) => item.seq > seenLanded.current);
+    seenLanded.current = latestLanding;
+    const here = new Set(fresh
+      .filter((item) => (item.target.profileId ?? null) === (profileId ?? null))
+      .map((item) => item.target.noteId));
+    if (here.size === 0) return;
+    void load().then((rowsNow) => {
+      if (!mounted.current || !rowsNow) return;
+      setOpen((card) => (card && here.has(card.id) ? rowsNow.find((row) => row.id === card.id) ?? card : card));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landedSeq]);
+  }, [latestLanding]);
   /* ONE NOTE'S FAILURE IS NOT ANOTHER'S. Opening a different note clears the
      last one's upload failure and the recorder's error line. */
   const clearRecording = recorder.clear;

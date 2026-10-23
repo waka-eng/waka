@@ -61,6 +61,8 @@ const S = vi.hoisted(() => ({
   objectMissing: 0,
   /* finalize waits until the case lets it answer */
   holdFinalize: null as null | (() => void),
+  /* every held finalize, oldest first */
+  heldFinalizes: [] as Array<() => void>,
   holding: false,
   deleted: [] as string[],
 }));
@@ -79,7 +81,7 @@ vi.mock("../src/lib/api", async (original) => {
   },
   uploadToPresignedUrl: async () => undefined,
   finalizeAttachment: async (input: { inspirationId: string }) => {
-    if (S.holding) await new Promise<void>((answer) => { S.holdFinalize = answer; });
+    if (S.holding) await new Promise<void>((answer) => { S.holdFinalize = answer; S.heldFinalizes.push(answer); });
     if (S.noteGone) throw new actual.ApiError({ status: 404, message: "Inspiration not found" });
     if (S.objectMissing > 0) { S.objectMissing -= 1; throw new actual.ApiError({ status: 404, message: "S3 object not found at the supplied key. Did the PUT succeed?" }); }
     if (S.failFinalize > 0) { S.failFinalize -= 1; throw new Error("offline"); }
@@ -143,7 +145,7 @@ beforeEach(() => {
   window.localStorage.clear();
   /* the notepad's draft store, so its Record can be pressed */
   (globalThis as { indexedDB?: IDBFactory }).indexedDB = new IDBFactory();
-  Object.assign(S, { presigned: [], finalized: [], failFinalize: 0, undelivered: [], recorders: 0, emptyClip: false, attachedOnRead: null, noteGone: false, objectMissing: 0, holdFinalize: null, holding: false, deleted: [] });
+  Object.assign(S, { presigned: [], finalized: [], failFinalize: 0, undelivered: [], recorders: 0, emptyClip: false, attachedOnRead: null, noteGone: false, objectMissing: 0, holdFinalize: null, heldFinalizes: [], holding: false, deleted: [] });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   vi.stubGlobal("MediaRecorder", Recorder);
   Object.defineProperty(window.navigator, "mediaDevices", {
@@ -556,4 +558,39 @@ it("keeps the archive recording's clock from re-rendering Home every second", as
   }
   expect(clock(), "the clock never ticked, so this proved nothing").not.toBe(startedAt);
   expect(renders.home - before, "Home re-rendered with the recording's clock").toBeLessThan(3);
+});
+
+/* ═══ EVERY LANDING COUNTS, NOT ONLY THE LAST (review, 2026-10-22) ═══════
+   The recorder kept only the latest landing, so two clips landing in one
+   render — the open note's, then another's — left the open note stale: the
+   archive only ever saw the second. */
+it("re-points the open note when its clip lands in the same render as another note's", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  S.holding = true;
+  /* a clip for note A, then one for note B, both still uploading */
+  await recordOn("own-1");
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await deliverStops();
+  await act(async () => q<HTMLButtonElement>('.waka-dock button[aria-label="Back"]')!.click());
+  await settle(2);
+  await recordOn("own-0");
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await deliverStops();
+  expect(S.heldFinalizes, "both uploads should be waiting").toHaveLength(2);
+  /* back on note A, which does not yet know about its clip */
+  await act(async () => q<HTMLButtonElement>('.waka-dock button[aria-label="Back"]')!.click());
+  await settle(2);
+  const rowA = [...document.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((item) => item.textContent?.includes("something I kept, 1"))!;
+  await act(async () => rowA.click());
+  await settle();
+  const field = () => q<HTMLTextAreaElement>(".waka-over textarea");
+  expect(field()?.placeholder, "note A should not yet know it holds anything").toBeTruthy();
+  /* the list read after the landings says note A now holds its clip */
+  S.attachedOnRead = "own-1";
+  S.holding = false;
+  await act(async () => { for (const answer of S.heldFinalizes.splice(0)) answer(); });
+  await settle(4);
+  expect(S.finalized).toEqual(["own-1", "own-0"]);
+  expect(field()?.placeholder, "note A's clip landed and its page was never re-pointed").toBe("");
 });

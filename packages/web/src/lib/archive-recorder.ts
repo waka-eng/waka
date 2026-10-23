@@ -64,7 +64,10 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
     if (count > 0) next.set(key, count); else next.delete(key);
     return next;
   }), []);
-  const [landed, setLanded] = useState<{ target: ClipTarget; seq: number } | null>(null);
+  /* THE RECENT LANDINGS, oldest first and numbered, so a reader that looks
+     once per render sees every one since it last looked (review,
+     2026-10-22). Bounded: a reader is never more than a few behind. */
+  const [landed, setLanded] = useState<ReadonlyArray<{ target: ClipTarget; seq: number }>>([]);
   const [failures, setFailuresState] = useState<ClipFailure[]>([]);
   const failuresRef = useRef<ClipFailure[]>([]);
   const setFailures = useCallback((next: (all: ClipFailure[]) => ClipFailure[]) => {
@@ -91,7 +94,8 @@ export function useArchiveRecorder(options: { blocked?: boolean } = {}) {
     try {
       await attachToNote(file, { noteId: to.noteId, profileId: to.profileId, type: "file" });
       landedSeq.current += 1;
-      setLanded({ target: to, seq: landedSeq.current });
+      const seq = landedSeq.current;
+      setLanded((was) => [...was.slice(-31), { target: to, seq }]);
     } catch (reason) {
       failureSeq.current += 1;
       const id = failureSeq.current;
