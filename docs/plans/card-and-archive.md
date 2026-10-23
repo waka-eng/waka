@@ -118,6 +118,20 @@ recorder never has to unmount at all.
   recording for any other note, or after the archive closed, goes to Home's
   line ("Your recording for "<note>": …", × only). Reopening the archive
   does not clear it.
+- **The clock stays out of Home.** The recorder lives in
+  `ArchiveRecorderProvider` around Home's screen; the archive reads it from
+  context, and Home reads only `useArchiveClips` (active, failures).
+- **A deleted note keeps its clip.** Only finalize's "Inspiration not found"
+  404 or a 410 means the note is gone (`NoteGoneError`); other 404s are a
+  failed upload. Either way the file is kept. From Delete until the delete is
+  undone, refused or sent, no clip is sent to the note. Its line says "The
+  note was deleted. Restore it to attach the recording." with Try again.
+  Undo, a refused delete or a restore from the shelf brings back the plain
+  line. Only deleting it for good lets the clip go. Delete cancels a
+  recording only if it was made on that note, and is held off while that
+  note's clip is uploading.
+- **Every landing counts.** The recorder keeps a short numbered list of
+  landings, so two in one render both re-point their open note.
 - **Residual: L14** (`docs/known-issues.md`). An account or profile switch
   remounts `HomeExperience` and drops a pending clip and its line. Not
   restructured.
