@@ -598,6 +598,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     }
   }, [draft, open, saving, stored, profileId]);
 
+  /* Whether the address has left the open note since it first named it
+     (see "WHETHER THE ADDRESS HAS LEFT THE OPEN NOTE" below). */
+  const addressFor = useRef<{ id: string; named: boolean; left: boolean } | null>(null);
   /* READ ONE NOTE IN FULL. A newer read (another note, or Try again) aborts
      the older, and a reply for a note no longer open is dropped by id — so a
      slow answer can never seed the wrong page. */
@@ -626,6 +629,8 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
       });
   }, [profileId]);
   const openNote = useCallback((row: Inspiration) => {
+    /* Opened fresh, by a press or by its address: no departure yet. */
+    addressFor.current = { id: row.id, named: false, left: false };
     setOpen(row);
     setDraft("");
     setSaveFailed(false);
@@ -928,7 +933,6 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
      Forward has brought the address back to it by then: closing would step
      back out of the note the person just walked forward into. The note then
      reopens from its address like any Forward. */
-  const addressFor = useRef<{ id: string; named: boolean; left: boolean } | null>(null);
   useEffect(() => {
     if (!openId) return;
     if (addressFor.current?.id !== openId) addressFor.current = { id: openId, named: false, left: false };
@@ -940,6 +944,9 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
     wasOpen.current = openId;
     if (!addressed || !was || openId === was) return;
     const left = addressFor.current?.id === was && addressFor.current.left;
+    /* The note has let go: its departure record ends with it, so a later
+       opening of the same note starts clean (and can be closed on screen). */
+    if (!openId) addressFor.current = null;
     if (noteAddress === was && !left) { letGo.current = was; tellAddress.current?.("close", was); }
   }, [openId, addressed, noteAddress]);
   useEffect(() => {

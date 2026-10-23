@@ -193,3 +193,27 @@ it('a link to a note this archive does not hold opens the list and stops naming 
   expect(params().get('open')).toBe('saves');
   expect(params().get('note')).toBeNull();
 });
+
+/* AFTER A BACK DURING A SAVE, THE NOTE IS STILL A NOTE. The record that the
+   address left it ends when it lets go, so the next time it opens it can be
+   closed on screen — and does not reopen itself from its own address. */
+it('a note reopened after a Back-during-save can still be closed on screen', async () => {
+  let land: () => void = () => undefined;
+  vi.mocked(updateInspiration).mockImplementation(() => new Promise((done) => { land = () => done(undefined as never); }));
+  await openArchiveThenNote();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(page(), 'dusk on the hill, and then the rain');
+    page()!.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle();
+  await back();
+  await act(async () => { land(); }); await settle();
+  expect(page()).toBeNull();
+  vi.mocked(updateInspiration).mockReset().mockResolvedValue(undefined as never);
+  await forward();
+  expect(page(), 'Forward did not reopen the note').toBeTruthy();
+  await pressDockRow(world.container, 'Back'); await settle();
+  expect(page(), 'the on-screen way back did not close the note').toBeNull();
+  expect(params().get('note')).toBeNull();
+  expect(listRow()).toBeTruthy();
+});
