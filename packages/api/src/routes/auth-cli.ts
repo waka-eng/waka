@@ -313,7 +313,7 @@ function renderConsentPage(input: {
   </form>
 
   <p class="note">
-    The connection lasts 30 days. End it in Settings → Connections without affecting this browser.
+    The connection lasts 30 days. End agent access in Settings → Agent profiles, or personal access in Account connections, without affecting this browser.
     Disconnecting preserves the profile and its memory.
   </p>
 </body>

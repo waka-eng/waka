@@ -92,7 +92,7 @@ it('creates a named key for the selected agent, copies it, and never displays it
   expect(calls.find(call => call.method === 'POST')?.body).toEqual({ profileId: noah.id, label: 'Claude desktop' });
   expect(host.querySelector<HTMLInputElement>('input[readonly]')?.value).toBe(secret);
   await click('Copy key'); expect(copied).toEqual([secret]);
-  await click('Manage'); await click('API keys');
+  await click('MCP connections'); await click('API keys');
   expect(host.querySelector('input[readonly]')).toBeNull();
   expect(host.textContent).toContain('Claude desktop');
   expect(host.innerHTML).not.toContain(secret);
