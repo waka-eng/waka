@@ -1246,6 +1246,7 @@ not have, which is exactly the lie this table would otherwise have told.)
 | `FIELD_FLOOR_ANSWERED` | 0.18 | Nor one you answered in your own words |
 | `FIELD_FRONTIER_DAYS` | 3 | Untouched longer than this and cited by nothing = a frontier |
 | `BULB_FLOOR` | 0.12 | The dimmest the character burns — lit, never dark |
+| `SAVING_LIGHT_SCALE` | 3.5 | The aura's reach is `1 − e^(−Σ 0.5^(age/7d) / this)` over your saves — ~5 this week reads about two thirds |
 | `FIELD_CARRY_ROOT_SATURATION` | 3 | Roots stop adding carry past this many citing patterns |
 | `FIELD_CARRY_ROOTS_SHARE` | 0.1 | Carry: the share held by how many patterns cite it |
 | `FIELD_CARRY_PROMOTED_SHARE` | 0.45 | Carry: the share held by how far the pattern above it has got |
