@@ -36,9 +36,16 @@ vi.mock('../src/lib/api/principles', async original => ({
   ...await original<typeof import('../src/lib/api/principles')>(),
   fetchPrincipleRead: vi.fn(async () => ({ principles: [], status: { phase: 'ready', eligible: false } })),
 }));
-vi.mock('../src/lib/data', async original => ({
-  ...await original<typeof import('../src/lib/data')>(), ...dataMockFrom(FACTS),
-}));
+/* when set, the agent has kept nothing — a dim wall to walk onto */
+const AGENT = vi.hoisted(() => ({ empty: false }));
+vi.mock('../src/lib/data', async original => {
+  const facts = dataMockFrom(FACTS);
+  return {
+    ...await original<typeof import('../src/lib/data')>(), ...facts,
+    loadInspirations: async (profile?: string) =>
+      AGENT.empty && profile === 'agent-busy' ? { inspirations: [], total: 0, short: false } : facts.loadInspirations(),
+  };
+});
 vi.mock('../src/lib/api', async original => ({
   ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),
   fetchPrinciples: vi.fn(async () => []),
@@ -55,7 +62,7 @@ let world: MountedWorld;
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
 const BUSY_WEEK = FACTS.inspirations.slice();
-afterEach(() => { world?.unmount(); vi.useRealTimers(); FACTS.inspirations = BUSY_WEEK.slice(); });
+afterEach(() => { world?.unmount(); vi.useRealTimers(); FACTS.inspirations = BUSY_WEEK.slice(); AGENT.empty = false; });
 
 async function settle(turns = 12) {
   for (let turn = 0; turn < turns; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
@@ -150,4 +157,31 @@ it('says it has been quiet when nothing has been saved in weeks', async () => {
   expect(world.audit().aura.lit).toBeLessThanOrEqual(0.55);
   const said = await ask();
   expect([...QUIET, ...WARM, ...FRONTIER], `a dim aura said "${said}"`).toContain(said);
+});
+
+it('lets motes already in the air finish their rise when the reach drops', async () => {
+  /* Drawing was gated on the reach too, so the frame the aura dipped under
+     the threshold every mote in flight vanished at once. */
+  AGENT.empty = true;
+  world = await mountWorld(FACTS); await settle();
+  let rising = 0;
+  for (let turn = 0; turn < 40 && rising < 2; turn += 1) {
+    await world.step(10);
+    rising = world.audit().aura.rising;
+  }
+  expect(rising, 'a bright aura sent nothing up').toBeGreaterThan(0);
+  await act(async () => { face('My agent')!.click(); });
+  /* frame by frame until the reach is under the line, then look */
+  let dipped: ReturnType<MountedWorld['audit']>['aura'] | null = null;
+  for (let frame = 0; frame < 400 && !dipped; frame += 1) {
+    await world.step(1);
+    const { aura } = world.audit();
+    if (aura.lit <= 0.55) dipped = aura;
+  }
+  expect(dipped, 'the reach never dropped on an empty wall').not.toBeNull();
+  expect(dipped!.rising, 'every mote had already gone before the reach dropped').toBeGreaterThan(0);
+  expect(dipped!.risingDrawn, 'motes in flight vanished the frame the reach dropped').toBe(dipped!.rising);
+  /* and they do go: nothing new leaves under a dim aura */
+  await settle(10);
+  expect(world.audit().aura.rising).toBe(0);
 });

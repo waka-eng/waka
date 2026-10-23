@@ -855,10 +855,11 @@ export interface FieldAudit {
   /**
    * The companion's aura on this wall: `reading` is how much this wall's
    * owner has been saving (`savingLight`), `lit` the eased reach the aura is
-   * drawn at, `rising` how many motes are coming off it right now. Numbers
-   * for the test only — the page renders them as light, never as numerals.
+   * drawn at, `rising` how many motes are coming off it right now and
+   * `risingDrawn` how many of them the last frame drew. Numbers for the test
+   * only — the page renders them as light, never as numerals.
    */
-  aura: { reading: number; lit: number; rising: number };
+  aura: { reading: number; lit: number; rising: number; risingDrawn: number };
   /* `ground` AND `company` ARE GONE FROM THE PUBLISHED SHAPE. `ground` named
      whose memories were standing in front of you and was null — yours — on
      every wall that was not a room's; `company` listed the painted member
@@ -1942,6 +1943,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     const upX = new Float32Array(10);
     const upY = new Float32Array(10);
     const upA = new Float32Array(10);
+    /** how many of those were drawn on the last frame — for the audit */
+    let upDrawn = 0;
     const riseX = new Float32Array(4);
     const riseY = new Float32Array(4);
     const riseA = new Float32Array(4);
@@ -4240,9 +4243,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         }
 
         /* inspiration coming off it, literally */
-        if (!view.reduced && lit > MOTES_RISE_AT) {
+        /* NOT GATED ON `lit`. Only EMISSION is: a mote already in the air
+           finishes its rise and fades on its own `upA`, so when the reach
+           drops under `MOTES_RISE_AT` no new ones leave and the ones in
+           flight go out over what is left of their climb — not all at once,
+           which is a light switching off with no hand on it. */
+        upDrawn = 0;
+        if (!view.reduced) {
           for (let i = 0; i < 10; i++) {
             if (upA[i] <= 0) continue;
+            upDrawn++;
             ctx!.globalAlpha = upA[i] * 0.5;
             ctx!.drawImage(pal.mote, charSX + upX[i] - 3, cyC + upY[i] - 3, 6, 6);
           }
@@ -6549,6 +6559,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             reading: Number((wallSaving.get(curWall().id) ?? 0).toFixed(3)),
             lit: Number(auraLit().toFixed(3)),
             rising: upA.reduce((n, a) => n + (a > 0 ? 1 : 0), 0),
+            risingDrawn: upDrawn,
           },
           col: trip.col,
           travelling: trip.active,
