@@ -468,6 +468,26 @@ it("says a clip's note was deleted here, and keeps the clip for its restore", as
   expect(tryAgainOn(line), "the clip was dropped with its note, though a restore can bring the note back").toBe(true);
 });
 
+/* Deleting a note cancels a recording made ON IT. It used to cancel the one
+   shared recorder whatever note it was recording for, so deleting note B
+   while note A's clip was still being handed over threw A's clip away. */
+it("does not throw away another note's finishing clip when a note is deleted", async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  await openArchive();
+  await recordOn("own-1");
+  /* back to the list stops A's recording; the browser has not handed it over */
+  await act(async () => q<HTMLButtonElement>('.waka-dock button[aria-label="Back"]')!.click());
+  await settle(2);
+  const other = [...document.querySelectorAll<HTMLButtonElement>(".waka-list-row")]
+    .find((item) => item.textContent?.includes("something I kept, 0"))!;
+  await act(async () => other.click());
+  await settle();
+  await act(async () => q<HTMLButtonElement>('#waka-note-tools [aria-label="Delete"]')!.click());
+  await settle(2);
+  await deliverStops();
+  expect(S.finalized, "deleting note B threw away note A's clip").toEqual(["own-1"]);
+});
+
 it("does not let a note be deleted while its clip is on its way", async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
   await openArchive();

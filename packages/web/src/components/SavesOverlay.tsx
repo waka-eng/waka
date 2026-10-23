@@ -1397,7 +1397,11 @@ export function SavesOverlay({ locale, profileId, title, focus, onClearFocus, on
                the note being deleted, so it is cancelled with it (review,
                2026-10-17). An agent's archive asks first — the Stop stays in
                that bar — and cancels on the confirming press. */
-            const silence = () => { if (recording.phase !== "idle") void recording.cancel(); };
+            /* ONLY A RECORDING MADE ON THIS NOTE (review, 2026-10-22): the
+               recorder is shared, and another note's clip still being handed
+               over is that note's, not this delete's. */
+            const recordingHere = recorder.forNote?.noteId === open.id && (recorder.forNote?.profileId ?? null) === (profileId ?? null);
+            const silence = () => { if (recording.phase !== "idle" && recordingHere) void recording.cancel(); };
             if (ownArchive) { silence(); eraseOpen(open); return; }
             if (askingErase !== open.id) { setAskingErase(open.id); return; }
             silence();
