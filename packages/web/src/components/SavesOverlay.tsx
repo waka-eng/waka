@@ -72,6 +72,7 @@ import { inspectAttachmentFile } from "../lib/api/file-accept";
 import { inspirationPreview } from "../lib/inspiration-preview";
 import { readNoteEdit, writeNoteEdit, clearNoteEdit } from "../lib/note-edit-drafts";
 import type { ProfileStorageScope } from "../lib/profile-storage";
+import { finishInspirationDelete, readAfterInspirationDeletes, trackInspirationDelete } from '../lib/pending-inspiration-deletes';
 import { wordsCanStand } from "../lib/note-words";
 
 type Phase = "loading" | "ready" | "failed";
@@ -324,7 +325,8 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
   const load = useCallback(async () => {
     setPhase("loading");
     try {
-      const field = await loadInspirations(profileId ?? undefined);
+      const { field, reconciled } = await readAfterInspirationDeletes(scope,
+        () => loadInspirations(profileId ?? undefined), () => mounted.current);
       if (!mounted.current) return;
       /* Newest first here: a grid is read from the top left, and the archive's
          own order is oldest first because the ground lays them down that way. */
@@ -339,6 +341,8 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
          page cannot be made to lie by a reader that stops holding it. */
       setTotal(Math.max(field.total, field.inspirations.length) - (waiting && field.inspirations.some((row) => row.id === waiting) ? 1 : 0));
       setPhase("ready");
+      // The first shelf read may have raced the same keepalive delete.
+      if (reconciled) void loadShelfAfterDelete.current();
       /* RETURNED, SO A CALLER CAN RE-POINT AT A ROW IT WAS HOLDING. `open`
          is a snapshot of one row taken when it was pressed; a reload
          replaces `rows` and leaves that snapshot stale, which is how the
@@ -350,7 +354,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
       setPhase("failed");
     }
     return [];
-  }, [profileId]);
+  }, [profileId, scope?.accountId, scope?.profileId]);
 
   useEffect(() => {
     void load();
@@ -365,6 +369,8 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
       if (mounted.current && request === shelfRequest.current) setShelfLoadFailed(true);
     }
   }, [profileId]);
+  const loadShelfAfterDelete = useRef(loadShelf);
+  loadShelfAfterDelete.current = loadShelf;
   useEffect(() => { setShelf([]); void loadShelf(); return () => { shelfRequest.current += 1; }; }, [loadShelf]);
 
   const forgetNote = recorder.forget, unforgetNote = recorder.unforget, markDeleting = recorder.setDeleting;
@@ -376,15 +382,18 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
   }, [forgetNote, markDeleting, profileId]);
   const commitErase = useCallback((pending: { row: Inspiration; at: number }, leaving = false) => {
     beginDelete(pending.row.id);
+    trackInspirationDelete(scope, pending.row.id);
     /* On an agent's archive the delete names the agent's profile; the
        request outlives the tab when it is sent as the page goes. */
     void deleteInspiration(pending.row.id, { ...(profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
       // The clip can land again once this profile restores its inspiration.
       .then(() => {
+        finishInspirationDelete(scope, pending.row.id);
         markDeleting(pending.row.id, profileId ?? null, false);
         return loadShelf();
       })
       .catch(() => {
+        finishInspirationDelete(scope, pending.row.id);
         /* refused: the note is still there, and so are its clips' chances */
         markDeleting(pending.row.id, profileId ?? null, false);
         unforgetNote(pending.row.id, profileId ?? null);
@@ -394,7 +403,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
         setTotal((count) => count === null ? count : count + 1);
         setEraseFailed(true);
       });
-  }, [beginDelete, loadShelf, markDeleting, profileId, unforgetNote]);
+  }, [beginDelete, loadShelf, markDeleting, profileId, scope?.accountId, scope?.profileId, unforgetNote]);
 
   const flushErase = useCallback((leaving = false) => {
     const pending = pendingErase.current;
