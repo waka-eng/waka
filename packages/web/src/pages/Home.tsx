@@ -9680,7 +9680,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                    anything. Everything else the creature says arrives
                    through `charSay`, which is always the lighter weight. */
                 <div
-                  className="jar-char-bubble"
+                  className={`jar-char-bubble${(lead && !standingAsAgent) || agentSays ? ' jar-char-bubble--reading' : ''}`}
                   data-jar-chrome="1"
                   /* Both states of this bubble are pressable — a reading and
                      the empty line — so the flag is unconditional. */

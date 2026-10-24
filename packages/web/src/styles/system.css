@@ -130,6 +130,7 @@
 
   /* --- the reading cluster. Everything else lives here. --- */
   --t-reading: clamp(21px, 2.2vw, 30px);
+  --t-bubble-reading: 22px;
   --t-lead: clamp(16px, 1.2vw, 19px);
   /* Home leaves more room around the statement without crowding short
      windows. Both limits come from the existing reading/lead scale. */

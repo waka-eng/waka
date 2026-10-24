@@ -4780,18 +4780,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   }
 }
 
-/* THE READING IN THE BUBBLE. Wider than the pencil's bubble because it holds
-   a sentence, set at the reading step on the creature's own warm ground — the
-   same material the note below it wears, so the two read as one voice. */
-/* THE SAME TYPE THE OFFER IS SET IN. Founder, with the two bubbles side by
-   side: "text too big" of the reading, and "use this font for top of mind as
-   well" of the offer below it.
-
-   They were two sizes because they arrived a week apart — the reading at
-   `--t-lead` from when it was the only thing the bubble held, the offer at
-   the interface step. One bubble saying two things in two sizes reads as two
-   different kinds of object, which is the opposite of what a speech bubble
-   is: everything in it is the same creature talking. */
+/* The compact voice used by offers and empty states. Top of mind gets its
+   own roomier reading treatment below, in the same interface face. */
 .jar-char-bubble-reading {
   display: block;
   max-width: 24rem;
@@ -5159,6 +5149,64 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
     0 0 76px color-mix(in srgb, var(--jar-live) 5%, transparent);
   /* The film sits inside it (see ::before), which has to clip to the shape. */
   isolation: isolate;
+}
+
+/* Roomier top of mind: the reading owns the space, with quiet actions at
+   its foot. Long readings scroll within the available space above WAKA,
+   leaving the profile controls, label and actions reachable. */
+.jar-char-bubble--reading {
+  padding-top: calc(var(--waka-corner) + var(--sp-24) + env(safe-area-inset-top));
+}
+/* On short screens the companion yields its space to the reading. Reuse
+   that measured space for the bubble and keep its actions available. */
+.jar:has(.jar-hq-inner--compact) .jar-char-bubble--reading {
+  height: var(--jar-mouth-top);
+}
+.jar:has(.jar-char-bubble--reading) .jar-hq-inner--compact {
+  visibility: hidden;
+}
+.jar-char-bubble--reading .jar-char-bubble-body {
+  width: min(28rem, 100%);
+  max-width: 28rem;
+  max-height: 100%;
+  min-height: 0;
+  gap: var(--sp-12);
+  padding: var(--sp-24) var(--sp-24) 0;
+  border-radius: var(--sp-24);
+}
+.jar-char-bubble--reading .jar-char-bubble-of {
+  flex-shrink: 0;
+}
+.jar-char-bubble--reading .jar-char-bubble-reading {
+  max-width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+  font-size: var(--t-bubble-reading);
+  font-weight: 400;
+  line-height: 1.5;
+}
+.jar-char-bubble--reading .jar-char-bubble-acts {
+  flex-shrink: 0;
+  margin: var(--sp-8) calc(var(--sp-24) * -1) 0;
+}
+.jar-char-bubble--reading .jar-char-bubble-act {
+  min-height: var(--waka-corner);
+}
+.jar-char-bubble--reading .jar-char-bubble-act:first-child {
+  border-bottom-left-radius: var(--sp-24);
+}
+.jar-char-bubble--reading .jar-char-bubble-act:last-child {
+  border-bottom-right-radius: var(--sp-24);
+}
+/* Agent readings have no action row to provide the bottom inset. */
+.jar-char-bubble--reading .jar-char-bubble-body:not(:has(.jar-char-bubble-acts)) {
+  padding-bottom: var(--sp-24);
+}
+.jar:has(.jar-hq-inner--compact) .jar-char-bubble--reading .jar-char-bubble-body {
+  padding-top: var(--sp-16);
+  gap: var(--sp-8);
 }
 
 /**
