@@ -383,7 +383,7 @@ it("re-points the open note only when the clip landed on it", async () => {
   await openArchive();
   await recordOn("own-1");
   /* back to the list (the recording stops there), and into another note */
-  await act(async () => q<HTMLButtonElement>('.waka-dock button[aria-label="Back"]')!.click());
+  await act(async () => q<HTMLButtonElement>('button.waka-page-back')!.click());
   await settle(2);
   const other = [...document.querySelectorAll<HTMLButtonElement>(".waka-list-row")]
     .find((item) => item.textContent?.includes("something I kept, 0"));
@@ -552,7 +552,7 @@ it("does not throw away another note's finishing clip when a note is deleted", a
   await openArchive();
   await recordOn("own-1");
   /* back to the list stops A's recording; the browser has not handed it over */
-  await act(async () => q<HTMLButtonElement>('.waka-dock button[aria-label="Back"]')!.click());
+  await act(async () => q<HTMLButtonElement>('button.waka-page-back')!.click());
   await settle(2);
   const other = [...document.querySelectorAll<HTMLButtonElement>(".waka-list-row")]
     .find((item) => item.textContent?.includes("something I kept, 0"))!;
@@ -613,14 +613,14 @@ it("re-points the open note when its clip lands in the same render as another no
   await recordOn("own-1");
   await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
   await deliverStops();
-  await act(async () => q<HTMLButtonElement>('.waka-dock button[aria-label="Back"]')!.click());
+  await act(async () => q<HTMLButtonElement>('button.waka-page-back')!.click());
   await settle(2);
   await recordOn("own-0");
   await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
   await deliverStops();
   expect(S.heldFinalizes, "both uploads should be waiting").toHaveLength(2);
   /* back on note A, which does not yet know about its clip */
-  await act(async () => q<HTMLButtonElement>('.waka-dock button[aria-label="Back"]')!.click());
+  await act(async () => q<HTMLButtonElement>('button.waka-page-back')!.click());
   await settle(2);
   const rowA = [...document.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((item) => item.textContent?.includes("something I kept, 1"))!;
   await act(async () => rowA.click());

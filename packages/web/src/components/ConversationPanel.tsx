@@ -922,13 +922,15 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               small picture, a file as its glyph, name and size, each with an
               ×. Uploading and "Couldn’t add this" are said on the chip they
               are about, and a failed one offers its retry beside its ×. */}
-          {draft?.attachments?.length||uploads.length?<ul className="chat-chips" aria-label={say('worldAttachList')}>
+          {!draft?.pending&&(draft?.attachments?.length||uploads.length)?<ul className="chat-chips" aria-label={say('worldAttachList')}>
             {(draft?.attachments??[]).map(item=><Chip key={item.id} type={item.type} name={attachmentLabel(locale,item.type,item.name)} size={item.size}
               file={localFiles.current.get(item.id)} attachmentId={item.id} state="ready" locale={locale} onRemove={()=>unattach(item.id)}/>)}
             {uploads.map(item=><Chip key={item.key} type={item.type} name={attachmentLabel(locale,item.type,item.name)} size={item.file.size} file={item.file} state={item.failed?'failed':'uploading'} locale={locale}
               onRemove={()=>dropUpload(item.key)} onRetry={()=>void upload(item)}/>)}
           </ul>:null}
-          <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
+          {/* A pending send lives in the transcript and durable journal, not
+              in the editor as well. Failed sends keep that same id for retry. */}
+          <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.pending?'':draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
           <div className="chat-composer-footer">
             {/* ═══ THE SEND ACTIONS, AND DICTATION IS ONE OF THEM ═══════
                 The reference is explicit about where a microphone goes:

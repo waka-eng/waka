@@ -66,6 +66,7 @@ import { publicWebOrigin } from '../lib/public-origins';
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { createConversation } from "../lib/api/conversations";
 import { DialogSurface, leaveAsModal } from "../components/DialogSurface";
+import { PageBack } from "../components/PageBack";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
@@ -5432,6 +5433,21 @@ const RETRY_READ_LIMIT_MS = 20_000;
     if (viewNavigationRef.current.view?.compose) { saveAsDraft(); return; }
     commitOpenNote();
     viewNavigationRef.current.closeToHome();
+  };
+
+  const backPage = () => {
+    if (making === 'inspiration') { saveAsDraft(); return; }
+    if (making === 'talk') {
+      listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new', principleId: viewNavigation.view?.principleId };
+      openOverHome('conversations');
+      return;
+    }
+    const close = closeSavedNote.current;
+    if (close) { close(); return; }
+    const origin = listOrigin.current;
+    listOrigin.current = null;
+    if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id, origin.principleId);
+    else openOverHome(null);
   };
 
   /**
@@ -11483,6 +11499,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
           surface that made this rule: "this should be its own page, so bottom
           navigation always visible." A conversation is a page like the rest
           of them now, so it keeps the bar like the rest of them. */}
+      {phase === 'ready' && (listing || making) && !viewNavigation.view?.sharePrinciple ? <PageBack
+        navigationKey={viewNavigation.href} onBack={backPage} visible={making !== 'inspiration'}
+        belowCorners={listing && !savedNoteOpen}
+        label={say(savedNoteOpen ? 'worldBackToAll' : making === 'talk' ? 'worldAllChats' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
       {phase==='ready'&&!viewNavigation.view?.sharePrinciple ? (
         <nav className={`waka-dock${atNowView && !reviewing ? ' waka-dock--home' : ''}`} aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
@@ -11541,17 +11561,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
                (Esc does the same) and brings the invitation back. */
             ...(reviewing && !making ? [{ id: 'review', label: 'worldReviewExit' as const, here: false,
               go: () => { setReviewing(false); } }] : []),
-            /* Back returns from a saved note to its list, or from chat
-               history to the chat that opened it. Close always goes home. */
+            /* Navigation lives in PageBack; this slot owns the note tools
+               and Close so they stay together at the bottom. */
             ...(listing ? [{ id: 'return', label: 'worldBack' as const, here: false,
-              go: () => {
-                const close = closeSavedNote.current;
-                if (close) { close(); return; }
-                const origin = listOrigin.current;
-                listOrigin.current = null;
-                if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id, origin.principleId);
-                else openOverHome(null);
-              } }] : []),
+              go: backPage }] : []),
             ...(making === 'talk' || listing || (reviewing && !making) ? [] : [{ id: 'inspiration', label: composerHasWords ? 'worldContinueDraft' as const : 'worldDockSaves' as const,
               here: false,
               go: () => {
@@ -11650,28 +11663,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 the plus's place; with the plus gone they ride beside the
                 word — which on a new note says how many you have kept and
                 opens them — and Close comes last. */}
-            {making !== 'inspiration' ? <button
+            {making === null && item.id !== 'return' ? <button
               type="button"
               className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}`}
               aria-current={item.here ? 'page' : undefined}
-              aria-label={item.id === 'return' ? say('worldBack') : undefined}
               onClick={item.go}
             >
-              {item.id === 'return'
-                ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-                    <path d="M9 14 4.5 9.5 9 5"/><path d="M4.5 9.5H14a5.5 5.5 0 0 1 0 11h-3"/>
-                  </svg>
-                : making === 'talk' && item.id === 'talk'
-                    ? say('worldAllChats')
-                    /* A GLYPH IN FRONT OF THE TWO WORDS THAT MAKE A NEW ONE.
-                       Founder, 2026-10-18: "add + icon in front of
-                       Inspiration, and chat icon in front of Chat at bottom
-                       bar." Only on the plain words: "N inspirations" and
-                       "All chats" open a list, not a new one, so a plus
-                       there would name the wrong act (Law 1). The glyph is
-                       decoration (aria-hidden) and the word stays the
-                       button's whole accessible name. */
-                    : item.id === 'inspiration' || item.id === 'talk'
+              {item.id === 'inspiration' || item.id === 'talk'
                       ? <><HomeActionIcon kind={item.id === 'inspiration' ? 'plus' : 'chat'} className="waka-dock-item-icon"/>{say(item.label)}</>
                       : say(item.label)}
             </button> : null}
@@ -11683,7 +11681,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 close." So on a page you are making something on, the row reads
                 where-you-came-from │ the making │ Close. The rules are drawn,
                 not typed: a `|` character would be read aloud. */}
-            {barOwner && item.id === barOwner && making !== 'inspiration' ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
             {/* ═══ THE BAR TRANSFORMS, IN THE ONE SLOT THAT SHOULD ═══════
                 Founder: "when the user is in inspirations, maybe this
                 bottom bar should transform so that the icons turn into the

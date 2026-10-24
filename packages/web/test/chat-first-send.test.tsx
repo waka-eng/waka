@@ -81,6 +81,21 @@ const ask=async(words:string)=>{
   await act(async()=>{const area=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,words);area.dispatchEvent(new Event('input',{bubbles:true}));});
   await send();
 };
+it('clears the first-message editor before a slow server confirms, showing the words only in the thread', async()=>{
+  const actual=vi.mocked(createConversation).getMockImplementation()!;
+  let finish!:()=>void;
+  vi.mocked(createConversation).mockImplementationOnce(async(...args)=>{
+    await new Promise<void>(resolve=>{finish=resolve;});return actual(...args);
+  });
+  await render();await ask('A slow first message');
+  expect(host.querySelector('textarea')!.value).toBe('');
+  expect(host.querySelectorAll('.chat-message')).toHaveLength(1);
+  expect(host.querySelector('.chat-sending')?.textContent).toContain('A slow first message');
+  expect(host.textContent).toContain('Sending…');
+  await act(async()=>finish());
+  expect(host.querySelectorAll('.chat-message')).toHaveLength(1);
+  expect(host.querySelector('textarea')!.value).toBe('');
+});
 it('retains the confirmed first question through the real new-to-id route without another GET',async()=>{
   await render();await ask('What has changed in how I think?');
   expect(createConversation).toHaveBeenCalledOnce();expect(fetchConversation).not.toHaveBeenCalled();

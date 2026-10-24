@@ -490,25 +490,16 @@ describe("every surface has a way out you can see", () => {
     expect(code(home), "Esc no longer ends the review").toMatch(
       /if \(event\.key === 'Escape'\) \{\s*if \(reviewing && atNowView && nothingOpen && !harvestWhy\) \{[^}]*setReviewing\(false\); \}/);
 
-    /* ON A LIST THE WAY OUT IS ↩ │ CLOSE. ↩ steps back where the list was
-       opened from — out of a saved note open in the archive first (which
-       commits it); else to the chat or the new note the bar's "All …" press
-       recorded in `listOrigin` (not history: the list REPLACES the page it
-       was opened from); else, reached some other way, home. It is drawn, not
-       written, and named for a screen reader. On a list nothing is lit any
-       more: the rows that could light are not in the bar there. */
-    const back = code(home.slice(home.indexOf("...(listing ? [{ id: 'return'"), home.indexOf("[{ id: 'inspiration', label: 'worldDock")));
-    expect(back, "a list's bar has no return row").toMatch(/^\.\.\.\(listing \? \[\{ id: 'return', label: 'worldBack' as const, here: false,/);
-    expect(back, "↩ no longer steps out of a saved note to the list first").toMatch(
-      /go: \(\) => \{\s*const close = closeSavedNote\.current;\s*if \(close\) \{ close\(\); return; \}/);
-    expect(back, "↩ no longer reads where the list was opened from, once").toMatch(
+    /* The labeled page control owns Back; the dock keeps tools and Close.
+       Behavioral navigation tests cover edit commits and origin restoration. */
+    const back = code(home.slice(home.indexOf("const backPage ="), home.indexOf("const whyFailed =")));
+    expect(back, "Back commits an open note before returning to its list").toMatch(
+      /const close = closeSavedNote\.current;\s*if \(close\) \{ close\(\); return; \}/);
+    expect(back, "Back consumes the list origin once").toMatch(
       /const origin = listOrigin\.current;\s*listOrigin\.current = null;/);
-    expect(back, "↩ no longer steps back to the chat the list was opened from").toMatch(
-      /if \(origin\?\.kind === 'chat'\) openTalk\(origin\.id === 'new' \? null : origin\.id, origin\.principleId\);/);
-    expect(back, "↩ no longer returns home from the archive").toMatch(/else openOverHome\(null\);/);
-    expect(code(home), "the return row lost its name for a screen reader").toMatch(/aria-label=\{item\.id === 'return' \? say\('worldBack'\) : undefined\}/);
-    expect(code(home), "the return row is no longer drawn as the return icon").toMatch(
-      /\{item\.id === 'return'\s*\? <svg [^>]*aria-hidden="true"[^>]*>\s*<path[^>]*\/><path[^>]*\/>\s*<\/svg>/);
+    expect(back).toContain("else openOverHome(null);");
+    expect(code(home)).toMatch(/<PageBack\s+navigationKey=\{viewNavigation.href\} onBack=\{backPage\}/);
+
     /* EVERY ROW IS THE SAME SLOT (2026-10-16): Chat's row was a bare inline
        span and its two rules collapsed — "the bottom bar should be identical
        for inspiration and chat". So the return row, Inspiration and Chat all
@@ -527,16 +518,10 @@ describe("every surface has a way out you can see", () => {
     /* ON A MAKING PAGE, THE KEPT ROW IS THE LIST'S DOOR, IN WORDS. */
     expect(talk, "the chat's row no longer opens the chats list, remembering the chat for ↩").toMatch(
       /making === 'talk'\) \{ listOrigin\.current = \{ kind: 'chat', id: viewNavigation\.view\?\.conversationId \?\? 'new', principleId: viewNavigation\.view\?\.principleId \}; openOverHome\('conversations'\); \}/);
-    expect(code(home), "archive navigation must stay outside the composer").toContain("{making !== 'inspiration' ? <button");
-    expect(code(home), "the chat's row no longer says All chats").toMatch(/making === 'talk' && item\.id === 'talk'\s*\? say\('worldAllChats'\)/);
+    expect(code(home), "archive navigation must stay outside the composer").toContain("{making === null && item.id !== 'return' ? <button");
+    expect(code(home), "the chat's row no longer says All chats").toMatch(/making === 'talk' \? 'worldAllChats'/);
 
-    /* THE RULES. One after the row's own word, on every bar that has an
-       owner; a second, before Close, only where there is a middle group —
-       the note's tools, a chat's tools (the mic and the ＋, lent to the
-       panel since 2026-10-16), or a saved note's tools in the archive. A
-       bare list is door │ Close. */
-    expect(code(home), "the first rule no longer follows the bar owner's row").toMatch(
-      /\{barOwner && item\.id === barOwner && making !== 'inspiration' \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
+    /* Only tools and Close need a separator; a list has Close alone. */
     expect(code(home), "the second rule is drawn where there is no middle group (a bare list)").toMatch(
       /\{barOwner && item\.id === barOwner && \(making !== null \|\| \(viewNavigation\.view\?\.open === 'saves' && savedNoteOpen\)\) \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
     expect(code(home), "a chat no longer lends its middle group to the panel's mic and ＋").toMatch(

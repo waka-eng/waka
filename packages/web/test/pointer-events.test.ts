@@ -226,6 +226,7 @@ describe("nothing visible loses its press", () => {
         (selector) =>
           ![
             ".jar-canvas",
+            ".waka-back-swipe", // Decorative progress only; never a hit target.
             ".jar-atmos",
             ".jar-topbar",
             ".jar-offline",

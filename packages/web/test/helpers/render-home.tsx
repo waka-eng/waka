@@ -518,7 +518,7 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
 
 /** The bar's rows. */
 function dockRows(container: HTMLElement): HTMLButtonElement[] {
-  return [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")];
+  return [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item, .waka-page-back")];
 }
 /* BY ACCESSIBLE NAME, which is what a person navigating by voice or by
    screen reader would say out loud. */

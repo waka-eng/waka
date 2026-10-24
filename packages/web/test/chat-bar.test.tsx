@@ -75,7 +75,7 @@ afterEach(() => { world?.unmount(); world = undefined; vi.clearAllMocks(); vi.us
 async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world!.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
-const row = (name: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item')]
+const row = (name: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-page-back')]
   .find((node) => node.textContent?.trim() === name);
 
 /** A new chat, opened the way a person opens one: the bar's Chat on Now. */
@@ -91,9 +91,9 @@ async function aNewChat(): Promise<void> {
 describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page keeps its own field and Send', () => {
   it('gives a chat the bar All chats │ ＋ │ Close, with nothing to type into in it', async () => {
     await aNewChat();
-    expect(barShape(world!.container), 'a chat\'s bar is not its door, its tools, Close').toEqual(['All chats', '│', 'Add photo or file', '│', 'Close']);
+    expect(barShape(world!.container), 'a chat\'s bar is not its door, its tools, Close').toEqual(['Add photo or file', '│', 'Close']);
     expect(world!.container.querySelectorAll('nav.waka-dock span.waka-dock-sep[aria-hidden="true"]'),
-      'the two rules are not hidden from a screen reader').toHaveLength(2);
+      'the two rules are not hidden from a screen reader').toHaveLength(1);
     const bar = world!.container.querySelector('nav.waka-dock')!;
     expect(bar.querySelector('textarea, .chat-send'), 'the chat\'s field or Send is in the bar again').toBeNull();
     expect(bar.querySelector('#waka-chat-tools.waka-dock-making[role="group"] button.waka-dock-tool[aria-haspopup="menu"]'),
@@ -127,7 +127,7 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
       await aNewChat();
       expect(world!.container.querySelector('nav.waka-dock button.waka-dock-tool.chat-dictate'), 'the bar has no mic').toBeTruthy();
       expect(world!.container.querySelector('footer.chat-composer .chat-dictate'), 'the mic is still in the page\'s box').toBeNull();
-      expect(barShape(world!.container)).toEqual(['All chats', '│', 'Speak', 'Add photo or file', '│', 'Close']);
+      expect(barShape(world!.container)).toEqual(['Speak', 'Add photo or file', '│', 'Close']);
     } finally {
       delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
     }
@@ -149,7 +149,7 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
     expect(world!.container.querySelector('.chat-message[data-role="user"]')?.textContent).toContain('What has changed in how I think?');
     expect(location.pathname, 'the chat did not take its id once it was created').toMatch(/^\/chat\/(?!new$)/);
     expect((await chatField(world!.container)).value, 'the page\'s field kept what was sent').toBe('');
-    expect(barShape(world!.container), 'the bar changed shape once the chat had an id').toEqual(['All chats', '│', 'Add photo or file', '│', 'Close']);
+    expect(barShape(world!.container), 'the bar changed shape once the chat had an id').toEqual(['Add photo or file', '│', 'Close']);
   });
 
   it('opens the ＋ in the bar as a menu of Add photos and Add file', async () => {
@@ -183,7 +183,7 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
     expect(open(), 'All chats did not open the chats list').toBe('conversations');
     /* On the list the bar is ↩ │ Close (the list's own ruling, held in
        `home-navigation.test.tsx`). */
-    expect(barShape(world!.container)).toEqual(['↩', '│', 'Close']);
+    expect(barShape(world!.container)).toEqual(['Close']);
   });
 
   it('returns from history to the same principle-started draft', async () => {
@@ -196,7 +196,7 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
     });
     await act(async()=>row('All chats')!.click());await settle();
     expect(open()).toBe('conversations');
-    await act(async()=>world!.container.querySelector<HTMLButtonElement>('.waka-dock button[aria-label="Back"]')!.click());await settle();
+    await act(async()=>world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click());await settle();
     expect(new URLSearchParams(location.search).get('principle')).toBe(principleId);
     expect((await chatField(world.container)).value).toBe('Keep this question with its starting point.');
   });
@@ -223,6 +223,6 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
       expect(button!.hasAttribute('aria-label'), `${name} gained an aria-label over its word`).toBe(false);
     }
     await act(async () => row('New chat')!.click()); await settle();
-    expect(row('All chats')?.querySelector('svg'), 'All chats wears the new-chat glyph').toBeNull();
+    expect(row('All chats')?.textContent).toBe('All chats');
   });
 });

@@ -190,7 +190,9 @@ it('reconciles a lost save response with a read, without resending',async()=>{
   const save=vi.mocked(saveConversationMessage).getMockImplementation()!;
   vi.mocked(saveConversationMessage).mockImplementationOnce(async(...args)=>{await save(...args);throw new Error('Response lost');});
   await mount();await type('Keep my exact thought');await click('Send');
-  expect(host.querySelector('textarea')!.value).toBe('Keep my exact thought');expect(host.textContent).toContain('Couldn’t confirm this message.');
+  expect(host.querySelector('textarea')!.value).toBe('');
+  expect(host.querySelector('.chat-sending')?.textContent).toContain('Keep my exact thought');
+  expect(host.textContent).toContain('Couldn’t confirm this message.');
   await click('Check saved messages');expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(stored.messages).toHaveLength(1);expect(host.querySelector('textarea')!.value).toBe('');
 });
 /* Review round 6: a failed list read on an open conversation used to be
@@ -467,6 +469,8 @@ it('calls a pending message lost offline not confirmed, and retries it under the
   await type('Words on the train');await click('Send');
   expect(host.textContent).toContain('Not confirmed yet');expect(host.textContent).not.toContain('Not sent');
   const first=vi.mocked(saveConversationMessage).mock.calls[0]![2].id;
+  expect(host.querySelector('textarea')!.value).toBe('');
+  expect(host.querySelector('.chat-sending')?.textContent).toContain('Words on the train');
   online.mockReturnValue(true);
   const retry=[...host.querySelectorAll('.chat-notice button')].find(b=>b.textContent==='Retry this message') as HTMLButtonElement;
   expect(retry).toBeTruthy();
@@ -702,7 +706,11 @@ it('coalesces rapid sends and retains one durable sending intent',async()=>{
   await mount();await type('What has changed in how I think?');
   const send=host.querySelector<HTMLButtonElement>('.chat-send')!;
   await act(async()=>{send.click();send.click();});expect(saveConversationMessage).toHaveBeenCalledOnce();expect(readConversationDrafts(scope,id)[0].value.pending).toBe(true);
-  expect(host.textContent).toContain('Sending…');await act(async()=>finish());expect(stored.messages).toHaveLength(1);
+  expect(host.textContent).toContain('Sending…');
+  expect(host.querySelector('textarea')!.value).toBe('');
+  expect(host.querySelectorAll('.chat-message')).toHaveLength(1);
+  expect(host.querySelector('.chat-sending')?.textContent).toContain('What has changed in how I think?');
+  await act(async()=>finish());expect(stored.messages).toHaveLength(1);
 });
 it('checks quick replies after one second rather than waiting two',async()=>{
   stored.generationEnabled=true;await mount();await type('A quick question');await click('Send');completeReply();await tick(1000);

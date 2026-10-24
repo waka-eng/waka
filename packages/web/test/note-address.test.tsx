@@ -169,7 +169,7 @@ it('Forward after Back reopens the note', async () => {
 
 it('the on-screen way back steps the same history: the list, then one Back out of the archive', async () => {
   await openArchiveThenNote();
-  await pressDockRow(world.container, 'Back'); await settle();
+  await pressDockRow(world.container, 'All inspirations'); await settle();
   expect(page()).toBeNull();
   expect(params().get('open')).toBe('saves');
   expect(params().get('note')).toBeNull();
@@ -180,7 +180,7 @@ it('the on-screen way back steps the same history: the list, then one Back out o
 it('a cold link (what a reload reads) opens the note, and its close lands on the list', async () => {
   world = await mountWorld(FACTS, { initialEntries: ['/?open=saves&note=kept'], routerTools: <RouterTools/> }); await settle();
   expect(page(), 'the linked note did not open').toBeTruthy();
-  await pressDockRow(world.container, 'Back'); await settle();
+  await pressDockRow(world.container, 'All inspirations'); await settle();
   expect(params().get('open')).toBe('saves');
   expect(params().get('note')).toBeNull();
   expect(listRow()).toBeTruthy();
@@ -212,7 +212,7 @@ it('a note reopened after a Back-during-save can still be closed on screen', asy
   vi.mocked(updateInspiration).mockReset().mockResolvedValue(undefined as never);
   await forward();
   expect(page(), 'Forward did not reopen the note').toBeTruthy();
-  await pressDockRow(world.container, 'Back'); await settle();
+  await pressDockRow(world.container, 'All inspirations'); await settle();
   expect(page(), 'the on-screen way back did not close the note').toBeNull();
   expect(params().get('note')).toBeNull();
   expect(listRow()).toBeTruthy();

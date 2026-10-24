@@ -59,6 +59,7 @@ const FORBIDDEN = [
  * renamed, and "it would be a lot of work" is not a reason that appears here.
  */
 const ALLOWED = new Map([
+  ["capture", "DOM AddEventListenerOptions.capture selects the event phase, not a memory concept"],
   ["onClickCapture", "React's standard capture-phase click event prop, not a memory concept"],
   [
     "capturedAt",

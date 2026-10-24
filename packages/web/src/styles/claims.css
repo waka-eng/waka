@@ -310,6 +310,54 @@
 }
 .waka-dock--home .waka-dock-item { width: 100%; }
 
+/* Back names the destination above the page; Close stays with its tools. */
+.waka-page-back {
+  position: fixed;
+  z-index: 60;
+  top: calc(var(--sp-12) + env(safe-area-inset-top));
+  left: max(var(--sp-16), env(safe-area-inset-left));
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--waka-corner);
+  max-width: calc(100vw - var(--sp-32));
+  padding: var(--sp-8);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--waka-raised);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-meta);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.waka-page-back:hover, .waka-page-back:focus-visible { color: var(--ink); }
+.waka-page-back[data-below-corners] {
+  top: calc(var(--waka-corner) + var(--sp-16) + env(safe-area-inset-top));
+}
+body:has(.waka-page-back[data-below-corners]) .waka-page {
+  padding-top: calc(var(--waka-corner) * 2 + var(--sp-16) + env(safe-area-inset-top));
+}
+body:has(.waka-page-back) .waka-over--note {
+  padding-top: calc(var(--waka-corner) + var(--sp-24) + env(safe-area-inset-top));
+}
+body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-page-back { visibility: hidden; }
+.waka-back-swipe {
+  position: fixed;
+  z-index: 61;
+  top: 45%;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: var(--waka-corner);
+  height: var(--waka-corner);
+  border-radius: var(--r-pill);
+  background: var(--waka-raised);
+  color: var(--ink);
+  font-size: var(--t-reading);
+  pointer-events: none;
+}
+
 /* ═══ A SHARE SHEET HAS ITS OWN WAY OUT, SO THE BAR STEPS ASIDE ═══════════
    The sheet is modal (a backdrop, its own Close) and runs nearly the full
    height of a short window, so at 1280x720 the bar sat on top of the
