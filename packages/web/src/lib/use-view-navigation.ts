@@ -167,5 +167,14 @@ export function useViewNavigation(scope: string | null) {
     if(stored?.scope===current.scope&&stored.conversationFrom) current.navigate(-1);
     else current.navigate(viewHref({...EMPTY_VIEW,wallId:before.wallId}),{replace:true});
   },[]);
-  return { view, href, key: location.key, query, write, closeComposer,closeShare,closeOpen,closeConversation,closeNote, own };
+  /** Close is a destination, unlike Back. Replacing the current entry also
+   * works after a cold launch or when another page sits beneath this one. */
+  const closeToHome = useCallback(() => {
+    const current = latest.current;
+    const before = readViewLocation(current.location.pathname, current.location.search);
+    if (!before) return;
+    leaving();
+    write({ ...EMPTY_VIEW, wallId: before.wallId, label: before.label }, { replace: true });
+  }, [write]);
+  return { view, href, key: location.key, query, write, closeComposer,closeShare,closeOpen,closeConversation,closeNote,closeToHome, own };
 }

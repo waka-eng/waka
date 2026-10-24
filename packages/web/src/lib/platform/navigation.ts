@@ -19,6 +19,9 @@ export function nativeLinkDestination(raw: string, appId: string, webOrigin: str
     const path = url.pathname + url.search + url.hash;
     if (url.pathname === '/login') return path;
     if (!safeInAppPath(path)) return null;
+    // These web routes still redirect to their current overlays in main.tsx.
+    // Accept the same saved links when the OS hands them to the native app.
+    if (url.pathname === '/inspirations' || url.pathname === '/principles') return path;
     /* `/profile` LEFT THIS LIST (2026-10-11), the same way `/review/...` did
        the day before, and for the same reason: the route is gone. The
        settings page became a panel in the corner, so `/profile` is no longer

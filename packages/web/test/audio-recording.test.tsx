@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY (gate G6): `navigator` supplies microphone outcomes,
  * `MediaRecorder` supplies recording events, `Blob`/`File` use Node's cloneable
- * implementations, and `performance` plus timers control elapsed time. The
+ * implementations, `lib/platform` selects web/native error wording, and
+ * `performance` plus timers control elapsed time. The
  * shipped hook runs; these tests do not claim microphone/device compatibility. */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -14,6 +15,8 @@ import { t, type MessageKey } from '../src/lib/locales';
    the reader's language — so the cases read them back through the English
    catalogue, and one case below reads the Korean. */
 const said = (key: MessageKey | '', locale: 'en-US' | 'ko-KR' = 'en-US') => (key ? t(locale, key) : '');
+const platform = vi.hoisted(() => ({ isMobileBuild: false }));
+vi.mock('../src/lib/platform', () => platform);
 
 let hook: ReturnType<typeof useAudioRecording>, host: HTMLDivElement, root: Root, now: number;
 let mounted = false;
@@ -33,6 +36,7 @@ class Recorder {
 }
 function Harness() { hook = useAudioRecording(saved, acquire); return <p>{hook.phase} {said(hook.error)}</p>; }
 beforeEach(async () => {
+  platform.isMobileBuild = false;
   vi.resetAllMocks(); now = 0; Recorder.instances = []; Recorder.bytes = 'fixture audio';
   Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
@@ -72,6 +76,15 @@ it('shows a permission failure without starting a recording', async () => {
   acquire.mockRejectedValue(new DOMException('Denied', 'NotAllowedError'));
   await act(async () => hook.start()); expect(hook.phase).toBe('idle'); expect(said(hook.error)).toContain('Microphone access');
   expect(saved).not.toHaveBeenCalled(); expect(Recorder.instances).toHaveLength(0);
+});
+it('directs installed-app microphone denials to device settings', async () => {
+  platform.isMobileBuild = true;
+  acquire.mockRejectedValue(new DOMException('Denied', 'NotAllowedError'));
+  await act(async () => hook.start());
+  expect(hook.error).toBe('worldRecordingDeniedNative');
+  expect(said(hook.error)).toContain('device settings');
+  expect(said(hook.error, 'ko-KR')).toContain('기기 설정');
+  expect(hook.phase).toBe('idle'); expect(saved).not.toHaveBeenCalled();
 });
 it('records successfully after microphone permission is allowed and retried', async () => {
   acquire.mockRejectedValueOnce(new DOMException('Denied', 'NotAllowedError'));

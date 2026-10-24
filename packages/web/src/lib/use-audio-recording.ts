@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { MessageKey } from './i18n';
+import { isMobileBuild } from './platform';
 
 export const MAX_RECORDING_SECONDS = 300;
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -89,7 +90,7 @@ export function useAudioRecording(onRecorded: (file: File) => Promise<void> | vo
     } catch (reason) {
       release(); media.current = null; pending.current = null;
       if (mounted.current && epoch.current === currentEpoch) { requesting.current = false; setPhase('idle'); setError(reason instanceof DOMException && reason.name === 'NotAllowedError'
-        ? 'worldRecordingDenied'
+        ? isMobileBuild ? 'worldRecordingDeniedNative' : 'worldRecordingDenied'
         : reason instanceof DOMException && reason.name === 'NotFoundError' ? 'worldRecordingNoMicrophone'
         : reason instanceof DOMException && reason.name === 'NotReadableError' ? 'worldRecordingMicrophoneBusy'
         : 'worldRecordingStartFailed'); }

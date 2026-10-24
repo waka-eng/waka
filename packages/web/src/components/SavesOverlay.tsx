@@ -44,9 +44,9 @@ import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
 import { AttachmentPreview } from "./AttachmentPreview";
+import { InspirationAttachments } from "./InspirationAttachments";
 import { NoteTools } from "./NoteTools";
 import {
-  attachmentPreviewImageUrl,
   deleteInspiration,
   forgetDeletedInspiration,
   listDeletedInspirations,
@@ -78,22 +78,12 @@ type Phase = "loading" | "ready" | "failed";
 /** How long a note's full-text read may take before it is a failed read. */
 const NOTE_READ_LIMIT_MS = 20_000;
 
-/** How many kept things it takes before finding one is a real act rather
-    than a glance. Roughly a screenful at the archive's row height. */
-const SEARCHABLE = 12;
 /* How long a delete waits for Undo before the server hears about it. Long
    enough to read "Deleted." and reach the word beside it; short enough that
    it is the moment just after the press and not a pending state. */
 const UNDO_MS = 6000;
 
-/** The first image on a keep, if it has one. Links and audio do not qualify:
-    a tile's picture has to be a picture, not a favicon standing in for one. */
-function pictureOf(row: Inspiration): string | null {
-  const image = row.attachments?.find((item) => item.type === "image");
-  return image ? attachmentPreviewImageUrl(image.id) : null;
-}
-
-export function SavesOverlay({ locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, ownArchive = true, note: noteAddress, onNoteAddress }: {
+export function SavesOverlay({ locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, newSaveLabel, note: noteAddress, onNoteAddress }: {
   /**
    * WHICH NOTE THE ADDRESS SAYS IS OPEN (`?open=saves&note=<id>`), when the
    * caller gives the note an address. The address leads: a row press asks
@@ -110,10 +100,6 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
   note?: string | null;
   onNoteAddress?: (change: 'open' | 'close' | 'missing', id: string) => void;
   locale: SupportedLocale;
-  /** Whether this is the person's own archive. The deleted shelf is theirs
-      alone, so it is not read on an agent's archive; deleting there still
-      works, and the request names the agent's profile. */
-  ownArchive?: boolean;
   /** Whose archive. The caller already knows whose world is on screen; this
       surface should never work it out a second way and risk disagreeing. */
   profileId?: string | null;
@@ -182,10 +168,9 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
   focus?: { label: string; ids: readonly string[] } | null;
   onClearFocus?: () => void;
   onClose: () => void;
-  /** Opens the save box — the same act as the dock's plus. Offered under an
-      empty archive of your own, where "Nothing kept yet." was the whole
-      page and the only way forward was a control somewhere else. */
+  /** Open the current profile's composer, preserving any unfinished draft. */
   onNewSave?: () => void;
+  newSaveLabel?: string;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   /* THE ARCHIVE'S RECORDER, OWNED BY THE CALLER (L12), read from the
@@ -291,6 +276,9 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
   const [shelf, setShelf] = useState<ApiDeletedInspiration[]>([]);
   const [onShelf, setOnShelf] = useState(false);
   const [forgetting, setForgetting] = useState<string | null>(null);
+  const [shelfLoadFailed, setShelfLoadFailed] = useState(false);
+  const [shelfBusy, setShelfBusy] = useState(false);
+  const shelfRequest = useRef(0), shelfAction = useRef(false);
   const [shelfFailed, setShelfFailed] = useState(false);
   const [undoable, setUndoable] = useState<Inspiration | null>(null);
   /* WHERE FOCUS GOES WHEN A DELETE TAKES THE NOTE AWAY. The press that
@@ -304,7 +292,6 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
      to the list it returns to — its first row, or the search field. */
   const focusListNext = useRef(false);
   /* Armed delete on an archive with no shelf — see `onErase` below. */
-  const [askingErase, setAskingErase] = useState<string | null>(null);
   const [eraseFailed, setEraseFailed] = useState(false);
   const pendingErase = useRef<{ row: Inspiration; at: number; timer: number } | null>(null);
   const [shareOf, setShareOf] = useState<ShareTarget | null>(null);
@@ -370,18 +357,17 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
   }, [load]);
 
   const loadShelf = useCallback(async () => {
-    if (!ownArchive) return;
+    const request = ++shelfRequest.current;
     try {
-      const deleted = await listDeletedInspirations();
-      if (mounted.current) setShelf(deleted);
+      const deleted = await listDeletedInspirations(profileId ? { profile: profileId } : {});
+      if (mounted.current && request === shelfRequest.current) { setShelf(deleted); setShelfLoadFailed(false); }
     } catch {
-      /* The shelf is a convenience beside the archive; failing to read it
-         leaves the archive exactly as it was, with no tab for it. */
+      if (mounted.current && request === shelfRequest.current) setShelfLoadFailed(true);
     }
-  }, [ownArchive]);
-  useEffect(() => { void loadShelf(); }, [loadShelf]);
+  }, [profileId]);
+  useEffect(() => { setShelf([]); void loadShelf(); return () => { shelfRequest.current += 1; }; }, [loadShelf]);
 
-  const forgetNote = recorder.forget, unforgetNote = recorder.unforget, markDeleting = recorder.setDeleting, dropForGood = recorder.drop;
+  const forgetNote = recorder.forget, unforgetNote = recorder.unforget, markDeleting = recorder.setDeleting;
   /* A DELETE BEGINS: no clip is sent to the note until it is undone,
      refused or sent, and its lines say it was deleted (review, 2026-10-22). */
   const beginDelete = useCallback((id: string) => {
@@ -393,13 +379,9 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
     /* On an agent's archive the delete names the agent's profile; the
        request outlives the tab when it is sent as the page goes. */
     void deleteInspiration(pending.row.id, { ...(profileId ? { profile: profileId } : {}), ...(leaving ? { keepalive: true } : {}) })
-      /* sent: a clip for this note waits on Home's line for a restore —
-         EXCEPT ON AN AGENT'S ARCHIVE (review, 2026-10-22), which keeps no
-         deleted shelf: nothing can bring the note back, so its clip is let
-         go and the line says the note was deleted for good, × only. */
+      // The clip can land again once this profile restores its inspiration.
       .then(() => {
         markDeleting(pending.row.id, profileId ?? null, false);
-        if (!ownArchive) dropForGood(pending.row.id, profileId ?? null);
         return loadShelf();
       })
       .catch(() => {
@@ -412,7 +394,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
         setTotal((count) => count === null ? count : count + 1);
         setEraseFailed(true);
       });
-  }, [beginDelete, dropForGood, loadShelf, markDeleting, ownArchive, profileId, unforgetNote]);
+  }, [beginDelete, loadShelf, markDeleting, profileId, unforgetNote]);
 
   const flushErase = useCallback((leaving = false) => {
     const pending = pendingErase.current;
@@ -468,9 +450,11 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
   }, [markDeleting, profileId, unforgetNote]);
 
   const bringBack = useCallback(async (item: ApiDeletedInspiration) => {
+    if (shelfAction.current) return;
+    shelfAction.current = true; setShelfBusy(true);
     setShelfFailed(false);
     try {
-      await restoreInspiration(item.id);
+      await restoreInspiration(item.id, profileId ? { profile: profileId } : {});
       /* back from the shelf under the same id: its clips can land again */
       unforgetNote(item.id, profileId ?? null);
       if (!mounted.current) return;
@@ -478,22 +462,24 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
       void load();
     } catch {
       if (mounted.current) setShelfFailed(true);
-    }
+    } finally { shelfAction.current = false; if (mounted.current) setShelfBusy(false); }
   }, [load, profileId, unforgetNote]);
 
   const dropNote = recorder.drop;
   const forget = useCallback(async (item: ApiDeletedInspiration) => {
     if (forgetting !== item.id) { setForgetting(item.id); return; }
+    if (shelfAction.current) return;
+    shelfAction.current = true; setShelfBusy(true);
     setForgetting(null);
     setShelfFailed(false);
     try {
-      await forgetDeletedInspiration(item.id);
+      await forgetDeletedInspiration(item.id, profileId ? { profile: profileId } : {});
       /* gone for good: now, and only now, its clips cannot be kept */
       dropNote(item.id, profileId ?? null);
       if (mounted.current) setShelf((all) => all.filter((row) => row.id !== item.id));
     } catch {
       if (mounted.current) setShelfFailed(true);
-    }
+    } finally { shelfAction.current = false; if (mounted.current) setShelfBusy(false); }
   }, [dropNote, forgetting, profileId]);
 
   /**
@@ -1084,7 +1070,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
 
   /* A shelf emptied by bringing everything back is not a tab to stand under. */
   const shelfOn = onShelf && shelf.length > 0 && !focus;
-  const shelfShown = shelf.filter((item) => !needle || item.text.toLowerCase().includes(needle));
+  const shelfShown = shelf.filter((item) => !needle || [item.text, item.attachmentName ?? ''].join(' ').toLowerCase().includes(needle));
   const focused = focus ? new Set(focus.ids) : null;
   const shown = rows.filter(
     (row) =>
@@ -1263,6 +1249,8 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
                 scroll, which is navigation — and under a filter it is the only
                 way to learn the filter did something without scrolling to the
                 bottom to find out. */
+            ) : shelfOn ? (
+              <span className="waka-over-count jar-saved-count">{shelfShown.length < shelf.length ? `(${shelfShown.length}/${shelf.length})` : `(${shelf.length})`}</span>
             ) : total !== null ? (
               <span className="waka-over-count jar-saved-count">
                 {shown.length < total ? `(${shown.length}/${total})` : `(${total})`}
@@ -1270,6 +1258,11 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
             ) : null}
           </span>
           )}
+          {!shelfOn && onNewSave ? (
+            <button type="button" className="waka-over-new" onClick={onNewSave}>
+              {newSaveLabel ?? say("worldDockSaves")}
+            </button>
+          ) : null}
         </header>}
         {/* THE TWO FACTS A GRID NEEDS BEFORE IT CAN BE SEARCHED: how much is
             behind it, and a way to narrow it. Both were in the page's header
@@ -1311,18 +1304,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
             least useful, before you arrive, about a thing you have not
             seen". */}
         {newHere && !open ? <p className="waka-over-what">{say("worldFieldWhatIs")}</p> : null}
-        {/* THE FIELD APPEARS WHEN THERE IS SOMETHING TO FIND IN.
-            It rendered from the first save — a full-width search bar, in the
-            input register, directly under the title, above three rows a
-            person can read in one glance. Founder: "only the most absolutely
-            necessary things should be shown." Searching an archive you can
-            see all of is not a thing anybody does, and it was the second
-            thing the eye hit on the surface.
-
-            The threshold is the same argument the category row already makes
-            one block down — "the row only appears when it divides something"
-            — and the number is a screenful: past about a dozen rows the list
-            stops being glanceable and finding becomes a real act. */}
+        {/* Search stays in the same place even in a small archive. */}
         {/* ═══ THE FIELD IS A SURFACE WITH THINGS IN IT, NOT A BARE INPUT ══
             Founder, pointing at this field: "search bar can also utilize some
             reference from [a design system]." Its text-input page lists the anatomy a text field is allowed to have
@@ -1372,7 +1354,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
             that spun on a keystroke would be inventing latency); Status icon
             (a search query cannot be invalid, and the error/warning tiers are
             built on a red this product does not have). */}
-        {!open && rows.length > SEARCHABLE ? (
+        {!open ? (
           <div className="waka-over-find">
             {/* Decorative in the exact sense `aria-hidden` is for: it says
                 "search", and `aria-label` on the input below already says
@@ -1425,6 +1407,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
           </div>
         ) : null}
 
+        {!open && shelfLoadFailed ? <p className="waka-over-status" role="alert">{say('worldDeletedLoadFailed')} <button type="button" onClick={() => void loadShelf()}>{say('worldRetry')}</button></p> : null}
         {/* The row divides nothing until there are two things to divide into. */}
         {!open && phase === "ready" && (categories.length > 1 || (shelf.length > 0 && !focus)) ? (
           <div className="waka-tabs" role="tablist" aria-label={say("worldInspirationsCategories")}>
@@ -1501,42 +1484,20 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
           canKeep={canKeepOpenNote}
           onKeep={() => { void keepOpenNote(); }}
           eraseLabel={say("worldDelete")}
-          /* ONE PRESS: off the page now, to the server after Undo's moment.
-             See `eraseOpen`. EXCEPT ON AN AGENT'S ARCHIVE, which keeps no
-             deleted shelf: there nothing could bring it back after the send,
-             so the first press asks and the second erases at once, with no
-             Undo line promising a way back. */
-          eraseQuestion={ownArchive ? undefined : say("worldDeleteForGood")}
-          eraseConfirmLabel={say("worldDeleteItAnyway")}
-          cancelEraseLabel={say("worldNotNow")}
-          erasePending={!ownArchive && askingErase === open.id}
+          /* Every owned profile gets Undo, then thirty-day recovery. */
           /* NOT WHILE ITS CLIP IS ON ITS WAY (review, 2026-10-22): deleting
              the note mid-upload leaves the clip nowhere to land */
           eraseDisabled={recorder.isSending(open.id, profileId ?? null)}
-          onCancelErase={() => setAskingErase(null)}
           onErase={() => {
             /* NEVER A LIVE MICROPHONE WITH NO STOP: the recording belongs to
                the note being deleted, so it is cancelled with it (review,
-               2026-10-17). An agent's archive asks first — the Stop stays in
-               that bar — and cancels on the confirming press. */
+               2026-10-17). Every owned profile uses the same Undo and recovery. */
             /* ONLY A RECORDING MADE ON THIS NOTE (review, 2026-10-22): the
                recorder is shared, and another note's clip still being handed
                over is that note's, not this delete's. */
             const recordingHere = recorder.forNote?.noteId === open.id && (recorder.forNote?.profileId ?? null) === (profileId ?? null);
             const silence = () => { if (recording.phase !== "idle" && recordingHere) void recording.cancel(); };
-            if (ownArchive) { silence(); eraseOpen(open); return; }
-            if (askingErase !== open.id) { setAskingErase(open.id); return; }
-            silence();
-            setAskingErase(null);
-            flushErase();
-            const at = Math.max(0, rows.findIndex((item) => item.id === open.id));
-            setRows((all) => all.filter((item) => item.id !== open.id));
-            setTotal((count) => count === null ? count : Math.max(0, count - 1));
-            setOpen(null);
-            setEraseFailed(false);
-            /* no Undo line on a shelfless archive: focus goes to the list */
-            focusListNext.current = true;
-            commitErase({ row: open, at });
+            silence(); eraseOpen(open);
           }}
           /* Only a note with words has a card to make. */
           /* Only a note with words has a card to make — its own words, read
@@ -1615,9 +1576,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
               whenMs={open.capturedMs}
               owner={ownerName ? formatMessage(locale, "worldSavingToProfile", { name: ownerName }) : undefined}
             >
-              {pictureOf(open) ? (
-                <img className="waka-sheet-picture" src={pictureOf(open)!} alt="" />
-              ) : null}
+              <InspirationAttachments items={open.attachments.filter(item => item.type !== "link")} locale={locale} quiet />
 
               {/* THE WORDS ARE THE PAGE. No border, no fill, no label — the
                   same blank-page treatment the notepad gives a new one, so a
@@ -1681,21 +1640,21 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
                   return (
                     <li key={item.id} className="waka-shelf-row">
                       <span className="waka-shelf-words">
-                        <span className="waka-list-lead">{lead}</span>
+                        <span className="waka-list-lead">{lead || item.attachmentName || say("worldDeletedAttachmentOnly")}</span>
                         <span className="waka-list-meta">
                           <span className="waka-list-date">
                             {formatMessage(locale, "worldDeletedWhen", { date: dateWords(Date.parse(item.deletedAt), now, locale) })}
                           </span>
-                          {/* Any attachment, not only a photo: none comes back on restore. */}
-                          {item.hadPhoto ? <span className="waka-list-rest">{say("worldDeletedAttachmentsGone")}</span> : null}
+                          {/* Legacy copies predate attachment retention. */}
+                          {item.hadPhoto && !item.attachmentCount ? <span className="waka-list-rest">{say("worldDeletedAttachmentsGone")}</span> : null}
                         </span>
                       </span>
                       <span className="waka-shelf-acts">
-                        <button type="button" className="waka-shelf-back" onClick={() => void bringBack(item)}>
+                        <button type="button" className="waka-shelf-back" disabled={shelfBusy} onClick={() => void bringBack(item)}>
                           {say("worldDeletedBringBack")}
                         </button>
                         <button type="button" className={`waka-shelf-forget${forgetting === item.id ? " waka-shelf-forget--armed" : ""}`}
-                          onClick={() => void forget(item)}>
+                          disabled={shelfBusy} onClick={() => void forget(item)}>
                           {say(forgetting === item.id ? "worldDeletedForgetSure" : "worldDeletedForget")}
                         </button>
                       </span>
@@ -1719,17 +1678,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
             </button>
           </>
         ) : rows.length === 0 ? (
-          /* AN EMPTY ARCHIVE OFFERS THE FIRST SAVE. Never on an agent's
-             archive: saving there is refused outright, and a door that is
-             refused on the other side is worse than no door. */
-          <>
-            <p className="waka-over-status">{say("worldInspirationsEmpty")}</p>
-            {ownArchive && onNewSave ? (
-              <button type="button" className="waka-over-new" onClick={onNewSave}>
-                {say("worldCaptureInspiration")}
-              </button>
-            ) : null}
-          </>
+          <p className="waka-over-status">{say("worldInspirationsEmpty")}</p>
         ) : shown.length === 0 ? (
           /* A FILTER MUST NOT BE A TRAP — this file's own standing rule, one
              block up: "a chosen category that no longer exists shows

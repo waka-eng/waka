@@ -1,4 +1,5 @@
 import { profileStorageKey, type ProfileStorageScope } from './profile-storage';
+import { isMobileBuild } from './platform';
 
 export interface InspirationDraftMedia {
   id: string;
@@ -30,6 +31,24 @@ interface StoredDraft extends InspirationDraft {
   key: string;
   owner: string;
   savedInspirationId?: string;
+}
+interface StoredMedia extends InspirationDraftMedia {
+  bytes?: ArrayBuffer;
+  contentType?: string;
+}
+// WKWebView can restore a large IndexedDB Blob's metadata and preview while
+// leaving its upload body unreadable after relaunch. Store native draft bytes
+// inline and recreate the Blob on read; web drafts retain their current format.
+async function storeMedia(item: InspirationDraftMedia): Promise<StoredMedia> {
+  if (!isMobileBuild || !item.blob) return item;
+  const { blob, ...rest } = item;
+  return { ...rest, bytes: await blob.arrayBuffer(), contentType: blob.type };
+}
+function restoreMedia(item: StoredMedia): InspirationDraftMedia {
+  if (item.bytes === undefined) return item;
+  if (!(item.bytes instanceof ArrayBuffer) || typeof item.contentType !== 'string') throw new Error('Unverifiable media draft');
+  const { bytes, contentType, ...rest } = item;
+  return { ...rest, blob: new Blob([bytes], { type: contentType }) };
 }
 export class InspirationDraftConflict extends Error {}
 const DATABASE = 'waka-inspiration-drafts';
@@ -68,9 +87,11 @@ function readStored(value: unknown, owner: string): StoredDraft | null {
   const row = value as StoredDraft;
   if (row.owner !== owner || typeof row.id !== 'string' || row.key !== `${owner}:${row.id}` || !Number.isSafeInteger(row.revision) ||
     typeof row.text !== 'string' || (row.linkText !== undefined && typeof row.linkText !== 'string') || !Array.isArray(row.media) || !Number.isFinite(row.updatedAt)) throw new Error('Unverifiable draft');
-  if (row.recordingCandidate && (row.recordingCandidate.type !== 'audio' || typeof row.recordingCandidate.id !== 'string' ||
-    (row.recordingCandidate.name !== undefined && typeof row.recordingCandidate.name !== 'string') || !(row.recordingCandidate.blob instanceof Blob))) throw new Error('Unverifiable recording draft');
-  return row;
+  const media = row.media.map(restoreMedia);
+  const recordingCandidate = row.recordingCandidate ? restoreMedia(row.recordingCandidate) : row.recordingCandidate;
+  if (recordingCandidate && (recordingCandidate.type !== 'audio' || typeof recordingCandidate.id !== 'string' ||
+    (recordingCandidate.name !== undefined && typeof recordingCandidate.name !== 'string') || !(recordingCandidate.blob instanceof Blob))) throw new Error('Unverifiable recording draft');
+  return { ...row, media, recordingCandidate };
 }
 export function newInspirationDraft(text = ''): InspirationDraft {
   return { id: crypto.randomUUID(), revision: 0, text, media: [], updatedAt: Date.now() };
@@ -94,6 +115,9 @@ export async function loadInspirationDraft(scope: ProfileStorageScope, id?: stri
 /** Compare-and-swap prevents another tab's newer words/files being overwritten. */
 export async function writeInspirationDraft(scope: ProfileStorageScope, draft: InspirationDraft, previousRevision: number): Promise<void> {
   const owner = ownerKey(scope);
+  // Read bytes before opening the IDB transaction so it cannot expire mid-read.
+  const media = await Promise.all(draft.media.map(storeMedia));
+  const recordingCandidate = draft.recordingCandidate ? await storeMedia(draft.recordingCandidate) : draft.recordingCandidate;
   return transaction('readwrite', (store, done, fail) => {
     const request = store.get(`${owner}:${draft.id}`);
     request.onsuccess = () => {
@@ -102,7 +126,7 @@ export async function writeInspirationDraft(scope: ProfileStorageScope, draft: I
         if (prior?.savedInspirationId || (prior?.revision ?? 0) !== previousRevision || draft.revision !== previousRevision + 1) {
           fail(new InspirationDraftConflict('This draft changed in another tab. Your input is still here.')); return;
         }
-        store.put({ ...draft, owner, key: `${owner}:${draft.id}` } satisfies StoredDraft);
+        store.put({ ...draft, media, recordingCandidate, owner, key: `${owner}:${draft.id}` } satisfies StoredDraft);
         done(undefined);
       } catch (reason) { fail(reason instanceof Error ? reason : new Error('Draft storage failed')); }
     };

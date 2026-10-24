@@ -1,12 +1,17 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `indexedDB` uses `fake-indexeddb` as the browser
- * storage engine in Node. The shipped ownership/CAS/settlement operations and
+ * storage engine in Node; `lib/platform` selects the web/native storage format.
+ * The shipped ownership/CAS/settlement operations and
  * real Blob structured clones run; actual browser storage is also a release check. */
 import { IDBFactory } from 'fake-indexeddb';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { InspirationDraftConflict, loadInspirationDraft, newInspirationDraft, settleInspirationMediaDraft, writeInspirationDraft } from '../src/lib/inspiration-draft-store';
 
 const scope = { accountId: 'account-a', profileId: 'profile-a' };
-beforeEach(() => vi.stubGlobal('indexedDB', new IDBFactory()));
+const platform = vi.hoisted(() => ({ isMobileBuild: false }));
+vi.mock('../src/lib/platform', () => platform);
+describe.each([false, true])('draft storage (native: %s)', native => {
+beforeEach(() => { platform.isMobileBuild = native; vi.stubGlobal('indexedDB', new IDBFactory()); });
 afterEach(() => vi.unstubAllGlobals());
 it('recovers an unfinished link even before it has been added to the note',async()=>{
   const draft={...newInspirationDraft(),revision:1,linkText:'https://example.test/unfinished'};
@@ -72,4 +77,20 @@ it('recovers both the old clip and an unchosen replacement without leaking eithe
   expect(await restored?.media[0]?.blob?.text()).toBe('old bytes');
   expect(await restored?.recordingCandidate?.blob?.text()).toBe('new bytes');
   expect(await loadInspirationDraft({ accountId: 'other', profileId: 'other' }, first.id)).toBeNull();
+});
+it('restores every byte of a large photo after the original file becomes unavailable', async () => {
+  const bytes = new Uint8Array(4 * 1024 * 1024).fill(173);
+  const file = new File([bytes], 'photo.jpg', { type: 'image/jpeg' });
+  const draft = { ...newInspirationDraft('Photo draft'), revision: 1,
+    media: [{ id: 'photo', type: 'image' as const, name: file.name, blob: file }] };
+  await writeInspirationDraft(scope, draft, 0);
+  vi.spyOn(file, 'arrayBuffer').mockRejectedValue(new Error('Original file released'));
+  const restored = (await loadInspirationDraft(scope, draft.id))!.media[0];
+  const hash = (value: Uint8Array) => createHash('sha256').update(value).digest('hex');
+  expect(hash(new Uint8Array(await restored.blob!.arrayBuffer()))).toBe(hash(bytes));
+  expect([restored.name, restored.blob!.type, restored.blob!.size]).toEqual(['photo.jpg', 'image/jpeg', bytes.length]);
+  await writeInspirationDraft(scope, { ...draft, revision: 2, media: [restored] }, 1);
+  expect(await settleInspirationMediaDraft(scope, draft.id, 2, 'saved-photo')).toBe(true);
+  expect(await loadInspirationDraft(scope, draft.id)).toBeNull();
+});
 });

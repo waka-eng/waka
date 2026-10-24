@@ -4,9 +4,11 @@
  * restore, the export, and the worker's daily run — asks here, against the
  * same `now` its route was given, so there is one lapse and not three.
  */
-import { lt } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 
 import { DELETED_KEEP_DAYS, deletedInspirations } from "../db/index.js";
+import { sweepAttachmentObjects, type DeleteAttachmentObjects } from './attachment-sweep.js';
+import { unreferencedAttachmentKeys } from './conversation-attachments.js';
 import type { getDb } from "./db.js";
 
 const DAY_MS = 86_400_000;
@@ -27,8 +29,9 @@ export function deletedShelfGoneAt(deletedAt: Date): Date {
  * person who never returns from having their words held past the month they
  * were promised. Run by the worker's daily invocation.
  */
-export async function sweepDeletedShelf(db: Pick<ReturnType<typeof getDb>, "delete">, now: Date): Promise<number> {
-  const gone = await db.delete(deletedInspirations).where(lt(deletedInspirations.deletedAt, deletedShelfCutoff(now)))
-    .returning({ id: deletedInspirations.id });
+export async function sweepDeletedShelf(db: Pick<ReturnType<typeof getDb>, "delete" | "select">, now: Date, profileId?: string, sweep: DeleteAttachmentObjects = sweepAttachmentObjects): Promise<number> {
+  const gone = await db.delete(deletedInspirations).where(and(lt(deletedInspirations.deletedAt, deletedShelfCutoff(now)), profileId ? eq(deletedInspirations.profileId, profileId) : undefined))
+    .returning({ attachments: deletedInspirations.attachments });
+  await sweep(await unreferencedAttachmentKeys(db, gone.flatMap(row => row.attachments.flatMap(item => item.s3Key ? [item.s3Key] : []))));
   return gone.length;
 }

@@ -225,12 +225,8 @@ const REGISTER: Record<string, string> = {
      for. */
   createConversation: "deleteConversation",
   deleteConversation: "createConversation",
-  stopConversationReply:
-    "RULED: stopping is itself the way back from a reply being written. Its old " +
-    "partner `requestConversationReply` re-ran the generator behind three " +
-    "buttons — Retry reply, Get a reply, Check reply — and a reply is now " +
-    "requested once, by sending the message. Asking again is saying something " +
-    "again, which is the composer, not a verb of its own.",
+  requestConversationReply: "stopConversationReply",
+  stopConversationReply: "RULED: stops an in-flight reply. Retry reply is available only for failed attempts; a stopped reply stays stopped and the composer remains available.",
   saveConversationMessage: "RULED: authored conversation messages are immutable; confirm deletion of the conversation to erase them, never automatically create a belief",
   /* EIGHT ROOM VERBS LEFT THIS REGISTER ON 2026-10-12. Founder: "방 없애" —
      remove rooms. `joinGroup`/`leaveGroup` were each other's way back,

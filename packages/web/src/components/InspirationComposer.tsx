@@ -256,6 +256,8 @@ export function InspirationComposer(props: {
      looking for the control that honours it. The way out of this page is
      the dock, which `way-out.test.ts` is the gate for. */
   onClose: () => void; onSubmit: () => void;
+  onDiscard?: () => Promise<boolean>;
+  discardDisabled?: boolean;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
   /** True when the draft changed in another tab — the one state the "keep as
       a separate draft" button answers. A flag, not a match on the error's
@@ -264,6 +266,8 @@ export function InspirationComposer(props: {
   draftConflict: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement>(null), linkInput = useRef<HTMLInputElement>(null);
+  const [discarding, setDiscarding] = useState(false), [confirmDiscard, setConfirmDiscard] = useState(false), [discardFailed, setDiscardFailed] = useState(false);
+  const discardLock = useRef(false);
   const [addingLink, setAddingLink] = useState(Boolean(props.linkText));
   /** Whether a file is being held over this page right now. See the drop
       note on the surface below for why the page has to answer. */
@@ -293,7 +297,7 @@ export function InspirationComposer(props: {
      The check was also already redundant for most of what it covered: the
      input is `disabled={blocked}`, and a disabled input has no keydown to
      gate. */
-  const blocked = props.busy || Boolean(props.save.pending) || !props.ready || props.recording.phase !== 'idle';
+  const blocked = discarding || confirmDiscard || props.busy || Boolean(props.save.pending) || !props.ready || props.recording.phase !== 'idle';
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   /* `invalidFiles` AND `empty` WENT WITH THE SAVE BUTTON. Both existed only
      to decide whether that button was there and whether it was pressable;
@@ -338,7 +342,7 @@ export function InspirationComposer(props: {
      dragging out of the WINDOW gives a null `relatedTarget`, which
      `contains` reports as outside, so that case still clears. */
   const overheadOff = () => setOverhead(false);
-  return <DialogSurface className="jar-seek jar-inspiration-composer" modal={false} motion="modal" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
+  return <DialogSurface className="jar-seek jar-inspiration-composer" modal={false} motion="modal" aria-label={say('worldCaptureInspiration')} onClose={confirmDiscard ? () => setConfirmDiscard(false) : props.onClose} data-jar-chrome="1"
     data-dropping={overhead ? '1' : undefined}
     onDragOver={event => {
       if (!event.dataTransfer.types.includes('Files')) return;
@@ -364,7 +368,7 @@ export function InspirationComposer(props: {
         none. */}
     <NotePage locale={props.locale} whenMs={when.current} owner={props.owner}>
     <div className="jar-composer-body">
-    <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={4} value={props.text} readOnly={props.busy || !props.ready || props.recording.phase !== 'idle'}
+    <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={4} value={props.text} readOnly={blocked}
       aria-label={say('worldCaptureInspiration')} placeholder={say('worldCapturePrompt')}
       onChange={event => props.onText(event.target.value, event.target.selectionStart ?? event.target.value.length)} onKeyDown={props.onKeyDown}
       onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.clipboardData.files]); } }} />
@@ -476,6 +480,22 @@ export function InspirationComposer(props: {
         below is the only way out of the one error that has an action, and a
         button cannot live in a status line. It renders only with that
         error, so it is absent from every normal note. */}
+    {props.onDiscard && Boolean(props.text.trim() || props.media.length || link.trim() || props.recordingCandidate) ? <div className="jar-draft-actions">
+      {confirmDiscard ? <section aria-label={say('worldDiscardInspirationDraft')}>
+        <p>{say('worldDiscardInspirationConfirm')}</p>
+        <div className="jar-composer-actions">
+          <button type="button" autoFocus disabled={discarding} onClick={() => { setConfirmDiscard(false); setDiscardFailed(false); }}>{say('worldNotNow')}</button>
+          <button type="button" disabled={props.discardDisabled || discarding || props.busy || Boolean(props.save.pending) || props.save.busy || props.recording.phase !== 'idle'} onClick={async () => {
+            if (discardLock.current) return;
+            discardLock.current = true; setDiscarding(true); setDiscardFailed(false);
+            try { if (await props.onDiscard!()) setConfirmDiscard(false); else setDiscardFailed(true); }
+            catch { setDiscardFailed(true); }
+            finally { discardLock.current = false; setDiscarding(false); }
+          }}>{say(discarding ? 'worldDiscardingDraft' : 'worldDiscardInspirationDraft')}</button>
+        </div>
+        {discardFailed ? <p role="alert">{say('worldDiscardInspirationFailed')}</p> : null}
+      </section> : <button type="button" disabled={props.discardDisabled || blocked || props.save.busy} onClick={() => setConfirmDiscard(true)}>{say('worldDiscardInspirationDraft')}</button>}
+    </div> : null}
     {props.draftConflict ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
     </div>
     </NotePage>

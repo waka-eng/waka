@@ -17,7 +17,8 @@
  *   `lib/api` — emptied group reads, so nothing else is in flight and the one
  *   rejection above is unambiguously what caused what follows.
  *
- *   `lib/auth-context` — the session as a fact, as everywhere else.
+ *   `lib/auth-context` — an unsigned local preview for the fixture alarm;
+ *   the signed-in case verifies that failures never invent account data.
  *
  *   `helpers/canvas-stub` and `helpers/render-home` — canvas, clock, frame
  *   loop, viewport. `helpers/render-home` is also the SUBJECT here, which is
@@ -43,6 +44,7 @@
  * watching, which looks exactly like a guard that never had anything to
  * report. So the mount that is meant to succeed is asserted too.
  */
+import { act } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
@@ -60,6 +62,9 @@ const FACTS = {
  * respect or the comparison says nothing.
  */
 let archiveFails = false;
+let signedIn = false;
+let rosterFails = false;
+let roster: Array<Record<string, unknown>> = [];
 
 vi.mock("../src/lib/data", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/data")>();
@@ -85,7 +90,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     fetchGroups: none,
-    fetchProfiles: none,
+    fetchProfiles: async () => { if (rosterFails) throw new Error("offline"); return roster; },
     fetchTopOfMindVersions: none,
   };
 });
@@ -100,7 +105,7 @@ vi.mock("../src/lib/auth-context", async (importOriginal) => {
     refresh: async () => undefined,
     signOut: async () => undefined,
   };
-  return { ...actual, useOptionalAuth: () => session, useAuth: () => session };
+  return { ...actual, useOptionalAuth: () => signedIn ? session : null, useAuth: () => session };
 });
 
 let layout: MountedWorld | null = null;
@@ -115,6 +120,7 @@ afterEach(() => {
   layout?.unmount();
   layout = null;
   archiveFails = false;
+  signedIn = false; rosterFails = false; roster = []; vi.restoreAllMocks();
 });
 
 describe("mounting the world when the fixture takes over", () => {
@@ -161,4 +167,38 @@ describe("mounting the world when the fixture takes over", () => {
 
     expect(layout.audit().present).toBe(FACTS.inspirations.length);
   });
+});
+
+
+it('shows an error instead of invented memories when a signed-in archive fails', async () => {
+  signedIn = true;
+  archiveFails = true;
+  layout = await mountWorld(FACTS);
+  expect(layout.container.querySelector('[role="alert"]')).not.toBeNull();
+  expect(layout.container.textContent).not.toMatch(/Ouroboros maintainer|Course marketing/);
+});
+
+
+it('offers Retry on a failed initial agent load and loads real profiles when it succeeds',async()=>{
+  signedIn=true; rosterFails=true;
+  layout=await mountWorld(FACTS);
+  expect(layout.container.textContent).toContain('Couldn’t load your agents.');
+  rosterFails=false; roster=[{id:'noah',name:'Noah',type:'agent',createdAt:new Date().toISOString(),hasInspirations:false}];
+  await act(async()=>layout!.container.querySelector<HTMLButtonElement>('.waka-profile-error button')!.click());
+  await layout.step(5);
+  expect(layout.container.querySelector('.waka-profile-error')).toBeNull();
+  expect(layout.container.textContent).toContain('Noah');
+});
+it('keeps known agents visible when a background roster refresh fails',async()=>{
+  signedIn=true; roster=[{id:'noah',name:'Noah',type:'agent',createdAt:new Date().toISOString(),hasInspirations:false}];
+  layout=await mountWorld(FACTS);
+  const visibility=vi.spyOn(document,'visibilityState','get');
+  visibility.mockReturnValue('hidden');
+  await act(async()=>document.dispatchEvent(new Event('visibilitychange')));
+  await layout.step(2000); rosterFails=true;
+  visibility.mockReturnValue('visible');
+  await act(async()=>document.dispatchEvent(new Event('visibilitychange')));
+  await layout.step(5);
+  expect(layout.container.textContent).toContain('Noah');
+  expect(layout.container.textContent).toContain('Couldn’t load your agents.');
 });

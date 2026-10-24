@@ -1,3 +1,6 @@
+import { attachments, deletedInspirations } from '../db/index.js';
+import { sweepAttachmentObjects } from '../lib/attachment-sweep.js';
+import { unreferencedAttachmentKeys } from '../lib/conversation-attachments.js';
 /**
  * Profiles: the memories an account owns.
  *
@@ -180,16 +183,18 @@ profilesRoutes.delete("/:profileId", humanSessionsOnly, async (c) => {
     return c.json({ error: "Profile not found" }, 404);
   }
 
-  const [deleted] = await getDb()
-    .delete(profiles)
-    .where(
-      and(
-        eq(profiles.id, c.req.param("profileId")),
-        eq(profiles.accountId, session.profile.accountId),
-        eq(profiles.type, "agent"),
-      ),
-    )
-    .returning({ id: profiles.id });
+  const db = getDb();
+  const deleted = await db.transaction(async tx => {
+    const [profile] = await tx.select({ id: profiles.id }).from(profiles)
+      .where(and(eq(profiles.id, c.req.param("profileId")), eq(profiles.accountId, session.profile.accountId), eq(profiles.type, "agent"))).for("update");
+    if (!profile) return null;
+    const live = await tx.select({ s3Key: attachments.s3Key }).from(attachments).where(eq(attachments.profileId, profile.id));
+    const copies = await tx.select({ attachments: deletedInspirations.attachments }).from(deletedInspirations).where(eq(deletedInspirations.profileId, profile.id));
+    const keys = [...live, ...copies.flatMap(row => row.attachments)].flatMap(row => row.s3Key ? [row.s3Key] : []);
+    await tx.delete(profiles).where(eq(profiles.id, profile.id));
+    return { id: profile.id, keys };
+  });
+  if (deleted) await sweepAttachmentObjects(await unreferencedAttachmentKeys(db, deleted.keys));
 
   if (!deleted) return c.json({ error: "Profile not found" }, 404);
   return c.json({ id: deleted.id });

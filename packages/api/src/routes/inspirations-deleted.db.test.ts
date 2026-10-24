@@ -63,14 +63,17 @@ it('refuses the keeper key: the shelf is a browser act',async()=>{
 
 /* Found in review (2026-10-15): a copy filed where nobody can reach it, and a
    month that only passed when somebody looked. */
-it('files no copy for a delete that is not the person\'s own, nor for a save with no words', async () => {
+it('keeps recoverable copies for owned agents and captures with no words', async () => {
   const f = await fixture();
   const [agent] = await t.sql`INSERT INTO profiles(account_id,type,name) SELECT account_id,'agent','Agent' FROM profiles WHERE id=${f.profileId} RETURNING id`;
   const [theirs] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${agent.id},'The agent kept this') RETURNING id`;
   expect((await f.app.request(`/api/inspirations/${theirs.id}?profile=${agent.id}`, { method: 'DELETE' })).status).toBe(200);
   const [blank] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${f.profileId},'') RETURNING id`;
   expect((await f.app.request(`/api/inspirations/${blank.id}`, { method: 'DELETE' })).status).toBe(200);
-  expect(await t.sql`SELECT id FROM deleted_inspirations`).toHaveLength(0);
+  expect(await t.sql`SELECT id FROM deleted_inspirations`).toHaveLength(2);
+  expect((await f.app.request(`/api/inspirations/deleted/${theirs.id}/restore`, { method: 'POST' })).status).toBe(404);
+  expect((await f.app.request(`/api/inspirations/deleted/${theirs.id}/restore?profile=${agent.id}`, { method: 'POST' })).status).toBe(200);
+  expect((await t.sql`SELECT profile_id FROM inspirations WHERE id=${theirs.id}`)[0].profile_id).toBe(agent.id);
 });
 it('cannot bring back a copy past its month even if the shelf was never opened, and sweeps it on the next delete', async () => {
   const f = await fixture();
@@ -91,15 +94,16 @@ it('puts what is on the shelf in the person\'s export', async () => {
 
 /* Found in review (2026-10-15), second pass: what a restore loses, said;
    the revision fence; and a month that passes for people who never return. */
-it('says the attachments did not come back, counts a link among them, and restores the kind as a note', async () => {
+it('restores a link with its original kind', async () => {
   const f = await fixture();
   await t.sql`UPDATE inspirations SET kind='link' WHERE id=${f.id}`;
   await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url) VALUES (${f.profileId},${f.id},'link','https://example.test/a')`;
   await f.app.request(`/api/inspirations/${f.id}`, { method: 'DELETE' });
   const restored = await f.app.request(`/api/inspirations/deleted/${f.id}/restore`, { method: 'POST' });
-  expect(await restored.json()).toEqual({ id: f.id, notRestored: ['attachments'] });
+  expect(await restored.json()).toEqual({ id: f.id, notRestored: [] });
   const [back] = await t.sql`SELECT kind FROM inspirations WHERE id=${f.id}`;
-  expect(back!.kind, 'a link kind with no link would describe something that is not there').toBe('note');
+  expect(back!.kind).toBe('link');
+  expect(await t.sql`SELECT url FROM attachments WHERE inspiration_id=${f.id}`).toEqual([{ url: 'https://example.test/a' }]);
 });
 it('restores past every revision the deleted row ever had', async () => {
   const f = await fixture();
@@ -130,4 +134,59 @@ it('gives a restored save back to the harvest candidate it was kept from', async
   expect((await t.sql`SELECT inspiration_id FROM harvest_candidates WHERE id=${candidate!.id}`)[0]!.inspiration_id).toBeNull();
   await f.app.request(`/api/inspirations/deleted/${f.id}/restore`, { method: 'POST' });
   expect((await t.sql`SELECT inspiration_id, source_hash FROM harvest_candidates WHERE id=${candidate!.id}`)[0]).toEqual({ inspiration_id: f.id, source_hash: 'h' });
+});
+
+it('restores media-only captures with stable attachment ids and corrected transcripts, without exposing them to another profile',async()=>{
+  const f=await fixture(),other=await fixture();
+  await t.sql`UPDATE inspirations SET text='',kind='mixed' WHERE id=${f.id}`;
+  const [audio]=await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key,content_type,size,enrichment_status,enrichment_text,transcript_correction,transcript_revision,transcript_corrected_at)
+    VALUES (${f.profileId},${f.id},'audio','https://example.test/audio','recovery/audio','audio/mp4',10,'ready','Machine words','My corrected words',2,'2026-10-01T00:00:00Z') RETURNING id`;
+  await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key,content_type,size,name)
+    VALUES (${f.profileId},${f.id},'image','https://example.test/photo','recovery/photo','image/jpeg',20,'Photo.jpg'),
+    (${f.profileId},${f.id},'file','https://example.test/file','recovery/file','application/pdf',30,'Notes.pdf')`;
+  await f.app.request(`/api/inspirations/${f.id}`,{method:'DELETE'});
+  expect(await t.sql`SELECT id FROM attachments WHERE inspiration_id=${f.id}`).toHaveLength(0);
+  const {unreferencedAttachmentKeys}=await import('../lib/conversation-attachments.js');
+  expect(await unreferencedAttachmentKeys(t.db as never,['recovery/audio','recovery/photo','recovery/file'])).toEqual([]);
+  const {assertAttachmentKeysUnused}=await import('../lib/inspiration-attachments.js');
+  await expect(t.db.transaction(tx=>assertAttachmentKeysUnused(tx as never,['recovery/audio']))).rejects.toThrow('already attached');
+  expect((await other.app.request(`/api/inspirations/deleted?profile=${f.profileId}`)).status).toBe(404);
+  expect((await other.app.request(`/api/inspirations/deleted/${f.id}/restore?profile=${f.profileId}`,{method:'POST'})).status).toBe(404);
+  const list=await (await f.app.request('/api/inspirations/deleted')).json() as {deleted:Array<{attachmentCount:number}>};
+  expect(list.deleted[0]?.attachmentCount).toBe(3);
+  expect((await f.app.request(`/api/inspirations/deleted/${f.id}/restore`,{method:'POST'})).status).toBe(200);
+  const [restored]=await t.sql`SELECT profile_id,inspiration_id,transcript_correction,transcript_revision,transcript_corrected_at,s3_key FROM attachments WHERE id=${audio.id}`;
+  expect(restored).toMatchObject({profile_id:f.profileId,inspiration_id:f.id,transcript_correction:'My corrected words',transcript_revision:2,s3_key:'recovery/audio'});
+  expect(new Date(restored.transcript_corrected_at).toISOString()).toBe('2026-10-01T00:00:00.000Z');
+  expect(await t.sql`SELECT id FROM attachments WHERE inspiration_id=${f.id}`).toHaveLength(3);
+});
+it('reports attachment loss honestly for old copies made before media retention',async()=>{
+  const f=await fixture(); await f.app.request(`/api/inspirations/${f.id}`,{method:'DELETE'});
+  await t.sql`UPDATE deleted_inspirations SET had_photo=true,kind='image' WHERE id=${f.id}`;
+  const response=await f.app.request(`/api/inspirations/deleted/${f.id}/restore`,{method:'POST'});
+  expect(await response.json()).toEqual({id:f.id,notRestored:['attachments']});
+  expect((await t.sql`SELECT kind FROM inspirations WHERE id=${f.id}`)[0].kind).toBe('note');
+});
+it('expiry sweeps retained media only when no other live attachment still uses it',async()=>{
+  const f=await fixture();
+  await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key) VALUES (${f.profileId},${f.id},'image','https://example.test/a','recovery/expired'),(${f.profileId},${f.id},'image','https://example.test/b','recovery/shared')`;
+  await f.app.request(`/api/inspirations/${f.id}`,{method:'DELETE'});
+  const [live]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${f.profileId},'Legacy shared media') RETURNING id`;
+  await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key) VALUES (${f.profileId},${live.id},'image','https://example.test/b','recovery/shared')`;
+  await t.sql`UPDATE deleted_inspirations SET deleted_at=now()-interval '31 days' WHERE id=${f.id}`;
+  const {sweepDeletedShelf}=await import('../lib/deleted-shelf.js');
+  const sweep=vi.fn().mockResolvedValue(undefined);
+  expect(await sweepDeletedShelf(t.db as never,new Date(),f.profileId,sweep)).toBe(1);
+  expect(sweep).toHaveBeenCalledExactlyOnceWith(['recovery/expired']);
+});
+
+
+it('resumes enrichment that was pending when an inspiration was deleted',async()=>{
+  const f=await fixture();
+  const [attachment]=await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,enrichment_status) VALUES (${f.profileId},${f.id},'link','https://example.test/pending','pending') RETURNING id`;
+  await f.app.request(`/api/inspirations/${f.id}`,{method:'DELETE'});
+  await f.app.request(`/api/inspirations/deleted/${f.id}/restore`,{method:'POST'});
+  const jobs=await t.sql`SELECT payload FROM background_jobs WHERE type='enrich_attachment' AND profile_id=${f.profileId}`;
+  expect(jobs).toHaveLength(1);
+  expect(jobs[0].payload).toMatchObject({attachmentId:attachment.id,inspirationId:f.id});
 });

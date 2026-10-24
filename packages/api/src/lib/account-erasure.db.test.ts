@@ -554,3 +554,17 @@ describe("erasing an account whose board cites its own signals", () => {
     expect(await t.sql`SELECT id FROM signals WHERE id = ${signal.id}`).toHaveLength(0);
   });
 });
+
+
+it('erases stored files retained on every owned profile’s deleted shelf',async()=>{
+  const person=await seedPerson('Recovery');
+  const [agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES (${person.accountId},'agent','Noah') RETURNING id`;
+  for (const [profileId,key] of [[person.profileId,'recovery/human'],[agent.id,'recovery/noah']]) {
+    await t.sql`INSERT INTO deleted_inspirations(id,profile_id,text,source,visibility,kept_at,attachments)
+      VALUES(gen_random_uuid(),${profileId},'','app','private',now(),${JSON.stringify([{s3Key:key}])}::jsonb)`;
+  }
+  const sweep=vi.fn().mockResolvedValue(undefined);
+  await eraseAccount(person.accountId,{db:t.db as never,deleteAttachmentObjects:sweep});
+  expect(sweep).toHaveBeenCalledExactlyOnceWith(expect.arrayContaining(['recovery/human','recovery/noah']));
+  expect(await t.sql`SELECT id FROM deleted_inspirations`).toHaveLength(0);
+});

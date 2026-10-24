@@ -87,6 +87,28 @@ machine's disposable database, not dev data. Install the generated fixture
 binary and use its ordinary login/capture UI. Normal dev/prod commands keep
 their HTTPS API origins and do not enable fixture cleartext policy.
 
+For the iOS `AccountsUITests` feature journeys, also set
+`WAKA_MOBILE_FIXTURE_JOURNEYS=1` on the fixture server. This adds a searchable
+archive, a reading, a principle and a conversation with an explicitly synthetic
+reply. These exercise display and persistence without model calls. Start a fresh
+fixture for each suite run; tests edit and delete their own synthetic data.
+Use `-parallel-testing-enabled NO -collect-test-diagnostics never` with
+`xcodebuild test` and the `FoundationChecks` scheme. XCTest still retains failure
+screenshots; disabling verbose simulator diagnostics avoids long sysdiagnose
+collection after an assertion fails.
+
+Media journeys additionally need the local object-store stub. Start it on a
+free loopback port (for example `pnpm tsx tools/e2e/s3-stub.ts --port 8794`),
+then pass `ATTACHMENTS_BUCKET=waka-mobile-media-test` and
+`ATTACHMENTS_ENDPOINT=http://127.0.0.1:8794` to the fixture server. Use a dedicated
+simulator with synthetic/sample photos only. The photo test selects the first
+two images; one should be several megabytes to cover restored file uploads.
+The file test downloads `/api/mobile-fixture/sample.txt` through Safari into
+On My iPhone/Downloads. The fixture's `/network` control returns a temporary 503
+for writes; it tests failed-save recovery, not the OS's airplane-mode behavior.
+The simulator does not reliably enforce microphone denial for WKWebView, so
+permission prompts and denial recovery still require a physical iPhone.
+
 The official Keyboard 8.0.6 plugin (MIT) resizes the native WebView when typing;
 Android uses `adjustResize`. This keeps sign-in controls above the keyboard.
 

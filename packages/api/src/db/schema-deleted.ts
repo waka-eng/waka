@@ -1,37 +1,15 @@
-/**
- * deleted_inspirations — what a person deleted, held for thirty days so it
- * can come back.
- *
- * Founder, 2026-10-15: "just delete when user clicks on this, but give option
- * to undo it. also create option to see all deleted inspirations in the
- * inspirations list".
- *
- * ── A SHELF BESIDE THE ARCHIVE, NOT A FLAG IN IT ────────────────────────
- *
- * Deleting still deletes: the inspiration row goes, its evidence goes, and
- * every signal that stood on it is reconciled exactly as before. This table
- * holds a copy of the words, so nothing that reads `inspirations` (sixty-odd
- * queries across derivation, recall, rooms, review and export) has to learn
- * to skip a deleted row. A `deleted_at` column on `inspirations` would have
- * made every one of those queries a place to forget it.
- *
- * Restoring is an ordinary save under the same id and the original date, and
- * the reading runs again. What a restore cannot return is listed at the top
- * of routes/inspirations-deleted.ts: attachments of every kind (swept from
- * storage at delete time; `had_photo` is true when there were any, the name
- * kept from when only photos were counted), the experience, decision
- * citations and conversation origin.
- *
- * Thirty days, then the copy goes for good: on the person's own reads and
- * deletes, and for everyone in the worker's daily run (`sweepDeletedShelf`),
- * so a person who never comes back is not held past the month either.
- */
+/** Thirty-day recovery outside the live memory stack; see docs/data-model.md. */
+import { sql } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { inspirationKindEnum, inspirationSourceEnum, inspirationVisibilityEnum } from "./schema-inspirations";
+import type { Attachment } from "./schema-attachments";
 import { profiles } from "./schema-profiles";
 
 export const DELETED_KEEP_DAYS = 30;
+/** JSON preserves every attachment field; timestamps cross the boundary as ISO strings. */
+export type DeletedAttachment = { [K in keyof Attachment]:
+  Attachment[K] extends Date ? string : Attachment[K] extends Date | null ? string | null : Attachment[K] };
 
 export interface DeletedReflection {
   question: string;
@@ -53,6 +31,7 @@ export const deletedInspirations = pgTable(
     source: inspirationSourceEnum("source").notNull(),
     visibility: inspirationVisibilityEnum("visibility").notNull(),
     reflections: jsonb("reflections").$type<DeletedReflection[]>().notNull().default([]),
+    attachments: jsonb("attachments").$type<DeletedAttachment[]>().notNull().default([]),
     /** Whether it had any attachment (photo, recording, file or link). */
     hadPhoto: boolean("had_photo").notNull().default(false),
     /** When it was first kept — what "Kept <date>" says after a restore. */
@@ -60,6 +39,7 @@ export const deletedInspirations = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    attachmentKeys: index("deleted_inspirations_attachments_idx").using("gin", sql`${table.attachments} jsonb_path_ops`),
     recent: index("deleted_inspirations_recent").on(table.profileId, table.deletedAt),
     /** The daily sweep reads by age across everyone (`sweepDeletedShelf`). */
     expiry: index("deleted_inspirations_expiry").on(table.deletedAt),

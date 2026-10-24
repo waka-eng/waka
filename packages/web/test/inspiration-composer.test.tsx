@@ -339,3 +339,20 @@ it('renders exactly one of each corner, never two', async () => {
      bar's two implementations are compared to each other. */
   expect(count('.waka-dock-tool'), 'the attach corner came back beside the bar').toBe(0);
 });
+
+it('requires confirmation to discard a draft, allows cancel, and blocks discard during a pending save', async () => {
+  props.onDiscard=vi.fn().mockResolvedValue(true);
+  props.text='Keep these words'; await mount();
+  const button=(label:string)=>[...host.querySelectorAll('button')].find(node=>node.textContent===label)!;
+  await act(async()=>button('Discard draft').click());
+  expect(props.onDiscard).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('Its text and attachments will be removed');
+  expect(host.querySelector('textarea')?.readOnly).toBe(true);
+  await act(async()=>button('Not now').click());
+  expect(props.onDiscard).not.toHaveBeenCalled();
+  await act(async()=>button('Discard draft').click());
+  await act(async()=>button('Discard draft').click());
+  expect(props.onDiscard).toHaveBeenCalledTimes(1);
+  props.save.pending={id:'pending'} as never; await mount();
+  expect(button('Discard draft').disabled).toBe(true);
+});

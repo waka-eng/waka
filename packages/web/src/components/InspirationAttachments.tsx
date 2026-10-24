@@ -4,7 +4,7 @@ import { t, type SupportedLocale } from '../lib/locales';
 import { AttachmentTranscript } from './AttachmentTranscript';
 import { AttachmentPreview } from './AttachmentPreview';
 
-function Attachment({ item, locale,readOnly }: { item: ApiAttachmentSummary; locale: SupportedLocale;readOnly:boolean }) {
+function Attachment({ item, locale,readOnly,quiet }: { item: ApiAttachmentSummary; locale: SupportedLocale;readOnly:boolean;quiet:boolean }) {
   const [url, setUrl] = useState(''), [failed, setFailed] = useState(false), [retry, setRetry] = useState(0);
   useEffect(() => {
     if (item.type === 'link') return;
@@ -24,13 +24,14 @@ function Attachment({ item, locale,readOnly }: { item: ApiAttachmentSummary; loc
   return <div className="jar-saved-attachment">
     {url && item.type === 'image' && !failed ? <img src={url} alt={item.label} onError={() => setFailed(true)} /> : null}
     {url && item.type === 'image' ? <a href={url} target="_blank" rel="noreferrer">{t(locale, 'worldAttachmentOpenOriginalImage')}</a> : null}
-    {item.type === 'image' ? <AttachmentPreview item={item} locale={locale} readOnly={readOnly} /> : null}
+    {item.type === 'image' && !quiet ? <AttachmentPreview item={item} locale={locale} readOnly={readOnly} /> : null}
     {url && item.type === 'audio' ? <audio controls preload="metadata" src={url} aria-label={item.label} onError={() => setFailed(true)} /> : null}
-    {item.type === 'audio' ? <AttachmentTranscript key={item.id} id={item.id} locale={locale} readOnly={readOnly} /> : null}
+    {item.type === 'audio' && !quiet ? <AttachmentTranscript key={item.id} id={item.id} locale={locale} readOnly={readOnly} /> : null}
+    {url && item.type === 'file' ? <a href={url} target="_blank" rel="noreferrer">{item.label}</a> : null}
     {failed ? <p role="alert">{t(locale, 'worldAttachmentOpenFailed')} <button type="button" onClick={() => setRetry(value => value + 1)}>{t(locale, 'worldRoomHistoryRetry')}</button></p> : null}
     {!url && !failed ? <p role="status">{t(locale, 'worldOpeningAttachment')}</p> : null}
   </div>;
 }
-export function InspirationAttachments({ items, locale,readOnly=false }: { items: ApiAttachmentSummary[]; locale: SupportedLocale;readOnly?:boolean }) {
-  return <div className="jar-saved-attachments">{items.filter(item => item.type !== 'file').map(item => <Attachment key={item.id} item={item} locale={locale} readOnly={readOnly} />)}</div>;
+export function InspirationAttachments({ items, locale,readOnly=false,quiet=false }: { items: ApiAttachmentSummary[]; locale: SupportedLocale;readOnly?:boolean;quiet?:boolean }) {
+  return <div className="jar-saved-attachments">{items.map(item => <Attachment key={item.id} item={item} locale={locale} readOnly={readOnly} quiet={quiet} />)}</div>;
 }

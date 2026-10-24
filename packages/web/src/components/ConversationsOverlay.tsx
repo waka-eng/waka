@@ -117,10 +117,8 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
    * thing you are reading, "delete" sits one slip away from "send".
    *
    * It belongs here, beside the row it would remove, and it asks first. The
-   * ask is INLINE rather than a sheet: a sheet over a list makes you lose
-   * your place in the list to answer a question about one line of it, and
-   * `worldDeleteItAnyway` is already this product's word for the second
-   * press. `failed` is per-row because a failure belongs beside the thing
+   * ask stays on the row and explains that the chat cannot be reopened.
+   * `failed` is per-row because a failure belongs beside the thing
    * that failed, and because the honest message is "it is still here" —
    * which is only true of one row.
    */
@@ -231,6 +229,9 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
       <DialogSurface className="waka-over" motion="modal" aria-label={title} modal={false} onClose={onClose}>
         <header className="waka-over-head">
           <h2 className="waka-over-title">{title}</h2>
+          <button type="button" className="waka-over-new" onClick={() => onOpen(null)}>
+            {say("worldConversationNew")}
+          </button>
         </header>
         <div className="waka-over-find">
           <span className="waka-over-find-glyph" aria-hidden="true" />
@@ -241,15 +242,6 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
             onClick={() => { setQuery(''); searchField.current?.focus(); }} /> : null}
         </div>
 
-        {/* "NEW CHAT" WAS A BORDERED PILL AT THE TOP OF THIS ONE SURFACE,
-            and it is gone. Its argument — "nothing led back, so starting one
-            is the first row" — was written when this list was unreachable
-            and a conversation could only ever be begun, never found. The
-            dock's plus offers both things this product makes, from every
-            screen, which is the general answer that argument was asking for.
-            It was also the only boxed control on any of the four
-            destinations: one surface in four wearing a button nobody else
-            wears is the inconsistency the founder reported, in miniature. */}
         {phase === "loading" ? (
           <p className="waka-over-status" role="status">{say("worldChatLoading")}</p>
         ) : phase === "failed" ? (
@@ -265,18 +257,7 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
         ) : rows.length === 0 && search ? (
           <p className="waka-over-status" role="status">{say("worldChatsNoMatches")}</p>
         ) : rows.length === 0 ? (
-          /* Honest rather than empty: nothing has been talked about, which is
-             a fact and not a failure. AND THE QUESTION IS A DOOR NOW. "What
-             would you like to explore?" was asked over a page with nowhere
-             to type an answer — the dock's plus could start one, but nothing
-             under the question said so. `onOpen(null)` is the same new chat
-             that plus opens. */
-          <>
-            <p className="waka-over-status">{say("worldConversationFirst")}</p>
-            <button type="button" className="waka-over-new" onClick={() => onOpen(null)}>
-              {say("worldConversationNew")}
-            </button>
-          </>
+          <p className="waka-over-status">{say("worldConversationFirst")}</p>
         ) : (
           /* ═══ THE SAME LIST THE ARCHIVE IS ═══════════════════════════
               Founder: "chat and inspirations should have same look and feel
@@ -334,8 +315,9 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
                           question about one line of it. */}
                       {asking === row.id ? (
                         <span className="waka-rail-ask">
+                          <span className="waka-rail-question">{say("worldChatDeleteQuestion")}</span>
                           {failed === row.id ? (
-                            <span className="waka-rail-warn">{say("worldDeleteFailed")}</span>
+                            <span className="waka-rail-warn" role="alert">{say("worldDeleteFailed")}</span>
                           ) : null}
                           <button
                             type="button"
@@ -357,9 +339,9 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
                                 .finally(() => setGoing(null));
                             }}
                           >
-                            {say(going === row.id ? "worldDeleting" : "worldDeleteItAnyway")}
+                            {say(going === row.id ? "worldDeleting" : "worldChatDelete")}
                           </button>
-                          <button type="button" onClick={() => { setAsking(null); setFailed(null); }}>
+                          <button type="button" disabled={going === row.id} onClick={() => { setAsking(null); setFailed(null); }}>
                             {say("worldNotNow")}
                           </button>
                         </span>

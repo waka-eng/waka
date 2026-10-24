@@ -235,7 +235,7 @@ export type FinalizeInspirationAttachmentRequest =
       name?: string;
     }
   | {
-      type: "image" | "file";
+      type: "image" | "file" | "audio";
       inspirationId: string;
       key: string;
       name?: string;

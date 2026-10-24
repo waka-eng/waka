@@ -109,6 +109,20 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
       try { if (key) sessionStorage.setItem(key, next.id); } catch { /* lookup excludes saved tombstones */ }
     }
   }, []);
+  const discard = useCallback(async () => {
+    const epoch = generation.current, scopeAtStart = owner.current;
+    if (!scopeAtStart || !ready) return false;
+    if (supported.current) await pump();
+    if (!alive.current || generation.current !== epoch) return false;
+    const previous = live.current;
+    const next: InspirationDraft = { ...previous, text: '', linkText: '', media: [], recordingCandidate: null,
+      revision: previous.revision + 1, updatedAt: Date.now() };
+    if (supported.current) await writeInspirationDraft(scopeAtStart, next, previous.revision);
+    if (!alive.current || generation.current !== epoch || live.current !== previous) return false;
+    live.current = next; setDraft(next); setError('');
+    writeProfileText(scopeAtStart, 'draft', '');
+    return true;
+  }, [pump, ready]);
   /* ONE FORK AT A TIME. A second press while the first is out would fork the
      fork; it waits on the same one instead. */
   const forking = useRef<Promise<void> | null>(null);
@@ -126,5 +140,5 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
     forking.current = run;
     return run;
   }, [forkOnce]);
-  return { draft: loadedPointer === pointer ? draft : seed, current: live, ready: ready && loadedPointer === pointer, available, error, setText, setMedia, setLinkText, setRecordingCandidate, chooseRecording, flush, settle, fork };
+  return { draft: loadedPointer === pointer ? draft : seed, current: live, ready: ready && loadedPointer === pointer, available, error, setText, setMedia, setLinkText, setRecordingCandidate, chooseRecording, flush, settle, fork, discard };
 }

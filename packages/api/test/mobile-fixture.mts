@@ -33,11 +33,28 @@ async function seed(email: string, name: string) {
   const [account] = await fixture.sql`INSERT INTO accounts (email, password_hash, onboarding_completed_at) VALUES (${email}, ${passwordHash}, now()) RETURNING id`;
   const [profile] = await fixture.sql`INSERT INTO profiles (account_id, type, name) VALUES (${account!.id}, 'human', ${name}) RETURNING id`;
   const [inspiration] = await fixture.sql`INSERT INTO inspirations (profile_id, text) VALUES (${profile!.id}, 'A synthetic native fixture: simple tools leave room to think.') RETURNING id`;
-  return { email, password, profileId: profile!.id, inspirationId: inspiration!.id };
+  return { email, password, accountId: account!.id, profileId: profile!.id, inspirationId: inspiration!.id };
 }
 const primary = await seed('native-one@example.test', 'Native fixture one');
 const secondary = await seed('native-two@example.test', 'Native fixture two');
+// Optional, explicitly authored memory for native reading/history checks.
+// These rows are fixtures, not evidence of model generation quality.
+if (process.env.WAKA_MOBILE_FIXTURE_JOURNEYS === '1') {
+  // Enough rows to exercise archive scrolling as well as search.
+  await fixture.sql`INSERT INTO inspirations(profile_id,text)
+    SELECT ${primary.profileId}, 'Synthetic archive background note ' || n FROM generate_series(1, 13) n`;
+  const [reading] = await fixture.sql`INSERT INTO top_of_minds(profile_id) VALUES(${primary.profileId}) RETURNING id`;
+  await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,sort_order,locked_at)
+    VALUES(${reading!.id},'pattern','I keep room to think before committing.',0,now())`;
+  await fixture.sql`INSERT INTO principles(profile_id,statement,rank,origin,locked_at)
+    VALUES(${primary.profileId},'Leave space for a small experiment.',0,'declared',now())`;
+  const [chat] = await fixture.sql`INSERT INTO conversations(id,profile_id,revision) VALUES(gen_random_uuid(),${primary.profileId},2) RETURNING id`;
+  await fixture.sql`INSERT INTO conversation_messages(id,profile_id,conversation_id,position,role,content)
+    VALUES(gen_random_uuid(),${primary.profileId},${chat!.id},1,'user','How can I leave room to think?'),
+    (gen_random_uuid(),${primary.profileId},${chat!.id},2,'assistant','Start with one small experiment. This is a synthetic fixture reply.')`;
+}
 const app = new Hono<AuthEnv>();
+let failWrites = false;
 const requests: Array<{ method: string; path: string; status: number; actor: string }> = [];
 app.use('/api/*', async (c, next) => {
   await next();
@@ -47,10 +64,37 @@ app.use('/api/*', async (c, next) => {
   if (requests.length > 500) requests.shift();
 });
 app.use('/api/*', mobileCors);
+app.use('/api/*', async (c, next) => {
+  if (failWrites && c.req.method === 'POST' && !c.req.path.startsWith('/api/mobile-fixture/')) {
+    return c.json({ error: 'Synthetic temporary connection failure' }, 503);
+  }
+  await next();
+});
+app.post('/api/mobile-fixture/network', async c => {
+  const input = await c.req.json().catch(() => null);
+  if (typeof input?.failWrites !== 'boolean') return c.json({ error: 'Expected failWrites boolean' }, 400);
+  failWrites = input.failWrites;
+  return c.json({ failWrites });
+});
 app.get('/api/mobile-fixture/audit', c => c.json({ requests }));
+app.get('/api/mobile-fixture/sample.txt', c => {
+  c.header('Content-Type', 'text/plain');
+  c.header('Content-Disposition', 'attachment; filename="waka-media-fixture.txt"');
+  return c.body('Synthetic WAKA iPhone file fixture. Leave room to think.\n');
+});
 app.get('/api/mobile-fixture/context', async c => {
   const [latest] = await fixture.sql`SELECT id FROM inspirations WHERE profile_id = ${primary.profileId} ORDER BY created_at DESC, id DESC LIMIT 1`;
   return c.json({ primary: { ...primary, newestInspirationId: latest?.id ?? primary.inspirationId }, secondary });
+});
+// Read back persisted synthetic data without exposing session/key secrets.
+app.get('/api/mobile-fixture/state', async c => {
+  const profiles = await fixture.sql`SELECT id,type,name,preferred_locale FROM profiles WHERE account_id=${primary.accountId} ORDER BY created_at,id`;
+  const inspirations = await fixture.sql`SELECT id,profile_id,text FROM inspirations WHERE profile_id IN (SELECT id FROM profiles WHERE account_id=${primary.accountId}) ORDER BY created_at,id`;
+  const conversations = await fixture.sql`SELECT id,profile_id,deleted_at FROM conversations WHERE profile_id IN (SELECT id FROM profiles WHERE account_id=${primary.accountId}) ORDER BY created_at,id`;
+  const messages = await fixture.sql`SELECT conversation_id,profile_id,role,content FROM conversation_messages WHERE profile_id IN (SELECT id FROM profiles WHERE account_id=${primary.accountId}) ORDER BY created_at,id`;
+  const keys = await fixture.sql`SELECT id,profile_id,label,revoked_at FROM agent_keys WHERE profile_id IN (SELECT id FROM profiles WHERE account_id=${primary.accountId})`;
+  const attachments = await fixture.sql`SELECT id,profile_id,inspiration_id,message_id,type,content_type,size,name,s3_key FROM attachments WHERE profile_id IN (SELECT id FROM profiles WHERE account_id=${primary.accountId}) ORDER BY created_at,id`;
+  return c.json({ profiles, inspirations, conversations, messages, keys, attachments });
 });
 app.post('/api/mobile-fixture/revoke', async c => {
   await fixture.sql`DELETE FROM sessions WHERE profile_id = ${primary.profileId}`;

@@ -432,7 +432,7 @@ describe("every surface has a way out you can see", () => {
        a second copy of it would agree with this file and not with the
        product. */
     const dock = /className=\{`waka-dock-item/.test(home)
-      ? [...home.matchAll(/\{ id: '([a-z]+)', label: 'worldDock/g)].map((hit) => hit[1]!)
+      ? [...home.matchAll(/\{ id: '([a-z]+)', label: (?:composerHasWords \? 'worldContinueDraft' as const : )?'worldDock/g)].map((hit) => hit[1]!)
       : [];
     /* TWO ROWS SINCE 2026-10-15. Founder: "at the bottom bar just keep
        inspiration and chat and clicking on it leads to new inspiration and
@@ -478,7 +478,7 @@ describe("every surface has a way out you can see", () => {
        a second way out that is not the page's own. Exact, so a fourth
        condition (or one dropped) is a decision and not drift. */
     expect(home, "Inspiration still stands in the bar on a chat, a list or a review").toMatch(
-      /\.\.\.\(making === 'talk' \|\| listing \|\| \(reviewing && !making\) \? \[\] : \[\{ id: 'inspiration', label: 'worldDock/);
+      /\.\.\.\(making === 'talk' \|\| listing \|\| \(reviewing && !making\) \? \[\] : \[\{ id: 'inspiration', label: composerHasWords \? 'worldContinueDraft' as const : 'worldDock/);
     expect(home, "Chat still stands in the bar on a new note, a list or a review").toMatch(
       /\.\.\.\(making === 'inspiration' \|\| listing \|\| \(reviewing && !making\) \? \[\] : \[\{ id: 'talk', label: 'worldDock/);
 
@@ -504,9 +504,8 @@ describe("every surface has a way out you can see", () => {
     expect(back, "↩ no longer reads where the list was opened from, once").toMatch(
       /const origin = listOrigin\.current;\s*listOrigin\.current = null;/);
     expect(back, "↩ no longer steps back to the chat the list was opened from").toMatch(
-      /if \(origin\?\.kind === 'chat'\) openTalk\(origin\.id === 'new' \? null : origin\.id\);/);
-    expect(back, "↩ no longer steps back to the new note (or, from nowhere, home)").toMatch(
-      /else \{ openOverHome\(null\); if \(origin\?\.kind === 'note'\) startNewInspiration\(\); \}/);
+      /if \(origin\?\.kind === 'chat'\) openTalk\(origin\.id === 'new' \? null : origin\.id, origin\.principleId\);/);
+    expect(back, "↩ no longer returns home from the archive").toMatch(/else openOverHome\(null\);/);
     expect(code(home), "the return row lost its name for a screen reader").toMatch(/aria-label=\{item\.id === 'return' \? say\('worldBack'\) : undefined\}/);
     expect(code(home), "the return row is no longer drawn as the return icon").toMatch(
       /\{item\.id === 'return'\s*\? <svg [^>]*aria-hidden="true"[^>]*>\s*<path[^>]*\/><path[^>]*\/>\s*<\/svg>/);
@@ -520,17 +519,15 @@ describe("every surface has a way out you can see", () => {
       /\{item\.id === 'return' && viewNavigation\.view\?\.open === 'saves' && savedNoteOpen \? \(\s*<span className="waka-dock-making" role="group" id=\{DOCK_SLOT\}/);
 
     /* EACH WORD ON NOW STILL MAKES A NEW ONE. */
-    expect(inspiration, "Inspiration pressed on Now no longer opens a new note").toMatch(/else startNewInspiration\(\)/);
+    expect(inspiration, "Inspiration pressed on Now no longer opens a new note").toMatch(/startNewInspiration\(\)/);
     expect(talk, "Chat pressed on Now no longer opens a new chat").toMatch(/else openTalk\(null\)/);
     expect(inspiration, "Inspiration lights on a new note again — the note's way out is Close").not.toMatch(/here:[^\n]*compose/);
     expect(talk, "Chat lights on a conversation again — the chat's way out is Close").not.toMatch(/here:[^\n]*conversationId/);
 
     /* ON A MAKING PAGE, THE KEPT ROW IS THE LIST'S DOOR, IN WORDS. */
-    expect(inspiration, "the note's row no longer opens the archive, remembering the note for ↩").toMatch(
-      /making === 'inspiration'\) \{ listOrigin\.current = \{ kind: 'note' \}; openOverHome\('saves'\); \}/);
     expect(talk, "the chat's row no longer opens the chats list, remembering the chat for ↩").toMatch(
-      /making === 'talk'\) \{ listOrigin\.current = \{ kind: 'chat', id: viewNavigation\.view\?\.conversationId \?\? 'new' \}; openOverHome\('conversations'\); \}/);
-    expect(code(home), "the note's row no longer says All inspirations").toMatch(/making === 'inspiration' && item\.id === 'inspiration'\s*\? say\('worldBackToAll'\)/);
+      /making === 'talk'\) \{ listOrigin\.current = \{ kind: 'chat', id: viewNavigation\.view\?\.conversationId \?\? 'new', principleId: viewNavigation\.view\?\.principleId \}; openOverHome\('conversations'\); \}/);
+    expect(code(home), "archive navigation must stay outside the composer").toContain("{making !== 'inspiration' ? <button");
     expect(code(home), "the chat's row no longer says All chats").toMatch(/making === 'talk' && item\.id === 'talk'\s*\? say\('worldAllChats'\)/);
 
     /* THE RULES. One after the row's own word, on every bar that has an
@@ -539,7 +536,7 @@ describe("every surface has a way out you can see", () => {
        panel since 2026-10-16), or a saved note's tools in the archive. A
        bare list is door │ Close. */
     expect(code(home), "the first rule no longer follows the bar owner's row").toMatch(
-      /\{barOwner && item\.id === barOwner \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
+      /\{barOwner && item\.id === barOwner && making !== 'inspiration' \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
     expect(code(home), "the second rule is drawn where there is no middle group (a bare list)").toMatch(
       /\{barOwner && item\.id === barOwner && \(making !== null \|\| \(viewNavigation\.view\?\.open === 'saves' && savedNoteOpen\)\) \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
     expect(code(home), "a chat no longer lends its middle group to the panel's mic and ＋").toMatch(
@@ -549,7 +546,7 @@ describe("every surface has a way out you can see", () => {
        list: the note goes down as a draft; a chat, a list, or a saved note
        in the archive (committed first) simply goes home. Rendered beside
        the bar owner's row and nowhere else. */
-    const close = /\{barOwner && item\.id === barOwner \? \(\s*<button[^>]*className="waka-dock-item waka-dock-item--close"\s*onClick=\{\(\) => leaveAsModal\(making === 'inspiration' \? saveAsDraft : \(\) => \{ commitOpenNote\(\); openOverHome\(null\); \}\)\}>\s*\{say\('worldClose'\)\}/;
+    const close = /onClick=\{\(\) => leaveAsModal\(closePage\)\}>\s*\{say\('worldClose'\)\}/;
     expect(code(home), "a making page's or a list's bar no longer ends in a Close that goes home (with the note kept)").toMatch(close);
 
     /* THE CHAT WRITES ON ITS OWN PAGE AGAIN. The chat-in-the-bar composer

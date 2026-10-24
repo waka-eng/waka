@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {ApiError} from './api/http';
-import {fetchConversation,fetchConversationReply,stopConversationReply,type ApiConversation,type ConversationReplyState} from './api/conversations';
+import {fetchConversation,fetchConversationReply,requestConversationReply,stopConversationReply,type ApiConversation,type ConversationReplyState} from './api/conversations';
 
 /** Another 4xx this many times in a row stops the watch. */
 const MAX_CLIENT_ERRORS=2;
@@ -38,7 +38,7 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
   const check=()=>{olderSince.current=null;setSerial(value=>value+1);};
   /* A focus/visibility re-read: asks again without resetting the clock. */
   const resumeRead=()=>setSerial(value=>value+1);
-  useEffect(()=>{alive.current=true;olderSince.current=null;return()=>{alive.current=false;mutation.current?.abort();};},[profileId,id]);
+  useEffect(()=>{alive.current=true;mutation.current=null;setBusy(false);olderSince.current=null;return()=>{alive.current=false;mutation.current?.abort();};},[profileId,id]);
   useEffect(()=>{
     if(!id||!enabled)return;const controller=new AbortController();let timer:number|undefined,polls=0,failures=0,older=0,clientErrors=0;
     setWaiting(false);setError(false);setTerminal(null);setBehind(false);setStopped(false);
@@ -106,20 +106,27 @@ export function useConversationReply(profileId:string,id:string|null,enabled:boo
     };void read();return()=>{controller.abort();window.clearTimeout(timer);};
   },[profileId,id,enabled,revision,serial,messageWindowStart]);
   useEffect(()=>{const resume=()=>{if(!document.hidden)resumeRead();};window.addEventListener('focus',resume);document.addEventListener('visibilitychange',resume);return()=>{window.removeEventListener('focus',resume);document.removeEventListener('visibilitychange',resume);};},[]);
-  /* STOPPING IS THE ONLY THING A PERSON CAN STILL DO TO A REPLY IN FLIGHT.
-     `act('request')` used to sit beside this and re-ran the generator for
-     "Retry reply", "Get a reply" and "Check reply" — three buttons the founder
-     could not tell apart, removed with the rest of the generation plumbing
-     from the surface (see `components/ConversationPanel`'s header). Asking
-     again is saying something again, which goes through the composer. */
+  const retry=async()=>{
+    if(!id||!state||busy||mutation.current||!enabled||state.phase!=='failed'||!state.canRetry||!state.messageId||!state.requestId)return;
+    const controller=new AbortController();mutation.current=controller;
+    const deadline=window.setTimeout(()=>controller.abort(),15000);setBusy(true);setError(false);
+    try {
+      const next=await requestConversationReply(profileId,id,state.messageId,state.requestId,controller.signal);
+      if(alive.current&&mutation.current===controller&&!controller.signal.aborted)setStored(next);
+    } catch {if(alive.current&&mutation.current===controller)setError(true);}
+    finally {
+      window.clearTimeout(deadline);
+      if(alive.current&&mutation.current===controller){mutation.current=null;setBusy(false);check();}
+    }
+  };
   const stop=async()=>{
-    if(!id||!state||busy||!enabled||!state.requestId)return;
+    if(!id||!state||busy||mutation.current||!enabled||!state.requestId)return;
     const controller=new AbortController();mutation.current=controller;const deadline=window.setTimeout(()=>controller.abort(),15000);setBusy(true);setError(false);
     try{
       const next=await stopConversationReply(profileId,id,state.requestId,controller.signal);
-      if(alive.current&&!controller.signal.aborted)setStored(next);
-    }catch{if(alive.current)setError(true);}
-    finally{window.clearTimeout(deadline);if(alive.current){setBusy(false);check();}}
+      if(alive.current&&mutation.current===controller&&!controller.signal.aborted)setStored(next);
+    }catch{if(alive.current&&mutation.current===controller)setError(true);}
+    finally{window.clearTimeout(deadline);if(alive.current&&mutation.current===controller){mutation.current=null;setBusy(false);check();}}
   };
-  return {state,waiting,error,terminal,behind,stopped,busy,check,stop};
+  return {state,waiting,error,terminal,behind,stopped,busy,check,stop,retry};
 }

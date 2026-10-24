@@ -292,7 +292,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   /* Only a 404 (`terminal`) is not a reply in flight: Send comes back and the
      notice offers a reload. An answer older than the screen (`behind`) keeps
      the reply unconfirmed — `reply.state` stays null — so Send stays off. */
-  const awaitingReply=!reply.terminal&&(replyPending||replyUnconfirmed);
+  const awaitingReply=!reply.terminal&&(reply.busy||replyPending||replyUnconfirmed);
   // The send guards as they stand now, for code that resumes after an await.
   const guards=useRef({loading,awaitingReply,storageFailed,focusFailed,conversation,talkWith,agent,focusPrinciple});guards.current={loading,awaitingReply,storageFailed,focusFailed,conversation,talkWith,agent,focusPrinciple};
   useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
@@ -602,11 +602,6 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const dictation=useDictation(()=>draftRef.current?.content??'',(text)=>edit(text),locale);
   const first=conversation?.initialPrinciple??focusPrinciple,canCompose=!id||Boolean(conversation);
   const full=(conversation?.revision??0)>=(generationEnabled?199:200);
-  /* ONE SENTENCE FOR THE REPLY'S BAD NEWS, AND NO BUTTON UNDER IT. Three of
-     the five states that used to print here carried a control — retry, ask,
-     check — and one of them, `stale`, was a word about the model's context
-     rather than about anything the person did. What a person needs from a
-     reply that did not arrive is to know it did not arrive. */
   /**
    * WHY SEND CANNOT BE PRESSED, in the order a person would meet the
    * reasons. `null` means it can.
@@ -887,7 +882,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             this. Two raised pills stacked is the "double layer is so weird"
             the founder reported, and the reference happens to ship the
             variant that avoids it. */}
-        {generationEnabled&&replyNotice?<p className="chat-reply-status" role="status">{say(replyNotice)}</p>:null}
+        {generationEnabled&&replyNotice?<p className="chat-reply-status" role="status">{say(replyNotice)}
+          {reply.state?.phase==='failed' && reply.state.canRetry && !reply.error && !reply.behind && !reply.stopped ? <button type="button" className="chat-recheck" disabled={reply.busy || busy || Boolean(draft?.pending)} onClick={() => void reply.retry()}>{say(reply.busy ? 'worldConversationRetryingReply' : 'worldConversationRetryReply')}</button> : null}
+        </p>:null}
         {/* THE WAY PAST "COULDN'T CHECK", and past the bounded wait running
             out. Both stop polling on purpose; neither may stop the person.
             This reads the reply's progress again — it does not ask for a new

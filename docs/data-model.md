@@ -1019,20 +1019,24 @@ copy of its words, kind, category, source, visibility, reflections and the
 date it was kept goes onto this shelf under the inspiration's own id. Nothing
 that reads `inspirations` has to learn to skip a deleted row.
 
-- **Own deletes only.** A copy is written only when the person's own
-  browser session deletes from their own archive; deleting on an agent's
-  archive, or with an agent or keeper key, leaves no copy.
-- **Thirty days** (`DELETED_KEEP_DAYS`), lapse-on-read: past the month a copy
-  is removed the next time the shelf is listed or that archive deletes again, and a
-  restore never finds one older than that.
-- **Routes**, browser sessions only, the caller's own profile:
-  `GET /api/inspirations/deleted` lists the shelf (newest first, at most
-  200, each with when it goes); `POST /api/inspirations/deleted/:id/restore`
-  saves it again as an ordinary inspiration under the same id and original
-  date and re-runs the reading; `DELETE /api/inspirations/deleted/:id`
-  removes it for good before the month is up.
-- A photo cannot come back: attachments are swept from storage at delete
-  time as before, and `had_photo` records that there was one.
+- **Every owned profile.** A human browser session can recover its own and
+  its agents' deleted inspirations, including captures with only attachments.
+  Agent sessions and API keys cannot access this shelf; their deletes remain permanent.
+- **Thirty days** (`DELETED_KEEP_DAYS`). Expired copies are removed on reads,
+  deletes and the daily sweep; restore never finds an expired copy.
+- **Routes**, human browser sessions only, scoped by optional `?profile=` to
+  an owned profile: `GET /api/inspirations/deleted`,
+  `POST /api/inspirations/deleted/:id/restore`, and
+  `DELETE /api/inspirations/deleted/:id` (permanent removal).
+- **Attachments are retained** with their metadata, transcript corrections and
+  stored files in a JSON snapshot (`attachments`, migration 0080). Restore
+  reuses their ids and the inspiration's original id and date. Stored objects
+  remain reserved while deleted, and are swept on expiry or permanent removal
+  only when no live attachment or other deleted copy references them.
+- Legacy copies with `had_photo` but no attachment snapshot can restore text
+  only; the UI and restore response explicitly say their attachments are gone.
+- Signals and the reading are regenerated. Experience, decision citations and
+  conversation-origin links are not restored.
 
 Erasing the profile erases its shelf; the profile export includes it.
 
@@ -1300,7 +1304,7 @@ words for the wrong layer. Disposition of every existing concept:
 | `GET /api/principles`, `POST`, `PATCH /:id`, `DELETE /:id`, `POST /reorder` | L4 | Ranked set + owner curation. **No refresh endpoint** — generation belongs to the nightly cron alone. |
 | `GET /api/principles.md` | L4 | The canonical machine rendering: one deterministic markdown document, byte-identical for every consumer. |
 | `POST /api/harvest`, `GET /api/harvest`, `POST /:id/keep`, `POST /:id/decline` | before L1 | The harvest basket. Proposing is open to the human profile's own sessions, the keeper key included; reading and deciding are browser only. |
-| `GET /api/inspirations/deleted`, `POST /deleted/:id/restore`, `DELETE /deleted/:id` | beside L1 | The deleted shelf: thirty days of the person's own deletes. Browser sessions only. |
+| `GET /api/inspirations/deleted`, `POST /deleted/:id/restore`, `DELETE /deleted/:id` | beside L1 | The deleted shelf: thirty days of each owned profile's deletes, including attachments. Human browser sessions only. |
 | Cross-profile reads | L2/L3/L4 | An agent-bound session may read the human profile per the permission matrix (explicit target parameter; server-enforced). |
 | `/api/wow-moments`, `/api/wow-status` | — | Deleted. |
 

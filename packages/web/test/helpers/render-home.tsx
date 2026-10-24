@@ -627,13 +627,8 @@ async function pressKey(container: HTMLElement, key: string): Promise<void> {
  * route to the control moves, so this helper carries that one difference and
  * the assertions stay where they were.
  *
- * THE ROUTES SINCE 2026-10-15. Founder: "at the bottom bar just keep
- * inspiration and chat and clicking on it leads to new inspiration and new
- * chat, and user can go to inspiration list and chat list ONLY from that new
- * page" — and "principle is sth user can only get by dragging". So:
- *   - "Inspirations" / "Your inspirations" → the bar's Inspiration (a new
- *     note), then "All inspirations" — the first word of that note's bar
- *     since "never put something on any corners" (2026-10-15);
+ * "Inspirations" / "Your inspirations" uses home's archive shortcut,
+ * closing the current page first when needed.
  *   - "Chats" → the bar's Chat (a new chat), then "All chats" in its bar;
  *   - "Principles" → ArrowRight on Now, the keyboard twin of pulling the
  *     creature right;
@@ -644,8 +639,8 @@ async function pressKey(container: HTMLElement, key: string): Promise<void> {
  */
 export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
   if (label === "Inspirations" || label === "Your inspirations") {
-    await pressDockRow(container, "New inspiration");
-    await pressDockRowWhenItAppears(container, "All inspirations", "a new note's All inspirations");
+    if (dockClose(container)) await closeOverlay(container);
+    await pressDockRowWhenItAppears(container, "All inspirations", "home's archive shortcut");
     return;
   }
   if (label === "Chats") {

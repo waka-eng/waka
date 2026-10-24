@@ -21,7 +21,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
-const calls = vi.hoisted(() => ({ deleted: [] as string[], restored: [] as string[], forgotten: [] as string[] }));
+const calls = vi.hoisted(() => ({ deleted: [] as string[], restored: [] as string[], forgotten: [] as string[], scopes: [] as unknown[] }));
 const shelf = vi.hoisted(() => ({ rows: [] as Array<Record<string, unknown>> }));
 
 vi.mock("../src/lib/data", async (importOriginal) => {
@@ -36,9 +36,9 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     deleteInspiration: async (id: string) => { calls.deleted.push(id); },
-    restoreInspiration: async (id: string) => { calls.restored.push(id); },
+    restoreInspiration: async (id: string, options: unknown) => { calls.restored.push(id); calls.scopes.push(options); },
     forgetDeletedInspiration: async (id: string) => { calls.forgotten.push(id); },
-    listDeletedInspirations: async () => shelf.rows,
+    listDeletedInspirations: async (options: unknown) => { calls.scopes.push(options); return shelf.rows; },
   };
 });
 
@@ -47,14 +47,14 @@ let host: HTMLElement | null = null;
 let dock: HTMLElement | null = null;
 
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
-beforeEach(() => { calls.deleted = []; calls.restored = []; calls.forgotten = []; shelf.rows = []; });
+beforeEach(() => { calls.deleted = []; calls.restored = []; calls.forgotten = []; shelf.rows = []; calls.scopes=[]; });
 afterEach(() => {
   if (root) act(() => root!.unmount());
   host?.remove(); dock?.remove();
   root = null; host = null; dock = null;
 });
 
-async function mount() {
+async function mount(profileId?: string) {
   const { Archive } = await import("./helpers/archive");
   const { DOCK_SLOT } = await import("../src/components/NoteTools");
   dock = document.createElement("span");
@@ -63,7 +63,7 @@ async function mount() {
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
-  await act(async () => { root!.render(createElement(Archive, { locale: "en-US", title: "Your inspirations", onClose: () => undefined })); });
+  await act(async () => { root!.render(createElement(Archive, { profileId, locale: "en-US", title: "Your inspirations", onClose: () => undefined })); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 }
 const leads = () => [...host!.querySelectorAll(".waka-list-lead")].map((node) => node.textContent);
@@ -110,4 +110,28 @@ it("offers to share the open note", async () => {
   await mount();
   await press(host!.querySelector(".waka-list-row"));
   expect(dock!.querySelector('[aria-label="Share this inspiration"]')).toBeTruthy();
+});
+
+
+it('shows search even for two inspirations and filters without leaving the archive',async()=>{
+  await mount();
+  const field=host!.querySelector<HTMLInputElement>('input[type="search"]')!;
+  expect(field).not.toBeNull();
+  await act(async()=>{
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(field,'Second');
+    field.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  expect(leads()).toEqual(['Second thing']);
+});
+it('lists and restores an agent’s media-only inspiration in that same profile',async()=>{
+  shelf.rows=[{id:'agent-photo',text:'',kind:'image',hadPhoto:true,attachmentCount:1,attachmentName:'Sunset.jpg',keptAt:new Date().toISOString(),deletedAt:new Date().toISOString(),goneAt:new Date().toISOString()}];
+  await mount('noah');
+  expect(calls.scopes).toContainEqual({profile:'noah'});
+  await press(byText('.waka-tab','Deleted'));
+  expect(host!.textContent).toContain('Sunset.jpg');
+  expect(host!.querySelector('.jar-saved-count')?.textContent).toBe('(1)');
+  expect(host!.textContent).not.toContain('Attachments not kept');
+  await press(byText('.waka-shelf-back','Bring back'));
+  expect(calls.restored).toEqual(['agent-photo']);
+  expect(calls.scopes.at(-1)).toEqual({profile:'noah'});
 });

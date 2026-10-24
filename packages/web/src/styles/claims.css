@@ -634,6 +634,18 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   opacity: 0.4;
 }
 
+/* Keep saving visibly distinct from leaving the composer. */
+.waka-dock-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-6);
+  width: auto;
+  padding: 0 var(--sp-12);
+  background: var(--ink);
+  color: var(--bg);
+}
+
 /* ═══ WHERE A PASSING SENTENCE GOES ═══════════════════════════════════════
    Founder: "states should show and disappear in the bottom bar only."
 
@@ -959,6 +971,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
      camera housing (audit f2afcbe2, land-home). */
   padding: calc(var(--sp-12) + env(safe-area-inset-top)) calc(var(--sp-16) + env(safe-area-inset-right)) 0 calc(var(--sp-16) + env(safe-area-inset-left));
   pointer-events: none;
+}
+
+/* An open corner card and its dismiss scrim must cover the dock, including
+   when the phone keyboard reduces the space available to Settings. */
+.waka-corners:has(.waka-account) {
+  z-index: 62;
 }
 
 
@@ -1677,6 +1695,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 .waka-over--note .waka-note-page,
 .waka-over--note .waka-sheet-picture,
+.waka-over--note .jar-saved-attachments,
 .waka-over--note .jar-attachment-preview {
   width: 100%;
   max-width: 34rem;
@@ -2763,7 +2782,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 
 .waka-rail-ask {
-  flex: 0 0 auto;
+  flex: 0 1 20rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2776,6 +2795,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   cursor: progress;
 }
 
+.waka-rail-question,
 .waka-rail-warn {
   flex: 1 1 100%;
   font-family: var(--waka-face);
@@ -6866,4 +6886,13 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 
 /* ─── end of `@layer chrome` ─── */
+}
+
+@layer chrome {
+/* Recovery actions stay secondary and wrap on narrow phones. */
+.jar-draft-actions { margin-top: 1.5rem; color: var(--muted); font-size: var(--t-ui); }
+.jar-draft-actions button { min-height: 44px; text-decoration: underline; text-underline-offset: 3px; }
+.jar-draft-actions .jar-composer-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+.waka-profile-error { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; font-size: var(--t-ui); max-width: min(25rem, calc(100vw - 6rem)); }
+.waka-profile-error button { min-height: 44px; text-decoration: underline; }
 }

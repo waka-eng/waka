@@ -22,11 +22,12 @@ const PARENT_GONE = "Inspiration not found";
  *
  * `profileId` is whose archive the note is in; `null` presigns as the
  * signed-in profile. `type` is the caller's statement about the bytes: a
- * photo that went through the sniffer is an "image", anything else a "file".
+ * photo that went through the sniffer is an "image", a recording is "audio",
+ * and a document is a "file".
  */
 export async function attachToNote(
   file: File,
-  to: { noteId: string; profileId: string | null; type: "image" | "file" },
+  to: { noteId: string; profileId: string | null; type: "image" | "file" | "audio" },
   canContinue: () => boolean = () => true,
   recovery?: { uploadedKey?: string; onUploaded: (key: string) => Promise<void> },
 ): Promise<void> {
@@ -51,6 +52,7 @@ export async function attachToNote(
       inspirationId: to.noteId,
       key,
       name: file.name,
+      size: file.size,
       ...(file.type ? { contentType: file.type } : {}),
     });
   } catch (reason) {

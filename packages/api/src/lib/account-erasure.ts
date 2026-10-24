@@ -46,6 +46,7 @@ import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 
 import {
   accounts,
+  deletedInspirations,
   attachments,
   groupMembers,
   groupMembershipEvents,
@@ -127,6 +128,9 @@ export async function eraseAccount(
         and(inArray(attachments.profileId, profileIds), isNotNull(attachments.s3Key)),
       );
 
+    const deletedRows = await db.select({ attachments: deletedInspirations.attachments }).from(deletedInspirations)
+      .where(inArray(deletedInspirations.profileId, profileIds));
+    attachmentRows.push(...deletedRows.flatMap(row => row.attachments.map(item => ({ s3Key: item.s3Key }))));
     attachmentKeys = [
       ...new Set(
         attachmentRows

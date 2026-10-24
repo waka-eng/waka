@@ -1,5 +1,6 @@
+import { unreferencedAttachmentKeys } from './conversation-attachments.js';
 import { HeadObjectCommand, type HeadObjectCommandOutput } from '@aws-sdk/client-s3';
-import { inArray, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { attachments } from '../db/index.js';
 import type { getDb } from './db.js';
 import { attachmentKeyPrefix, attachmentObjectUrl, getAttachmentsBucket } from './attachment-storage.js';
@@ -87,8 +88,8 @@ export async function verifyUploadedAttachment(input: { key: string; contentType
 export async function assertAttachmentKeysUnused(db: Pick<ReturnType<typeof getDb>, 'select' | 'execute'>, keys: string[]): Promise<void> {
   if (!keys.length) return;
   await lockAttachmentKeys(db, keys);
-  const [reused] = await db.select({ id: attachments.id }).from(attachments).where(inArray(attachments.s3Key, keys)).limit(1);
-  if (reused) throw new InspirationAttachmentError(409, 'attachment_already_attached', 'This upload is already attached. Upload it again.');
+  const unused = await unreferencedAttachmentKeys(db, keys);
+  if (unused.length !== new Set(keys).size) throw new InspirationAttachmentError(409, 'attachment_already_attached', 'This upload is already attached. Upload it again.');
 }
 
 /**

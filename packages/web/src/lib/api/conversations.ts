@@ -80,11 +80,10 @@ export async function saveConversationMessage(profile:string,id:string,input:{id
  * still checked before anything is believed. */
 function checkedReply(row:ConversationReplyState,profile:string,id:string){if(!row||row.profileId!==profile||row.conversationId!==id||!['idle','pending','running','ready','failed','stopped','stale'].includes(row.phase)||!Number.isSafeInteger(row.revision)||typeof row.canRetry!=='boolean'||typeof row.generationEnabled!=='boolean'||![row.retryAfter,row.runAfter].every(value=>value===null||Number.isFinite(Date.parse(value)))||![row.messageId,row.requestId].every(value=>value===null||typeof value==='string'))throw invalid();return row;}
 export async function fetchConversationReply(profile:string,id:string,signal?:AbortSignal){return checkedReply(await getJson(path(profile,`/${encodeURIComponent(id)}/reply`),'Could not check the reply.',signal),profile,id);}
-/* ASKING FOR THE REPLY AGAIN (`requestConversationReply`) IS GONE. A reply
- * is requested once, by the act of sending the message; "Retry reply", "Get a
- * reply" and "Check reply" were three buttons for re-running the generator and
- * the founder could not tell what any of them did. A reply that fails still
- * says so in a sentence; saying something again is how you ask again. */
+/** Retry the existing message. The previous request id prevents duplicate generations. */
+export async function requestConversationReply(profile:string,id:string,messageId:string,afterRequestId:string,signal?:AbortSignal){
+  return checkedReply(await postJson(path(profile,`/${encodeURIComponent(id)}/replies`),{messageId,afterRequestId},'Could not retry the reply.',signal),profile,id);
+}
 /* Erasing one, from the list it is listed in. The server soft-deletes, so
    this is the end of the conversation being OFFERED rather than the end of
    its existence — and it reports failure rather than swallowing it, because

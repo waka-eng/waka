@@ -436,9 +436,8 @@ function markPassages(
  * borrowing anything; a wall that is APPROACHED refetches, see `loadWall`.)
  *
  * The mocks are the founder's own two from the meeting, and they appear ONLY
- * in dev AND ONLY when the account has no real agent profiles. Standing an
- * invented wall beside a real one is the same class of mistake as mixing
- * invented memories into a real archive, and it is not made twice.
+ * in an unsigned local preview. Signed-in accounts always show their real
+ * profiles, including an empty roster or a failed read.
  */
 interface AgentRosterEntry {
   hasInspirations?: boolean;
@@ -456,21 +455,22 @@ interface AgentRosterEntry {
  * potentially thousands of rows for walls nobody visits that day (founder,
  * 2026-08-30: "separate pages to make this more efficient").
  */
-async function loadAgentRoster(): Promise<{
+async function loadAgentRoster(allowFixture: boolean, signal?: AbortSignal): Promise<{
   roster: AgentRosterEntry[];
   /** dev fixture only: mock walls arrive with their bundles pre-loaded */
   mockBundles: AgentBundle[] | null;
 }> {
-  const real = await fetchProfiles()
+  const real = await fetchProfiles(signal)
     .then((rows) => rows.filter((p) => p.type === "agent"))
-    .catch(() => []);
+    .catch(error => { if (allowFixture && MOCK_AGENTS) return []; throw error; });
   if (real.length > 0) {
     return {
       roster: real.map((p) => ({ id: p.id, name: p.name, createdAt: p.createdAt, hasInspirations: p.hasInspirations })),
       mockBundles: null,
     };
   }
-  if (!MOCK_AGENTS) return { roster: [], mockBundles: null };
+  // Signed-in accounts must never acquire sample agents, even in local dev.
+  if (!allowFixture || !MOCK_AGENTS) return { roster: [], mockBundles: null };
   return {
     roster: MOCK_AGENT_BUNDLES.map((b) => ({
       id: b.agent.id,
@@ -1601,6 +1601,27 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const [agents, setAgents] = useState<AgentBundle[] | null>(null);
   /** The axis of agent walls — identities only; memories load on approach. */
   const [agentRoster, setAgentRoster] = useState<AgentRosterEntry[] | null>(null);
+  const [agentRosterFailed, setAgentRosterFailed] = useState(false), [agentRosterBusy, setAgentRosterBusy] = useState(false);
+  const rosterRequest = useRef(0), rosterMounted = useRef(true), rosterAbort = useRef<AbortController | null>(null);
+  useEffect(() => { rosterMounted.current = true; return () => { rosterMounted.current = false; rosterRequest.current += 1; rosterAbort.current?.abort(); }; }, []);
+  const refreshAgentRoster = useCallback(async () => {
+    const request = ++rosterRequest.current;
+    rosterAbort.current?.abort();
+    const controller = new AbortController(); rosterAbort.current = controller;
+    const deadline = window.setTimeout(() => controller.abort(), 20000);
+    setAgentRosterBusy(true);
+    try {
+      const { roster, mockBundles } = await loadAgentRoster(!storageScope, controller.signal);
+      if (!rosterMounted.current || request !== rosterRequest.current) return;
+      setAgentRoster(roster); setAgentRosterFailed(false);
+      setAgents(previous => mockBundles ?? previous ?? []);
+    } catch {
+      if (rosterMounted.current && request === rosterRequest.current) setAgentRosterFailed(true);
+    } finally {
+      window.clearTimeout(deadline);
+      if (rosterMounted.current && request === rosterRequest.current) setAgentRosterBusy(false);
+    }
+  }, [storageScope]);
   /* `wokenGroups`, `groupFieldTick` and `failedGroups` are gone: the three
      pieces of state a room's asynchronous arrival needed — its words exist
      now, its ground just landed, its data could not be fetched. `setMembersRef`
@@ -2218,7 +2239,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /** Which bar row the page's own groups (rules, tools, Close) hang off. */
   const barOwner: 'inspiration' | 'talk' | 'return' | null = making ?? (listing ? 'return' : null);
   /** Where a list was opened from by the bar's "All …", so ↩ can go back there (see the dock). */
-  const listOrigin = useRef<{ kind: 'note' } | { kind: 'chat'; id: string; principleId?: string | null } | null>(null);
+  const listOrigin = useRef<{ kind: 'chat'; id: string; principleId?: string | null } | null>(null);
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
   const [principlesCrossing, setPrinciplesCrossing] = useState<{ going: 'in' | 'out'; home: CreatureSpot | null } | null>(null);
   if (crossSeen.open !== principlesOpen || crossSeen.now !== atNowView) {
@@ -2575,6 +2596,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     settleMs: NAME_SETTLE_MS,
   });
   const onAgentProfilesChange = useCallback((profiles: ApiOwnedProfile[]) => {
+    rosterRequest.current += 1; rosterAbort.current?.abort(); setAgentRosterFailed(false); setAgentRosterBusy(false);
     const roster = profiles.filter(profile => profile.type === 'agent');
     setAgentRoster(previous => previous?.length === roster.length && previous.every((profile, i) =>
       profile.id === roster[i].id && profile.name === roster[i].name && profile.hasInspirations === roster[i].hasInspirations && profile.createdAt === roster[i].createdAt
@@ -3233,7 +3255,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
            again". Reloading can never fix not being signed in, so the one
            instruction on screen was guaranteed to fail, forever. It is a
            door, not an error: go to the door. */
-        const layout = offlineHome();
+        const layout = storageScope ? null : offlineHome();
         /* NOT SIGNED IN IS NOT A FAILURE — but in dev it is an OPPORTUNITY.
            A 401 used to land in the same branch as a dead network, so a
            production build met a signed-out visitor with "reload to try
@@ -3326,21 +3348,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     };
     retryReadingLoadRef.current = readInitialReading;
     readInitialReading();
-    /* THE WALLS TO THE LEFT — identities now, memories on approach. An
-       outright failure means no agents, which is exactly what a person with
-       no agents sees. */
-    loadAgentRoster()
-      .then(({ roster, mockBundles }) => {
-        if (dead) return;
-        setAgentRoster(roster);
-        setAgents(mockBundles ?? []);
-      })
-      .catch(() => {
-        if (!dead) {
-          setAgentRoster([]);
-          setAgents([]);
-        }
-      });
+    void refreshAgentRoster();
     /* THE ROOMS WERE THE COLUMNS TO THE RIGHT, and `GET /groups` filled
        them, newest first. Gone, with the route (founder, 2026-10-12: "방
        없애"). The canon's privacy line is the thing to carry forward out of
@@ -3480,7 +3488,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           setInspirations(field.inspirations);
           setFieldBeyond(beyondOf(field));
         }),
-        loadAgentRoster().then(({ roster }) => setAgentRoster(roster)),
+        refreshAgentRoster(),
         readSkyRef.current(),
       ]);
       // Recheck the displayed artifact, not a newer headline behind an open
@@ -5416,8 +5424,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
       composerEpoch.current += 1; uploadController.current?.abort(); preparingInspirationRef.current = false;
       setPreparingInspiration(false); setUploadingMediaId(null);
     }
-    void recording.stop().then(() => { setMouthOpen(false); setMouthNote(''); viewNavigationRef.current.closeComposer(); });
+    void recording.stop().then(() => { setMouthOpen(false); setMouthNote(''); viewNavigationRef.current.closeToHome(); });
   }, [recording.stop]);
+
+  const closePage = () => {
+    listOrigin.current = null;
+    if (viewNavigationRef.current.view?.compose) { saveAsDraft(); return; }
+    commitOpenNote();
+    viewNavigationRef.current.closeToHome();
+  };
 
   /**
    * KEEP IT. The owned draft and immutable pending intent survive until a
@@ -7744,7 +7759,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                    roster with it, and the reading; one Try again asks for
                    all four. */
                 void readSkyRef.current().catch(() => undefined);
-                void loadAgentRoster().then(({ roster }) => setAgentRoster(roster)).catch(() => undefined);
+                void refreshAgentRoster().catch(() => undefined);
                 retryReadingLoadRef.current();
               } },
               ...(auth?.isAuthenticated ? [{ label: say("signOut"), onClick: () => {
@@ -9852,7 +9867,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                             <>
                               <span className="jar-char-bubble-of">{say('worldAgentEmptyHelp')}</span>
                               <span className="jar-char-bubble-acts">
-                                <button type="button" className="jar-char-bubble-act" onClick={startNewInspiration}>{say('worldDockSaves')}</button>
+                                <button type="button" className="jar-char-bubble-act" onClick={startNewInspiration}>{say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}</button>
                                 <button type="button" className="jar-char-bubble-act" onClick={() => setAgentSetup({ id: atWall.id, sequence: Date.now() })}>{say('worldAgentConnect')}</button>
                               </span>
                             </>
@@ -10244,7 +10259,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 says it now ("I'm inspired!", with the chat as its act). */}
           </div>
         </div>
-        {mouthOpen ? <InspirationComposer owner={conversationProfile ? formatMessage(locale, "worldSavingToProfile", { name: conversationProfile.name }) : undefined} text={draft} media={inputMedia}
+        {mouthOpen ? <InspirationComposer key={memoryProfileId} owner={conversationProfile ? formatMessage(locale, "worldSavingToProfile", { name: conversationProfile.name }) : undefined} text={draft} media={inputMedia}
           linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
           recordingCandidate={composerDraft.draft.recordingCandidate}
           onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => sayMouthProblem(draftProblem(reason))); }}
@@ -10265,6 +10280,19 @@ const RETRY_READ_LIMIT_MS = 20_000;
              called this since. The lesson lives where it still applies:
              `openOverHome` writes ONE destination, which is why pressing a
              place from inside the notepad does not need a close first. */
+          discardDisabled={dictation.listening}
+          onDiscard={async () => {
+            if (preparingInspirationRef.current || checkingFilesCount.current || inspirationSave.pending || inspirationSave.busy || recording.phase !== 'idle' || dictation.listening) return false;
+            const epoch = composerEpoch.current;
+            preparingInspirationRef.current = true; setPreparingInspiration(true);
+            try {
+              if (!await composerDraft.discard() || composerEpoch.current !== epoch) return false;
+              draftRef.current = ''; setMouthNote(''); setMouthOpen(false); viewNavigationRef.current.closeToHome();
+              return true;
+            } finally {
+              if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); }
+            }
+          }}
           onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
@@ -11503,21 +11531,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                on a chat or the chats list, Chat again goes home. Esc still
                closes every page, and Principles walks home on ← or a drag
                left. */
-            /* ═══ WHILE MAKING SOMETHING, THE BAR IS THAT PAGE'S OWN ═══════
-               Founder, 2026-10-15: "never put something on any corners. So at
-               the bottom, write X inspirations so the bottom bar should be X
-               inspirations the microphone the image instead of download have
-               a save icon and then have Close button and then clicking close
-               brings the user back to the main screen" — and of a chat: "say
-               all chats and then close."
-
-               So on a new note the row is: how many you have kept (the way to
-               the list), the note's own tools, and Close. On a chat it is All
-               chats, then Close. The other place's word steps out of the row
-               while you are making something: the bar is the page's, and a
-               door to the other room would be a second way out that is not
-               Close. On Now and on the two lists the row is Inspiration and
-               Chat as before, and the lit one pressed again goes home. */
+            /* The composer offers its tools, a labeled Save, and Close.
+               Archive navigation stays on home so leaving cannot be
+               mistaken for saving. Chats keep their history shortcut. */
             /* WHILE REVIEWING, THE BAR IS THE WAY OUT OF IT. Founder,
                2026-10-15: "in the review mode, bottom bar should say exit
                review mode." The cards are the page then, so the two doors
@@ -11525,17 +11541,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                (Esc does the same) and brings the invitation back. */
             ...(reviewing && !making ? [{ id: 'review', label: 'worldReviewExit' as const, here: false,
               go: () => { setReviewing(false); } }] : []),
-            /* ON A LIST, ↩ │ CLOSE. Founder, 2026-10-15: "from all
-               inspirations, the bottom bar should just be a return icon |
-               close." ↩ goes back where the list was opened from — the new
-               note (its draft comes back with it) or the chat — or, from a
-               saved note open in the archive, back to the list; Close goes
-               home. The same for All chats: one ruling for the class.
-
-               BY A REMEMBERED ORIGIN, NOT BY HISTORY. Opening a list from a
-               page you are standing on REPLACES that page's entry (see
-               `openOverHome`), so there is nothing behind the list to step
-               back to; `listOrigin` is set by the bar's own "All …" press. */
+            /* Back returns from a saved note to its list, or from chat
+               history to the chat that opened it. Close always goes home. */
             ...(listing ? [{ id: 'return', label: 'worldBack' as const, here: false,
               go: () => {
                 const close = closeSavedNote.current;
@@ -11543,16 +11550,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 const origin = listOrigin.current;
                 listOrigin.current = null;
                 if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id, origin.principleId);
-                else { openOverHome(null); if (origin?.kind === 'note') startNewInspiration(); }
+                else openOverHome(null);
               } }] : []),
-            ...(making === 'talk' || listing || (reviewing && !making) ? [] : [{ id: 'inspiration', label: 'worldDockSaves' as const,
+            ...(making === 'talk' || listing || (reviewing && !making) ? [] : [{ id: 'inspiration', label: composerHasWords ? 'worldContinueDraft' as const : 'worldDockSaves' as const,
               here: false,
               go: () => {
                 commitOpenNote();
-                /* On a new note this is "All inspirations": the archive comes
-                   up and the note folds into a draft on the way. */
-                if (making === 'inspiration') { listOrigin.current = { kind: 'note' }; openOverHome('saves'); }
-                else startNewInspiration();
+                startNewInspiration();
               } }]),
             /* SAVE IS NOT A TAB. Founder: "home, inspirations -> let see list
                of past inspirations with main CTA to save new, chat -> see
@@ -11646,7 +11650,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 the plus's place; with the plus gone they ride beside the
                 word — which on a new note says how many you have kept and
                 opens them — and Close comes last. */}
-            <button
+            {making !== 'inspiration' ? <button
               type="button"
               className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}`}
               aria-current={item.here ? 'page' : undefined}
@@ -11657,9 +11661,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
                     <path d="M9 14 4.5 9.5 9 5"/><path d="M4.5 9.5H14a5.5 5.5 0 0 1 0 11h-3"/>
                   </svg>
-                : making === 'inspiration' && item.id === 'inspiration'
-                  ? say('worldBackToAll')
-                  : making === 'talk' && item.id === 'talk'
+                : making === 'talk' && item.id === 'talk'
                     ? say('worldAllChats')
                     /* A GLYPH IN FRONT OF THE TWO WORDS THAT MAKE A NEW ONE.
                        Founder, 2026-10-18: "add + icon in front of
@@ -11672,7 +11674,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     : item.id === 'inspiration' || item.id === 'talk'
                       ? <><HomeActionIcon kind={item.id === 'inspiration' ? 'plus' : 'chat'} className="waka-dock-item-icon"/>{say(item.label)}</>
                       : say(item.label)}
-            </button>
+            </button> : null}
             {/* ═══ THREE GROUPS, AND A RULE BETWEEN EACH ═══════════════════
                 Founder, 2026-10-15: "the first item is always either ... all
                 inspiration or all chat And then after that, let's have | And
@@ -11681,7 +11683,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 close." So on a page you are making something on, the row reads
                 where-you-came-from │ the making │ Close. The rules are drawn,
                 not typed: a `|` character would be read aloud. */}
-            {barOwner && item.id === barOwner ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
+            {barOwner && item.id === barOwner && making !== 'inspiration' ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
             {/* ═══ THE BAR TRANSFORMS, IN THE ONE SLOT THAT SHOULD ═══════
                 Founder: "when the user is in inspirations, maybe this
                 bottom bar should transform so that the icons turn into the
@@ -11891,34 +11893,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     that you have not written anything yet. Dim is the whole
                     message. See `.waka-dock-tool--keep:disabled` for why that
                     dim is an opacity and never an outline. */}
-                {/* ═══ ONE MARK, NOT TWO WORDS ═══════════════════════════
-                    Founder, with "Save as draft" and "Save" standing beside
-                    each other in the bar: "this is so confusing. Save as
-                    draft and save are... let's just have a save icon.
-                    There's no save as draft. There's just a save icon."
-
-                    THE PAIR WAS WRONG EVEN THOUGH BOTH WERE TRUE. Naming
-                    the draft exit was meant as honesty — leaving already
-                    keeps your words, and nothing said so — but putting it
-                    beside Save turned an invisible safety net into a
-                    DECISION, and a decision between two things that both
-                    sound like saving. The founder read them as two kinds of
-                    save, which is exactly what they look like.
-
-                    SO THE NET GOES BACK TO BEING A NET. `saveAsDraft` is
-                    still what Now and every other way out call, and the
-                    words are still kept; it simply is not a button any
-                    more. That is the reference's behaviour — Apple Notes
-                    has no "save as draft" either — and it is what the
-                    founder has asked for twice now under "only the most
-                    absolutely necessary things should be shown".
-
-                    A GLYPH, BESIDE TWO GLYPHS. The bar's middle slot is
-                    the mic and the photo; a word between them was the odd
-                    one out, and "Save" at 12px in a filled pill was wider
-                    than both of them together. The name stays on the
-                    `aria-label`, where it is read in full. */}
-                <button type="button" className="waka-dock-tool waka-dock-tool--keep"
+                {/* A labeled Save is the primary action; archive navigation stays
+                    on home so it cannot be mistaken for finishing this draft. */}
+                <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save"
                   aria-label={say('worldSaveInspiration')}
                   /* AND IT SAYS WHY IT CANNOT BE PRESSED, the same way the
                      chat's Send does and for the reason written there: the
@@ -11926,7 +11903,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                      somebody who has just tried. */
                   title={whyNotKeeping ? say(whyNotKeeping) : undefined}
                   disabled={!composerCanKeep}
-                  onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep"/></button>
+                  onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep"/><span>{say('worldSave')}</span></button>
 
                 {/* ═══ AND THE TRANSIENT STATE, IN THE BAR AND NOWHERE ELSE ══
                     Founder, with "Recording canceled." printed across the
@@ -11996,7 +11973,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             {barOwner && item.id === barOwner && (making !== null || (viewNavigation.view?.open === 'saves' && savedNoteOpen)) ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
             {barOwner && item.id === barOwner ? (
               <button type="button" className="waka-dock-item waka-dock-item--close"
-                onClick={() => leaveAsModal(making === 'inspiration' ? saveAsDraft : () => { commitOpenNote(); openOverHome(null); })}>
+                onClick={() => leaveAsModal(closePage)}>
                 {say('worldClose')}
               </button>
             ) : null}
@@ -12027,7 +12004,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            are a history rather than a depth of your own material, which is
            why they never sat among the three and why this corner is where
            they belong. */
-        left={agentWall ? (
+        left={<>{agentWall ? (
               <span className="jar-char-form" role="group" aria-label={say('worldProfileSwitcher')}>
                 {[null, ...agentWalls].map(wall => {
                   const here = wall ? atWall.kind === 'agent' && atWall.id === wall.id : atWall.kind !== 'agent';
@@ -12054,6 +12031,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 })}
               </span>
             ) : null}
+          {agentRosterFailed ? <span className="waka-profile-error" role="alert">{say('worldAgentProfilesFailed')}
+            <button type="button" disabled={agentRosterBusy} onClick={() => void refreshAgentRoster()}>{say('worldRetry')}</button>
+          </span> : null}</>}
         account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
         settings={settingsCard}
         agentSetup={agentSetup}
@@ -12130,10 +12110,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
         note={viewNavigation.view.note}
         onNoteAddress={noteAddressChanged}
         onNewSave={startNewInspiration}
+        newSaveLabel={say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}
         key={`${conversationScope.accountId}:${conversationScope.profileId}:saves`}
         scope={conversationScope} ownerName={conversationProfile.name}
         locale={locale} profileId={conversationScope.profileId}
-        ownArchive={conversationProfile.type==='human'}
         title={conversationProfile.type==='agent'?formatMessage(locale,'worldProfileInspirations',{name:conversationProfile.name}):say('worldMenuField')}
         focus={savesFocus} onClearFocus={() => setSavesFocus(null)}
         /* THE SWITCH IS IN THE CORNER, AND IT ALWAYS WAS. Founder: "if the
@@ -12144,7 +12124,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            buttons saying the same two words, which stood here while the
            corner's pair stood behind this sheet's own left edge, clipped to
            "MY AGE". The act survives; the duplicate does not. */
-        onClose={leaveOpen}/>:null}
+        onClose={closePage}/>:null}
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
@@ -12176,7 +12156,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         key={`${conversationScope.accountId}:${conversationScope.profileId}:talks`}
         locale={locale} profileId={conversationScope.profileId}
         title={formatMessage(locale, 'worldProfileChats', { name: conversationProfile.name })}
-        onClose={leaveOpen}
+        onClose={closePage}
         onOpen={id=>openTalk(id)}/>:null}
 
       {/* THE CONVERSATION ITSELF, ALSO OVER THE WORLD.
@@ -12234,7 +12214,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           <DialogSurface className="waka-over waka-over--talk" motion="modal" aria-label={say('worldMenuTalk')}
             data-way-out="talk"
             modal={false}
-            onClose={viewNavigation.closeConversation}>
+            onClose={closePage}>
             {/* ═══ THE WAY BACK TO THE LIST, which this surface was the one
                 place in the product not to have ═══════════════════════════
                 Founder: "chat and inspirations should have same look and

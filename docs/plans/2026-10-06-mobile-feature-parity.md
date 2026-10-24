@@ -1,6 +1,7 @@
 # Mobile consumer feature parity
 
-Status: M1 inventory complete; platform journeys remain to be verified.
+Status: M1 inventory complete; selected iPhone journeys verified below. Full
+platform acceptance and Android verification remain open.
 Source baseline: dev `315328e` and the current shared React consumer app.
 
 The matrix below defines acceptance cases. Sharing the UI alone does not mark
@@ -53,6 +54,123 @@ rooms, signals, timelines, search and wall navigation in `Home.tsx`; public
 content in `PublicProfile.tsx`; current contracts in `src/lib/api/`.
 
 Both native platforms currently have pending feature acceptance for these
-cases. The existing web implementation/regressions are the comparison point;
+cases in full. The existing web implementation/regressions are the comparison point;
 each native integration must record platform/device/build evidence before its
 status becomes accepted. Update this inventory as shared web functionality changes.
+
+## iPhone verification — 2026-10-23
+
+Device: iPhone 17 simulator, iOS 27.0 (24A434), Xcode 27.1. Source: dev
+`07fbd135` plus the local fixes and tests from this pass. The M1 matrix above is
+the original inventory; this pass follows the current UI, including Settings
+and agent-owned archives, rather than removed settings/review/room screens.
+
+The installed `im.waka.app.test` app used the real API against an explicitly
+local, disposable Postgres database. All accounts, agents and content were
+synthetic. Model workers were disabled; the reading, principle and assistant
+reply were authored fixtures, so these checks do not verify live AI generation.
+
+| Journey subset | iPhone result |
+| --- | --- |
+| Session restoration and account switch | Passed: capture/reopen, relaunch, sign-out, and a second account receiving 404 for the first account's inspiration. |
+| Settings name | Passed: edit with the keyboard visible and retain the exact value after relaunch. |
+| Inspirations | Passed: capture, edit exact words, search a populated archive, delete, restore the same ID, and reopen after relaunch. |
+| Chats | Passed: read a seeded reply, resume an unsent draft after relaunch, persist a sent message, search history, cancel deletion, then delete. |
+| Reading and principle | Passed: display the seeded reading, replace principle wording, save and reopen the exact wording after relaunch. |
+| Agent profiles and keys | Passed: create, isolated inspiration/chat storage, key allow/deny/revoke, rename, cancel deletion, and confirmed deletion. The deleted profile's inspirations/chats were removed; human and sibling profiles and their inspirations/chats remained. |
+
+Two small app fixes came from this pass: Settings now stays above the dock
+when the keyboard reduces available height, and native links accept the retained
+`/inspirations` and `/principles` redirects used by the web app. Targeted web
+regressions passed (53 tests), mobile build-target checks passed (6 tests), and
+both API and web typechecks passed.
+The normal development iOS build also passed and was reinstalled. The final
+agent lifecycle rerun passed after unlocking the Mac (`agent-unlocked.xcresult`,
+one test, zero failures). All six journey subsets above now have passing native
+results from targeted runs. Temporary test apps, schemas and databases were
+removed after verification.
+
+Native tests live in `packages/mobile/ios/App/FoundationTests/FoundationUITests.swift`.
+Fixture setup is documented in `packages/mobile/README.md`; these feature tests
+need `WAKA_MOBILE_FIXTURE_JOURNEYS=1` and a fresh fixture. Local result bundles,
+screenshots and audit readbacks are under
+`work/mobile-foundation/20261023-iphone-step2/` (ignored evidence files).
+
+This is partial acceptance, not complete M5 or web/native parity. The media
+checks below extend this core pass. Live model replies, real Google sign-in,
+OS-verified HTTPS links, accessibility/rotation/offline coverage and
+physical-phone behavior still need their own evidence. Android remains next.
+
+## iPhone media verification — 2026-10-23
+
+Four targeted media/recovery journeys now pass on the iPhone 17 / iOS 27.0
+simulator. They used synthetic accounts, an explicitly verified disposable
+loopback Postgres database and the local S3 stub. Model workers were disabled.
+This verifies the app's upload/read contracts, not deployed S3 policy/signatures.
+
+| Journey | Verified result |
+| --- | --- |
+| Photos | Cancel selection without losing words; select two photos; restore text/photos after background and relaunch; save and reopen both images. The large JPEG uploaded all 4,127,524 bytes. |
+| Files | Cancel the picker; choose a synthetic text document from Downloads; restore the draft after relaunch; save and reopen its document link. Stored bytes match the fixture. |
+| Recording | Backgrounding stops recording and saves an audio attachment with type/size; relaunch, play and pause the saved recording. |
+| Failed save | A temporary API 503 retains the exact draft; retry succeeds; exactly one inspiration remains after relaunch. This does not simulate airplane mode or a lost response after commit. |
+
+This pass corrected four gaps:
+
+- Saved notes used the link-preview endpoint for their first photo and omitted
+  recordings, documents and additional photos. They now reuse the attachment
+  renderer with authorized read URLs, audio controls and document links.
+- Archive recordings were finalized as generic files without a byte count.
+  New recordings use the existing audio type and include their size.
+- iOS permission purpose strings were missing. Camera, microphone and speech
+  descriptions are present; recording denial guidance points to device settings.
+- A restored large photo previewed correctly but sent zero upload bytes.
+  Native drafts now store bytes directly in IndexedDB and reconstruct blobs on
+  read. The web format is unchanged; the reader still accepts existing blob drafts.
+  Copying picker files or materializing bytes only at upload time did not fix
+  the failure and those attempted changes were removed.
+
+Acceptance evidence is under `work/mobile-foundation/20261023-iphone-media/`
+(ignored): `resume-photo3.xcresult` passes the photo journey;
+`resume-media.xcresult` passes recording and retry, with an earlier file-selector
+ambiguity; `resume-file.xcresult` passes the corrected file test. Screenshots and
+final API/database readbacks are retained. Earlier failed/interrupted bundles
+are diagnostic evidence, not acceptance results.
+
+Validation: 102 retained media regression tests plus 36 draft storage/hook/logout
+tests pass (138 tests across 12 files); six mobile target checks, API/web
+typechecks, fixture iOS builds and the normal development iOS build pass.
+Draft ownership, revision conflicts, settlement and large-file byte integrity
+are exercised in both native and web storage formats.
+
+The simulator starts WKWebView recording even after microphone access is
+revoked with simctl. Real denial prompts/settings recovery, camera capture,
+microphone quality, live speech recognition/transcription, airplane mode and
+physical-phone behavior remain unverified. Android and live provider
+authentication are still open.
+
+The test app, temporary schema/database and synthetic Downloads files were
+removed; fixture servers were stopped. The normal WAKA Dev build was restored.
+No changes were pushed.
+
+
+### Recovery UX follow-up — 2026-10-23
+
+The shared web/native UI now retains the last agent roster on load failures,
+offers confirmed discard for the active profile's draft, retries failed replies
+without resending messages, and keeps archive search available at every size.
+Human and owned agent archives use the same Undo and thirty-day recovery, including
+attachments and corrected transcripts (migration `0080_deleted_attachments`).
+Old deleted copies whose files were already swept still disclose that loss.
+Password recovery remains deferred.
+
+Validation: 1,329 web tests, 975 API unit tests (three skipped), 57 targeted
+API/database tests, six mobile tests, typechecks, web build, migration checks and
+the iPhone development build passed. Browser checks covered draft cancellation,
+close/reopen, save, search, delete and restore. Evidence is in
+`work/mobile-foundation/20261023-recovery/verification.json` (ignored).
+Android APK verification is still pending: another build's Gradle distribution
+download held the wrapper lock. Device Hub was concurrently controlling another
+simulator, so native UI checks were stopped and the temporary WAKA test simulator
+removed. Physical-phone installation remains deferred; no personal phone was
+updated in this pass. Migration and changes have not been deployed.

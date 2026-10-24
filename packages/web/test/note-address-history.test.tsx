@@ -144,3 +144,24 @@ it('a cold note link has no list beneath, so closing the note rewrites the addre
   expect(here).toBe('/?open=saves');
   await run(() => go(-1)); expect(here).toBe('/');
 });
+
+it.each([
+  ['/w/noah/noah?compose=1', '/w/noah/noah'],
+  ['/w/noah/noah?open=saves&note=kept', '/w/noah/noah'],
+  ['/w/anotherone?open=conversations', '/w/anotherone'],
+  ['/chat/new?profile=noah', '/w/noah'],
+  ['/chat/existing?profile=anotherone', '/w/anotherone'],
+])('Close returns %s to its own profile even without prior history', async (path, home) => {
+  await mount([path]);
+  await run(() => nav.closeToHome());
+  expect(here).toBe(home);
+  expect(nav.view?.compose).toBe(false);
+  expect(nav.view?.open).toBeNull();
+  expect(nav.view?.conversationId).toBeNull();
+});
+
+it('a pending note close cannot undo the explicit Close to home', async () => {
+  await homeArchiveNote();
+  await run(() => { nav.closeToHome(); nav.closeNote(); });
+  expect(here).toBe('/');
+});

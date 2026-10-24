@@ -8,21 +8,14 @@
  * re-derivation, deleting cascades evidence away — so the awkward parts of
  * this file are all about leaving the signals consistent afterwards.
  *
- * The S3 sweep lives here rather than with the attachment routes because it
- * only ever runs on this path: Postgres cascades the attachment *rows* when an
- * inspiration goes, and the bytes those rows named are the one thing the
- * database cannot take with them.
+ * Browser deletions retain attachments for recovery; permanent removals sweep
+ * only objects no other live or deleted inspiration references.
  */
 
 import {readConversationOrigin} from '../lib/conversation-capture.js';
-import {
-  DeleteObjectsCommand,
-  S3Client,
-  type ObjectIdentifier,
-} from "@aws-sdk/client-s3";
-
-import { makeAttachmentsS3Client } from "../lib/s3-client.js";
-import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
+import { sweepAttachmentObjects } from '../lib/attachment-sweep.js';
+import { unreferencedAttachmentKeys } from '../lib/conversation-attachments.js';
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from 'zod';
 
@@ -36,9 +29,10 @@ import {
   backgroundJobs,
   deletedInspirations,
   type Inspiration,
+  type DeletedAttachment,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { deletedShelfCutoff } from "../lib/deleted-shelf.js";
+import { sweepDeletedShelf } from "../lib/deleted-shelf.js";
 import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
@@ -60,75 +54,6 @@ import {
   updateInspirationSchema,
   uuidSchema,
 } from "./inspirations-validation.js";
-
-// ---------------------------------------------------------------------------
-// Deletion
-// ---------------------------------------------------------------------------
-
-/**
- * Postgres cascades attachments, reflections, embeddings, and evidence links
- * when an inspiration goes. The S3 objects behind image and file attachments
- * live outside the database and have to be swept here.
- */
-let cachedDeleteS3: S3Client | null = null;
-function getDeleteS3(): S3Client {
-  if (cachedDeleteS3) return cachedDeleteS3;
-  cachedDeleteS3 = makeAttachmentsS3Client();
-  return cachedDeleteS3;
-}
-
-function getDeleteBucketName(): string | null {
-  const fromEnv = process.env.ATTACHMENTS_BUCKET;
-  if (fromEnv && fromEnv.length > 0) return fromEnv;
-
-  const sstLink = process.env.SST_RESOURCE_Attachments;
-  if (sstLink) {
-    try {
-      const parsed = JSON.parse(sstLink) as { name?: string };
-      if (parsed?.name) return parsed.name;
-    } catch {
-      // fall through
-    }
-  }
-  return null;
-}
-
-/**
- * Best-effort by design. A member deleting their own capture must not be
- * blocked by a flaky bucket: a row pointing at bytes that are gone is worse
- * than bytes with no row, and the second is sweepable later.
- */
-async function sweepAttachmentObjects(keys: string[], inspirationId: string): Promise<void> {
-  if (keys.length === 0) return;
-  const bucket = getDeleteBucketName();
-  if (!bucket) {
-    console.warn("[inspirations] S3 sweep skipped: bucket not configured", {
-      inspirationId,
-      keyCount: keys.length,
-    });
-    return;
-  }
-
-  const objects: ObjectIdentifier[] = keys.map((Key) => ({ Key }));
-  try {
-    await getDeleteS3().send(
-      new DeleteObjectsCommand({
-        Bucket: bucket,
-        Delete: { Objects: objects, Quiet: true },
-      }),
-    );
-  } catch (err) {
-    console.warn("[inspirations] S3 sweep failed during delete:", {
-      inspirationId,
-      objectCount: objects.length,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Routes
-// ---------------------------------------------------------------------------
 
 export function registerEditingRoutes(
   routes: Hono<AuthEnv>,
@@ -297,20 +222,8 @@ export function registerEditingRoutes(
     const target = await resolveTargetProfile(db, session, query.data.profile, "write");
     if (!target.ok) return c.json(target.body, target.status);
 
-    // Collect the object keys before the cascade removes the rows that name
-    // them; a link attachment has no key, so it is not swept, but it is
-    // still lost with the row and counts toward `hadPhoto` below.
-    const attachmentRows = await db
-      .select({ s3Key: attachments.s3Key })
-      .from(attachments)
-      .innerJoin(inspirations, eq(inspirations.id, attachments.inspirationId))
-      .where(
-        and(
-          eq(attachments.inspirationId, idCheck.data),
-          eq(inspirations.profileId, target.profileId),
-        ),
-      );
-    const s3KeyRows = attachmentRows.filter((row): row is { s3Key: string } => row.s3Key !== null);
+    await sweepDeletedShelf(db, now(), target.profileId);
+    let removedKeys: string[] = [];
 
     // Lock the source before collecting every destination's witnesses.
     // No derivation can add a new source FK after this collection. Lock the
@@ -339,37 +252,22 @@ export function registerEditingRoutes(
       if (citingRows.length) await tx.select({ id: signals.id }).from(signals)
         .where(inArray(signals.id, citingRows.map((row) => row.signalId))).orderBy(asc(signals.id)).for("no key update");
 
-      /* THE COPY ON THE DELETED SHELF, written in the same transaction as
-         the delete so there is never a moment the words are in neither
-         place. See db/schema-deleted.ts for why it is a shelf and not a
-         flag on this row.
-
-         ONLY A PERSON'S OWN DELETE, and only one with words in it. The shelf
-         is read by the person at a browser (`/deleted` is human-only and
-         reads the session's own profile), so a copy filed under an agent —
-         an agent deleting its own, or `?profile=` to an agent — could never
-         be seen, brought back, forgotten or lapsed: it would be retained
-         text with no way out. And a save with no words has nothing a restore
-         could bring back, since its picture is swept from storage below. */
-      const ownDelete = session.profile.type === "human" && !session.keyScoped && target.profileId === session.profile.id;
-      /* Whatever on this shelf has passed its month goes now, whether or not
-         anybody opens the shelf again. */
+      const attachmentRows = await tx.select().from(attachments)
+        .where(and(eq(attachments.profileId, target.profileId), eq(attachments.inspirationId, idCheck.data))).for("update");
+      const recoverable = session.profile.type === "human" && !session.keyScoped;
       const at = now();
-      await tx.delete(deletedInspirations).where(and(eq(deletedInspirations.profileId, target.profileId),
-        lt(deletedInspirations.deletedAt, deletedShelfCutoff(at))));
-      const [whole] = !ownDelete ? [] : await tx.select({ text: inspirations.text, kind: inspirations.kind, category: inspirations.category,
-        source: inspirations.source, visibility: inspirations.visibility, createdAt: inspirations.createdAt })
-        .from(inspirations).where(and(eq(inspirations.id, idCheck.data), eq(inspirations.profileId, target.profileId)));
-      if (whole && whole.text.trim()) {
+      if (recoverable) {
+        const [whole] = await tx.select().from(inspirations)
+          .where(and(eq(inspirations.id, idCheck.data), eq(inspirations.profileId, target.profileId)));
         const said = await tx.select({ question: reflections.question, answer: reflections.answer, skipped: reflections.skipped })
           .from(reflections).where(and(eq(reflections.inspirationId, idCheck.data), eq(reflections.profileId, target.profileId)))
           .orderBy(asc(reflections.createdAt), asc(reflections.id));
-        /* A plain insert: the restore removes the shelf copy and the delete
-           above clears expired ones, so an id already on the shelf would be
-           a second delete of a row that no longer exists. */
-        await tx.insert(deletedInspirations).values({ id: idCheck.data, profileId: target.profileId, text: whole.text, kind: whole.kind,
-          category: whole.category, source: whole.source, visibility: whole.visibility, reflections: said,
-          hadPhoto: attachmentRows.length > 0, keptAt: whole.createdAt, deletedAt: at });
+        await tx.insert(deletedInspirations).values({ id: idCheck.data, profileId: target.profileId, text: whole!.text, kind: whole!.kind,
+          category: whole!.category, source: whole!.source, visibility: whole!.visibility, reflections: said,
+          attachments: JSON.parse(JSON.stringify(attachmentRows)) as DeletedAttachment[],
+          hadPhoto: attachmentRows.length > 0, keptAt: whole!.createdAt, deletedAt: at });
+      } else {
+        removedKeys = attachmentRows.flatMap(row => row.s3Key ? [row.s3Key] : []);
       }
 
       const removed = await tx
@@ -407,13 +305,7 @@ export function registerEditingRoutes(
     }
 
     await wakeCommittedBackgroundJobs();
-    await sweepAttachmentObjects(
-      s3KeyRows
-        .map((row) => row.s3Key)
-        .filter((key): key is string => typeof key === "string" && key.length > 0),
-      idCheck.data,
-    );
-
+    await sweepAttachmentObjects(await unreferencedAttachmentKeys(db, removedKeys));
 
     return c.json({ id: deleted[0]!.id }, 200);
   });

@@ -676,7 +676,10 @@ it('saves a capture into the selected agent without adding it to the human or an
   PROFILES.rows = ['noah','another'].map((name,i)=>({id:`agent-${name}`,accountId:'account-1',name,type:'agent',avatarUrl:null,preferredLocale:'en-US',createdAt:`2026-10-0${i+1}T00:00:00Z`}));
   world=await mountWorld(FACTS); await settle();
   await act(async()=>face('noah')!.click()); await settle();
-  await pressDockRow(world.container,'New inspiration'); await settle();
+  await pressDockRow(world.container,'All inspirations'); await settle();
+  const newNote=world.container.querySelector<HTMLButtonElement>('.waka-over-head .waka-over-new')!;
+  expect(newNote.textContent).toBe('New inspiration');
+  await act(async()=>newNote.click()); await settle();
   const area=world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
   await act(async()=>{
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,'A new Noah observation');

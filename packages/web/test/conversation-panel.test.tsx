@@ -27,11 +27,11 @@ import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ConversationPanel} from '../src/components/ConversationPanel';
 import {fetchPrinciples} from '../src/lib/api';
-import {createConversation,fetchConversation,fetchConversationReply,listConversations,saveConversationMessage,stopConversationReply,type ApiConversation,type ConversationReplyState} from '../src/lib/api/conversations';
+import {createConversation,fetchConversation,fetchConversationReply,requestConversationReply,listConversations,saveConversationMessage,stopConversationReply,type ApiConversation,type ConversationReplyState} from '../src/lib/api/conversations';
 import {readConversationDrafts} from '../src/lib/conversation-drafts';
 import {ApiError} from '../src/lib/api/http';
 vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),fetchPrinciples:vi.fn()}));
-vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),stopConversationReply:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
+vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),requestConversationReply:vi.fn(),stopConversationReply:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
 const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn(),history=vi.fn();
 /* THE SAME JOB, DONE BY THE RULE THAT CAN DO IT SYMMETRICALLY.
    This asked `.jar-conversation-body` in `chrome.css` for
@@ -781,4 +781,25 @@ it('does not print a read failure after a re-aimed load succeeds',async()=>{
     host.textContent,
     'the surface says the conversation could not be opened while showing it',
   ).not.toContain('couldn’t be opened');
+});
+
+
+it('retries a failed reply against the saved message without sending another user message',async()=>{
+  stored.generationEnabled=true; await mount();
+  await type('A question worth retrying'); await click('Send');
+  replyState={...replyState,phase:'failed',canRetry:true};
+  await tick(1000);
+  const sent=vi.mocked(saveConversationMessage).mock.calls.length;
+  const messageId=stored.messages[0]!.id;
+  let finish!:(state:ConversationReplyState)=>void;
+  vi.mocked(requestConversationReply).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+  await click('Retry reply');
+  expect(vi.mocked(requestConversationReply).mock.calls[0]?.slice(0,4)).toEqual([scope.profileId,id,messageId,replyId]);
+  expect(host.textContent).toContain('Retrying reply…');
+  await click('Retrying reply…');
+  expect(requestConversationReply).toHaveBeenCalledTimes(1);
+  replyState={...replyState,phase:'pending',requestId:crypto.randomUUID(),canRetry:false};
+  await act(async()=>finish(structuredClone(replyState)));
+  expect(saveConversationMessage).toHaveBeenCalledTimes(sent);
+  expect(stored.messages.filter(message=>message.role==='user')).toHaveLength(1);
 });

@@ -137,3 +137,26 @@ it('keeps text, files, and pending links separate when switching agent profiles'
   expect(hook.draft.media.map(file => file.id)).toEqual(['noah-file']);
   await switchTo(scope.profileId); expect(hook.draft.text).toBe('Human draft');
 });
+
+it('discards text, links and media only for the active profile and rejects stale tab writes', async () => {
+  await act(async () => { hook.setText('Noah draft'); hook.setLinkText('https://example.test'); hook.setMedia([{id:'photo',type:'image',blob:new Blob(['photo'])}]); await hook.flush(); });
+  const original = hook.draft;
+  await act(async () => root.render(<Harness profile="anotherone" />));
+  await vi.waitFor(async () => { await act(async () => undefined); expect(hook.ready).toBe(true); });
+  await act(async () => { hook.setText('Another draft'); await hook.flush(); });
+  const other = hook.draft;
+  await act(async () => root.render(<Harness />));
+  await vi.waitFor(async () => { await act(async () => undefined); expect(hook.ready).toBe(true); });
+  await act(async () => { expect(await hook.discard()).toBe(true); });
+  expect(await loadInspirationDraft(scope, original.id)).toMatchObject({text:'',linkText:'',media:[]});
+  expect((await loadInspirationDraft({...scope,profileId:'anotherone'},other.id))?.text).toBe('Another draft');
+  await expect(writeInspirationDraft(scope,{...original,text:'Stale tab',revision:original.revision+1},original.revision)).rejects.toThrow('another tab');
+});
+it('keeps a draft when a competing tab edited it before discard', async () => {
+  await act(async () => { hook.setText('Original'); await hook.flush(); });
+  const original=hook.draft;
+  await writeInspirationDraft(scope,{...original,text:'Newer words',revision:original.revision+1},original.revision);
+  await act(async () => { await expect(hook.discard()).rejects.toThrow('another tab'); });
+  expect(hook.draft.text).toBe('Original');
+  expect((await loadInspirationDraft(scope,original.id))?.text).toBe('Newer words');
+});

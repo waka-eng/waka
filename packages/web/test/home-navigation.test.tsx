@@ -13,7 +13,7 @@ import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressChatCorner, closeOverlay, keepBox, barShape, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { pressesInTopRow } from './helpers/note-top-row';
 import { loadInspirations, loadInspiration, type InspirationDetail } from '../src/lib/data';
-import {fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
+import {fetchProfiles,fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
 
 /* THE ROOM "Renamed room" IS GONE FROM THESE FACTS (founder, 2026-10-12: "방
    없애"). It held one memory of the viewer's and one of Bo's, and it was the
@@ -25,7 +25,7 @@ const principleState=vi.hoisted(()=>({rows:[] as ApiPrinciple[]}));
 vi.mock('../src/lib/api/principles',async original=>({...await original<typeof import('../src/lib/api/principles')>(),fetchPrincipleRead:vi.fn(async()=>({principles:principleState.rows,status:{phase:'ready',eligible:false}}))}));
 vi.mock('../src/lib/data', async (original) => ({ ...await original<typeof import('../src/lib/data')>(),
   ...dataMockFrom(FACTS), loadInspirations: vi.fn(dataMockFrom(FACTS).loadInspirations), loadInspiration: vi.fn() }));
-vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),fetchPrinciples:vi.fn(async()=>principleState.rows),updatePrinciple:vi.fn(),updateInspiration:vi.fn() }));
+vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),fetchProfiles:vi.fn(async()=>[]),fetchPrinciples:vi.fn(async()=>principleState.rows),updatePrinciple:vi.fn(),updateInspiration:vi.fn() }));
 vi.mock('../src/lib/auth-context', async (original) => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
     profile: { id: VIEWER_ID, name: 'You', type: 'human' }, profiles: [], refresh: async () => undefined, signOut: async () => undefined };
@@ -40,7 +40,7 @@ const detail: InspirationDetail = { id: 'older', text: 'An older inspiration bey
     { id: 'answer-2', question: 'Next?', answer: 'My later words', skipped: false, createdMs: 1700000001000 },
   ] };
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
-beforeEach(() => { principleState.rows=[];vi.mocked(updatePrinciple).mockReset();vi.mocked(fetchPrinciples).mockClear();localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); vi.mocked(loadInspirations).mockClear(); vi.mocked(loadInspiration).mockReset().mockResolvedValue(detail); });
+beforeEach(() => { vi.mocked(fetchProfiles).mockReset().mockResolvedValue([]); principleState.rows=[];vi.mocked(updatePrinciple).mockReset();vi.mocked(fetchPrinciples).mockClear();localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); vi.mocked(loadInspirations).mockClear(); vi.mocked(loadInspiration).mockReset().mockResolvedValue(detail); });
 afterEach(() => { world?.unmount(); vi.useRealTimers(); });
 async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
@@ -514,6 +514,11 @@ it("leaves the unavailable-link notice alone on Escape while another layer is op
  * identical one frame before and one frame after.
  */
 it('changes form in place instead of travelling to the agent', async () => {
+  vi.mocked(fetchProfiles).mockResolvedValue([
+    { id: 'ouroboros-maintainer', type: 'agent', name: 'Ouroboros maintainer', createdAt: '2026-08-01T00:00:00Z' },
+    { id: 'course-marketing', type: 'agent', name: 'Course marketing', createdAt: '2026-08-01T00:00:00Z' },
+  ] as never);
+
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   expect(world.audit().wallKind).toBe('self');
 
@@ -565,6 +570,11 @@ it('changes form in place instead of travelling to the agent', async () => {
  * matters ("For inspirations it does, for now it does").
  */
 it('identifies the owner on the chats page and the archive', async () => {
+  vi.mocked(fetchProfiles).mockResolvedValue([
+    { id: 'ouroboros-maintainer', type: 'agent', name: 'Ouroboros maintainer', createdAt: '2026-08-01T00:00:00Z' },
+    { id: 'course-marketing', type: 'agent', name: 'Course marketing', createdAt: '2026-08-01T00:00:00Z' },
+  ] as never);
+
   const faces = () =>
     [...world!.container.querySelectorAll<HTMLButtonElement>('.jar-char-face')]
       .map(button => ({
@@ -855,14 +865,14 @@ it('makes a new note from Inspiration, and its Close goes home with the draft ke
   expect(world.container.querySelector('textarea.jar-composer-text'), 'the note is still up').toBeNull();
   expect(lit(), 'home lights a bar row').toBeNull();
   expect(close(), 'home still offers a Close').toBeNull();
-  expect(barShape(world.container), 'home is not back to creation and history').toEqual(['New inspiration', 'New chat', 'All inspirations', 'All chats']);
+  expect(barShape(world.container), 'home is not back to creation and history').toEqual(['Continue draft', 'New chat', 'All inspirations', 'All chats']);
 
-  await act(async () => row('New inspiration').click()); await settle();
+  await act(async () => row('Continue draft').click()); await settle();
   expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value,
     'going home threw the draft away').toBe('half a thought');
 });
 
-it('reaches the archive only from a new note\'s bar, and the chats only from a chat\'s bar', async () => {
+it('keeps archive navigation outside the composer, and reaches chat history from a chat', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   /* ON NOW THE BAR IS THE TWO WORDS AND NOTHING ELSE — no list door, no
      Close, no rule. */
@@ -873,8 +883,9 @@ it('reaches the archive only from a new note\'s bar, and the chats only from a c
      word of the note's own bar, not a word beside its date. */
   expect(world.container.querySelector('.jar-note-see-all, .jar-note-lead'), 'the archive door is back in the note\'s corner').toBeNull();
   expect(pressesInTopRow(world.container), 'something pressable stands beside a new note\'s date').toEqual([]);
+  expect(row('All inspirations'), 'archive navigation competes with saving').toBeUndefined();
+  await act(async () => close()!.click()); await settle();
   const seeAll = row('All inspirations');
-  expect(seeAll, 'a new note offers no way to the archive').toBeTruthy();
   await act(async () => seeAll!.click()); await settle();
   expect(open(), 'All inspirations did not open the archive').toBe('saves');
   /* ON A LIST THE BAR IS ↩ │ CLOSE (2026-10-15), and Close goes home. */
@@ -909,8 +920,7 @@ const returnRow = () => world.container.querySelector<HTMLButtonElement>('.waka-
 
 it('gives both lists the bar ↩ │ Close, with no Inspiration or Chat in it', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
-  for (const [door, list, entry] of [['New inspiration', 'saves', 'All inspirations'], ['New chat', 'conversations', 'All chats']] as const) {
-    await act(async () => row(door).click()); await settle();
+  for (const [list, entry] of [['saves', 'All inspirations'], ['conversations', 'All chats']] as const) {
     await act(async () => row(entry)!.click()); await settle();
     expect(open(), `${entry} did not open its list`).toBe(list);
     expect(barShape(world.container), `the ${list} list's bar is not ↩ │ Close`).toEqual(['↩', '│', 'Close']);
@@ -927,27 +937,6 @@ it('gives both lists the bar ↩ │ Close, with no Inspiration or Chat in it', 
     expect(open(), `Close on the ${list} list did not go home`).toBeNull();
     expect(barShape(world.container), 'home is not back to creation and history').toEqual(['New inspiration', 'New chat', 'All inspirations', 'All chats']);
   }
-});
-
-it('steps back from the archive to the new note it was opened from, draft and all, on ↩', async () => {
-  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
-  await act(async () => row('New inspiration').click()); await settle();
-  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text');
-  expect(field, 'Inspiration did not open a new note').toBeTruthy();
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'half a thought');
-    field!.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await settle();
-  await act(async () => row('All inspirations')!.click()); await settle();
-  expect(open(), 'All inspirations did not open the archive').toBe('saves');
-
-  await act(async () => returnRow()!.click()); await settle();
-  expect(open(), '↩ left the archive up').toBeNull();
-  expect(new URLSearchParams(location.search).get('compose'), '↩ did not step back to the new note').toBe('1');
-  expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value,
-    '↩ came back to the note without its draft').toBe('half a thought');
-  expect(barShape(world.container).slice(0, 2), 'the note\'s bar did not come back').toEqual(['All inspirations', '│']);
 });
 
 it('steps back from the chats list to the chat it was opened from on ↩', async () => {
@@ -1014,18 +1003,8 @@ it('gives the saved note in the archive no All inspirations, since it is already
   expect(world.container.querySelector('.jar-note-see-all'), 'a saved note grew a door to the archive it is in').toBeNull();
 });
 
-/**
- * ═══ A NEW NOTE'S BAR IS THE NOTE'S OWN (2026-10-15) ═══════════════════
- *
- * Founder: "the first item is always either ... all inspiration or all chat
- * And then after that, let's have | And then for inspirations it would be
- * the dictate button, the photo button, the save button and after that have
- * another | and say close." Read in the order a person meets it, with the
- * rules as `│`: the archive's door, the note's tools ending in Save, Close —
- * and Chat stepped out, because a door to the other room on a making page
- * would be a second way out that is not Close.
- */
-it('gives a new note the bar All inspirations │ its tools │ Close, with no Chat in it', async () => {
+// Save and leaving must read as different actions while composing.
+it('gives a new note a labeled Save and separate Close, without archive navigation', async () => {
   /* THE MIC IS OFFERED ONLY WHERE THE BROWSER CAN LISTEN, so the probe is
      given a yes here — the same stand-in `one-dock-two-notes` uses — or the
      row would honestly be one tool short and the order unproven. */
@@ -1035,17 +1014,19 @@ it('gives a new note the bar All inspirations │ its tools │ Close, with no C
     world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
     await act(async () => row('New inspiration').click()); await settle();
     const shape = barShape(world.container);
-    const seps = shape.flatMap((part, at) => (part === '│' ? [at] : []));
-    expect(seps, 'a new note\'s bar is not three groups with a rule between each').toHaveLength(2);
-    expect(world.container.querySelectorAll('nav.waka-dock span.waka-dock-sep[aria-hidden="true"]'),
-      'the rules are not hidden from a screen reader').toHaveLength(2);
-    expect(shape.slice(0, seps[0]), 'the first group is not the archive\'s door alone').toEqual(['All inspirations']);
-    expect(shape.slice(seps[1]! + 1), 'the last group is not Close alone').toEqual(['Close']);
-    const tools = shape.slice(seps[0]! + 1, seps[1]);
-    /* THE PHOTO BECAME ＋ (2026-10-16): "All inspirations │ dictate · ＋ ·
-       save │ Close". Its two rows are not in the bar until it is pressed —
-       `note-add-menu.test.tsx` opens it. */
-    expect(tools, 'the note\'s tools are not the mic, the ＋ and Save, in that order').toEqual(['Speak', 'Add photo or file', 'Save inspiration']);
+    expect(shape).toEqual(['Speak', 'Add photo or file', 'Save', '│', 'Close']);
+    expect(row('All inspirations')).toBeUndefined();
+    const save = world.container.querySelector<HTMLButtonElement>('.waka-dock-save')!;
+    expect(save.textContent).toBe('Save');
+    expect(save.disabled).toBe(true);
+    const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'A deliberate save');
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    expect(save.disabled).toBe(false);
+    const tools = shape.slice(0, 3);
     /* The tools are the making-slot's, and Save is the disk-drawn keep. */
     const making = world.container.querySelector('nav.waka-dock .waka-dock-making');
     expect(making?.querySelector('button.waka-dock-tool--keep [data-home-action-icon="keep"]'), 'Save lost its keep icon').toBeTruthy();
@@ -1061,4 +1042,52 @@ it('gives a new note the bar All inspirations │ its tools │ Close, with no C
   } finally {
     delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
   }
+});
+
+// Moving the background while a page is open can leave another page entry
+// underneath. Close must leave the page in one press, regardless of history.
+it('closes the archive to home even when the previous history entry is also the archive', async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools/> }); await settle();
+  await act(async () => row('All inspirations').click()); await settle();
+  await act(async () => go('/?view=sky&open=saves', { state: location.state })); await settle();
+  await act(async () => close()!.click()); await settle();
+  expect(location.pathname + location.search).toBe('/');
+  expect(world.container.querySelector('.waka-over')).toBeNull();
+});
+
+it.each(['/?compose=1', '/?open=saves', '/?open=saves&note=loaded', '/?open=conversations', '/chat/new'])(
+  'closes a directly opened %s in one press', async path => {
+    world = await mountWorld(FACTS, { initialEntries: [path], routerTools: <RouterTools/> }); await settle();
+    expect(close()).toBeTruthy();
+    await act(async () => close()!.click()); await settle();
+    expect(location.pathname + location.search).toBe('/');
+    expect(close()).toBeNull();
+    expect(world.container.querySelector('.jar-inspiration-composer, .waka-over')).toBeNull();
+  },
+);
+
+
+it('starts a capture directly from a populated archive and names a retained draft', async () => {
+  world = await mountWorld(FACTS, { initialEntries: ['/?open=saves'], routerTools: <RouterTools/> }); await settle();
+  const action = () => world.container.querySelector<HTMLButtonElement>('.waka-over-head .waka-over-new')!;
+  expect(action().textContent?.trim()).toBe('New inspiration');
+  await act(async () => action().click()); await settle();
+  expect(new URLSearchParams(location.search).get('open')).toBeNull();
+  expect(new URLSearchParams(location.search).get('compose')).toBe('1');
+  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'A draft from the archive');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  }); await settle();
+  await act(async () => close()!.click()); await settle();
+  await act(async () => row('All inspirations').click()); await settle();
+  expect(action().textContent?.trim()).toBe('Continue draft');
+  await act(async () => action().click()); await settle();
+  expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value).toBe('A draft from the archive');
+});
+
+it('shows only owned profiles when a signed-in account has no agents', async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools/> }); await settle();
+  expect([...world.container.querySelectorAll('.jar-char-face')].map(node => node.textContent?.trim())).toEqual([]);
+  expect(world.container.textContent).not.toMatch(/Ouroboros maintainer|Course marketing/);
 });

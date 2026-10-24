@@ -113,7 +113,7 @@ export function useArchiveRecorder(options: { blocked?: boolean; enabled?: boole
         catch (error) { storageFailed = true; if (uploadedKey) throw error; }
       }
       if (deleting.current.has(key)) throw new Error('Note being deleted');
-      await attachToNote(file, { noteId: to.noteId, profileId: to.profileId ?? options.ownerProfileId ?? null, type: "file" }, () => enabledRef.current, {
+      await attachToNote(file, { noteId: to.noteId, profileId: to.profileId ?? options.ownerProfileId ?? null, type: "audio" }, () => enabledRef.current, {
         uploadedKey,
         onUploaded: async key => {
           uploadedKey = key;

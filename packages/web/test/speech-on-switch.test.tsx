@@ -27,6 +27,7 @@ vi.mock('../src/lib/data', async original => ({
 }));
 vi.mock('../src/lib/api', async original => ({
   ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),
+  fetchProfiles: vi.fn(async () => [{ id: 'ouroboros-maintainer', type: 'agent', name: 'Ouroboros maintainer', createdAt: '2026-08-01T00:00:00Z' }]),
   fetchPrinciples: vi.fn(async () => []),
   fetchTheWeather: vi.fn(),
 }));

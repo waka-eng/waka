@@ -290,26 +290,28 @@ export interface ApiDeletedInspiration {
   id: string;
   text: string;
   kind: string | null;
-  /** Any attachment (photo, recording, file, link): none comes back with the words, and the shelf says so. */
+  /** Legacy copies can have lost attachments; a nonzero count means retained media. */
   hadPhoto: boolean;
+  attachmentCount?: number;
+  attachmentName?: string | null;
   keptAt: string;
   deletedAt: string;
   goneAt: string;
 }
 
-export async function listDeletedInspirations(signal?: AbortSignal): Promise<ApiDeletedInspiration[]> {
-  const body = await getJson<{ deleted: ApiDeletedInspiration[] }>(apiPath("/inspirations/deleted"), "Failed to load deleted inspirations", signal);
+export async function listDeletedInspirations(options: ProfileScoped = {}, signal?: AbortSignal): Promise<ApiDeletedInspiration[]> {
+  const body = await getJson<{ deleted: ApiDeletedInspiration[] }>(apiPath(`/inspirations/deleted${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`), "Failed to load deleted inspirations", signal);
   return body.deleted;
 }
 
 /** Back under the same id and its original date; the reading runs again. */
-export async function restoreInspiration(id: string): Promise<void> {
-  await requestVoid(apiPath(`/inspirations/deleted/${encodeURIComponent(id)}/restore`), "POST", undefined, "Failed to bring this back");
+export async function restoreInspiration(id: string, options: ProfileScoped = {}): Promise<void> {
+  await requestVoid(apiPath(`/inspirations/deleted/${encodeURIComponent(id)}/restore${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`), "POST", undefined, "Failed to bring this back");
 }
 
 /** Off the shelf for good, before the thirty days are up. */
-export async function forgetDeletedInspiration(id: string): Promise<void> {
-  await requestVoid(apiPath(`/inspirations/deleted/${encodeURIComponent(id)}`), "DELETE", undefined, "Failed to delete this for good");
+export async function forgetDeletedInspiration(id: string, options: ProfileScoped = {}): Promise<void> {
+  await requestVoid(apiPath(`/inspirations/deleted/${encodeURIComponent(id)}${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`), "DELETE", undefined, "Failed to delete this for good");
 }
 
 // ---------------------------------------------------------------------------

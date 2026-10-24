@@ -24,7 +24,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConversationsOverlay } from "../src/components/ConversationsOverlay";
-import { listConversations } from "../src/lib/api/conversations";
+import { deleteConversation, listConversations } from "../src/lib/api/conversations";
 
 vi.mock("../src/lib/api/conversations", () => ({ listConversations: vi.fn(), deleteConversation: vi.fn() }));
 
@@ -82,4 +82,32 @@ describe("the chat list", () => {
     await press("New chat");
     expect(open).toHaveBeenCalledWith(null);
   });
+});
+
+
+it('offers a new chat from a populated list and explains deletion before sending it', async () => {
+  vi.mocked(listConversations).mockResolvedValue({ conversations: [{
+    id: 'chat-1', profileId: 'profile-1', revision: 1,
+    updatedAt: '2026-10-23T12:00:00Z', preview: 'A question worth keeping',
+  }] } as never);
+  const open = vi.fn();
+  await show(<ConversationsOverlay locale="en-US" profileId="profile-1" title="Chats" onClose={() => undefined} onOpen={open} />);
+  await press('New chat');
+  expect(open).toHaveBeenCalledWith(null);
+  await press('Delete');
+  expect(host.textContent).toContain('Delete this chat? You won’t be able to reopen it.');
+  expect(deleteConversation).not.toHaveBeenCalled();
+  await press('Not now');
+  expect(host.textContent).not.toContain('Delete this chat?');
+  expect(host.textContent).toContain('A question worth keeping');
+  vi.mocked(deleteConversation).mockRejectedValueOnce(new Error('offline'));
+  await press('Delete');
+  await press('Delete chat');
+  expect(deleteConversation).toHaveBeenCalledWith('profile-1', 'chat-1');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('it is still here');
+  expect(host.textContent).toContain('A question worth keeping');
+  vi.mocked(deleteConversation).mockResolvedValueOnce(undefined);
+  await press('Delete chat');
+  expect(host.textContent).not.toContain('A question worth keeping');
+  expect(host.querySelectorAll('.waka-over-new')).toHaveLength(1);
 });

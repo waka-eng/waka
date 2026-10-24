@@ -16,11 +16,11 @@
    now REFUSE that link instead of handing it to the app — otherwise a tap on
    an old notification or a shared URL would open the world with nothing in
    it. The invariant is unchanged and still enforced: a destination is owned
-   if and only if the view model can resolve it. */
+   if a current view or retained consumer redirect can resolve it. */
 import { expect, it } from 'vitest';
 import { nativeLinkDestination } from '../src/lib/platform/navigation';
 const id = 'im.waka.app.dev', origin = 'https://dev.waka.im';
-it.each(['/', '/onboarding', '/login', '/@native_fixture', '/w/room1', '/inspirations/source-id', '/principles/principle-id/share', '/chat/new?principle=principle-id', '/?inspiration=source-id&reflection=open#detail', '/?open=reading', '/w/room1?open=&view=sky'])('preserves owned consumer destination %s', path => {
+it.each(['/', '/inspirations', '/principles', '/onboarding', '/login', '/@native_fixture', '/w/room1', '/inspirations/source-id', '/principles/principle-id/share', '/chat/new?principle=principle-id', '/?inspiration=source-id&reflection=open#detail', '/?open=reading', '/w/room1?open=&view=sky'])('preserves owned consumer destination %s', path => {
   expect(nativeLinkDestination(origin + path, id, origin)).toBe(path);
   expect(nativeLinkDestination(`${id}://navigate${path}`, id, origin)).toBe(path);
 });

@@ -42,12 +42,14 @@ export interface ApiOwnedProfile {
 }
 
 /** GET /profiles — every profile the account owns, human first. */
-export async function fetchProfiles(): Promise<ApiOwnedProfile[]> {
+export async function fetchProfiles(signal?: AbortSignal): Promise<ApiOwnedProfile[]> {
   const body = await getJson<{ profiles: ApiOwnedProfile[] }>(
     apiPath("/profiles"),
     "Failed to load your profiles",
+    signal,
   );
-  return Array.isArray(body.profiles) ? body.profiles : [];
+  if (!Array.isArray(body.profiles)) throw new Error("Invalid profiles response");
+  return body.profiles;
 }
 
 /**

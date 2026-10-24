@@ -49,6 +49,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock("../src/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/lib/api")>()),
+  fetchAttachmentUrl: async (id: string) => `https://bucket.test/${id}`,
   updateInspiration: async (id: string, patch: { text?: string }, options: { profile?: string } = {}) => {
     state.written.push({ id, text: patch.text ?? "" });
     state.profiles.push({ act: "write", profile: options.profile });
@@ -114,13 +115,13 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-type World = { profileId?: string; ownArchive?: boolean };
+type World = { profileId?: string };
 /** The archive as Home renders it: every callback a NEW inline function on
     every render, exactly as Home passes them. */
 async function renderArchive(whose: World = {}): Promise<void> {
   await act(async () => root.render(
     <Archive locale="en-US" title="Your Inspirations" onClose={vi.fn()}
-      profileId={whose.profileId} ownArchive={whose.ownArchive}
+      profileId={whose.profileId}
       onNoteOpen={(close) => { closer = close; }} />,
   ));
 }
@@ -263,7 +264,7 @@ it("on an agent's archive, writes and deletes name the same profile the read did
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
     state.more = [{ ...longRow, id: "older-1", preview: "an older note stays" }];
-    await openSave(longRow, LONG, { profileId: "agent-7", ownArchive: false });
+    await openSave(longRow, LONG, { profileId: "agent-7" });
     await answer(true);
     await type(`${LONG} By the agent.`);
     await act(async () => save().click());
@@ -271,12 +272,9 @@ it("on an agent's archive, writes and deletes name the same profile the read did
       { act: "read", profile: "agent-7" },
       { act: "write", profile: "agent-7" },
     ]);
-    /* an agent's archive asks before it deletes, then sends at once */
     const del = () => slot.querySelector<HTMLButtonElement>(".waka-dock-tool--erase")!;
     await act(async () => del().click());
-    expect(document.activeElement?.getAttribute("aria-label"), "an armed delete puts focus on its confirmation").toBe("Delete it anyway");
-    await act(async () => del().click());
-    expect(document.activeElement?.matches(".waka-list-row, .waka-over-search"), "and after it, focus goes to the list it returns to").toBe(true);
+    expect(document.activeElement?.textContent).toBe("Undo");
     await act(async () => { vi.advanceTimersByTime(10_000); });
     expect(state.profiles.filter((item) => item.act === "delete")).toEqual([{ act: "delete", profile: "agent-7" }]);
   } finally {
@@ -400,4 +398,22 @@ it("ends a full-text read that never answers as a failed read with Try again", a
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('reopens every saved photo, recording and file through an owned read URL', async () => {
+  await openSave({ ...longRow, attachments: [
+    { id: 'photo-one', type: 'image', label: 'First photo' },
+    { id: 'photo-two', type: 'image', label: 'Second photo' },
+    { id: 'recording', type: 'audio', label: 'Recording.m4a' },
+    { id: 'document', type: 'file', label: 'notes.txt' },
+  ] }, LONG);
+  await answer(true);
+  expect([...host.querySelectorAll('.jar-saved-attachments img')].map(image => image.getAttribute('src')))
+    .toEqual(['https://bucket.test/photo-one', 'https://bucket.test/photo-two']);
+  expect(host.querySelector('audio')?.getAttribute('src')).toBe('https://bucket.test/recording');
+  expect(host.querySelector('audio')?.hasAttribute('controls')).toBe(true);
+  const file = [...host.querySelectorAll('a')].find(link => link.textContent === 'notes.txt');
+  expect(file?.href).toBe('https://bucket.test/document');
+  expect(host.querySelector('img[src*="preview-image"]')).toBeNull();
+  expect(state.written).toEqual([]);
 });

@@ -41,10 +41,10 @@ beforeEach(() => { calls.length = 0; Object.assign(fails, { step: null, status: 
 
 it("presigns under the note's owner, uploads, and finalizes onto that note", async () => {
   const file = new File(["x"], "Recording.webm", { type: "audio/webm" });
-  await attachToNote(file, { noteId: "note-1", profileId: "agent-1", type: "file" });
+  await attachToNote(file, { noteId: "note-1", profileId: "agent-1", type: "audio" });
   expect(calls.map(([what]) => what)).toEqual(["presign", "upload", "finalize"]);
   expect(calls[0]![1]).toEqual({ input: { filename: "Recording.webm", contentType: "audio/webm", size: 1 }, profile: "agent-1" });
-  expect(calls[2]![1]).toEqual({ type: "file", inspirationId: "note-1", key: "k/1", name: "Recording.webm", contentType: "audio/webm" });
+  expect(calls[2]![1]).toEqual({ type: "audio", inspirationId: "note-1", key: "k/1", name: "Recording.webm", size: 1, contentType: "audio/webm" });
 });
 
 it("presigns as the signed-in profile when no owner is named", async () => {

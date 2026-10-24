@@ -34,6 +34,9 @@ function profileRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const sweep = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("../lib/attachment-sweep.js", () => ({sweepAttachmentObjects:sweep}));
+
 const mockState = vi.hoisted(() => ({
   db: undefined as any,
   session: undefined as any,
@@ -71,6 +74,7 @@ function makeDb(options: { selects?: unknown[][]; returning?: unknown[][] } = {}
       const rows = selects.shift() ?? [];
       const result: any = Promise.resolve(rows);
       result.orderBy = vi.fn(async () => rows);
+      result.for = vi.fn(async () => rows);
       result.limit = vi.fn(async () => rows);
       return result;
     });
@@ -93,7 +97,8 @@ function makeDb(options: { selects?: unknown[][]; returning?: unknown[][] } = {}
   }));
   const del = vi.fn(() => ({ where: deleteWhere }));
 
-  return { select, insert, insertValues, update, delete: del, deleteWhere };
+  const db = { select, insert, insertValues, update, delete: del, deleteWhere, transaction: vi.fn(async (work: (tx: unknown) => unknown) => work(db)) };
+  return db;
 }
 
 function jsonRequest(path: string, method: string, body?: unknown) {
@@ -185,7 +190,7 @@ describe("POST /api/profiles", () => {
 
 describe("DELETE /api/profiles/:profileId", () => {
   it("removes an agent profile", async () => {
-    mockState.db = makeDb({ returning: [[{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" }]] });
+    mockState.db = makeDb({ selects: [[{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" }], [], []] });
 
     const res = await createApp().request("/api/profiles/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", {
       method: "DELETE",
@@ -252,4 +257,13 @@ describe("PATCH /api/profiles/:profileId", () => {
 
     expect(res.status).toBe(403);
   });
+});
+
+
+it('sweeps both live and recoverable media when its owned agent is removed',async()=>{
+  sweep.mockClear();
+  mockState.db=makeDb({selects:[[{id:AGENT_SESSION.profile.id}],[{s3Key:'live/photo'}],[{attachments:[{s3Key:'deleted/audio'}]}],[],[]]});
+  const response=await createApp().request(`/api/profiles/${AGENT_SESSION.profile.id}`,{method:'DELETE'});
+  expect(response.status).toBe(200);
+  expect(sweep).toHaveBeenCalledExactlyOnceWith(['live/photo','deleted/audio']);
 });
