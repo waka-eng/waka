@@ -75,7 +75,7 @@ it('opens an agent with no connections and pins setup to its identity', async ()
   expect(host.querySelector('h2')?.textContent).toBe('noah');
   expect(host.textContent).toContain('No live sign-in connections for noah');
   expect(host.textContent).not.toContain('Other client');
-  await click('Set up MCP'); await click('Next: Sign in');
+  await click('Set up MCP'); await click('Install manually instead'); await click('Next: Sign in');
   expect([...host.querySelectorAll('select option')].map(option => option.textContent)).toEqual(['Claude Code', 'Codex']);
   expect(host.textContent).toContain(`--profile '${noah.id}'`);
   expect(host.textContent).not.toContain(another.id);
@@ -126,7 +126,8 @@ it('retries failed loads and binds configuration to the selected agent', async (
   fail = null; await click('Refresh');
   expect(host.textContent).toContain('Another laptop');
   expect(host.textContent).not.toContain('Noah laptop');
-  const config = host.querySelector('pre')!.textContent!;
+  await click('Copy configuration');
+  const config = copied.at(-1)!;
   expect(config).toContain(another.id); expect(config).not.toContain(noah.id);
   expect(config).toContain('YOUR_API_KEY');
 });
@@ -149,4 +150,45 @@ it('never reveals a late key response after navigating to another agent', async 
   expect(host.querySelector('input[readonly]')).toBeNull();
   expect(host.innerHTML).not.toContain(secret);
   expect(host.textContent).not.toContain('Pending key');
+});
+
+it('shows ordered setup and copies the chosen client config and profile-specific test prompt', async () => {
+  await openAgent(another); await click('API keys');
+  expect(host.textContent).toContain('Keys let apps read and write only this agent’s memory until revoked.');
+  await act(async () => host.querySelector('summary')!.click());
+  const steps = [...host.querySelectorAll('.waka-mcp-key-steps > li > h4')].map(node => node.textContent);
+  expect(steps).toEqual(['Prepare WAKA MCP in Terminal', 'Add the configuration to your client', 'Test it in your AI client']);
+  await click('Copy configuration');
+  expect(JSON.parse(copied.at(-1)!).mcpServers[`waka-${another.id}`].env)
+    .toMatchObject({ WAKA_PROFILE_ID: another.id, WAKA_API_KEY: 'YOUR_API_KEY' });
+  await act(async () => {
+    const select = host.querySelector('select')!;
+    select.value = 'codex'; select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await click('Copy configuration');
+  expect(copied.at(-1)).toContain(`[mcp_servers."waka-${another.id}"]`);
+  expect(copied.at(-1)).not.toContain(noah.id);
+  await click('Copy test prompt');
+  expect(copied.at(-1)).toContain(`profileId "${another.id}"`);
+  expect(copied.at(-1)).toContain('anotherone');
+  expect(copied.every(text => !text.includes(secret))).toBe(true);
+  expect(calls.some(call => call.method === 'POST')).toBe(false);
+});
+
+it('offers the setup prompt before manual key instructions without putting the secret into it', async () => {
+  await openAgent(); await click('API keys');
+  await input('Key name, e.g. Work laptop', 'Prompt setup'); await click('Create key');
+  expect(host.querySelector<HTMLDetailsElement>('.waka-mcp-key-setup')!.open).toBe(true);
+  await click('Copy setup prompt');
+  const prompt = copied.at(-1)!;
+  expect(prompt).toContain(`"profileId": "${noah.id}"`);
+  expect(prompt).toContain('Never ask me to paste the key into chat');
+  expect(prompt).not.toContain(secret);
+  const copyButton = button('Copy setup prompt');
+  const manual = [...host.querySelectorAll('summary')].find(node => node.textContent === 'Install manually instead')!;
+  expect(copyButton.compareDocumentPosition(manual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect((manual.parentElement as HTMLDetailsElement).open).toBe(false);
+  await act(async () => manual.click());
+  await click('Copy configuration');
+  expect(copied.at(-1)).toContain('YOUR_API_KEY');
 });

@@ -1,4 +1,7 @@
-import { mcpSetupCommands, mcpClientName, type McpClient, type McpScope } from '../lib/mcp-setup';
+import { publicWebOrigin } from '../lib/public-origins';
+import { mcpSetupCommands, mcpSetupPrompt, mcpClientName, type McpClient, type McpScope } from '../lib/mcp-setup';
+import { McpCopyBlock } from './McpCopyBlock';
+import { McpInstallPrompt } from './McpInstallPrompt';
 /**
  * Settings stays behind the gear. Its sections now replace the overview
  * within one fixed-size frame, with Back returning to the overview.
@@ -480,6 +483,7 @@ function ProfileConnections({ locale, profile }: { locale: SupportedLocale; prof
       </button>
     </div>
     <p className="waka-settings-note">{say(profile ? 'profileConnectionAgentAccess' : 'profileAccountConnectionsHint')}</p>
+    {profile ? <p className="waka-settings-note">{say('profileConnectionMethodHint')}</p> : null}
     {profile ? <button type="button" className="waka-settings-row" onClick={() => { setView('setup'); setConfirm(null); }}>
       {say('profileConnectionSetup')}<span aria-hidden="true">›</span>
     </button> : null}
@@ -528,6 +532,8 @@ function SessionSetup({ locale, onDone, profile: selected, connection }: { local
   const [client, setClient] = useState<McpClient>(connection?.deviceLabel?.startsWith('Codex') ? 'codex' : 'claude');
   const [scope, setScope] = useState<McpScope>('user');
   const [step, setStep] = useState(connection ? 2 : 0);
+  const [manual, setManual] = useState(Boolean(connection));
+  const [promptCopy, setPromptCopy] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [installed, setInstalled] = useState(false);
   const [verification, setVerification] = useState<'idle' | 'checking' | 'waiting' | 'error' | 'verified'>('idle');
   const [verifiedDevice, setVerifiedDevice] = useState('');
@@ -535,10 +541,16 @@ function SessionSetup({ locale, onDone, profile: selected, connection }: { local
   const verificationRequest = useRef(0);
   useEffect(() => () => { verificationRequest.current += 1; }, []);
   const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { heading.current?.focus(); }, [step]);
+  useEffect(() => { heading.current?.focus(); }, [step, manual]);
   const apiUrl = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, "");
-  const commands = mcpSetupCommands({ profile: selected, apiUrl, installed, client, scope });
+  const packageOrigin = publicWebOrigin();
+  const commands = mcpSetupCommands({ profile: selected, apiUrl, packageOrigin, installed, client, scope });
   const clientName = mcpClientName(client);
+  const setupPrompt = mcpSetupPrompt({ locale, profile: selected, apiUrl, packageOrigin, client, scope, authMethod: 'browser' });
+  const scopeControl = client === 'codex' ? <label className="waka-mcp-choice"><span>{say('profileMcpScope')}</span>
+    <select value={scope} onChange={event => { setScope(event.target.value as McpScope); setPromptCopy('idle'); setVerification('idle'); verificationRequest.current += 1; }}>
+      <option value="user">{say('profileMcpScopeUser')}</option><option value="launch">{say('profileMcpScopeLaunch')}</option>
+    </select></label> : null;
   const checkConnection = async () => {
     if (!selected) return;
     const request = ++verificationRequest.current;
@@ -554,70 +566,77 @@ function SessionSetup({ locale, onDone, profile: selected, connection }: { local
     } catch { if (request === verificationRequest.current) setVerification('error'); }
   };
   return <section className="waka-mcp-setup" aria-labelledby="waka-mcp-step">
-    {!connection ? <p className="waka-settings-note">{formatMessage(locale, "profileConnectionStep", { step: step + 1 - Number(installed), total: installed ? 2 : 3 })}</p> : null}
-    <h3 id="waka-mcp-step" ref={heading} tabIndex={-1}>{say(connection ? 'profileMcpTest' : step === 0 ? "profileConnectionInstallTitle" : step === 1 ? "profileConnectionLoginTitle" : "profileConnectionVerifyTitle")}</h3>
+    {!connection && manual ? <p className="waka-settings-note">{formatMessage(locale, "profileConnectionStep", { step: step + 1 - Number(installed), total: installed ? 2 : 3 })}</p> : null}
+    <p className="waka-settings-note">{formatMessage(locale, 'profileConnectionTarget', { name: selected.name })}</p>
+    <h3 id="waka-mcp-step" ref={heading} tabIndex={-1}>{say(!manual ? 'profileMcpPromptTitle' : connection ? 'profileMcpTest' : step === 0 ? "profileConnectionInstallTitle" : step === 1 ? "profileConnectionLoginTitle" : "profileConnectionVerifyTitle")}</h3>
     <div key={step}>
-      {!connection && step < 2 ? <label className="waka-mcp-choice">
+      {!connection && (step < 2 || !manual) ? <label className="waka-mcp-choice">
         <span>{say('profileMcpClient')}</span>
-        <select value={client} onChange={event => { setClient(event.target.value as McpClient); setVerification('idle'); verificationRequest.current += 1; }}>
+        <select value={client} onChange={event => { setClient(event.target.value as McpClient); setPromptCopy('idle'); setVerification('idle'); verificationRequest.current += 1; }}>
           <option value="claude">Claude Code</option><option value="codex">Codex</option>
         </select>
       </label> : null}
-      {step === 0 ? <>
-        <p>{say("profileConnectionInstallHint")}</p>
-        <CommandBlock locale={locale} command={commands[0]!} />
-        <button type="button" className="waka-settings-erase" onClick={() => { setInstalled(true); setStep(1); }}>{say("profileConnectionAlreadyInstalled")}</button>
-      </> : step === 1 ? <>
-        <p>{say("profileConnectionLoginHint")}</p>
-        <p>{say('profileConnectionChooseProfile')}: <strong>{selected.name}</strong></p>
-        {selected ? <CommandBlock locale={locale} command={commands[1]!} /> : null}
-        <p className="waka-settings-note">{say('profileConnectionAgentAccess')}</p>
-        <p className="waka-settings-note">{say("profileConnectionApprove")}</p>
-        <p className="waka-settings-note">{say("profileConnectionSharedLogin")}</p>
+      {!manual ? <>
+        {scopeControl}
+        <McpInstallPrompt locale={locale} profile={selected} apiUrl={apiUrl} packageOrigin={packageOrigin} client={client} scope={scope} authMethod="browser" hideCopy={promptCopy === 'idle'}
+          onCopied={() => setPromptCopy('copied')} onCopyFailed={() => setPromptCopy('failed')} />
+        <p className="waka-settings-note">{say('profileMcpPromptAfter')}</p>
       </> : <>
-        {connection ? <p>{formatMessage(locale, 'profileMcpTestHint', { name: selected.name, device: connection.deviceLabel || say('profileConnectionUnnamed') })}</p> : <>
-          {client === 'codex' ? <label className="waka-mcp-choice"><span>{say('profileMcpScope')}</span>
-            <select value={scope} onChange={event => setScope(event.target.value as McpScope)}>
-              <option value="user">{say('profileMcpScopeUser')}</option><option value="launch">{say('profileMcpScopeLaunch')}</option>
-            </select></label> : null}
-          <p>{formatMessage(locale, 'profileConnectionRegisterHint', { client: clientName })}</p>
-          <p className="waka-settings-note">{say(client === 'codex' && scope === 'launch' ? 'profileMcpLaunchHint' : client === 'codex' ? 'profileMcpCodexUserHint' : 'profileMcpClaudeUserHint')}</p>{selected ? <CommandBlock locale={locale} command={commands[2]!} /> : null}
-          <p>{client === 'codex' && scope === 'launch' ? say('profileMcpLaunchVerify') : formatMessage(locale, 'profileConnectionVerifyHint', { client: clientName })}</p>
+        {step === 0 ? <>
+          <button type="button" className="waka-settings-erase" onClick={() => {
+            setManual(false); setVerification('idle'); verificationRequest.current += 1;
+          }}>{say('profileMcpPromptTitle')}</button>
+          <p>{say("profileConnectionInstallHint")}</p>
+          <p className="waka-settings-note">{say('profileMcpRequirements')}</p>
+          <McpCopyBlock locale={locale} text={commands[0]!} />
+          <button type="button" className="waka-settings-erase" onClick={() => { setInstalled(true); setStep(1); }}>{say("profileConnectionAlreadyInstalled")}</button>
+        </> : step === 1 ? <>
+          {installed ? <p className="waka-settings-note">{say('profileMcpReconnectHint')}</p> : null}
+          <p>{say("profileConnectionLoginHint")}</p>
+          <p>{say('profileConnectionChooseProfile')}: <strong>{selected.name}</strong></p>
+          {selected ? <McpCopyBlock locale={locale} text={commands[1]!} /> : null}
+          <p className="waka-settings-note">{say('profileConnectionAgentAccess')}</p>
+          <p className="waka-settings-note">{say("profileConnectionApprove")}</p>
+          <p className="waka-settings-note">{say("profileConnectionSharedLogin")}</p>
+        </> : <>
+          {connection ? <p>{formatMessage(locale, 'profileMcpTestHint', { name: selected.name, device: connection.deviceLabel || say('profileConnectionUnnamed') })}</p> : <>
+            {scopeControl}
+            <h4 className="waka-mcp-instruction-title">{say('profileMcpInTerminal')}</h4>
+            <p>{formatMessage(locale, 'profileConnectionRegisterHint', { client: clientName })}</p>
+            <p className="waka-settings-note">{say(client === 'codex' && scope === 'launch' ? 'profileMcpLaunchHint' : client === 'codex' ? 'profileMcpCodexUserHint' : 'profileMcpClaudeUserHint')}</p>{selected ? <McpCopyBlock locale={locale} text={commands[2]!} /> : null}
+            <h4 className="waka-mcp-instruction-title">{formatMessage(locale, 'profileMcpInClient', { client: clientName })}</h4>
+            <p>{client === 'codex' && scope === 'launch' ? say('profileMcpLaunchVerify') : formatMessage(locale, 'profileConnectionVerifyHint', { client: clientName })}</p>
+          </>}
+          <McpCopyBlock locale={locale} prompt copyLabel={say('profileMcpCopyTest')}
+            text={formatMessage(locale, selected?.type === 'human' ? "profileConnectionTestPromptHuman" : "profileConnectionTestPrompt", { name: selected?.name ?? "", id: selected?.id ?? "" })} />
+          <h4 className="waka-mcp-instruction-title">{say('profileMcpBackInWaka')}</h4>
+          <p className="waka-settings-note">{say(connection ? 'profileMcpTestResult' : selected?.type === 'human' ? "profileConnectionVerifyResultHuman" : "profileConnectionVerifyResult")}</p>
         </>}
-        <blockquote className="waka-session-prompt">{formatMessage(locale, selected?.type === 'human' ? "profileConnectionTestPromptHuman" : "profileConnectionTestPrompt", { name: selected?.name ?? "", id: selected?.id ?? "" })}</blockquote>
-        <p className="waka-settings-note">{say(connection ? 'profileMcpTestResult' : selected?.type === 'human' ? "profileConnectionVerifyResultHuman" : "profileConnectionVerifyResult")}</p>
       </>}
     </div>
-    {step === 2 && verification !== 'idle' && verification !== 'checking' ? <p className="waka-settings-note" role={verification === 'error' ? 'alert' : 'status'}>
+    {!manual && promptCopy !== 'idle' && verification === 'idle' ? <p className="waka-settings-note" role={promptCopy === 'failed' ? 'alert' : 'status'}>
+      {promptCopy === 'failed' ? say('profileConnectionCopyError') : formatMessage(locale, 'profileMcpPromptCopied', { client: clientName })}
+    </p> : null}
+    {(!manual || step === 2) && verification !== 'idle' && verification !== 'checking' ? <p className="waka-settings-note" role={verification === 'error' ? 'alert' : 'status'}>
       {verification === 'verified' ? formatMessage(locale, 'profileConnectionVerified', { name: selected?.name ?? '', device: verifiedDevice })
         : verification === 'waiting' && connection ? formatMessage(locale, 'profileMcpTestWaiting', { device: connection.deviceLabel || say('profileConnectionUnnamed') })
           : say(verification === 'error' ? 'profileConnectionCheckFailed' : 'profileConnectionNotVerified')}
     </p> : null}
     <div className="waka-session-actions">
-      {connection ? <button type="button" className="waka-settings-erase" onClick={onDone}>{say('profileConnectionCancel')}</button>
+      {!manual ? <button type="button" className="waka-settings-erase" onClick={() => {
+        setManual(true); setStep(0); setInstalled(false); setVerification('idle'); verificationRequest.current += 1;
+      }}>{say('profileMcpManualInstall')}</button> : connection ? <button type="button" className="waka-settings-erase" onClick={onDone}>{say('profileConnectionCancel')}</button>
         : step > 0 ? <button type="button" className="waka-settings-erase" onClick={() => { if (step === 1) setInstalled(false); setStep(step - 1); }}>{say("profileConnectionPrevious")}</button> : null}
+      {!manual && promptCopy === 'idle' ? <McpCopyBlock locale={locale} text={setupPrompt} mode="button"
+        copyLabel={say('profileMcpCopySetupPrompt')} onCopied={() => setPromptCopy('copied')} onCopyFailed={() => setPromptCopy('failed')} /> :
       <button type="button" className="waka-settings-erase" disabled={(step > 0 && !selected) || verification === 'checking'}
-        onClick={() => step === 2 ? verification === 'verified' ? onDone() : void checkConnection() : setStep(step + 1)}>
-        {say(step === 0 ? "profileConnectionNextLogin" : step === 1 ? "profileConnectionNextVerify"
+        onClick={() => (!manual || step === 2) ? verification === 'verified' ? onDone() : void checkConnection() : setStep(step + 1)}>
+        {say(manual && step === 0 ? "profileConnectionNextLogin" : manual && step === 1 ? "profileConnectionNextVerify"
           : verification === 'verified' ? "profileConnectionViewDevices" : verification === 'checking' ? 'profileConnectionChecking' : 'profileConnectionCheck')}
       </button>
+      }
     </div>
   </section>;
-}
-
-function CommandBlock({ locale, command }: { locale: SupportedLocale; command: string }): JSX.Element {
-  const [result, setResult] = useState<"copied" | "failed" | null>(null);
-  useEffect(() => setResult(null), [command]);
-  return <div className="waka-session-command">
-    <button type="button" className="waka-settings-erase" onClick={() => {
-      void (async () => {
-        try { await navigator.clipboard.writeText(command); setResult("copied"); }
-        catch { setResult("failed"); }
-      })();
-    }}>{t(locale, "profileConnectionCopy")}</button>
-    {result ? <span role="status" className="waka-settings-note">{t(locale, result === "copied" ? "profileConnectionCopied" : "profileConnectionCopyError")}</span> : null}
-    <pre className="waka-mcp-commands"><code>{command}</code></pre>
-  </div>;
 }
 
 /** Overview rows navigate; only the selected section's content is mounted. */

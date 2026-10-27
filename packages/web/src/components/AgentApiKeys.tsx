@@ -1,5 +1,8 @@
-import { mcpKeyConfig, type McpClient } from '../lib/mcp-setup';
+import { publicWebOrigin } from '../lib/public-origins';
+import { mcpKeyConfig, mcpSetupCommands, mcpClientName, type McpClient } from '../lib/mcp-setup';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { McpCopyBlock } from './McpCopyBlock';
+import { McpInstallPrompt } from './McpInstallPrompt';
 
 import { createAgentKey, fetchAgentKeys, revokeAgentKey, type ApiAgentKey } from '../lib/api/agent-keys';
 import { formatMessage, t, type SupportedLocale } from '../lib/locales';
@@ -21,7 +24,11 @@ export function AgentApiKeys({ profile, locale }: {
   const [confirm, setConfirm] = useState<string | null>(null);
   const alive = useRef(true);
   const secretField = useRef<HTMLInputElement>(null);
-  useEffect(() => { secretField.current?.focus(); }, [fresh]);
+  const setupDetails = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    secretField.current?.focus();
+    if (fresh && setupDetails.current) setupDetails.current.open = true;
+  }, [fresh]);
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
@@ -57,14 +64,17 @@ export function AgentApiKeys({ profile, locale }: {
     finally { if (alive.current) setBusy(null); }
   };
   const apiUrl = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, '');
-  const config = mcpKeyConfig(client, profile.id, apiUrl);
+  const packageOrigin = publicWebOrigin();
+  const config = mcpKeyConfig(client, profile.id, apiUrl, packageOrigin);
+  const install = mcpSetupCommands({ profile, apiUrl, packageOrigin, installed: false, client, scope: 'user' })[0]!;
   return <>
     <div className="waka-session-list-heading">
       <h3>{formatMessage(locale, 'profileApiKeysForAgent', { name: profile.name })}</h3>
       <button type="button" className="waka-settings-erase" disabled={loading || busy !== null} onClick={() => void load()}>{say('profileConnectionsRefresh')}</button>
     </div>
     <p className="waka-settings-note">{say('profileApiKeysHint')}</p>
-    <p className="waka-settings-note">{say('profileConnectionAgentAccess')}</p>
+    <h4 className="waka-mcp-instruction-title">{say('profileApiKeysCreateStep')}</h4>
+    <p className="waka-settings-note">{say('profileApiKeysCreateHint')}</p>
     {error ? <p className="waka-account-failed" role="alert">{error}</p> : null}
     {loading ? <p className="waka-settings-note" role="status">{say('worldInspirationsLoad')}</p> : null}
     {fresh ? <div className="waka-session-confirm">
@@ -86,6 +96,42 @@ export function AgentApiKeys({ profile, locale }: {
     </div> : null}
     {keys && keys.length >= 5 ? <p className="waka-settings-note">{say('profileApiKeysLimit')}</p> : null}
     {keys?.length === 0 ? <p className="waka-settings-note">{say('profileApiKeysEmpty')}</p> : null}
+    <details ref={setupDetails} className="waka-mcp-key-setup">
+      <summary>{say('profileApiKeysConfigTitle')}</summary>
+      <label className="waka-mcp-choice"><span>{say('profileMcpClient')}</span><select value={client} onChange={event => setClient(event.target.value as McpClient)}>
+        <option value="claude">Claude Code / JSON</option><option value="codex">Codex</option>
+      </select></label>
+      <h4 className="waka-mcp-instruction-title">{say('profileMcpPromptTitle')}</h4>
+      <McpInstallPrompt locale={locale} profile={profile} apiUrl={apiUrl} packageOrigin={packageOrigin} client={client} scope="user" authMethod="key" />
+      <details className="waka-mcp-key-setup">
+        <summary>{say('profileMcpManualInstall')}</summary>
+        <ol className="waka-mcp-key-steps">
+          <li>
+            <h4 className="waka-mcp-instruction-title">{say('profileApiKeysPrepareTitle')}</h4>
+            <p className="waka-settings-note">{say('profileMcpRequirements')}</p>
+            <p className="waka-settings-note">{say('profileConnectionInstallHint')}</p>
+            <McpCopyBlock locale={locale} text={install} copyLabel={say('profileMcpCopyInstall')} />
+          </li>
+          <li>
+            <h4 className="waka-mcp-instruction-title">{say('profileApiKeysConfigStep')}</h4>
+            <p className="waka-settings-note">{say(client === 'codex' ? 'profileMcpCodexConfigHint' : 'profileMcpClaudeConfigHint')}</p>
+            <p className="waka-settings-note">{say('profileApiKeysConfigHint')}</p>
+            <McpCopyBlock locale={locale} text={config} copyLabel={say('profileApiKeysCopyConfig')} />
+          </li>
+          <li>
+            <h4 className="waka-mcp-instruction-title">{say('profileApiKeysVerifyTitle')}</h4>
+            <p className="waka-settings-note">{formatMessage(locale, 'profileConnectionVerifyHint', { client: mcpClientName(client) })}</p>
+            <McpCopyBlock locale={locale} prompt copyLabel={say('profileMcpCopyTest')}
+              text={formatMessage(locale, 'profileConnectionTestPrompt', { name: profile.name, id: profile.id })} />
+            <p className="waka-settings-note">{formatMessage(locale, 'profileApiKeysTestHint', { name: profile.name, id: profile.id })}</p>
+          </li>
+        </ol>
+      </details>
+    </details>
+    {keys && keys.length > 0 ? <>
+      <h4 className="waka-mcp-instruction-title">{say('profileApiKeysActive')}</h4>
+      <p className="waka-settings-note">{say('profileApiKeysRotateHint')}</p>
+    </> : null}
     <ul className="waka-session-list" aria-busy={loading}>
       {keys?.map(key => <li key={key.id} className="waka-session-card">
         <div className="waka-session-card-heading"><strong>{key.label || say('profileApiKeysSecret')}</strong><span>{key.prefix}…</span></div>
@@ -100,15 +146,6 @@ export function AgentApiKeys({ profile, locale }: {
         </div> : <button type="button" className="waka-settings-erase" disabled={busy !== null || loading} onClick={() => setConfirm(key.id)}>{say('profileApiKeysRevoke')}</button>}
       </li>)}
     </ul>
-    <details>
-      <summary>{say('profileApiKeysConfigTitle')}</summary>
-      <label className="waka-mcp-choice"><span>{say('profileMcpClient')}</span><select value={client} onChange={event => setClient(event.target.value as McpClient)}>
-        <option value="claude">Claude Code / JSON</option><option value="codex">Codex</option>
-      </select></label>
-      <p className="waka-settings-note">{say('profileApiKeysConfigHint')}</p>
-      {client === 'codex' ? <p className="waka-settings-note">{say('profileMcpCodexConfigHint')}</p> : null}
-      <pre className="waka-mcp-commands"><code>{config}</code></pre>
-      <p className="waka-settings-note">{formatMessage(locale, 'profileApiKeysTestHint', { name: profile.name, id: profile.id })}</p>
-    </details>
+
   </>;
 }

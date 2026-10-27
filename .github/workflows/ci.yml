@@ -116,6 +116,9 @@ jobs:
       - name: API unit tests
         run: pnpm --filter @waka/api test:unit
 
+      - name: Public MCP installation without repository access
+        run: pnpm mcp:check
+
       # Everything that needs only Postgres. This is the gate: it covers the
       # authorization boundary, the vault, the routes, and the migration
       # journal.

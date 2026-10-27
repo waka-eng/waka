@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node ../../tools/mcp-distribution/check.mjs && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/check-vocabulary.mjs && node scripts/check-seams.mjs && vitest run",

@@ -7081,4 +7081,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-agent-profile-fields input, .waka-settings-add input, .waka-settings .waka-account-field input { font-size: var(--t-input); }
 .waka-mcp-choice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-8); margin: var(--sp-12) 0; font-size: var(--t-body); }
 .waka-mcp-choice select { min-height: var(--sp-44); max-width: 100%; padding: var(--sp-8); border: 1px solid var(--line); border-radius: var(--sp-8); background: var(--paper); color: var(--ink); font: inherit; font-size: var(--t-input); }
+.waka-mcp-instruction-title { margin: var(--sp-16) 0 var(--sp-8); font-size: var(--t-body); font-weight: 500; }
+.waka-mcp-key-steps { margin: var(--sp-12) 0; padding-inline-start: var(--sp-24); }
+.waka-mcp-key-steps > li { padding-inline-start: var(--sp-4); }
+.waka-mcp-key-setup > summary { cursor: pointer; padding-block: var(--sp-12); }
+.waka-mcp-prompt-scroll { max-height: min(14rem, 36dvh); overflow: auto; overscroll-behavior: contain; }
 }

@@ -62,12 +62,15 @@
     "e2e:every-orb-answers": "tsx tools/e2e/every-orb-answers.ts",
     "e2e:the-timeline": "tsx tools/e2e/the-timeline.ts",
     "e2e:coming-back": "tsx tools/e2e/coming-back.ts",
-    "e2e:the-character": "tsx tools/e2e/the-character.ts"
+    "e2e:the-character": "tsx tools/e2e/the-character.ts",
+    "mcp:package": "node tools/mcp-distribution/build.mjs",
+    "mcp:check": "node --test tools/mcp-distribution/smoke.test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
     "dotenv": "^16.4.5",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.25.12",
     "playwright": "^1.48.2",
     "sst": "^3.19.3",
     "tsx": "^4.19.2",
