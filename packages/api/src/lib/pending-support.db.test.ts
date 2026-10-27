@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 /** Pending checks through real rows, serving projections and reviewed writes.
  * Providers return deterministic verdicts; no model or hosted database runs. */
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -116,13 +117,17 @@ describe('pending support is not current proof', () => {
 
   it('an explicit read waits for active support without publishing an empty success', async () => {
     const f = await fixture();
+    const [other] = await t.sql`INSERT INTO inspirations(profile_id,text)
+      VALUES (${f.profileId}, 'A separate quiet walk clarified a difficult decision.') RETURNING id`;
+    await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
+      VALUES (${f.profileId},${f.profileId},${f.signalId},${other.id})`;
     await t.sql`UPDATE inspirations SET text = 'Quiet still helps me decide' WHERE id = ${f.sourceId}`;
     const request = await enqueueTopOfMindRefresh(f.profileId, 'manual');
     await t.sql`UPDATE background_jobs SET run_after = now() + interval '30 minutes' WHERE type::text = 'review_signal_support'`;
     const synthesis = vi.fn(async (input: TopOfMindSynthesisInput) => ({
       entries: [{ type: 'hypothesis' as const, body: 'A current checked reading', citedSignalIds: input.signals.map((signal) => signal.id) }],
     }));
-    setDefaultModelProviderForTests({ ...supported, synthesizeTopOfMind: synthesis } as unknown as ModelProvider);
+    setDefaultModelProviderForTests({ ...supported, reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: synthesis } as unknown as ModelProvider);
     const readingJob = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
     expect(readingJob?.id).toBe(request.jobId);
     try { await processBackgroundJob(readingJob!); throw new Error('Pending checks must hold the reading'); }
@@ -205,7 +210,7 @@ describe('pending support is not current proof', () => {
     const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${f.profileId}, 'A quiet walk helps me choose') RETURNING id`;
     const provider = { ...supported,
       extractSignalCandidates: async () => ({ statements: [{ statement: 'Quiet walking helps me choose', quote: 'A quiet walk helps me choose' }] }),
-      synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => ({ entries: [{ type: 'hypothesis', body: 'Quiet walking is a current thread', citedSignalIds: input.signals.map((signal) => signal.id) }] }),
+      reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => ({ entries: [{ type: 'hypothesis', body: 'Quiet walking is a current thread', citedSignalIds: input.signals.map((signal) => signal.id) }] }),
     } as unknown as ModelProvider;
     const outcome = await deriveSignalsForInspiration({ inspirationId: source.id as string, reason: 'created' }, {
       db: t.db as never, modelProvider: provider, embeddingClient: { model, embed: async () => vector },

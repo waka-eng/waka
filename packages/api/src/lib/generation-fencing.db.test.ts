@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { sql } from "drizzle-orm";
@@ -37,7 +38,7 @@ async function fixture() {
 }
 
 const synthesizer = (ids: string[], change?: () => Promise<unknown>, body = 'A stale new reading') => ({
-  synthesizeTopOfMind: async () => { await change?.(); return { entries: [{ type: 'pattern', body, citedSignalIds: ids }] }; },
+  reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async () => { await change?.(); return { entries: [{ type: 'pattern', body, citedSignalIds: ids }] }; },
 }) as unknown as ModelProvider;
 
 /* `groupFixture` went with the rooms (founder: "방 없애"). It stood up two
@@ -94,7 +95,7 @@ describe('generation commit fences', () => {
     for (let n = 0; n < 25; n++) await t.sql`INSERT INTO feedback(profile_id, target_type, target_id, value)
       VALUES (${a.profileId}, 'signal', ${b.signalIds[0]!}, 'true')`;
     await refreshTopOfMindForProfile({ profileId: a.profileId, reason: 'manual' }, { db: t.db as never,
-      modelProvider: { synthesizeTopOfMind: async (input: { recentFeedback: unknown[] }) => {
+      modelProvider: { reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: { recentFeedback: unknown[] }) => {
         expect(input.recentFeedback).toEqual([{ target: 'signal', about: 'Pattern 0', value: 'partly', correction: 'My own correction' }]);
         return { noChange: true, entries: [] };
       } } as unknown as ModelProvider,
@@ -143,7 +144,7 @@ describe('generation commit fences', () => {
       VALUES (${a.profileId}, 'signal', ${b.signalIds[0]!}, 'not_true')`;
     await t.sql`UPDATE signals SET statement = 'PRIVATE_SENTINEL changed after revocation' WHERE id = ${b.signalIds[0]!}`;
     await refreshTopOfMindForProfile({ profileId: a.profileId, reason: 'manual' }, { db: t.db as never,
-      modelProvider: { synthesizeTopOfMind: async (input: unknown) => {
+      modelProvider: { reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: unknown) => {
         expect(JSON.stringify(input)).not.toContain('PRIVATE_SENTINEL');
         return { noChange: true, entries: [] };
       } } as unknown as ModelProvider,

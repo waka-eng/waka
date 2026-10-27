@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 /**
  * THE BOARD SHIFTS AT MOST ONCE A DAY — goal: one-shift-a-day, Phase 2.
  *
@@ -66,8 +67,8 @@ async function seedSignals(profileId: string): Promise<string[]> {
   return ids;
 }
 
-/** A synthesis that always proposes ONE fresh entry citing the first given
-    signal — every un-held refresh is a content shift, which is exactly what
+/** A synthesis that always proposes ONE fresh entry citing different originals
+    — every un-held refresh is a content shift, which is exactly what
     the floor must contain. */
 function scriptedSynthesis(signalIds: () => string[]): ModelProvider {
   let n = 0;
@@ -76,7 +77,7 @@ function scriptedSynthesis(signalIds: () => string[]): ModelProvider {
   };
   return {
     name: "scripted",
-    async synthesizeTopOfMind() {
+    reviewTopOfMind: approveReadingReview, async synthesizeTopOfMind() {
       n += 1;
       return {
         noChange: false,
@@ -86,7 +87,7 @@ function scriptedSynthesis(signalIds: () => string[]): ModelProvider {
             body: `the board as of pass ${n}`,
             belief: null,
             prompt: null,
-            citedSignalIds: [signalIds()[0]!],
+            citedSignalIds: signalIds(),
           },
         ],
       };

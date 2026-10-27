@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 /**
  * THE GARDENER PROPOSES; ONLY THE OWNER MOVES.
  *
@@ -85,7 +86,7 @@ function scriptedJudge(verdict: SignalMatchJudgement["relation"]): {
         return { relation: verdict };
       },
       extractSignalCandidates: refuse,
-      synthesizeTopOfMind: refuse,
+      reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: refuse,
       distillPrinciples: refuse,
       judgePrincipleRelation: refuse,
       routeDeclaration: refuse,

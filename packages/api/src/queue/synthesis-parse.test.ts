@@ -28,23 +28,15 @@ describe("parseTopOfMindSynthesis", () => {
       entries: [good, { type: "not-a-real-type", body: "should be dropped" }, good],
     });
     expect(out.entries).toHaveLength(2);
+    expect(out.rejectedEntries).toBe(1);
     expect(out.entries[0]?.body).toBe(good.body);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 
-  it("preserves noChange even when every entry is unusable", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const out = parseTopOfMindSynthesis({
-      noChange: true,
-      entries: [{ type: "nonsense", body: "x" }],
-    });
-    // The old parser returned {entries: []} with noChange lost, and the caller
-    // could not tell "the model declined to change anything" from "the model
-    // says you now have nothing".
-    expect(out.noChange).toBe(true);
-    expect(out.entries).toHaveLength(0);
-    warn.mockRestore();
+  it("treats an entirely malformed reply as failure even when it says noChange", () => {
+    expect(() => parseTopOfMindSynthesis({ noChange: true, entries: [{ type: 'nonsense', body: 'x' }] })).toThrow(/invalid entries/);
+    expect(() => parseTopOfMindSynthesis({ entries: [{ type: 'pattern', body: '   ' }] })).toThrow(/invalid entries/);
   });
 
   it("carries noChange through a reply that sends no entries at all", () => {
@@ -55,8 +47,9 @@ describe("parseTopOfMindSynthesis", () => {
 
   it("still rejects a payload that is not an artifact", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(parseTopOfMindSynthesis("nope").entries).toHaveLength(0);
-    expect(parseTopOfMindSynthesis({ entries: "not an array" }).entries).toHaveLength(0);
+    expect(() => parseTopOfMindSynthesis("nope")).toThrow(/invalid artifact/);
+    expect(() => parseTopOfMindSynthesis({ entries: "not an array" })).toThrow(/invalid artifact/);
+    expect(() => parseTopOfMindSynthesis({})).toThrow(/invalid artifact/);
     warn.mockRestore();
   });
 

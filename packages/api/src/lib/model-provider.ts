@@ -142,6 +142,8 @@ export interface SignalSupportAssessmentResult {
 export interface TopOfMindSynthesisSignal {
   id: string;
   statement: string;
+  /** Current original inspiration IDs, deduplicated across signal citations. */
+  inspirationIds?: string[];
   /** Personal selection may mix new interests and established patterns. */
   status?: 'active' | 'emerging';
   confidence: number;
@@ -239,11 +241,35 @@ export interface TopOfMindSynthesisEntry {
 
 export interface TopOfMindSynthesisResult {
   entries: TopOfMindSynthesisEntry[];
+  /** Entries rejected by parsing, before publication validation can see them. */
+  rejectedEntries?: number;
   /**
    * The model's read that the current artifact still holds. Advisory: the
    * caller decides, and records the decision either way.
    */
   noChange?: boolean;
+}
+
+/** Independent publication review, using only this profile's current sources. */
+export interface TopOfMindReviewInput {
+  preferredLocale: SupportedLocale;
+  entries: Array<{
+    body: string;
+    belief?: string | null;
+    prompt?: string | null;
+    inspirationIds: string[];
+  }>;
+  inspirations: Array<{ id: string; text: string; truncated: boolean }>;
+}
+
+export interface TopOfMindReviewResult {
+  entries: Array<{
+    index: number;
+    languageMatches: boolean;
+    grounded: boolean;
+    synthesized: boolean;
+    supportingInspirationIds: string[];
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -499,6 +525,7 @@ export interface ModelProvider {
   synthesizeTopOfMind(
     input: TopOfMindSynthesisInput,
   ): Promise<TopOfMindSynthesisResult>;
+  reviewTopOfMind(input: TopOfMindReviewInput): Promise<TopOfMindReviewResult>;
 }
 
 let defaultProvider: ModelProvider | null = null;

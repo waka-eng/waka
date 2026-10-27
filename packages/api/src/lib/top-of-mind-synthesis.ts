@@ -50,11 +50,14 @@ import {
   type BackgroundJobResult,
   feedback,
   signalContradictions,
+  inspirations,
+  reflections,
+  attachments,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
 import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 import { getDb } from "./db.js";
-import { computeSignalConfidence, selectIndependentEvidence } from "./signal-lifecycle.js";
+import { computeSignalConfidence, selectIndependentEvidence, type ConfidenceEvidence } from "./signal-lifecycle.js";
 import {loadSignalEvidence} from './review-evidence.js';
 import { normalizeSupportedLocale } from "./locales.js";
 import {
@@ -64,6 +67,8 @@ import {
   type TopOfMindRecentFeedback,
 } from "./model-provider.js";
 import { acquireTopOfMindArtifactLock } from "./top-of-mind-family-lock.js";
+import { effectiveAttachmentText, effectiveAttachmentStatus } from './attachment-material.js';
+import { distinctReadingOrigins, readingQualityIssue, reviewReadingEntries, type TopOfMindQualityContext } from './top-of-mind-quality.js';
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -353,6 +358,7 @@ export const TOP_OF_MIND_EMERGING_MIN_EVIDENCE = 2;
 
 interface SelectionOutcome {
   signals: SelectedSignal[];
+  evidence: ReadonlyMap<string, ConfidenceEvidence[]>;
   /** All current standing disputes, including signals outside this pass. */
   contested: ReadonlyMap<string, readonly string[]>;
   /** True when the selection includes a still-forming interest. */
@@ -385,7 +391,7 @@ async function selectSignals(
     )
     .orderBy(desc(signals.confidence), desc(signals.lastEvidenceAt));
 
-  if (rows.length === 0) return { signals: [], provisional: false, contested:new Map() };
+  if (rows.length === 0) return { signals: [], evidence: new Map(), provisional: false, contested:new Map() };
 
   const {witnesses:evidenceBySignal}=await loadSignalEvidence(db,profileId,rows.map(row=>row.id));
 
@@ -533,7 +539,35 @@ async function selectSignals(
 
   const standingIds=new Set(scored.map(row=>row.id));
   const standingContested=new Map([...opposing].filter(([id])=>standingIds.has(id)).map(([id,partners])=>[id,partners.filter(partner=>standingIds.has(partner))]));
-  return { signals: finalList.map((s) => strip(s, inList)), provisional: chosen.provisional, contested:standingContested };
+  return { signals: finalList.map((s) => strip(s, inList)), evidence: evidenceBySignal, provisional: chosen.provisional, contested:standingContested };
+}
+
+/** Batch the current original material for selected and carried citations.
+ * Synthesis reads signals; publication review reads bounded original excerpts.
+ * Ownership predicates and the generation revision fence cover every read. */
+async function loadReadingQualityContext(db: WakaDb, profileId: string,
+  locale: TopOfMindQualityContext['locale'], selection: SelectionOutcome,
+  current: LiveArtifactSnapshot | null): Promise<TopOfMindQualityContext> {
+  const signalIds = new Set([...selection.signals.map(row => row.id),
+    ...(current?.entries.flatMap(entry => entry.citedSignalIds) ?? [])]);
+  const signalOrigins = new Map([...signalIds].map(id => [id,
+    [...new Set((selection.evidence.get(id) ?? []).flatMap(row => row.lineage?.originIds ?? []))]]));
+  const ids = [...new Set([...signalOrigins.values()].flat())];
+  const sourceTexts = new Map<string, string[]>();
+  if (!ids.length) return { locale, signalOrigins, sourceTexts };
+  const [originals, answers, media] = await Promise.all([
+    db.select({ id: inspirations.id, text: inspirations.text }).from(inspirations)
+      .where(and(eq(inspirations.profileId, profileId), inArray(inspirations.id, ids))),
+    db.select({ id: reflections.inspirationId, text: reflections.answer }).from(reflections)
+      .where(and(eq(reflections.profileId, profileId), inArray(reflections.inspirationId, ids), eq(reflections.skipped, false))),
+    db.select({ id: attachments.inspirationId, text: effectiveAttachmentText }).from(attachments)
+      .where(and(eq(attachments.profileId, profileId), inArray(attachments.inspirationId, ids), eq(effectiveAttachmentStatus, 'ready'))),
+  ]);
+  for (const row of originals) sourceTexts.set(row.id, row.text ? [row.text] : []);
+  for (const row of [...answers, ...media]) {
+    if (row.id && row.text && sourceTexts.has(row.id)) sourceTexts.get(row.id)!.push(row.text);
+  }
+  return { locale, signalOrigins, sourceTexts };
 }
 
 /**
@@ -1087,7 +1121,15 @@ export async function refreshTopOfMindForProfile(
     selectSignals(db, input.profileId, now),
     loadLiveArtifact(db, input.profileId),
   ]);
-  const selected = selection.signals;
+  const preferredLocale = normalizeSupportedLocale(profileRows[0]?.preferredLocale);
+  const quality = await loadReadingQualityContext(db, input.profileId, preferredLocale, selection, liveBefore);
+  const lockedBefore = (liveBefore?.entries ?? []).filter(
+    (entry) => (entry.lockedAt !== null || entry.pinnedAt !== null) && entry.dismissedAt === null,
+  );
+  // Several signals extracted from one capture are still only one source.
+  // Human-kept entries may still regain support without changing their words.
+  const selected = lockedBefore.length > 0 || distinctReadingOrigins(selection.signals.map(row => row.id), quality) >= 2
+    ? selection.signals : [];
   const provisional = selection.provisional;
 
   if (selected.length === 0 && liveBefore === null) {
@@ -1111,75 +1153,105 @@ export async function refreshTopOfMindForProfile(
     };
   }
 
-  const lockedBefore = (liveBefore?.entries ?? []).filter(
-    (entry) => (entry.lockedAt !== null || entry.pinnedAt !== null) && entry.dismissedAt === null,
-  );
-
   let generated: TopOfMindSynthesisEntry[] = [];
   let modelSaidNoChange = false;
   let droppedCitations = 0;
   let lockViolations = 0;
+  let generationFailure: unknown = null;
+  const entryKey = (entry: { type: string; body: string; belief?: string | null; prompt?: string | null; citedSignalIds: string[] }) =>
+    JSON.stringify([entry.type, entry.body, entry.belief ?? null, entry.prompt ?? null, [...entry.citedSignalIds].sort()]);
+  const priorCandidates = (liveBefore?.entries ?? []).filter(entry => !isHumanTouched(entry) &&
+    contestedCarryAllowed(entry, selection.contested) && readingQualityIssue(entry, quality) === null);
+  let approvedPrevious = new Set(priorCandidates.map(entryKey));
+  const keptWording = (entry: TopOfMindSynthesisEntry) => lockedBefore.some(kept => kept.type === entry.type && kept.body === entry.body);
   const contested = new Map(selected.map(signal=>[signal.id,signal.contestedWithIds??[]]));
   const selectedStatements = new Map(selected.map(signal=>[signal.id,signal.statement]));
 
   if (selected.length > 0) {
-    const recentFeedback = await loadRecentFeedback(db, input.profileId);
-    const synthesis = await provider.synthesizeTopOfMind({
-      recentFeedback,
-      provisional,
-      profileId: input.profileId,
-      preferredLocale: normalizeSupportedLocale(profileRows[0]?.preferredLocale),
-      signals: selected.map((signal) => ({
-        id: signal.id,
-        statement: signal.statement,
-        status: signal.status,
-        confidence: signal.confidence,
-        evidenceCount: signal.evidenceCount,
-        lastEvidenceAt: signal.lastEvidenceAt,
-        timeShape: signal.timeShape ?? undefined,
-        contestedWithIds: signal.contestedWithIds,
-      })),
-      lockedEntries: lockedBefore.map((entry, index) => ({
-        id: `${liveBefore?.id ?? "pending"}:${index}`,
-        type: entry.type,
-        body: entry.body,
-        belief: entry.belief,
-        prompt: entry.prompt,
-        citedSignalIds: entry.supportChanged ? [] : entry.citedSignalIds,
-        supportChanged: entry.supportChanged,
-      })),
-      currentEntries: (liveBefore?.entries ?? [])
-        .filter((entry) => entry.dismissedAt === null && !entry.supportChanged)
-        .map((entry) => ({
+    try {
+      const recentFeedback = await loadRecentFeedback(db, input.profileId);
+      const synthesis = await provider.synthesizeTopOfMind({
+        recentFeedback,
+        provisional,
+        profileId: input.profileId,
+        preferredLocale,
+        signals: selected.map((signal) => ({
+          id: signal.id,
+          statement: signal.statement,
+          status: signal.status,
+          confidence: signal.confidence,
+          evidenceCount: signal.evidenceCount,
+          lastEvidenceAt: signal.lastEvidenceAt,
+          timeShape: signal.timeShape ?? undefined,
+          contestedWithIds: signal.contestedWithIds,
+          inspirationIds: [...(quality.signalOrigins.get(signal.id) ?? [])],
+        })),
+        lockedEntries: lockedBefore.map((entry, index) => ({
+          id: `${liveBefore?.id ?? "pending"}:${index}`,
           type: entry.type,
           body: entry.body,
-          citedSignalIds: entry.citedSignalIds,
+          belief: entry.belief,
+          prompt: entry.prompt,
+          citedSignalIds: entry.supportChanged ? [] : entry.citedSignalIds,
+          supportChanged: entry.supportChanged,
         })),
-    });
-
-    modelSaidNoChange = synthesis.noChange === true;
-    lockViolations = countLockViolations(lockedBefore, synthesis.entries);
-    if (lockViolations > 0) {
-      console.warn("[top-of-mind] model did not reproduce locked entries verbatim", {
-        profileId: input.profileId,
-        lockViolations,
+        currentEntries: (liveBefore?.entries ?? [])
+          .filter((entry) => entry.dismissedAt === null && !entry.supportChanged &&
+            (isHumanTouched(entry) || readingQualityIssue(entry, quality) === null))
+          .map((entry) => ({
+            type: entry.type,
+            body: entry.body,
+            citedSignalIds: entry.citedSignalIds,
+          })),
       });
-    }
 
-    const validated = validateSynthesizedEntries(
-      synthesis.entries,
-      new Set(selected.map((signal) => signal.id)),
-      contested,
-      selectedStatements,
-    );
-    generated = validated.entries;
-    droppedCitations = validated.droppedCitations;
-    if (droppedCitations > 0) {
-      console.warn("[top-of-mind] dropped citations the profile does not hold", {
-        profileId: input.profileId,
-        droppedCitations,
-      });
+      modelSaidNoChange = synthesis.noChange === true;
+      lockViolations = countLockViolations(lockedBefore, synthesis.entries);
+      if (lockViolations > 0) {
+        console.warn("[top-of-mind] model did not reproduce locked entries verbatim", {
+          profileId: input.profileId,
+          lockViolations,
+        });
+      }
+
+      const validated = validateSynthesizedEntries(
+        synthesis.entries,
+        new Set(selected.map((signal) => signal.id)),
+        contested,
+        selectedStatements,
+      );
+      generated = validated.entries.filter(entry => keptWording(entry) || readingQualityIssue(entry, quality) === null);
+      if ((synthesis.rejectedEntries || synthesis.entries.some(entry => !keptWording(entry))) && !generated.some(entry => !keptWording(entry))) {
+        generationFailure = new Error('Top of mind generation failed publication checks');
+      }
+      droppedCitations = validated.droppedCitations;
+      if (droppedCitations > 0) {
+        console.warn("[top-of-mind] dropped citations the profile does not hold", {
+          profileId: input.profileId,
+          droppedCitations,
+        });
+      }
+    } catch (error) {
+      generationFailure = error;
+      generated = [];
     }
+  }
+
+  // Review the fallback as well as the proposal: noChange cannot grandfather
+  // a wrong-language or unsupported legacy reading into the new version.
+  const machineEntries = generated.filter(entry => !keptWording(entry));
+  try {
+    const approved = await reviewReadingEntries([...machineEntries, ...priorCandidates], quality, provider);
+    generated = generated.filter(entry => keptWording(entry) || approved.has(machineEntries.indexOf(entry)));
+    approvedPrevious = new Set(priorCandidates.filter((_, index) => approved.has(machineEntries.length + index)).map(entryKey));
+    if (machineEntries.length && !generated.some(entry => !keptWording(entry))) {
+      generationFailure = new Error('Top of mind generation failed publication review');
+    }
+  } catch (error) {
+    // Reviewer downtime is a failed job, not permission to publish unchecked
+    // text. Keep only the existing supported fallback; the queue retries.
+    generationFailure = error;
+    generated = [];
   }
 
   const written = await db.transaction(async (tx) => {
@@ -1194,9 +1266,15 @@ export async function refreshTopOfMindForProfile(
     // A no-change response may omit entries, but it cannot resurrect a
     // conclusion whose cited support is no longer current. The live snapshot
     // has already projected that support while retaining human choices.
-    const preserveCurrent = (selected.length === 0 || modelSaidNoChange) && previous !== null;
+    const validPrevious = previous?.entries.filter(entry => isHumanTouched(entry) ||
+      approvedPrevious.has(entryKey(entry))) ?? [];
+    // noChange may not carry an old-language quotation or a one-source
+    // reading forward. Accept valid replacement entries even when the model
+    // incorrectly labels its repair as noChange.
+    const preserveCurrent = previous !== null && (generationFailure !== null || selected.length === 0 ||
+      (modelSaidNoChange && (generated.length === 0 || validPrevious.length === previous.entries.length)));
     const entries = preserveCurrent
-      ? carryEverything({...previous,entries:previous.entries.filter(entry=>isHumanTouched(entry)||contestedCarryAllowed(entry,selection.contested))
+      ? carryEverything({...previous,entries:validPrevious
           .map(entry=>isHumanTouched(entry)?entry:{...entry,belief:entry.citedSignalIds.some(id=>selection.contested.get(id)?.length)?null:machineBelief(entry,selectedStatements)??null})}, generated)
       : assembleEntries({ carried: previous?.entries ?? [], generated });
 
@@ -1209,6 +1287,10 @@ export async function refreshTopOfMindForProfile(
         ? "no_change"
         : "regenerated";
 
+    // A bad response must neither erase a valid reading nor record success.
+    // Prune invalid/stale prior machine text if needed, then fail outside this
+    // transaction so that cleanup commits and normal bounded retries apply.
+    if (generationFailure !== null && (previous === null || unchanged)) return null;
     const created = await writeVersion(tx, {
       profileId: input.profileId,
       previous,
@@ -1217,12 +1299,14 @@ export async function refreshTopOfMindForProfile(
       now,
     });
 
-    await deps.onPublished?.(tx, { profileId: input.profileId, result: { kind: "top_of_mind", topOfMindId: created.id,
+    if (generationFailure === null) await deps.onPublished?.(tx, { profileId: input.profileId, result: { kind: "top_of_mind", topOfMindId: created.id,
       version: created.version, outcome: entries.length === 0 ? "empty" : reason === "no_change" ? "unchanged" : "changed" } });
 
     return { created, reason, entryCount: entries.length };
   });
 
+  if (generationFailure !== null) throw generationFailure;
+  if (!written) throw new Error('Top of mind publication did not complete');
   return {
     status: "versioned",
     topOfMindId: written.created.id,

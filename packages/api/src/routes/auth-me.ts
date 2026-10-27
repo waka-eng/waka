@@ -30,7 +30,7 @@ import { accounts, profiles } from "../db/index.js";
 import { eraseAccount } from "../lib/account-erasure.js";
 import { buildSessionClearCookie } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
-import { enqueueTopOfMindRefresh } from "../lib/queue.js";
+import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { supportedLocaleSchema } from "../lib/locales.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import {
@@ -84,6 +84,20 @@ const deleteAccountSchema = z
     confirmation: z.literal("DELETE"),
   })
   .strict();
+
+/** Serialize locale changes with the profile write. A durable refresh request
+ * commits with the setting, and the worker is woken only after commit. Read the
+ * locked row instead of the session snapshot, which may already be stale. */
+type WakaTx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+async function saveProfileWithLocaleRefresh(tx: WakaTx, profileId: string,
+  changes: Partial<typeof profiles.$inferInsert> & { preferredLocale: string }) {
+  const [before] = await tx.select({ preferredLocale: profiles.preferredLocale }).from(profiles)
+    .where(eq(profiles.id, profileId)).for('update');
+  const [profile] = await tx.update(profiles).set(changes).where(eq(profiles.id, profileId)).returning(profileColumns);
+  const refresh = profile && before && before.preferredLocale !== changes.preferredLocale
+    ? await enqueueTopOfMindRefresh(profileId, 'manual', tx) : null;
+  return { profile, refresh };
+}
 
 // ---------------------------------------------------------------------------
 // Handlers
@@ -140,28 +154,15 @@ export async function preferencesHandler(c: Context<AuthEnv>): Promise<Response>
   const session = c.get("session");
   const db = getDb();
 
-  const changed = parsed.data.preferredLocale !== session.profile.preferredLocale;
-  const updated = await db
-    .update(profiles)
-    .set({
-      preferredLocale: parsed.data.preferredLocale,
-      updatedAt: new Date(),
-    })
-    .where(eq(profiles.id, session.profile.id))
-    .returning({ id: profiles.id });
-
-  /* The artifact should speak the new language soon, not at the next
-     unrelated refresh — a top of mind in a language you just left behind
-     reads as the setting not working. Fire-and-forget posture is wrong
-     here for the same reason it is everywhere: awaited, so a queue that
-     cannot take the job fails the preference change loudly. */
-  if (changed && updated.length > 0) {
-    await enqueueTopOfMindRefresh(session.profile.id, "manual");
-  }
+  const written = await db.transaction(tx => saveProfileWithLocaleRefresh(tx, session.profile.id, {
+    preferredLocale: parsed.data.preferredLocale, updatedAt: new Date(),
+  }));
+  if (written.refresh) await wakeCommittedBackgroundJobs([{ id: written.refresh.jobId,
+    profileId: session.profile.id, requestVersion: String(written.refresh.requestVersion) }]);
 
   // RETURNING cannot reach across the join, so the answer is read back
   // through the one query that assembles the whole identity.
-  const identity = updated.length > 0 ? await loadIdentity(db, session.profile.id) : null;
+  const identity = written.profile ? await loadIdentity(db, session.profile.id) : null;
   if (!identity) {
     return c.json({ error: "Authentication required" }, 401);
   }
@@ -269,21 +270,17 @@ export async function profileHandler(c: Context<AuthEnv>): Promise<Response> {
   let profile = current.profile;
   try {
     const written = await db.transaction(async (tx) => {
-      const [updatedProfile] = await tx
-        .update(profiles)
-        .set({
-          name: parsed.data.name,
-          preferredLocale: parsed.data.preferredLocale,
-          publicHandle: normalizedHandle,
-          publicProfileEnabled,
-          publicTopOfMindEnabled,
-          updatedAt: now,
-        })
-        .where(eq(profiles.id, current.profile.id))
-        .returning(profileColumns);
+      const saved = await saveProfileWithLocaleRefresh(tx, current.profile.id, {
+        name: parsed.data.name,
+        preferredLocale: parsed.data.preferredLocale,
+        publicHandle: normalizedHandle,
+        publicProfileEnabled,
+        publicTopOfMindEnabled,
+        updatedAt: now,
+      });
 
       if (!completeOnboarding) {
-        return { account: null, profile: updatedProfile };
+        return { account: null, ...saved };
       }
 
       const [updatedAccount] = await tx
@@ -292,9 +289,11 @@ export async function profileHandler(c: Context<AuthEnv>): Promise<Response> {
         .where(eq(accounts.id, current.account.id))
         .returning(accountColumns);
 
-      return { account: updatedAccount, profile: updatedProfile };
+      return { account: updatedAccount, ...saved };
     });
 
+    if (written.refresh) await wakeCommittedBackgroundJobs([{ id: written.refresh.jobId,
+      profileId: current.profile.id, requestVersion: String(written.refresh.requestVersion) }]);
     account = written.account ?? account;
     /* the update wrote this session's own profile, which has an account by
        the CHECK constraint; the narrow restates that for the types */

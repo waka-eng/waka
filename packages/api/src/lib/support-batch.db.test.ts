@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 /** Real source jobs, review records and queue settlement in isolated Postgres.
  * Provider responses and vectors are synthetic; no model/network calls. */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -119,7 +120,7 @@ describe('bounded support coverage', () => {
     })) }));
     const extract = vi.fn(async () => ({ statements: [] }));
     setDefaultModelProviderForTests({ assessSignalSupport: assess, extractSignalCandidates: extract,
-      synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => ({ entries: [{ type: 'hypothesis', body: 'Quiet work is a current thread', citedSignalIds: [input.signals[0]!.id] }] }),
+      reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => ({ entries: [{ type: 'hypothesis', body: 'Quiet work is a current thread', citedSignalIds: [input.signals[0]!.id] }] }),
     } as unknown as ModelProvider);
     vi.spyOn(GeminiEmbeddingHttpClient.prototype, 'embed').mockResolvedValue([1, ...new Array<number>(767).fill(0)]);
     const queued = await enqueueDeriveSignals(profile.id as string, source.id as string, 'edited');
@@ -145,8 +146,9 @@ describe('bounded support coverage', () => {
     const [progress] = await t.sql`SELECT derived_at, completed_at, reading_job_id, result FROM inspiration_processing WHERE id = ${queued.receipt.id}`;
     expect(progress.derived_at).not.toBeNull(); expect(progress.reading_job_id).not.toBeNull();
     if (progress.completed_at) {
-      expect(progress.result.topOfMindId).toBeTruthy();
-      expect(await t.sql`SELECT id FROM top_of_minds WHERE id = ${progress.result.topOfMindId} AND profile_id = ${profile.id}`).toHaveLength(1);
+      // Forty claims from one original do not make a multi-inspiration reading.
+      expect(progress.result).toMatchObject({ topOfMindId: null, version: 0, outcome: 'empty' });
+      expect(await t.sql`SELECT id FROM top_of_minds WHERE profile_id = ${profile.id}`).toHaveLength(0);
     }
   });
 });

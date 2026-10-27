@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 /**
  * CONTESTED SPEAKS — a dispute the owner has not arbitrated reaches the
  * synthesis as a dispute, never as two independent certainties.
@@ -45,6 +46,11 @@ async function seedSignal(profileId: string, statement: string): Promise<string>
   await t.sql`
     INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id)
     VALUES (${profileId}, ${profileId}, ${sig.id}, ${insp.id})`;
+  // Even a lone standing side needs two original captures to enter synthesis.
+  const [other] = await t.sql`INSERT INTO inspirations(profile_id,text)
+    VALUES (${profileId}, ${`A later independent observation: ${statement}`}) RETURNING id`;
+  await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
+    VALUES (${profileId},${profileId},${sig.id},${other.id})`;
   return sig.id as string;
 }
 
@@ -55,7 +61,7 @@ function rememberingProvider(seen: TopOfMindSynthesisInput[]): ModelProvider {
   };
   return {
     name: "remembering",
-    async synthesizeTopOfMind(input: TopOfMindSynthesisInput) {
+    reviewTopOfMind: approveReadingReview, async synthesizeTopOfMind(input: TopOfMindSynthesisInput) {
       seen.push(input);
       return {
         noChange: false,
@@ -106,7 +112,7 @@ describe("contested pairs reach the synthesis", () => {
     const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${tom.id},'pattern','Family always wins.') RETURNING id`;
     await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES(${entry.id},${a})`;
     let seen:TopOfMindSynthesisInput|null=null;
-    setDefaultModelProviderForTests({...rememberingProvider([]),synthesizeTopOfMind:async input=>{seen=input;return {noChange:true,entries:[]};}});
+    setDefaultModelProviderForTests({...rememberingProvider([]),reviewTopOfMind: approveReadingReview, synthesizeTopOfMind:async input=>{seen=input;return {noChange:true,entries:[]};}});
     await refreshTopOfMindForProfile({profileId,reason:'manual'});
     expect((seen as TopOfMindSynthesisInput|null)?.signals.map(row=>row.id)).not.toContain(a);
     const rows=await t.sql`SELECT e.body FROM top_of_mind_entries e JOIN top_of_minds m ON m.id=e.top_of_mind_id WHERE m.profile_id=${profileId} AND m.status='live'`;
@@ -120,7 +126,7 @@ describe("contested pairs reach the synthesis", () => {
     const [human]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,locked_at,pinned_at) VALUES(${tom.id},'pattern','My exact choice.',now(),now()) RETURNING id`;
     for(const entry of [machine,human])await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES(${entry.id},${a})`;
     const seen:TopOfMindSynthesisInput[]=[];
-    setDefaultModelProviderForTests({...rememberingProvider(seen),synthesizeTopOfMind:async()=>({noChange:true,entries:[]})});
+    setDefaultModelProviderForTests({...rememberingProvider(seen),reviewTopOfMind: approveReadingReview, synthesizeTopOfMind:async()=>({noChange:true,entries:[]})});
     await refreshTopOfMindForProfile({profileId,reason:'manual'});
     const rows=await t.sql`SELECT e.body,e.locked_at FROM top_of_mind_entries e JOIN top_of_minds m ON m.id=e.top_of_mind_id WHERE m.profile_id=${profileId} AND m.status='live'`;
     expect(rows.map(row=>row.body)).toEqual(['My exact choice.']);

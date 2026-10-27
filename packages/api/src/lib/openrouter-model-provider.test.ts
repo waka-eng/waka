@@ -65,6 +65,7 @@ describe('all generation tasks share the V4.1 Flash 1017 default',()=>{
     ['signal extraction',p=>p.extractSignalCandidates({...profile,inspiration:{id:'source',text:sources[0]!.text,source:'app',createdAt:new Date('2026-10-05')},reflections:[],attachments:[],existingCategories:[],existingStatements:[],relatedInspirations:[]})],
     ['signal support',p=>p.assessSignalSupport({sources:[{id:'source',kind:'inspiration',text:sources[0]!.text}],claims:[{signalId:'signal',statement:'Small experiments matter.'}]})],
     ['signal matching',p=>p.judgeSignalMatch({...locale,candidateStatement:'Small experiments matter.',existingStatement:'Try small experiments.'})],
+    ['top of mind review',p=>p.reviewTopOfMind({...locale,entries:[],inspirations:[]})],
     ['top of mind',p=>p.synthesizeTopOfMind({...profile,signals:[],lockedEntries:[],currentEntries:[],recentFeedback:[],provisional:true})],
     ['principles',p=>p.distillPrinciples({...profile,signals:[],currentPrinciples:[],currentEntries:[]})],
     ['principle grounding',p=>p.assessPrincipleGrounding({...locale,signals:[],candidates:[]})],

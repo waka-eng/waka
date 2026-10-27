@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 /** WHAT THIS MOCKS, AND WHY (gate G6): `ModelProvider` returns synthetic
  * grounded decisions and `fetch` permits only the embedding endpoint with a
  * fixed vector. Real queue claims, metering, migrations and persistence run
@@ -26,7 +27,7 @@ beforeAll(async()=>{
 beforeEach(async()=>{
   await t.truncateAll();derive.mockClear();during=null;
   setDefaultModelProviderForTests({name:'review-queue-fixture',deriveReviewAnswer:derive,
-    synthesizeTopOfMind:async(input:TopOfMindSynthesisInput)=>({entries:input.signals.length?[{type:'pattern',body:'I leave room to reconsider plans.',citedSignalIds:[input.signals[0].id]}]:[]}),
+    reviewTopOfMind: approveReadingReview, synthesizeTopOfMind:async(input:TopOfMindSynthesisInput)=>({entries:input.signals.length?[{type:'pattern',body:'I leave room to reconsider plans.',citedSignalIds:[input.signals[0].id]}]:[]}),
     judgeSignalMatch:async()=>({relation:'same'})} as unknown as ModelProvider);
   vi.stubEnv('GEMINI_API_KEY','synthetic-test-key');
   vi.stubGlobal('fetch',vi.fn(async(url:unknown)=>{

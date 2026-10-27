@@ -28,6 +28,7 @@ function fakeProvider(): ModelProvider {
     routeDeclaration: vi.fn(async () => ({ route: "inspiration" as const, type: "maxim" as const })),
     extractSignalCandidates: vi.fn(),
     synthesizeTopOfMind: vi.fn(),
+    reviewTopOfMind: vi.fn(),
   };
 }
 

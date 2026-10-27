@@ -95,6 +95,7 @@ const SPENDS_THE_SHARED_KEY: Record<string, string> = {
   extractSignalCandidates: "src/queue/gemini.ts",
   judgeSignalMatch: "src/queue/gemini.ts",
   synthesizeTopOfMind: "src/queue/gemini.ts",
+  reviewTopOfMind: "src/queue/gemini.ts",
   // Enrichment: describing an image is a model call, and the attachment path
   // reaches it.
   describeImage: "src/lib/image-description.ts",

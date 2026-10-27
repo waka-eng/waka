@@ -13,7 +13,7 @@ export async function measurePerformanceStage<T>(stage:PerformanceStage,operatio
   finally{recordPerformanceStage(stage,operation,performance.now()-started,outcome);}
 }
 const modelMethods=new Set(['answerConversation','askReflectionQuestion','askReviewQuestion','deriveReviewAnswer','extractSignalCandidates',
-  'assessSignalSupport','judgeSignalMatch','distillPrinciples','assessPrincipleGrounding','judgePrincipleRelation','routeDeclaration','synthesizeTopOfMind']);
+  'assessSignalSupport','judgeSignalMatch','distillPrinciples','assessPrincipleGrounding','judgePrincipleRelation','routeDeclaration','synthesizeTopOfMind','reviewTopOfMind']);
 const timingOperations=new Set([...modelMethods,...backgroundJobTypeValues,'conversation','inspiration','gemini']);
 /** Forward precisely one call and its original result/error. Transport, model,
  * token limits, budgets and retry behavior remain the provider's responsibility. */

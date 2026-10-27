@@ -46,6 +46,8 @@ import {
   parseSignalSupport,
   parseSignalMatchJudgement,
   parseTopOfMindSynthesis,
+  buildTopOfMindReviewRequest,
+  parseTopOfMindReview,
 } from "../queue/gemini.js";
 import {
   DeclarationNotConsideredError,
@@ -171,6 +173,11 @@ async function ask(
 export function createOpenRouterModelProvider(): ModelProvider {
   return {
     name: "openrouter",
+    async reviewTopOfMind(input) {
+      const payload = await ask(() => buildTopOfMindReviewRequest(input), 'top-of-mind review', 'WAKA_MODEL_JUDGE', 'top_of_mind_review');
+      if (payload === null || payload === MODEL_DECLINED) throw new ModelDidNotAnswerError('top-of-mind review');
+      return parseTopOfMindReview(payload);
+    },
     async answerConversation(input){
       const request=toChatRequest(buildConversationReplyRequest(input),modelFor('WAKA_MODEL_CHAT'),'conversation_reply');
       // The pinned route returned truncated strings/decoder errors for this

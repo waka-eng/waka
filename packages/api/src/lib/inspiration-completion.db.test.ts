@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import { enqueueDeriveSignals, enqueueTopOfMindRefresh, postgresBackgroundJobStore, processBackgroundJob } from './queue.js';
@@ -22,7 +23,7 @@ beforeEach(async () => {
   vi.spyOn(GeminiEmbeddingHttpClient.prototype, 'embed').mockResolvedValue([1, ...new Array<number>(767).fill(0)]);
   setDefaultModelProviderForTests({ extractSignalCandidates: extract,
     assessSignalSupport: async (input: SignalSupportAssessmentInput) => ({ assessments: input.claims.map((claim) => ({ signalId: claim.signalId, verdict: supportVerdict, sourceIds: supportVerdict === 'supported' ? [input.sources[0]!.id] : [] })) }),
-    synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => ({ entries: [{ type: 'hypothesis', body: 'A little quiet may help you choose.', citedSignalIds: [input.signals[0]!.id] }] }),
+    reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => ({ entries: [{ type: 'hypothesis', body: 'A little quiet may help you choose.', citedSignalIds: input.signals.map(row => row.id) }] }),
   } as unknown as ModelProvider);
 });
 afterAll(async () => { vi.restoreAllMocks(); setDefaultModelProviderForTests(null); process.env.DB_CONNECTION_URL = originalUrl; await t?.cleanup(); });
@@ -30,6 +31,14 @@ async function fixture() {
   const [account] = await t.sql`INSERT INTO accounts(email) VALUES (${`complete-${++sequence}@example.test`}) RETURNING id`;
   const [profile] = await t.sql`INSERT INTO profiles(account_id, type, name) VALUES (${account.id}, 'human', 'Owner') RETURNING id`;
   const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${profile.id}, 'A saved source') RETURNING id`;
+  // Reading completion needs another original, not more signals from the
+  // source whose save receipt this suite exercises.
+  const [other] = await t.sql`INSERT INTO inspirations(profile_id,text)
+    VALUES (${profile.id}, 'Pausing before a difficult decision clarified the options.') RETURNING id`;
+  const [prior] = await t.sql`INSERT INTO signals(profile_id,statement)
+    VALUES (${profile.id}, 'Pausing can clarify a decision') RETURNING id`;
+  await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
+    VALUES (${profile.id},${profile.id},${prior.id},${other.id})`;
   const queued = await enqueueDeriveSignals(profile.id as string, source.id as string, 'created');
   return { profileId: profile.id as string, sourceId: source.id as string, receipt: queued.receipt };
 }
@@ -55,7 +64,7 @@ describe('saved material reaches an actual reading', () => {
       }
       await t.sql`UPDATE signals SET status = 'active' WHERE id = ${signal.id}`;
     }
-    setDefaultModelProviderForTests({ synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => ({
+    setDefaultModelProviderForTests({ reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => ({
       entries: [{ type: 'pattern', body: 'A reading across the current patterns', citedSignalIds: input.signals.map((signal) => signal.id) }],
     }) } as unknown as ModelProvider);
     await t.sql`CREATE FUNCTION refuse_principle_request() RETURNS trigger AS $$ BEGIN
@@ -90,9 +99,9 @@ describe('saved material reaches an actual reading', () => {
   it('a newer request for unchanged material is not acknowledged by an older reading before derivation', async () => {
     const f = await fixture(); await runNext();
     let newer = '';
-    setDefaultModelProviderForTests({ synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => {
+    setDefaultModelProviderForTests({ reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => {
       newer = (await enqueueDeriveSignals(f.profileId, f.sourceId, 'edited')).receipt.id;
-      return { entries: [{ type: 'hypothesis', body: 'An actual new reading', citedSignalIds: [input.signals[0]!.id] }] };
+      return { entries: [{ type: 'hypothesis', body: 'An actual new reading', citedSignalIds: input.signals.map(row => row.id) }] };
     } } as unknown as ModelProvider);
     await runNext();
     expect((await read(f.receipt.id)).completed_at).not.toBeNull();
@@ -167,7 +176,7 @@ describe('saved material reaches an actual reading', () => {
   it('does not complete either source revision after a source edit races with synthesis', async () => {
     const f = await fixture(); await runNext();
     let newer = '';
-    setDefaultModelProviderForTests({ synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => {
+    setDefaultModelProviderForTests({ reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => {
       await t.sql`UPDATE inspirations SET text = 'Edited while reading' WHERE id = ${f.sourceId}`;
       newer = (await enqueueDeriveSignals(f.profileId, f.sourceId, 'edited')).receipt.id;
       return { entries: [{ type: 'hypothesis', body: 'An outdated reading', citedSignalIds: [input.signals[0]!.id] }] };

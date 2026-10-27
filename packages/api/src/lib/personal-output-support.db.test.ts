@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
@@ -49,7 +50,7 @@ describe('a personal reading reports current support', () => {
     }
     expect((await getLiveTopOfMind(t.db as never, { profileId: f.profileId }))?.entries).toEqual([]);
     const result = await refreshTopOfMindForProfile({ profileId: f.profileId, reason: 'manual' }, {
-      db: t.db as never, modelProvider: { synthesizeTopOfMind: async () => { throw new Error('Invalid signal reached generation'); } } as unknown as ModelProvider,
+      db: t.db as never, modelProvider: { reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async () => { throw new Error('Invalid signal reached generation'); } } as unknown as ModelProvider,
     });
     expect(result.entryCount).toBe(0);
   });
@@ -99,7 +100,7 @@ describe('a personal reading reports current support', () => {
     const [signal] = await t.sql`INSERT INTO signals(profile_id, statement) VALUES (${f.profileId}, 'A current pattern') RETURNING id`;
     await t.sql`INSERT INTO signal_evidence(profile_id, owner_profile_id, signal_id, inspiration_id) VALUES (${f.profileId}, ${f.profileId}, ${signal.id}, ${source.id})`;
     await refreshTopOfMindForProfile({ profileId: f.profileId, reason: 'manual' }, { db: t.db as never,
-      modelProvider: { synthesizeTopOfMind: async (input: { currentEntries: unknown[]; lockedEntries: unknown[] }) => {
+      modelProvider: { reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: { currentEntries: unknown[]; lockedEntries: unknown[] }) => {
         expect(input.currentEntries).toEqual([]);
         expect(input.lockedEntries[0]).toMatchObject({ supportChanged: true, belief: null, prompt: null, citedSignalIds: [] });
         return { noChange: true, entries: [{ type: 'pattern', body: 'A reading that lost its support', citedSignalIds: [signal.id] }] };
@@ -163,7 +164,7 @@ describe('a personal reading reports current support', () => {
   it('a no-signal refresh cannot carry an unsupported generated conclusion forward as no change', async () => {
     const f = await fixture();
     const result = await refreshTopOfMindForProfile({ profileId: f.profileId, reason: 'manual' }, {
-      db: t.db as never, modelProvider: { synthesizeTopOfMind: async () => { throw new Error('no model needed'); } } as unknown as ModelProvider,
+      db: t.db as never, modelProvider: { reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async () => { throw new Error('no model needed'); } } as unknown as ModelProvider,
     });
     expect(result.entryCount).toBe(0);
     expect(result.reason).toBe('regenerated');

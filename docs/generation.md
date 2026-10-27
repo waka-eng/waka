@@ -625,6 +625,14 @@ the floor only qualified recent emerging focuses enter; there is no incidental
 single-observation backfill. The rule is the pure function `chooseSelection`
 **[checked]**.
 
+Selection alone does not authorize an entry. Each generated entry must cite
+signals whose current evidence traces to at least two different inspirations.
+Several signals from one original and duplicate saves of identical material
+do not satisfy this requirement. With fewer than two distinct originals in the
+selection, synthesis makes no model call unless human-kept wording needs to
+be considered for renewed support. The first reading waits for enough
+material to derive a connection; human-kept wording remains available.
+
 **No two voices on the board saying one thing.** After scoring, the ranked
 list takes one greedy diversity pass (`diversifyRanked`): a candidate whose
 embedding sits at or above `SELECTION_DIVERSITY_MAX_COSINE` to an
@@ -674,7 +682,9 @@ typed (`pattern`, `tension`, `question`, `hypothesis`, `action`), each
 citing signal ids — or an explicit `noChange`.
 
 The first supplied signal is the selected leading focus unless a human-kept
-entry already leads. A saved event or workshop does not prove attendance,
+entry already leads. It must still participate in a supported connection across
+different inspirations; unrelated material must not be forced together. The
+prompt requests fresh wording, never a quoted inspiration or signal. A saved event or workshop does not prove attendance,
 completion or a repeated habit; the prompt preserves that distinction. These
 are synthesis constraints, not new ranking weights or eligibility thresholds.
 
@@ -694,13 +704,50 @@ statements deliberately do NOT follow the setting: extraction writes them in
 the language the capture itself was written in, because a signal quotes the
 person's own vocabulary back to them.
 
+Publication first checks the English/Korean script of each generated body and
+optional field, current distinct original support, and normalized copying. A
+separate model review then checks the actual language and meaning of new and
+carried machine entries together. French/Spanish in English mode, mostly-English
+Korean, unsupported motives or habits, unilateral conclusions from contradictory
+evidence, and one-source paraphrases with decorative citations are rejected.
+The reviewer must identify at least two distinct cited originals that contribute
+to the connection; its IDs are checked against current profile-owned evidence.
+
+This adds at most one review call per refresh, using the configured judge model
+(Flash 1017 by default) and the existing job budget/retries. It reviews at most
+14 entries (seven proposed, seven carried), four originals per entry and 1,600
+characters per original, deduplicating originals across entries. Truncation is
+explicit: missing text cannot be assumed to support a conclusion. Synthesis
+still reads signals; only the publication reviewer receives bounded original
+excerpts. All source text is fenced as data. Human-kept wording bypasses machine
+review and remains exact. The review is a model judgment, not mathematical proof
+of entailment; a live English/Korean evaluation covers these failure cases in
+`packages/api/test/top-of-mind-review-eval.test.ts`.
+
+An entirely rejected/malformed reply or unavailable reviewer fails the job and
+uses the queue's bounded retries. It cannot record a successful empty reading or
+replace a valid current reading. Still-valid prior machine entries and human
+choices survive; invalid prior wording/support is pruned under the same revision
+and worker fences before retry. A reviewer outage publishes no proposed text and
+leaves the currently supported, deterministically checked fallback. A genuine
+empty model reply remains a valid outcome. Existing versions are not rewritten
+in a migration: these checks take effect on the next refresh.
+
+Both language-setting routes lock and read the current profile, then save its
+locale and durable refresh request in one transaction. Enqueue failure rolls
+back the setting (and onboarding, if included). After commit the worker is woken;
+wake failure cannot lose the durable job or turn the save into a failed request.
+
 ### 4. What code enforces after the model answers
 
 | Guarantee | Mechanism |
 |---|---|
 | Every cited signal exists and belongs to this profile | Citations validated against the DB; invented ones dropped; an entry left citing nothing is dropped with it. An artifact that cites nothing is a horoscope. |
+| Generated entries draw from different inspirations | Follow current evidence origins across the cited signals; require at least two distinct originals, with duplicate material counted once. |
+| Generated wording respects the selected language and does not copy inspirations | Check script/overlap, then independently review the actual language and supported connection against bounded original excerpts. Human-kept text remains exact. |
 | Locked entries survive **byte-identical** | Copied forward from storage, never from the model's reply — the model is asked to reproduce them and then not trusted to. Violations are counted and logged. |
 | Pins, dismissals, locks survive regeneration | Columns on entries, carried by code; the model never sees or controls them. |
+| Rejected output cannot clear a valid reading | Keep the supported fallback, publish no unchecked proposal, and fail/retry the job instead of recording empty success. |
 | "Nothing changed" is a decision, not a silence | A no-move/no-signal pass carries the support-projected reading, not withheld machine conclusions. It compares that result to stored entries; removing stale text or updating citations is a change even if the model reports `noChange`. |
 | Stale generation cannot replace newer material | A per-profile revision is captured before input reads and locked/rechecked at commit, alongside the artifact-family lock and worker claim. Concurrent source, statement or human edits make generation retry. |
 | Order-shuffled citations are not a change | The no-change comparison treats citations as a set. |

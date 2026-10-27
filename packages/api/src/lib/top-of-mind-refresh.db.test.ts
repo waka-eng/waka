@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { setDefaultModelProviderForTests, type ModelProvider } from "./model-provider.js";
@@ -29,7 +30,7 @@ async function material({ active = false } = {}) {
     ids.push(signal.id as string);
     for (let j = 0; j < (active ? 3 : 1); j++) {
       const [inspiration] = await t.sql`INSERT INTO inspirations (profile_id, text, visibility)
-        VALUES (${profileId}, 'A fixture', 'private') RETURNING id`;
+        VALUES (${profileId}, ${`An independent fixture ${i}-${j}`}, 'private') RETURNING id`;
       await t.sql`INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id)
         VALUES (${profileId}, ${profileId}, ${signal.id}, ${inspiration.id})`;
     }
@@ -49,10 +50,10 @@ beforeEach(async () => {
   await t.truncateAll();
   profileId = await person(); noChange = false; beforeSynthesis = null;
   setDefaultModelProviderForTests({
-    synthesizeTopOfMind: async (input: { signals: Array<{ id: string }> }) => {
+    reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: { signals: Array<{ id: string }> }) => {
       await beforeSynthesis?.();
       return noChange ? { noChange: true, entries: [] } : {
-        entries: [{ type: "pattern", body: "You keep making room for small experiments.", citedSignalIds: [input.signals[0]!.id] }],
+        entries: [{ type: "pattern", body: "You keep making room for small experiments.", citedSignalIds: input.signals.map(row => row.id) }],
       };
     },
   } as unknown as ModelProvider);
@@ -119,6 +120,22 @@ describe("top of mind completion receipts", () => {
     const entries = await t.sql`SELECT e.body FROM top_of_mind_entries e JOIN top_of_minds m ON m.id = e.top_of_mind_id
       WHERE m.profile_id = ${profileId} AND m.status = 'live'`;
     expect(entries.map((row) => row.body)).toEqual(["You keep making room for small experiments."]);
+  });
+
+  it('retries rejected output without a success receipt or an empty replacement', async () => {
+    const ids = await material();
+    await enqueueTopOfMindRefresh(profileId, 'manual'); await drain();
+    setDefaultModelProviderForTests({ reviewTopOfMind: approveReadingReview,
+      synthesizeTopOfMind: async () => ({ noChange: false, entries: [{ type: 'pattern',
+        body: 'An independent fixture 0-0', citedSignalIds: ids }] }),
+    } as unknown as ModelProvider);
+    const { jobId } = await enqueueTopOfMindRefresh(profileId, 'manual');
+    await drain();
+    expect(await state(jobId)).toMatchObject({ status: 'pending', result: null });
+    expect(await t.sql`SELECT id FROM top_of_minds WHERE profile_id=${profileId}`).toHaveLength(1);
+    const [job] = await t.sql`SELECT attempts,last_error FROM background_jobs WHERE id=${jobId}`;
+    expect(job!.attempts).toBe(1);
+    expect(job!.last_error).toContain('publication checks');
   });
 
   it("separates empty completion from failure and legacy unknown completion", async () => {

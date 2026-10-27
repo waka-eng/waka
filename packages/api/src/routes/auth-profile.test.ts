@@ -36,6 +36,11 @@ const PROFILE_ROW = {
 };
 
 const dbState = vi.hoisted(() => ({ db: {} as any }));
+const wakeReading = vi.hoisted(() => vi.fn(async () => undefined));
+const refreshReading = vi.hoisted(() => vi.fn(async () => ({ jobId: 'reading-job', requestVersion: 1n })));
+vi.mock('../lib/queue.js', async importOriginal => ({
+  ...await importOriginal<typeof import('../lib/queue.js')>(), enqueueTopOfMindRefresh: refreshReading, wakeCommittedBackgroundJobs: wakeReading,
+}));
 
 const erasureState = vi.hoisted(() => ({
   erase: vi.fn(async (_accountId: string, _deps: { db: unknown }) => undefined),
@@ -102,14 +107,16 @@ function makeDb(input: {
   failWithCode?: string;
 } = {}) {
   const selects = [...(input.selects ?? [])];
-  const select = vi.fn(() => {
+  const select = vi.fn((fields?: Record<string, unknown>) => {
     const chain: any = {};
     chain.from = vi.fn(() => chain);
     chain.innerJoin = vi.fn(() => chain);
     chain.where = vi.fn(() => {
-      const rows = selects.shift() ?? [];
+      const isLocaleLock = fields && Object.keys(fields).length === 1 && fields.preferredLocale;
+      const rows = isLocaleLock ? [{ preferredLocale: PROFILE_ROW.preferredLocale }] : selects.shift() ?? [];
       const result: any = Promise.resolve(rows);
       result.limit = vi.fn(async () => rows);
+      result.for = vi.fn(async () => rows);
       return result;
     });
     return chain;
@@ -208,6 +215,14 @@ describe("GET /api/auth/me", () => {
 });
 
 describe("PATCH /api/auth/me/preferences", () => {
+  it('requests a manual reread when the selected language changes', async () => {
+    refreshReading.mockClear();
+    dbState.db = makeDb({ selects: [identity({ profile: { preferredLocale: 'ko-KR' } })] });
+    const response = await app().request('/api/auth/me/preferences', authorized({ preferredLocale: 'ko-KR' }, 'PATCH'));
+    expect(response.status).toBe(200);
+    expect(refreshReading).toHaveBeenCalledWith('profile-1', 'manual', dbState.db);
+    expect(wakeReading).toHaveBeenCalledWith([{ id: 'reading-job', profileId: 'profile-1', requestVersion: '1' }]);
+  });
   it("writes the locale onto the acting profile", async () => {
     const db = makeDb({
       selects: [identity({ profile: { preferredLocale: "en-US" } })],
@@ -230,6 +245,14 @@ describe("PATCH /api/auth/me/preferences", () => {
 });
 
 describe("PATCH /api/auth/me/profile", () => {
+  it('also requests a reread when a profile edit changes the language', async () => {
+    refreshReading.mockClear();
+    dbState.db = makeDb({ selects: [identity()], updatedProfile: { ...PROFILE_ROW, preferredLocale: 'ko-KR' } });
+    const response = await app().request('/api/auth/me/profile', authorized({ name: 'Existing', preferredLocale: 'ko-KR' }, 'PATCH'));
+    expect(response.status).toBe(200);
+    expect(refreshReading).toHaveBeenCalledWith('profile-1', 'manual', dbState.db);
+    expect(wakeReading).toHaveBeenCalledWith([{ id: 'reading-job', profileId: 'profile-1', requestVersion: '1' }]);
+  });
   it("requires authentication", async () => {
     const response = await app().request("/api/auth/me/profile", {
       method: "PATCH",

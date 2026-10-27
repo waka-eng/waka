@@ -1153,6 +1153,14 @@ agent's distilled working memory.
   mutated in place.
 - **Profile-scoped**: generated from that profile's signals; the admin
   can edit entries (which locks them), pin, dismiss, reorder.
+- **Derived, not quoted**: each machine entry connects at least two distinct
+  inspirations through its cited signals and speaks the profile's selected
+  language. Several signals from one original are still one inspiration.
+  Copied wording and wrong-language machine entries do not survive a refresh,
+  including a model's `noChange` response. A separate publication review checks
+  the actual language and whether distinct cited originals meaningfully support
+  the connection, not merely whether citations exist. Rejected replies retry
+  without replacing a valid reading; human-kept wording remains exact.
 - **Current support is projected when read.** Personal current and historical
   version reads check the entire citation set against standing, owned evidence.
   A retired, dismissed, unsupported, missing or foreign-evidenced signal cannot

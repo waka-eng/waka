@@ -1,7 +1,7 @@
 import {emitOperationalMetric} from './operational-metrics.js';
 const operations:Record<string,string>={
   'conversation reply':'conversation','signal extraction':'signal_extraction','signal match judgement':'signal_match',
-  'signal support assessment':'signal_support','top-of-mind synthesis':'top_of_mind','principle distillation':'principles',
+  'signal support assessment':'signal_support','top-of-mind synthesis':'top_of_mind','top-of-mind review':'top_of_mind_review','principle distillation':'principles',
   'principle relation judgement':'principle_relation','principle grounding':'principle_grounding','declaration routing':'declaration',
   'reflection follow-up':'reflection','review question':'review_question','review derivation':'review_derivation',
   'embedding':'embedding',

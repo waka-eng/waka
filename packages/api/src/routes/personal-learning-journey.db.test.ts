@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 /** Real save/read/recovery routes and queue processing in disposable Postgres.
  * Only authentication, model responses and embeddings are injected. This is
  * backend journey evidence, not browser, deployment or model-quality evidence. */
@@ -56,7 +57,7 @@ beforeEach(async () => {
     entries: [{ type: 'hypothesis', body: wording, citedSignalIds: input.signals.map((signal) => signal.id) }],
   }));
   setDefaultModelProviderForTests({ extractSignalCandidates: extract, assessSignalSupport: assess,
-    synthesizeTopOfMind: synthesize } as unknown as ModelProvider);
+    reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: synthesize } as unknown as ModelProvider);
 });
 afterAll(async () => {
   vi.restoreAllMocks(); setDefaultModelProviderForTests(null);
@@ -114,6 +115,14 @@ async function saveThreeAnswers() {
   expect(await status()).toMatchObject({ phase: 'queued', superseded: true, result: null });
   expect(await t.sql`SELECT id FROM inspirations`).toHaveLength(1);
   expect(await t.sql`SELECT id FROM reflections`).toHaveLength(3);
+  // The three answers belong to one capture. A separate prior observation
+  // gives the resulting reading genuinely different inspiration material.
+  const [other] = await t.sql`INSERT INTO inspirations(profile_id,text)
+    VALUES (${f.profileId}, 'Pausing before a difficult decision made the options clearer.') RETURNING id`;
+  const [signal] = await t.sql`INSERT INTO signals(profile_id,statement)
+    VALUES (${f.profileId}, 'A pause can clarify difficult decisions') RETURNING id`;
+  await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
+    VALUES (${f.profileId},${f.profileId},${signal.id},${other.id})`;
   return { ...f, path, source, saved, keys, status };
 }
 
@@ -174,7 +183,7 @@ describe('personal learning journey', () => {
     expect(before?.entries.map((entry) => entry.body)).toEqual([wording]);
     expect(await f.status()).toMatchObject({ phase: 'ready', result: { topOfMindId: before!.id, version: before!.version } });
     expect(extract.mock.calls.at(-1)?.[0].reflections).toEqual(answers);
-    expect(await t.sql`SELECT quote, quote_reflection_id FROM signal_evidence`).toEqual([
+    expect(await t.sql`SELECT quote, quote_reflection_id FROM signal_evidence WHERE inspiration_id=${f.source.inspiration.id}`).toEqual([
       { quote: answers[1]!.answer, quote_reflection_id: f.saved[1]!.reflection.id },
     ]);
 
@@ -185,7 +194,7 @@ describe('personal learning journey', () => {
 
     const removed = await f.app.request(`${f.path}/reflections/${f.saved[1]!.reflection.id}`, { method: 'DELETE' });
     expect(removed.status).toBe(200);
-    expect(await t.sql`SELECT quote FROM signal_evidence`).toEqual([{ quote: null }]);
+    expect(await t.sql`SELECT quote FROM signal_evidence WHERE inspiration_id=${f.source.inspiration.id}`).toEqual([{ quote: null }]);
     expect(await f.status()).toMatchObject({ phase: 'queued', result: null });
     await drain();
     // Unsupported generated wording is not served while replacement is held.
@@ -195,7 +204,7 @@ describe('personal learning journey', () => {
       expect((await f.post('/api/top-of-mind/refresh', {})).status).toBe(202);
       await drain();
     }
-    expect(await t.sql`SELECT id FROM signal_evidence`).toHaveLength(0);
+    expect(await t.sql`SELECT id FROM signal_evidence WHERE inspiration_id=${f.source.inspiration.id}`).toHaveLength(0);
     const after = await getLiveTopOfMind(t.db as never, { profileId: f.profileId });
     expect(after?.entries).toEqual([]);
     expect(after!.version).toBeGreaterThan(before!.version);
@@ -217,7 +226,7 @@ describe('personal learning journey', () => {
     expect(repeated.status).toBe(200);
     await drain();
     expect(await f.status()).toMatchObject({ phase: 'ready', result: { topOfMindId: before!.id, version: before!.version } });
-    expect(await t.sql`SELECT id FROM signal_evidence`).toHaveLength(1);
+    expect(await t.sql`SELECT id FROM signal_evidence WHERE inspiration_id=${f.source.inspiration.id}`).toHaveLength(1);
     expect(await t.sql`SELECT id FROM top_of_minds`).toHaveLength(1);
     expect(synthesize).toHaveBeenCalledTimes(1);
 

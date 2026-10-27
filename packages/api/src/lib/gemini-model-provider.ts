@@ -20,6 +20,7 @@ import {
   judgeSignalMatch,
   routeDeclaration,
   synthesizeTopOfMind,
+  reviewTopOfMind,
 } from "../queue/gemini.js";
 import type { ModelProvider } from "./model-provider.js";
 
@@ -34,6 +35,7 @@ export function createGeminiModelProvider(): ModelProvider {
     extractSignalCandidates,
     judgeSignalMatch,
     synthesizeTopOfMind,
+    reviewTopOfMind,
     distillPrinciples,
     assessPrincipleGrounding,
     judgePrincipleRelation,

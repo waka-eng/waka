@@ -1,3 +1,4 @@
+import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import { refreshTopOfMindForProfile } from './top-of-mind-synthesis.js';
@@ -32,7 +33,7 @@ async function fixture() {
 async function context(profileId: string) {
   let seen: TopOfMindRecentFeedback[] = [];
   await refreshTopOfMindForProfile({ profileId, reason: 'manual' }, { db: t.db as never,
-    modelProvider: { synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => { seen = input.recentFeedback; return { entries: [] }; } } as unknown as ModelProvider });
+    modelProvider: { reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => { seen = input.recentFeedback; return { entries: [] }; } } as unknown as ModelProvider });
   return seen;
 }
 
@@ -146,6 +147,10 @@ describe('feedback stays with its words, not just its ID', () => {
     for (let n = 0; n < 25; n++) await t.sql`INSERT INTO feedback(profile_id,target_type,target_id,value,correction_text)
       VALUES (${f.profileId},'signal',${f.signals[0]!},'partly','Outdated')`;
     await t.sql`UPDATE inspirations SET text='Different source' WHERE id=${f.sources[0]!}`;
+    const [other] = await t.sql`INSERT INTO inspirations(profile_id,text)
+      VALUES (${f.profileId}, 'Another independent witness of the remaining claim') RETURNING id`;
+    await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
+      VALUES (${f.profileId},${f.profileId},${f.signals[1]!},${other.id})`;
     expect(await context(f.profileId)).toMatchObject([{ about: 'Claim 1', correction: 'Still relevant' }]);
     expect(await listFeedbackForProfile(t.db as never, { profileId: f.profileId, limit: 50 })).toHaveLength(26);
   });
