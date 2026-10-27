@@ -5188,7 +5188,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         setDialAway(nowAway);
       }
 
-      if (!covered) draw(now);
+      // Pages are transparent: paint once with the companion suppressed by
+      // asideRef before parking below, or its last home frame stays behind
+      // every page. Navigation and resize wakes also need a fresh background.
+      draw(now);
       syncDom();
 
       /* THE REST EDGE, said once per stop, on the first frame that finds the

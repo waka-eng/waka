@@ -29,12 +29,19 @@ it.each(['Inspirations', 'Chats'])('parks the covered canvas on %s and resumes w
   const context = world.container.querySelector<HTMLCanvasElement>('.jar-canvas')!.getContext('2d')!;
   const draw = vi.fn(context.clearRect);
   context.clearRect = draw;
+  // Only the companion paints ellipses on the main canvas (eyes/glasses).
+  const features = vi.fn(context.ellipse);
+  context.ellipse = features;
   await world.step(120);
   expect(draw.mock.calls.length).toBe(120);
+  expect(features).toHaveBeenCalled();
   const tab = (name: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-primary-navigation button')]
     .find(button => button.textContent?.trim() === name)!;
+  draw.mockClear(); features.mockClear();
   await act(async () => tab(label).click());
   await world.step(120);
+  expect(draw).toHaveBeenCalled(); // Clear the old creature before sleeping.
+  expect(features).not.toHaveBeenCalled();
   draw.mockClear();
   const schedule = vi.spyOn(globalThis, 'requestAnimationFrame');
   await world.step(600);
@@ -45,6 +52,7 @@ it.each(['Inspirations', 'Chats'])('parks the covered canvas on %s and resumes w
   draw.mockClear();
   await world.step(120);
   expect(draw.mock.calls.length).toBe(120);
+  expect(features).toHaveBeenCalled();
 });
 
 const simulation = () => (window as unknown as { wakaSim: () => SimApi }).wakaSim();
