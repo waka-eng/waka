@@ -58,12 +58,16 @@ const remount = async (onChat?: (said: string) => void) => {
 const seats = () => [...host.querySelectorAll(".waka-ground-seat")];
 const line = () => host.querySelector(".waka-ground-bubble .jar-char-bubble-reading")?.textContent ?? "";
 
-it("shows three empty seats and says how principles grow when nothing is holding", async () => {
+it("explains principles with a labeled example instead of empty placeholders", async () => {
   vi.mocked(fetchSignals).mockResolvedValue([]);
   await ground();
-  expect(seats()).toHaveLength(3);
+  expect(seats()).toHaveLength(0);
+  expect(host.querySelector(".waka-ground-definition")?.textContent).toBe("A principle is a guide for making choices.");
+  expect(host.querySelector(".waka-ground-example")?.textContent).toContain("Example principle");
+  expect(host.querySelector(".waka-ground-example")?.textContent).toContain("Make room for small experiments.");
+  expect(host.querySelector(".waka-ground-how")?.textContent).toContain("inspirations and Top of Mind");
   expect(host.querySelectorAll(".waka-ground-seat--held")).toHaveLength(0);
-  expect(line()).toContain("Nothing is holding yet.");
+  expect(line()).toContain("Add more inspirations so WAKA can find patterns and generate your first principle.");
 });
 
 it("puts each holding pattern's own words in a seat and says what is left, in words", async () => {
@@ -72,7 +76,7 @@ it("puts each holding pattern's own words in a seat and says what is left, in wo
   const held = [...host.querySelectorAll(".waka-ground-seat--held")].map((node) => node.textContent);
   /* Longest-held first: it is the likeliest ground for the first principle. */
   expect(held).toEqual(["You keep reversible doors open.", "You choose small first moves."]);
-  expect(line()).toBe("Right now two things are holding. One more and I think I’ll see it.");
+  expect(line()).toBe("I’ve found two patterns that could help shape your first principle. Add more inspirations to help it take shape.");
   expect(line(), "states render, numerals never").not.toMatch(/\d/);
 });
 
@@ -82,7 +86,8 @@ it("warms the card and quickens the creature when every seat is held, and never 
   expect(host.querySelector(".waka-ground-card--full")).not.toBeNull();
   expect(host.querySelector(".waka-ground-hero--ready"), "the creature's anticipation is the full state").not.toBeNull();
   expect(host.querySelectorAll(".waka-ground-seat--held")).toHaveLength(3);
-  expect(line()).toContain("Tonight I’ll read for your first principle");
+  expect(line()).toContain("These patterns could help shape your first principle");
+  expect(line()).not.toMatch(/tonight|everything is in place/i);
 });
 
 it("leaves out patterns the person set aside or that lost their saves", async () => {
@@ -215,7 +220,7 @@ it("on an agent's wall, the waiting ground and the first-principle greeting spea
   vi.mocked(fetchSignals).mockResolvedValue([]);
   vi.mocked(fetchPrinciples).mockResolvedValue([]);
   await agentPage();
-  expect(line()).toBe("Nothing is holding yet. I’m watching for what your agent keeps coming back to.");
+  expect(line()).toBe("More inspirations from your agent will help WAKA find patterns for its first principle.");
   expect(host.querySelector(".waka-ground-foot")?.textContent).toBe("Your agent’s first principle");
   expect(host.querySelector(".waka-ground")?.getAttribute("aria-label")).toBe("What your agent’s first principle will grow from");
 
@@ -236,4 +241,36 @@ it("offers no chat about the creature's line on an agent's ground", async () => 
   ));
   expect(host.querySelector(".waka-ground-bubble")).not.toBeNull();
   expect(host.querySelector(".waka-ground-bubble .jar-char-bubble-act"), "the agent's line is not yours to open a chat with").toBeNull();
+});
+
+it.each([0, 1, 2])("offers the existing inspiration draft when only %i patterns are available", async (count) => {
+  vi.mocked(fetchSignals).mockResolvedValue(Array.from({ length: count }, (_, index) => signal(String(index), "A pattern.")));
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);
+  const add = vi.fn(), chat = vi.fn();
+  await act(async () => root.render(
+    <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Agi" title="Principles"
+      onClose={() => {}} onOpen={() => {}} onNewSave={add} newSaveLabel="Continue draft" onChat={chat} />,
+  ));
+  const actions = host.querySelectorAll<HTMLButtonElement>(".waka-ground-bubble .jar-char-bubble-act");
+  expect(actions).toHaveLength(1);
+  expect(actions[0]!.textContent).toBe("Continue draft");
+  await act(async () => actions[0]!.click());
+  expect(add).toHaveBeenCalledTimes(1);
+  expect(chat).not.toHaveBeenCalled();
+});
+
+it("explains an agent’s empty memory in Korean without offering to write into it", async () => {
+  vi.mocked(fetchSignals).mockResolvedValue([]);
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);
+  const add = vi.fn();
+  await act(async () => root.render(
+    <PrinciplesOverlay locale="ko-KR" profileId={PROFILE} name="Bot" title="에이전트의 원칙" whose="agent"
+      onClose={() => {}} onOpen={() => {}} onNewSave={add} onChat={() => {}} />,
+  ));
+  expect(line()).toBe("에이전트의 영감이 더 쌓이면 WAKA가 반복되는 패턴을 찾아 첫 원칙을 만들 수 있어요.");
+  expect(host.querySelector(".waka-ground-how")?.textContent).toContain("이 에이전트의 영감과 탑 오브 마인드만");
+  expect(host.querySelector(".waka-ground-example")?.textContent).toContain("원칙 예시");
+  expect(host.querySelector(".waka-ground-bubble button")).toBeNull();
+  expect(fetchSignals).toHaveBeenCalledWith({ profile: PROFILE, status: "active", limit: 20 });
+  expect(add).not.toHaveBeenCalled();
 });

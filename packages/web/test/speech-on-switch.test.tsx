@@ -115,7 +115,7 @@ it('drops a weather answer that was asked for on the wall you just left', async 
   expect(press(), 'the creature has nothing to press').toBeTruthy();
   await act(async () => { press()!.click(); });
   await world.step(0);
-  expect(speech(), 'the answer cannot have arrived yet — it is still held').toBeNull();
+  expect(speech(), 'a prompt appears immediately while activity is loading').toBe('Want to explore what’s on your mind?');
 
   /* SWITCH FORM WHILE THE ANSWER IS STILL IN FLIGHT. */
   const toAgent = face('Ouroboros maintainer');
@@ -231,7 +231,7 @@ async function pastTheGreeting() {
   }
 }
 
-it('speaks the away-window line on the wall you arrived at', async () => {
+it('keeps the reading first instead of announcing an away-window line', async () => {
   camePastAnHourAgo();
   vi.mocked(fetchTheWeather).mockResolvedValue(TOLD);
   world = await mountWorld(FACTS);
@@ -239,7 +239,8 @@ it('speaks the away-window line on the wall you arrived at', async () => {
   /* THE COUNTERWEIGHT FIRST, for the same reason the press case has one: a
      fix that simply stopped the greeting speaking would pass the next case
      and silently delete the feature. */
-  expect(speech()).toBe('You kept a memory while you were gone');
+  expect(speech()).toBeNull();
+  expect(fetchTheWeather).not.toHaveBeenCalled();
 });
 
 it('drops the away-window line when the form changed before it spoke', async () => {
@@ -301,27 +302,26 @@ it('speaks its own line when the weather does not come back', async () => {
   await world.step(0);
   /* Before the grace period, nothing — the product still prefers the real
      answer and will wait a moment for it. */
-  expect(speech(), 'it spoke before giving the weather a chance').toBeNull();
+  expect(speech(), 'the tap should immediately offer a conversation').toBe('Want to explore what’s on your mind?');
 
   await act(async () => { await vi.advanceTimersByTimeAsync(400); });
   await settle();
   expect(speech(), 'the press went unanswered').toBeTruthy();
 });
 
-it('returns to the reading after seen activity and only speaks newly changed updates', async () => {
+it('cycles through other prompts without repeating already-seen activity', async () => {
   vi.mocked(fetchTheWeather).mockResolvedValue(WEATHER);
   world = await mountWorld(FACTS); await settle();
-  await act(async () => { press()!.click(); }); await settle();
-  expect(speech()).toBe('You kept one memory today.');
-  await act(async () => { press()!.click(); }); await settle();
-  expect(speech()).toBeNull();
+  const tap = async () => { await act(async () => { press()!.click(); }); await settle(); };
+  await tap(); expect(speech()).toBe('You kept one memory today.');
+  await tap(); expect(speech()).toBe('Which principles are guiding you lately?');
+  await tap(); expect(speech()).toBeNull();
+  await tap(); expect(speech()).toBe('Want to explore what’s on your mind?');
   vi.mocked(fetchTheWeather).mockResolvedValue({ ...WEATHER, days: [{ ...WEATHER.days[0]!, sentences: [
     ...WEATHER.days[0]!.sentences, { text: 'your memory was consulted', backing: 'consultations' },
   ] }] });
-  await act(async () => { press()!.click(); }); await settle();
+  await tap(); await tap(); await tap();
   expect(speech()).toBe('Your memory was consulted today.');
-  await act(async () => { press()!.click(); }); await settle();
-  expect(speech()).toBeNull();
 });
 
 it('does not replace a local answer mid-reading when a slow response arrives', async () => {
@@ -334,6 +334,33 @@ it('does not replace a local answer mid-reading when a slow response arrives', a
   await act(async () => { answer(WEATHER); }); await settle();
   expect(speech()).toBe(localLine);
   vi.mocked(fetchTheWeather).mockResolvedValue(WEATHER);
-  await act(async () => { press()!.click(); }); await settle();
+  await act(async () => { press()!.click(); press()!.click(); press()!.click(); }); await settle();
   expect(speech()).toBe('You kept one memory today.');
+});
+
+it('drops a pending activity response after another tap selects principles', async () => {
+  let answer!: (weather: ApiWeather) => void;
+  vi.mocked(fetchTheWeather).mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+  world = await mountWorld(FACTS); await settle();
+  await act(async () => { press()!.click(); });
+  await act(async () => { press()!.click(); });
+  expect(speech()).toBe('Which principles are guiding you lately?');
+  await act(async () => { answer(WEATHER); await vi.advanceTimersByTimeAsync(400); });
+  expect(speech()).toBe('Which principles are guiding you lately?');
+});
+
+it('starts with the reading when returning to a profile that had another prompt selected', async () => {
+  vi.mocked(fetchTheWeather).mockResolvedValue(WEATHER);
+  world = await mountWorld(FACTS); await settle();
+  const initialReading = world.container.querySelector('.jar-char-bubble')?.textContent;
+  expect(initialReading).toBeTruthy();
+  await act(async () => { press()!.click(); press()!.click(); });
+  await settle();
+  expect(speech()).toBe('Which principles are guiding you lately?');
+  await act(async () => { face('Ouroboros maintainer')!.click(); });
+  await world.step(0); await settle();
+  await act(async () => { face('Me')!.click(); });
+  await world.step(0); await settle();
+  expect(world.container.querySelector('.jar-char-bubble')?.textContent).toBe(initialReading);
+  expect(speech()).toBeNull();
 });

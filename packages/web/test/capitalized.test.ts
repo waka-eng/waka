@@ -291,7 +291,7 @@ describe("every string a person reads begins with a capital", () => {
        and does not pass it through `asSentence` prints a sentence starting
        in lower case. */
     const SPEAKS_A_CLAUSE_ALONE = [
-      ["pages/Home.tsx", 2, "the creature asked what has been happening, and the away-window sentence"],
+      ["pages/Home.tsx", 1, "the creature asked what has been happening"],
     ] as const;
     const bare: string[] = [];
     for (const [file, wanted, why] of SPEAKS_A_CLAUSE_ALONE) {

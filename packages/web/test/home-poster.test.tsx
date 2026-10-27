@@ -835,66 +835,20 @@ describe("ratified light: the poster's grounds are lit by who holds them", () =>
   });
 });
 
-describe("the weather is told on arrival, after the world has drawn", () => {
-  /**
-   * goal: the-legible-loop, Phase 5. On return after time away, the world
-   * glides to the newest thing, comes home — and only then whispers the
-   * told sentence through the companion's own line. Seeing first, telling
-   * second: the assertion in the middle of this case is the phase's law,
-   * not decoration. Never a notification — it is SAID IN THE MOUTH'S OWN
-   * SLOT, in the resting phrase's place, and goes on its own. It had a row of
-   * its own until 2026-08-25; putting it here costs the page a layer rather
-   * than adding one, and is why this case reads `.jar-mouth-rest`.
-   *
-   * `setTimeout` is faked for this case only: the glide's two beats are
-   * wall-clock timeouts, and a test that really waited four seconds would
-   * be a sleep, not a statement. The harness clock (rAF) is untouched.
-   */
-  it("whispers the away-window's sentence only after the glide returns", async () => {
+describe("returning home keeps the reading", () => {
+  // Advance beyond the former greeting delay to catch unsolicited replacement.
+  it("keeps Top of Mind in place after returning to the app", async () => {
     layout.unmount();
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     window.localStorage.setItem("waka.seen", String(Date.UTC(2026, 7, 10)));
     try {
       layout = await mountWorld(FACTS);
-      /* WHAT THE CREATURE SAYS MOVED ABOVE ITS HEAD. It was a line under the
-         chin, in the same column as the claim, so one had to silence the
-         other; speech and a question are different acts and now have
-         different places. The fact under test — that the away-window's
-         sentence is whispered only after the glide returns — is unchanged,
-         so this reads the bubble instead of the line. */
-      const said = () =>
-        layout.container.querySelector(".jar-char-bubble")?.textContent ?? "";
-
-      /* the world has drawn, the glide has not begun: silence */
-      expect(said()).not.toContain("refused a candidate");
-
-      /* first beat: the camera goes to the newest thing — still silence */
-      await act(async () => {
-        vi.advanceTimersByTime(1400);
-      });
+      const said = () => layout.container.querySelector('.jar-char-bubble')?.textContent ?? '';
+      const reading = said();
+      expect(reading).toContain('This is what’s on your mind right now.');
+      await act(async () => { vi.advanceTimersByTime(6000); });
       await layout.step(5);
-      expect(said(), "the telling must not precede the return").not.toContain(
-        "refused a candidate",
-      );
-
-      /* second beat: the camera comes home — now the weather is told */
-      await act(async () => {
-        vi.advanceTimersByTime(2600);
-      });
-      await layout.step(5);
-      expect(said()).toContain(
-        /* CAPITALISED WHERE IT IS SPOKEN. The API writes this clause lower
-           case on purpose — the full record joins several into one line —
-           and the creature says one of them alone, which makes it a
-           sentence. `asSentence` capitalises at that point; see the note on
-           it in `lib/words`. What this case is about is unchanged: the
-           sentence arrives only AFTER the glide returns. */
-        "Refused a candidate — too close to what you dismissed.",
-      );
-      /* A count in the telling is now exact, not spelled (founder ruling,
-         2026-08-24) — the fixture's sentence carries none either way, and
-         what this case is about is WHEN the whisper arrives, not its
-         arithmetic. `the-weather.db.test.ts` owns the counting. */
+      expect(said()).toBe(reading);
     } finally {
       vi.useRealTimers();
       window.localStorage.removeItem("waka.seen");

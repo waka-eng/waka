@@ -717,6 +717,9 @@ export async function closeOverlay(container: HTMLElement): Promise<void> {
  * world's `step` to run the frame that hands the first card focus.
  */
 export async function diveIntoReview(container: HTMLElement, step?: (frames?: number) => Promise<void>): Promise<void> {
+  if (!container.querySelector('.jar-char-bubble--review')) {
+    await pressWhenItAppears(container, '.jar-char-press', 'the avatar that offers review');
+  }
   await pressWhenItAppears(container, ".jar-char-bubble--review button.jar-char-bubble-act", "the review invitation's Dive into review");
   if (step) await step(2);
 }

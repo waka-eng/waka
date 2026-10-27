@@ -129,7 +129,7 @@ const PULL_HOME = 56;
  */
 const MAX_HELD = 3;
 
-export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own", onClose, onOpen, onShare, onChat, crossing = null, onCrossed }: {
+export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own", onClose, onOpen, onShare, onChat, onNewSave, newSaveLabel, crossing = null, onCrossed }: {
   locale: SupportedLocale;
   profileId?: string | null;
   /** Whose name goes on the card. The attribution is half of why a card is
@@ -147,6 +147,8 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
   onShare?: (id: string) => void;
   /** A chat about what the creature said on the waiting page. */
   onChat?: (said: string) => void;
+  onNewSave?: () => void;
+  newSaveLabel?: string;
   /**
    * THE WALK FROM NOW, OR BACK TO IT — see `CrossingCompanion`. `home` is
    * where the world's creature stands; "in" walks there and then glides to
@@ -328,7 +330,8 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           /* No chat act on an agent's ground: the chat would open with the
              agent's line posted as the owner's own first message. Home omits
              it too; this holds even when a caller does not. */
-          <PrinciplesGround locale={locale} profileId={profileId} whose={whose} onChat={agent ? undefined : onChat} />
+          <PrinciplesGround locale={locale} profileId={profileId} whose={whose}
+            onChat={agent ? undefined : onChat} onNewSave={agent ? undefined : onNewSave} newSaveLabel={newSaveLabel} />
         ) : (
           <>
           {/* THE CREATURE THAT WAITED WITH YOU PRESENTS IT. Same body, same

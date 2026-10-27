@@ -1,44 +1,12 @@
 /**
- * THE PRINCIPLES PAGE, BEFORE THERE ARE ANY.
+ * Principles before the first one exists. Explain the idea and show a
+ * labeled example, then replace the example with this profile’s own patterns
+ * as evidence arrives. An available pattern is a starting point, not a
+ * guarantee that a principle is ready or will arrive at a particular time.
  *
- * Founder, 2026-10-15: "in the beginning they wouldn't form because it
- * takes time, but even the waiting time I wanted to have a very thrilling
- * and super exciting waiting time."
- *
- * ── WHAT WAS HERE, AND WHY IT WAS THE WRONG KIND OF TRUE ─────────────────
- *
- * "No principles yet. They take months of the same choice to form." That
- * sentence was a wall: nothing to look at, nothing to do, and a number of
- * months that is not even what the code asks for. The bar in
- * `lib/principle-generation.ts` is three active patterns that have each
- * appeared in a top of mind, and a nightly read that may then propose one.
- * That bar is near, it is visible, and the person moves it every time they
- * answer a claim. The waiting is not a delay. It is ground being laid.
- *
- * ── WHAT IT SHOWS ─────────────────────────────────────────────────────
- *
- * The card a principle will be, empty, with three seats inside it — one
- * for each pattern the bar asks for. A seat a pattern holds carries that
- * pattern's words, quietly; an empty seat is a faint line. Above it, the
- * creature says the state in words, never as a numeral, in the home
- * screen's own bubble — with a way to chat about it, when the page has one.
- *
- * WHY THE PATTERNS' OWN WORDS. They are already the person's to see — each
- * is a claim on the home screen or a light in the sky — so nothing is
- * revealed early. Showing them here says what the principle will be made
- * of, which is the thrill: you can watch your own ground and guess.
- *
- * WHAT IS NEVER SHOWN: the generator's candidate wording. A principle seen
- * before it is minted makes the mint a non-event.
- *
- * ── THE MOTION, AND WHAT IT EXPLAINS ─────────────────────────────────
- *
- * A seat that filled since the last visit lights up once on arrival. The
- * law is that motion explains and never decorates, and this explains the
- * only thing that changed: a pattern arrived while you were away. The
- * creature breathes once anything is holding, and its light is the
- * progress — the waiting, made visible. Under reduced motion the new seat
- * is simply lit and the creature is still.
+ * Keep the shared companion and bubble. A person without patterns can add
+ * an inspiration; an agent’s page explains its own memory without asking
+ * the person to write into it. Generator drafts are never previewed here.
  */
 import { useEffect, useState } from "react";
 
@@ -54,7 +22,7 @@ const GROUND_SEATS = 3;
 
 type Phase = "loading" | "ready" | "failed";
 
-export function PrinciplesGround({ locale, profileId, whose = "own", onChat }: {
+export function PrinciplesGround({ locale, profileId, whose = "own", onChat, onNewSave, newSaveLabel }: {
   locale: SupportedLocale;
   profileId?: string | null;
   /** Whose ground this is — an agent's wall must not say "you keep". */
@@ -62,6 +30,8 @@ export function PrinciplesGround({ locale, profileId, whose = "own", onChat }: {
   /** A chat about what the creature just said. Founder, 2026-10-15: "make
       this also have the chat about it thing." */
   onChat?: (said: string) => void;
+  onNewSave?: () => void;
+  newSaveLabel?: string;
 }) {
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
   const agent = whose === "agent";
@@ -145,7 +115,7 @@ export function PrinciplesGround({ locale, profileId, whose = "own", onChat }: {
   const line = count === 0
     ? say(agent ? "worldGroundNoneAgent" : "worldGroundNone")
     : count < GROUND_SEATS
-      ? formatMessage(locale, "worldGroundSome", { count, countWords: numWords(count, locale), left: GROUND_SEATS - count })
+      ? formatMessage(locale, agent ? "worldGroundSomeAgent" : "worldGroundSome", { count, countWords: numWords(count, locale) })
       : say(agent ? "worldGroundReadyAgent" : "worldGroundReady");
   /* How lit the waiting is, 0 to 1. Light is the only meaning channel: the
      glow around the creature IS the progress, and nothing else measures it. */
@@ -164,7 +134,13 @@ export function PrinciplesGround({ locale, profileId, whose = "own", onChat }: {
             tail — and ends in the same foot row. */}
         <div className="jar-char-bubble-body waka-ground-bubble">
           <span className="jar-char-bubble-reading" role="status">{line}</span>
-          {onChat ? (
+          {!agent && count < GROUND_SEATS && onNewSave ? (
+            <span className="jar-char-bubble-acts">
+              <button type="button" className="jar-char-bubble-act" onClick={onNewSave}>
+                {newSaveLabel ?? say("worldBubbleActAdd")}
+              </button>
+            </span>
+          ) : !agent && onChat ? (
             <span className="jar-char-bubble-acts">
               <button type="button" className="jar-char-bubble-act" onClick={() => onChat(line)}>
                 {say("worldTalkAboutThis")}
@@ -177,21 +153,33 @@ export function PrinciplesGround({ locale, profileId, whose = "own", onChat }: {
         </span>
       </div>
       <div className={`waka-ground-card${count >= GROUND_SEATS ? " waka-ground-card--full" : ""}`}>
-        <ol className="waka-ground-seats">
-          {Array.from({ length: GROUND_SEATS }, (_, index) => {
-            const signal = holding[index];
-            const fresh = signal && seenBefore !== null && index >= seenBefore;
-            return (
-              <li
-                key={signal?.id ?? `empty-${index}`}
-                className={`waka-ground-seat${signal ? " waka-ground-seat--held" : ""}${fresh ? " waka-ground-seat--new" : ""}`}
-                aria-hidden={signal ? undefined : true}
-              >
-                {signal ? <span className="waka-ground-words">{signal.statement}</span> : <span className="waka-ground-empty" />}
-              </li>
-            );
-          })}
-        </ol>
+        <p className="waka-ground-definition">{say("worldGroundDefinition")}</p>
+        {count === 0 ? (
+          <div className="waka-ground-example">
+            <p className="waka-ground-label">{say("worldGroundExampleLabel")}</p>
+            <blockquote>{say("worldGroundExample")}</blockquote>
+          </div>
+        ) : (
+          <>
+            <p className="waka-ground-label">{say("worldGroundPatterns")}</p>
+            <ol className="waka-ground-seats">
+              {Array.from({ length: GROUND_SEATS }, (_, index) => {
+                const signal = holding[index];
+                const fresh = signal && seenBefore !== null && index >= seenBefore;
+                return (
+                  <li
+                    key={signal?.id ?? `empty-${index}`}
+                    className={`waka-ground-seat${signal ? " waka-ground-seat--held" : ""}${fresh ? " waka-ground-seat--new" : ""}`}
+                    aria-hidden={signal ? undefined : true}
+                  >
+                    {signal ? <span className="waka-ground-words">{signal.statement}</span> : <span className="waka-ground-empty" />}
+                  </li>
+                );
+              })}
+            </ol>
+          </>
+        )}
+        <p className="waka-ground-how">{say(agent ? "worldGroundHowAgent" : "worldGroundHow")}</p>
         <p className="waka-ground-foot">{say(agent ? "worldGroundFootAgent" : "worldGroundFoot")}</p>
       </div>
     </section>

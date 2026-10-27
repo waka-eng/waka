@@ -194,7 +194,7 @@ it('offers places in the dock, and nothing that is already on the screen',async(
   const rows=dock.map(node=>(node.textContent?.trim()||node.getAttribute('aria-label')?.trim())??'');
   expect(rows).toEqual(['Home', 'Inspirations', 'Chats']);
   expect(dock.map(node=>node.getAttribute('aria-current')),'on Now, the bar names nowhere you are standing').toEqual(['page',null,null]);
-  expect(world.container.querySelector('.jar-char-principles')?.textContent).toContain('View principles');
+  expect(world.container.querySelector('.jar-char-principles')).toBeNull();
   expect(rows,'a claim is answered on home; the dock must not offer a second way in').not.toContain('Claims');
 });
 

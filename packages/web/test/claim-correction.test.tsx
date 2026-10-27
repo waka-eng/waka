@@ -46,7 +46,7 @@ import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import { apiMockFrom, dataMockFrom, diveIntoReview, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 import { createFeedback, listClaims } from "../src/lib/api";
-import { loadSignal } from "../src/lib/data";
+import { loadSignal, loadTopOfMind } from "../src/lib/data";
 import { createConversation } from "../src/lib/api/conversations";
 import { SLIP_LEAVE_MS as LEAVE_MS } from "../src/components/ClaimSlip";
 
@@ -88,6 +88,7 @@ vi.mock("../src/lib/auth-context", async (original) => ({
 vi.mock("../src/lib/data", async (original) => ({
   ...await original<typeof import("../src/lib/data")>(),
   ...dataMockFrom({ inspirations: [{ id: "kept-1", text: "An original capture", daysAgo: 3 }], groups: [] }),
+  loadTopOfMind: vi.fn(async () => null),
   /* THE CLAIM'S ROOTS, for the tap that dives deeper: a claim is a signal,
      and its evidence comes from `loadSignal`. */
   loadSignal: vi.fn(async (id: string) => ({
@@ -102,7 +103,7 @@ beforeAll(() => {
   installCanvasStub(); setViewport(1280, 900);
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
-afterEach(() => { world?.unmount(); vi.clearAllMocks(); vi.useRealTimers(); });
+afterEach(() => { world?.unmount(); vi.clearAllMocks(); vi.mocked(loadTopOfMind).mockResolvedValue(null); vi.useRealTimers(); });
 
 /** The two directions, read by their words rather than by their order. */
 function direction(label: string): HTMLButtonElement {
@@ -265,8 +266,7 @@ it("does not offer partly from this slot at all", async () => {
 it("does not walk to Principles when the creature is pulled while reviewing", async () => {
   await withClaims(CLAIM);
   const creature = world.container.querySelector<HTMLElement>(".jar-char-press");
-  expect(creature, "the creature is not on screen while reviewing").toBeTruthy();
-  await drag(creature!, 120);
+  expect(creature, "the avatar must not intercept a review swipe").toBeNull();
   await act(async () => { await world.step(); });
   expect(world.container.querySelector(".waka-page--timeless"), "the pull walked to Principles mid-review").toBeNull();
   expect(statement()).toContain(CLAIM.statement);
@@ -363,11 +363,14 @@ async function press(target: EventTarget, key: string) {
 
 it("counts what waits in the invitation, in the singular and the plural", async () => {
   await mountQueue(CLAIM);
+  expect(invite()).toBeNull();
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
   expect(inviteSays()).toBe("There is 1 thing to review!");
   expect(invite()?.querySelector("button.jar-char-bubble-act")?.textContent?.trim()).toBe("Dive into review");
   world.unmount();
 
   await mountQueue(CLAIM, SECOND, { ...CLAIM, id: "claim-3", statement: "You finish what you start." });
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
   expect(inviteSays()).toBe("There are 3 things to review!");
 });
 
@@ -386,13 +389,13 @@ it("shows no card until the dive, and the first card has the keys once in", asyn
     .toBe(world.container.querySelector(".jar-pick-slip"));
 });
 
-it("steps back out to the invitation on Escape", async () => {
+it("steps back out to Top of Mind on Escape", async () => {
   await mountQueue(CLAIM, SECOND);
   await diveIntoReview(world.container, world.step);
   expect(card()).toBeTruthy();
   await press(document.body, "Escape");
   expect(card(), "Escape left the cards up").toBeNull();
-  expect(inviteSays(), "Escape did not bring the invitation back").toBe("There are 2 things to review!");
+  expect(invite(), "Escape should return to the reading, not another review invitation").toBeNull();
 });
 
 it("makes the bar one way out while reviewing: Exit review mode", async () => {
@@ -406,7 +409,7 @@ it("makes the bar one way out while reviewing: Exit review mode", async () => {
   const exit = [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")].find((n) => n.textContent?.trim() === "Exit review mode")!;
   await act(async () => { exit.click(); });
   expect(card(), "Exit review mode left the cards up").toBeNull();
-  expect(inviteSays(), "Exit review mode did not bring the invitation back").toBe("There are 2 things to review!");
+  expect(invite(), "Exit review mode should return to the reading").toBeNull();
   expect(bar(), "the bar after review").toEqual(["Home", "Inspirations", "Chats"]);
 });
 
@@ -481,4 +484,39 @@ it("stays home when nothing is waiting, and the request does not linger", async 
   await act(async () => { go("/w/me"); }); await world.step(6);
   await act(async () => { go("/"); }); await world.step(6);
   expect(card(), "review popped open long after the link was answered").toBeNull();
+});
+
+
+it('shows Top of Mind before pending reviews and cycles only on avatar presses', async () => {
+  const body = 'Small experiments help me find a clearer direction.';
+  vi.mocked(loadTopOfMind).mockResolvedValue({ id: 'reading', version: 1, reason: 'initial', createdMs: Date.now(), entries: [{
+    id: 'entry', type: 'pattern', body, belief: null, prompt: null, locked: false, pinned: false, dismissed: false,
+    sortOrder: 0, citedSignals: [], createdMs: Date.now(),
+  }] });
+  await mountQueue(CLAIM, SECOND);
+  const bubbleText = () => world.container.querySelector('.jar-char-bubble')?.textContent;
+  const tap = () => act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
+  expect(bubbleText()).toContain(body);
+  expect(invite()).toBeNull();
+  await tap(); expect(inviteSays()).toBe('There are 2 things to review!');
+  await tap(); expect(invite()).toBeNull(); expect(bubbleText()).not.toContain(body);
+  await tap(); expect(bubbleText()).toContain('Which principles are guiding you lately?');
+  await tap(); expect(bubbleText()).toContain(body);
+  expect(world.container.querySelectorAll('.jar-char-bubble')).toHaveLength(1);
+  // A complete cycle in one event turn must still end on the reading.
+  await act(async () => { for (let i = 0; i < 4; i++) world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click(); });
+  expect(bubbleText()).toContain(body);
+  await diveIntoReview(world.container, world.step);
+  await press(document.body, 'Escape');
+  expect(bubbleText()).toContain(body);
+});
+
+it('skips review when nothing waits and opens the selected principles flow', async () => {
+  await mountQueue();
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
+  expect(invite()).toBeNull();
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
+  expect(world.container.querySelector('.jar-char-bubble')?.textContent).toContain('Which principles are guiding you lately?');
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-bubble-act')!.click());
+  expect(walkedToPrinciples()).toBe(true);
 });

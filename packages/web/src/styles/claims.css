@@ -2444,6 +2444,16 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   background: radial-gradient(closest-side, color-mix(in srgb, var(--jar-live) 16%, transparent), transparent);
 }
 
+.waka-ground-definition, .waka-ground-how, .waka-ground-label { margin: 0; }
+.waka-ground-definition { color: var(--ink); font-size: var(--t-body); line-height: 1.5; }
+.waka-ground-how { color: var(--muted); font-size: var(--t-ui); line-height: 1.6; }
+.waka-ground-label { color: var(--muted); font-size: var(--t-fine); }
+.waka-ground-example { display: grid; gap: var(--sp-8); }
+.waka-ground-example blockquote {
+  margin: 0; color: var(--ink); font-family: var(--waka-face);
+  font-size: var(--t-body); line-height: 1.5;
+}
+
 .waka-ground-seats {
   display: flex;
   flex-direction: column;
@@ -7016,15 +7026,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   background: var(--ink); color: var(--paper); font: inherit; font-size: var(--t-body); cursor: pointer;
 }
 .waka-primary-capture svg { width: var(--sp-20); height: var(--sp-20); }
-.jar-char-bubble:has(> .jar-char-principles) {
-  flex-direction: column; align-items: center; justify-content: flex-end; gap: var(--sp-8);
-}
-.jar-char-principles {
-  display: block; flex: none; pointer-events: auto; margin: 0; min-height: var(--sp-44);
-  padding: var(--sp-8) var(--sp-16); border: 0; background: none;
-  color: var(--muted); font: inherit; font-size: var(--t-ui); text-decoration: underline; cursor: pointer;
-}
-.jar-char-principles:hover, .jar-char-principles:focus-visible { color: var(--ink); }
 
 /* The selected identity stays visible; a menu accommodates any number of names. */
 .waka-profile-switcher { position: relative; pointer-events: auto; min-width: 0; }

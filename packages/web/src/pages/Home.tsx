@@ -832,30 +832,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
    * needs it every visit, so it persists. Declared here, above the sim effect,
    * because the loop reads it at construction.
    */
-  /**
-   * WHEN YOU WERE LAST HERE — read once, before anything is written.
-   *
-   * The founder's own use of this product is "open it after the agent has been
-   * working", and that moment had no design at all: the world simply rendered,
-   * fuller than before, with nothing to say which part was new.
-   *
-   * The answer is not a digest. Announcing "3 new signals" before the world
-   * draws converts the discovery into a receipt — the reward for opening it
-   * was seeing, and telling first spends that. Animal Crossing greets a
-   * two-month absence with no summary screen at all; it just gives you a
-   * fuller island. Outer Wilds does the other half: come back knowing more and
-   * the log PANS ALONG THE EDGE from what you knew to what you have just
-   * learned, then pulls out to frame the whole thing again. You get "what
-   * changed" and "where that sits" in one move, and no modal.
-   */
-  const lastSeenRef = useRef<number>(0);
-  if (lastSeenRef.current === 0) {
-    try {
-      lastSeenRef.current = Number(window.localStorage.getItem("waka.seen")) || 0;
-    } catch {
-      lastSeenRef.current = 0;
-    }
-  }
   const offlineRef = useRef(false);
   const [inspirations, setInspirations] = useState<Inspiration[] | null>(null);
   /**
@@ -1228,9 +1204,12 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
    * carries every word and simply is what it was.
    */
   const posterSaidRef = useRef(new Map<string, string>());
-  /** What the companion is saying: its own line when tapped, and the told
-      weather when an arrival has something on the record to tell. */
+  /** A requested activity line or a short confirmation/error from an action. */
   const [charSay, setCharSayNow] = useState("");
+  type CompanionPrompt = 'reading' | 'review' | 'activity' | 'principles';
+  const promptScope = `${storageScope?.accountId ?? ''}:${spaceKey(atWall)}`;
+  const [promptChoice, setPromptChoice] = useState<{ scope: string; kind: CompanionPrompt }>(() => ({ scope: promptScope, kind: 'reading' }));
+  const promptChoiceRef = useRef(promptChoice);
   /**
    * ═══ NOTHING SPEAKS WHILE THE CREATURE IS CHANGING FORM ════════════════
    *
@@ -1270,40 +1249,8 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     if (next !== "" && speechSealed.current) return;
     setCharSayNow(next);
   }, []);
-  /**
-   * ═══ THE CREATURE WAS JUST PRESSED, AND IS OFFERING ════════════════════
-   *
-   * Founder: "clicking on the character should just make it shine and bright,
-   * and maybe we can change the speech bubble from the top of mind content to
-   * 'feeling inspired? save inspiration', and then a few seconds later it can
-   * come back to top of mind."
-   *
-   * This replaces a press that went straight into the notepad. The press is
-   * an ANSWER now rather than a door: you poke it, it lights up and offers,
-   * and the offer is the thing you press to write. One extra press buys the
-   * gesture its whole character — a creature that reacts is a creature, and
-   * one that teleports you to a form is a button with a face on it.
-   *
-   * THE RETURN IS NOT THE WORLD MOVING ON ITS OWN. The law is that nothing
-   * changes unless the person moved it, and they did: this whole sequence is
-   * one press and its settling. What would break the law is a bubble that
-   * cycled unprompted, which is why the rotation the founder asked about
-   * earlier — "once in a while show the pencil icon?" — was answered with
-   * state rather than a timer.
-   */
-  /* THE OFFER IS GONE. Founder, for the fourth time, with a screenshot of
-     the creature holding "Feeling inspired? Save it.": "an agent should
-     never prompt user to save something."
-     It was half of this press's rotation, which is why removing it also
-     ends the two-state swap the bubble was glitching between. See
-     `creatureSpeaks`.
-
-     THE SHINE IS NOT GONE WITH IT, and the distinction is the founder's own:
-     "clicking on the character should just make it shine and bright" was
-     liked; the sentence it used to raise was not. So what `offering` drove
-     visually survives as exactly that and nothing else — a creature that
-     brightens while it is answering you. It is purely a light, so it carries
-     no words and opens no page; `charSay` is what arrives. */
+  // The glow settles after a tap; the chosen invitation stays until the
+  // next tap or navigation. Agent profiles never offer to save on their behalf.
   const [lit, setLit] = useState(false);
   const litTimer = useRef<number | null>(null);
   /* BOTH OF THE PRESS'S TIMERS, not just the glow's. A press starts two:
@@ -1327,59 +1274,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
       Assigned inside the frame effect; the press button calls it. */
   const pressFlareRef = useRef<(() => void) | null>(null);
   const sayLineKeyRef = useRef<{ line: string; key: MessageKey } | null>(null);
-  /** Which thing the next press says. */
-  const creatureTurn = useRef(0);
-  /**
-   * ═══ PRESSING IT KEEPS CHANGING WHAT IT SAYS ═══════════════════════════
-   *
-   * Founder: "clicking on the character should keep changing what it says.
-   * Like, I see, like, feeling inspired, save it, and that's like your
-   * memory was consulted the X times, blah blah blah."
-   *
-   * THE ROTATION ALREADY EXISTED AND WAS UNREACHABLE, which is the part
-   * worth recording. `sayTheWeather` walks the day's clauses one per press
-   * (`weatherTurnRef`), and `sayLine` below picks a fresh field line and
-   * never repeats the last one. Both were wired to the CANVAS hit-test —
-   * and `.jar-char-press`, an invisible disc, sits on top of the canvas and
-   * took every press for itself, showing the save offer and nothing else.
-   * So the product had two things to say, a mechanism for alternating them,
-   * and a button over the top that said one of them forever.
-   *
-   * One target, one rotation. The offer first, because that is the order
-   * the founder listed and because saving is what the screen is for; then
-   * what has been happening, which is the record talking rather than the
-   * product asking.
-   */
-  const creatureSpeaks = useCallback(() => {
-    creatureTurn.current++;
-    /* ONE THING, NOT TWO ALTERNATING. The rotation used to be offer, then
-       weather, then offer — and the offer was "Feeling inspired? Save it.",
-       which the founder has now struck four times. With it gone there is one
-       kind of answer and the press simply turns the page of the record.
-
-       THAT IS ALSO THE GLITCH FIX, and it is worth saying why rather than
-       taking the luck. Two states meant two writers: `offering` was
-       synchronous and `charSay` arrived from a fetch, so a fast press could
-       raise the offer and then have the previous press's sentence land on top
-       of it — the bubble's first branch requires `!charSay`, so the whole
-       bubble was torn down and rebuilt mid-press. One writer cannot do that
-       to itself; the epoch below handles two presses of the same kind. */
-    speechEpoch += 1;
-    /* A PRESS IS A QUESTION ASKED ON THE WALL YOU ARE ON NOW, so it lifts
-       the switch's seal (see the effect on `wallAddress`). Without this, the
-       650ms of quiet a wall change buys would also swallow the answer to a
-       press made inside it — which is reachable, because the press target
-       stays on screen while you walk between rooms even though it is pulled
-       during a form turn. The seal is for sentences from BEFORE the switch;
-       this one is from after it. */
-    speechSealed.current = false;
-    setLit(true);
-    if (litTimer.current !== null) window.clearTimeout(litTimer.current);
-    litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
-    const fallback = sayLineRef.current;
-    if (fallback) sayTheWeatherRef.current(fallback);
-  }, []);
-
   /* WHETHER THE DOCK'S PLUS IS OPEN. A press on a place is navigation and
      lives in the address; a press on the plus is not going anywhere yet, so
      it stays here — putting it in the URL would make "I was about to make
@@ -1890,6 +1784,10 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      (yours or your agent's) is kept. */
   const [queueLoaded, setQueueLoaded] = useState(false);
   const queueLoadRef = useRef(0);
+  const canOfferReview = queueLoaded && !offline && toReview > 0;
+  const companionPrompt = promptChoice.scope !== promptScope || (promptChoice.kind === 'review' && !canOfferReview)
+    ? 'reading' : promptChoice.kind;
+  promptChoiceRef.current = { scope: promptScope, kind: companionPrompt };
   const viewOpen = viewNavigation.view?.open ?? null;
   /* The rules (and the fourth case, offline: the link is dropped) live in
      `lib/open-claims-link.ts`. */
@@ -2235,6 +2133,32 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const principlesOpen = viewNavigation.view?.open === 'principles';
   const atNowView = !viewNavigation.view?.open && !viewNavigation.view?.conversationId &&
     !viewNavigation.view?.compose && !viewNavigation.view?.sharePrinciple && !viewNavigation.view?.principleId;
+  // One deliberate cycle, with no timer advancing the invitation. Keep the
+  // cursor synchronous so rapid taps cannot replay the same choice.
+  const creatureSpeaks = useCallback(() => {
+    if (!atNowView || reviewing) return;
+    const choices: CompanionPrompt[] = ['reading', ...(canOfferReview ? ['review' as const] : []), 'activity', 'principles'];
+    const current = promptChoiceRef.current.scope === promptScope ? promptChoiceRef.current.kind : 'reading';
+    const next = choices[(choices.indexOf(current) + 1) % choices.length]!;
+    promptChoiceRef.current = { scope: promptScope, kind: next };
+    setPromptChoice(promptChoiceRef.current);
+    speechEpoch += 1;
+    speechSealed.current = false;
+    if (graceTimer.current !== null) { window.clearTimeout(graceTimer.current); graceTimer.current = null; }
+    setCharSay('');
+    setLit(true);
+    if (litTimer.current !== null) window.clearTimeout(litTimer.current);
+    litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
+    if (next === 'activity' && sayLineRef.current) sayTheWeatherRef.current(sayLineRef.current);
+  }, [atNowView, reviewing, canOfferReview, promptScope, setCharSay]);
+  useEffect(() => {
+    if (atNowView && !reviewing && promptChoice.scope === promptScope) return;
+    speechEpoch += 1;
+    setCharSay('');
+    promptChoiceRef.current = { scope: promptScope, kind: 'reading' };
+    setPromptChoice(promptChoiceRef.current);
+  }, [atNowView, reviewing, promptScope, promptChoice.scope, setCharSay]);
+
   /** What is being made right now, if anything — the bar becomes that page's own (see the dock). */
   const making: 'inspiration' | 'talk' | null = viewNavigation.view?.compose ? 'inspiration'
     : viewNavigation.view?.conversationId ? 'talk' : null;
@@ -2657,6 +2581,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const say = useCallback((key: MessageKey) => t(localeRef.current, key), []);
+  const companionLine = charSay || (companionPrompt === 'activity' ? say('worldCompanionChatPrompt') : '');
   /** Says a draft problem on the composer, and flags the one problem that
       offers a separate draft: this draft changed in another tab. */
   const sayMouthProblem = useCallback((key: MessageKey) =>
@@ -3648,133 +3573,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const creatureSpeaksRef = useRef(creatureSpeaks);
   creatureSpeaksRef.current = creatureSpeaks;
 
-  /**
-   * WHAT ARRIVED WHILE YOU WERE GONE — shown by going there, not by saying so.
-   *
-   * Held until the pour has settled, so the world is whole before it moves;
-   * then the camera glides to the newest thing and lights it, and comes back
-   * out. One beat, no summary, and nothing to dismiss. If nothing is new the
-   * whole thing is silent, which is most days.
-   *
-   * AND THEN, ONLY THEN, THE WEATHER IS TOLD. One sentence for the
-   * away-window, assembled server-side purely from stored records
-   * (`the-weather.db.test.ts` — a deleted record loses its sentence),
-   * whispered through the companion's own line after the world has drawn
-   * and the camera has come home. Seeing first, telling second — the told
-   * line rides the return, it never precedes it, and it is never a
-   * notification: nothing to dismiss, gone on its own. A window in which
-   * the loop did nothing is told with silence
-   * (goals/the-legible-loop.md Phase 5).
-   */
-  /**
-   * ONE GREETING PER VISIT — this is an ARRIVAL, and it must know that.
-   *
-   * The effect depends on `inspirations` because the glide cannot run before
-   * the archive is in hand — but the archive also changes every time you KEEP
-   * something, and `lastSeenRef` was read once at mount and never advanced
-   * when `stamp()` wrote the new time. So each save re-ran the greeting
-   * against the mount-time clock, found "something new since you were away"
-   * — the memory you had typed four seconds ago — glid the camera to it and
-   * opened its card over the mouth (founder, 2026-08-24: "dont show the
-   * thing i save in card format after saving"). Greeted once, and stamp
-   * advances the ref with the storage so nothing later re-reads a stale
-   * "away".
-   */
-  const greetedRef = useRef(false);
-  useEffect(() => {
-    if (!inspirations || phase !== "ready" || offlineRef.current) return undefined;
-    if (greetedRef.current) return undefined;
-    greetedRef.current = true;
-    const since = lastSeenRef.current;
-    const stamp = () => {
-      lastSeenRef.current = Date.now();
-      try {
-        window.localStorage.setItem("waka.seen", String(lastSeenRef.current));
-      } catch {
-        /* private mode: every visit is a first visit, which is survivable */
-      }
-    };
-    if (since === 0) {
-      /* the first visit has no "while you were gone" — everything is new, and
-         saying so about a whole archive would be noise */
-      stamp();
-      return undefined;
-    }
-    const requested = requestedViewRef.current;
-    // An explicit route or an already-started interaction belongs to the
-    // person. A returning-visitor greeting is never navigation authority.
-    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.principleId || requested?.conversationId) {
-      stamp(); return undefined;
-    }
-    /* ═══ AND WHOSE ARRIVAL THIS IS, WHICH IS THE THIRD RACE ═══════════
-       Founder, reporting the same thing for the second time after both of
-       the other two were fixed and shipped: "sometimes the speech bubble
-       stays on." Still true, and this is the writer that was missed.
-
-       `charSay` has THREE late writers, not two. `sayTheWeather` takes a
-       `speechEpoch` number on the press and drops a superseded answer; the
-       wall effect clears a sentence that had already landed. This greeting
-       is the third: it fetches the away-window line at mount, holds it in
-       `toldRef` and speaks it from a timer — 1400ms after the world is
-       drawn, 4000ms when there is something new to glide to first. It took
-       no number at all, so the guard built for exactly this shape of bug
-       could not see it, and a sentence about YOUR day landed on your
-       agent's wall whenever somebody switched form on the way in.
-
-       THE SEAL CANNOT COVER IT, and that is why this needs the epoch rather
-       than a longer hush. `speechSealed` lifts with the turn (650ms,
-       `FORM_HUSH_MS`) because words over the back of a turning creature is
-       the only thing it is for. The greeting speaks at 1400ms at the
-       earliest, so it lands after every seal has lifted, EVERY time —
-       "sometimes" only because switching form inside the first few seconds
-       of a visit is itself occasional. Widening the hush to four seconds was
-       the obvious alternative and is wrong twice over: it would hold a
-       sentence somebody ASKED for off the screen for four seconds, and it
-       would still be a race rather than an answer to one.
-
-       WHY IT WAS NEVER SEEN BY HAND. StrictMode double-mounts `Home` in
-       development, the first mount's cleanup clears these timers, and
-       `greetedRef` is already spent — so the greeting never speaks at all
-       under `pnpm dev`. It is only reachable in a real build, which is why
-       the founder is the only person who had seen it. Pinned by
-       `speech-on-switch.test.tsx` instead. */
-    const askedOnArrival = speechEpoch;
-    /* fetched while the glide waits its beat; whichever timeout speaks reads
-       the settled value from the ref. A failed fetch is a silent arrival —
-       the weather is a courtesy, never a blocker. */
-    const toldRef = { current: null as string | null };
-    void fetchTheWeather({ since: new Date(since), antechamber: false })
-      .then((weather) => {
-        toldRef.current = weather.told;
-      })
-      .catch(() => undefined);
-    const timers: number[] = [];
-    const tell = () => {
-      /* THE THIRD PLACE A SERVER CLAUSE IS SPOKEN ALONE, and it was missed
-         when the other two were fixed — caught by a probe that printed what
-         the creature was actually saying: "you kept a memory." The
-         away-window sentence comes off the same API as the day's clauses,
-         lower case for the same reason, and lands straight in the bubble.
-         `capitalized.test.ts` lists all three by name now. */
-      /* A GREETING IS ADDRESSED TO WHOEVER ARRIVED, and a press or a wall
-         change means that is no longer who is standing here. Same test the
-         press path makes (`mine()`), same reason: a late answer to a
-         question nobody is asking any more is not an answer. */
-      if (askedOnArrival !== speechEpoch) return;
-      if (toldRef.current && !speechSealed.current) setCharSay(unseenUpdate.current(
-        storageScope, new Date().toISOString().slice(0, 10), [asSentence(toldRef.current, localeRef.current)],
-      ));
-    };
-    /* THE GREETING NO LONGER OPENS A CARD. It used to glide to the newest
-       thing kept while you were away, open its card, hold it 2.6s and close
-       it again. Founder, 2026-10-16: "once in a while the inspiration card
-       keeps coming up in the main page but dont have that." So coming back
-       is the whisper alone — the creature tells you what happened — and a
-       card opens only when you open one. */
-    timers.push(window.setTimeout(tell, 1400));
-    stamp();
-    return () => timers.forEach((id) => window.clearTimeout(id));
-  }, [inspirations, phase]);
+  // Arrival always belongs to Top of Mind. Activity is requested by an
+  // avatar tap; an unsolicited greeting must not replace the reading.
 
   /* ------------- derived data (changes only when data changes) ------------- */
 
@@ -4629,10 +4429,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
   /* the companion's line is a whisper, not a status bar: it goes after 4s —
      6s for "I'm inspired!", which carries a button worth reaching for */
   useEffect(() => {
-    if (!charSay) return undefined;
+    if (!charSay || companionPrompt === 'activity') return undefined;
     const id = window.setTimeout(() => setCharSay(""), charSay === say('worldImInspired') ? 6000 : 4000);
     return () => window.clearTimeout(id);
-  }, [charSay]);
+  }, [charSay, companionPrompt]);
 
   /* THE EVIDENCE INDEX HAS NO CHANGE SIGNAL ANY MORE, because it no longer
      changes after load. `provTick` was how React was told the ref had been
@@ -9449,28 +9249,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
               it is the only thing on screen that came from the product rather
               than from you — so it carries the door into a conversation
               about itself. */}
-          {/* ═══ PRESSING THE CREATURE OPENS THE NOTEPAD ════════════════
-              Founder: "clicking on character should open save inspirations
-              note pad", with a mockup of the creature holding a PENCIL in its
-              speech bubble.
-
-              So the bubble is not a step — it is the label for the gesture.
-              It is always up when the creature has nothing else to say, the
-              way the reference's character always holds up a pebble or a
-              pencil, and it says what pressing the body will do. One press,
-              straight into the note; no toggle in between.
-
-              A PENCIL RATHER THAN THE WORDS. The reference puts an object in
-              the bubble, not a sentence, and an object is why the bubble can
-              share the screen with the claim below without competing: a glyph
-              is not a second thing to read. This is the creature's own
-              illustration register — the same place the body and its aura
-              live — not a UI icon set, which this product still does not have
-              and is not getting. */}
-          {/* THE INVITATION INTO REVIEW, in the top-of-mind slot and its full
-              weight, because it is the page's main act while anything waits
-              (see `reviewing`). */}
-          {!mouthOpen && !charSay && !turning && !reviewing && toReview > 0 ? (
+          {/* Review is offered only when selected by an avatar tap. Pending
+              work never takes the reading's place on arrival. */}
+          {!mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'review' ? (
             <div className="jar-char-bubble jar-char-bubble--review" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">
@@ -9482,33 +9263,16 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   </button>
                 </span>
               </span>
-              <button type="button" className="jar-char-principles" onClick={toPrinciples}>
-                    {say('worldViewPrinciples')}
-                  </button>
             </div>
           ) : null}
-          {/* ═══ THE CREATURE IS ALWAYS THERE TO PRESS — AND TO PULL ═══════
-              It stood inside the top-of-mind bubble's block, so whenever the
-              bubble stepped aside (a line being said, the review invitation,
-              review itself) the press went with it — and with it the only
-              touch way to Principles (code review, 2026-10-16). It stands on
-              its own now. NOT ON AN AGENT'S WALL, for the reason the note in
-              the bubble block below gives: a press that offers to save into
-              someone else's archive is a control that can never work.
-
-              DRAG IT RIGHT AND IT WALKS TO PRINCIPLES. Founder, 2026-10-15:
-              "principle is sth user can only get by dragging." A press is
-              still a press (the creature speaks); a pull of `CREATURE_PULL`
-              px rightward that is more across than down is the walk, and the
-              click that follows the release is swallowed so it does not also
-              speak. The swallow is reset on every new press: some touch
-              browsers send no click after a moved touch, and a stale flag
-              would eat the next real tap. */}
-          {!backgroundHidden && !mouthOpen && atWall.kind !== 'agent' ? (
+          {/* Taps change the invitation on this profile; dragging right
+              still opens Principles. The release click after a drag is ignored. */}
+          {!backgroundHidden && !mouthOpen && !reviewing ? (
             <button
               type="button"
               className={`jar-char-press${lit ? ' jar-char-press--lit' : ''}`}
               aria-label={say('worldCreatureSpeak')}
+              title={say('worldCreatureSpeak')}
               aria-keyshortcuts="ArrowRight"
               data-jar-chrome="1"
               data-jar-interactive="1"
@@ -9544,7 +9308,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               }}
             />
           ) : null}
-          {!mouthOpen && !charSay && !turning && !reviewing && toReview === 0 ? (
+          {!mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
             <>
               {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over
                   there and being offered "Feeling inspired? Save one.":
@@ -9831,14 +9595,21 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       )
                     )}
                   </span>
-                  <button type="button" className="jar-char-principles" onClick={toPrinciples}>
-                    {say('worldViewPrinciples')}
-                  </button>
                 </div>
               ) : null}
             </>
           ) : null}
-          {!mouthOpen && charSay ? (
+          {!mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'principles' ? (
+            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
+              <span className="jar-char-bubble-body">
+                <span className="jar-char-bubble-reading" role="status">{say('worldCompanionPrinciplesPrompt')}</span>
+                <span className="jar-char-bubble-acts">
+                  <button type="button" className="jar-char-bubble-act" onClick={toPrinciples}>{say('worldViewPrinciples')}</button>
+                </span>
+              </span>
+            </div>
+          ) : null}
+          {!mouthOpen && !turning && companionLine ? (
             /* THE SAME WHITE AS THE TOP OF MIND. This bubble wore a lighter
                fill (`--aside`) to step back from the reading; founder,
                2026-10-15: "make all ... the speech bubbles be the same color
@@ -9866,7 +9637,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     speech bubbles should have an action at the end." This
                     is the bubble that reports what has been happening, and
                     it led into a chat on a press nothing advertised. */}
-                <span className="jar-char-bubble-reading" role="status">{charSay}</span>
+                <span className="jar-char-bubble-reading" role="status">{companionLine}</span>
                 {/* ═══ CHAT WHEN THERE IS SOMETHING, SAVE WHEN THERE IS NOT ══
                     Founder, of "Quiet lately — Let's talk about it":
                     "determine when it's appropriate to say 'lets chat about
@@ -9907,15 +9678,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   <span className="jar-char-bubble-acts">
                     <button type="button" className="jar-char-bubble-act"
                       disabled={talking}
-                      onClick={() => { void talkAbout({ id: '', text: charSay }); }}>
+                      onClick={() => {
+                        if (charSay) void talkAbout({ id: '', text: charSay });
+                        else viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.kind === 'agent' ? atWall.id : null, conversationId: 'new' });
+                      }}>
                       {say('worldTalkAboutThis')}
                     </button>
                   </span>
                 )}
               </div>
-              <button type="button" className="jar-char-principles" onClick={toPrinciples}>
-                    {say('worldViewPrinciples')}
-                  </button>
             </div>
           ) : null}
           <div ref={measured.charSay} className="jar-char-say" data-jar-chrome="1" data-jar-interactive="1">
@@ -11937,6 +11708,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
         name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
         title={atWall.kind==='agent'?formatMessage(locale,'worldProfilePrinciples',{name:atWall.name}):say('worldPrinciplesShortcut')}
         whose={atWall.kind==='agent'?'agent':'own'}
+        onNewSave={atWall.kind==='agent'?undefined:startNewInspiration}
+        newSaveLabel={say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}
         onClose={closePage}
         /* Opening one REPLACES the overlay rather than stacking on it: the
            principle's own surface is the next thing to read, not a sheet on
