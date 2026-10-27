@@ -5309,6 +5309,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        with nothing painted there is nothing to ask. */
 
     function overChar(cx: number, wy: number): boolean {
+      if (covered || asideRef.current) return false;
       const dx = cx - (view.w / 2 + companion.off);
       const dy = wy - (companion.y + companion.asideNow);
       const r = companion.size * 0.55;
@@ -5380,6 +5381,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     };
 
     const onDown = (e: PointerEvent) => {
+      if (covered || asideRef.current) return;
       /* capture phase: interactive elements keep their own behaviour */
       if (isInteractive(e.target)) return;
       /* mid-travel the camera belongs to the traveler */
@@ -5516,6 +5518,12 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     }
 
     const onHover = (e: PointerEvent) => {
+      // A page (or the walking companion) owns input while Home is hidden.
+      if (covered || asideRef.current) {
+        gesture.cursor = "";
+        root!.style.cursor = "";
+        return;
+      }
       /* presence: the eyes drift a couple of pixels toward the last touch */
       const dx = e.clientX - view.w / 2;
       const dy = e.clientY + cam.y - companion.y;
@@ -5587,6 +5595,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          the cloud-drag paths used to return without either. */
       releaseOwner(e.pointerId);
       if (!gesture.down) return;
+      if (covered || asideRef.current) { dropPress(); return; }
       gesture.down = false;
       /* A TAP IS DECIDED ON RELEASE. Six pixels of MANHATTAN distance means a
          four-and-four thumb wobble latches a drag, and the else-branch then
@@ -5927,6 +5936,11 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       setCovered: value => {
         if (covered === value) return;
         covered = value;
+        if (value) {
+          gesture.cursor = "";
+          root!.style.cursor = "";
+          if (gesture.down) dropPress();
+        }
         wake();
       },
       isResting: resting,

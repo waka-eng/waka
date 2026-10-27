@@ -57,6 +57,54 @@ it.each(['Inspirations', 'Chats'])('parks the covered canvas on %s and resumes w
 
 const simulation = () => (window as unknown as { wakaSim: () => SimApi }).wakaSim();
 
+const pointer = (target: EventTarget, type: string, x: number, y: number) => {
+  target.dispatchEvent(new window.PointerEvent(type, { bubbles: true, pointerId: 1,
+    pointerType: 'mouse', clientX: x, clientY: y, buttons: type === 'pointerdown' ? 1 : 0 }));
+};
+
+it.each(['Inspirations', 'Chats'])('removes the avatar click target and hover cursor on %s', async label => {
+  world = await mountWorld(facts);
+  const root = world.container.querySelector<HTMLElement>('.jar')!;
+  const spot = simulation().creatureAt()!;
+  const tab = (name: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-primary-navigation button')]
+    .find(button => button.textContent?.trim() === name)!;
+  await act(async () => { pointer(window, 'pointermove', spot.x, spot.y); pointer(window, 'pointermove', spot.x, spot.y); });
+  expect(root.style.cursor).toBe('pointer');
+  await act(async () => tab(label).click());
+  expect(root.style.cursor).toBe(''); // No pointer movement needed to clear it.
+  expect(world.container.querySelector('.jar-char-press')).toBeNull();
+  await world.step(120);
+  const schedule = vi.spyOn(globalThis, 'requestAnimationFrame');
+  await act(async () => {
+    pointer(window, 'pointermove', spot.x, spot.y);
+    pointer(window, 'pointermove', spot.x, spot.y);
+    pointer(root, 'pointerdown', spot.x, spot.y);
+    pointer(window, 'pointerup', spot.x, spot.y);
+  });
+  await world.step(120);
+  expect(root.style.cursor).toBe('');
+  expect(schedule).not.toHaveBeenCalled();
+  await act(async () => tab('Home').click());
+  await world.step(120);
+  expect(world.container.querySelector('.jar-char-press--lit')).toBeNull();
+  const returned = simulation().creatureAt()!;
+  await act(async () => {
+    pointer(root, 'pointerdown', returned.x, returned.y);
+    pointer(window, 'pointerup', returned.x, returned.y);
+  });
+  expect(world.container.querySelector('.jar-char-press--lit')).not.toBeNull();
+});
+
+it.each(['/?compose=1', '/chat/new', '/?open=principles'])(
+  'does not expose the background avatar on a direct %s page', async path => {
+    world = await mountWorld(facts, { initialEntries: [path] });
+    expect(world.container.querySelector('.jar-char-press')).toBeNull();
+    const root = world.container.querySelector<HTMLElement>('.jar')!, spot = simulation().creatureAt()!;
+    await act(async () => { pointer(window, 'pointermove', spot.x, spot.y); pointer(window, 'pointermove', spot.x, spot.y); });
+    expect(root.style.cursor).toBe('');
+  },
+);
+
 it('finishes navigation under a covered page before parking, including a cold list link', async () => {
   world = await mountWorld(facts, { initialEntries: ['/?open=saves'] });
   const sim = simulation();

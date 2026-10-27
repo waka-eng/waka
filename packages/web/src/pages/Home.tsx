@@ -9504,7 +9504,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               speak. The swallow is reset on every new press: some touch
               browsers send no click after a moved touch, and a stale flag
               would eat the next real tap. */}
-          {!mouthOpen && atWall.kind !== 'agent' ? (
+          {!backgroundHidden && !mouthOpen && atWall.kind !== 'agent' ? (
             <button
               type="button"
               className={`jar-char-press${lit ? ' jar-char-press--lit' : ''}`}
