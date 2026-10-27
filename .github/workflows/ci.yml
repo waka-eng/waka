@@ -121,7 +121,7 @@ jobs:
       # journal.
       - name: API suite (hermetic)
         run: |
-          pnpm --filter @waka/api test \
+          pnpm --filter @waka/api exec vitest run \
             --exclude '**/node_modules/**' \
             --exclude '**/dist/**' \
             --exclude '**/.sst/**' \
