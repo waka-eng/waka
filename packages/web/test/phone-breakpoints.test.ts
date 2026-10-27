@@ -255,38 +255,20 @@ describe("the four breaks that a browser found and reading did not", () => {
     ).toBe(false);
   });
 
-  /* ═══ AT 350 THE VERBS ABOUT A NOTE FOLD, AND THE STATE GETS A LINE ════
-     Measured 2026-10-17: Back, five 44px tools, Close and two rules need
-     343px of a phone; below that Share and Delete fold into ⋯ rather than
-     any target shrinking. The ⋯ is hidden above 350 (two classes, because
-     `.waka-add` comes later and would show it), its menu hangs from its
-     right edge (centred, it ran off a 320px screen), and under 440 a state
-     line takes its own row instead of being squeezed to ~10px. */
-  it("folds Share and Delete into ⋯ at 350px, anchors its menu right, and gives the state its own line", () => {
+  /* The audit moved secondary actions to the header at every width. Their
+     menu still needs to fit inside a 320px screen; status keeps its own row. */
+  it("anchors note actions in the header and gives phone save status its own line", () => {
     const css = rules("claims.css");
-    expect(/\.waka-dock-more\.waka-add\s*\{\s*display:\s*none;/.test(css), "the ⋯ shows at full width").toBe(true);
-    expect(
-      /@media \(max-width: 350px\) \{\s*\.waka-dock-roomy\s*\{\s*display:\s*none;\s*\}\s*\.waka-dock-more\.waka-add\s*\{\s*display:\s*inline-flex;/.test(css),
-      "below 350px Share and Delete no longer fold into ⋯ — the row needs 343px at 44px a target",
-    ).toBe(true);
-    expect(
-      /\.waka-add-menu\.waka-more-menu\s*\{[^}]*right:\s*0;[^}]*transform:\s*none;/.test(css),
-      "the ⋯ menu is centred on its button again, which runs it off the right of a 320px phone",
-    ).toBe(true);
+    expect(block('claims.css', '.jar-note-actions-trigger')).toContain('width: var(--sp-44)');
+    expect(block('claims.css', '.jar-note-actions-trigger')).toContain('height: var(--sp-44)');
+    const menu = block('claims.css', '.waka-add-menu.jar-draft-menu');
+    expect(menu).toContain('right: 0');
+    expect(menu).toContain('top: calc(100% + var(--sp-6))');
+    expect(menu).toContain('max-width: min(20rem, calc(100vw - var(--sp-48)))');
     expect(
       /\.waka-dock-making:has\(> \.waka-dock-state\)\s*\{[^}]*flex-wrap:\s*wrap;[^}]*\}\s*\.waka-dock-making > \.waka-dock-state\s*\{[^}]*flex:\s*1 0 100%;/.test(css)
         && /\.waka-dock:has\(\.waka-dock-making > \.waka-dock-state\)\s*\{\s*width:\s*calc\(100vw - var\(--sp-16\)\);/.test(css),
       "a state line shares the phone row with the tools again and is squeezed to ~10px",
-    ).toBe(true);
-  });
-
-  /* While recording the mic is an auto-width clock; the fold reaches up to
-     400px then, so a long recording cannot push Close off at 351-360. */
-  it("folds Share and Delete into ⋯ up to 400px while a recording clock is in the row", () => {
-    const css = rules("claims.css");
-    expect(
-      /@media \(max-width: 400px\) \{\s*\.waka-dock-making:has\(\.waka-dock-tool--live\) \.waka-dock-roomy\s*\{\s*display:\s*none;\s*\}\s*\.waka-dock-making:has\(\.waka-dock-tool--live\) \.waka-dock-more\.waka-add\s*\{\s*display:\s*inline-flex;/.test(css),
-      "the recording clock no longer folds the row, so Close can leave a 351-360px screen",
     ).toBe(true);
   });
 

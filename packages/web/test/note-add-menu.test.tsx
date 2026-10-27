@@ -77,7 +77,7 @@ async function settle() {
 }
 async function openNotepad(): Promise<void> {
   world = await mountWorld(FACTS); await settle();
-  const inspiration = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item')]
+  const inspiration = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-primary-capture')]
     .find(row => row.textContent?.trim() === 'New inspiration');
   expect(inspiration, 'the bar offers no Inspiration row').toBeTruthy();
   await act(async () => inspiration!.click()); await settle();

@@ -33,10 +33,8 @@ import { SurfaceBoundary } from "./components/SurfaceBoundary";
 import { AuthProvider } from "./lib/auth-context";
 import { ArchiveRecordingBoundary } from "./lib/archive-recording-boundary";
 import { installPreloadRecovery } from "./lib/preload-recovery";
+import { LoadingHome } from "./components/LoadingHome";
 import LoginPage from "./pages/Login";
-import { Days } from "./pages/Days";
-import OnboardingPage from "./pages/Onboarding";
-import PublicProfilePage from "./pages/PublicProfile";
 import { MobileShell } from './components/MobileShell';
 if (import.meta.env.VITE_BUILD_TARGET === 'mobile') void import('./styles/mobile-fonts.css');
 // FIRST, ALWAYS: declares the layer order every other stylesheet relies on.
@@ -78,6 +76,12 @@ import "./styles/claims.css";
   down, and the next person reads it as the current shape of the product.
 */
 const HomePage = lazy(() => import("./pages/Home"));
+// Secondary routes load their own screens. Days must not pull its
+// Menu/settings/chat dependencies into the public login's startup bundle.
+// Login stays eager so the first screen adds no extra module round trip.
+const Days = lazy(() => import("./pages/Days").then(module => ({ default: module.Days })));
+const OnboardingPage = lazy(() => import("./pages/Onboarding"));
+const PublicProfilePage = lazy(() => import("./pages/PublicProfile"));
 const MobileChecks = import.meta.env.VITE_BUILD_TARGET === 'mobile' && import.meta.env.VITE_MOBILE_DIAGNOSTICS === '1' ? lazy(() => import('./pages/MobileChecks')) : null;
 
 /**
@@ -181,14 +185,14 @@ ReactDOM.createRoot(root).render(
               redirect. */}
           <Route path="/inspirations" element={<Navigate to="/?open=saves" replace />} />
           <Route path="/principles" element={<Navigate to="/?open=principles" replace />} />
-          <Route path="/days" element={<RequireAuth><SurfaceBoundary surface="your days"><Days /></SurfaceBoundary></RequireAuth>} />
-          <Route path="/:handle" element={<SurfaceBoundary surface="a public page"><PublicProfilePage /></SurfaceBoundary>} />
+          <Route path="/days" element={<RequireAuth><SurfaceBoundary surface="your days"><Suspense fallback={<LoadingHome />}><Days /></Suspense></SurfaceBoundary></RequireAuth>} />
+          <Route path="/:handle" element={<SurfaceBoundary surface="a public page"><Suspense fallback={<LoadingHome />}><PublicProfilePage /></Suspense></SurfaceBoundary>} />
           <Route
             path="/onboarding"
             element={
               <RequireAuth>
                 <SurfaceBoundary surface="onboarding">
-                  <OnboardingPage />
+                  <Suspense fallback={<LoadingHome />}><OnboardingPage /></Suspense>
                 </SurfaceBoundary>
               </RequireAuth>
             }

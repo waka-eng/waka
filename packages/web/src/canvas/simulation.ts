@@ -685,6 +685,8 @@ type Moment = "touch" | "kept" | "answered" | "arrived" | "shared" | "let-go";
 
 export interface SimApi {
   navigationState: () => { wall: Space; section: 'top' | 'field' | 'sky'; moving: boolean };
+  /** A full page covers the canvas; finish navigation, then park its loop. */
+  setCovered: (covered: boolean) => void;
   /** The world is at rest: no trip, no aim, no finger down, no camera ease.
       The ONE definition the rest edge (`pushRestedRef`) fires on and the
       first-load landing asks, so "may this land now" and "it has just
@@ -1762,6 +1764,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       /** when something last happened; the loop parks itself after a while */
       lastActive: 0,
     };
+    let covered = false;
 
     /**
      * ONE HAND ON THE WORLD — everything about the gesture in progress.
@@ -1974,6 +1977,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     const inspTop = new Float32Array(8);
 
     function wake() {
+      // Data/resize callbacks can arrive after the visibility handler parked
+      // the loop. They must not restart animation in a background tab.
+      if (document.hidden) return;
       clock.lastActive = performance.now();
       /* ANY REAL EVENT WAKES THE WORLD, at once and to full amplitude. wake()
          is what every one of them already calls — a touch, a keep, a scrub,
@@ -4701,6 +4707,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     }
 
     function tick(now: number) {
+      if (document.hidden) { clock.running = false; return; }
       clock.raf = requestAnimationFrame(tick);
       /* dt is clamped BOTH ways: a wake() racing a queued frame can hand a
          timestamp older than prev (heavily throttled tabs make it seconds),
@@ -5181,7 +5188,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         setDialAway(nowAway);
       }
 
-      draw(now);
+      if (!covered) draw(now);
       syncDom();
 
       /* THE REST EDGE, said once per stop, on the first frame that finds the
@@ -5192,6 +5199,14 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       else if (movedSinceRest) {
         movedSinceRest = false;
         pushRestedRef.current(curWall(), api);
+      }
+
+      // Route restoration and profile travel still need to reach their rest
+      // edge under an open page. Ambient drift does not need another frame.
+      if (covered && resting() && gesture.snapAt <= 0) {
+        clock.running = false;
+        cancelAnimationFrame(clock.raf);
+        return;
       }
 
       /* The field drifts continuously, so there is no longer an idle state to
@@ -5906,6 +5921,11 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
 
     const api: SimApi = {
       navigationState: () => ({ wall: curWall(), section: cam.y < view.layout.minCam * 0.5 ? 'sky' : cam.y > view.layout.maxCam * 0.5 ? 'field' : 'top', moving: trip.active || cam.aiming }),
+      setCovered: value => {
+        if (covered === value) return;
+        covered = value;
+        wake();
+      },
       isResting: resting,
       /* the timeline re-hangs under the word, whose width the reading sets */
       hangRail,

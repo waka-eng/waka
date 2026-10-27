@@ -241,10 +241,20 @@ export function Menu({ locale, items, current, label, left, account, settings, o
    */
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const infoTrigger = useRef<HTMLButtonElement>(null);
-  const close = (): void => {
-    (corner === "info" ? infoTrigger : settingsTrigger).current?.focus();
-    setCorner(null);
+  const settingsLeave = useRef<(() => Promise<boolean>) | null>(null);
+  const leaving = useRef(false);
+  const changeCorner = async (next: typeof corner) => {
+    if (leaving.current) return;
+    if (corner === 'settings' && next !== 'settings' && settingsLeave.current) {
+      leaving.current = true;
+      const saved = await settingsLeave.current();
+      leaving.current = false;
+      if (!saved) return;
+    }
+    if (next === null) (corner === 'info' ? infoTrigger : settingsTrigger).current?.focus();
+    setCorner(next);
   };
+  const close = () => { void changeCorner(null); };
 
   /**
    * ESCAPE CLOSES THE CARD. THE PRESS-AWAY IS THE SCRIM, AND IT WAS MISSING.
@@ -274,8 +284,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
     if (!corner) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      (corner === "info" ? infoTrigger : settingsTrigger).current?.focus();
-      setCorner(null);
+      close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -416,7 +425,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
           className="waka-corner waka-corner--info"
           aria-label={t(locale, "worldHowItWorksTitle")}
           aria-expanded={corner === "info"}
-          onClick={() => setCorner((value) => (value === "info" ? null : "info"))}
+          onClick={() => void changeCorner(corner === "info" ? null : "info")}
         >
           {/* A RING AND AN "i", drawn rather than typed. The glyph has to
               sit on the cog's own optical weight — same 20px box, same
@@ -443,7 +452,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
           className="waka-corner waka-corner--settings"
           aria-label={t(locale, "worldSettingsOpen")}
           aria-expanded={account_open}
-          onClick={() => { setSetupId(undefined); setCorner((value) => (value === "settings" ? null : "settings")); }}
+          onClick={() => { setSetupId(undefined); void changeCorner(corner === "settings" ? null : "settings"); }}
         >
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
             <path
@@ -497,7 +506,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
               semantics and the surface supplies the paint. The bare
               name-and-address check really IS a note, and keeps it. */}
           {corner === "info" ? (
-            <span className="waka-account">
+            <span className="waka-account waka-account--about">
               <button type="button" className="waka-account-close" onClick={close}>{t(locale, "worldClose")}</button>
               <HowItWorksPanel locale={locale} />
             </span>
@@ -505,6 +514,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
             <span className="waka-account waka-account--settings">
               <button type="button" className="waka-account-close" onClick={close}>{t(locale, "worldClose")}</button>
               <SettingsPanel {...settings} locale={locale} initialAgentId={setupId}
+                onBeforeLeave={guard => { settingsLeave.current = guard; }}
                 email={account?.email ?? null}
                 onSignOut={onSignOut ?? (() => undefined)}
                 onClose={close} />

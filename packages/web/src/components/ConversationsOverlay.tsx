@@ -37,6 +37,7 @@ import { deleteConversation, listConversations, type ConversationSummary } from 
 import { DialogSurface } from "./DialogSurface";
 import { t, type SupportedLocale } from "../lib/locales";
 import { dateWords, timeOf } from "../lib/words";
+import { useListFilters, useListScroll, type ListViewState } from '../lib/list-view-state';
 
 type Phase = "loading" | "ready" | "failed";
 
@@ -90,7 +91,9 @@ function clock(row: ConversationSummary, locale: SupportedLocale): string {
   return Number.isNaN(when.getTime()) ? "" : timeOf(when.getTime(), locale);
 }
 
-export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen }: {
+export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen, viewState, topRequest }: {
+  topRequest?: number;
+  viewState?: ListViewState;
   locale: SupportedLocale;
   /** Whose conversations — so an agent's talks are its own. */
   profileId: string | null | undefined;
@@ -99,14 +102,15 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
   onOpen: (conversationId: string | null) => void;
 }): JSX.Element {
   const searchField = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState("");
-  const [search, setSearch] = useState("");
+  const { query, setQuery, memory } = useListFilters(viewState);
+  const [search, setSearch] = useState(query.trim());
   useEffect(() => {
     const timer = setTimeout(() => setSearch(query.trim()), 200);
     return () => clearTimeout(timer);
   }, [query]);
   const [rows, setRows] = useState<ConversationSummary[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
+  const listScroll = useListScroll(memory, phase === 'ready' && search === query.trim(), query, topRequest);
   /**
    * ERASING ONE — asked on the row, never on the row's own press.
    *
@@ -226,7 +230,7 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
           changes — Escape still leaves, and there is no scrim to press
           away on, because `.waka-page` is the ground rather than a film
           over one. */}
-      <DialogSurface className="waka-over" motion="modal" aria-label={title} modal={false} onClose={onClose}>
+      <DialogSurface {...listScroll} className="waka-over" motion="modal" aria-label={title} modal={false} onClose={onClose}>
         <header className="waka-over-head">
           <h2 className="waka-over-title">{title}</h2>
           <button type="button" className="waka-over-new" onClick={() => onOpen(null)}>

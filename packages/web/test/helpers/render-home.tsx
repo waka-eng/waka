@@ -518,7 +518,7 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
 
 /** The bar's rows. */
 function dockRows(container: HTMLElement): HTMLButtonElement[] {
-  return [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item, .waka-page-back")];
+  return [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item, .waka-page-back, .waka-primary-capture, .waka-over-new")];
 }
 /* BY ACCESSIBLE NAME, which is what a person navigating by voice or by
    screen reader would say out loud. */
@@ -547,6 +547,11 @@ function isReturnRow(node: HTMLElement): boolean {
 
 /** Press the bar row named exactly `label`, or say what the bar offers. */
 export async function pressDockRow(container: HTMLElement, label: string): Promise<void> {
+  if (label === "New chat" && !dockRows(container).some(node => accessibleName(node) === label)) {
+    await pressDockRow(container, "Chats");
+    await pressDockRowWhenItAppears(container, "New chat", "the chat list's primary action");
+    return;
+  }
   const rows = dockRows(container);
   const row = rows.find((node) => accessibleName(node) === label);
   if (!row) {
@@ -640,7 +645,7 @@ async function pressKey(container: HTMLElement, key: string): Promise<void> {
 export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
   if (label === "Inspirations" || label === "Your inspirations") {
     if (dockClose(container)) await closeOverlay(container);
-    await pressDockRowWhenItAppears(container, "All inspirations", "home's archive shortcut");
+    await pressDockRowWhenItAppears(container, "Inspirations", "the Inspirations tab");
     return;
   }
   if (label === "Chats") {
@@ -669,8 +674,8 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
  * header above it, since nothing sits in a corner any more.
  */
 export async function pressChatCorner(container: HTMLElement): Promise<void> {
-  await pressDockRow(container, "New chat");
-  await pressDockRowWhenItAppears(container, "All chats", "a new chat's All chats");
+  if (dockClose(container)) await closeOverlay(container);
+  await pressDockRowWhenItAppears(container, "Chats", "the Chats tab");
 }
 
 /**
@@ -694,9 +699,9 @@ export async function closeOverlay(container: HTMLElement): Promise<void> {
     await act(async () => close.click());
     return;
   }
-  const lit = container.querySelector<HTMLButtonElement>('.waka-dock .waka-dock-item[aria-current="page"]');
-  if (lit) {
-    await act(async () => lit.click());
+  const home = dockRows(container).find(node => accessibleName(node) === "Home");
+  if (home) {
+    await act(async () => home.click());
     return;
   }
   await pressKey(container, "Escape");

@@ -6,7 +6,7 @@
  * to undo it. also create option to see all deleted inspirations in the
  * inspirations list."
  *
- * WHAT THIS MOCKS, AND WHY (gate G6). `lib/data` (the archive reader) and
+ * WHAT THIS MOCKS, AND WHY (gate G6): `helpers/note-actions` opens the real header menu.. `lib/data` (the archive reader) and
  * `lib/api` (the four inspiration verbs), because the claim is about what the page does with a
  * press — which call it makes, and when — not about the server, whose half
  * is `api/src/routes/inspirations-deleted.db.test.ts` on real SQL. The dock
@@ -17,6 +17,7 @@
  * `Home` now (L12), so the archive is mounted with the real
  * `useArchiveRecorder` handed to it, as `Home` mounts it.
  */
+import { openNoteActions } from './helpers/note-actions';
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
@@ -29,12 +30,13 @@ vi.mock("../src/lib/data", async (importOriginal) => {
   const row = (id: string, text: string, daysAgo: number) => ({ id, preview: text, text, capturedMs: Date.now() - daysAgo * 86_400_000, attachments: [], category: null });
   /* The full-text read a note now waits on before it can be edited. */
   const all = [row("b", "Second thing", 1), row("a", "First thing", 2)];
-  return { ...actual, loadInspiration: async (id: string) => ({ ...all.find((item) => item.id === id)!, reflections: [] }), loadInspirations: async () => ({ inspirations: [row("b", "Second thing", 1), row("a", "First thing", 2)].reverse(), total: 2, short: false }) };
+  return { ...actual, loadInspiration: async (id: string) => ({ ...(all.find((item) => item.id === id) ?? row(id, String(shelf.rows.find(item => item.id === id)?.text ?? ''), 90)), reflections: [] }), loadInspirations: async () => ({ inspirations: [row("b", "Second thing", 1), row("a", "First thing", 2)].reverse(), total: 2, short: false }) };
 });
 vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
   return {
     ...actual,
+    fetchInspirationPage: async ({ q }: { q?: string }) => ({ inspirations: ['First thing', 'Second thing'].filter(text => !q || text.toLowerCase().includes(q.toLowerCase())).map(text => ({ id: text.startsWith('First') ? 'a' : 'b', textPreview: text, kind: 'note', source: 'app', visibility: 'private', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), attachmentSummary: [], reflectionCount: 0 })) }),
     deleteInspiration: async (id: string) => { calls.deleted.push(id); },
     restoreInspiration: async (id: string, options: unknown) => { calls.restored.push(id); calls.scopes.push(options); },
     forgetDeletedInspiration: async (id: string) => { calls.forgotten.push(id); },
@@ -77,7 +79,8 @@ it("deletes on one press, offers Undo, and Undo puts it back without telling the
   await mount();
   expect(leads()).toEqual(["Second thing", "First thing"]);
   await press(host!.querySelector(".waka-list-row"));
-  await press(dock!.querySelector('[aria-label="Delete"]'));
+  await openNoteActions();
+  await press(document.querySelector('[aria-label="Delete"]'));
   expect(leads()).toEqual(["First thing"]);
   expect(host!.querySelector(".waka-over-undo")?.textContent).toContain("Deleted.");
   await press(byText(".waka-over-undo button", "Undo"));
@@ -88,7 +91,8 @@ it("deletes on one press, offers Undo, and Undo puts it back without telling the
 it("tells the server when the page is left before Undo's moment passes", async () => {
   await mount();
   await press(host!.querySelector(".waka-list-row"));
-  await press(dock!.querySelector('[aria-label="Delete"]'));
+  await openNoteActions();
+  await press(document.querySelector('[aria-label="Delete"]'));
   await act(async () => { root!.unmount(); });
   root = null;
   expect(calls.deleted).toEqual(["b"]);
@@ -109,7 +113,8 @@ it("keeps a Deleted tab while anything is on the shelf, and brings a thing back 
 it("offers to share the open note", async () => {
   await mount();
   await press(host!.querySelector(".waka-list-row"));
-  expect(dock!.querySelector('[aria-label="Share this inspiration"]')).toBeTruthy();
+  await openNoteActions();
+  expect(document.querySelector('[aria-label="Share this inspiration"]')).toBeTruthy();
 });
 
 
@@ -121,7 +126,7 @@ it('shows search even for two inspirations and filters without leaving the archi
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(field,'Second');
     field.dispatchEvent(new Event('input',{bubbles:true}));
   });
-  expect(leads()).toEqual(['Second thing']);
+  await vi.waitFor(() => expect(leads()).toEqual(['Second thing']));
 });
 it('lists and restores an agent’s media-only inspiration in that same profile',async()=>{
   shelf.rows=[{id:'agent-photo',text:'',kind:'image',hadPhoto:true,attachmentCount:1,attachmentName:'Sunset.jpg',keptAt:new Date().toISOString(),deletedAt:new Date().toISOString(),goneAt:new Date().toISOString()}];
@@ -134,4 +139,14 @@ it('lists and restores an agent’s media-only inspiration in that same profile'
   await press(byText('.waka-shelf-back','Bring back'));
   expect(calls.restored).toEqual(['agent-photo']);
   expect(calls.scopes.at(-1)).toEqual({profile:'noah'});
+});
+
+it('confirms restoration and opens that exact old note even outside the loaded archive', async () => {
+  shelf.rows = [{ id: 'old-note', text: 'An older restored thought.', kind: null, hadPhoto: false, keptAt: '2026-01-01T00:00:00Z', deletedAt: new Date().toISOString(), goneAt: new Date().toISOString() }];
+  await mount('noah');
+  await press(byText('.waka-tab', 'Deleted'));
+  await press(byText('.waka-shelf-back', 'Bring back'));
+  expect(host!.textContent).toContain('Inspiration restored.');
+  await press(byText('.waka-restore-notice button', 'Open inspiration'));
+  expect(host!.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('An older restored thought.');
 });

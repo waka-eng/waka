@@ -52,7 +52,7 @@
  * would have pushed somebody to make them agree HERE, which would be the wrong
  * fix made confidently. The divergence is a decision, so it gets a case.
  *
- * WHAT THIS MOCKS, AND WHY (gate G6). The same two seams `one-note.test.tsx`
+ * WHAT THIS MOCKS, AND WHY (gate G6): `helpers/note-actions` opens the real header menu.. The same two seams `one-note.test.tsx`
  * uses, plus a microphone.
  *
  *   `lib/data` — where rows enter the archive, so the one saved note arrives as
@@ -75,6 +75,7 @@
  * `Home` now (L12), so the archive is mounted with the real
  * `useArchiveRecorder` handed to it, as `Home` mounts it.
  */
+import { openNoteActions } from './helpers/note-actions';
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { readFileSync } from "node:fs";
@@ -343,7 +344,8 @@ it("cancels a running recording when the note is deleted", async () => {
   await openTheSavedNote();
   await act(async () => record()!.click());
   expect(stopRecording(), "the recorder is running").not.toBeNull();
-  await act(async () => slot.querySelector<HTMLButtonElement>(".waka-dock-roomy .waka-dock-tool--erase")!.click());
+  await openNoteActions();
+  await act(async () => document.querySelector<HTMLButtonElement>("[aria-label='Delete']")!.click());
   for (let turn = 0; turn < 6; turn += 1) await act(async () => { await Promise.resolve(); });
   expect(stopTrack, "the microphone was released").toHaveBeenCalled();
 });

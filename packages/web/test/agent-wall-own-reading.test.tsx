@@ -165,15 +165,15 @@ it('opens history directly for the standing agent without starting a note or con
   world = await mountWorld(FACTS); await settle();
   const dock = (label: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock button')]
     .find(button => button.textContent?.trim() === label)!;
-  const close = async () => { await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-dock-item--close')!.click()); await settle(); };
+  const close = async () => { await act(async () => dock('Home').click()); await settle(); };
   for (const name of ['noah', 'another']) {
     await act(async () => face(name)!.click()); await settle();
-    await act(async () => dock('All inspirations').click()); await settle();
+    await act(async () => dock('Inspirations').click()); await settle();
     const archive = world.container.querySelector('.waka-over[data-jar-surface]')!;
     expect(archive.textContent).toContain(`Only agent-${name} kept this`);
     expect(world.container.querySelector('textarea.jar-composer-text')).toBeNull();
     await close();
-    await act(async () => dock('All chats').click()); await settle();
+    await act(async () => dock('Chats').click()); await settle();
     expect(vi.mocked(listConversations).mock.lastCall?.[0]).toBe(`agent-${name}`);
     expect(createConversation).not.toHaveBeenCalled();
     await close();
@@ -598,18 +598,22 @@ it('shows every named agent, keeps their memory separate, and syncs Settings cha
   expect(face('third')).toBeTruthy();
   expect(world.audit().wallId).toBe('agent-another');
 
-  const another = world.container.querySelectorAll<HTMLInputElement>('.waka-settings-rows input')[1];
+  expect(world.container.querySelector('.waka-settings-heading h2')?.textContent).toBe('third');
+  await act(async () => world.container.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
+  await act(async () => world.container.querySelector<HTMLButtonElement>('[data-agent-id="agent-another"]')!.click());
+  const another = world.container.querySelector<HTMLInputElement>('.waka-agent-details input')!;
   await act(async () => { another.focus(); type(another, 'renamed'); another.blur(); });
   await settle();
   expect(face('another')).toBeUndefined();
   expect(face('renamed')?.getAttribute('aria-pressed')).toBe('true');
   expect(world.audit().wallId).toBe('agent-another');
 
+  await act(async () => world.container.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
   const erase = async (name: string) => {
-    const input = [...world.container.querySelectorAll<HTMLInputElement>('.waka-settings-rows input')].find(input => input.value === name)!;
-    const button = input.closest('li')!.querySelector<HTMLButtonElement>('.waka-settings-erase')!;
+    await act(async () => world.container.querySelector<HTMLButtonElement>(`[aria-label="Settings for ${name}"]`)!.click());
+    const button = world.container.querySelector<HTMLButtonElement>('[data-agent-delete]')!;
     await act(async () => { button.click(); });
-    const confirm = [...input.closest('li')!.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent === 'Delete profile and memory')!;
+    const confirm = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-settings-danger button')].find(node => node.textContent === 'Delete profile and memory')!;
     await act(async () => { confirm.click(); });
     await settle();
   };
@@ -676,7 +680,7 @@ it('saves a capture into the selected agent without adding it to the human or an
   PROFILES.rows = ['noah','another'].map((name,i)=>({id:`agent-${name}`,accountId:'account-1',name,type:'agent',avatarUrl:null,preferredLocale:'en-US',createdAt:`2026-10-0${i+1}T00:00:00Z`}));
   world=await mountWorld(FACTS); await settle();
   await act(async()=>face('noah')!.click()); await settle();
-  await pressDockRow(world.container,'All inspirations'); await settle();
+  await pressDockRow(world.container,'Inspirations'); await settle();
   const newNote=world.container.querySelector<HTMLButtonElement>('.waka-over-head .waka-over-new')!;
   expect(newNote.textContent).toBe('New inspiration');
   await act(async()=>newNote.click()); await settle();

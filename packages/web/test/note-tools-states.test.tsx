@@ -7,11 +7,12 @@
  * earlier save, upload or recording failure line vanished with the tools,
  * news nobody had read yet. Both lines are kept now.
  *
- * WHAT THIS MOCKS, AND WHY (gate G6). Nothing in the product: `NoteTools` is
+ * WHAT THIS MOCKS, AND WHY (gate G6): `helpers/note-actions` opens the real header menu.. Nothing in the product: `NoteTools` is
  * rendered directly with plain props into the dock slot it portals into, and
  * the recorder prop is a plain idle object, because the claim is about what
  * the bar renders for a combination of states, not about how they arose.
  */
+import { openNoteActions } from './helpers/note-actions';
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -73,5 +74,15 @@ it("keeps a recorder failure beside a failed read, and Try again and Delete stay
   const lines = await bar({ readFailed: "Didn’t open.", failed: "The microphone stopped." });
   expect(lines).toEqual(["Didn’t open.", "The microphone stopped."]);
   expect(slot.querySelector(".waka-dock-retry")?.textContent).toBe("Try again");
-  expect(slot.querySelector('[aria-label="Delete"]')).not.toBeNull();
+  await openNoteActions();
+  expect(document.querySelector('[aria-label="Delete"]')).not.toBeNull();
+});
+
+it('keeps Escape available when the only note action is temporarily disabled', async () => {
+  await bar({ readFailed: 'Didn’t open.', eraseDisabled: true });
+  await openNoteActions();
+  const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+  expect(document.activeElement).toBe(menu);
+  await act(async () => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  expect(document.querySelector('[role="menu"]')).toBeNull();
 });

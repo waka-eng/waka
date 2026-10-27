@@ -87,10 +87,11 @@
    an act, so it is the plainest mark there is; `file` is a page with its
    corner folded — the shape both phone systems use for "a document" — and
    it stands beside a name on every tile, so it never has to carry one. */
-export function HomeActionIcon({kind,className}:{kind:'capture'|'chat'|'record'|'photo'|'plus'|'file'|'play'|'pause'|'keep'|'erase'|'send'|'stop'|'share'|'more';className?:string}){
+export function HomeActionIcon({kind,className}:{kind:'home'|'capture'|'chat'|'record'|'photo'|'plus'|'file'|'play'|'pause'|'keep'|'erase'|'send'|'stop'|'share'|'more';className?:string}){
   return <svg className={className} data-home-action-icon={kind} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
     {kind==='capture'?<><path className="jar-spark-core" d="m12 5 1.8 5.2L19 12l-5.2 1.8L12 19l-1.8-5.2L5 12l5.2-1.8z" fill="currentColor" strokeWidth=".8"/>
         <g className="jar-spark-rays" strokeWidth="1.4"><path d="m3 3 2 2m14 14 2 2M3 21l2-2M19 5l2-2"/></g></>
+      :kind==='home'?<><path d="m3 10 9-7 9 7M5 9v11h14V9"/><path d="M9 20v-7h6v7"/></>
       :kind==='record'?<><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></>
       :kind==='send'?<path d="M4.5 12h14m0 0-5.5-5.5M18.5 12 13 17.5" fill="none" stroke="currentColor" strokeWidth="1.9"/>
       :kind==='stop'?<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none"/>

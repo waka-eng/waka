@@ -66,18 +66,18 @@ async function openConnections(locale: SettingsPanelProps["locale"] = "en-US", p
   await act(async () => root.render(<SettingsPanel {...props} locale={locale} />));
   await act(async () => button(locale === "en-US" ? "Agent profiles" : "에이전트 프로필").click());
   const name = profileId.startsWith('b') ? 'anotherone' : 'noah';
-  const label = locale === 'en-US' ? `Connections and API keys for ${name}` : `${name}의 연결 및 API 키`;
+  const label = locale === 'en-US' ? `Settings for ${name}` : `${name} 설정`;
   await act(async () => host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click());
 }
 async function chooseAnotherAgent() {
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Connections and API keys for anotherone"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Settings for anotherone"]')!.click());
 }
 
 it("keeps MCP connections and keys under their agent without a Manage tab", async () => {
   await act(async () => root.render(<SettingsPanel {...props} />));
   expect(requests).toEqual([]);
-  expect(host.textContent).toContain('Account connections');
+  expect(host.textContent).toContain('Signed-in devices');
   await openConnections();
   expect(host.querySelector('h2')?.textContent).toBe('noah');
   expect([...host.querySelectorAll('.waka-session-tabs button')].map(node => node.textContent)).toEqual(['MCP connections', 'API keys']);
@@ -119,8 +119,8 @@ it('shows verification history and tests the exact existing connection without r
 it("keeps personal sign-ins in account settings, with no agent list or setup controls", async () => {
   rows.push({ ...session('personal-browser'), profile: { id:'human', name:'Someone', type:'human' }, deviceLabel:'Other browser' });
   await act(async () => root.render(<SettingsPanel {...props} />));
-  await act(async () => button('Account connections').click());
-  expect(host.querySelector("h2")?.textContent).toBe("Account connections");
+  await act(async () => button('Signed-in devices').click());
+  expect(host.querySelector("h2")?.textContent).toBe("Signed-in devices");
   expect(document.activeElement).toBe(host.querySelector("h2"));
   expect(host.textContent).toContain('Other browser');
   expect(host.textContent).not.toContain('Work laptop');
@@ -270,7 +270,7 @@ it('keeps MCP setup pinned to the agent whose settings are open',async()=>{
   await openConnections('en-US','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
   await act(async()=>button('Set up MCP').click());
   await act(async()=>button('Reconnect an existing setup').click());
-  expect(host.querySelector('select')).toBeNull();
+  expect([...host.querySelectorAll('select option')].map(option => option.textContent)).toEqual(['Claude Code', 'Codex']);
   expect(host.querySelector('pre')?.textContent).toContain('Claude Code · anotherone');
   expect(host.querySelector('pre')?.textContent).not.toContain('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
 });
@@ -307,4 +307,31 @@ it('requires a fresh verification for the selected profile and device', async ()
   failRead = true;
   await act(async () => button('Check connection').click());
   expect(host.textContent).toContain('Could not check the connection');
+});
+
+it('offers one-launch Codex setup and verifies only that client on the selected agent', async () => {
+  await openConnections();
+  await act(async () => button('Set up MCP').click());
+  await act(async () => {
+    const client = host.querySelector('select')!;
+    client.value = 'codex'; client.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await act(async () => button('Next: Sign in').click());
+  expect(host.querySelector('pre')?.textContent).toContain('Codex · noah');
+  await act(async () => button('Next: Check connection').click());
+  await act(async () => {
+    const scope = host.querySelector('select')!;
+    scope.value = 'launch'; scope.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(host.querySelector('pre')?.textContent).toContain('codex -c');
+  expect(host.textContent).toContain('for this launch only');
+  const verified = { ...session('codex-noah'), deviceLabel: 'Claude Code · noah',
+    profile: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'noah', type: 'agent' as const },
+    verifiedAt: new Date(Date.now() + 1000).toISOString(), expiresAt: '2099-01-01T00:00:00Z' };
+  rows.push(verified);
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('No new verification received');
+  verified.deviceLabel = 'Codex · noah';
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('Verified for noah · Codex · noah');
 });

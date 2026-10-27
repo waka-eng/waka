@@ -229,7 +229,7 @@ const pastDays = () =>
     .sort((a, b) => b - a);
 
 function inspirationRow(): HTMLElement {
-  const row = [...layout.container.querySelectorAll<HTMLElement>(".waka-dock .waka-dock-item")].find((item) => item.textContent?.trim() === "New inspiration");
+  const row = [...layout.container.querySelectorAll<HTMLElement>(".waka-dock .waka-dock-item, .waka-primary-capture")].find((item) => item.textContent?.trim() === "New inspiration");
   if (!row) throw new Error("no Inspiration row in the bar");
   return row;
 }

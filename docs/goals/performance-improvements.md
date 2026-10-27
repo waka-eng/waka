@@ -390,3 +390,34 @@ Verdict: these two follow-up fixes pass locally, not yet pushed or deployed.
 No new schema or AI calls. Exact deployed request timing and queue/provider
 stage attribution remain open because runtime-log access is denied; viewport
 tests remain distinct from physical-device validation.
+
+### Background rendering and secondary routes on 2026 10 26
+
+Owner requested the next focused performance improvements after progressive
+archive loading and search restoration. This local follow-up preserves that
+work and does not reopen the completed database/model milestones.
+
+Measured gates: eliminate continuing animation behind a full page, resume it
+on Home, let covered navigation finish, and reduce startup JavaScript without
+adding a lazy-module round trip to Login. The controlled real-simulation test
+submitted 600 canvas draws over 600 frame steps on both Inspirations and Chats
+before the change; afterward it submits zero draws and schedules zero frames
+over the same interval once navigation settles. Returning Home draws all 120
+of the next 120 frames. A cold list link can still navigate to the field and
+park, and a data update cannot restart a document-hidden animation loop.
+
+Days, onboarding and public profiles now load on demand, inside their existing
+error boundaries with the shared loading screen. Login stays eager. Matched
+production builds, including every unique static dependency for the selected
+route: Login 422,409 → 379,288 JavaScript bytes (gzip 129,812 → 119,745); Home
+811,638 → 804,218 bytes (gzip 246,903 → 245,886). These are bundle/draw-count
+measurements, not claims about network latency, GPU time or phone battery life.
+The [measurement receipt](../craft/evidence/performance/2026-10-26-background-rendering.json)
+records the build command, chunk membership, method and source hashes.
+
+Verification: 1,382 web tests passed, including four new simulation regressions;
+web types and web/shared mobile builds passed. Built-browser Login, Days,
+onboarding, public-profile missing state and Home/list/Principles navigation
+were checked on disposable loopback data, with Home return also inspected at
+390×844. No schema change, provider call, remote write, deployment or device
+installation. The existing deployed timing gate remains open.

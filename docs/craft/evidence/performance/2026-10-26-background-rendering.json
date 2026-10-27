@@ -1,0 +1,69 @@
+{
+  "date": "2026-10-26",
+  "before": {
+    "login": {
+      "files": [
+        "assets/index-CF3QDRqd.js"
+      ],
+      "raw": 422409,
+      "gzip": 129812
+    },
+    "home": {
+      "files": [
+        "assets/index-CF3QDRqd.js",
+        "assets/Home-DgYPcpLj.js"
+      ],
+      "raw": 811638,
+      "gzip": 246903
+    }
+  },
+  "after": {
+    "login": {
+      "files": [
+        "assets/index-8pP2J7--.js",
+        "assets/preload-helper-zJ_50EbN.js"
+      ],
+      "raw": 379288,
+      "gzip": 119745
+    },
+    "home": {
+      "files": [
+        "assets/index-8pP2J7--.js",
+        "assets/preload-helper-zJ_50EbN.js",
+        "assets/Home-DzPBcdBx.js",
+        "assets/page-menu-DEDDyfOx.js"
+      ],
+      "raw": 804218,
+      "gzip": 245886
+    }
+  },
+  "measurement": "Sum of unique JavaScript files in each route’s static dependency closure; includes selected lazy route and shared chunks. Node gzip defaults; no source maps or CSS. Not a network or physical-device latency measurement.",
+  "canvas": {
+    "method": "Real simulation with deterministic 16.7 ms frame steps and stubbed Canvas2D; two tests ran before changes, four after.",
+    "covered": {
+      "Inspirations": {
+        "beforeDraws": 600,
+        "afterDraws": 0,
+        "afterScheduledFrames": 0
+      },
+      "Chats": {
+        "beforeDraws": 600,
+        "afterDraws": 0,
+        "afterScheduledFrames": 0
+      }
+    },
+    "homeResume": {
+      "draws": 120,
+      "frames": 120
+    },
+    "navigationUnderCover": "settles to field and stops scheduling",
+    "hiddenTab": "data update cannot restart animation"
+  },
+  "sourceHashes": {
+    "src/main.tsx": "d34ffd2784fb416c080e3074edec6828241fe409c3502bd25e528f9d9470ceaa",
+    "src/pages/Home.tsx": "ad8257b97b6481d146c79def69259858738a479b8c34ed9f2358409cacd9abb9",
+    "src/canvas/simulation.ts": "50864d49b9173c3772c8000df5f3c9859e8b1d8a282c9676a39f363bfd8d2bee",
+    "test/covered-canvas.test.tsx": "7be57022156bf719ba71b1887c7310c26745e9dd957757ba8d574966943d177b"
+  },
+  "buildCommand": "pnpm --filter @waka/web exec vite build --manifest --sourcemap"
+}

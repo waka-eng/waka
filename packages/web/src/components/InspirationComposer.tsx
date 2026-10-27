@@ -39,6 +39,7 @@ import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
 import { fileSizeWords } from '../lib/api/file-accept';
 import { formatMessage, isMessageKey, t, type SupportedLocale } from '../lib/locales';
 import { attachmentLabel } from '../lib/attachment-label';
+import { useDockMenu } from '../lib/use-dock-menu';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { useAuthoredSave } from '../lib/use-authored-save';
 import type { useAudioRecording } from '../lib/use-audio-recording';
@@ -229,6 +230,7 @@ function MediaPreview({ item, recording = false, label }: { item: InspirationDra
 }
 export function InspirationComposer(props: {
   owner?: string;
+  noticeInDock?: boolean;
   text: string; media: InspirationDraftMedia[]; locale: SupportedLocale;
   linkText: string; onLinkText: (value:string)=>void;
   ready: boolean; fileDraftsAvailable: boolean; busy: boolean; error: string; uploadingId: string | null;
@@ -298,6 +300,9 @@ export function InspirationComposer(props: {
      input is `disabled={blocked}`, and a disabled input has no keydown to
      gate. */
   const blocked = discarding || confirmDiscard || props.busy || Boolean(props.save.pending) || !props.ready || props.recording.phase !== 'idle';
+  const discardUnavailable = props.discardDisabled || props.busy || Boolean(props.save.pending) || props.save.busy || !props.ready || props.recording.phase !== 'idle';
+  const actions = useDockMenu(discardUnavailable);
+  useEffect(() => { if (!actions.open) { setConfirmDiscard(false); setDiscardFailed(false); } }, [actions.open]);
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   /* `invalidFiles` AND `empty` WENT WITH THE SAVE BUTTON. Both existed only
      to decide whether that button was there and whether it was pressable;
@@ -363,10 +368,38 @@ export function InspirationComposer(props: {
         page is the one the founder prefers, so it is this page's chrome
         that both now render.
 
-        NO TRAILING VERB HERE. A note that does not exist yet cannot be
-        deleted; the slot is for a verb ABOUT the note and a new one has
-        none. */}
-    <NotePage locale={props.locale} whenMs={when.current} owner={props.owner}>
+        Draft actions share the header, away from the writing area. */}
+    <NotePage locale={props.locale} whenMs={when.current} owner={props.owner} trailing={
+      props.onDiscard && Boolean(props.text.trim() || props.media.length || link.trim() || props.recordingCandidate) ? (
+        <span ref={actions.wrap} className="jar-note-actions">
+          <button {...actions.buttonProps} type="button" className="jar-note-actions-trigger"
+            aria-label={say('worldMoreActions')} aria-haspopup={confirmDiscard ? 'dialog' : 'menu'}
+            disabled={discardUnavailable || discarding}><HomeActionIcon kind="more" /></button>
+          {actions.open ? confirmDiscard ? (
+            <DialogSurface modal={false} role="dialog" id={actions.menuProps.id} className="waka-add-menu jar-draft-menu"
+              aria-label={say('worldDiscardInspirationDraft')} onClose={() => { if (!discarding) actions.close(); }}>
+              <p>{say('worldDiscardInspirationConfirm')}</p>
+              <button type="button" className="waka-add-row" autoFocus disabled={discarding}
+                onClick={() => actions.close()}>{say('worldNotNow')}</button>
+              <button type="button" className="waka-add-row" disabled={discardUnavailable || discarding} onClick={async () => {
+                if (discardLock.current) return;
+                discardLock.current = true; setDiscarding(true); setDiscardFailed(false);
+                try { if (await props.onDiscard!()) actions.close(); else setDiscardFailed(true); }
+                catch { setDiscardFailed(true); }
+                finally { discardLock.current = false; setDiscarding(false); }
+              }}>{say(discarding ? 'worldDiscardingDraft' : 'worldDiscardInspirationDraft')}</button>
+              {discardFailed ? <p role="alert">{say('worldDiscardInspirationFailed')}</p> : null}
+            </DialogSurface>
+          ) : (
+            <div {...actions.menuProps} className="waka-add-menu jar-draft-menu" aria-label={say('worldMoreActions')}>
+              <button type="button" role="menuitem" className="waka-add-row" onClick={() => setConfirmDiscard(true)}>
+                <HomeActionIcon kind="erase" /><span>{say('worldDiscardInspirationDraft')}</span>
+              </button>
+            </div>
+          ) : null}
+        </span>
+      ) : null
+    }>
     <div className="jar-composer-body">
     <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={4} value={props.text} readOnly={blocked}
       aria-label={say('worldCaptureInspiration')} placeholder={say('worldCapturePrompt')}
@@ -480,22 +513,6 @@ export function InspirationComposer(props: {
         below is the only way out of the one error that has an action, and a
         button cannot live in a status line. It renders only with that
         error, so it is absent from every normal note. */}
-    {props.onDiscard && Boolean(props.text.trim() || props.media.length || link.trim() || props.recordingCandidate) ? <div className="jar-draft-actions">
-      {confirmDiscard ? <section aria-label={say('worldDiscardInspirationDraft')}>
-        <p>{say('worldDiscardInspirationConfirm')}</p>
-        <div className="jar-composer-actions">
-          <button type="button" autoFocus disabled={discarding} onClick={() => { setConfirmDiscard(false); setDiscardFailed(false); }}>{say('worldNotNow')}</button>
-          <button type="button" disabled={props.discardDisabled || discarding || props.busy || Boolean(props.save.pending) || props.save.busy || props.recording.phase !== 'idle'} onClick={async () => {
-            if (discardLock.current) return;
-            discardLock.current = true; setDiscarding(true); setDiscardFailed(false);
-            try { if (await props.onDiscard!()) setConfirmDiscard(false); else setDiscardFailed(true); }
-            catch { setDiscardFailed(true); }
-            finally { discardLock.current = false; setDiscarding(false); }
-          }}>{say(discarding ? 'worldDiscardingDraft' : 'worldDiscardInspirationDraft')}</button>
-        </div>
-        {discardFailed ? <p role="alert">{say('worldDiscardInspirationFailed')}</p> : null}
-      </section> : <button type="button" disabled={props.discardDisabled || blocked || props.save.busy} onClick={() => setConfirmDiscard(true)}>{say('worldDiscardInspirationDraft')}</button>}
-    </div> : null}
     {props.draftConflict ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
     </div>
     </NotePage>
@@ -528,6 +545,6 @@ export function InspirationComposer(props: {
 
         KEPT: "only once there is something to keep", which the bar also
         obeys through `composerHasWords`. */}
-    <AuthoredSaveNotice save={props.save} locale={props.locale} />
+    {!props.noticeInDock ? <AuthoredSaveNotice save={props.save} locale={props.locale} /> : null}
   </DialogSurface>;
 }

@@ -1,3 +1,4 @@
+import { mcpKeyConfig, type McpClient } from '../lib/mcp-setup';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { createAgentKey, fetchAgentKeys, revokeAgentKey, type ApiAgentKey } from '../lib/api/agent-keys';
@@ -9,6 +10,7 @@ export function AgentApiKeys({ profile, locale }: {
   locale: SupportedLocale;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
+  const [client, setClient] = useState<McpClient>('claude');
   const [keys, setKeys] = useState<ApiAgentKey[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -55,12 +57,7 @@ export function AgentApiKeys({ profile, locale }: {
     finally { if (alive.current) setBusy(null); }
   };
   const apiUrl = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, '');
-  const config = JSON.stringify({
-    mcpServers: { [`waka-${profile.id}`]: {
-      command: 'node', args: ['/absolute/path/to/waka-mcp/dist/src/server.js'],
-      env: { WAKA_API_URL: apiUrl, WAKA_PROFILE_ID: profile.id, WAKA_API_KEY: 'YOUR_API_KEY' },
-    } },
-  }, null, 2);
+  const config = mcpKeyConfig(client, profile.id, apiUrl);
   return <>
     <div className="waka-session-list-heading">
       <h3>{formatMessage(locale, 'profileApiKeysForAgent', { name: profile.name })}</h3>
@@ -105,7 +102,11 @@ export function AgentApiKeys({ profile, locale }: {
     </ul>
     <details>
       <summary>{say('profileApiKeysConfigTitle')}</summary>
+      <label className="waka-mcp-choice"><span>{say('profileMcpClient')}</span><select value={client} onChange={event => setClient(event.target.value as McpClient)}>
+        <option value="claude">Claude Code / JSON</option><option value="codex">Codex</option>
+      </select></label>
       <p className="waka-settings-note">{say('profileApiKeysConfigHint')}</p>
+      {client === 'codex' ? <p className="waka-settings-note">{say('profileMcpCodexConfigHint')}</p> : null}
       <pre className="waka-mcp-commands"><code>{config}</code></pre>
       <p className="waka-settings-note">{formatMessage(locale, 'profileApiKeysTestHint', { name: profile.name, id: profile.id })}</p>
     </details>

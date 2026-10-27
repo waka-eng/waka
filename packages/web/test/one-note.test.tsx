@@ -255,7 +255,7 @@ it("leaves no press in the top row of either note page", async () => {
   await savedNote();
   /* The slot renders only when something is passed to it, and nothing is
      any more — so its absence is the assertion, not an empty element. */
-  expect(host.querySelector(".jar-note-verb")).toBeNull();
+  expect(host.querySelector(".jar-note-verb #waka-note-actions")).not.toBeNull();
   expect(host.textContent).not.toContain("Delete");
 });
 

@@ -78,10 +78,25 @@ reading's full roots are fetched and validated separately.
 
 ### Archive search
 
+The web archive requests 50 summaries at a time and follows the cursor only
+when more are requested. An optional `includeCategories=true` list query
+returns the target profile's category names independently of the current page.
+Category names never include another profile's material.
+
+Search-result previews may be remembered in memory for the mounted account
+and profile (up to three queries of 500 rows each). They render immediately
+on return while their loaded pages refresh. They are display state, never
+current evidence: opening an inspiration still reads its full original.
+Source-write attempts invalidate reuse; account changes discard the owning
+view objects. An authorization failure clears remembered results; an ordinary
+refresh failure explicitly labels the previous results and offers Retry.
+
 Archive search matches the requested profile's original text, non-skipped
 saved answers and current effective attachment material. A corrected recording
 replaces its machine transcript. Storage object URLs are not searchable words;
 original link URLs remain searchable. Matching never broadens profile access.
+An optional exact category filter applies before counting and pagination, so
+searching within a category includes older matching originals as well.
 
 `inspirations.text_search_vector` is an internal projection of that row's raw
 text, with `text_search_vector_policy` identifying the parser policy. Policy 1

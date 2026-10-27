@@ -23,8 +23,8 @@ beforeEach(() => {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
-async function mount(key = 'note', onBack = back) {
-  await act(async () => root.render(<PageBack label="All inspirations" onBack={onBack} navigationKey={key}/>));
+async function mount(key = 'note', onBack = back, visible = true) {
+  await act(async () => root.render(<PageBack label="All inspirations" onBack={onBack} navigationKey={key} visible={visible}/>));
 }
 async function touch(type: string, x: number, y: number, target: Element = host, count = 1) {
   await act(async () => {
@@ -71,6 +71,13 @@ it('keeps browser gestures untouched and offers the visible control', async () =
   await touch('touchstart', 8, 200); await touch('touchend', 100, 200);
   expect(back).not.toHaveBeenCalled();
   await act(async () => host.querySelector('button')!.click()); expect(back).toHaveBeenCalledOnce();
+});
+it.each(['ios', 'android'])('keeps native Back working on %s when the list has no visible Back button', async platform => {
+  device.platform = platform; await mount('list', back, false);
+  expect(host.querySelector('button')).toBeNull();
+  if (platform === 'android') await act(async () => device.back!());
+  else { await touch('touchstart', 8, 200); await touch('touchend', 100, 200); }
+  expect(back).toHaveBeenCalledOnce();
 });
 it('routes Android Back to the latest page action, dismissing an open sheet first', async () => {
   device.platform = 'android'; await mount();

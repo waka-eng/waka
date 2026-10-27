@@ -77,3 +77,14 @@ it('does not retain a failed delete or stale receipt indefinitely', async () => 
   await vi.advanceTimersByTimeAsync(120_000);
   expect((await readAfterInspirationDeletes(noah, async () => stale, () => true)).reconciled).toBe(false);
 });
+
+
+it('does not treat absence from a partial page as confirmation of an older deletion', async () => {
+  trackInspirationDelete(noah, 'deleted-note');
+  await readAfterInspirationDeletes(noah, async () => ({ inspirations: [{ id: 'newer' }] }), () => true, true);
+  const load = vi.fn().mockResolvedValueOnce(stale).mockResolvedValueOnce(settled);
+  const reading = readAfterInspirationDeletes(noah, load, () => true, true);
+  await vi.advanceTimersByTimeAsync(301);
+  expect((await reading).reconciled).toBe(true);
+  expect(load).toHaveBeenCalledTimes(2);
+});

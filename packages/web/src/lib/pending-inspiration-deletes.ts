@@ -37,15 +37,17 @@ export function finishInspirationDelete(scope: ProfileStorageScope | null, id: s
 /** A pagehide keepalive can finish after the next page's first archive read.
  * Keep that stale read off screen and confirm the result, bounded to 20s. */
 export async function readAfterInspirationDeletes<T extends { inspirations: { id: string }[] }>(
-  scope: ProfileStorageScope | null, load: () => Promise<T>, active: () => boolean,
+  scope: ProfileStorageScope | null, load: () => Promise<T>, active: () => boolean, partial = false,
 ): Promise<{ field: T; reconciled: boolean }> {
   const ids = Object.keys(read(scope));
   const deadline = Date.now() + 20_000;
+  const seen = new Set<string>();
   while (true) {
     if (!active()) throw new DOMException('Archive closed', 'AbortError');
     const field = await load();
+    for (const id of ids) if (field.inspirations.some(row => row.id === id)) seen.add(id);
     if (!ids.some(id => field.inspirations.some(row => row.id === id))) {
-      for (const id of ids) finishInspirationDelete(scope, id);
+      for (const id of ids) if (!partial || seen.has(id)) finishInspirationDelete(scope, id);
       return { field, reconciled: ids.length > 0 };
     }
     if (Date.now() >= deadline) {

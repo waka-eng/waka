@@ -383,6 +383,8 @@ const FIELD_MAX_PAGES = 10;
  * to paint — the rest arrive behind it.
  */
 export interface FieldLoad {
+  nextCursor?: string;
+  categories?: string[];
   /** What arrived, oldest first — the order the ground lays them down in. */
   inspirations: Inspiration[];
   /**
@@ -407,7 +409,14 @@ export function beyondOf(field: FieldLoad): number {
   return Math.max(0, field.total - field.inspirations.length);
 }
 
-export async function loadInspirations(profile?:string,options?:{scope?:ProfileStorageScope;signal?:AbortSignal;onFirstPage?:(field:FieldLoad)=>void}):Promise<FieldLoad>{
+export async function loadInspirations(profile?:string,options?:{scope?:ProfileStorageScope;signal?:AbortSignal;onFirstPage?:(field:FieldLoad)=>void;page?:{limit:number;cursor?:string}}):Promise<FieldLoad>{
+  if(options?.page){
+    const page=await fetchInspirationPage({profile,...options.page,includeCategories:!options.page.cursor},options.signal);
+    const total=Math.max(page.total??0,page.inspirations.length);
+    const field={inspirations:page.inspirations.map(toInspiration).reverse(),total,short:total>page.inspirations.length,nextCursor:page.nextCursor,categories:page.categories};
+    if(!options.signal?.aborted)options.onFirstPage?.(field);
+    return field;
+  }
   if(!options?.scope)return (await loadInspirationPages(profile,options?.signal,options?.onFirstPage)).data;
   const target=profile??options.scope.profileId;
   return readInspirationSnapshot({scope:options.scope,profileId:target,signal:options.signal,

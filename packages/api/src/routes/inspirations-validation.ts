@@ -196,6 +196,8 @@ const MAX_LIST_LIMIT = 200;
 export const listQuerySchema = z
   .object({
     q: z.string().trim().max(200, "q is too long").optional(),
+    category: z.string().trim().min(1).max(80).optional(),
+    includeCategories: z.literal("true").optional(),
     /** Only the memories kept during this named experience. */
     experience: z.string().trim().min(1).max(80, "experience is too long").optional(),
     limit: z

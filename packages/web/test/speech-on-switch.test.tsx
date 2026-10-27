@@ -307,3 +307,33 @@ it('speaks its own line when the weather does not come back', async () => {
   await settle();
   expect(speech(), 'the press went unanswered').toBeTruthy();
 });
+
+it('returns to the reading after seen activity and only speaks newly changed updates', async () => {
+  vi.mocked(fetchTheWeather).mockResolvedValue(WEATHER);
+  world = await mountWorld(FACTS); await settle();
+  await act(async () => { press()!.click(); }); await settle();
+  expect(speech()).toBe('You kept one memory today.');
+  await act(async () => { press()!.click(); }); await settle();
+  expect(speech()).toBeNull();
+  vi.mocked(fetchTheWeather).mockResolvedValue({ ...WEATHER, days: [{ ...WEATHER.days[0]!, sentences: [
+    ...WEATHER.days[0]!.sentences, { text: 'your memory was consulted', backing: 'consultations' },
+  ] }] });
+  await act(async () => { press()!.click(); }); await settle();
+  expect(speech()).toBe('Your memory was consulted today.');
+  await act(async () => { press()!.click(); }); await settle();
+  expect(speech()).toBeNull();
+});
+
+it('does not replace a local answer mid-reading when a slow response arrives', async () => {
+  let answer!: (weather: ApiWeather) => void;
+  vi.mocked(fetchTheWeather).mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+  world = await mountWorld(FACTS); await settle();
+  await act(async () => { press()!.click(); }); await settle();
+  const localLine = speech();
+  expect(localLine).toBeTruthy();
+  await act(async () => { answer(WEATHER); }); await settle();
+  expect(speech()).toBe(localLine);
+  vi.mocked(fetchTheWeather).mockResolvedValue(WEATHER);
+  await act(async () => { press()!.click(); }); await settle();
+  expect(speech()).toBe('You kept one memory today.');
+});

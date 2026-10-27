@@ -54,6 +54,7 @@ export interface ApiReflection {
 
 /** One row of the archive: whatever the list needs, and nothing more. */
 export interface ApiInspirationSummary {
+  category?: string | null;
   id: string;
   /** Current owned material, including reflections and effective media. */
   materialRevision?:string;
@@ -130,7 +131,9 @@ export interface UpdateInspirationRequest {
 }
 
 export interface FetchInspirationsOptions extends ProfileScoped {
+  includeCategories?: boolean;
   q?: string;
+  category?: string;
   limit?: number;
   /** Opaque, from a previous page's `nextCursor`. */
   cursor?: string;
@@ -138,6 +141,7 @@ export interface FetchInspirationsOptions extends ProfileScoped {
 
 /** One page, plus the way to ask for the next one. */
 export interface ApiInspirationPage {
+  categories?: string[];
   inspirations: ApiInspirationSummary[];
   nextCursor?: string;
   /** How many the archive holds under this query — not how many were sent.
@@ -216,6 +220,8 @@ export async function fetchInspirationPage(
   const params = new URLSearchParams();
   if (options.profile) params.set("profile", options.profile);
   if (options.q) params.set("q", options.q);
+  if (options.category) params.set("category", options.category);
+  if (options.includeCategories) params.set("includeCategories", "true");
   if (typeof options.limit === "number") params.set("limit", String(options.limit));
   if (options.cursor) params.set("cursor", options.cursor);
   const query = params.toString();
@@ -227,6 +233,7 @@ export async function fetchInspirationPage(
   if (!Array.isArray(body.inspirations)) throw new ApiError({ status: 200, code: 'invalid_response', message: 'Could not read your inspirations' });
   return {
     inspirations: body.inspirations,
+    categories: Array.isArray(body.categories) ? body.categories : undefined,
     nextCursor: body.nextCursor,
     total: typeof body.total === "number" ? body.total : undefined,
   };

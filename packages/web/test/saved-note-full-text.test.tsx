@@ -14,7 +14,7 @@
  * the edit when it succeeds — through the explicit Save and through the
  * autosave on the way out.
  *
- * WHAT THIS MOCKS, AND WHY (gate G6). `lib/data` (where rows enter — the list row and the detail read are
+ * WHAT THIS MOCKS, AND WHY (gate G6): `helpers/note-actions` opens the real header menu.. `lib/data` (where rows enter — the list row and the detail read are
  * fixtures here, with the detail read held open so the loading frame is
  * observable); `lib/api`, spread through with only `updateInspiration` (the
  * write under test) swapped to record what would be sent; and `URL`, a piece
@@ -25,6 +25,7 @@
  * `Home` now (L12), so the archive is mounted with the real
  * `useArchiveRecorder` handed to it, as `Home` mounts it.
  */
+import { openNoteActions } from './helpers/note-actions';
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -163,7 +164,8 @@ it("keeps all 1,000 characters through open → edit → Save", async () => {
   expect(page().readOnly).toBe(true);
   expect(save()).toBeNull(); // no making tool is offered until there is a note to act on
   expect(bar()).toBe("Opening…");
-  expect(slot.querySelector('[aria-label="Delete"]'), "Delete needs only the id").not.toBeNull();
+  await openNoteActions();
+  expect(document.querySelector('[aria-label="Delete"]'), "Delete needs only the id").not.toBeNull();
 
   await answer(true);
   expect(page().readOnly).toBe(false);
@@ -206,7 +208,8 @@ it("stays read-only and never saves when the read fails, and Try again recovers"
   expect(alert.querySelector("button")).toBeNull();
   const again = [...slot.querySelectorAll("button")].find((item) => item.textContent === "Try again");
   expect(again?.className).toContain("waka-dock-item");
-  expect(slot.querySelector('[aria-label="Delete"]')).not.toBeNull();
+  await openNoteActions();
+  expect(document.querySelector('[aria-label="Delete"]')).not.toBeNull();
   await act(async () => closer!());
   expect(state.written).toEqual([]);
 
@@ -272,7 +275,8 @@ it("on an agent's archive, writes and deletes name the same profile the read did
       { act: "read", profile: "agent-7" },
       { act: "write", profile: "agent-7" },
     ]);
-    const del = () => slot.querySelector<HTMLButtonElement>(".waka-dock-tool--erase")!;
+  await openNoteActions();
+    const del = () => document.querySelector<HTMLButtonElement>("[aria-label='Delete']")!;
     await act(async () => del().click());
     expect(document.activeElement?.textContent).toBe("Undo");
     await act(async () => { vi.advanceTimersByTime(10_000); });
@@ -290,10 +294,10 @@ it("folds Share and Delete into a More menu with the bar's menu keys", async () 
   await openSave(longRow, LONG);
   await answer(true);
   await type(`${LONG} so there is something to share`);
-  const more = slot.querySelector<HTMLButtonElement>('[aria-label="More"]')!;
+  const more = document.querySelector<HTMLButtonElement>('[aria-label="More"]')!;
   expect(more.getAttribute("aria-haspopup")).toBe("menu");
   await act(async () => more.click());
-  const rows = () => [...slot.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+  const rows = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
   expect(rows().map((row) => row.textContent)).toEqual(["Share this inspiration", "Delete"]);
   expect(document.activeElement, "focus moves into the menu").toBe(rows()[0]);
   const key = async (name: string) => act(async () => {
@@ -349,7 +353,8 @@ it("keeps a delete undoable while the world behind re-renders", async () => {
   try {
     await openSave(longRow, LONG);
     await answer(true);
-    await act(async () => slot.querySelector<HTMLButtonElement>(".waka-dock-tool--erase")!.click());
+  await openNoteActions();
+    await act(async () => document.querySelector<HTMLButtonElement>("[aria-label='Delete']")!.click());
     for (let turn = 0; turn < 3; turn += 1) await renderArchive();
     await act(async () => { vi.advanceTimersByTime(1_000); });
     expect(state.profiles.filter((item) => item.act === "delete"), "no delete sent while Undo still stands").toEqual([]);

@@ -14,7 +14,7 @@
  * produces and jsdom does not), and assert the clip reached the note it was
  * made on, under the profile it was made under.
  *
- * WHAT THIS MOCKS, AND WHY (gate G6). `lib/use-inspiration-draft` is passed
+ * WHAT THIS MOCKS, AND WHY (gate G6): `helpers/note-actions` opens the real header menu.. `lib/use-inspiration-draft` is passed
  * through unchanged and only counted: it runs once per render of Home's
  * world, which is the render counter one case needs. `lib/data` and `lib/api` through the
  * shared builders in `helpers/render-home`, with the attachment calls
@@ -29,6 +29,7 @@
  * `helpers/canvas-stub` stands in for drawing (jsdom has no 2D context) and
  * `helpers/render-home` for the mount and the frame loop.
  */
+import { openNoteActions } from './helpers/note-actions';
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { useNavigate } from "react-router-dom";
@@ -478,7 +479,8 @@ it("says a clip's note was deleted here, and keeps the clip for its restore", as
   await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
   await deliverStops();
   expect(tryAgainOn(q(".waka-clip-failed")), "the failed clip offered no Try again").toBe(true);
-  await act(async () => q<HTMLButtonElement>('#waka-note-tools [aria-label="Delete"]')!.click());
+  await openNoteActions();
+  await act(async () => q<HTMLButtonElement>('[aria-label="Delete"]')!.click());
   /* past Undo's moment, the delete is sent */
   await act(async () => { await vi.advanceTimersByTimeAsync(7000); });
   await settle(4);
@@ -506,7 +508,8 @@ it("keeps the clip recoverable when its note is deleted on an agent's archive", 
   expect(S.presigned, "the clip was not sent under the agent").toEqual([AGENT_ID]);
   expect(tryAgainOn(q(".waka-clip-failed")), "the failed clip offered no Try again").toBe(true);
   /* Owned agent archives use the same Undo and deleted shelf. */
-  await act(async () => q<HTMLButtonElement>('#waka-note-tools [aria-label="Delete"]')!.click());
+  await openNoteActions();
+  await act(async () => q<HTMLButtonElement>('[aria-label="Delete"]')!.click());
   await act(async () => { await vi.advanceTimersByTimeAsync(7000); });
   await settle(4);
   expect(S.deleted).toEqual(["own-1"]);
@@ -523,7 +526,8 @@ it("does not send a clip to a note whose delete is pending, and lets Undo bring 
   await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
   await deliverStops();
   const presignedBefore = S.presigned.length;
-  await act(async () => q<HTMLButtonElement>('#waka-note-tools [aria-label="Delete"]')!.click());
+  await openNoteActions();
+  await act(async () => q<HTMLButtonElement>('[aria-label="Delete"]')!.click());
   await settle(2);
   const line = () => q(".waka-clip-failed");
   expect(line()?.textContent, "the line did not say the note was deleted").toContain("The note was deleted. Restore it to attach the recording.");
@@ -558,7 +562,8 @@ it("does not throw away another note's finishing clip when a note is deleted", a
     .find((item) => item.textContent?.includes("something I kept, 0"))!;
   await act(async () => other.click());
   await settle();
-  await act(async () => q<HTMLButtonElement>('#waka-note-tools [aria-label="Delete"]')!.click());
+  await openNoteActions();
+  await act(async () => q<HTMLButtonElement>('[aria-label="Delete"]')!.click());
   await settle(2);
   await deliverStops();
   expect(S.finalized, "deleting note B threw away note A's clip").toEqual(["own-1"]);
@@ -571,7 +576,8 @@ it("does not let a note be deleted while its clip is on its way", async () => {
   S.holding = true;
   await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
   await deliverStops();
-  const erase = () => q<HTMLButtonElement>('#waka-note-tools [aria-label="Delete"]');
+  await openNoteActions();
+  const erase = () => q<HTMLButtonElement>('[aria-label="Delete"]');
   expect(erase(), "the note's Delete is gone").toBeTruthy();
   expect(erase()!.disabled, "Delete was offered over a clip still uploading to this note").toBe(true);
   S.holding = false;

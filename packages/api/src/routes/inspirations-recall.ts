@@ -124,6 +124,7 @@ export function registerRecallRoutes(
     const search = query.data.q && query.data.q.length > 0 ? query.data.q : null;
 
     const filters = [eq(inspirations.profileId, target.profileId)];
+    if (query.data.category) filters.push(eq(inspirations.category, query.data.category));
 
     if (search) {
       // Cheap literal matching first. Candidate subqueries are uncorrelated
@@ -311,6 +312,11 @@ export function registerRecallRoutes(
       reflectionCountRows.map((row) => [row.inspirationId, Number(row.count)]),
     );
 
+    // Category choices describe the whole owned archive, even when only its
+    // first page is rendered. Opt-in avoids this work for later pages/search.
+    const categoryRows = query.data.includeCategories ? await db.select({ category: inspirations.category })
+      .from(inspirations).where(and(eq(inspirations.profileId, target.profileId), isNotNull(inspirations.category)))
+      .groupBy(inspirations.category).orderBy(desc(sql`count(*)`), asc(inspirations.category)) : undefined;
     const last = rows.length === limit ? rows[rows.length - 1] : undefined;
 
     return c.json(
@@ -322,6 +328,7 @@ export function registerRecallRoutes(
           }),
         ),
         ...(total !== undefined ? { total } : {}),
+        ...(categoryRows ? { categories: categoryRows.map(row => row.category!).filter(Boolean) } : {}),
         ...(last ? { nextCursor: encodeCursor(last) } : {}),
       },
       200,

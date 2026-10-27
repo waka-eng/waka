@@ -16,6 +16,8 @@ export function setInspirationSnapshotOwner(scope:ProfileStorageScope|null){
   for(const flight of flights.values())flight.controller.abort();flights.clear();
 }
 
+export function inspirationSourceRevision() { return epoch; }
+
 export function invalidateInspirationSnapshots(){epoch++;snapshot=null;}
 
 /** Attempts count too: a server may commit a source write whose reply is lost. */

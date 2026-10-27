@@ -45,8 +45,9 @@ import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { InspirationAttachments } from "./InspirationAttachments";
-import { NoteTools } from "./NoteTools";
+import { NOTE_ACTIONS_SLOT, NoteTools } from "./NoteTools";
 import {
+  ApiError,
   deleteInspiration,
   forgetDeletedInspiration,
   listDeletedInspirations,
@@ -74,6 +75,8 @@ import { readNoteEdit, writeNoteEdit, clearNoteEdit } from "../lib/note-edit-dra
 import type { ProfileStorageScope } from "../lib/profile-storage";
 import { finishInspirationDelete, readAfterInspirationDeletes, trackInspirationDelete } from '../lib/pending-inspiration-deletes';
 import { wordsCanStand } from "../lib/note-words";
+import { useListFilters, useListScroll, type ListViewState } from '../lib/list-view-state';
+import { useArchiveSearch } from '../lib/use-archive-search';
 
 type Phase = "loading" | "ready" | "failed";
 /** How long a note's full-text read may take before it is a failed read. */
@@ -84,7 +87,9 @@ const NOTE_READ_LIMIT_MS = 20_000;
    it is the moment just after the press and not a pending state. */
 const UNDO_MS = 6000;
 
-export function SavesOverlay({ locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, newSaveLabel, note: noteAddress, onNoteAddress }: {
+export function SavesOverlay({ locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, newSaveLabel, note: noteAddress, onNoteAddress, viewState, topRequest }: {
+  topRequest?: number;
+  viewState?: ListViewState;
   /**
    * WHICH NOTE THE ADDRESS SAYS IS OPEN (`?open=saves&note=<id>`), when the
    * caller gives the note an address. The address leads: a row press asks
@@ -184,12 +189,14 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
      to your agent's. */
   const newHere = useFirstVisit(profileId ? { accountId: "p", profileId } : null, "saves");
   const [rows, setRows] = useState<Inspiration[]>([]);
-  /* FIND IS A THING YOU DO TO YOUR INSPIRATIONS, so it lives on the page that
-     holds them rather than as a destination of its own. It was a row in the
-     menu — a verb among places — and the one entry there that did not go
-     anywhere. Filtering happens here, over what is already loaded, so typing
-     narrows in place with no round trip and no empty frame between keys. */
-  const [query, setQuery] = useState("");
+  const [archiveCursor, setArchiveCursor] = useState<string | undefined>();
+  const [archiveCategories, setArchiveCategories] = useState<string[]>([]);
+  const [archiveMoreBusy, setArchiveMoreBusy] = useState(false), [archiveMoreFailed, setArchiveMoreFailed] = useState(false);
+  const archiveRequest = useRef<AbortController | null>(null), archivePaging = useRef(false);
+  const [addressError, setAddressError] = useState(false), [addressAttempt, setAddressAttempt] = useState(0);
+  const { query, setQuery, category, setCategory, onShelf, setOnShelf, memory, clearFilters } = useListFilters(viewState);
+  const [hiddenSearchIds, setHiddenSearchIds] = useState(() => new Set<string>());
+  const showSearchId = (id: string) => setHiddenSearchIds(previous => { const next = new Set(previous); next.delete(id); return next; });
   /* THE FIELD ITSELF, so the clear control can hand focus back to it.
      The reference library's text-input component anatomy defines the clear as the thing that "resets
      the value AND RETURNS FOCUS TO THE INPUT" — without the ref, pressing it
@@ -215,7 +222,6 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
    * and two tabs where one holds everything is a control that looks like it
    * does something and does not. See `categories` below.
    */
-  const [category, setCategory] = useState<string | null>(null);
   /* HOW MUCH IS BEHIND THIS DOOR. The archive's size was announced on the
      menu row that used to lead here; it is a fact about this page, so it
      moved onto it when the row stopped carrying one. `total` is what the
@@ -274,8 +280,15 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
      AFTER THAT, THE SHELF. What the server deleted stays on
      `/inspirations/deleted` for a month (`db/schema-deleted.ts`), which is
      the "Deleted" tab below the search — the same list, the same rows. */
+  const [restored, setRestored] = useState<string | null>(null);
+  const [restoredOpenFailed, setRestoredOpenFailed] = useState(false);
+  const [openingRestored, setOpeningRestored] = useState(false);
   const [shelf, setShelf] = useState<ApiDeletedInspiration[]>([]);
-  const [onShelf, setOnShelf] = useState(false);
+  const [shelfLoaded, setShelfLoaded] = useState(false);
+  const searching = Boolean(query.trim() || category) && !(onShelf && (!shelfLoaded || shelf.length > 0)) && !focus;
+  const search = useArchiveSearch(profileId, searching ? query.trim() : null, category, memory);
+  const refreshSearch = search.refresh;
+  const listScroll = useListScroll(memory, (searching ? search.phase === 'ready' : phase === 'ready') && !open && !noteAddress && (!onShelf || shelfLoaded), JSON.stringify([query, category, onShelf]), topRequest);
   const [forgetting, setForgetting] = useState<string | null>(null);
   const [shelfLoadFailed, setShelfLoadFailed] = useState(false);
   const [shelfBusy, setShelfBusy] = useState(false);
@@ -319,15 +332,31 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
     mounted.current = true;
     return () => {
       mounted.current = false;
+      archiveRequest.current?.abort();
     };
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (refreshMatches = true) => {
+    archiveRequest.current?.abort();
+    const controller = new AbortController(); archiveRequest.current = controller;
+    archivePaging.current = false; setArchiveMoreBusy(false); setArchiveMoreFailed(false);
     setPhase("loading");
     try {
-      const { field, reconciled } = await readAfterInspirationDeletes(scope,
-        () => loadInspirations(profileId ?? undefined), () => mounted.current);
-      if (!mounted.current) return;
+      const { field, reconciled } = await readAfterInspirationDeletes(scope, async () => {
+        if (focus) return loadInspirations(profileId ?? undefined, { signal: controller.signal });
+        const first = await loadInspirations(profileId ?? undefined, { signal: controller.signal, page: { limit: 50 } });
+        const combined = [...first.inspirations].reverse();
+        let cursor = first.nextCursor, pages = 1;
+        while (cursor && pages < (memory.archivePages ?? 1)) {
+          const next = await loadInspirations(profileId ?? undefined, { signal: controller.signal, page: { limit: 50, cursor } });
+          combined.push(...[...next.inspirations].reverse()); pages += 1;
+          cursor = next.nextCursor === cursor ? undefined : next.nextCursor;
+        }
+        if (!controller.signal.aborted) memory.archivePages = pages;
+        return { ...first, inspirations: [...new Map(combined.map(row => [row.id, row])).values()].reverse(), nextCursor: cursor };
+      }, () => mounted.current && !controller.signal.aborted, !focus);
+      if (!mounted.current || controller.signal.aborted) return [];
+      setArchiveCursor(field.nextCursor); setArchiveCategories(field.categories ?? []);
       /* Newest first here: a grid is read from the top left, and the archive's
          own order is oldest first because the ground lays them down that way. */
       /* A delete still waiting on Undo is not back just because the list
@@ -341,6 +370,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
          page cannot be made to lie by a reader that stops holding it. */
       setTotal(Math.max(field.total, field.inspirations.length) - (waiting && field.inspirations.some((row) => row.id === waiting) ? 1 : 0));
       setPhase("ready");
+      if (refreshMatches) refreshSearch();
       // The first shelf read may have raced the same keepalive delete.
       if (reconciled) void loadShelfAfterDelete.current();
       /* RETURNED, SO A CALLER CAN RE-POINT AT A ROW IT WAS HOLDING. `open`
@@ -350,15 +380,31 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
          note on screen was the row as it had been a second earlier. */
       return field.inspirations;
     } catch {
-      if (!mounted.current) return [];
+      if (!mounted.current || controller.signal.aborted) return [];
       setPhase("failed");
     }
     return [];
-  }, [profileId, scope?.accountId, scope?.profileId]);
+  }, [profileId, scope?.accountId, scope?.profileId, refreshSearch, memory, focus]);
 
   useEffect(() => {
-    void load();
+    void load(false);
   }, [load]);
+
+  const moreArchive = async () => {
+    if (!archiveCursor || archivePaging.current || phase !== 'ready') return;
+    const controller = archiveRequest.current;
+    archivePaging.current = true; setArchiveMoreBusy(true); setArchiveMoreFailed(false);
+    try {
+      const { field } = await readAfterInspirationDeletes(scope,
+        () => loadInspirations(profileId ?? undefined, { signal: controller?.signal, page: { limit: 50, cursor: archiveCursor } }),
+        () => mounted.current && !controller?.signal.aborted, true);
+      if (!mounted.current || controller?.signal.aborted) return;
+      setRows(all => [...new Map([...all, ...[...field.inspirations].reverse()].filter(row => row.id !== pendingErase.current?.row.id).map(row => [row.id, row])).values()]);
+      setArchiveCursor(field.nextCursor === archiveCursor ? undefined : field.nextCursor);
+      memory.archivePages = (memory.archivePages ?? 1) + 1;
+    } catch { if (mounted.current && !controller?.signal.aborted) setArchiveMoreFailed(true); }
+    finally { if (archiveRequest.current === controller) { archivePaging.current = false; setArchiveMoreBusy(false); } }
+  };
 
   const loadShelf = useCallback(async () => {
     const request = ++shelfRequest.current;
@@ -367,6 +413,8 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
       if (mounted.current && request === shelfRequest.current) { setShelf(deleted); setShelfLoadFailed(false); }
     } catch {
       if (mounted.current && request === shelfRequest.current) setShelfLoadFailed(true);
+    } finally {
+      if (mounted.current && request === shelfRequest.current) setShelfLoaded(true);
     }
   }, [profileId]);
   const loadShelfAfterDelete = useRef(loadShelf);
@@ -390,6 +438,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
       .then(() => {
         finishInspirationDelete(scope, pending.row.id);
         markDeleting(pending.row.id, profileId ?? null, false);
+        refreshSearch();
         return loadShelf();
       })
       .catch(() => {
@@ -398,6 +447,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
         markDeleting(pending.row.id, profileId ?? null, false);
         unforgetNote(pending.row.id, profileId ?? null);
         if (!mounted.current) return;
+        showSearchId(pending.row.id); refreshSearch();
         setRows((all) => all.some((row) => row.id === pending.row.id) ? all
           : [...all.slice(0, pending.at), pending.row, ...all.slice(pending.at)]);
         setTotal((count) => count === null ? count : count + 1);
@@ -432,6 +482,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
     flushErase();
     const at = Math.max(0, rows.findIndex((item) => item.id === row.id));
     setRows((all) => all.filter((item) => item.id !== row.id));
+    setHiddenSearchIds(previous => new Set(previous).add(row.id));
     setTotal((count) => count === null ? count : Math.max(0, count - 1));
     setOpen(null);
     setEraseFailed(false);
@@ -452,6 +503,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
     pendingErase.current = null;
     markDeleting(pending.row.id, profileId ?? null, false);
     unforgetNote(pending.row.id, profileId ?? null);
+    showSearchId(pending.row.id); refreshSearch();
     setRows((all) => all.some((row) => row.id === pending.row.id) ? all
       : [...all.slice(0, pending.at), pending.row, ...all.slice(pending.at)]);
     setTotal((count) => count === null ? count : count + 1);
@@ -468,6 +520,8 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
       unforgetNote(item.id, profileId ?? null);
       if (!mounted.current) return;
       setShelf((all) => all.filter((row) => row.id !== item.id));
+      showSearchId(item.id);
+      setRestored(item.id); setRestoredOpenFailed(false);
       void load();
     } catch {
       if (mounted.current) setShelfFailed(true);
@@ -547,6 +601,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
       /* The list holds what the page loaded, so it has to agree without a
          refetch — otherwise going back reveals the old first line. */
       setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: inspirationPreview(words, row.attachments) } : row)));
+      refreshSearch();
       setOpen(null);
     } catch {
       if (mounted.current) setSaveFailed(true);
@@ -637,6 +692,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
          show the old first line, and the note in front must agree that it is
          saved or the button never dims. */
       setRows((all) => all.map((row) => (row.id === note.id ? { ...row, preview: inspirationPreview(words, row.attachments) } : row)));
+      refreshSearch();
       setOpen((card) => (card && card.id === note.id ? { ...card, preview: inspirationPreview(words, card.attachments) } : card));
       /* What is stored now, which is what dims the button again. */
       setStored((held) => (held && held.id === note.id ? { ...held, text: words } : held));
@@ -799,9 +855,10 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
       /* The open note is a snapshot, so it is re-pointed at the row that
          now carries the attachment — otherwise the upload lands, the list
          knows, and the page somebody is looking at does not. */
-      const fresh = (await load()) ?? [];
+      const rowsNow = await load();
+      const fresh = rowsNow.find(row => row.id === note.id) ?? await loadInspiration(note.id, profileId ?? undefined);
       if (!mounted.current) return;
-      setOpen((card) => (card ? fresh.find((row) => row.id === card.id) ?? card : card));
+      setOpen(card => card?.id === fresh.id ? fresh : card);
     } catch {
       if (mounted.current) setAttachFailedFor(note.id);
     } finally {
@@ -869,7 +926,13 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
     if (here.size === 0) return;
     void load().then((rowsNow) => {
       if (!mounted.current || !rowsNow) return;
-      setOpen((card) => (card && here.has(card.id) ? rowsNow.find((row) => row.id === card.id) ?? card : card));
+      if (open && here.has(open.id)) {
+        const fresh = rowsNow.find(row => row.id === open.id);
+        if (fresh) setOpen(card => card?.id === fresh.id ? fresh : card);
+        else void loadInspiration(open.id, profileId ?? undefined)
+          .then(detail => { if (mounted.current) setOpen(card => card?.id === detail.id ? detail : card); })
+          .catch(() => { if (mounted.current) setAttachFailedFor(open.id); });
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestLanding]);
@@ -997,7 +1060,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
   useEffect(() => {
     if (open || !focusListNext.current) return;
     focusListNext.current = false;
-    (document.querySelector<HTMLElement>(".waka-list-row") ?? field.current)?.focus();
+    (document.querySelector<HTMLElement>(".waka-list-row") ?? field.current)?.focus({ preventScroll: true });
   }, [open, rows]);
   useEffect(() => {
     if (!undoable || open || !focusUndoNext.current) return;
@@ -1046,29 +1109,41 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
     if (!addressed) return;
     if (letGo.current !== null && letGo.current !== noteAddress) letGo.current = null;
     if (!noteAddress || open || letGo.current === noteAddress) return;
-    const row = rows.find((item) => item.id === noteAddress);
+    const row = rows.find((item) => item.id === noteAddress) ?? (searching ? search.rows.find(item => item.id === noteAddress) : undefined);
     if (row) { openNote(row); return; }
     /* Not in this archive (deleted, another owner's, a stale link): the
        address stops naming it rather than promising a page it cannot open. */
-    if (phase === "ready") tellAddress.current?.("missing", noteAddress);
-  }, [addressed, noteAddress, open, rows, phase, openNote]);
+    if (phase !== 'ready' || searching && search.phase !== 'ready') return;
+    if (!archiveCursor && (total ?? rows.length) <= rows.length) { tellAddress.current?.('missing', noteAddress); return; }
+    let active = true;
+    setAddressError(false);
+    void loadInspiration(noteAddress, profileId ?? undefined).then(detail => {
+      if (active) openNote(detail);
+    }).catch(error => {
+      if (!active) return;
+      if (error instanceof ApiError && [403, 404].includes(error.status)) tellAddress.current?.('missing', noteAddress);
+      else setAddressError(true);
+    });
+    return () => { active = false; };
+  }, [addressed, noteAddress, open, rows, phase, openNote, searching, search.rows, search.phase, profileId, addressAttempt, archiveCursor, total]);
   /** A row press: the note opens here and now, and its address is pushed. */
   const pressNote = useCallback((row: Inspiration) => {
     openNote(row);
     tellAddress.current?.("open", row.id);
   }, [openNote]);
 
-  /* Case-folded substring over the preview, which is what a person reading the
-     grid can actually see. Matching text they cannot read would return cards
-     with no visible reason for being there. */
+  // Deleted items and an explicitly scoped evidence list remain local views.
+  // The main archive uses server search over complete owned material.
   const needle = query.trim().toLowerCase();
 
   /* Ordered by how much each holds, largest first: the tab you are most
      likely to want is the one with the most behind it, and an alphabetical
      row would put that wherever its first letter happened to fall. */
   const categories = (() => {
-    const counts = new Map<string, number>();
+    const counts = new Map<string, number>(archiveCategories.map((name, at) => [name, archiveCategories.length - at]));
     for (const row of rows) if (row.category) counts.set(row.category, (counts.get(row.category) ?? 0) + 1);
+    for (const row of search.rows) if (row.category && !counts.has(row.category)) counts.set(row.category, 1);
+    if (category && searching && !counts.has(category)) counts.set(category, 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name);
   })();
 
@@ -1081,20 +1156,22 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
   const shelfOn = onShelf && shelf.length > 0 && !focus;
   const shelfShown = shelf.filter((item) => !needle || [item.text, item.attachmentName ?? ''].join(' ').toLowerCase().includes(needle));
   const focused = focus ? new Set(focus.ids) : null;
-  const shown = rows.filter(
+  const shown = searching ? search.rows.filter(row => !hiddenSearchIds.has(row.id)) : rows.filter(
     (row) =>
       (!needle || row.preview.toLowerCase().includes(needle)) &&
       (!active || row.category === active) &&
       (!focused || focused.has(row.id)),
   );
+  const resultTotal = searching ? search.total === undefined ? undefined : Math.max(0, search.total - search.rows.filter(row => hiddenSearchIds.has(row.id)).length) : total;
+  const resetFilters = () => { clearFilters(); onClearFocus?.(); field.current?.focus({ preventScroll: true }); };
   /* Newest first, so the first row carries the largest number — the archive
      counts up as it grows, the way a person counts their own. Built from the
      unfiltered list so a search never renames anything. */
   const ordinals = useMemo(() => {
     const map = new Map<string, number>();
-    rows.forEach((row, at) => map.set(row.id, rows.length - at));
+    rows.forEach((row, at) => map.set(row.id, (total ?? rows.length) - at));
     return map;
-  }, [rows]);
+  }, [rows, total]);
 
   /**
    * NOW, READ ONCE PER LOAD RATHER THAN PER ROW.
@@ -1130,6 +1207,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
        between this page and the one the founder prefers. */
     <div className={`waka-page${open ? " waka-page--note" : ""}`}>
       <DialogSurface
+        {...listScroll}
         /* ═══ AN OPEN NOTE IS A PAGE, NOT A COLUMN IN THE ARCHIVE ════════
            Founder: "it should go to the same exact UI as when I'm creating
            a new inspiration."
@@ -1143,7 +1221,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
 
            The modifier gives this depth the notepad's geometry. The archive
            keeps its own at the list depth, where it is right. */
-        className={`waka-over${open ? " waka-over--note" : ""}`}
+        className={`waka-over${open ? " waka-over--note" : " waka-over--archive"}`}
         aria-label={title}
         /* ═══ A PAGE, NOT A DIALOG ══════════════════════════════════════
            This surface is the one the audit names: "A keyboard user
@@ -1260,9 +1338,9 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
                 bottom to find out. */
             ) : shelfOn ? (
               <span className="waka-over-count jar-saved-count">{shelfShown.length < shelf.length ? `(${shelfShown.length}/${shelf.length})` : `(${shelf.length})`}</span>
-            ) : total !== null ? (
+            ) : resultTotal != null && (!searching || search.phase === 'ready') ? (
               <span className="waka-over-count jar-saved-count">
-                {shown.length < total ? `(${shown.length}/${total})` : `(${total})`}
+                {shown.length < resultTotal ? `(${shown.length}/${resultTotal})` : `(${resultTotal})`}
               </span>
             ) : null}
           </span>
@@ -1281,15 +1359,8 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
             FINDING IS A THING YOU DO TO YOUR INSPIRATIONS, so it lives on the
             surface that holds them rather than as a destination of its own.
             It was once a row in the menu — a verb among places, and the only
-            entry there that did not go anywhere. Filtering happens over what
-            is already loaded, so typing narrows in place with no round trip
-            and no empty frame between keys. */}
-        {/* THE FIELD TAKES THE ROW, because it is the only thing on it and
-            because finding is a thing you do TO your inspirations — it lives
-            on the surface that holds them rather than as a destination of its
-            own. Filtering happens over what is already loaded, so typing
-            narrows in place with no round trip and no empty frame between
-            keys. */}
+            entry there that did not go anywhere. Search now reads complete
+            material on the server, beyond the initial archive window. */}
         {/* ═══ WHAT THIS PLACE IS, SAID ONCE ══════════════════════════
             Founder: "how to add the descriptions for like this without
             overwhelming the space we have?"
@@ -1312,7 +1383,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
             three info icons answered the question "in the one place it is
             least useful, before you arrive, about a thing you have not
             seen". */}
-        {newHere && !open ? <p className="waka-over-what">{say("worldFieldWhatIs")}</p> : null}
+        {newHere && !open && total === 0 ? <p className="waka-over-what">{say("worldFieldWhatIs")}</p> : null}
         {/* Search stays in the same place even in a small archive. */}
         {/* ═══ THE FIELD IS A SURFACE WITH THINGS IN IT, NOT A BARE INPUT ══
             Founder, pointing at this field: "search bar can also utilize some
@@ -1358,9 +1429,8 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
             Description (the founder removed the permanent explainers from
             this surface under "only the most absolutely necessary things
             should be shown", and the one line that survived is `newHere`
-            above, shown once); Spinner (filtering runs over rows already in
-            memory — there is no round trip for a spinner to describe, and one
-            that spun on a keystroke would be inventing latency); Status icon
+            above, shown once); a separate Spinner (the results area already
+            announces loading); Status icon
             (a search query cannot be invalid, and the error/warning tiers are
             built on a red this product does not have). */}
         {!open ? (
@@ -1416,6 +1486,20 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
           </div>
         ) : null}
 
+        {!open && restored ? <div className="waka-restore-notice">
+          <span role="status">{say('worldInspirationRestored')}</span>
+          <button type="button" disabled={openingRestored} onClick={() => {
+            setOpeningRestored(true); setRestoredOpenFailed(false);
+            void loadInspiration(restored, profileId ?? undefined).then(detail => {
+              if (!mounted.current) return;
+              setQuery(''); setCategory(null); setOnShelf(false);
+              setRows(all => all.some(row => row.id === detail.id) ? all : [...all, detail]);
+              pressNote(detail); setRestored(null);
+            }).catch(() => { if (mounted.current) setRestoredOpenFailed(true); })
+              .finally(() => { if (mounted.current) setOpeningRestored(false); });
+          }}>{say('worldOpenRestored')}</button>
+          {restoredOpenFailed ? <span role="alert">{say('worldNoteOpenFailed')}</span> : null}
+        </div> : null}
         {!open && shelfLoadFailed ? <p className="waka-over-status" role="alert">{say('worldDeletedLoadFailed')} <button type="button" onClick={() => void loadShelf()}>{say('worldRetry')}</button></p> : null}
         {/* The row divides nothing until there are two things to divide into. */}
         {!open && phase === "ready" && (categories.length > 1 || (shelf.length > 0 && !focus)) ? (
@@ -1490,6 +1574,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
              separate "Save changes" here would be the product admitting the
              two pages are two pages. */
           keepLabel={say("worldSaveInspiration")}
+          saveLabel={say("worldSave")}
           canKeep={canKeepOpenNote}
           onKeep={() => { void keepOpenNote(); }}
           eraseLabel={say("worldDelete")}
@@ -1583,6 +1668,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
             <NotePage
               locale={locale}
               whenMs={open.capturedMs}
+              trailing={<span id={NOTE_ACTIONS_SLOT} />}
               owner={ownerName ? formatMessage(locale, "worldSavingToProfile", { name: ownerName }) : undefined}
             >
               <InspirationAttachments items={open.attachments.filter(item => item.type !== "link")} locale={locale} quiet />
@@ -1639,7 +1725,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
             <p className="waka-over-what">{say("worldDeletedKeptFor")}</p>
             {shelfFailed ? <p className="waka-over-status" role="alert">{say("worldDeletedBackFailed")}</p> : null}
             {shelfShown.length === 0 ? (
-              <p className="waka-over-status">{say("worldInspirationsNoHits")}</p>
+              <p className="waka-over-status">{say("worldInspirationsNoHits")} <button type="button" className="waka-over-retry" onClick={resetFilters}>{say('worldClearFilters')}</button></p>
             ) : (
               <ul className="waka-list-rows">
                 {shelfShown.map((item) => {
@@ -1673,20 +1759,20 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
               </ul>
             )}
           </div>
-        ) : phase === "loading" ? (
+        ) : (searching ? search.phase : phase) === "loading" ? (
           <p className="waka-over-status" role="status">
-            {say("worldInspirationsLoad")}
+            {say(searching ? 'worldSearchingInspirations' : "worldInspirationsLoad")}
           </p>
-        ) : phase === "failed" ? (
+        ) : (searching ? search.phase : phase) === "failed" ? (
           <>
             <p className="waka-over-status" role="alert">
-              {say("worldInspirationsFail")}
+              {say(searching ? 'worldSearchFailed' : "worldInspirationsFail")}
             </p>
-            <button type="button" className="waka-over-retry" onClick={() => void load()}>
+            <button type="button" className="waka-over-retry" onClick={() => searching ? refreshSearch() : void load()}>
               {say("worldRetry")}
             </button>
           </>
-        ) : rows.length === 0 ? (
+        ) : !searching && rows.length === 0 ? (
           <p className="waka-over-status">{say("worldInspirationsEmpty")}</p>
         ) : shown.length === 0 ? (
           /* A FILTER MUST NOT BE A TRAP — this file's own standing rule, one
@@ -1699,6 +1785,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
              the header where it always is. */
           <p className="waka-over-status">
             {say(focus ? "worldClaimFromGone" : "worldInspirationsNoHits")}
+            {(query || category || focus) ? <> <button type="button" className="waka-over-retry" onClick={resetFilters}>{say('worldClearFilters')}</button></> : null}
           </p>
         ) : (
           /* ═══ THE ARCHIVE READS AS A NOTES LIST ════════════════════════
@@ -1770,9 +1857,9 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
                                 a bare 36 reads as another measurement of
                                 the same kind; "#36" reads as which one this
                                 is. */}
-                            <span className="waka-list-index" aria-hidden="true">
+                            {ordinals.has(row.id) ? <span className="waka-list-index" aria-hidden="true">
                               #{ordinals.get(row.id)}
-                            </span>
+                            </span> : null}
                             <span className="waka-list-date">{dateWords(row.capturedMs, now, locale)}</span>
                             {rest ? <span className="waka-list-rest">{rest}</span> : null}
                           </span>
@@ -1785,6 +1872,22 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
             ))}
           </div>
         )}
+
+        {!open && addressError ? <p className="waka-over-status" role="alert">{say('worldNoteOpenFailed')} <button type="button" onClick={() => setAddressAttempt(value => value + 1)}>{say('worldRetry')}</button></p> : null}
+        {!open && searching && search.refreshFailed ? <p className="waka-over-status" role="status">{say('worldSearchRefreshFailed')} <button type="button" onClick={refreshSearch}>{say('worldRetry')}</button></p> : null}
+        {!open && !searching && !shelfOn && !focus && archiveCursor && phase === 'ready' ? <div className="waka-search-more">
+          {archiveMoreFailed ? <p role="alert">{say('worldInspirationsFail')}</p> : null}
+          <button type="button" className="waka-over-retry" disabled={archiveMoreBusy} onClick={() => void moreArchive()}>
+            {say(archiveMoreBusy ? 'worldInspirationsLoad' : archiveMoreFailed ? 'worldRetry' : 'worldMoreInspirations')}
+          </button>
+        </div> : null}
+
+        {!open && searching && search.phase === 'ready' && search.cursor ? <div className="waka-search-more">
+          {search.moreFailed ? <p role="alert">{say('worldSearchFailed')}</p> : null}
+          <button type="button" className="waka-over-retry" disabled={search.moreBusy || search.refreshing} onClick={() => void search.more()}>
+            {say(search.moreBusy ? 'worldSearchingInspirations' : search.moreFailed ? 'worldRetry' : 'worldMoreResults')}
+          </button>
+        </div> : null}
 
         {/* ONE SURFACE, TWO STATES — NOT A SHEET OVER A SHEET.
             Founder: "modal and a modal is bad, so when user clicks on a box,

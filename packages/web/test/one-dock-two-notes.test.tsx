@@ -42,7 +42,7 @@
  * it excused. `reachable.test.ts` carries the same shape for the same
  * reason.
  *
- * WHAT THIS MOCKS, AND WHY (gate G6). The same four seams
+ * WHAT THIS MOCKS, AND WHY (gate G6): `helpers/note-actions` opens the real header menu.. The same four seams
  * `leaving-a-note.test.tsx` uses, for the same reasons: `lib/data` so the
  * archive's one row arrives as a fixture rather than over HTTP (mocked
  * there and not at `lib/api`, because `loadInspirations` follows the cursor
@@ -72,6 +72,7 @@
  * here rather than pinned, because a reader finding this suite green should
  * know which questions it chose not to ask.
  */
+import { openNoteActions } from './helpers/note-actions';
 import { act } from "react";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
@@ -320,7 +321,7 @@ it("gives a new note and a saved one the same row of presses, bar what is writte
 
   /* THE ONE-SIDED PRESS IS ASSERTED BEFORE IT IS SET ASIDE, so removing it
      cannot be the thing that makes this pass. */
-  expect(keptRow.map((press) => press.label), "the saved note has no Delete").toContain("Delete");
+  expect(keptRow.map((press) => press.label), "destructive actions stay in the note header").not.toContain("Delete");
   expect(freshRow.map((press) => press.label), "a note that was never kept offers to delete it").not.toContain("Delete");
 
   const fresh = comparable(freshRow);
@@ -338,7 +339,7 @@ it("gives a new note and a saved one the same row of presses, bar what is writte
 
   // New captures give Save a visible label. Both notes keep the same
   // accessible action and enabled/disabled rules.
-  expect(kept.map((press) => press.className)).toEqual(fresh.map((press) => press.className.replace(" waka-dock-save", "")));
+  expect(kept.map((press) => press.className)).toEqual(fresh.map((press) => press.className));
 
   /* AND THE SAME ACT LIGHTS THE SAME CONTROLS. Both pages were given the
      same words to keep, so every press is pressable on both or on neither —
@@ -381,8 +382,8 @@ it("dims Save on both pages when there is nothing to keep", async () => {
      nothing to delete — a saved note nobody has typed into is exactly the
      one you might want gone, and a trash that greys out with Save would be
      the save rule leaking onto a control it does not govern. */
-  expect(kept.find((press) => press.label === "Delete"), "Delete went dim with Save")
-    .toMatchObject({ label: "Delete", disabled: false });
+  await openNoteActions();
+  expect(document.querySelector<HTMLButtonElement>('[aria-label="Delete"]')?.disabled, "Delete went dim with Save").toBe(false);
   /* THE REST OF THE ROW COMPARES WITH DELETE SET ASIDE, same as the case
      above and for the same reason — it is a press one page does not have,
      not a press the two pages disagree about. */

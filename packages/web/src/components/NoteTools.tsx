@@ -44,6 +44,7 @@ import { useDockMenu } from "../lib/use-dock-menu";
 
 /** The id `Home` gives the dock slot this renders into. */
 export const DOCK_SLOT = "waka-note-tools";
+export const NOTE_ACTIONS_SLOT = "waka-note-actions";
 
 export function NoteTools(props: {
   attaching: boolean;
@@ -68,8 +69,7 @@ export function NoteTools(props: {
   readFailed?: string;
   retryLabel?: string;
   onRetry?: () => void;
-  /** The overflow's name on a narrow phone, where Share and Delete fold into
-      it so every remaining act keeps its 44px target. */
+  /** The header menu keeps secondary actions away from Save on every screen. */
   moreLabel?: string;
   recordLabel: string;
   stopLabel: string;
@@ -81,6 +81,7 @@ export function NoteTools(props: {
   fileLabel: string;
   /** Named for the act, not the page: it is the notepad's word, on purpose. */
   keepLabel: string;
+  saveLabel?: string;
   /**
    * `canKeep(state)` FROM `lib/keep-ready.ts`, AND NOTHING ELSE.
    *
@@ -101,9 +102,7 @@ export function NoteTools(props: {
    */
   canKeep: boolean;
   onKeep: () => void;
-  /** The trash beside Save. Founder: "let's just add delete icon next to the
-      save icon." Absent on the notepad, because a note that was never kept
-      has nothing to erase — see `one-dock-two-notes.test.tsx`'s ledger. */
+  /** A saved note offers Delete in its header menu; a new note offers Discard. */
   eraseLabel: string;
   /* `erasing` WENT: delete is one press with an Undo now, so there is no
      armed state to report, and what it carried was always `saving`. */
@@ -141,7 +140,8 @@ export function NoteTools(props: {
      the first open and a correct result on every subsequent one, which is
      the worst kind of bug to find. */
   const [slot, setSlot] = useState<HTMLElement | null>(null);
-  useEffect(() => { setSlot(document.getElementById(DOCK_SLOT)); });
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => { setSlot(document.getElementById(DOCK_SLOT)); setActionsSlot(document.getElementById(NOTE_ACTIONS_SLOT)); });
   /* AN ARMED DELETE TAKES FOCUS TO ITS CONFIRMATION. The press that armed
      it is gone from the bar (the group becomes the question), so focus
      would otherwise fall to the page; "Delete it anyway" is what a keyboard
@@ -155,12 +155,12 @@ export function NoteTools(props: {
      note's id, so it is offered in every state below — loading and failed
      included (review, 2026-10-17: hiding it there left a note that would not
      open with no way to remove it). */
-  const erase = (
-    <button type="button" className="waka-dock-tool waka-dock-tool--erase"
-      aria-label={props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel}
-      disabled={props.saving || props.eraseDisabled}
-      onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
-  );
+  const menu = <MoreMenu label={props.moreLabel ?? "More"} disabled={props.saving}
+    rows={[
+      ...(props.onShare && props.shareLabel ? [{ label: props.shareLabel, icon: "share" as const, act: props.onShare }] : []),
+      { label: props.eraseLabel, icon: "erase" as const, act: props.onErase, disabled: props.eraseDisabled },
+    ]} />;
+  const actions = actionsSlot ? createPortal(menu, actionsSlot) : menu;
   /* ═══ AN ARMED DELETE IS THE WHOLE BAR FOR ITS MOMENT ═════════════════
      On an archive with no deleted shelf the first press asks. The question,
      the confirming press and "Not now" are the only three things in the
@@ -240,7 +240,7 @@ export function NoteTools(props: {
             {props.retryLabel}
           </button>
         ) : null}
-        {erase}
+        {actions}
       </>,
       slot,
     );
@@ -315,9 +315,9 @@ export function NoteTools(props: {
           `saving`", which was a statement about a contract that did not
           exist: the prop was a hand-written dirty check and the claim was
           true of it only by luck. It is a contract now. */}
-      <button type="button" className="waka-dock-tool waka-dock-tool--keep"
+      <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save"
         aria-label={props.keepLabel} disabled={!props.canKeep}
-        onClick={props.onKeep}><HomeActionIcon kind="keep" /></button>
+        onClick={props.onKeep}><HomeActionIcon kind="keep" /><span>{props.saveLabel ?? props.keepLabel}</span></button>
       {/* ═══ AND THE WAY TO UNDO KEEPING IT, IN THE SAME BAR ══════════════
           Founder: "let's just add delete icon next to the save icon."
 
@@ -352,20 +352,7 @@ export function NoteTools(props: {
           left in the row keeps the full target. Both copies are rendered and
           the stylesheet chooses (`.waka-dock-roomy` / `.waka-dock-more`), so
           the switch is a width, not a script. */}
-      <span className="waka-dock-roomy">
-        {props.onShare && props.shareLabel ? (
-          <button type="button" className="waka-dock-tool"
-            aria-label={props.shareLabel} disabled={props.saving}
-            onClick={props.onShare}><HomeActionIcon kind="share" /></button>
-        ) : null}
-        {erase}
-      </span>
-      <MoreMenu label={props.moreLabel ?? "More"} disabled={props.saving}
-        rows={[
-          ...(props.onShare && props.shareLabel ? [{ label: props.shareLabel, icon: "share" as const, act: props.onShare }] : []),
-          /* the folded Delete is held off by the same rule as the bar's */
-          ...(props.eraseDisabled ? [] : [{ label: props.erasePending && props.eraseConfirmLabel ? props.eraseConfirmLabel : props.eraseLabel, icon: "erase" as const, act: props.onErase }]),
-        ]} />
+      {actions}
       {/* ONE LINE, THE SAME SLOT THE NOTEPAD'S STATE USES. Founder: "states
           should show and disappear in the bottom bar only." */}
       {/* the recorder's own problem arrives inside `failed`, already said:
@@ -392,12 +379,12 @@ export function NoteTools(props: {
 function MoreMenu(props: {
   label: string;
   disabled?: boolean;
-  rows: Array<{ label: string; icon: "share" | "erase"; act: () => void }>;
+  rows: Array<{ label: string; icon: "share" | "erase"; act: () => void; disabled?: boolean }>;
 }): JSX.Element {
   const menu = useDockMenu(props.disabled);
   return (
-    <span ref={menu.wrap} className="waka-add waka-dock-more">
-      <button {...menu.buttonProps} type="button" className="waka-dock-tool" aria-label={props.label}
+    <span ref={menu.wrap} className="jar-note-actions">
+      <button {...menu.buttonProps} type="button" className="jar-note-actions-trigger" aria-label={props.label}
         disabled={props.disabled}>
         <HomeActionIcon kind="more" />
       </button>
@@ -405,9 +392,9 @@ function MoreMenu(props: {
         /* ANCHORED TO THE BUTTON'S RIGHT EDGE, not centred on it like the ＋'s:
            the ⋯ sits near the end of the row, and centring ran the menu off
            the right of the screen (`.waka-more-menu`). */
-        <div {...menu.menuProps} className="waka-add-menu waka-more-menu" aria-label={props.label}>
+        <div {...menu.menuProps} className="waka-add-menu jar-draft-menu" aria-label={props.label}>
           {props.rows.map((row) => (
-            <button key={row.icon} type="button" role="menuitem" className="waka-add-row"
+            <button key={row.icon} type="button" role="menuitem" className="waka-add-row" aria-label={row.label} disabled={row.disabled}
               /* FOCUS GOES BACK TO ⋯ FIRST, then the row acts: Share opens
                  its sheet from there, and Delete takes the note (and the ⋯)
                  away, after which the archive puts focus on its Undo line. */

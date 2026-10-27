@@ -68,9 +68,10 @@ it("locks only the language while the language is being written", async () => {
   expect(nameField().disabled).toBe(false);
 });
 
-it("describes the two-press delete it actually has, in both languages", async () => {
+it("explains permanent deletion and requires a separate confirmation in both languages", async () => {
   for (const locale of ["en-US", "ko-KR"] as const) {
-    await render({ locale });
+    let deletes = 0;
+    await render({ locale, onDeleteAccount: async () => { deletes += 1; } });
     const danger = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
       /Delete account|계정 삭제/.test(b.textContent ?? ""),
     );
@@ -78,7 +79,13 @@ it("describes the two-press delete it actually has, in both languages", async ()
     await act(async () => danger.click());
     const hint = host.querySelector(".waka-settings-note")?.textContent ?? "";
     expect(hint, `${locale} still asks for a typed word`).not.toMatch(/DELETE|입력/);
-    expect(hint).toMatch(locale === "en-US" ? /Delete it anyway/ : /그래도 지우기/);
+    expect(hint).toMatch(locale === "en-US" ? /cannot be undone/ : /되돌릴 수 없어요/);
+    const erase = host.querySelector<HTMLButtonElement>('.waka-settings-body button')!;
+    await act(async () => erase.click());
+    expect(deletes).toBe(0);
+    expect(erase.textContent).toMatch(locale === 'en-US' ? /Delete it anyway/ : /그래도 지우기/);
+    await act(async () => erase.click());
+    expect(deletes).toBe(1);
     /* a fresh panel per language: the disclosure is a toggle, and pressing
        it again on a re-render would close it */
     await act(async () => root.unmount());

@@ -9,7 +9,7 @@ import type {AuthEnv} from '../lib/middleware.js';
 let t:TestDatabase,sequence=0;
 beforeEach(async()=>{t??=await createTestDatabase();await t.truncateAll();});
 afterAll(async()=>{await t?.cleanup();});
-type Page={inspirations:Array<{id:string;materialRevision?:string|null}>,total?:number;nextCursor?:string};
+type Page={categories?:string[];inspirations:Array<{id:string;materialRevision?:string|null}>,total?:number;nextCursor?:string};
 async function fixture(){
   const [account]=await t.sql`INSERT INTO accounts(email) VALUES (${`search-pages-${++sequence}@example.test`}) RETURNING id`;
   const [profile]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES (${account.id},'human','Reader') RETURNING id`;
@@ -25,6 +25,23 @@ async function source(profileId:string,text:string,time='2026-10-01T12:00:00.000
   return row.id as string;
 }
 const descending=(ids:string[])=>[...ids].sort((a,b)=>b.localeCompare(a));
+it('finds full text beyond both the preview and the newest 2,000 captures, scoped by profile and category',async()=>{
+  const own=await fixture(),foreign=await fixture();
+  const text='An ordinary opening. '.repeat(30)+'hiddenneedle';
+  const older=await source(own.profileId,text,'2020-01-01T00:00:00.000Z');
+  const sameCategory=await source(own.profileId,'hiddenneedle');
+  const otherCategory=await source(own.profileId,'hiddenneedle');
+  await source(foreign.profileId,text);
+  await t.sql`UPDATE inspirations SET category='Work' WHERE profile_id=${own.profileId} AND id IN (${older},${sameCategory})`;
+  await t.sql`UPDATE inspirations SET category='Life' WHERE id=${otherCategory}`;
+  await t.sql`INSERT INTO inspirations(profile_id,text,created_at) SELECT ${own.profileId},'A newer capture',now() FROM generate_series(1,2001)`;
+  const first=await own.search('hiddenneedle','&category=Work&limit=1');
+  expect(first.total).toBe(2); expect(first.inspirations.map(row=>row.id)).toEqual([sameCategory]);
+  const next=await own.search('hiddenneedle','&category=Work&limit=1&cursor='+encodeURIComponent(first.nextCursor!));
+  expect(next.inspirations.map(row=>row.id)).toEqual([older]);
+  expect((await own.search('hiddenneedle','&category=Life')).inspirations.map(row=>row.id)).toEqual([otherCategory]);
+  expect(await own.search('hiddenneedle','&category=Missing')).toMatchObject({total:0,inspirations:[]});
+});
 it('preserves full-text token order, Korean fragments and literal wildcards with exact totals',async()=>{
   const own=await fixture(),foreign=await fixture();
   const a=await source(own.profileId,'garden then walking'),b=await source(own.profileId,'walking garden');
@@ -82,4 +99,19 @@ it('applies an owned named experience to matching and counting without requiring
   const page=await own.search('garden','&experience='+encodeURIComponent('A quiet day'));
   expect(page.total).toBe(1);expect(page.inspirations.map(row=>row.id)).toEqual([id]);expect(page.inspirations.map(row=>row.id)).not.toContain(outside);
   expect(await own.search('garden','&experience=missing')).toMatchObject({inspirations:[],total:0});
+});
+
+it('returns owned category choices beyond the first page only when requested',async()=>{
+  const own=await fixture(),foreign=await fixture();
+  const older=await source(own.profileId,'Old note','2020-01-01T00:00:00Z');
+  const recent=await source(own.profileId,'Recent note');
+  const other=await source(foreign.profileId,'Other profile');
+  await t.sql`UPDATE inspirations SET category='Older category' WHERE id=${older}`;
+  await t.sql`UPDATE inspirations SET category='Recent' WHERE id=${recent}`;
+  await t.sql`UPDATE inspirations SET category='Private category' WHERE id=${other}`;
+  const first=await own.search('','&limit=1&includeCategories=true');
+  expect(first.inspirations.map(row=>row.id)).toEqual([recent]);
+  expect(first.categories).toEqual(['Older category','Recent']);
+  expect((await own.search('','&limit=1')).categories).toBeUndefined();
+  expect((await own.app.request('/api/inspirations?includeCategories=false')).status).toBe(400);
 });

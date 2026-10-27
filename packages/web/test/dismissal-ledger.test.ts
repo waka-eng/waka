@@ -77,6 +77,7 @@ function sources(dir: string, found: string[] = []): string[] {
  * above it would be deleted within a month.
  */
 const SHEETS: ReadonlyArray<{ file: string; what: string }> = [
+  { file: "components/ReadingBubbleText.tsx", what: "the full reading closes with its visible Close button or Escape" },
   { file: "components/InspirationSearch.tsx", what: "the archive's search — holds a typed query" },
   { file: "components/PrincipleShare.tsx", what: "sharing a principle — never opted in" },
   { file: "components/ReadingChanges.tsx", what: "what changed in the reading — never opted in" },

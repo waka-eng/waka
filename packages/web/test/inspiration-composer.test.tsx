@@ -344,15 +344,37 @@ it('requires confirmation to discard a draft, allows cancel, and blocks discard 
   props.onDiscard=vi.fn().mockResolvedValue(true);
   props.text='Keep these words'; await mount();
   const button=(label:string)=>[...host.querySelectorAll('button')].find(node=>node.textContent===label)!;
+  const more=()=>host.querySelector<HTMLButtonElement>('button[aria-label="More"]')!;
+  expect(host.textContent).not.toContain('Discard draft');
+  expect(more().closest('.jar-note-top')).not.toBeNull();
+  await act(async()=>more().click());
   await act(async()=>button('Discard draft').click());
   expect(props.onDiscard).not.toHaveBeenCalled();
   expect(host.textContent).toContain('Its text and attachments will be removed');
   expect(host.querySelector('textarea')?.readOnly).toBe(true);
   await act(async()=>button('Not now').click());
   expect(props.onDiscard).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(more());
+  await act(async()=>more().click());
   await act(async()=>button('Discard draft').click());
   await act(async()=>button('Discard draft').click());
   expect(props.onDiscard).toHaveBeenCalledTimes(1);
   props.save.pending={id:'pending'} as never; await mount();
-  expect(button('Discard draft').disabled).toBe(true);
+  expect(more().disabled).toBe(true);
+});
+
+it('keeps a failed discard available to retry and lets Escape return to editing', async () => {
+  props.onDiscard=vi.fn().mockResolvedValue(false); props.text='Do not lose this'; await mount();
+  const more=host.querySelector<HTMLButtonElement>('button[aria-label="More"]')!;
+  await act(async()=>more.click());
+  await act(async()=>host.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click());
+  const dialog=()=>host.querySelector<HTMLElement>('[role="dialog"]')!;
+  await act(async()=>[...dialog().querySelectorAll('button')].find(b=>b.textContent==='Discard draft')!.click());
+  expect(dialog().querySelector('[role="alert"]')?.textContent).toContain('Your draft is still here');
+  expect(host.querySelector('textarea')?.value).toBe('Do not lose this');
+  await act(async()=>dialog().dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
+  expect(dialog()).toBeNull();
+  expect(props.onClose).not.toHaveBeenCalled();
+  expect(host.querySelector('textarea')?.readOnly).toBe(false);
+  expect(document.activeElement).toBe(more);
 });

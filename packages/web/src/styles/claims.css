@@ -302,14 +302,6 @@
   pointer-events: auto;
 }
 
-/* Keep creation and history one press away, paired in two columns on phones. */
-.waka-dock--home {
-  display: grid;
-  grid-template-columns: repeat(2, max-content);
-  border-radius: var(--sp-24);
-}
-.waka-dock--home .waka-dock-item { width: 100%; }
-
 /* Back names the destination above the page; Close stays with its tools. */
 .waka-page-back {
   position: fixed;
@@ -851,18 +843,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
     padding-inline: var(--sp-4);
   }
 }
-/* THE TWO VERBS ABOUT A NOTE, AND THEIR FOLDED COPY. Both are rendered;
-   the width chooses. `display: contents` keeps the inline pair as direct
-   members of the row, so they space and shrink exactly as before. */
-.waka-dock-roomy {
-  display: contents;
-}
-/* Two classes on purpose: the overflow also wears `.waka-add` (its menu's
-   positioning), whose `display: inline-flex` comes later in this sheet and
-   would otherwise win and show both shapes at once. */
-.waka-dock-more.waka-add {
-  display: none;
-}
 /* TRY AGAIN, beside the failed-read sentence rather than inside it: a dock
    item with the 44px floor, in the ink a press is drawn in. */
 .waka-dock-retry {
@@ -921,47 +901,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* × lets the clip go: secondary to Try again, so it speaks in the muted ink */
 .waka-clip-failed .waka-clip-failed-close { color: var(--muted); }
 .waka-clip-failed button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-/* MEASURED: tightened with 44px glyph slots, the open-save row is 327px; the
-   dock is 100vw - 16, so it fits down to 343px. Below 350 Share and Delete
-   fold into ⋯ — the row becomes Back, Record, ＋, Save, ⋯, Close: 283px at
-   44px each (measured at 320: inside a 304px dock). */
-@media (max-width: 350px) {
-  .waka-dock-roomy {
-    display: none;
-  }
-  .waka-dock-more.waka-add {
-    display: inline-flex;
-  }
-}
-/* MEASURED WHILE RECORDING (review, 2026-10-17): the mic becomes a clock,
-   an auto-width tool — 44px at "0:07", wider once it reads "12:34" — and
-   (since the merge with claude/fix-usability the mic stays a lit 44px Stop,
-   `--live`, and the clock rides in a state line beside it: the same growth,
-   so the fold keys on `--live`) — and
-   the unfolded row has only 17px to spare at 360 (327 of a 344px dock), so a
-   long recording could push Close off at 351-360px. While a clock is in the
-   row the fold reaches up to 400px. Playwright, fake microphone, at
-   351/355/360/380/400: ⋯ shown, Close inside (355: x 270-315); at 401/414
-   the five tools return and Close is still inside. */
-@media (max-width: 400px) {
-  .waka-dock-making:has(.waka-dock-tool--live) .waka-dock-roomy {
-    display: none;
-  }
-  .waka-dock-making:has(.waka-dock-tool--live) .waka-dock-more.waka-add {
-    display: inline-flex;
-  }
-}
-/* THE ⋯'S MENU HANGS FROM ITS RIGHT EDGE. It reuses the ＋'s lifted column,
-   which is centred on its button; the ⋯ sits near the end of the row, so
-   centring ran the menu off the right of a 320px screen. Anchored right and
-   held inside the 16px gutters instead. Two classes so this outranks the
-   base `.waka-add-menu`, which comes later in the sheet. */
-.waka-add-menu.waka-more-menu {
-  left: auto;
-  right: 0;
-  transform: none;
-  max-width: calc(100vw - var(--sp-32));
-}
 /* MEASURED (review, 2026-10-17): with the tools in the row, a state line —
    "Uploading…", a failed save, a delete question — was left 10-20px at 320
    and ~9px at 360, which is no sentence at all. On a phone the state takes
@@ -5542,6 +5481,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    would run off the edge of a phone. */
 .waka-account { right: 0; }
 
+.waka-account--about {
+  width: min(26rem, calc(100vw - var(--sp-32)));
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
 .waka-account--settings {
   width: min(26rem, calc(100vw - var(--sp-32)));
   height: 36rem;
@@ -5580,16 +5525,14 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   gap: var(--sp-4);
 }
 
-/* The card's own way out on touch, where the invisible scrim is not a target
-   anybody can find (see the note in `Menu.tsx`). Right-aligned inside the
-   card, never in the screen's corner. A mouse keeps the scrim and Escape. */
+/* Close stays beside the title while the panel body scrolls. */
 .waka-account-close {
-  align-self: flex-end;
+  position: absolute;
+  top: var(--sp-12);
+  right: var(--sp-12);
+  z-index: 1;
   min-height: var(--sp-44);
   padding: 0 var(--sp-8);
-}
-@media (hover: hover) and (pointer: fine) {
-  .waka-account-close { display: none; }
 }
 
 .waka-account-name {
@@ -5670,16 +5613,22 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   flex: 0 0 auto;
   min-height: var(--waka-corner);
   justify-content: flex-start;
+  align-items: center;
+  padding-right: 60px;
   gap: var(--sp-8);
   color: var(--ink);
 }
 
 .waka-settings-heading h2 {
   margin: 0;
-  font: inherit;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--t-body);
+  font-weight: 500;
 }
 
 .waka-settings-heading button {
+  flex-shrink: 0;
   width: var(--waka-corner);
   min-height: var(--waka-corner);
   text-align: center;
@@ -5867,7 +5816,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   min-width: 0;
   gap: var(--sp-4);
   overflow-wrap: anywhere;
-  font-size: var(--t-meta);
+  font-size: var(--t-body);
 }
 
 .waka-session-profile-copy strong {
@@ -5958,13 +5907,35 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   align-items: stretch;
 }
 
+.waka-settings-rows .waka-session-profile-row {
+  border-radius: 0;
+  padding: var(--sp-12) 0;
+}
+
+.waka-agent-name-state > span { display: block; }
+
+.waka-agent-details {
+  padding-bottom: var(--sp-8);
+}
+
+.waka-settings-danger {
+  margin-top: var(--sp-16);
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--line);
+}
+
+.waka-settings-delete {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
 .waka-agent-profile-fields {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
 }
 
-.waka-settings-rows input,
+.waka-agent-profile-fields input,
 .waka-settings-add input {
   flex: 1 1 auto;
   min-width: 0;
@@ -5979,7 +5950,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   font-size: var(--t-ui);
 }
 
-.waka-settings-rows input:focus-visible,
+.waka-agent-profile-fields input:focus-visible,
 .waka-settings-add input:focus-visible {
   outline: none;
   border-color: color-mix(in srgb, var(--ink) 80%, transparent);
@@ -6092,50 +6063,66 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   display: flex;
   flex-direction: column;
   gap: var(--sp-12);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.waka-about-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-20);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .waka-about-title {
+  display: flex;
+  align-items: center;
+  min-height: var(--sp-44);
+  padding-right: 60px;
+  flex-shrink: 0;
   margin: 0;
   font-family: var(--waka-face);
-  font-size: var(--t-ui);
+  font-size: var(--t-body);
   font-weight: 500;
   color: var(--ink);
 }
 
-.waka-about-lead,
-.waka-about-caveat {
+.waka-about-lead {
   margin: 0;
-  font-size: var(--t-meta);
+  font-size: var(--t-body);
   line-height: 1.5;
   color: var(--muted);
 }
 
-/* THE CAVEAT IS SET APART BY A HAIRLINE, not by a heading saying "note".
-   It is the one paragraph that is about the loop rather than part of it —
-   what the product cannot promise — and a person who has read four
-   paragraphs is owed a visible seam before the fifth changes subject. */
-.waka-about-caveat {
-  padding-top: var(--sp-12);
-  border-top: 1px solid var(--line);
-}
-
-.waka-about-loop {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-12);
+.waka-about-steps {
+  display: grid;
+  gap: var(--sp-16);
   margin: 0;
+  padding-left: var(--sp-24);
 }
 
-.waka-about-loop dt {
-  font-size: var(--t-ui);
+.waka-about-steps li { padding-left: var(--sp-4); }
+.waka-about-steps li::marker { color: var(--muted); }
+.waka-about-steps h3, .waka-about-details dt {
+  margin: 0;
+  font-size: var(--t-body);
+  font-weight: 500;
   color: var(--ink);
 }
-
-.waka-about-loop dd {
+.waka-about-steps p, .waka-about-details dd {
   margin: var(--sp-4) 0 0;
-  font-size: var(--t-meta);
+  font-size: var(--t-body);
   line-height: 1.5;
   color: var(--muted);
+}
+.waka-about-details {
+  display: grid;
+  gap: var(--sp-12);
+  margin: 0;
+  padding-top: var(--sp-16);
+  border-top: 1px solid var(--line);
 }
 
 /* ═══ THE THREE MACHINERY DOORS ARE GONE FROM THE FOOT OF THE CARD ═════
@@ -6986,9 +6973,100 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 @layer chrome {
 /* Recovery actions stay secondary and wrap on narrow phones. */
-.jar-draft-actions { margin-top: 1.5rem; color: var(--muted); font-size: var(--t-ui); }
-.jar-draft-actions button { min-height: 44px; text-decoration: underline; text-underline-offset: 3px; }
-.jar-draft-actions .jar-composer-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+.jar-note-actions { position: relative; display: inline-flex; }
+.jar-note-actions-trigger {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--sp-44); height: var(--sp-44); padding: var(--sp-10);
+  border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer;
+}
+.jar-note-actions-trigger:hover, .jar-note-actions-trigger:focus-visible { color: var(--ink); background: var(--waka-raised); }
+.jar-note-actions-trigger:disabled { opacity: .45; cursor: default; }
+.waka-add-menu.jar-draft-menu {
+  top: calc(100% + var(--sp-6)); bottom: auto; right: 0; left: auto; transform: none;
+  max-width: min(20rem, calc(100vw - var(--sp-48)));
+  color: var(--ink); font-size: var(--t-ui); text-align: start; white-space: normal;
+}
+.jar-draft-menu p { margin: var(--sp-12); line-height: 1.5; }
 .waka-profile-error { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; font-size: var(--t-ui); max-width: min(25rem, calc(100vw - 6rem)); }
 .waka-profile-error button { min-height: 44px; text-decoration: underline; }
+
+/* Stable destinations sit below the home page's single primary action. */
+.waka-primary-navigation {
+  position: fixed; z-index: 60; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--sp-20) + env(safe-area-inset-bottom));
+  width: min(28rem, calc(100vw - var(--sp-32) - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  pointer-events: auto;
+}
+.waka-dock.waka-dock--tabs {
+  position: static; transform: none; width: 100%; max-width: none;
+  justify-content: space-around; border-radius: var(--sp-24);
+}
+.waka-dock--tabs .waka-dock-item {
+  flex: 1; min-width: 0; min-height: 52px; padding: var(--sp-6) var(--sp-4);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--sp-4); font-size: var(--t-fine);
+}
+.waka-dock--tabs svg { width: var(--sp-20); height: var(--sp-20); }
+.waka-primary-capture {
+  display: flex; align-items: center; justify-content: center; gap: var(--sp-8);
+  width: min(20rem, 100%); min-height: var(--sp-44); margin: 0 auto var(--sp-16);
+  padding: var(--sp-12) var(--sp-20); border: 0; border-radius: var(--r-pill);
+  background: var(--ink); color: var(--paper); font: inherit; font-size: var(--t-body); cursor: pointer;
+}
+.waka-primary-capture svg { width: var(--sp-20); height: var(--sp-20); }
+.jar-char-bubble:has(> .jar-char-principles) {
+  flex-direction: column; align-items: center; justify-content: flex-end; gap: var(--sp-8);
+}
+.jar-char-principles {
+  display: block; flex: none; pointer-events: auto; margin: 0; min-height: var(--sp-44);
+  padding: var(--sp-8) var(--sp-16); border: 0; background: none;
+  color: var(--muted); font: inherit; font-size: var(--t-ui); text-decoration: underline; cursor: pointer;
+}
+.jar-char-principles:hover, .jar-char-principles:focus-visible { color: var(--ink); }
+
+/* The selected identity stays visible; a menu accommodates any number of names. */
+.waka-profile-switcher { position: relative; pointer-events: auto; min-width: 0; }
+.waka-profile-switcher > button { display: flex; align-items: center; gap: var(--sp-8); max-width: min(24rem, calc(100vw - 7rem)); }
+.waka-profile-switcher > button > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; }
+.waka-profile-menu { position: absolute; top: calc(100% + var(--sp-6)); left: 0; width: max-content; max-width: calc(100vw - var(--sp-32)); max-height: 60dvh; overflow: auto; padding: var(--sp-8); background: var(--paper); border: 1px solid var(--line); border-radius: var(--sp-12); box-shadow: 0 var(--sp-8) var(--sp-24) var(--line); }
+.waka-profile-menu button { display: flex; align-items: center; gap: var(--sp-8); width: 100%; min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 0; background: none; color: var(--ink); font: inherit; text-align: start; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.waka-profile-menu button[aria-checked="true"], .waka-profile-menu button:focus-visible { background: var(--waka-raised); }
+.waka-profile-menu button > span:nth-child(2) { flex: 1; }
+
+.waka-reading-preview { display: flex; flex-direction: column; min-height: 0; position: relative; width: 100%; }
+.waka-reading-preview--shareable { padding-bottom: var(--sp-20); }
+.waka-reading-open, .waka-reading-more { position: absolute; bottom: 0; left: 0; right: 0; min-height: var(--sp-44); padding: var(--sp-8); border: 0; background: none; color: inherit; font: inherit; font-size: var(--t-body); text-decoration: underline; cursor: pointer; }
+/* The 44px tap target borrows the gap before the chat row; its label keeps
+   one line of space without squeezing a short reading out of the preview. */
+.waka-reading-preview--shareable > button { bottom: calc(var(--sp-12) * -1); line-height: 1.2; }
+.waka-reading-preview:has(.waka-reading-more) .jar-char-bubble-reading { overflow: hidden; }
+.waka-reading-preview:not(.waka-reading-preview--shareable) .waka-reading-more { padding-top: var(--sp-16); background: linear-gradient(to bottom, transparent, var(--bubble-fill) 35%); }
+.waka-reading-sheet { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: max(var(--sp-16), env(safe-area-inset-top)) var(--sp-16) max(var(--sp-16), env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--paper) 85%, transparent); }
+.waka-reading-full { width: min(36rem, 100%); max-height: 100%; overflow: auto; padding: var(--sp-24); border: 1px solid var(--line); border-radius: var(--sp-24); background: var(--paper); color: var(--ink); font-family: var(--waka-face); }
+.waka-reading-full header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-16); }
+.waka-reading-full h2 { margin: 0; font-size: var(--t-body); font-weight: 500; }
+.waka-reading-full button { min-height: var(--sp-44); padding: var(--sp-8); background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
+.waka-reading-full p { margin: var(--sp-16) 0 0; font-size: var(--t-bubble-reading); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.waka-reading-full footer { margin-top: var(--sp-16); }
+.waka-reading-full footer button { text-decoration: underline; }
+.waka-dock--tabs .waka-dock-item { position: relative; }
+.waka-dock--tabs .waka-dock-item[aria-current="page"]::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: var(--sp-16); height: 2px; border-radius: var(--r-pill); background: currentColor; }
+
+.waka-over--archive { gap: var(--sp-12); }
+.waka-over--archive .waka-over-head { flex-wrap: nowrap; align-items: center; gap: var(--sp-8); }
+.waka-over--archive .waka-over-name { flex-wrap: wrap; }
+.waka-over--archive .waka-over-title { font-size: var(--t-lead); }
+.waka-over--archive .waka-over-new { padding-inline: var(--sp-12); }
+.waka-over--archive .waka-over-what { margin: 0; }
+.waka-restore-notice { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-8); font-size: var(--t-body); }
+.waka-restore-notice button { min-height: var(--sp-44); color: var(--ink); text-decoration: underline; background: none; border: 0; font: inherit; cursor: pointer; }
+.waka-dock-making > .jar-source-status { position: absolute; bottom: calc(100% + var(--sp-8)); left: 0; right: 0; width: auto; max-width: none; margin: 0; padding: var(--sp-12) var(--sp-16); background: var(--paper); border: 1px solid var(--line); border-radius: var(--sp-12); font-size: var(--t-body); }
+
+/* Important settings text uses the reading register; fields keep the iOS-safe input size. */
+.waka-settings-note, .waka-mcp-setup, .waka-session-tabs button, .waka-settings-erase,
+.waka-settings-row, .waka-settings-add button, .waka-settings-rows button,
+.waka-session-list-heading h3, .waka-mcp-setup h3 { font-size: var(--t-body); }
+.waka-agent-profile-fields input, .waka-settings-add input, .waka-settings .waka-account-field input { font-size: var(--t-input); }
+.waka-mcp-choice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-8); margin: var(--sp-12) 0; font-size: var(--t-body); }
+.waka-mcp-choice select { min-height: var(--sp-44); max-width: 100%; padding: var(--sp-8); border: 1px solid var(--line); border-radius: var(--sp-8); background: var(--paper); color: var(--ink); font: inherit; font-size: var(--t-input); }
 }

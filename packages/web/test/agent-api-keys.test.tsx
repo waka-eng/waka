@@ -67,7 +67,7 @@ afterEach(async () => {
 async function openAgent(profile = noah) {
   await act(async () => root.render(<SettingsPanel {...props} />));
   await click('Agent profiles');
-  await act(async () => host.querySelector<HTMLButtonElement>(`button[aria-label="Connections and API keys for ${profile.name}"]`)!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>(`button[aria-label="Settings for ${profile.name}"]`)!.click());
 }
 
 it('opens an agent with no connections and pins setup to its identity', async () => {
@@ -76,7 +76,7 @@ it('opens an agent with no connections and pins setup to its identity', async ()
   expect(host.textContent).toContain('No live sign-in connections for noah');
   expect(host.textContent).not.toContain('Other client');
   await click('Set up MCP'); await click('Next: Sign in');
-  expect(host.querySelector('select')).toBeNull();
+  expect([...host.querySelectorAll('select option')].map(option => option.textContent)).toEqual(['Claude Code', 'Codex']);
   expect(host.textContent).toContain(`--profile '${noah.id}'`);
   expect(host.textContent).not.toContain(another.id);
 });
@@ -142,7 +142,7 @@ it('never reveals a late key response after navigating to another agent', async 
   });
   await input('Key name, e.g. Work laptop', 'Pending key'); await click('Create key');
   await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Back to agent profiles"]')!.click());
-  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Connections and API keys for anotherone"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Settings for anotherone"]')!.click());
   await click('API keys');
   await act(async () => { release(); await pending; });
   expect(host.querySelector('h2')?.textContent).toBe('anotherone');

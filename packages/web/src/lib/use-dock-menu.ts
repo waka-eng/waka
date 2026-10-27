@@ -41,7 +41,8 @@ export function useDockMenu(disabled?: boolean) {
 
   useEffect(() => {
     if (!open) return;
-    menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    const first = menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled)');
+    (first ?? menu.current)?.focus();
     const outside = (event: PointerEvent) => {
       if (wrap.current && event.target instanceof Node && !wrap.current.contains(event.target)) setOpen(false);
     };
@@ -59,7 +60,7 @@ export function useDockMenu(disabled?: boolean) {
     if (event.key === "Tab") { setOpen(false); return; }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Home" && event.key !== "End") return;
     event.preventDefault();
-    const rows = [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+    const rows = [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled)') ?? [])];
     if (rows.length === 0) return;
     const at = rows.indexOf(document.activeElement as HTMLButtonElement);
     const next = event.key === "Home" ? 0 : event.key === "End" ? rows.length - 1
@@ -76,7 +77,7 @@ export function useDockMenu(disabled?: boolean) {
     onClick: toggle,
   };
   /** What the menu needs: its ref, its id, its role, its keys. */
-  const menuProps = { ref: menu, id: menuId, role: "menu" as const, onKeyDown: onMenuKey };
+  const menuProps = { ref: menu, id: menuId, role: "menu" as const, tabIndex: -1, onKeyDown: onMenuKey };
 
   return { open, close, wrap, buttonProps, menuProps };
 }
