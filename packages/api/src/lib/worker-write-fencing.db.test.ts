@@ -1,4 +1,11 @@
+/** WHAT THIS MOCKS, AND WHY: `undici` fetch delegates to the test fetch stub;
+ * `GeminiEmbeddingHttpClient` and `setDefaultModelProviderForTests` replace model
+ * calls. Real queue claims, ownership fences and writes run on local Postgres. */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('undici', async (importOriginal) => ({
+  ...await importOriginal<typeof import('undici')>(),
+  fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
+}));
 import postgres from 'postgres';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import { GeminiEmbeddingHttpClient, GEMINI_EMBEDDING_MODEL, hashEmbeddingInput } from './inspiration-embeddings.js';

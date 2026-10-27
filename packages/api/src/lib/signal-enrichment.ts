@@ -37,7 +37,9 @@
 
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { Agent } from 'undici';
+// Use the patched package fetch as well as its dispatcher; Node's bundled
+// fetch can contain a different Undici version.
+import { Agent, fetch, type Response } from 'undici';
 
 import { and, eq } from "drizzle-orm";
 
@@ -462,7 +464,7 @@ async function fetchWithTimeout(
         signal: controller.signal,
         redirect: "manual",
         headers: { "User-Agent": USER_AGENT, Accept: accept },
-      } as RequestInit & { dispatcher: Agent });
+      });
       const location = response.headers.get("location");
       if (response.status < 300 || response.status >= 400 || !location) {
         startBodyDeadline();

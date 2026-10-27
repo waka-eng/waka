@@ -1,15 +1,12 @@
 name: CI
 
-# Nothing gated the code before this. `deploy-dev` and `deploy` build and
-# ship; neither runs a typecheck or a test, so a broken migration or a failed
-# authorization check reached an environment before anyone saw it. The fast
-# check runs automatically; the expensive browser and live-model gates are
-# deliberate manual runs from the Actions page.
+# Dev calls this workflow before deployment; PRs and main run it directly.
+# Browser and live-model gates remain deliberate manual runs.
 on:
+  workflow_call:
   pull_request:
   push:
     branches:
-      - dev
       - main
   workflow_dispatch:
     inputs:
@@ -35,7 +32,7 @@ on:
         type: boolean
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -44,7 +41,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   PNPM_VERSION: "9.12.0"
-  NODE_VERSION: "20"
+  NODE_VERSION: "24"
 
 jobs:
   check:
@@ -95,11 +92,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Audit application dependencies
+        run: pnpm audit --prod --audit-level=low
+
       - name: Typecheck API
         run: pnpm --filter @waka/api typecheck
 
       - name: Typecheck web
         run: pnpm --filter @waka/web typecheck
+
+      - name: Typecheck admin
+        run: pnpm typecheck:admin
 
       # Runs the whole chain against an empty database, which is the only way
       # to catch a migration that references a relation that no longer exists.
@@ -118,7 +121,7 @@ jobs:
       # journal.
       - name: API suite (hermetic)
         run: |
-          pnpm --filter @waka/api test -- \
+          pnpm --filter @waka/api test \
             --exclude '**/node_modules/**' \
             --exclude '**/dist/**' \
             --exclude '**/.sst/**' \
@@ -157,6 +160,11 @@ jobs:
 
       - name: Mobile tests
         run: pnpm --filter @waka/mobile test
+
+      - name: Build web and admin
+        run: |
+          pnpm --filter @waka/web build
+          pnpm --filter @waka/admin build
 
   avatar-quality:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_avatar_evaluation == true }}

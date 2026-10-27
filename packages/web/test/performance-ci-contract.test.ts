@@ -4,6 +4,15 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {expect,it} from 'vitest';
 const read=(path:string)=>readFileSync(fileURLToPath(new URL(path,import.meta.url)),'utf8');
+it('requires reusable CI before dev deployment and audits runtime dependencies',()=>{
+  const ci=read('../../../.github/workflows/ci.yml'),dev=read('../../../.github/workflows/deploy-dev.yml');
+  expect(ci).toMatch(/on:\s+workflow_call:/);
+  expect(dev).toMatch(/check:\s+if:.*\n\s+uses: \.\/\.github\/workflows\/ci.yml/);
+  expect(dev).toMatch(/deploy:\s+needs: check/);
+  expect(ci).toContain('pnpm audit --prod --audit-level=low');
+  expect(ci).toContain('pnpm --filter @waka/web build');
+  expect(ci).toContain('pnpm --filter @waka/admin build');
+});
 it('keeps browser/model gates manual and includes loader/cache/request regressions in normal web tests',()=>{
   const workflow=read('../../../.github/workflows/ci.yml');
   expect(workflow).toContain("github.event_name == 'workflow_dispatch' && inputs.run_browser_gates == true");

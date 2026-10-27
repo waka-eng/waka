@@ -1,10 +1,10 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `node:dns/promises` supplies changing
- * answers, `undici` captures the connector configuration, and `fetch` supplies
+ * answers, `undici` captures the connector configuration, and its package fetch supplies
  * bounded image responses. Real URL/redirect/size checks run without network. */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const control = vi.hoisted(() => ({ lookup: vi.fn(), options: [] as Array<{ connect: { lookup: (host: string, options: { all?: boolean }, callback: (error: null, value: unknown, family?: number) => void) => void } }>, destroy: vi.fn(async () => undefined) }));
 vi.mock('node:dns/promises', () => ({ lookup: control.lookup }));
-vi.mock('undici', () => ({ Agent: class { constructor(options: typeof control.options[number]) { control.options.push(options); } destroy = control.destroy; } }));
+vi.mock('undici', () => ({ fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args), Agent: class { constructor(options: typeof control.options[number]) { control.options.push(options); } destroy = control.destroy; } }));
 import { fetchLinkPreviewImage } from './signal-enrichment.js';
 beforeEach(() => { control.lookup.mockReset(); control.options.length = 0; control.destroy.mockClear(); vi.stubEnv('WAKA_ENRICHMENT_ALLOWED_HOSTS', ''); });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });

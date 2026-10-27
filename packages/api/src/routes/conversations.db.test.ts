@@ -3,13 +3,16 @@
  * cascades run on disposable Postgres. No model or network is invoked. */
 import {randomUUID} from 'node:crypto';
 import {Hono} from 'hono';
-import {afterAll,beforeAll,beforeEach,expect,it} from 'vitest';
+import {afterAll,afterEach,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js';
 import {createConversationRoutes} from './conversations.js';
 import type {AuthEnv} from '../lib/middleware.js';
 import {assembleProfileExport} from '../lib/profile-export.js';
 let t:TestDatabase;
-beforeAll(async()=>{t=await createTestDatabase();});beforeEach(async()=>{await t.truncateAll();});afterAll(async()=>{await t?.cleanup();});
+beforeAll(async()=>{t=await createTestDatabase();});
+beforeEach(async()=>{vi.stubEnv('WAKA_CONVERSATION_REPLIES','0');await t.truncateAll();});
+afterEach(()=>{vi.unstubAllEnvs();});
+afterAll(async()=>{await t?.cleanup();});
 async function fixture(keyScoped=false){
   const [account]=await t.sql`INSERT INTO accounts(email) VALUES(${randomUUID()+'@example.test'}) RETURNING id`;
   const [profile]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${account.id},'human','Conversation fixture') RETURNING id`;

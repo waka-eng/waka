@@ -45,11 +45,9 @@ permissions:
   contents: read
 
 env:
-  # Avoid GitHub's 2026 Node 20 actions-runtime deprecation warning while still
-  # building the app itself with Node 20 below.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   PNPM_VERSION: "9.12.0"
-  NODE_VERSION: "20"
+  NODE_VERSION: "24"
   # dev.waka.im is currently backed by the SST "development" stage.
   SST_STAGE: development
   AWS_REGION: us-west-2
@@ -62,6 +60,10 @@ env:
   WAKA_CONVERSATION_REPLIES: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_conversation_replies == false && '0' || '1' }}
 
 jobs:
+  check:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_only != true }}
+    uses: ./.github/workflows/ci.yml
+
   verify:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_only == true }}
     name: Read-only dev operational audit
@@ -96,6 +98,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   deploy:
+    needs: check
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_only != true }}
     name: SST deploy dev.waka.im
     runs-on: ubuntu-latest

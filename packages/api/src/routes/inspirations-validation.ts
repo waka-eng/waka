@@ -65,9 +65,7 @@ export const createInspirationSchema = z.object({
     (v) => (typeof v === "string" ? v.trim() || undefined : v),
     z
       .enum(inspirationKindValues, {
-        errorMap: () => ({
-          message: "kind must be note, link, image, mixed, or decision",
-        }),
+        error: "kind must be note, link, image, mixed, or decision",
       })
       .optional(),
   ),
@@ -98,7 +96,7 @@ export const createInspirationSchema = z.object({
   /** Honored only for an agent session — see the provenance note in `inspirations.ts`. */
   source: z
     .enum(inspirationSourceValues, {
-      errorMap: () => ({ message: "source must be app or agent" }),
+      error: "source must be app or agent",
     })
     .optional(),
   /**
@@ -113,7 +111,7 @@ export const createInspirationSchema = z.object({
    */
   visibility: z
     .enum(inspirationVisibilityValues, {
-      errorMap: () => ({ message: "visibility must be private or public" }),
+      error: "visibility must be private or public",
     })
     .optional(),
   reflections: z
@@ -157,7 +155,7 @@ export const updateInspirationSchema = z
         z.preprocess(
           (v) => (typeof v === "string" ? v.trim() || null : v),
           z.enum(inspirationKindValues, {
-            errorMap: () => ({ message: "kind must be note, link, image, or mixed" }),
+            error: "kind must be note, link, image, or mixed",
           }),
         ),
         z.null(),
@@ -170,7 +168,7 @@ export const updateInspirationSchema = z
        there is no copy anywhere else to chase. */
     visibility: z
       .enum(inspirationVisibilityValues, {
-        errorMap: () => ({ message: "visibility must be private or public" }),
+        error: "visibility must be private or public",
       })
       .optional(),
   })

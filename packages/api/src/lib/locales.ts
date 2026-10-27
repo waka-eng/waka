@@ -15,7 +15,7 @@ export type SupportedLocale = (typeof supportedLocaleValues)[number];
 export const DEFAULT_LOCALE: SupportedLocale = "en-US";
 
 export const supportedLocaleSchema = z.enum(supportedLocaleValues, {
-  errorMap: () => ({ message: "Unsupported locale. Expected en-US or ko-KR." }),
+  error: "Unsupported locale. Expected en-US or ko-KR.",
 });
 
 const supportedLocaleSet = new Set<string>(supportedLocaleValues);
