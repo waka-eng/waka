@@ -9751,17 +9751,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         <>
                           <span className="jar-char-bubble-of">{say('worldBubbleActMine')}</span>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
+                            onChat={() => { void talkAbout({ id: '', text: lead.body }); }} chatDisabled={talking}
                             onShare={storageScope && !offline ? () => setThingShare({
                               kind: "topOfMind", text: lead.body,
                               proof: formatMessage(locale, "worldShareOnMyMind", { date: dateStamp(Date.now(), locale) }),
                             }) : undefined} />
-                          <span className="jar-char-bubble-acts">
-                            <button type="button" className="jar-char-bubble-act"
-                              disabled={talking}
-                              onClick={() => { void talkAbout({ id: '', text: lead.body }); }}>
-                              {say('worldTalkAboutThis')}
-                            </button>
-                          </span>
                         </>
                       ) : agentSays ? (
                         /* ═══ AND ON ITS WALL, THE AGENT'S OWN ══════════

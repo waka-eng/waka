@@ -16,12 +16,13 @@ it('holds the expanded version, focus, scroll and share target until it is close
     await act(async () => root.render(<ReadingBubbleText text="The original reading." locale="en-US" onShare={firstShare} />));
     await act(async () => host.querySelector<HTMLButtonElement>('button')!.click());
     const dialog = document.querySelector<HTMLElement>('.waka-reading-full')!;
-    dialog.scrollTop = 120;
+    const body = dialog.querySelector<HTMLElement>('.waka-reading-full-body')!;
+    body.scrollTop = 120;
     const focused = document.activeElement;
     await act(async () => root.render(<ReadingBubbleText text="A refreshed reading." locale="en-US" onShare={nextShare} />));
     expect(document.querySelector('.waka-reading-full')).toBe(dialog);
     expect(dialog.querySelector('p')?.textContent).toBe('The original reading.');
-    expect(dialog.scrollTop).toBe(120); expect(document.activeElement).toBe(focused);
+    expect(body.scrollTop).toBe(120); expect(document.activeElement).toBe(focused);
     await act(async () => dialog.querySelector<HTMLButtonElement>('footer button')!.click());
     expect(firstShare).toHaveBeenCalledOnce(); expect(nextShare).not.toHaveBeenCalled();
     await act(async () => host.querySelector<HTMLButtonElement>('button')!.click());
@@ -32,11 +33,14 @@ it('holds the expanded version, focus, scroll and share target until it is close
 });
 it('keeps sharing available for a short reading only inside its expanded view', async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  const share = vi.fn(), host = document.createElement('div'); document.body.append(host);
+  const share = vi.fn(), chat = vi.fn(), host = document.createElement('div'); document.body.append(host);
   const root = createRoot(host);
   try {
-    await act(async () => root.render(<ReadingBubbleText text="A short reading." locale="en-US" onShare={share} />));
+    await act(async () => root.render(<ReadingBubbleText text="A short reading." locale="en-US" onShare={share} onChat={chat} />));
     expect(host.textContent).not.toContain('Share it');
+    await act(async () => host.querySelector<HTMLButtonElement>('.jar-char-bubble-acts button:last-child')!.click());
+    expect(chat).toHaveBeenCalledOnce();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
     const opener = host.querySelector<HTMLButtonElement>('button')!;
     expect(opener.textContent).toBe('View reading');
     await act(async () => { opener.focus(); opener.click(); });
@@ -61,7 +65,7 @@ it('offers a full reading only when clipped, closes by Escape, and returns focus
   try {
     await act(async () => root.render(<ReadingBubbleText text="Every word remains available." locale="en-US" />));
     const more = host.querySelector<HTMLButtonElement>('button')!;
-    expect(more.textContent).toBe('Read more');
+    expect(more.textContent).toBe('Read in full');
     await act(async () => { more.focus(); more.click(); });
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Every word remains available.');

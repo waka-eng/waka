@@ -4,7 +4,9 @@ import { DialogSurface } from './DialogSurface';
 import { t, type SupportedLocale } from '../lib/locales';
 
 /** Keep the home reading compact, with an explicit way to read every word. */
-export function ReadingBubbleText({ text, locale, onShare }: { text: string; locale: SupportedLocale; onShare?: () => void }) {
+export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled }: {
+  text: string; locale: SupportedLocale; onShare?: () => void; onChat?: () => void; chatDisabled?: boolean;
+}) {
   const reading = useRef<HTMLSpanElement>(null);
   const [overflow, setOverflow] = useState(false);
   const [expanded, setExpanded] = useState<{ text: string; onShare?: () => void } | null>(null);
@@ -23,17 +25,22 @@ export function ReadingBubbleText({ text, locale, onShare }: { text: string; loc
     return () => { observer?.disconnect(); cancelAnimationFrame(frame); window.removeEventListener('resize', schedule); };
   }, [text]);
   return <>
-    <span className={`waka-reading-preview${onShare ? ' waka-reading-preview--shareable' : ''}`}>
+    <span className="waka-reading-preview">
       <span ref={reading} className="jar-char-bubble-reading">{text}</span>
-      {overflow || onShare || expanded ? <button type="button" className={overflow ? 'waka-reading-more' : 'waka-reading-open'} onClick={() => setExpanded({ text, onShare })}>
+    </span>
+    {overflow || onShare || expanded || onChat ? <span className="jar-char-bubble-acts">
+      {overflow || onShare || expanded ? <button type="button" className="jar-char-bubble-act" onClick={() => setExpanded({ text, onShare })}>
         {t(locale, overflow ? 'worldReadFullReading' : 'worldViewReading')}
       </button> : null}
-    </span>
+      {onChat ? <button type="button" className="jar-char-bubble-act" disabled={chatDisabled} onClick={onChat}>
+        {t(locale, 'worldTalkAboutThis')}
+      </button> : null}
+    </span> : null}
     {expanded ? createPortal(<div className="waka-reading-sheet">
       <DialogSurface className="waka-reading-full" aria-label={t(locale, 'worldNowTitle')} onClose={() => setExpanded(null)}>
         <header><h2>{t(locale, 'worldNowTitle')}</h2>
           <button type="button" onClick={() => setExpanded(null)}>{t(locale, 'worldClose')}</button></header>
-        <p>{expanded.text}</p>
+        <div className="waka-reading-full-body" tabIndex={0}><p>{expanded.text}</p></div>
         {expanded.onShare ? <footer><button type="button" onClick={() => { setExpanded(null); expanded.onShare?.(); }}>{t(locale, 'worldBubbleActShare')}</button></footer> : null}
       </DialogSurface>
     </div>, document.body) : null}
