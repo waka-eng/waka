@@ -713,6 +713,24 @@ evidence, and one-source paraphrases with decorative citations are rejected.
 The reviewer must identify at least two distinct cited originals that contribute
 to the connection; its IDs are checked against current profile-owned evidence.
 
+The synthesis prompt ends with a per-entry source audit: each generated entry
+must cite signals that jointly cover at least two different originals. Separate
+single-source entries do not satisfy that rule. This reminder changes no
+publication threshold or exemption for human-kept wording.
+When all selected signals have exactly one original, the prompt also groups
+their signal IDs by original. A new entry must cross at least two groups.
+Without human-kept entries, that input also gets a minimum of two citations
+in the response schema; combined-source signals and human-kept entries retain
+their existing citation shape. Runtime checks still enforce distinct originals
+and the semantic reviewer still decides whether the connection is supported.
+
+Publication diagnostics record the profile, locale, entry index, failing field
+names, distinct-original count and controlled rejection codes for parsing,
+citations, content checks and semantic review. The queue's publication-check
+error includes the reason counts. A pre-commit assessment records accepted and
+rejected counts without claiming the artifact has been published. Neither
+source text nor generated wording is included in these diagnostics.
+
 This adds at most one review call per refresh, using the configured judge model
 (Flash 1017 by default) and the existing job budget/retries. It reviews at most
 14 entries (seven proposed, seven carried), four originals per entry and 1,600

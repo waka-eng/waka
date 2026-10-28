@@ -769,18 +769,19 @@ export function validateSynthesizedEntries(
   knownSignalIds: Set<string>,
   contested: ReadonlyMap<string, readonly string[]> = new Map(),
   statements?: ReadonlyMap<string,string>,
+  onRejected?: (index: number, reason: 'no_owned_citations' | 'unresolved_conflict') => void,
 ): ValidationOutcome {
   let droppedCitations = 0;
   const validated: TopOfMindSynthesisEntry[] = [];
 
-  for (const entry of entries) {
+  for (const [index, entry] of entries.entries()) {
     const cited = entry.citedSignalIds.filter((id) => {
       if (knownSignalIds.has(id)) return true;
       droppedCitations += 1;
       return false;
     });
-    if (cited.length === 0) continue;
-    if(!contestedEntryAllowed({...entry,citedSignalIds:cited},contested))continue;
+    if (cited.length === 0) { onRejected?.(index, 'no_owned_citations'); continue; }
+    if(!contestedEntryAllowed({...entry,citedSignalIds:cited},contested)) { onRejected?.(index, 'unresolved_conflict'); continue; }
     const belief=cited.some(id=>contested.get(id)?.length)?undefined:statements?machineBelief({...entry,citedSignalIds:cited},statements):entry.belief;
     validated.push({ ...entry, belief, citedSignalIds: [...new Set(cited)] });
   }
@@ -1166,6 +1167,17 @@ export async function refreshTopOfMindForProfile(
   const keptWording = (entry: TopOfMindSynthesisEntry) => lockedBefore.some(kept => kept.type === entry.type && kept.body === entry.body);
   const contested = new Map(selected.map(signal=>[signal.id,signal.contestedWithIds??[]]));
   const selectedStatements = new Map(selected.map(signal=>[signal.id,signal.statement]));
+  const rejected: Record<string, number> = {};
+  const reportRejection = (stage: 'parse' | 'checks' | 'review', reason: string,
+    detail: { entryIndex?: number; fields?: string[]; distinctOrigins?: number } = {}, count = 1) => {
+    const code = `${stage}_${reason}`;
+    rejected[code] = (rejected[code] ?? 0) + count;
+    // Controlled codes and counts only; never generated wording or source text.
+    console.warn('[top-of-mind] publication rejected', JSON.stringify({
+      profileId: input.profileId, locale: preferredLocale, stage, reason, count, ...detail,
+    }));
+  };
+  const rejectionSummary = () => Object.entries(rejected).sort().map(([reason, count]) => `${reason}=${count}`).join(', ');
 
   if (selected.length > 0) {
     try {
@@ -1206,6 +1218,7 @@ export async function refreshTopOfMindForProfile(
       });
 
       modelSaidNoChange = synthesis.noChange === true;
+      if (synthesis.rejectedEntries) reportRejection('parse', 'invalid_entry', {}, synthesis.rejectedEntries);
       lockViolations = countLockViolations(lockedBefore, synthesis.entries);
       if (lockViolations > 0) {
         console.warn("[top-of-mind] model did not reproduce locked entries verbatim", {
@@ -1219,10 +1232,12 @@ export async function refreshTopOfMindForProfile(
         new Set(selected.map((signal) => signal.id)),
         contested,
         selectedStatements,
+        (entryIndex, reason) => reportRejection('checks', reason, { entryIndex }),
       );
-      generated = validated.entries.filter(entry => keptWording(entry) || readingQualityIssue(entry, quality) === null);
+      generated = validated.entries.filter((entry, entryIndex) => keptWording(entry) || readingQualityIssue(entry, quality,
+        detail => reportRejection('checks', detail.reason, { entryIndex, fields: detail.fields, distinctOrigins: detail.distinctOrigins })) === null);
       if ((synthesis.rejectedEntries || synthesis.entries.some(entry => !keptWording(entry))) && !generated.some(entry => !keptWording(entry))) {
-        generationFailure = new Error('Top of mind generation failed publication checks');
+        generationFailure = new Error(`Top of mind generation failed publication checks: ${rejectionSummary()}`);
       }
       droppedCitations = validated.droppedCitations;
       if (droppedCitations > 0) {
@@ -1232,6 +1247,7 @@ export async function refreshTopOfMindForProfile(
         });
       }
     } catch (error) {
+      reportRejection('parse', 'unavailable_or_invalid');
       generationFailure = error;
       generated = [];
     }
@@ -1241,18 +1257,24 @@ export async function refreshTopOfMindForProfile(
   // a wrong-language or unsupported legacy reading into the new version.
   const machineEntries = generated.filter(entry => !keptWording(entry));
   try {
-    const approved = await reviewReadingEntries([...machineEntries, ...priorCandidates], quality, provider);
+    const approved = await reviewReadingEntries([...machineEntries, ...priorCandidates], quality, provider,
+      (entryIndex, reasons) => { for (const reason of reasons) reportRejection('review', reason, { entryIndex }); });
     generated = generated.filter(entry => keptWording(entry) || approved.has(machineEntries.indexOf(entry)));
     approvedPrevious = new Set(priorCandidates.filter((_, index) => approved.has(machineEntries.length + index)).map(entryKey));
     if (machineEntries.length && !generated.some(entry => !keptWording(entry))) {
-      generationFailure = new Error('Top of mind generation failed publication review');
+      generationFailure = new Error(`Top of mind generation failed publication review: ${rejectionSummary()}`);
     }
   } catch (error) {
     // Reviewer downtime is a failed job, not permission to publish unchecked
     // text. Keep only the existing supported fallback; the queue retries.
+    reportRejection('review', 'unavailable_or_invalid');
     generationFailure = error;
     generated = [];
   }
+
+  console.info('[top-of-mind] publication assessment', JSON.stringify({ profileId: input.profileId,
+    locale: preferredLocale, acceptedEntries: generated.filter(entry => !keptWording(entry)).length,
+    rejected, canPublish: generationFailure === null }));
 
   const written = await db.transaction(async (tx) => {
     await acquireTopOfMindArtifactLock(tx, { profileId: input.profileId });

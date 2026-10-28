@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { copiesSource, readingMatchesLocale, readingQualityIssue, reviewReadingEntries, type TopOfMindQualityContext } from './top-of-mind-quality.js';
 import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
-import { buildTopOfMindReviewRequest, parseTopOfMindReview } from '../queue/gemini.js';
+import { buildTopOfMindReviewRequest, buildTopOfMindSynthesisRequest, parseTopOfMindReview } from '../queue/gemini.js';
+import type { TopOfMindSynthesisInput } from './model-provider.js';
 
 const context: TopOfMindQualityContext = {
   locale: 'en-US',
@@ -13,7 +14,36 @@ const context: TopOfMindQualityContext = {
 };
 const entry = { body: 'You are noticing how small navigation choices shape the experience.', citedSignalIds: ['a', 'b'] };
 
+it('groups single-original signals and constrains new entries without restricting kept or combined-source entries', () => {
+  const input: TopOfMindSynthesisInput = { profileId: 'reader', preferredLocale: 'en-US', provisional: true,
+    signals: ['a','b','c'].map((id,index) => ({ id, statement: 'A tentative observation.', confidence: 20,
+      evidenceCount: 1, lastEvidenceAt: null, inspirationIds: [index === 1 ? 'two' : 'one'] })),
+    lockedEntries: [], currentEntries: [], recentFeedback: [] };
+  const citations = (request: ReturnType<typeof buildTopOfMindSynthesisRequest>) =>
+    request.generationConfig.responseSchema!.properties!.entries!.items!.properties!.citedSignalIds!;
+  const first = buildTopOfMindSynthesisRequest(input);
+  expect(citations(first).minItems).toBe(2);
+  expect(first.contents[0]!.parts[0]!.text).toContain('Original 1: signal IDs a, c');
+  expect(first.contents[0]!.parts[0]!.text).toContain('Original 2: signal IDs b');
+  expect(first.contents[0]!.parts[0]!.text).toContain('TWO DIFFERENT numbered groups');
+  expect(citations(buildTopOfMindSynthesisRequest({ ...input,
+    signals: [{ ...input.signals[0]!, inspirationIds: ['one','two'] }] })).minItems).toBeUndefined();
+  expect(citations(buildTopOfMindSynthesisRequest({ ...input,
+    lockedEntries: [{ id: 'kept', type: 'pattern', body: 'My exact words.', belief: null, prompt: null, citedSignalIds: ['a'] }] })).minItems).toBeUndefined();
+});
+
 describe('a reading connects different inspirations', () => {
+  it('reports only reason codes, failing field names and origin counts', () => {
+    const rejected = vi.fn();
+    expect(readingQualityIssue({ ...entry, prompt: '어떤 선택이 편안했나요?' }, context, rejected)).toBe('language');
+    expect(rejected).toHaveBeenLastCalledWith({ reason: 'language', fields: ['prompt'], distinctOrigins: 2 });
+    expect(readingQualityIssue({ ...entry, citedSignalIds: ['a'] }, context, rejected)).toBe('single_source');
+    expect(rejected).toHaveBeenLastCalledWith({ reason: 'single_source', fields: [], distinctOrigins: 1 });
+    expect(readingQualityIssue({ ...entry, body: context.sourceTexts.get('one')![0]! }, context, rejected)).toBe('copied_source');
+    expect(rejected).toHaveBeenLastCalledWith({ reason: 'copied_source', fields: ['body'], distinctOrigins: 2 });
+    expect(JSON.stringify(rejected.mock.calls)).not.toContain(entry.body);
+    expect(JSON.stringify(rejected.mock.calls)).not.toContain(context.sourceTexts.get('one')![0]);
+  });
   it('accepts a fresh connection backed by two originals, including one combined signal', () => {
     expect(readingQualityIssue(entry, context)).toBeNull();
     expect(readingQualityIssue({ ...entry, citedSignalIds: ['combined'] }, context)).toBeNull();
@@ -35,6 +65,14 @@ describe('a reading connects different inspirations', () => {
 });
 
 describe('publication review', () => {
+  it('reports negative review dimensions and invalid supporting sources without source text', async () => {
+    const rejected = vi.fn();
+    const accepted = await reviewReadingEntries([entry], context, { reviewTopOfMind: async () => ({ entries: [{
+      index: 0, languageMatches: false, grounded: false, synthesized: false, supportingInspirationIds: ['foreign'],
+    }] }) }, rejected);
+    expect([...accepted]).toEqual([]);
+    expect(rejected).toHaveBeenCalledWith(0, ['language', 'grounding', 'synthesis', 'foreign_source', 'single_source']);
+  });
   it('requires positive language, grounding and synthesis verdicts for every entry', async () => {
     for (const field of ['languageMatches', 'grounded', 'synthesized'] as const) {
       const approved = await reviewReadingEntries([entry, entry], context, { reviewTopOfMind: async input => {

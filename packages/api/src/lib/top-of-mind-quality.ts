@@ -8,6 +8,12 @@ export interface TopOfMindQualityContext {
   sourceTexts: ReadonlyMap<string, readonly string[]>;
 }
 
+export interface ReadingQualityRejection {
+  reason: 'language' | 'single_source' | 'copied_source';
+  fields: Array<'body' | 'belief' | 'prompt'>;
+  distinctOrigins: number;
+}
+
 const normalize = (text: string) => text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
 /** Cheap script prefilter. The separate publication review checks the actual
@@ -58,12 +64,18 @@ export function distinctReadingOrigins(ids: readonly string[], context: TopOfMin
  * this check at the caller and always remain byte-identical. */
 export function readingQualityIssue(entry: {
   body: string; belief?: string | null; prompt?: string | null; citedSignalIds: string[];
-}, context: TopOfMindQualityContext): 'language' | 'single_source' | 'copied_source' | null {
-  const wording = [entry.body, entry.belief, entry.prompt].filter((text): text is string => Boolean(text?.trim()));
-  if (wording.some(text => !readingMatchesLocale(text, context.locale))) return 'language';
-  if (distinctReadingOrigins(entry.citedSignalIds, context) < 2) return 'single_source';
+}, context: TopOfMindQualityContext, onRejected?: (detail: ReadingQualityRejection) => void): ReadingQualityRejection['reason'] | null {
+  const fields = (['body', 'belief', 'prompt'] as const).filter(field => Boolean(entry[field]?.trim()));
+  const reject = (reason: ReadingQualityRejection['reason'], failedFields: ReadingQualityRejection['fields']) => {
+    onRejected?.({ reason, fields: failedFields, distinctOrigins: distinctReadingOrigins(entry.citedSignalIds, context) });
+    return reason;
+  };
+  const wrongLanguage = fields.filter(field => !readingMatchesLocale(entry[field]!, context.locale));
+  if (wrongLanguage.length) return reject('language', wrongLanguage);
+  if (distinctReadingOrigins(entry.citedSignalIds, context) < 2) return reject('single_source', []);
   const sources = [...context.sourceTexts.values()].flat();
-  if (wording.some(text => copiesSource(text, sources))) return 'copied_source';
+  const copied = fields.filter(field => copiesSource(entry[field]!, sources));
+  if (copied.length) return reject('copied_source', copied);
   return null;
 }
 
@@ -75,6 +87,7 @@ export async function reviewReadingEntries(
   entries: Array<Omit<ReviewEntry, 'inspirationIds'>>,
   context: TopOfMindQualityContext,
   provider: Pick<ModelProvider, 'reviewTopOfMind'>,
+  onRejected?: (index: number, reasons: string[]) => void,
 ): Promise<Set<number>> {
   if (!entries.length) return new Set();
   if (entries.length > 14) throw new Error('Top of mind review exceeds entry limit');
@@ -111,11 +124,15 @@ export async function reviewReadingEntries(
     // unrelated source IDs cannot turn an unsupported conclusion into a pass.
     const ids = verdict.supportingInspirationIds;
     const supporting = new Map([['review', ids]]);
-    if (verdict.languageMatches && verdict.grounded && verdict.synthesized &&
-        ids.every(id => entry.inspirationIds.includes(id)) &&
-        distinctReadingOrigins(['review'], { ...context, signalOrigins: supporting }) >= 2) {
-      approved.add(verdict.index);
-    }
+    const reasons = [
+      ...(!verdict.languageMatches ? ['language'] : []),
+      ...(!verdict.grounded ? ['grounding'] : []),
+      ...(!verdict.synthesized ? ['synthesis'] : []),
+      ...(!ids.every(id => entry.inspirationIds.includes(id)) ? ['foreign_source'] : []),
+      ...(distinctReadingOrigins(['review'], { ...context, signalOrigins: supporting }) < 2 ? ['single_source'] : []),
+    ];
+    if (!reasons.length) approved.add(verdict.index);
+    else onRejected?.(verdict.index, reasons);
   }
   if (seen.size !== entries.length) throw new Error('Incomplete top of mind review');
   return approved;

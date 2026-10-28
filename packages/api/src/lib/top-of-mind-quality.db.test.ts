@@ -97,7 +97,15 @@ it('waits without a model call when multiple signals all come from one inspirati
 
 it('requires two sources per entry, not merely somewhere in the model context', async () => {
   reply = async () => ({ entries: [{ ...proposed().entries[0]!, citedSignalIds: [signalIds[0]!] }] });
-  await expect(refresh()).rejects.toThrow(/publication checks/);
+  const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    await expect(refresh()).rejects.toThrow(/publication checks: checks_single_source=1/);
+    const event = log.mock.calls.find(call => call[0] === '[top-of-mind] publication rejected');
+    expect(JSON.parse(event![1] as string)).toEqual({ profileId, locale: 'en-US', stage: 'checks',
+      reason: 'single_source', count: 1, entryIndex: 0, fields: [], distinctOrigins: 1 });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(fresh);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(originals[0]);
+  } finally { log.mockRestore(); }
 });
 
 it('allows one signal that is actually derived from two different inspirations', async () => {

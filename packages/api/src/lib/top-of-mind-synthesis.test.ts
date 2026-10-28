@@ -8,7 +8,7 @@
  * database. Both are enforced here, so both are asserted here.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   assessShiftFloor,
@@ -131,6 +131,15 @@ describe('unresolved disputes do not publish as one-sided conclusions',()=>{
 
 describe("citations are checked against what the profile holds", () => {
   const owned = new Set(["signal-a", "signal-b"]);
+  it('identifies missing owned citations and unresolved disputes separately', () => {
+    const rejected=vi.fn();
+    const result=validateSynthesizedEntries([
+      {type:'pattern',body:'Private words must not enter diagnostics.',citedSignalIds:['foreign']},
+      {type:'tension',body:'Only one side.',citedSignalIds:['signal-a']},
+    ],owned,new Map([['signal-a',['signal-b']]]),new Map(),rejected);
+    expect(result.entries).toEqual([]);
+    expect(rejected.mock.calls).toEqual([[0,'no_owned_citations'],[1,'unresolved_conflict']]);
+  });
 
   it("keeps citations the profile owns", () => {
     const result = validateSynthesizedEntries(

@@ -1187,12 +1187,37 @@ function buildTopOfMindSynthesisPrompt(input: TopOfMindSynthesisInput): string {
     );
   }
 
+  if (!input.group) sections.push(
+    'Before returning JSON, audit EACH new entry separately: collect the inspiration IDs behind its citedSignalIds and require at least TWO different originals. ' +
+    'Two entries backed by one original each do not satisfy this rule. When each signal has only one original, combine related signals from DIFFERENT inspiration IDs into one connected entry and cite all contributing signal IDs. ' +
+    'Do not use inspiration IDs as citedSignalIds. Omit an entry if its connection is not supported by two originals. Human-kept wording remains exempt. ' +
+    `Keep every generated field in ${input.preferredLocale === 'ko-KR' ? 'Korean' : 'English'}.`,
+  );
+  if (!input.group && input.signals.length > 0 && input.signals.every(signal => signal.inspirationIds?.length === 1)) {
+    const groups = new Map<string, string[]>();
+    for (const signal of input.signals) {
+      const original = signal.inspirationIds![0]!;
+      groups.set(original, [...(groups.get(original) ?? []), signal.id]);
+    }
+    sections.push('Independent original groups for this input:\n' + [...groups.values()]
+      .map((ids, index) => `Original ${index + 1}: signal IDs ${ids.join(', ')}`).join('\n') +
+      '\nEach NEW entry must connect and cite signals from at least TWO DIFFERENT numbered groups. ' +
+      'Two signal IDs from Original 1 still count as only ONE original. Return entries=[] if no supported connection crosses groups.');
+  }
+
   return sections.join("\n\n");
 }
 
 export function buildTopOfMindSynthesisRequest(
   input: TopOfMindSynthesisInput,
 ): GenerateContentRequest {
+  const schema = structuredClone(topOfMindSynthesisResponseSchema);
+  if (!input.group && !input.lockedEntries.length && input.signals.length > 0 &&
+      input.signals.every(signal => signal.inspirationIds?.length === 1)) {
+    // With single-original signals, one citation can never support a new
+    // reading. Human-kept entries and genuinely multi-original signals can.
+    schema.properties!.entries!.items!.properties!.citedSignalIds!.minItems = 2;
+  }
   return {
     systemInstruction: {
       parts: [
@@ -1209,7 +1234,7 @@ export function buildTopOfMindSynthesisRequest(
       // reshuffle on every refresh learns to distrust it.
       temperature: 0,
       responseMimeType: "application/json",
-      responseSchema: topOfMindSynthesisResponseSchema,
+      responseSchema: schema,
     },
   };
 }
