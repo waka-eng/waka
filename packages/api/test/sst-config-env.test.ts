@@ -30,6 +30,16 @@ describe("SST API admin route environment flags", () => {
 });
 
 describe("SST background job delivery", () => {
+  it('scopes deferred reading schedules and their invocation role to this worker', () => {
+    expect(sstConfig).toContain('WAKA_READING_WAKE_GROUP: readingWakeGroup.name');
+    expect(sstConfig).toContain('WAKA_READING_WAKE_ROLE: readingWakeRole.arn');
+    expect(sstConfig).toContain('Principal: { Service: "scheduler.amazonaws.com" }');
+    expect(sstConfig).toContain('Condition: { ArnEquals: { "aws:SourceArn": arn } }');
+    expect(sstConfig).toContain('actions: ["iam:PassRole"], resources: [readingWakeRole.arn]');
+    expect(sstConfig).toContain('arn.replace(":schedule-group/", ":schedule/") + "/waka-reading-*"');
+    expect(sstConfig).toMatch(/new aws\.iam\.RolePolicy\("ReadingWakeInvoke",[\s\S]*?Resource: arn/);
+    expect(sstConfig).toContain('policy: backgroundWorker.arn.apply(');
+  });
   /*
     Work is pushed, not polled: enqueueing wakes the worker directly, so a
     capture begins deriving in the same second and an idle deployment issues

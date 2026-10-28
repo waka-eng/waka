@@ -73,7 +73,7 @@ it('introduces forming memory quietly, animates only confirmed processing, then 
 it('keeps a scheduled or failed reading honest instead of suggesting continuous work', async () => {
   vi.mocked(fetchInspirationProcessing).mockResolvedValue({ ...waiting, phase: 'waiting', stage: 'reading', runAfter: new Date(Date.now() + 86400000).toISOString() });
   await act(async () => root.render(<Probe quiet />)); await click('save');
-  expect(host.textContent).toContain('The next reading is scheduled');
+  expect(host.textContent).toContain('WAKA can start the next reading after');
   expect(host.querySelector('.jar-source-mark')?.hasAttribute('data-processing')).toBe(false);
   vi.mocked(fetchInspirationProcessing).mockResolvedValue({ ...waiting, phase: 'failed', canRetry: true });
   await act(async () => latest.check());
@@ -174,7 +174,7 @@ it('waits until a known future eligibility time rather than polling continuously
 it('describes scheduled reading separately from the successful save without claiming completion',async()=>{
   vi.mocked(fetchInspirationProcessing).mockResolvedValue({...waiting,phase:'waiting',stage:'reading',runAfter:new Date(Date.now()+3600000).toISOString()});
   await act(async()=>root.render(<Probe/>));await click('save');
-  expect(host.textContent).toContain('Saved. The next reading is scheduled for');
+  expect(host.textContent).toContain('Saved. WAKA can start the next reading after');
   expect(host.textContent).not.toContain('Your reading has an update');
   expect(view).not.toHaveBeenCalled();expect(retryInspirationProcessing).not.toHaveBeenCalled();
 });

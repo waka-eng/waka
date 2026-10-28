@@ -297,6 +297,9 @@ it("holds up the agent's own reading on its wall, never the owner's", async () =
   }
   await settle();
   expect(world.audit().wallKind).toBe('agent');
+  const walls = [...document.querySelectorAll('.jar-wallcol')];
+  expect(walls.filter(node => !node.hasAttribute('inert'))).toHaveLength(1);
+  for (const wall of walls.filter(node => node.hasAttribute('inert'))) expect(wall.getAttribute('aria-hidden')).toBe('true');
 
   const said = bubble();
   expect(said?.textContent ?? '', 'the owner\'s sentence leaked onto the agent\'s wall').not.toContain(OWNER_SAYS);

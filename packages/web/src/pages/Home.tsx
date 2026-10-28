@@ -1,3 +1,5 @@
+import { startJourney } from '../lib/journey-performance';
+import { HomeActions } from '../components/HomeActions';
 import { ProfileSwitcher } from '../components/ProfileSwitcher';
 import { ReadingBubbleText } from '../components/ReadingBubbleText';
 /**
@@ -814,6 +816,13 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const detachedRef = useRef(detachedInspiration); detachedRef.current = detachedInspiration;
   const linkedReflectionRef = useRef<{ panelId: string; open: boolean } | null>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "failed">("loading");
+  const [finishHomeTiming] = useState(() => startJourney('home_ready'));
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    const frame = requestAnimationFrame(() => finishHomeTiming());
+    return () => cancelAnimationFrame(frame);
+  }, [phase, finishHomeTiming]);
+
   /**
    * NOTHING BEHIND THIS WORLD BUT THE FIXTURE — see offlineHome().
    *
@@ -7627,6 +7636,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               <div
                 key={key}
                 className="jar-wallcol"
+                {...(!here ? { inert: '', 'aria-hidden': true } : {})}
                 /* `data-kind` was once a question — a room of nothing but
                    machines was set in the machine hand, so the typography and
                    the body could never disagree about what kind of mind you
@@ -9515,6 +9525,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         <>
                           <span className="jar-char-bubble-of">{say('worldBubbleActMine')}</span>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
+                            details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
+                              onUpdated: () => verifyReadingRef.current(true),
+                              onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
                             onChat={() => { void talkAbout({ id: '', text: lead.body }); }} chatDisabled={talking}
                             onShare={storageScope && !offline ? () => setThingShare({
                               kind: "topOfMind", text: lead.body,
@@ -9546,7 +9559,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
                            review, 2026-10-16). */
                         <>
                           <span className="jar-char-bubble-of">{say('worldBubbleActAgentMine')}</span>
-                          <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={agentSays} locale={locale} />
+                          <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={agentSays} locale={locale}
+                            details={!offline && atWall.kind === 'agent' ? { profileId: atWall.id,
+                              onUpdated: () => loadAgentWallRef.current(atWall.id, true),
+                              onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.id, open: 'saves', note: id }) } : undefined} />
                         </>
                       ) : (
                         /* ═══ AND THE EMPTY LINE IS A DOOR AFTER ALL ═════
@@ -11578,6 +11594,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
         </nav>
       ) : null}
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
+        actions={!viewNavigation.view?.open && !viewNavigation.view?.conversationId && !mouthOpen ? <HomeActions key={memoryScope?.profileId ?? 'preview'} locale={locale}
+          profileId={!offline ? memoryScope?.profileId : undefined} revision={sourceListMutationRef.current}
+          onPrinciples={toPrinciples} onReview={atWall.kind === 'self' && canOfferReview ? startReview : undefined}
+          onOpen={id => viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.kind === 'agent' ? atWall.id : null, open: 'saves', note: id })} /> : undefined}
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
            Founder: "I kind of want to give the feeling of, rather than my
            agent moving rooms, it kind of switches itself up to its agent

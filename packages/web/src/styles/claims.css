@@ -7087,3 +7087,24 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-mcp-key-setup > summary { cursor: pointer; padding-block: var(--sp-12); }
 .waka-mcp-prompt-scroll { max-height: min(14rem, 36dvh); overflow: auto; overscroll-behavior: contain; }
 }
+
+@layer chrome {
+/* One compact, stable home menu; reading evidence stays inside its sheet. */
+.waka-home-actions { position: relative; }
+.waka-home-actions > button { min-height: var(--sp-44); padding-inline: var(--sp-10); font-size: var(--t-ui); }
+.waka-home-actions-list { position: absolute; right: 0; top: 100%; width: min(18rem, calc(100vw - var(--sp-32))); padding: var(--sp-8); border: 1px solid var(--line); border-radius: var(--sp-16); background: var(--paper); color: var(--ink);  }
+.waka-home-actions-list:not([hidden]) { display: grid; }
+.waka-home-actions-list > button, .waka-home-actions-list > span { display: block; min-height: var(--sp-44); padding: var(--sp-10) var(--sp-12); text-align: start; font: inherit; background: none; border: 0; color: inherit; }
+.waka-home-actions-list > button { cursor: pointer; }
+.waka-home-actions-list > span { font-size: var(--t-ui); color: var(--muted); }
+.waka-reading-details { margin-top: var(--sp-16); }
+.waka-reading-details summary { min-height: var(--sp-44); padding-block: var(--sp-12); cursor: pointer; overflow-wrap: anywhere; }
+.waka-reading-details details details { margin-inline-start: var(--sp-12); }
+.waka-reading-full .waka-reading-meta { font-size: var(--t-ui); color: var(--muted); }
+.waka-reading-details textarea { display: block; width: 100%; min-height: 100px; margin-top: var(--sp-8); padding: var(--sp-12); background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: var(--sp-12); font: inherit; font-size: var(--t-input); }
+.waka-reading-sources { margin: var(--sp-8) 0; padding-inline-start: var(--sp-20); }
+.waka-reading-sources button { text-align: start; overflow-wrap: anywhere; }
+
+  .waka-processing-body { font-size: var(--t-ui); line-height: 1.5; }
+
+}

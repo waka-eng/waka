@@ -102,7 +102,7 @@ export function AgentApiKeys({ profile, locale }: {
         <option value="claude">Claude Code / JSON</option><option value="codex">Codex</option>
       </select></label>
       <h4 className="waka-mcp-instruction-title">{say('profileMcpPromptTitle')}</h4>
-      <McpInstallPrompt locale={locale} profile={profile} apiUrl={apiUrl} packageOrigin={packageOrigin} client={client} scope="user" authMethod="key" />
+      <McpInstallPrompt locale={locale} profile={profile} apiUrl={apiUrl} packageOrigin={packageOrigin} client={client} scope="project" authMethod="key" />
       <details className="waka-mcp-key-setup">
         <summary>{say('profileMcpManualInstall')}</summary>
         <ol className="waka-mcp-key-steps">
@@ -114,7 +114,7 @@ export function AgentApiKeys({ profile, locale }: {
           </li>
           <li>
             <h4 className="waka-mcp-instruction-title">{say('profileApiKeysConfigStep')}</h4>
-            <p className="waka-settings-note">{say(client === 'codex' ? 'profileMcpCodexConfigHint' : 'profileMcpClaudeConfigHint')}</p>
+            <p className="waka-settings-note">{say(client === 'codex' ? 'profileMcpCodexProjectConfigHint' : 'profileMcpClaudeConfigHint')}</p>
             <p className="waka-settings-note">{say('profileApiKeysConfigHint')}</p>
             <McpCopyBlock locale={locale} text={config} copyLabel={say('profileApiKeysCopyConfig')} />
           </li>

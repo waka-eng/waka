@@ -174,3 +174,59 @@ download held the wrapper lock. Device Hub was concurrently controlling another
 simulator, so native UI checks were stopped and the temporary WAKA test simulator
 removed. Physical-phone installation remains deferred; no personal phone was
 updated in this pass. Migration and changes have not been deployed.
+
+### Reading and connection usability — 2026-10-28
+
+Implemented across the shared web/native UI:
+
+- The human Language setting synchronizes owned agents and requests a new
+  reading for each changed profile. Agent creation locks the human profile
+  before inheriting its language. Human-edited wording remains locked.
+- Inactive profile walls are inert and hidden from the accessibility tree.
+- Home has a compact Actions disclosure for Principles, available Review,
+  and server-backed processing progress for the active profile. Progress
+  distinguishes queued, scheduled, running and attention-needed work.
+- Expanded Top of Mind includes the content update time, source patterns and
+  inspirations loaded on demand, wording edits and feedback. Editing protects
+  unsaved text when closing. Source links open the current inspiration page
+  with Close, rather than the old floating orb card. No-change versions do not advance the
+  content timestamp.
+- API-key MCP setup prompts and manual configuration both target the current
+  project. Browser-login setup retains its existing scope choices.
+- Android declares the microphone permissions required by Capacitor's WebView
+  capture implementation; microphone hardware is optional. No device permission
+  was silently granted.
+- Local journey timing distinguishes Home readiness, save acknowledgment,
+  chat acknowledgment and actual reply observation; see the performance README.
+
+Deferred readings now get self-deleting EventBridge Scheduler wake-ups after
+the 24-hour hold or a budget deferral. PostgreSQL still enforces ownership,
+due time, leases and budgets. Durable metadata recovers interrupted schedule
+creation; bounded recovery batches arrange another wake when more may remain.
+The daily safety sweep remains. This requires the new SST resources and IAM
+bindings to be deployed; no schema migration was added or applied.
+
+Verification used an explicitly selected disposable database on 127.0.0.1,
+synthetic accounts, and disabled model generation. Web: 1,410 tests across 178
+files; API unit: 998 passed, five skipped; 22 targeted database checks; seven
+mobile contract checks; API/web typechecks, web build, migration consistency,
+SST syntax and scheduler permission contracts passed. A legacy Review-link
+routing assertion failed once during concurrent builds/tests; its 26-test
+isolated rerun and the subsequent full web rerun passed. No routing code was
+changed for that intermittent result.
+
+At phone width, browser checks covered save/acknowledgment, reading editing,
+unsaved-close protection, source disclosure/navigation, chat acknowledgment,
+and processing status. The iOS 27 iPhone 18 Pro simulator installed and opened
+the test build, displayed the reading edited in the browser, independently
+found its saved inspiration in processing progress, and closed both reading
+and progress sheets successfully. Android API 36 built and installed the APK,
+but native UI automation could not bind the emulator window. Android journeys,
+real microphone/permission recovery, and live provider reply timing are still
+unverified in this pass. Earlier physical iOS mic acceptance does not establish
+Android acceptance. No personal phone was updated.
+
+Screenshots and timing receipts are in `work/improvements-20261028/`.
+Temporary servers, the disposable database, the audit Android emulator and the
+iOS test app were removed; the existing WAKA Dev installation was preserved.
+These changes remain local; no push or deployment was performed.

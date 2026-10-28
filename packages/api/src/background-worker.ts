@@ -1,3 +1,4 @@
+import { scheduleDeferredReadings, recoverDeferredReadingWakes } from './lib/reading-wake.js';
 /**
  * The background queue's worker.
  *
@@ -65,7 +66,7 @@ async function runScheduledSweeps(now=new Date()){
   catch(error){console.warn('[staged-attachment-sweep] failed',error instanceof Error?error.message:String(error));}
 }
 
-export async function handler(event?:unknown) {
+export async function handler(event?:unknown, context?: { invokedFunctionArn?: string }) {
   if(event&&typeof event==='object'&&(event as {mode?:unknown}).mode==='recovery'){
     const state=await readBackgroundJobRecoveryState();recordQueueRecovery(state);
     if(!state.overdue)return {claimed:0,succeeded:0,retried:0,failed:0,deferred:0,passes:0,exhaustedPasses:false,recovery:state};
@@ -82,12 +83,16 @@ export async function handler(event?:unknown) {
      not on an enqueue or a local wake, which are a person's work waiting. */
   if(isScheduledEvent(event))await runScheduledSweeps();
   const retries:BackgroundJobRetryWake[]=[];
+  const passWakes: Array<{ id: string; profileId: string; requestVersion: string }> = [];
   const total = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
   let passes = 0;
 
   const drain=async()=>{
   while (passes < MAX_DRAIN_PASSES) {
-    const result = await runBackgroundJobWorker({ limit, ...(asyncEnqueue?{onTransientRetry:(retry:BackgroundJobRetryWake)=>{retries.push(retry);}}:{}) });
+    const pass = await collectReadingWakeReferences(() => runBackgroundJobWorker({ limit, ...(asyncEnqueue?{onTransientRetry:(retry:BackgroundJobRetryWake)=>{retries.push(retry);}}:{}) }));
+    const result = pass.result;
+    if (asyncEnqueue) passWakes.push(...pass.wakes);
+    await scheduleDeferredReadings(pass.wakes, context?.invokedFunctionArn);
     passes += 1;
     total.claimed += result.claimed;
     total.held += result.held;
@@ -125,9 +130,11 @@ export async function handler(event?:unknown) {
 
   return { ...total, passes, exhaustedPasses: passes >= MAX_DRAIN_PASSES };
   };
-  const collected=asyncEnqueue?await collectReadingWakeReferences(drain):{result:await drain(),wakes:[]};
+  const collected=await collectReadingWakeReferences(drain);
   const drained=collected.result;
-  const requested=readBackgroundJobWakeReferences([...new Map([...wakes,...collected.wakes].map(row=>[row.id,row])).values()].slice(0,50));
+  const requested=readBackgroundJobWakeReferences([...new Map([...wakes,...collected.wakes,...passWakes].map(row=>[row.id,row])).values()].slice(0,50));
+  await scheduleDeferredReadings(requested, context?.invokedFunctionArn);
+  await recoverDeferredReadingWakes(context?.invokedFunctionArn);
   console.log("[background-worker] drained background jobs", drained);
   if(asyncEnqueue && retries.length && await hasNearTermBackgroundJobRetry(retries)){
     // This error asks Lambda's existing async queue for at most two more

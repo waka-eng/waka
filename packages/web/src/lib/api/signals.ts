@@ -114,9 +114,9 @@ export async function fetchSignals(
 }
 
 /** GET /signals/:id — the same statement, plus what it rests on. */
-export async function fetchSignal(id: string,signal?:AbortSignal): Promise<ApiSignalDetail> {
+export async function fetchSignal(id: string,signal?:AbortSignal, options: { profile?: string } = {}): Promise<ApiSignalDetail> {
   const body = await getJson<{ signal: ApiSignalDetail }>(
-    apiPath(`/signals/${encodeURIComponent(id)}`),
+    apiPath(`/signals/${encodeURIComponent(id)}${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     "Failed to load this signal",
     signal,
   );

@@ -1,3 +1,4 @@
+import { startJourney, startReplyTiming, observeReplyTiming, cancelReplyTiming } from '../lib/journey-performance';
 /**
  * A TRANSCRIPT, A BOX, AND ONE WAY TO STOP.
  *
@@ -252,6 +253,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      send clears both. Another tab's draft is never linked. */
   const keep=(next:Draft)=>{draftRef.current=next;setDraft(next);try{const before=receipt.current;receipt.current=storeConversationDraft(scope,journal,next,before);recordDraftStored(scope,receipt.current,before);setStorageFailed(false);return true;}catch{setStorageFailed(true);return false;}};
   const observe=(next:ApiConversation)=>{
+    observeReplyTiming(next);
     if(conversationRef.current?.id===next.id&&conversationRef.current.profileId===next.profileId&&conversationRef.current.revision>next.revision)next=conversationRef.current;
     conversationRef.current=next;setConversation(next);setGenerationEnabled(next.generationEnabled??false);
     /* THE ID IS THE MESSAGE. Ids are chosen here, and the server refuses (409)
@@ -268,6 +270,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     }
   };
   const reply=useConversationReply(scope.profileId,id,Boolean(conversation?.generationEnabled),conversation?.revision??0,observe,conversation?.messageWindowStart);
+  useEffect(() => {
+    if (id && (reply.terminal || reply.state?.phase === 'failed' || reply.state?.phase === 'stopped')) cancelReplyTiming(scope.profileId, id);
+  }, [id, scope.profileId, reply.terminal, reply.state?.phase]);
   const replyPending=reply.state?.phase==='pending'||reply.state?.phase==='running';
   const latestMessage=conversation?.messages.at(-1);
   /* ═══ THE MESSAGE STILL IN FLIGHT IS PART OF THE TRANSCRIPT ══════════
@@ -456,6 +461,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     const withNow=guards.current;
     const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID(),...(current.talkWith?{}:withNow.agent&&withNow.talkWith!=='mine'?{talkWith:withNow.talkWith,agentId:withNow.agent.id}:{})}:{})};
     if(!keep(intent))return;const owner=lifecycle.current;working.current=true;setBusy(true);
+    const acknowledge = startJourney('chat_acknowledged');
+    if (replies === true) startReplyTiming(scope.profileId, id ?? intent.conversationId!, intent.revision + 1);
     // The notice clears only now, with the send actually begun (review): a pre-flight that bails keeps it, and its Retry.
     setError(null);setUnsent(false);nearBottom.current=true;
     try{
@@ -468,10 +475,13 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(replies?{requestReply:true}:{}),...attachmentIds},from=conversationRef.current?.messageWindowStart;
         return from!==undefined?saveConversationMessage(scope.profileId,id,input,signal,from):saveConversationMessage(scope.profileId,id,input,signal);})
         :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:replies===true,...attachmentIds},intent.talkWith&&talkAgent?{perspective:intent.talkWith,agentId:talkAgent}:undefined));
+      acknowledge();
       if(mine(owner)){observe(next);setError(null);setUnsent(false);setAttachNote(null);if(id)reply.check();}
     }catch(reason){
+      acknowledge(false);
       if(!mine(owner))return;
       if(!id&&reason instanceof ApiError&&reason.status===429&&reason.code==='conversation_limit_reached'){
+        cancelReplyTiming(scope.profileId, intent.conversationId!);
         // A definite refusal created nothing. Keep the draft editable instead
         // of journalling an uncertain send that retries forever.
         const current=draftRef.current;
@@ -491,6 +501,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
          the next Send links them. */
       const current=draftRef.current;
       if(reason instanceof ApiError&&reason.status===409&&reason.code==='attachment_not_ready'&&current?.pending&&current.id===intent.id){
+        cancelReplyTiming(scope.profileId, id ?? intent.conversationId!);
         const gone=new Set(reason.missingAttachmentIds?.length?reason.missingAttachmentIds:(current.attachments??[]).map(item=>item.id));
         const left=(current.attachments??[]).filter(item=>!gone.has(item.id));
         const back:Draft={...current,pending:false,updatedAt:Date.now()};

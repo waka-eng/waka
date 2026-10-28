@@ -112,25 +112,34 @@ profilesRoutes.post("/", humanSessionsOnly, async (c) => {
   }
 
   const db = getDb();
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(profiles)
-    .where(and(eq(profiles.accountId, session.profile.accountId), eq(profiles.type, "agent")));
+  const created = await db.transaction(async tx => {
+    // Serialize with language changes and other creations. A stale auth snapshot
+    // must not give a new agent the owner's previous language.
+    const [owner] = await tx.select({ preferredLocale: profiles.preferredLocale }).from(profiles)
+      .where(eq(profiles.id, session.profile.id)).for('update');
+    const [{ count }] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(profiles)
+      .where(and(eq(profiles.accountId, session.profile.accountId), eq(profiles.type, "agent")));
 
-  if (count >= MAX_AGENT_PROFILES) {
-    return c.json({ error: `An account may hold ${MAX_AGENT_PROFILES} agent profiles` }, 409);
-  }
+    if (count >= MAX_AGENT_PROFILES) {
+      return null;
+    }
 
-  const [created] = await db
-    .insert(profiles)
-    .values({
-      accountId: session.profile.accountId,
-      type: "agent",
-      name: parsed.data.name,
-      // An agent writes in the language its owner reads.
-      preferredLocale: session.profile.preferredLocale,
-    })
-    .returning();
+    const [created] = await tx
+      .insert(profiles)
+      .values({
+        accountId: session.profile.accountId,
+        type: "agent",
+        name: parsed.data.name,
+        // An agent writes in the language its owner reads.
+        preferredLocale: owner.preferredLocale,
+      })
+      .returning();
+    return created;
+  });
+
+  if (!created) return c.json({ error: `An account may hold ${MAX_AGENT_PROFILES} agent profiles` }, 409);
 
   return c.json({ profile: serializeProfile(created!) }, 201);
 });

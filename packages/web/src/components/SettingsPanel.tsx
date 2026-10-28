@@ -277,7 +277,8 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 
       <label className="waka-account-field">
         <span>{say("profileLanguageLabel")}</span>
-        <select value={props.locale} disabled={props.localeBusy}
+        <small>{say("profileLanguageScope")}</small>
+        <select aria-label={say("profileLanguageLabel")} value={props.locale} disabled={props.localeBusy}
           onChange={(event) => props.onLocale(event.currentTarget.value as SupportedLocale)}>
           {supportedLocales.map((option) => (
             <option key={option.code} value={option.code}>{option.nativeLabel}</option>
@@ -530,7 +531,7 @@ function ProfileConnections({ locale, profile }: { locale: SupportedLocale; prof
 function SessionSetup({ locale, onDone, profile: selected, connection }: { locale: SupportedLocale; onDone: () => void; profile: ApiOwnedProfile; connection?: ApiSession }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
   const [client, setClient] = useState<McpClient>(connection?.deviceLabel?.startsWith('Codex') ? 'codex' : 'claude');
-  const [scope, setScope] = useState<McpScope>('user');
+  const [scope, setScope] = useState<Exclude<McpScope, 'project'>>('user');
   const [step, setStep] = useState(connection ? 2 : 0);
   const [manual, setManual] = useState(Boolean(connection));
   const [promptCopy, setPromptCopy] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -548,7 +549,7 @@ function SessionSetup({ locale, onDone, profile: selected, connection }: { local
   const clientName = mcpClientName(client);
   const setupPrompt = mcpSetupPrompt({ locale, profile: selected, apiUrl, packageOrigin, client, scope, authMethod: 'browser' });
   const scopeControl = client === 'codex' ? <label className="waka-mcp-choice"><span>{say('profileMcpScope')}</span>
-    <select value={scope} onChange={event => { setScope(event.target.value as McpScope); setPromptCopy('idle'); setVerification('idle'); verificationRequest.current += 1; }}>
+    <select value={scope} onChange={event => { setScope(event.target.value as Exclude<McpScope, 'project'>); setPromptCopy('idle'); setVerification('idle'); verificationRequest.current += 1; }}>
       <option value="user">{say('profileMcpScopeUser')}</option><option value="launch">{say('profileMcpScopeLaunch')}</option>
     </select></label> : null;
   const checkConnection = async () => {

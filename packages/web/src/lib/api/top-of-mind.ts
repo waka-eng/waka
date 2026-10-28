@@ -68,6 +68,7 @@ export interface ApiTopOfMindEntry {
  * this one.
  */
 export interface ApiTopOfMind {
+  contentUpdatedAt?: string;
   id: string;
   version: number;
   reason: ApiTopOfMindReason;
@@ -181,9 +182,10 @@ export function fetchTopOfMindRefresh(jobId: string, signal?: AbortSignal, reque
 export async function updateTopOfMindEntry(
   entryId: string,
   input: { body: string },
+  options: ProfileScoped = {},
 ): Promise<ApiTopOfMindEntry> {
   const body = await patchJson<{ entry: ApiTopOfMindEntry }>(
-    apiPath(`/top-of-mind/entries/${encodeURIComponent(entryId)}`),
+    apiPath(`/top-of-mind/entries/${encodeURIComponent(entryId)}${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     input,
     "Failed to update this entry",
   );

@@ -22,7 +22,7 @@
  * that writes both, which is why it is the one that opens a transaction.
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { z } from "zod";
 
@@ -91,12 +91,24 @@ const deleteAccountSchema = z
 type WakaTx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 async function saveProfileWithLocaleRefresh(tx: WakaTx, profileId: string,
   changes: Partial<typeof profiles.$inferInsert> & { preferredLocale: string }) {
-  const [before] = await tx.select({ preferredLocale: profiles.preferredLocale }).from(profiles)
+  const [before] = await tx.select({ preferredLocale: profiles.preferredLocale, accountId: profiles.accountId, type: profiles.type }).from(profiles)
     .where(eq(profiles.id, profileId)).for('update');
   const [profile] = await tx.update(profiles).set(changes).where(eq(profiles.id, profileId)).returning(profileColumns);
-  const refresh = profile && before && before.preferredLocale !== changes.preferredLocale
-    ? await enqueueTopOfMindRefresh(profileId, 'manual', tx) : null;
-  return { profile, refresh };
+  // The app's Language setting applies to the person's agents too. Agent
+  // credentials may still change only their own profile, never their owner.
+  const owned = before?.type === 'human' && before.accountId
+    ? await tx.select({ id: profiles.id, preferredLocale: profiles.preferredLocale }).from(profiles)
+      .where(and(eq(profiles.accountId, before.accountId), eq(profiles.type, 'agent'))).orderBy(profiles.id).for('update')
+    : [];
+  const changed = [...(profile && before && before.preferredLocale !== changes.preferredLocale ? [profileId] : []),
+    ...owned.filter(row => row.preferredLocale !== changes.preferredLocale).map(row => row.id)];
+  const wakes = [];
+  for (const id of changed) {
+    if (id !== profileId) await tx.update(profiles).set({ preferredLocale: changes.preferredLocale, updatedAt: new Date() }).where(eq(profiles.id, id));
+    const refresh = await enqueueTopOfMindRefresh(id, 'manual', tx);
+    wakes.push({ id: refresh.jobId, profileId: id, requestVersion: String(refresh.requestVersion) });
+  }
+  return { profile, wakes };
 }
 
 // ---------------------------------------------------------------------------
@@ -129,8 +141,8 @@ export async function meHandler(c: Context<AuthEnv>): Promise<Response> {
  * PATCH /api/auth/me/preferences
  *
  * Locale is a property of the memory, not of the login: generation is
- * locale-aware and generation is per-profile, so this writes the acting
- * profile.
+ * locale-aware and generation is per-profile, so agent sessions write only their own profile. The human Language setting
+ * also synchronizes owned agent profiles and requests a read for each changed one.
  */
 export async function preferencesHandler(c: Context<AuthEnv>): Promise<Response> {
   let rawBody: unknown;
@@ -157,8 +169,7 @@ export async function preferencesHandler(c: Context<AuthEnv>): Promise<Response>
   const written = await db.transaction(tx => saveProfileWithLocaleRefresh(tx, session.profile.id, {
     preferredLocale: parsed.data.preferredLocale, updatedAt: new Date(),
   }));
-  if (written.refresh) await wakeCommittedBackgroundJobs([{ id: written.refresh.jobId,
-    profileId: session.profile.id, requestVersion: String(written.refresh.requestVersion) }]);
+  if (written.wakes.length) await wakeCommittedBackgroundJobs(written.wakes);
 
   // RETURNING cannot reach across the join, so the answer is read back
   // through the one query that assembles the whole identity.
@@ -292,8 +303,7 @@ export async function profileHandler(c: Context<AuthEnv>): Promise<Response> {
       return { account: updatedAccount, ...saved };
     });
 
-    if (written.refresh) await wakeCommittedBackgroundJobs([{ id: written.refresh.jobId,
-      profileId: current.profile.id, requestVersion: String(written.refresh.requestVersion) }]);
+    if (written.wakes.length) await wakeCommittedBackgroundJobs(written.wakes);
     account = written.account ?? account;
     /* the update wrote this session's own profile, which has an account by
        the CHECK constraint; the narrow restates that for the types */

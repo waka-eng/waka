@@ -125,7 +125,7 @@ it('offers an explicit re-read when stale support is hidden and automatic readin
   world=await mountWorld(facts);
   await act(async()=>reads.requests[0]!.resolve({...board(),entries:[],supportChanged:true}));await world.step(2);
   expect(world.container.textContent).toContain('This reading needs another look.');
-  expect(world.container.textContent).toContain('The next reading is scheduled');
+  expect(world.container.textContent).toContain('WAKA can start the next reading after');
   expect(refreshTopOfMind).not.toHaveBeenCalled();
   const reread=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].find(row=>row.textContent?.trim()==='Read again');
   expect(reread).toBeDefined();

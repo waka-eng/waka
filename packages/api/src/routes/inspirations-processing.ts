@@ -1,3 +1,4 @@
+import { loadProfileProcessing } from '../lib/profile-processing.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../lib/db.js';
@@ -8,6 +9,16 @@ import { resolveTargetProfile } from './inspirations-tenancy.js';
 import { profileQuerySchema, uuidSchema } from './inspirations-validation.js';
 
 export function registerProcessingRoutes(routes: Hono<AuthEnv>, getDatabase: typeof getDb): void {
+  routes.get('/processing', async c => {
+    c.header('Cache-Control', 'private, no-store');
+    const query = profileQuerySchema.safeParse(c.req.query());
+    if (!query.success) return c.json({ error: 'Invalid processing query' }, 400);
+    const db = getDatabase();
+    const target = await resolveTargetProfile(db, c.get('session'), query.data.profile, 'read');
+    if (!target.ok) return c.json(target.body, target.status);
+    return c.json(await loadProfileProcessing(db, target.profileId));
+  });
+
   routes.post('/:id/processing/retry', async (c) => {
     c.header('Cache-Control', 'private, no-store');
     const id = uuidSchema.safeParse(c.req.param('id'));

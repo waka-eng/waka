@@ -1,3 +1,4 @@
+import { measureJourney } from '../journey-performance';
 /**
  * Client for `/api/inspirations` — mirrors `packages/api/src/routes/inspirations.ts`.
  *
@@ -196,13 +197,13 @@ export async function createInspiration(
   const intent = { ...options };
   const payload = JSON.parse(JSON.stringify(input)) as CreateInspirationRequest;
   const path = apiPath(`/inspirations${intent.profile ? `?profile=${encodeURIComponent(intent.profile)}` : ''}`);
-  const body = await reconcileInspirationSave(() => postJson<{ inspiration: ApiInspiration; processing?: ApiInspirationProcessingReceipt; saveRequest?: ApiInspirationSaveReceipt }>(
+  const body = await measureJourney('inspiration_saved', () => reconcileInspirationSave(() => postJson<{ inspiration: ApiInspiration; processing?: ApiInspirationProcessingReceipt; saveRequest?: ApiInspirationSaveReceipt }>(
     path,
     payload,
     "Failed to save this capture",
     intent.signal,
     intent.requestId,
-  ), intent, 'inspiration');
+  ), intent, 'inspiration'));
   return { ...body.inspiration, ...(body.processing ? { processing: body.processing } : {}), ...(body.saveRequest ? { saveRequest: body.saveRequest } : {}) };
 }
 

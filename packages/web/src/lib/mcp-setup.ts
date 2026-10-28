@@ -2,7 +2,7 @@ import { formatMessage, type SupportedLocale } from './locales';
 import distribution from './mcp-distribution.json';
 
 export type McpClient = 'claude' | 'codex';
-export type McpScope = 'user' | 'launch';
+export type McpScope = 'user' | 'launch' | 'project';
 export type McpAuthMethod = 'browser' | 'key';
 export const mcpClientName = (client: McpClient) => client === 'codex' ? 'Codex' : 'Claude Code';
 const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
@@ -22,7 +22,7 @@ export function mcpSetupPrompt(options: SetupTarget & { locale: SupportedLocale;
     packageUrl, packageVersion: distribution.version, minimumNodeVersion: 20,
     apiUrl, profileId: profile.id, profileName: profile.name, serverName: `waka-${profile.id}`,
     client: mcpClientName(client),
-    scope: client === 'codex' && scope === 'launch' ? 'one Codex CLI launch only' : 'user configuration across sessions',
+    scope: scope === 'project' ? 'current project only' : client === 'codex' && scope === 'launch' ? 'one Codex CLI launch only' : 'user configuration across sessions',
     persistConfiguration: client !== 'codex' || scope !== 'launch',
     deviceLabel: `${mcpClientName(client)} · ${profile.name}`,
     server: { command: 'npx', args: [...args, 'waka-mcp'] },
@@ -36,7 +36,7 @@ export function mcpSetupPrompt(options: SetupTarget & { locale: SupportedLocale;
 }
 
 /** Display-only shell commands. Credentials and the server name stay profile-bound. */
-export function mcpSetupCommands(options: SetupTarget & { installed: boolean }): string[] {
+export function mcpSetupCommands(options: SetupTarget & { installed: boolean; scope: Exclude<McpScope, 'project'> }): string[] {
   const { profile, apiUrl, installed, client, scope, packageOrigin = apiUrl } = options;
   const name = `waka-${profile.id}`;
   const profileHome = `"$HOME/.waka/profiles/${encodeURIComponent(profile.id)}"`;

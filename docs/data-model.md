@@ -51,6 +51,10 @@ An unfinished re-recording keeps the existing clip and a separate owned
 second uploaded attachment. Choosing a clip atomically replaces or discards
 the candidate; only the chosen recording enters the immutable save manifest.
 
+The human profile's language setting also updates its owned agent profiles and
+queues a separate reading refresh for each changed profile. Agent credentials
+can change only their own language. Generation still preserves locked human wording.
+
 ### Archive summary snapshots
 
 Personal archive summary snapshots are an in-memory read optimization, not a

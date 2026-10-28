@@ -159,11 +159,12 @@ export interface MenuProps {
    * the cog are the navigation either way.
    */
   left?: ReactNode;
+  actions?: ReactNode;
   /** Hidden while a panel owns the screen, so two sheets never stack. */
   hidden?: boolean;
 }
 
-export function Menu({ locale, items, current, label, left, account, settings, onSignOut, hidden, agentSetup }: MenuProps): JSX.Element | null {
+export function Menu({ locale, items, current, label, left, actions, account, settings, onSignOut, hidden, agentSetup }: MenuProps): JSX.Element | null {
   /* THE SWITCHER'S OWN OPEN STATE IS GONE WITH THE SHEET IT OPENED. The
      three rungs are laid out rather than listed (see `.waka-rungs`), so there
      is nothing to expand, nothing to focus into, nothing to close on Escape
@@ -403,6 +404,7 @@ export function Menu({ locale, items, current, label, left, account, settings, o
         ) : null}
 
         <span className="waka-corner-place">
+        {actions}
         {/* ═══ AN "i" BESIDE THE COG ════════════════════════════════════
             Founder: "lets add a button next to the settinsg of info icon
             and in there put all things to explain how waka works."

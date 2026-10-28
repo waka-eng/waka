@@ -19,7 +19,7 @@
  */
 
 import { recordConsultation } from "../lib/consultations.js";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, getTableColumns } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
@@ -118,6 +118,7 @@ export interface TopOfMindEntryView {
 }
 
 export interface TopOfMindView {
+  contentUpdatedAt?: string;
   id: string;
   version: number;
   reason: TopOfMindRevisionReason;
@@ -234,7 +235,12 @@ async function readProfileArtifact(db: WakaDb, input: { profileId: string; artif
   const revision = await readGenerationRevision(tx, { profileId: input.profileId });
   if (!revision) return null;
   const [artifact] = await tx
-    .select()
+    .select({ ...getTableColumns(topOfMinds), contentUpdatedAt: sql<string>`greatest(
+      coalesce((SELECT max(v.created_at) FROM top_of_minds v WHERE v.profile_id=top_of_minds.profile_id
+        AND v.created_at<=top_of_minds.created_at AND v.reason::text<>'no_change'), top_of_minds.created_at),
+      (SELECT max(greatest(e.locked_at, CASE WHEN e.updated_at>e.created_at THEN e.updated_at END))
+        FROM top_of_mind_entries e JOIN top_of_minds v ON v.id=e.top_of_mind_id
+        WHERE v.profile_id=top_of_minds.profile_id AND v.created_at<=top_of_minds.created_at))::text` })
     .from(topOfMinds)
     .where(and(eq(topOfMinds.profileId, input.profileId), input.artifactId
       ? eq(topOfMinds.id, input.artifactId) : eq(topOfMinds.status, "live")))
@@ -246,6 +252,7 @@ async function readProfileArtifact(db: WakaDb, input: { profileId: string; artif
     version: artifact.version,
     reason: artifact.reason,
     createdAt: artifact.createdAt.toISOString(),
+    contentUpdatedAt: new Date(artifact.contentUpdatedAt ?? artifact.createdAt).toISOString(),
     profileId: input.profileId,
     generationRevision: revision.revision.toString(),
     ...await loadEntries(tx, input.profileId, artifact.id, input.includeDismissed === true),

@@ -137,7 +137,7 @@ describe("GET /api/profiles", () => {
 
 describe("POST /api/profiles", () => {
   it("creates an agent profile for the account owner", async () => {
-    mockState.db = makeDb({ selects: [[{ count: 0 }]], returning: [[profileRow()]] });
+    mockState.db = makeDb({ selects: [[{ preferredLocale: "ko-KR" }], [{ count: 0 }]], returning: [[profileRow()]] });
 
     const res = await jsonRequest("/api/profiles", "POST", { name: "Scout" });
 
@@ -148,6 +148,7 @@ describe("POST /api/profiles", () => {
     };
     expect(created.type).toBe("agent");
     expect(created.accountId).toBe("account-1");
+    expect(mockState.db.insertValues.mock.calls[0][0].preferredLocale).toBe("ko-KR");
   });
 
   /**
@@ -164,7 +165,7 @@ describe("POST /api/profiles", () => {
   });
 
   it("refuses once the account is at its agent-profile cap", async () => {
-    mockState.db = makeDb({ selects: [[{ count: 8 }]] });
+    mockState.db = makeDb({ selects: [[{ preferredLocale: "en-US" }], [{ count: 8 }]] });
 
     const res = await jsonRequest("/api/profiles", "POST", { name: "Nine" });
 

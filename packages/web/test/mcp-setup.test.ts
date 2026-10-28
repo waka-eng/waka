@@ -77,3 +77,12 @@ it('downloads from the public web origin when the API is hosted separately', () 
   expect(config.env.WAKA_API_URL).toBe(apiUrl);
   expect(config.args.join(' ')).not.toContain('/absolute/path');
 });
+
+it('makes API-key installation project-scoped for both supported clients', () => {
+  for(const client of ['codex','claude'] as const){
+    const prompt=mcpSetupPrompt({...options,client,scope:'project',locale:'en-US',authMethod:'key'});
+    expect(prompt).toContain('current project only');
+    expect(prompt).not.toContain('user configuration across sessions');
+    expect(mcpKeyConfig(client,profile.id,options.apiUrl)).toContain('YOUR_API_KEY');
+  }
+});

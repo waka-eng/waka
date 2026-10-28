@@ -164,3 +164,19 @@ describe('source processing status and recovery', () => {
     }
   });
 });
+
+it('discovers current processing across tabs, counts multiple saves and never crosses a profile', async () => {
+  const f = await fixture(), foreign = await fixture();
+  const [second] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${f.profileId},'SECOND_PRIVATE_SOURCE') RETURNING id`;
+  const request = await enqueueDeriveSignals(f.profileId, String(second.id), 'created');
+  await t.sql`UPDATE background_jobs SET status='failed', last_error='PRIVATE_PROVIDER' WHERE id=${request.jobId}`;
+  const response = await f.app.request('/api/inspirations/processing');
+  expect(response.status).toBe(200);
+  const body = await response.json() as { items: Array<{ inspirationId: string; phase: string }> };
+  expect(body).toMatchObject({ profileId: f.profileId, total: 2, failed: 1 });
+  expect(body.items[0]).toMatchObject({ inspirationId: second.id, phase: 'failed' });
+  expect(JSON.stringify(body)).not.toMatch(/PRIVATE_SOURCE|PRIVATE_PROVIDER/);
+  expect((await foreign.app.request(`/api/inspirations/processing?profile=${f.profileId}`)).status).toBe(404);
+  await t.sql`DELETE FROM inspirations WHERE id=${second.id}`;
+  expect(await (await f.app.request('/api/inspirations/processing')).json()).toMatchObject({ total: 1, failed: 0 });
+});

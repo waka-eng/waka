@@ -114,10 +114,10 @@ export function createInspirationsRoutes(
   /* Before recall: `GET /deleted` must not reach `GET /:id`. */
   const now = deps.now ?? (() => new Date());
   registerDeletedRoutes(routes, getDatabase, now);
+  registerProcessingRoutes(routes, getDatabase);
   registerRecallRoutes(routes, getDatabase);
   registerEditingRoutes(routes, getDatabase, now);
   registerReflectionRoutes(routes, getDatabase);
-  registerProcessingRoutes(routes, getDatabase);
   registerSaveRequestRoutes(routes, getDatabase);
 
   return routes;

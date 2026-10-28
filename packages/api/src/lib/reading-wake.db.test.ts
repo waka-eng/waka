@@ -1,0 +1,24 @@
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
+const state=vi.hoisted(()=>({db:null as unknown,send:vi.fn()}));
+vi.mock('./db.js',()=>({getDb:()=>state.db}));
+vi.mock('@aws-sdk/client-scheduler',()=>({SchedulerClient:class{send=state.send},CreateScheduleCommand:class{constructor(readonly input:unknown){}}}));
+import {scheduleDeferredReadings,recoverDeferredReadingWakes} from './reading-wake.js';
+let t:TestDatabase;
+beforeAll(async()=>{t=await createTestDatabase();state.db=t.db;vi.stubEnv('WAKA_READING_WAKE_ROLE','role');vi.stubEnv('WAKA_READING_WAKE_GROUP','group');});
+afterAll(async()=>{vi.unstubAllEnvs();await t.cleanup();});
+it('recovers an interrupted AWS request from durable state, scopes hints, and schedules changed deadlines again',async()=>{
+ const [a]=await t.sql`INSERT INTO accounts(email) VALUES('wake@example.test') RETURNING id`;
+ const [p]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${a.id},'human','Reader') RETURNING id`;
+ const [j]=await t.sql`INSERT INTO background_jobs(profile_id,type,payload,run_after) VALUES(${p.id},'refresh_top_of_mind','{"reason":"signals_changed"}',now()+interval '2 hours') RETURNING id`;
+ const wake={id:j.id as string,profileId:p.id as string,requestVersion:'1'};
+ await scheduleDeferredReadings([{...wake,profileId:'00000000-0000-4000-8000-000000000001'}],'worker');expect(state.send).not.toHaveBeenCalled();
+ state.send.mockRejectedValueOnce(new Error('interrupted'));
+ await expect(scheduleDeferredReadings([wake],'worker')).rejects.toThrow('interrupted');
+ state.send.mockResolvedValue({});await recoverDeferredReadingWakes('worker');expect(state.send).toHaveBeenCalledTimes(2);
+ await recoverDeferredReadingWakes('worker');expect(state.send).toHaveBeenCalledTimes(2);
+ await t.sql`UPDATE background_jobs SET run_after=run_after+interval '1 day' WHERE id=${j.id}`;
+ await recoverDeferredReadingWakes('worker');expect(state.send).toHaveBeenCalledTimes(3);
+ await t.sql`UPDATE background_jobs SET status='succeeded',completed_version=request_version WHERE id=${j.id}`;
+ await recoverDeferredReadingWakes('worker');expect(state.send).toHaveBeenCalledTimes(3);
+});

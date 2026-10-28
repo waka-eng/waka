@@ -312,6 +312,13 @@ export default $config({
      * run daily instead of every minute — and a queue nobody is polling is a
      * database that can go to sleep.
      */
+    const readingWakeGroup = new aws.scheduler.ScheduleGroup("ReadingWakeGroup", {});
+    const readingWakeRole = new aws.iam.Role("ReadingWakeRole", {
+      assumeRolePolicy: readingWakeGroup.arn.apply(arn => JSON.stringify({ Version: "2012-10-17", Statement: [{
+        Effect: "Allow", Principal: { Service: "scheduler.amazonaws.com" }, Action: "sts:AssumeRole",
+        Condition: { ArnEquals: { "aws:SourceArn": arn } },
+      }] })),
+    });
     const backgroundWorker = new sst.aws.Function("BackgroundWorker", {
       handler: "packages/api/src/background-worker.handler",
       // Enqueue wakes may return a retry signal for a still-pending transient
@@ -323,7 +330,20 @@ export default $config({
       environment: {
         ...runtimeEnvironment,
         WAKA_BACKGROUND_JOB_CRON_LIMIT: "25",
+        WAKA_READING_WAKE_GROUP: readingWakeGroup.name,
+        WAKA_READING_WAKE_ROLE: readingWakeRole.arn,
       },
+      permissions: [
+        { actions: ["scheduler:CreateSchedule"], resources: [readingWakeGroup.arn.apply(arn => arn.replace(":schedule-group/", ":schedule/") + "/waka-reading-*")] },
+        { actions: ["iam:PassRole"], resources: [readingWakeRole.arn] },
+      ],
+    });
+
+    new aws.iam.RolePolicy("ReadingWakeInvoke", {
+      role: readingWakeRole.id,
+      policy: backgroundWorker.arn.apply(arn => JSON.stringify({ Version: "2012-10-17", Statement: [{
+        Effect: "Allow", Action: "lambda:InvokeFunction", Resource: arn,
+      }] })),
     });
 
     const api = new sst.aws.Function("Api", {

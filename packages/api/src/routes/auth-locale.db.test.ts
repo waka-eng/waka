@@ -4,7 +4,7 @@ import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.
 import type { AuthEnv } from '../lib/middleware.js';
 
 const state = vi.hoisted(() => ({ db: null as unknown }));
-const wake = vi.hoisted(() => vi.fn(async () => undefined));
+const wake = vi.hoisted(() => vi.fn(async (_wakes: unknown[]) => undefined));
 vi.mock('../lib/db.js', () => ({ getDb: () => state.db }));
 vi.mock('../lib/queue.js', async original => ({
   ...await original<typeof import('../lib/queue.js')>(), wakeCommittedBackgroundJobs: wake,
@@ -60,4 +60,19 @@ it.each(['/preferences', '/profile'])('%s reads the locked profile instead of a 
   expect((await save(path)).status).toBe(200);
   expect(await t.sql`SELECT id FROM background_jobs WHERE type='refresh_top_of_mind'`).toHaveLength(1);
   expect(wake).toHaveBeenCalledOnce();
+});
+
+it.each(['/preferences', '/profile'])('%s synchronizes owned agents without touching another account', async path => {
+  const [agent] = await t.sql`INSERT INTO profiles(account_id,type,name,preferred_locale) VALUES (${accountId},'agent','Own agent','en-US') RETURNING id`;
+  const [other] = await t.sql`INSERT INTO accounts(email) VALUES ('other@example.test') RETURNING id`;
+  const [foreign] = await t.sql`INSERT INTO profiles(account_id,type,name,preferred_locale) VALUES (${other.id},'agent','Other agent','en-US') RETURNING id`;
+  expect((await save(path)).status).toBe(200);
+  expect((await t.sql`SELECT preferred_locale FROM profiles WHERE id=${agent.id}`)[0]!.preferred_locale).toBe('ko-KR');
+  expect((await t.sql`SELECT preferred_locale FROM profiles WHERE id=${foreign.id}`)[0]!.preferred_locale).toBe('en-US');
+  expect((await t.sql`SELECT profile_id FROM background_jobs ORDER BY profile_id`).map(r => r.profile_id).sort()).toEqual([profileId, agent.id].sort());
+  expect(wake.mock.calls[0]?.[0]).toHaveLength(2);
+  // An unchanged human language also repairs an older agent's drift.
+  await t.sql`UPDATE profiles SET preferred_locale='en-US' WHERE id=${agent.id}`;
+  expect((await save(path)).status).toBe(200);
+  expect((await t.sql`SELECT preferred_locale FROM profiles WHERE id=${agent.id}`)[0]!.preferred_locale).toBe('ko-KR');
 });

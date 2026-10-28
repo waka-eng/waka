@@ -4,6 +4,39 @@ Run a production web build against a fresh disposable Postgres schema and
 synthetic accounts. Provider network and background autodrain are disabled.
 No real-account data, credentials or model inputs belong in output receipts.
 
+### Journey timing — 2026-10-28
+
+The shared UI records local User Timing measures for `waka:home_ready`,
+`waka:inspiration_saved`, `waka:chat_acknowledged` and `waka:chat_reply`.
+Set `VITE_PERFORMANCE_DEBUG=1` to print bounded diagnostic measurements in
+the browser console. These emit only a metric name, duration and success flag;
+there is no analytics upload. Home runs from component mount through the first
+ready animation frame; it excludes authentication and script download. Save
+and chat acknowledgment end at server confirmation. Reply timing ends when a
+new assistant message is observed, including after returning to the chat.
+
+A local smoke measurement used a 390 × 844 viewport, warm Vite assets,
+2,000 synthetic inspirations and 150 ms of added latency per API request:
+Home median 205.9 ms, range 203.3–210.7 ms over seven reloads. One subsequent
+inspiration save took 169.2 ms; one chat acknowledgment took 163.7 ms. The save
+increased the fixture to 2,001 inspirations. These are diagnostic samples, not
+a production p95 gate or a before/after speedup claim. Background generation
+was disabled, so live model reply latency was not measured.
+
+The model-free responsiveness benchmark (seven samples) measured Review next
+at 7.08 ms median / 9.546 ms p95 and chat polling at 1.16 / 2.315 ms with no
+SQL delay. Adding 50 ms per SQL statement produced 1040.35 / 1040.988 ms and
+207.99 / 209.545 ms respectively. Review used 20 statements; polling used four.
+This keeps database round trips visible separately from provider latency.
+Receipts: `work/improvements-20261028/*timings.json` and
+`work/performance/responsiveness-review-improvements.json` (local artifacts).
+
+Reading evidence is lazy-loaded. Shared processing status reads only the
+active profile, stops polling empty/failed queues, pauses in hidden tabs, and
+waits until a scheduled deadline when all remaining work is deferred.
+
+### Run the fixture
+
 ```bash
 DB_CONNECTION_URL=postgresql://agi@127.0.0.1:5432/waka_capture_a03_test pnpm perf:local
 ```

@@ -112,11 +112,13 @@ function makeDb(input: {
     chain.from = vi.fn(() => chain);
     chain.innerJoin = vi.fn(() => chain);
     chain.where = vi.fn(() => {
-      const isLocaleLock = fields && Object.keys(fields).length === 1 && fields.preferredLocale;
-      const rows = isLocaleLock ? [{ preferredLocale: PROFILE_ROW.preferredLocale }] : selects.shift() ?? [];
+      const isLocaleLock = fields?.preferredLocale && fields?.accountId && fields?.type;
+      const isAgents = fields?.preferredLocale && fields?.id;
+      const rows = isLocaleLock ? [{ preferredLocale: PROFILE_ROW.preferredLocale, accountId: PROFILE_ROW.accountId, type: PROFILE_ROW.type }] : isAgents ? [] : selects.shift() ?? [];
       const result: any = Promise.resolve(rows);
       result.limit = vi.fn(async () => rows);
       result.for = vi.fn(async () => rows);
+      result.orderBy = vi.fn(() => result);
       return result;
     });
     return chain;
