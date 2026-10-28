@@ -63,6 +63,10 @@ function rememberingProvider(seen: TopOfMindSynthesisInput[]): ModelProvider {
     name: "remembering",
     reviewTopOfMind: approveReadingReview, async synthesizeTopOfMind(input: TopOfMindSynthesisInput) {
       seen.push(input);
+      // A tension must cite both sides of a live dispute. Ranking can put
+      // either a disputed or an unrelated signal first; the fixture must
+      // produce a publishable response in either case.
+      const lead = input.signals.find(signal => signal.contestedWithIds?.length) ?? input.signals[0]!;
       return {
         noChange: false,
         entries: [
@@ -71,7 +75,7 @@ function rememberingProvider(seen: TopOfMindSynthesisInput[]): ModelProvider {
             body: "two things pull here",
             belief: null,
             prompt: null,
-            citedSignalIds: [input.signals[0]!.id],
+            citedSignalIds: [lead.id, ...(lead.contestedWithIds ?? [])],
           },
         ],
       };
@@ -151,6 +155,12 @@ describe("contested pairs reach the synthesis", () => {
     expect(byId.get(a)?.contestedWithIds).toEqual([b]);
     expect(byId.get(b)?.contestedWithIds).toEqual([a]);
     expect(byId.get(c)?.contestedWithIds).toBeUndefined();
+    const published = await t.sql`
+      SELECT c.signal_id FROM top_of_mind_entry_signals c
+      JOIN top_of_mind_entries e ON e.id=c.entry_id
+      JOIN top_of_minds m ON m.id=e.top_of_mind_id
+      WHERE m.profile_id=${profileId} AND m.status='live' AND e.type='tension'`;
+    expect(published.map(row => row.signal_id).sort()).toEqual([a,b].sort());
   });
 
   it("carries no mark once the owner has arbitrated", async () => {
