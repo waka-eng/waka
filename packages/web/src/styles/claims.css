@@ -7105,6 +7105,5 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-reading-sources { margin: var(--sp-8) 0; padding-inline-start: var(--sp-20); }
 .waka-reading-sources button { text-align: start; overflow-wrap: anywhere; }
 
-  .waka-processing-body { font-size: var(--t-ui); line-height: 1.5; }
 
 }

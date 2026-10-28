@@ -1943,8 +1943,6 @@ button.jar-tile-face,
 .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(clamp(48px,10.6vh,72px) + env(safe-area-inset-top)); padding-top:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; pointer-events:auto; touch-action:pan-y; }
 .jar-hq-inner--compact:focus-visible { outline:1px solid var(--w-muted); outline-offset:-2px; }
 @media (max-width:560px) { .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(118px + env(safe-area-inset-top)); } }
-.jar-source-details { font-size:var(--t-ui); }
-.jar-source-details summary { min-height:var(--sp-44); display:flex; align-items:center; cursor:pointer; color:var(--w-muted); }
 .jar-panel .jar-panel-foot button,.jar-panel .jar-panel-askrow button,.jar-reflection-flow button { min-height:var(--sp-44); }
 .jar-personal-shortcuts { position:absolute; z-index:6; inset:auto var(--sp-12) calc(var(--sp-12) + env(safe-area-inset-bottom)); display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:end; gap:var(--sp-12); pointer-events:none; }
 .jar-personal-shortcuts--above-count { bottom:calc(64px + env(safe-area-inset-bottom)); }

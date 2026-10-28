@@ -89,7 +89,6 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConversationsOverlay } from "../src/components/ConversationsOverlay";
-import { InspirationProcessingNotice } from "../src/components/InspirationProcessingNotice";
 import { PrincipleEvidence } from "../src/components/PrincipleEvidence";
 import { PrinciplesOverlay } from "../src/components/PrinciplesOverlay";
 import { ReviewEvidence } from "../src/components/ReviewEvidence";
@@ -316,21 +315,4 @@ describe("every surface that prints a date says it in the world's words", () => 
     }
   });
 
-  it("names a scheduled reading's moment with the module's day and clock", async () => {
-    for (const locale of ["en-US", "ko-KR"] as const) {
-      await act(async () => root.render(
-        <InspirationProcessingNotice locale={locale} onView={vi.fn()}
-          processing={{
-            active: true, phase: "waiting", busy: false,
-            status: { phase: "waiting", stage: "reading", runAfter: ISO },
-            check: vi.fn(), retry: vi.fn(), clear: vi.fn(),
-          } as never} />,
-      ));
-      /* `Oct 11 at 7:05 AM` / `10월 11일 오전 7:05` — the day from `dateWords`
-         and the minute from `timeOf`, so this notice cannot disagree with the
-         clock an attachment two inches away is printing. */
-      expect(said()).toContain(momentTag(HELD, HELD, locale));
-      expect(said()).toContain(timeOf(HELD, locale));
-    }
-  });
 });

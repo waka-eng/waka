@@ -73,6 +73,30 @@ usage/spend visibility and safeguards are exercised. Existing performance gates
 and ownership/material-revision invariants remain satisfied. Human or cloud
 access requirements remain open until authoritative verification is available.
 
+### Production gate: owner alerting (added 2026-10-28)
+
+Background inspiration processing is owned by the operator; its progress,
+scheduled waits and recovery controls must not be exposed as a user task.
+The owner deferred notification setup to production readiness. No recipient
+or delivery channel is configured or verified yet. This gate remains open:
+
+- [ ] Configure an owner notification destination and confirm its subscription.
+- [ ] Emit and alert on terminal job failures and worker wake/scheduling failures
+  when they occur. The existing recovery metrics require an explicit inspection;
+  they do not cover ordinary failed jobs or guarantee timely detection.
+- [ ] Detect overdue runnable work, exhausted leases and missed scheduled work
+  without restoring continuous idle database polling. Intended cadence and
+  account-budget holds must not trigger incidents.
+- [ ] Cover API/server failures and browser render/unhandled errors. Browser
+  errors currently reach the local console, not a central reporting service.
+- [ ] Include stage, operation, safe failure code and correlation identifiers;
+  exclude inspiration/chat text, provider bodies, credentials and tokens.
+- [ ] Document and exercise owner inspection and bounded recovery using safe
+  job metadata, without requiring users to retry or exposing their memories.
+- [ ] Test a real failure through detection, owner delivery and recovery.
+  Deduplicate repeated failures and avoid paging on expected async retry signals.
+  Console-only alarm state exercises do not satisfy this delivery gate.
+
 ## Verification and budget
 
 Use targeted checks from AGENTS.md and explicit disposable loopback databases

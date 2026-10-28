@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { ProfileProcessing } from './ProfileProcessing';
 import { t, type SupportedLocale } from '../lib/locales';
 
-export function HomeActions({ locale, profileId, revision, onPrinciples, onReview, onOpen }: {
-  locale: SupportedLocale; profileId?: string; revision: number; onPrinciples: () => void;
-  onReview?: () => void; onOpen: (id: string) => void;
+export function HomeActions({ locale, onPrinciples, onReview }: {
+  locale: SupportedLocale; onPrinciples: () => void; onReview?: () => void;
 }) {
   const [open, setOpen] = useState(false), root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -22,7 +20,6 @@ export function HomeActions({ locale, profileId, revision, onPrinciples, onRevie
     <div className="waka-home-actions-list" hidden={!open}>
       <button onClick={() => { setOpen(false); onPrinciples(); }}>{t(locale, 'worldViewPrinciples')}</button>
       {onReview ? <button onClick={() => { setOpen(false); onReview(); }}>{t(locale, 'worldActionsReview')}</button> : <span>{t(locale, 'worldActionsNoReview')}</span>}
-      {profileId ? <ProfileProcessing key={profileId} profileId={profileId} locale={locale} revision={revision} onOpen={id => { setOpen(false); onOpen(id); }} /> : null}
     </div>
   </div>;
 }

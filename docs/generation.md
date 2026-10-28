@@ -524,12 +524,15 @@ are distinct internal observations. The response carries no source/provider
 text and does not enqueue work. `POST /:id/processing/retry` rechecks those
 facts under locks and resumes only the missing/failed enrichment, derivation or
 read; it neither resaves source material nor upgrades automatic work to manual.
-Read-only access cannot recover work. The client preserves the exact save
-reference, checks rather than repeats an ambiguous recovery POST, and offers
-“See reading” only after confirmed completion. Opening it rechecks current
-processing and fetches that artifact or a newer live reading; ready status
-alone never replaces a headline. Saved-word idempotency is a separate required
-contract, not something these processing receipts claim to provide.
+Read-only access cannot recover work. Inspiration processing progress and
+recovery controls are not shown in the normal UI; failed background work is
+operator-owned. The client preserves the exact save reference and boundedly
+observes status. Confirmed completion rechecks current processing and fetches
+that artifact or a newer live reading before quietly updating an idle Home
+screen. An open page or edited capture defers adoption; status alone never
+replaces a headline. Actual save/load failures remain visible. Saved-word
+idempotency is a separate required contract, not something these processing
+receipts claim to provide.
 
 Refreshes are debounced to one pending pass per profile, with the same
 trailing-edge `rerun_requested` semantics as derivation.

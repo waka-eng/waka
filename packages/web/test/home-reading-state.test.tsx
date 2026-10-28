@@ -117,6 +117,36 @@ it('shows loading again on a Home remount instead of flashing an empty or unvali
   world=await mountWorld(facts);expect(reads.requests).toHaveLength(2);expectLoading();
   await act(async()=>reads.requests[1]!.resolve(board()));await world.step(2);expect(poster()).not.toBeNull();
 });
+it('silently adopts a confirmed completed reading on idle Home without buying more generation',async()=>{
+  sessionStorage.setItem(profileStorageKey({accountId:'owner',profileId:VIEWER_ID},'sourceProcessing')!,JSON.stringify({profileId:VIEWER_ID,inspirationId:'source-one'}));
+  vi.mocked(fetchInspirationProcessing).mockResolvedValue({profileId:VIEWER_ID,inspirationId:'source-one',receipt:null,
+    currentMaterialRevision:'1',requestedMaterialRevision:'1',latestDerivedRevision:'1',latestCompletedRevision:'1',superseded:false,
+    phase:'ready',stage:null,runAfter:null,result:{kind:'top_of_mind',topOfMindId:'reading-next',version:2,outcome:'changed'},unavailableAttachments:0,canRetry:false});
+  world=await mountWorld(facts);
+  await act(async()=>reads.requests[0]!.resolve(board()));await world.step(4);
+  expect(reads.requests).toHaveLength(2);
+  await act(async()=>reads.requests[1]!.resolve({...board('The completed reading arrives quietly.'),id:'reading-next',version:2}));await world.step(4);
+  expect(poster()?.textContent).toContain('The completed reading arrives quietly.');
+  expect(world.container.querySelector('.jar-source-status')).toBeNull();
+  expect(sessionStorage.getItem(profileStorageKey({accountId:'owner',profileId:VIEWER_ID},'sourceProcessing')!)).toBeNull();
+  expect(refreshTopOfMind).not.toHaveBeenCalled();
+});
+it('retains a completed reading for later when a capture is edited during the final read',async()=>{
+  sessionStorage.setItem(profileStorageKey({accountId:'owner',profileId:VIEWER_ID},'sourceProcessing')!,JSON.stringify({profileId:VIEWER_ID,inspirationId:'source-one'}));
+  vi.mocked(fetchInspirationProcessing).mockResolvedValue({profileId:VIEWER_ID,inspirationId:'source-one',receipt:null,
+    currentMaterialRevision:'1',requestedMaterialRevision:'1',latestDerivedRevision:'1',latestCompletedRevision:'1',superseded:false,
+    phase:'ready',stage:null,runAfter:null,result:{kind:'top_of_mind',topOfMindId:'reading-next',version:2,outcome:'changed'},unavailableAttachments:0,canRetry:false});
+  world=await mountWorld(facts);
+  await act(async()=>reads.requests[0]!.resolve(board()));await world.step(4);
+  expect(reads.requests).toHaveLength(2);
+  await act(async()=>{const field=keepBox(world!.container);field.focus();Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(field,'An unfinished capture');field.dispatchEvent(new Event('input',{bubbles:true}));});
+  await act(async()=>reads.requests[1]!.resolve({...board('The completed reading must wait.'),id:'reading-next',version:2}));await world.step(4);
+  expect(poster()?.textContent).not.toContain('The completed reading must wait.');
+  expect(keepBox(world.container).value).toBe('An unfinished capture');
+  expect(sessionStorage.getItem(profileStorageKey({accountId:'owner',profileId:VIEWER_ID},'sourceProcessing')!)).not.toBeNull();
+  expect(world.container.querySelector('.jar-source-status')).toBeNull();
+  expect(refreshTopOfMind).not.toHaveBeenCalled();
+});
 it('offers an explicit re-read when stale support is hidden and automatic reading is scheduled',async()=>{
   sessionStorage.setItem(profileStorageKey({accountId:'owner',profileId:VIEWER_ID},'sourceProcessing')!,JSON.stringify({profileId:VIEWER_ID,inspirationId:'source-one'}));
   vi.mocked(fetchInspirationProcessing).mockResolvedValue({profileId:VIEWER_ID,inspirationId:'source-one',receipt:null,
@@ -125,19 +155,21 @@ it('offers an explicit re-read when stale support is hidden and automatic readin
   world=await mountWorld(facts);
   await act(async()=>reads.requests[0]!.resolve({...board(),entries:[],supportChanged:true}));await world.step(2);
   expect(world.container.textContent).toContain('This reading needs another look.');
-  expect(world.container.textContent).toContain('WAKA can start the next reading after');
+  expect(world.container.textContent).not.toContain('WAKA can start the next reading after');
+  expect(world.container.querySelector('.jar-source-status')).toBeNull();
   expect(refreshTopOfMind).not.toHaveBeenCalled();
   const reread=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].find(row=>row.textContent?.trim()==='Read again');
   expect(reread).toBeDefined();
   await act(async()=>reread!.click());expect(refreshTopOfMind).toHaveBeenCalledOnce();
 });
-it.each(['queued','processing','waiting'] as const)('keeps active %s derivation separate from manual reading recovery',async phase=>{
+it.each(['queued','processing','waiting','failed','unknown'] as const)('keeps %s background derivation out of the user UI',async phase=>{
   sessionStorage.setItem(profileStorageKey({accountId:'owner',profileId:VIEWER_ID},'sourceProcessing')!,JSON.stringify({profileId:VIEWER_ID,inspirationId:'source-one'}));
   vi.mocked(fetchInspirationProcessing).mockResolvedValue({profileId:VIEWER_ID,inspirationId:'source-one',receipt:null,
     currentMaterialRevision:'1',requestedMaterialRevision:'1',latestDerivedRevision:'0',latestCompletedRevision:'0',superseded:false,
     phase,stage:'derivation',runAfter:new Date(Date.now()+86400000).toISOString(),result:null,unavailableAttachments:0,canRetry:false});
   world=await mountWorld(facts);await act(async()=>reads.requests[0]!.resolve({...board(),entries:[],supportChanged:true}));await world.step(2);
   expect([...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].some(row=>row.textContent?.trim()==='Read again')).toBe(false);
+  expect(world.container.querySelector('.jar-source-status')).toBeNull();
   expect(refreshTopOfMind).not.toHaveBeenCalled();
 });
 /* The principles line and its Try again live in the sky, not on the board, so

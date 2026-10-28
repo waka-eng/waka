@@ -23,10 +23,6 @@ import {fetchProfiles,fetchPrinciples,updatePrinciple,updateInspiration,type Api
    can reach cheaply now: an agent's needs an agent roster and a bundle. */
 const FACTS = vi.hoisted(() => ({ inspirations: [{ id: 'loaded', text: 'Current inspiration', daysAgo: 1 }] }));
 const principleState=vi.hoisted(()=>({rows:[] as ApiPrinciple[]}));
-vi.mock('../src/lib/api/inspiration-processing',async original=>({...await original<typeof import('../src/lib/api/inspiration-processing')>(),
-  fetchProfileProcessing:vi.fn(async(profileId:string)=>({profileId,total:1,failed:0,items:[{
-    inspirationId:'loaded',createdAt:'2026-10-28T12:00:00Z',stage:'derivation',phase:'queued',runAfter:null,
-  }]}))}));
 vi.mock('../src/lib/api/principles',async original=>({...await original<typeof import('../src/lib/api/principles')>(),fetchPrincipleRead:vi.fn(async()=>({principles:principleState.rows,status:{phase:'ready',eligible:false}}))}));
 vi.mock('../src/lib/data', async (original) => ({ ...await original<typeof import('../src/lib/data')>(),
   ...dataMockFrom(FACTS), loadInspirations: vi.fn(dataMockFrom(FACTS).loadInspirations), loadInspiration: vi.fn() }));
@@ -1075,21 +1071,12 @@ it.each(['/?compose=1', '/?open=saves', '/?open=saves&note=loaded', '/?open=conv
   },
 );
 
-it('opens a processing source in the current note page with a working Close', async () => {
+it('keeps background inspiration processing out of Actions', async () => {
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
   await act(async()=>world.container.querySelector<HTMLButtonElement>('.waka-home-actions > button')!.click());
-  const progress=[...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-actions button')]
-    .find(button=>button.textContent?.startsWith('Saved inspiration progress'))!;
-  await act(async()=>progress.click());await settle();
-  const sheet=document.querySelector('[role="dialog"][aria-label="Saved inspiration progress"]')!;
-  const source=[...sheet.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Open inspiration')!;
-  await act(async()=>source.click());await settle();
-  const query=new URLSearchParams(location.search);
-  expect(query.get('note')).toBe('loaded');expect(query.get('inspiration')).toBeNull();
-  expect(world.container.querySelector('.jar-note-top')).not.toBeNull();
-  expect(world.container.querySelector('.jar-panel')).toBeNull();
-  await act(async()=>close()!.click());await settle();
-  expect(location.pathname+location.search).toBe('/');
+  expect(world.container.querySelector('.waka-home-actions')?.textContent).not.toContain('Saved inspiration progress');
+  expect(document.querySelector('[role="dialog"][aria-label="Saved inspiration progress"]')).toBeNull();
+  expect(world.container.querySelector('.jar-source-status')).toBeNull();
 });
 
 

@@ -67,7 +67,6 @@ import {
 } from "react";
 import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
-import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { createConversation } from "../lib/api/conversations";
 import { DialogSurface, leaveAsModal } from "../components/DialogSurface";
 import { PageBack } from "../components/PageBack";
@@ -1041,9 +1040,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   });
   const sourceProcessingActiveRef = useRef(sourceProcessing.active);
   sourceProcessingActiveRef.current = sourceProcessing.active;
-  // The comparison belongs to this verified snapshot, not every future read
-  // of the same artifact. Revalidation or a local edit withdraws the copy.
-  const [sourcePrevious, setSourcePrevious] = useState<{ body: string; reading: TopOfMind } | null>(null);
   const latestReadingRef = useRef<TopOfMind | null>(null);
   const readingMutationRef = useRef(0);
   const readingActionsPendingRef = useRef(0);
@@ -1064,7 +1060,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     return tom;
   }, [storageScope?.profileId]);
   const beginReadingMutation = useCallback(() => {
-    setSourcePrevious(null);
     readingMutationRef.current += 1;
     readingActionsPendingRef.current += 1;
     readingNeedsLatestRef.current = true;
@@ -7317,30 +7312,26 @@ const RETRY_READ_LIMIT_MS = 20_000;
     [],
   );
 
-  const viewSourceReading = () => void sourceProcessing.open(async (result, current) => {
-    const previous = latestReadingRef.current;
-    const [fetched, verifiedPrevious] = await Promise.all([
-      loadPersonalReading(),
-      previous?.id ? loadTopOfMindVersion(previous.id, storageScope?.profileId).catch(() => null) : Promise.resolve(null),
-    ]);
-    if (!current()) return;
-    const next = acceptsReadingSnapshot(latestReadingRef.current, fetched, storageScope?.profileId) ? fetched : latestReadingRef.current;
-    if (result.topOfMindId && (!next || next.version < result.version || (next.version === result.version && next.id !== result.topOfMindId))) {
-      throw new Error('The completed reading is not available yet');
-    }
-    const before = verifiedPrevious?.entries.find((entry) => entry.pinned) ?? verifiedPrevious?.entries[0];
-    const after = next?.entries.find((entry) => entry.pinned) ?? next?.entries[0];
-    if (!absorbBoard(next)) throw new Error('Reading changed while opening');
-    setSourcePrevious(before && after && before.body !== after.body ? { body: before.body, reading: next! } : null);
-    setReflectOpen(false); setSelectedId(null);
-    simApiRef.current?.goToWall(0); simApiRef.current?.toTop(); setPosterAsk(true);
-  });
+  // Background processing is operator-owned. Adopt its completed reading on
+  // an idle Home screen without showing a queue or moving an open page.
+  const backgroundReadingIdle = phase === 'ready' && readingLoadPhase === 'ready' && !offline &&
+    !readingRefresh.busy && atNow && !inField && !inSky && !reflectOpen && !editing.open && !mouthOpen && inspirationSave.phase === 'idle';
+  const backgroundReadingIdleRef = useRef(backgroundReadingIdle);
+  backgroundReadingIdleRef.current = backgroundReadingIdle;
+  useEffect(() => {
+    if (!backgroundReadingIdle || sourceProcessing.phase !== 'ready' || sourceProcessing.busy || isEditableTarget(document.activeElement)) return;
+    void sourceProcessing.open(async (result, current) => {
+      const fetched = await loadPersonalReading();
+      if (!current() || !backgroundReadingIdleRef.current || isEditableTarget(document.activeElement)) return false;
+      const next = acceptsReadingSnapshot(latestReadingRef.current, fetched, storageScope?.profileId) ? fetched : latestReadingRef.current;
+      if (result.topOfMindId && (!next || next.version < result.version || (next.version === result.version && next.id !== result.topOfMindId))) {
+        throw new Error('The completed reading is not available yet');
+      }
+      if (!absorbBoard(next)) throw new Error('Reading changed while opening');
+    });
+  }, [backgroundReadingIdle, sourceProcessing.phase, sourceProcessing.busy, sourceProcessing.open, loadPersonalReading, absorbBoard, storageScope?.profileId]);
   /* A FAILED READING USED TO BE SILENT HERE — see `use-reading-paused.ts`. */
   const readingPaused = useReadingPaused(phase === 'ready' && !offline);
-  const sourceNotice = !offline && !readingRefresh.busy && inspirationSave.phase === 'idle' ? <InspirationProcessingNotice
-    processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
-  const showHomeProcessing = Boolean(sourceProcessing.active && sourceProcessing.phase !== 'idle' && !offline && !readingRefresh.busy &&
-    inspirationSave.phase === 'idle' && atNow && !inField && !inSky && !reflectOpen && !editing.open);
 
   const appliedViewKey = useRef<string | null>(null), viewRequest = useRef(0);
   /** The address the world last finished applying (or was told it already shows). */
@@ -8095,7 +8086,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                           <span className="jar-poster-away"> {c.awayFrom}</span>
                         ) : null}
                       </h1>
-                    ) : here && w.kind === 'self' && showHomeProcessing && readingLoadPhase === 'ready' && !topOfMind?.supportChanged ? null
+                    )
                     /* THE EMPTY LINE IS SAID ONCE, BY THE CREATURE.
                        Founder, on this paragraph printed across the middle of
                        the screen with the speech bubble floating through the
@@ -8162,8 +8153,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
                           :c.formingAlt ?? say("worldFormingNothingAdopted")}
                       </p>
                     )}
-                    {here && w.kind === 'self' && showHomeProcessing ? <InspirationProcessingNotice quiet introducePrinciples={!c.text && principles.length === 0}
-                      processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null}
                     {here&&w.kind==='self'&&atNow&&readingLoadPhase==='ready'&&!inspirations?.length&&!fieldBeyond?<p className="jar-first-capture-hint">{say('worldFirstCaptureExample')}</p>:null}
                     {/* The dial's historical date stays attached to its read. */}
                     {c.asOf ? (
@@ -8373,9 +8362,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         ))}
                       </div>
                     ) : null}
-                    {here && w.kind === 'self' && posterAsk && !readingChecking && !readingCheckFailed && sourcePrevious && sourcePrevious.reading === topOfMind ? (
-                      <p className="jar-source-previous"><span>{say('worldSourcePrevious')}</span>{sourcePrevious.body}</p>
-                    ) : null}
                     {here && posterAsk ? (
                       posterChain.length > 0 || posterReviewSignalIds.length > 0 ? (
                         /* THE SAME ROOM THE SKY OPENS. These rows travelled
@@ -8488,17 +8474,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         progress keeps them mounted regardless: a control that
                         vanished mid-work would take its own progress report
                         with it. */}
-                    {/* Only while the band is open (`mouthOpen`): on the
-                        yielded band "Saved. WAKA will revisit this…" was
-                        rendered at height zero, unseen. The save is already
-                        confirmed where the eye is — the creature's own "I'm
-                        inspired!" in the bubble. */}
-                    {here && w.kind === 'self' && mouthOpen && !showHomeProcessing && !reflectOpen && !editing.open ? sourceNotice : null}
                     {/* NOT `besidePrincipleRead`: PrincipleRead's failure line
                         and its Try again live in the sky, not on this board,
                         so a principles failure must not hide the only Retry
                         a person on the board can see. */}
-                    {here && w.kind === "self" && !offline && !readingMessage && !showHomeProcessing ? (
+                    {here && w.kind === "self" && !offline && !readingMessage ? (
                       <ReadingPausedNotice state={readingPaused} locale={locale} canRetry={auth?.profile?.type !== 'agent'} />
                     ) : null}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
@@ -11595,9 +11575,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
       ) : null}
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         actions={!viewNavigation.view?.open && !viewNavigation.view?.conversationId && !mouthOpen ? <HomeActions key={memoryScope?.profileId ?? 'preview'} locale={locale}
-          profileId={!offline ? memoryScope?.profileId : undefined} revision={sourceListMutationRef.current}
-          onPrinciples={toPrinciples} onReview={atWall.kind === 'self' && canOfferReview ? startReview : undefined}
-          onOpen={id => viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.kind === 'agent' ? atWall.id : null, open: 'saves', note: id })} /> : undefined}
+          onPrinciples={toPrinciples} onReview={atWall.kind === 'self' && canOfferReview ? startReview : undefined} /> : undefined}
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
            Founder: "I kind of want to give the feeling of, rather than my
            agent moving rooms, it kind of switches itself up to its agent

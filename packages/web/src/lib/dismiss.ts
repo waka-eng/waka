@@ -20,10 +20,10 @@
  * deleted because nothing could open it — its only opener went with the
  * new-place sheet in `f918b62f` and the verb already lives in
  * `SettingsPanel`. The share sheet (`ShareSheet.tsx`) arrived the same day:
- * 7 modal call sites, one covered. With the saved-inspiration progress sheet
- * on 2026-10-28: 8 modal call sites, one covered. `ProfileProcessing.tsx` uses
- * Close or Escape so pressing its surrounding Actions menu does not also
- * dismiss the status the user is inspecting. Reading edits confirm discard.
+ * 7 modal call sites, one covered. The saved-inspiration progress sheet was
+ * briefly added on 2026-10-28, then removed: background work belongs to the
+ * operator. There are still 7 modal call sites, one covered. Reading edits
+ * confirm discard.
  *
  * That is worse than an uncovered sheet, because the file holding the rule
  * was the one place anybody auditing dismissal would look, and it reported

@@ -387,6 +387,16 @@ query the database and treat missing samples as non-breaching. Notifications
 require an explicit SNS topic. The development deployment verifies through
 EventBridge reads that the worker's daily sweep is its only scheduled trigger.
 
+Ordinary job failures are retried with backoff (three attempts by default;
+repeated malformed output can stop earlier), then retained as failed with a
+sanitized `last_error`. The daily sweep does not automatically revive terminal
+failed jobs. Worker summaries and generation diagnostics are logs, not delivered
+owner notifications. The recovery alarms above sample explicit recovery
+inspections, not every terminal failure. There are no configured API-error or
+browser-error notification paths in the application infrastructure; render
+boundaries report to the browser console. Owner alert delivery and a real
+failure/recovery exercise remain production gates in `docs/goals/beta-readiness.md`.
+
 Model transports emit numeric attempt, token and billing metadata without
 prompts, responses, vectors, credentials or account IDs. OpenRouter's returned
 `usage.cost` is recorded when finite and nonnegative. Missing/invalid cost and
@@ -819,9 +829,12 @@ agent's relayed excerpt, an agent's own observation.
   Explicit recovery resumes only missing/failed work, preserving active work
   and scheduled holds. Reading-only credentials are not offered recovery.
   The browser keeps one account/profile-scoped metadata reference in session
-  storage, boundedly checks status, and rechecks completion before the person
-  opens an updated reading. Neither a timeout nor returning to the tab installs
-  new wording. Removed/inaccessible sources withdraw the progress reference.
+  storage and boundedly checks status without displaying processing progress or
+  recovery controls. Confirmed completion revalidates the owned artifact before
+  updating an idle Home screen; open pages and editing are not interrupted.
+  Neither a timeout nor an unconfirmed status installs new wording.
+  Removed/inaccessible sources withdraw the metadata reference. Actual save and
+  load failures remain visible; background failure recovery belongs to the owner.
   Room processing remains an internal destination fact, not a new way to expose
   a member's private source-processing state to the room.
 - **Signal input policy** records the derivation contract, not user approval.

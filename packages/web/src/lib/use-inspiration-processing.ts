@@ -6,7 +6,7 @@ interface Reference { profileId: string; inspirationId: string; receiptId?: stri
 type Phase = ApiInspirationProcessingStatus['phase'] | 'idle' | 'checking' | 'error' | 'delayed';
 
 /** Metadata-only, account-scoped progress. GET checks never buy model work and
- * readiness never changes the displayed reading without the person's action. */
+ * readiness is revalidated before the caller can adopt a completed reading. */
 export function useInspirationProcessing(scope: ProfileStorageScope | null) {
   const storageKey = profileStorageKey(scope, 'sourceProcessing');
   const key = useRef(storageKey); key.current = storageKey;
@@ -95,7 +95,7 @@ export function useInspirationProcessing(scope: ProfileStorageScope | null) {
     stop(); remember({ profileId: profile.current, inspirationId, receiptId: receipt?.id });
     latest.current = null; setStatus(null); void begin();
   }, [begin, remember, stop]);
-  const open = useCallback(async (show: (result: ApiTopOfMindRefreshResult, current: () => boolean) => Promise<void>) => {
+  const open = useCallback(async (show: (result: ApiTopOfMindRefreshResult, current: () => boolean) => Promise<void | boolean>) => {
     if (viewing.current === epoch.current || posting.current === epoch.current || !latest.current?.result || latest.current.phase !== 'ready') return;
     const owner = key.current;
     const checking = begin(); const sequence = epoch.current;
@@ -103,7 +103,7 @@ export function useInspirationProcessing(scope: ProfileStorageScope | null) {
     if (epoch.current !== sequence || key.current !== owner || confirmed?.phase !== 'ready' || !confirmed.result) return;
     viewing.current = sequence; setBusy(true);
     const current = () => mounted.current && epoch.current === sequence && key.current === owner;
-    try { await show(confirmed.result, current); if (current()) clear(); }
+    try { const adopted = await show(confirmed.result, current); if (current() && adopted !== false) clear(); }
     catch { if (current()) setPhase('error'); }
     finally { if (viewing.current === sequence) viewing.current = null; if (current()) setBusy(false); }
   }, [begin, clear]);

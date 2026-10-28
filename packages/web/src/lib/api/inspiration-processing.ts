@@ -33,12 +33,3 @@ export function retryInspirationProcessing(inspirationId: string, options: Profi
   return postJson(apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/processing/retry${query}`),
     { ...(options.receiptId ? { receiptId: options.receiptId } : {}) }, 'Could not resume this reading', signal);
 }
-
-export interface ApiProfileProcessing {
-  profileId: string; total: number; failed: number;
-  items: Array<{ inspirationId: string; createdAt: string; stage: string;
-    phase: ApiInspirationProcessingStatus['phase']; runAfter: string | null }>;
-}
-export function fetchProfileProcessing(profileId: string, signal?: AbortSignal): Promise<ApiProfileProcessing> {
-  return getJson(apiPath(`/inspirations/processing?profile=${encodeURIComponent(profileId)}`), 'Could not check saved inspirations', signal);
-}
