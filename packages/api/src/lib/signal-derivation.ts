@@ -4,16 +4,14 @@
  * The shape of a pass, per capture:
  *
  *   1. load the capture, its reflections, and its attachments' enrichment
- *   2. ask the provider for 0–3 candidate statements, each grounded in a span
- *   3. embed the capture (so layer-1 recall stays warm) and each candidate
- *   4. match-or-mint: cosine each candidate against the profile's existing
- *      signal vectors — above the bar it is evidence for that signal, below
- *      it is a new `emerging` signal
+ *   2. embed the capture and retrieve related owned material
+ *   3. ask for 0–3 candidates and embed unique candidate wording
+ *   4. match-or-mint: cosine finds nearby statements; a meaning judgment
+ *      keeps changed certainty, time scope and opposition from being fused
  *   5. recompute lifecycle in pure code: confidence, promotion, recency
  *
- * Only step 2 is a model call. Everything that decides what the profile ends
- * up holding is deterministic and testable without a network, which is what
- * makes the thresholds below tunable rather than mysterious.
+ * Extraction, embeddings and semantic judgments use providers. Source
+ * validation, identity checks and evidence arithmetic run in code around them.
  *
  * The lock rule is absolute: a signal whose `lockedAt` is set never has its
  * statement rewritten here. Evidence and confidence keep accruing to it — the
@@ -25,8 +23,8 @@
  *   - `signal-derivation-thresholds.ts` — every tuning number, plus
  *     `classifyMatch`, the function that reads two of them. Locked to
  *     docs/generation.md; that file's header explains how, and why it says so.
- *   - `signal-match-or-mint.ts` — step 4. Cosine decides; the one model call
- *     in it is a tie-breaker inside a band and can never overrule the number.
+ *   - `signal-match-or-mint.ts` — step 4. Cosine retrieves; meaning decides
+ *     whether changed wording can share evidence with its nearest target.
  *   - `signal-lifecycle.ts` — step 5, plus what becomes of a signal when its
  *     evidence is deleted. Arithmetic over rows; no model, no network.
  *   - `signal-embeddings.ts` — the signal-vector store: write, drop, and the
@@ -72,7 +70,6 @@ import {
   RELATED_INSPIRATION_CONTEXT_LIMIT,
   RELATED_INSPIRATION_MIN_COSINE,
   RELATED_INSPIRATION_SCAN_LIMIT,
-  SIGNAL_BATCH_DEDUPE_MIN_COSINE,
   MAX_EXISTING_CATEGORIES,
 } from "./signal-derivation-thresholds.js";
 import type { StatementEmbeddingClient } from "./signal-embeddings.js";
@@ -395,13 +392,11 @@ export async function deriveSignalsForInspiration(
 
   const embedded: ResolvedCandidate[] = [];
   for (const candidate of statements) {
+    // Identical wording is one candidate. Similar vectors can still encode
+    // opposite positions or different time scopes; matching checks meaning.
+    if (embedded.some(seen => seen.statement === candidate.statement)) continue;
     const embedding = await embeddingClient.embed(candidate.statement);
-    // One capture saying the same thing twice is one pattern.
-    const duplicate = embedded.some((seen) => {
-      const similarity = cosineSimilarity(seen.embedding, embedding);
-      return similarity !== null && similarity >= SIGNAL_BATCH_DEDUPE_MIN_COSINE;
-    });
-    if (!duplicate) embedded.push({ ...candidate, embedding });
+    embedded.push({ ...candidate, embedding });
   }
 
   const outcome = await db.transaction(async (tx) => {

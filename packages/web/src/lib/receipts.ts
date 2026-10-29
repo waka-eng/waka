@@ -80,7 +80,7 @@ export const RECEIPTS = {
       claim would have been the advisory-button lie. */
   groundRefuses: {
     messageKey: "worldReceiptGroundRefuses",
-    text: "The ground will refuse anything this close from now on",
+    text: "WAKA will also set aside rewordings of this pattern",
     enforcedBy: "packages/api/src/lib/signal-suppression.db.test.ts",
   },
   /** the star's standing line, already on screen — documented here */

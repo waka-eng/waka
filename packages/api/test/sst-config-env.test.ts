@@ -4,6 +4,13 @@ import { describe, expect, it } from "vitest";
 
 const sstConfig = readFileSync(resolve(__dirname, "../../../sst.config.ts"), "utf8");
 
+it('pins Terra for Top of Mind synthesis/review and keeps signals on DeepSeek in the shared environment', () => {
+  const shared = sstConfig.match(/const runtimeEnvironment = \{([\s\S]*?)\n    \};/)?.[1];
+  expect(shared).toContain('OPENROUTER_GENERATION_MODEL: "deepseek/deepseek-v4.1-flash-1017"');
+  expect(shared).toContain('WAKA_MODEL_SYNTHESIZE: "openai/gpt-6.1-terra"');
+  expect(shared).toContain('WAKA_MODEL_TOP_OF_MIND_REVIEW: "openai/gpt-6.1-terra"');
+});
+
 describe("SST API admin route environment flags", () => {
   /*
     The two flags asserted here are the two the API actually reads
@@ -30,13 +37,13 @@ describe("SST API admin route environment flags", () => {
 });
 
 describe("SST background job delivery", () => {
-  it('scopes deferred reading schedules and their invocation role to this worker', () => {
-    expect(sstConfig).toContain('WAKA_READING_WAKE_GROUP: readingWakeGroup.name');
-    expect(sstConfig).toContain('WAKA_READING_WAKE_ROLE: readingWakeRole.arn');
+  it('scopes one-time job schedules, cancellation and their invocation role to this worker', () => {
+    expect(sstConfig).toContain('WAKA_BACKGROUND_JOB_WAKE_GROUP: jobWakeGroup.name');
+    expect(sstConfig).toContain('WAKA_BACKGROUND_JOB_WAKE_ROLE: jobWakeRole.arn');
     expect(sstConfig).toContain('Principal: { Service: "scheduler.amazonaws.com" }');
     expect(sstConfig).toContain('Condition: { ArnEquals: { "aws:SourceArn": arn } }');
-    expect(sstConfig).toContain('actions: ["iam:PassRole"], resources: [readingWakeRole.arn]');
-    expect(sstConfig).toContain('arn.replace(":schedule-group/", ":schedule/") + "/waka-reading-*"');
+    expect(sstConfig).toContain('actions: ["iam:PassRole"], resources: [jobWakeRole.arn]');
+    expect(sstConfig).toContain('arn.replace(":schedule-group/", ":schedule/") + "/waka-job-*"');
     expect(sstConfig).toMatch(/new aws\.iam\.RolePolicy\("ReadingWakeInvoke",[\s\S]*?Resource: arn/);
     expect(sstConfig).toContain('policy: backgroundWorker.arn.apply(');
   });

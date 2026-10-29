@@ -86,8 +86,8 @@ export function useAuthoredSave(options: {
   // Callbacks must settle matching device drafts before returning. IndexedDB
   // media cleanup may be asynchronous; keep the save journal until it finishes.
   // Throwing leaves the request available for safe reconciliation on return.
-  onResolved: (intent: AuthoredSaveIntent, result: AuthoredSaveResult, initiated: boolean) => void | (() => void) | Promise<void | (() => void)>;
-  onRemoved: (intent: AuthoredSaveIntent) => void | Promise<void>;
+  onResolved: (intent: AuthoredSaveIntent, result: AuthoredSaveResult, initiated: boolean, assertCurrent: () => void) => void | (() => void) | Promise<void | (() => void)>;
+  onRemoved: (intent: AuthoredSaveIntent, assertCurrent: () => void) => void | Promise<void>;
   onEditRejected?: (intent: AuthoredSaveIntent) => void;
 }) {
   const prefix = profileStorageKey(options.scope, `pendingSave:${options.operation}:${encodeURIComponent(options.journal ?? options.inspirationId ?? '')}:`);
@@ -123,6 +123,11 @@ export function useAuthoredSave(options: {
     let rejectAborted!: () => void;
     const cancelled = new Promise<never>((_, reject) => { rejectAborted = () => reject(new Error('Save observation cancelled')); });
     controller.signal.addEventListener('abort', rejectAborted, { once: true });
+    // The same deadline covers network observation and local settlement.
+    // Callbacks fence late storage completions before changing live drafts.
+    const deadline = new Promise<never>((_, reject) => {
+      timeout = window.setTimeout(() => { controller.abort(); reject(new Error('Save check timed out')); }, 15_000);
+    });
     const work = async (): Promise<AuthoredSaveResult> => {
       let saved = intent.acknowledged;
       let created: ApiInspiration | null = null;
@@ -161,11 +166,9 @@ export function useAuthoredSave(options: {
       return { inspiration, reflection: null, processing: saved.processing, recovered: !created || created.saveRequest?.replayed === true };
     };
     try {
-      const result = await Promise.race([work(), cancelled, new Promise<never>((_, reject) => {
-        timeout = window.setTimeout(() => { controller.abort(); reject(new Error('Save check timed out')); }, 15_000);
-      })]);
+      const result = await Promise.race([work(), cancelled, deadline]);
       current();
-      const afterSettlement = await live.current.onResolved(intent, result, pressed);
+      const afterSettlement = await Promise.race([Promise.resolve(live.current.onResolved(intent, result, pressed, current)), cancelled, deadline]);
       current();
       // Cleanup follows matching-draft settlement; a crash before cleanup can
       // only cause a read/replay, never a newly identified copy of these words.
@@ -176,7 +179,7 @@ export function useAuthoredSave(options: {
       if (!owns()) return;
       if (error instanceof ApiError && error.status === 410 && error.code === 'saved_item_removed') {
         try {
-          await live.current.onRemoved(intent);
+          await Promise.race([Promise.resolve(live.current.onRemoved(intent, current)), cancelled, deadline]);
           current();
           localStorage.removeItem(key + intent.requestId);
           intentRef.current = null; setPending(null); setPhase('removed');

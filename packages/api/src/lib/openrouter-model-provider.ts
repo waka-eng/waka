@@ -9,11 +9,12 @@
  * is written once and cannot drift between providers; what changes per road
  * is transport and model id, nothing else.
  *
- * Model selection: `deepseek/deepseek-v4.1-flash-1017` for every task (owner
- * request, 2026-10-22), overridable per task by env so a future eval can move
+ * Model selection: Terra for Top of Mind synthesis/review; DeepSeek V4.1 Flash 1017
+ * for the other text tasks. Overridable per task by env so an eval can move
  * one task without moving the rest:
  *
  *   WAKA_MODEL_EXTRACT · WAKA_MODEL_JUDGE · WAKA_MODEL_SYNTHESIZE
+ *   WAKA_MODEL_TOP_OF_MIND_REVIEW
  *   WAKA_MODEL_PRINCIPLES · WAKA_MODEL_PRINCIPLE_JUDGE · WAKA_MODEL_ROUTE
  *   WAKA_MODEL_SUPPORT · WAKA_MODEL_REFLECT · WAKA_MODEL_CHAT
  *
@@ -48,6 +49,8 @@ import {
   parseTopOfMindSynthesis,
   buildTopOfMindReviewRequest,
   parseTopOfMindReview,
+  buildTopOfMindComparisonRequest,
+  applyTopOfMindComparison,
 } from "../queue/gemini.js";
 import {
   DeclarationNotConsideredError,
@@ -59,6 +62,7 @@ import {
 import {
   callOpenRouter,
   OPENROUTER_GENERATION_MODEL,
+  OPENROUTER_TOP_OF_MIND_MODEL,
   OPENROUTER_MAX_OUTPUT_TOKENS,
   type OpenRouterChatRequest,
 } from "./openrouter-http.js";
@@ -104,22 +108,26 @@ const TYPE_MAP: Record<string, string> = {
 };
 
 /** Gemini's UPPERCASE schema dialect → plain JSON Schema. */
-export function toJsonSchema(schema: GeminiShapedSchema): Record<string, unknown> {
+export function toJsonSchema(schema: GeminiShapedSchema, strict = false): Record<string, unknown> {
   const out: Record<string, unknown> = {
     type: TYPE_MAP[schema.type] ?? schema.type.toLowerCase(),
   };
   if (schema.description) out.description = schema.description;
   if (schema.enum) out.enum = schema.enum;
   if (schema.nullable) out.type = [out.type as string, "null"];
-  if (schema.items) out.items = toJsonSchema(schema.items);
+  if (schema.items) out.items = toJsonSchema(schema.items, strict);
   if (schema.properties) {
     out.properties = Object.fromEntries(
-      Object.entries(schema.properties).map(([k, v]) => [k, toJsonSchema(v)]),
+      Object.entries(schema.properties).map(([key, value]) => [key,
+        strict && !schema.required?.includes(key)
+          ? { anyOf: [toJsonSchema(value, strict), { type: 'null' }] }
+          : toJsonSchema(value, strict)]),
     );
     out.additionalProperties = false;
   }
-  if (schema.required) out.required = schema.required;
-  if (schema.anyOf) out.anyOf = schema.anyOf.map(toJsonSchema);
+  if (strict && schema.properties) out.required = Object.keys(schema.properties);
+  else if (schema.required) out.required = schema.required;
+  if (schema.anyOf) out.anyOf = schema.anyOf.map(child => toJsonSchema(child, strict));
   for (const key of ['minItems','maxItems','minimum','maximum','minLength','maxLength','pattern'] as const) {
     if (schema[key] !== undefined) out[key] = schema[key];
   }
@@ -130,6 +138,7 @@ export function toChatRequest(
   request: GeminiShapedRequest,
   model: string,
   schemaName: string,
+  strict = false,
 ): OpenRouterChatRequest {
   const system = (request.systemInstruction?.parts ?? [])
     .map((p) => p.text)
@@ -150,14 +159,24 @@ export function toChatRequest(
     max_tokens: request.generationConfig.maxOutputTokens ?? OPENROUTER_MAX_OUTPUT_TOKENS,
     reasoning: { enabled: false },
     response_format: schema
-      ? { type: "json_schema", json_schema: { name: schemaName, schema: toJsonSchema(schema) } }
+      ? { type: "json_schema", json_schema: { name: schemaName, schema: toJsonSchema(schema, strict), ...(strict ? { strict: true } : {}) } }
       : { type: "json_object" },
   };
 }
 
-function modelFor(envName: string): string {
+function modelFor(envName: string, fallback = OPENROUTER_GENERATION_MODEL): string {
   const fromEnv = process.env[envName]?.trim();
-  return fromEnv && fromEnv.length > 0 ? fromEnv : OPENROUTER_GENERATION_MODEL;
+  return fromEnv && fromEnv.length > 0 ? fromEnv : fallback;
+}
+
+function topOfMindRequest(request: GeminiShapedRequest, envName: string, schemaName: string, effort: 'low' | 'medium' = 'medium'): OpenRouterChatRequest {
+  const model = modelFor(envName, OPENROUTER_TOP_OF_MIND_MODEL);
+  const chat = toChatRequest(request, model, schemaName, model === OPENROUTER_TOP_OF_MIND_MODEL);
+  if (model === OPENROUTER_TOP_OF_MIND_MODEL) {
+    chat.reasoning = { effort, exclude: true };
+    delete chat.temperature;
+  }
+  return chat;
 }
 
 async function ask(
@@ -174,9 +193,13 @@ export function createOpenRouterModelProvider(): ModelProvider {
   return {
     name: "openrouter",
     async reviewTopOfMind(input) {
-      const payload = await ask(() => buildTopOfMindReviewRequest(input), 'top-of-mind review', 'WAKA_MODEL_JUDGE', 'top_of_mind_review');
+      const payload = await callOpenRouter(topOfMindRequest(buildTopOfMindReviewRequest(input),
+        'WAKA_MODEL_TOP_OF_MIND_REVIEW', 'top_of_mind_review', 'low'), 'top-of-mind review');
       if (payload === null || payload === MODEL_DECLINED) throw new ModelDidNotAnswerError('top-of-mind review');
-      return parseTopOfMindReview(payload);
+      const reviewed = parseTopOfMindReview(payload);
+      if (!input.comparison) return reviewed;
+      const compared = await ask(() => buildTopOfMindComparisonRequest(input, reviewed), 'top-of-mind comparison', 'WAKA_MODEL_JUDGE', 'top_of_mind_comparison');
+      return applyTopOfMindComparison(input, reviewed, compared);
     },
     async answerConversation(input){
       const request=toChatRequest(buildConversationReplyRequest(input),modelFor('WAKA_MODEL_CHAT'),'conversation_reply');
@@ -233,8 +256,6 @@ export function createOpenRouterModelProvider(): ModelProvider {
         "WAKA_MODEL_JUDGE",
         "signal_match",
       );
-      if (payload === MODEL_DECLINED) return { relation: "independent" };
-      if (payload === null) throw new ModelDidNotAnswerError("signal match judgement");
       return parseSignalMatchJudgement(payload);
     },
     async assessSignalSupport(input) {
@@ -248,12 +269,8 @@ export function createOpenRouterModelProvider(): ModelProvider {
       return parseSignalSupport(payload);
     },
     async synthesizeTopOfMind(input) {
-      const payload = await ask(
-        () => buildTopOfMindSynthesisRequest(input),
-        "top-of-mind synthesis",
-        "WAKA_MODEL_SYNTHESIZE",
-        "top_of_mind",
-      );
+      const request = topOfMindRequest(buildTopOfMindSynthesisRequest(input), 'WAKA_MODEL_SYNTHESIZE', 'top_of_mind');
+      const payload = await callOpenRouter(request, 'top-of-mind synthesis');
       if (payload === null || payload === MODEL_DECLINED) {
         /* same loudness as the incumbent: an unusable synthesis must not be
            recorded as "nothing changed" */

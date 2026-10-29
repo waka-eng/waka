@@ -142,6 +142,47 @@ async function cardLeaves() {
 /** The one conversation a press opened, if it opened one. */
 const openedChat = () => vi.mocked(createConversation).mock.calls[0];
 
+it('keeps a failed verdict available to retry instead of silently completing the review',async()=>{
+  vi.mocked(createFeedback).mockRejectedValueOnce(new Error('Synthetic save failure')).mockResolvedValueOnce({} as never);
+  await withClaims(CLAIM);
+  await act(async()=>direction('True').click());
+  await cardLeaves();
+  expect(statement()).toContain(CLAIM.statement);
+  expect(world.container.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t save your answer');
+  await act(async()=>direction('True').click());
+  await cardLeaves();
+  expect(createFeedback).toHaveBeenCalledTimes(2);
+  expect(card()).toBeNull();
+});
+
+it('holds a slow verdict once and advances only when its save succeeds',async()=>{
+  let resolve!:(value:Awaited<ReturnType<typeof createFeedback>>)=>void;
+  vi.mocked(createFeedback).mockReturnValue(new Promise(done=>{resolve=done;}));
+  await withClaims(CLAIM,SECOND);
+  await act(async()=>direction('True').click());
+  await cardLeaves();
+  expect(statement()).toContain(CLAIM.statement);
+  expect(world.container.querySelector('[role="status"]')?.textContent).toContain('Saving answer');
+  expect(direction('True').disabled).toBe(true);
+  await act(async()=>resolve({} as never));
+  expect(statement()).toContain(SECOND.statement);
+  expect(createFeedback).toHaveBeenCalledTimes(1);
+});
+
+it('reloads changed wording before retrying and never transfers the rejected verdict to its new revision',async()=>{
+  vi.mocked(createFeedback).mockRejectedValueOnce(Object.assign(new Error('Changed wording'),{code:'feedback_target_changed'})).mockResolvedValueOnce({} as never);
+  await withClaims(CLAIM);
+  const current={...CLAIM,statement:'A revised reading to consider.',statementRevision:'8'};
+  vi.mocked(listClaims).mockResolvedValue({claims:[current],more:false});
+  await act(async()=>direction('True').click());await cardLeaves();
+  expect(statement()).toContain(current.statement);
+  expect(createFeedback).toHaveBeenCalledTimes(1);
+  await act(async()=>direction('Not true').click());await cardLeaves();
+  expect(vi.mocked(createFeedback).mock.calls.map(([input])=>({value:input.value,revision:input.targetRevision})))
+    .toEqual([{value:'true',revision:'7'},{value:'not_true',revision:'8'}]);
+  expect(card()).toBeNull();
+});
+
 /** A sideways pointer drag on the slip, in pixels; positive is right (keep).
     jsdom gives the slip no height, so a flick is used — the same release a
     thumb makes. */
@@ -299,9 +340,9 @@ it("says when the last yes was, when a reading is being asked again", async () =
   expect(line, "states render, numerals never").not.toMatch(/\d/);
 });
 
-it("says nothing about a last answer on a first ask", async () => {
+it("explains an unanswered wording without implying an earlier yes", async () => {
   await withClaims(CLAIM);
-  expect(world.container.querySelector(".jar-pick-source")).toBeNull();
+  expect(world.container.querySelector(".jar-pick-source")?.textContent).toBe('You haven’t reviewed this wording yet.');
 });
 
 it("hints at the next claim with a bare edge, and no back card when it is the last", async () => {

@@ -1,3 +1,4 @@
+import { cancelBackgroundJobWakes } from '../lib/background-job-wake.js';
 /**
  * PATCH and DELETE /api/inspirations/:id — changing a capture after the fact.
  *
@@ -224,6 +225,7 @@ export function registerEditingRoutes(
 
     await sweepDeletedShelf(db, now(), target.profileId);
     let removedKeys: string[] = [];
+    let removedJobPayloads: unknown[] = [];
 
     // Lock the source before collecting every destination's witnesses.
     // No derivation can add a new source FK after this collection. Lock the
@@ -233,12 +235,6 @@ export function registerEditingRoutes(
       const [parent] = await tx.select({ id: inspirations.id }).from(inspirations)
         .where(and(eq(inspirations.id, idCheck.data), eq(inspirations.profileId, target.profileId))).for("update");
       if (!parent) return [];
-
-      if (input.data.sourceRevision) {
-        const [revision] = await tx.select({ value: inspirationRevisions.personalRevision }).from(inspirationRevisions)
-          .where(and(eq(inspirationRevisions.profileId, target.profileId), eq(inspirationRevisions.inspirationId, idCheck.data)));
-        if (revision?.value.toString() !== input.data.sourceRevision) return null;
-      }
 
       const citingRows = await tx
         .selectDistinct({ signalId: signalEvidence.signalId, profileId: signalEvidence.profileId })
@@ -254,6 +250,10 @@ export function registerEditingRoutes(
 
       const attachmentRows = await tx.select().from(attachments)
         .where(and(eq(attachments.profileId, target.profileId), eq(attachments.inspirationId, idCheck.data))).for("update");
+      const [lastRevision] = await tx.select().from(inspirationRevisions)
+        .where(and(eq(inspirationRevisions.profileId, target.profileId), eq(inspirationRevisions.inspirationId, idCheck.data)))
+        .for("update");
+      if (input.data.sourceRevision && lastRevision?.personalRevision.toString() !== input.data.sourceRevision) return null;
       const recoverable = session.profile.type === "human" && !session.keyScoped;
       const at = now();
       if (recoverable) {
@@ -264,6 +264,7 @@ export function registerEditingRoutes(
           .orderBy(asc(reflections.createdAt), asc(reflections.id));
         await tx.insert(deletedInspirations).values({ id: idCheck.data, profileId: target.profileId, text: whole!.text, kind: whole!.kind,
           category: whole!.category, source: whole!.source, visibility: whole!.visibility, reflections: said,
+          personalRevision: lastRevision!.personalRevision, publicRevision: lastRevision!.publicRevision,
           attachments: JSON.parse(JSON.stringify(attachmentRows)) as DeletedAttachment[],
           hadPhoto: attachmentRows.length > 0, keptAt: whole!.createdAt, deletedAt: at });
       } else {
@@ -282,9 +283,10 @@ export function registerEditingRoutes(
 
       if (removed.length === 0) return removed;
 
-      await tx.delete(backgroundJobs).where(and(eq(backgroundJobs.profileId, target.profileId),
+      const cancelled = await tx.delete(backgroundJobs).where(and(eq(backgroundJobs.profileId, target.profileId),
         inArray(backgroundJobs.type, ["derive_signals", "review_signal_support", "assess_signal_support", "enrich_attachment", "generate_reflection_question"]),
-        sql`${backgroundJobs.payload}->>'inspirationId' = ${idCheck.data}`));
+        sql`${backgroundJobs.payload}->>'inspirationId' = ${idCheck.data}`)).returning({ payload: backgroundJobs.payload });
+      removedJobPayloads = cancelled.map(row => row.payload);
       for (const profileId of [...new Set([target.profileId, ...citingRows.map((row) => row.profileId)])].sort()) {
         const signalIds = citingRows.filter((row) => row.profileId === profileId).map((row) => row.signalId);
         await reconcileSignalsAfterEvidenceLoss(tx, { profileId, signalIds });
@@ -304,6 +306,7 @@ export function registerEditingRoutes(
       return c.json({ error: "Inspiration not found" }, 404);
     }
 
+    await cancelBackgroundJobWakes(removedJobPayloads);
     await wakeCommittedBackgroundJobs();
     await sweepAttachmentObjects(await unreferencedAttachmentKeys(db, removedKeys));
 

@@ -1,4 +1,5 @@
-import { scheduleDeferredReadings, recoverDeferredReadingWakes } from './lib/reading-wake.js';
+import { BackgroundJobHeldError } from './lib/background-job-hold.js';
+import { armBackgroundJobLease, cancelBackgroundJobLease, cancelBackgroundJobWakes, backgroundJobWakesEnabled, prepareBackgroundJobWake, recoverBackgroundJobWakes, readBackgroundJobWake, retireBackgroundJobWake } from './lib/background-job-wake.js';
 /**
  * The background queue's worker.
  *
@@ -19,7 +20,7 @@ import { scheduleDeferredReadings, recoverDeferredReadingWakes } from './lib/rea
  * re-arming itself is a Lambda that runs until its timeout, every time.
  */
 
-import { runBackgroundJobWorker,readBackgroundJobRecoveryState,settleAbandonedExhaustedLeases,hasNearTermBackgroundJobRetry,readBackgroundJobWakeReferences,hasNearTermRequestedReading,collectReadingWakeReferences,type BackgroundJobRetryWake } from "./lib/queue.js";
+import { runBackgroundJobWorker,readBackgroundJobRecoveryState,settleAbandonedExhaustedLeases,sweepBackgroundJobRuns,hasNearTermBackgroundJobRetry,readBackgroundJobWakeReferences,hasNearTermRequestedReading,collectReadingWakeReferences,type BackgroundJobRetryWake } from "./lib/queue.js";
 import {QUEUE_RECOVERY_LIMITS,recordQueueRecovery} from './lib/queue-recovery.js';
 import {sweepDeletedShelf} from './lib/deleted-shelf.js';
 import {sweepStaleStagedAttachments} from './lib/conversation-attachments.js';
@@ -58,6 +59,8 @@ export function isScheduledEvent(event:unknown):boolean{
  * queue its pass.
  */
 async function runScheduledSweeps(now=new Date()){
+  try{await sweepBackgroundJobRuns(getDb(),now);}
+  catch(error){console.warn('[background-job-runs-sweep] failed',error instanceof Error?error.message:String(error));}
   try{const settled=await settleAbandonedExhaustedLeases(getDb(),now);if(settled)console.info('[abandoned-lease-sweep]',JSON.stringify({settled}));}
   catch(error){console.warn('[abandoned-lease-sweep] failed',error instanceof Error?error.message:String(error));}
   try{const swept=await sweepDeletedShelf(getDb(),now);if(swept)console.info('[deleted-shelf-sweep]',JSON.stringify({swept}));}
@@ -67,10 +70,35 @@ async function runScheduledSweeps(now=new Date()){
 }
 
 export async function handler(event?:unknown, context?: { invokedFunctionArn?: string }) {
+  const mode = event && typeof event === 'object' ? (event as { mode?: unknown }).mode : undefined;
+  const empty = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0, passes: 0, exhaustedPasses: false };
+  if (mode === 'wake_recovery') { await recoverBackgroundJobWakes(context?.invokedFunctionArn); return empty; }
+  const deliveredWake = mode === 'job_wake' ? readBackgroundJobWake((event as { wake?: unknown }).wake) : null;
+  if (mode === 'job_wake') {
+    if (!deliveredWake) return empty;
+    if (!await prepareBackgroundJobWake(deliveredWake)) {
+      // A failed earlier scheduling attempt may have moved this profile's
+      // deadline. Repair only proven work in that profile; never drain here.
+      if (backgroundJobWakesEnabled(context?.invokedFunctionArn)) await recoverBackgroundJobWakes(context?.invokedFunctionArn, deliveredWake.profileId);
+      return empty;
+    }
+  }
+  const preciseWakes = backgroundJobWakesEnabled(context?.invokedFunctionArn);
+  const settledPayloads: unknown[] = [];
+  const lifecycle = preciseWakes ? {
+    onClaimed: async (job: import('./db/index.js').BackgroundJob) => {
+      if (!await armBackgroundJobLease(job, context?.invokedFunctionArn)) throw new BackgroundJobHeldError(new Date(Date.now()+30_000), 'Recovery claim changed', 'support');
+    },
+    onSettled: async (job: import('./db/index.js').BackgroundJob) => { await cancelBackgroundJobLease(job); settledPayloads.push(job.payload); },
+  } : {};
+
+
   if(event&&typeof event==='object'&&(event as {mode?:unknown}).mode==='recovery'){
     const state=await readBackgroundJobRecoveryState();recordQueueRecovery(state);
-    if(!state.overdue)return {claimed:0,succeeded:0,retried:0,failed:0,deferred:0,passes:0,exhaustedPasses:false,recovery:state};
-    const result=await runBackgroundJobWorker({limit:QUEUE_RECOVERY_LIMITS.claims,overdueOnly:true});
+    if(!state.overdue){await recoverBackgroundJobWakes(context?.invokedFunctionArn);return {...empty,recovery:state};}
+    const result=await runBackgroundJobWorker({limit:QUEUE_RECOVERY_LIMITS.claims,overdueOnly:true,...lifecycle});
+    await recoverBackgroundJobWakes(context?.invokedFunctionArn);
+    await cancelBackgroundJobWakes(settledPayloads);
     try{console.info('[queue-recovery-result]',JSON.stringify({claimed:result.claimed,succeeded:result.succeeded,retried:result.retried,failed:result.failed,deferred:result.deferred}));}catch{/* Logging cannot retry completed work. */}
     return {...result,passes:1,exhaustedPasses:false,recovery:state};
   }
@@ -89,10 +117,11 @@ export async function handler(event?:unknown, context?: { invokedFunctionArn?: s
 
   const drain=async()=>{
   while (passes < MAX_DRAIN_PASSES) {
-    const pass = await collectReadingWakeReferences(() => runBackgroundJobWorker({ limit, ...(asyncEnqueue?{onTransientRetry:(retry:BackgroundJobRetryWake)=>{retries.push(retry);}}:{}) }));
+    const pass = await collectReadingWakeReferences(() => runBackgroundJobWorker({ limit,
+      ...lifecycle,
+      ...(asyncEnqueue?{onTransientRetry:(retry:BackgroundJobRetryWake)=>{retries.push(retry);}}:{}) }));
     const result = pass.result;
     if (asyncEnqueue) passWakes.push(...pass.wakes);
-    await scheduleDeferredReadings(pass.wakes, context?.invokedFunctionArn);
     passes += 1;
     total.claimed += result.claimed;
     total.held += result.held;
@@ -133,10 +162,11 @@ export async function handler(event?:unknown, context?: { invokedFunctionArn?: s
   const collected=await collectReadingWakeReferences(drain);
   const drained=collected.result;
   const requested=readBackgroundJobWakeReferences([...new Map([...wakes,...collected.wakes,...passWakes].map(row=>[row.id,row])).values()].slice(0,50));
-  await scheduleDeferredReadings(requested, context?.invokedFunctionArn);
-  await recoverDeferredReadingWakes(context?.invokedFunctionArn);
+  if (deliveredWake) await retireBackgroundJobWake(deliveredWake);
+  await recoverBackgroundJobWakes(context?.invokedFunctionArn);
+  await cancelBackgroundJobWakes(settledPayloads);
   console.log("[background-worker] drained background jobs", drained);
-  if(asyncEnqueue && retries.length && await hasNearTermBackgroundJobRetry(retries)){
+  if(!preciseWakes && asyncEnqueue && retries.length && await hasNearTermBackgroundJobRetry(retries)){
     // This error asks Lambda's existing async queue for at most two more
     // deliveries. The next delivery still uses normal due-time, lease and
     // budget checks. Completed work is not replayed. Expected retry signals
@@ -144,7 +174,7 @@ export async function handler(event?:unknown, context?: { invokedFunctionArn?: s
     console.info('[background-worker] transient retry remains; requesting bounded async redelivery');
     throw new Error('BackgroundJobRetryScheduled');
   }
-  if(asyncEnqueue&&requested.length&&await hasNearTermRequestedReading(requested)){
+  if(!preciseWakes&&asyncEnqueue&&requested.length&&await hasNearTermRequestedReading(requested)){
     console.info('[background-worker] requested reading remains near-term; requesting bounded async redelivery');
     throw new Error('BackgroundJobWakeScheduled');
   }

@@ -342,3 +342,42 @@ it('ignores an old timed-out response after a same-account retry has settled', a
   expect(resolved).toHaveBeenCalledOnce(); expect(resolved.mock.calls[0]?.[1].inspiration.id).toBe(source.id);
   expect(records()).toHaveLength(0);
 });
+
+it('keeps in-flight saves bound to their agent through a same-account switch and return', async () => {
+  let finish!: (value: ApiInspiration) => void;
+  vi.mocked(createInspiration).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await act(async () => root.render(<Probe />)); await act(async () => { latest.start(input); });
+  const requestId = latest.pending!.requestId;
+  const another = { ...scope, profileId: 'another-agent' };
+  const second = { ...source, id: 'source-B', profileId: another.profileId, text: 'Another agent capture' };
+  await act(async () => root.render(<Probe owner={another} />));
+  expect(latest.pending).toBeNull();
+  await act(async () => finish(source));
+  expect(resolved).not.toHaveBeenCalled(); expect(records()).toHaveLength(1);
+  vi.mocked(createInspiration).mockResolvedValueOnce(second);
+  await act(async () => { latest.start({operation:'inspiration',input:{text:second.text}}); });
+  expect(resolved).toHaveBeenCalledOnce();
+  expect(vi.mocked(createInspiration).mock.calls[1]?.[1]).toMatchObject({profile:another.profileId});
+  vi.mocked(fetchInspirationSaveRequest).mockResolvedValue({requestId,operation:'inspiration',inspirationId:source.id,reflectionId:null,
+    processing:{id:'receipt',profileId:scope.profileId,inspirationId:source.id,materialRevision:'1',jobId:'job',requestVersion:'1'},createdAt:source.createdAt});
+  await act(async () => root.render(<Probe />));
+  expect(resolved).toHaveBeenCalledTimes(2);
+  expect(resolved.mock.calls[1]?.[1].inspiration.profileId).toBe(scope.profileId);
+  expect(createInspiration).toHaveBeenCalledTimes(2); expect(records()).toHaveLength(0);
+});
+
+it('bounds stalled draft cleanup and rejects its late result after a successful retry', async () => {
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const adopted:string[]=[];
+  resolved.mockImplementationOnce(async(_intent,_result,_pressed,assertCurrent:()=>void)=>{
+    await gate;assertCurrent();adopted.push('old');
+  });
+  await act(async()=>root.render(<Probe/>));await act(async()=>{latest.start(input);});
+  expect(latest.busy).toBe(true);expect(records()).toHaveLength(1);
+  await act(async()=>vi.advanceTimersByTimeAsync(15_000));
+  expect(latest.busy).toBe(false);expect(latest.phase).toBe('uncertain');expect(records()).toHaveLength(1);
+  resolved.mockImplementation(()=>{adopted.push('retry');});
+  await act(async()=>latest.retry());await act(async()=>release());
+  expect(adopted).toEqual(['retry']);expect(records()).toHaveLength(0);expect(createInspiration).toHaveBeenCalledOnce();
+});

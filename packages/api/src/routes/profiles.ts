@@ -1,4 +1,5 @@
-import { attachments, deletedInspirations } from '../db/index.js';
+import { cancelBackgroundJobWakes } from '../lib/background-job-wake.js';
+import { attachments, deletedInspirations, backgroundJobs } from '../db/index.js';
 import { sweepAttachmentObjects } from '../lib/attachment-sweep.js';
 import { unreferencedAttachmentKeys } from '../lib/conversation-attachments.js';
 /**
@@ -200,10 +201,15 @@ profilesRoutes.delete("/:profileId", humanSessionsOnly, async (c) => {
     const live = await tx.select({ s3Key: attachments.s3Key }).from(attachments).where(eq(attachments.profileId, profile.id));
     const copies = await tx.select({ attachments: deletedInspirations.attachments }).from(deletedInspirations).where(eq(deletedInspirations.profileId, profile.id));
     const keys = [...live, ...copies.flatMap(row => row.attachments)].flatMap(row => row.s3Key ? [row.s3Key] : []);
+    const jobs = await tx.select({ payload: backgroundJobs.payload }).from(backgroundJobs)
+      .where(eq(backgroundJobs.profileId, profile.id)).orderBy(backgroundJobs.id).for('update');
     await tx.delete(profiles).where(eq(profiles.id, profile.id));
-    return { id: profile.id, keys };
+    return { id: profile.id, keys, jobPayloads: jobs.map(row => row.payload) };
   });
-  if (deleted) await sweepAttachmentObjects(await unreferencedAttachmentKeys(db, deleted.keys));
+  if (deleted) {
+    await cancelBackgroundJobWakes(deleted.jobPayloads);
+    await sweepAttachmentObjects(await unreferencedAttachmentKeys(db, deleted.keys));
+  }
 
   if (!deleted) return c.json({ error: "Profile not found" }, 404);
   return c.json({ id: deleted.id });

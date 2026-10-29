@@ -1,6 +1,6 @@
 /** Thirty-day recovery outside the live memory stack; see docs/data-model.md. */
 import { sql } from "drizzle-orm";
-import { boolean, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { inspirationKindEnum, inspirationSourceEnum, inspirationVisibilityEnum } from "./schema-inspirations";
 import type { Attachment } from "./schema-attachments";
@@ -30,6 +30,9 @@ export const deletedInspirations = pgTable(
     category: text("category"),
     source: inspirationSourceEnum("source").notNull(),
     visibility: inspirationVisibilityEnum("visibility").notNull(),
+    /** Restore must advance past both pre-deletion fences, even if clocks repeat. */
+    personalRevision: bigint("personal_revision", { mode: "bigint" }).notNull().default(sql`0`),
+    publicRevision: bigint("public_revision", { mode: "bigint" }).notNull().default(sql`0`),
     reflections: jsonb("reflections").$type<DeletedReflection[]>().notNull().default([]),
     attachments: jsonb("attachments").$type<DeletedAttachment[]>().notNull().default([]),
     /** Whether it had any attachment (photo, recording, file or link). */

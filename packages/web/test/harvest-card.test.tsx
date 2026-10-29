@@ -8,7 +8,7 @@
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): `lib/data` supplies the three layers;
  * `lib/api` supplies the claim queue, the basket, the save and the two
- * basket decisions, because those are the seams a candidate arrives and
+ * basket decisions and `createFeedback`, because those are the seams a candidate arrives and
  * leaves through, and each press here is only checkable if they are
  * observable. `lib/auth-context` supplies the viewer. `helpers/render-home`
  * and `helpers/canvas-stub` replace time, frames, randomness and drawing.
@@ -18,7 +18,7 @@ import { act } from "react";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import { apiMockFrom, dataMockFrom, diveIntoReview, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
-import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration } from "../src/lib/api";
+import { createFeedback, createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration } from "../src/lib/api";
 import { SLIP_LEAVE_MS as LEAVE_MS } from "../src/components/ClaimSlip";
 
 const FACTS = { inspirations: [{ id: "kept-1", text: "An original capture", daysAgo: 3 }], groups: [] };
@@ -38,6 +38,7 @@ vi.mock("../src/lib/api", async (original) => ({
   ...await original<typeof import("../src/lib/api")>(),
   ...apiMockFrom({ inspirations: [{ id: "kept-1", text: "An original capture", daysAgo: 3 }], groups: [] }),
   listClaims: vi.fn(),
+  createFeedback:vi.fn(),
   listHarvest: vi.fn(),
   createInspiration: vi.fn(),
   keepHarvest: vi.fn(),
@@ -78,11 +79,26 @@ async function withBasket(candidates: Array<typeof CANDIDATE>, claims: Array<typ
   vi.mocked(listClaims).mockResolvedValue({ claims, more: false } as never);
   vi.mocked(createInspiration).mockImplementation(async (input) => SAVED(input.text ?? "") as never);
   vi.mocked(keepHarvest).mockResolvedValue(undefined);
+  vi.mocked(createFeedback).mockResolvedValue({} as never);
   vi.mocked(declineHarvest).mockResolvedValue(undefined);
   world = await mountWorld(FACTS);
   /* The cards are behind the invitation since 2026-10-15; see `diveIntoReview`. */
   await diveIntoReview(world.container, world.step);
 }
+
+it('offers at most five reviews total, with agent picks before readings',async()=>{
+  const claims=Array.from({length:4},(_,index)=>({...CLAIM,id:`claim-${index+1}`,statement:`Reading ${index+1}`}));
+  await withBasket([CANDIDATE,SECOND],claims);
+  // Two picks leave three reading slots; the sixth queued item stays out.
+  expect(listClaims).toHaveBeenCalledWith({limit:5});
+  await act(async()=>button('Keep it').click());await leaves();
+  await act(async()=>button('Keep it').click());await leaves();
+  for(const claim of claims.slice(0,3)){
+    expect(statement()).toContain(claim.statement);
+    await act(async()=>button('True').click());await leaves();
+  }
+  expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
+});
 
 it("asks about a picked sentence before any reading, in the agent's voice, and says where it came from", async () => {
   await withBasket([CANDIDATE], [CLAIM]);

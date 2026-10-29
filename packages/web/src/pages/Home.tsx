@@ -83,7 +83,7 @@ import { createCompanionUpdates } from "../lib/companion-updates";
 import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
 import { useProfileListViews } from '../lib/list-view-state';
 import { useInspirationProcessing } from '../lib/use-inspiration-processing';
-import { useAuthoredSave } from '../lib/use-authored-save';
+import { useAuthoredSave, type AuthoredSaveIntent } from '../lib/use-authored-save';
 import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { useSettingsWrites } from '../lib/use-settings-writes';
 import { DraftProblem, draftProblem, forkDraftAndClear } from '../lib/draft-problem';
@@ -271,6 +271,7 @@ import "../styles/chat.css";
  * becoming a thing you scroll, which would be the hunt all over again.
  */
 const DIAL_STOPS = 10;
+const REVIEW_CARD_LIMIT = 5;
 /**
  * HOW LONG THE CREATURE HOLDS ITS OFFER UP BEFORE GOING BACK TO THE READING.
  *
@@ -1035,7 +1036,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const inspirationSaveHandlers = useRef<Pick<Parameters<typeof useAuthoredSave>[0], 'onResolved' | 'onRemoved' | 'onEditRejected'> | null>(null);
   const inspirationSave = useAuthoredSave({ scope: memoryScope, operation: 'inspiration', enabled: phase === 'ready' && !offline && composerDraft.ready,
     onResolved: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); return inspirationSaveHandlers.current.onResolved(...args); },
-    onRemoved: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); inspirationSaveHandlers.current.onRemoved(...args); },
+    onRemoved: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); return inspirationSaveHandlers.current.onRemoved(...args); },
     onEditRejected: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); inspirationSaveHandlers.current.onEditRejected?.(...args); },
   });
   const sourceProcessingActiveRef = useRef(sourceProcessing.active);
@@ -2058,43 +2059,29 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   standingAsAgentRef.current = standingAsAgent;
   useEffect(() => { if (standingAsAgent) setHarvestWhy(null); }, [standingAsAgent]);
   const loadClaims = useCallback(() => {
+    const load = ++queueLoadRef.current;
     if (standingAsAgent) { setClaimQueue([]); setHarvestQueue([]); setQueueLoaded(true); return; }
     /* Whether the queue on screen is an answer or a load in flight — what an
        old `?open=claims` link waits on before deciding (see above). */
     setQueueLoaded(false);
-    const load = ++queueLoadRef.current;
     /* The basket loads beside the claims. A failure is an empty basket:
        nothing here is broken for the person, nothing is being asked. */
-    const basket = listHarvest()
-      .then((rows) => { if (!standingAsAgentRef.current) setHarvestQueue(rows.slice(0, 3)); })
-      .catch(() => setHarvestQueue([]));
-    const asked = listClaims({ limit: 8 })
-      /* ═══ THREE IS A SITTING ═══════════════════════════════════════════
-         Not eight, which is what this used to hold. A claim is expensive to
-         answer — it asks a person to consult themselves — and the research
-         on products that ask for repeated judgements is unanimous that the
-         quality of the answers degrades fast. Anki's entire philosophy is
-         capping intake, and its manual says why: "More than one Anki user has
-         excitedly studied hundreds of new cards over their first few days of
-         using the program, and then has become overwhelmed by the reviews
-         required."
-
-         That matters more here than it does for a flashcard, because bad
-         answers do not just waste a review — they are what the top of mind
-         and the principles get written FROM. The outputs are only ever as
-         good as the attention paid to the three questions above them.
-
-         And being stopped by the product reads as the product respecting the
-         cost; running dry reads as a chore completed. The rest of the queue
-         is still visible in its own room, which is now a doorway back to
-         here. */
-      .then(({ claims }) => { if (!standingAsAgentRef.current) setClaimQueue(claims.slice(0, 3)); })
+    const basket = listHarvest().catch(() => []);
+    const asked = listClaims({ limit: REVIEW_CARD_LIMIT })
+      .then(({ claims }) => claims)
       /* A queue that cannot be fetched is silence, not an error on the home
          screen: nothing here is broken for the person, there is simply
          nothing being asked. */
-      .catch(() => setClaimQueue([]));
-    void Promise.all([basket, asked]).then(() => { if (load === queueLoadRef.current) setQueueLoaded(true); });
-  }, [standingAsAgent]);
+      .catch(() => []);
+    void Promise.all([basket, asked]).then(([picks,claims]) => {
+      if (load !== queueLoadRef.current || standingAsAgentRef.current) return;
+      // One sitting has five slots in total. Picks expire, so they go first.
+      const selected=picks.slice(0,REVIEW_CARD_LIMIT);
+      setHarvestQueue(selected);
+      setClaimQueue(claims.slice(0,REVIEW_CARD_LIMIT-selected.length));
+      setQueueLoaded(true);
+    });
+  }, [standingAsAgent,storageScope?.profileId]);
   useEffect(() => {
     if (phase !== 'ready' || offline) return;
     /* The wall changed under the queue, so the old wall's question must not
@@ -2102,7 +2089,9 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
        correction this also used to clear no longer exists — see the note on
        `correcting` above. */
     setClaimQueue([]);
+    setHarvestQueue([]);
     loadClaims();
+    return () => { queueLoadRef.current++; };
   }, [phase, offline, loadClaims]);
   const composerOpenRef = useRef(mouthOpen); composerOpenRef.current = mouthOpen;
   /* ═══ THE WORLD STEPS ASIDE FOR A DESTINATION, CANVAS INCLUDED ═════════
@@ -5245,15 +5234,27 @@ const RETRY_READ_LIMIT_MS = 20_000;
     if (serverId) bornIdsRef.current.add(serverId);
     setClockMs(atMs);
   };
+  const settleSubmittedInspiration = async (intent: AuthoredSaveIntent, inspirationId: string, assertCurrent: () => void) => {
+    assertCurrent();
+    const ownsDraft = () => intent.profileId === memoryScopeRef.current?.profileId && intent.accountId === memoryScopeRef.current?.accountId;
+    if (!ownsDraft()) throw new Error('Save owner changed');
+    const currentDraft = composerDraft.current.current;
+    const submittedKeys = intent.input.attachments?.flatMap(item => item.type === 'link' ? [] : [item.key]) ?? [];
+    const settledCurrentDraft = await composerDraft.settle(intent.draft, inspirationId, assertCurrent, submittedKeys);
+    assertCurrent();
+    if (!ownsDraft()) throw new Error('Save owner changed');
+    const latestDraft = composerDraft.current.current;
+    const preserveNewer = intent.draft ? !settledCurrentDraft
+      : latestDraft.id !== currentDraft.id || latestDraft.revision !== currentDraft.revision || latestDraft.media.length > 0;
+    const remaining = preserveNewer ? latestDraft.text : settleInspirationDraft(profileStorageKey(memoryScope, 'draft'), intent.input.text, draftRef.current);
+    draftRef.current = remaining; setDraft(remaining);
+    return {remaining,preserveNewer};
+  };
   inspirationSaveHandlers.current = {
-    onResolved: async (intent, result, initiated) => {
+    onResolved: async (intent, result, initiated, assertCurrent) => {
       if (intent.operation !== 'inspiration' || intent.profileId !== memoryScopeRef.current?.profileId) return;
-      const currentDraft = composerDraft.current.current;
-      const preserveNewer = intent.draft ? currentDraft.id !== intent.draft.id || currentDraft.revision !== intent.draft.revision : currentDraft.media.length > 0;
-      await composerDraft.settle(intent.draft, result.inspiration.id);
-      if (intent.profileId !== memoryScopeRef.current?.profileId) throw new Error('Save owner changed');
-      const remaining = preserveNewer ? composerDraft.current.current.text : settleInspirationDraft(profileStorageKey(memoryScope, 'draft'), intent.input.text, draftRef.current);
-      draftRef.current = remaining; setDraft(remaining); setMouthNote('');
+      const {remaining,preserveNewer} = await settleSubmittedInspiration(intent, result.inspiration.id, assertCurrent);
+      setMouthNote('');
       const made = result.inspiration, detail = toInspirationDetail(made);
       const displayText = detail.preview;
       if (intent.profileId === storageScope?.profileId) {
@@ -5314,11 +5315,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
         viewNavigationRef.current.closeComposer();
       } };
     },
-    onRemoved: async (intent) => {
+    onRemoved: async (intent, assertCurrent) => {
       if (intent.operation !== 'inspiration') return;
-      await composerDraft.settle(intent.draft, intent.acknowledged?.inspirationId ?? 'removed');
-      const remaining = settleInspirationDraft(profileStorageKey(memoryScope, 'draft'), intent.input.text, draftRef.current);
-      draftRef.current = remaining; setDraft(remaining);
+      await settleSubmittedInspiration(intent, intent.acknowledged?.inspirationId ?? 'removed', assertCurrent);
     },
     onEditRejected: (intent) => {
       if (intent.operation !== 'inspiration') return;
@@ -5329,13 +5328,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
 
   // The immutable, owned intent is durable before anything is sent. A newer
   // draft can be written meanwhile, but cannot replace an unresolved save.
-  const uploadDraftFiles = async (media: InspirationDraftMedia[], controller: AbortController, current: () => void) => {
+  const uploadDraftFiles = async (media: InspirationDraftMedia[], controller: AbortController, current: () => void, submitted?: { id: string; revision: number }) => {
     if (!memoryScope) throw new DraftProblem('worldComposerUploadFailed');
-    await uploadInspirationMedia({ media, profileId: memoryScope.profileId, signal: controller.signal,
+    return uploadInspirationMedia({ media, profileId: memoryScope.profileId, signal: controller.signal,
       assertCurrent: current, uploading: setUploadingMediaId,
       persist: async (id, update) => {
         current();
-        composerDraft.setMedia(composerDraft.current.current.media.map(row => row.id === id ? { ...row, ...update } : row));
+        const before = composerDraft.current.current;
+        composerDraft.setMedia(before.media.map(row => row.id === id ? { ...row, ...update } : row));
+        // Receipt storage is part of this submission. A human edit breaks
+        // this revision chain and must survive the older save's settlement.
+        if (submitted?.id === before.id && submitted.revision === before.revision) submitted.revision = composerDraft.current.current.revision;
         await composerDraft.flush(); current();
       },
     });
@@ -5594,9 +5597,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const epoch = ++composerEpoch.current, controller = new AbortController(); uploadController.current = controller;
     const current = () => { if (controller.signal.aborted || composerEpoch.current !== epoch) throw new Error('Save owner changed'); };
     try {
-      await composerDraft.flush(); current();
-      if (initialMedia.some(item => item.blob && !item.uploaded)) await uploadDraftFiles(initialMedia, controller, current);
-      const attachments: NonNullable<CreateInspirationRequest['attachments']> = composerDraft.current.current.media.map(item => {
+      const flushing = composerDraft.flush();
+      // Words and files are the snapshot taken by the press. Only our own
+      // upload receipts advance its revision; human edits belong to the next draft.
+      const pressedDraft = composerDraft.current.current;
+      const submittedReference = { id: pressedDraft.id, revision: pressedDraft.revision };
+      await flushing; current();
+      const submittedMedia = initialMedia.some(item => item.blob && !item.uploaded)
+        ? await uploadDraftFiles(initialMedia, controller, current, submittedReference) : initialMedia;
+      const attachments: NonNullable<CreateInspirationRequest['attachments']> = submittedMedia.map(item => {
         // An unnamed upload is sent unnamed; its label is the reader's to say.
         const name = item.name ? { name: item.name } : {};
         if (item.type === 'link' && item.url) return { type: 'link', url: item.url, ...name };
@@ -5608,7 +5617,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         if (!attachments.some(item => item.type === 'link' && item.url === url)) attachments.push({ type: 'link', url });
       }
       if (attachments.length > 5) throw new DraftProblem('worldComposerTooManyFiles');
-      const reference = await composerDraft.flush(); current();
+      await composerDraft.flush(); current();
       /* A FILE DOES NOT NAME A KIND. There is no 'file' kind on the server, and
          a PDF kept with words is still a note — so files are left out of the
          count, and a note of files alone is 'note'. A file beside a photo is
@@ -5627,7 +5636,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
       inspirationSave.start({ operation: 'inspiration', input: { text, kind, source: 'app',
         ...(attachments.length ? { attachments } : {}), ...(reflections ? { reflections } : {}),
       },
-        ...(reference ? { draft: reference } : {}) });
+        draft: submittedReference });
       setMomentWhy('');
       setCharSay('');
     } catch (reason) {
@@ -6172,6 +6181,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
       targetRevision?: string,
       correctionText?: string,
     ): Promise<boolean> | null => {
+      if (offlineRef.current) return null;
+      const queueAtSend=queueLoadRef.current;
+      const answeringProfile=answeringAsRef.current;
       setVerdicts((prev) => new Map(prev).set(id, value));
       /* the receipt: what this answer taught the loop, said where the act
          happened, worded only as strongly as its enforcing test allows —
@@ -6185,7 +6197,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
       const receipt = value === "not_true"
           ? say(RECEIPTS.verdictNo.messageKey)
           : say(RECEIPTS.verdictKept.messageKey);
-      if (offlineRef.current) return null;
       /* Filed by whoever is standing here. A claim read from an agent's wall
          is about the agent, and a verdict on it under your own profile is a
          verdict about a signal you do not own — which the server refuses, as
@@ -6209,14 +6220,27 @@ const RETRY_READ_LIMIT_MS = 20_000;
             .catch(() => undefined);
           return true;
         })
-        .catch((error) => {
+        .catch(async (error) => {
         /* it did not land, and the row should not claim it did */
         setVerdicts((prev) => {
           const next = new Map(prev);
           next.delete(id);
           return next;
         });
-        if ((error as { code?: string })?.code === 'feedback_target_changed') verifyReadingRef.current(false);
+        if ((error as { code?: string })?.code === 'feedback_target_changed') {
+          verifyReadingRef.current(false);
+          // The rejected verdict is never applied to new wording. Refresh
+          // only this sitting's existing IDs; do not refill its five slots.
+          try {
+            const {claims}=await listClaims({limit:REVIEW_CARD_LIMIT,...(answeringProfile?{profile:answeringProfile}:{})});
+            if(queueAtSend===queueLoadRef.current&&!standingAsAgentRef.current){
+              setClaimQueue(queue=>queue.flatMap(row=>{
+                const current=claims.find(fresh=>fresh.id===row.id);
+                return current?[current]:[];
+              }));
+            }
+          } catch { /* Keep the unanswered card when its current version cannot be read. */ }
+        }
         return false;
       });
     },
@@ -9852,6 +9876,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                    the pair written for it. */
                 labelKeep={say(claimQueue[0].askedAgain ? 'worldStillTrue' : 'worldClaimTrue')}
                 labelNot={say(claimQueue[0].askedAgain ? 'worldNotAnymore' : 'worldNotTrue')}
+                savingLabel={say('worldReviewAnswerSaving')}
+                failureLabel={say('worldReviewAnswerFailed')}
                 /* NO CHAT DOOR ON THE CARD. Founder, 2026-10-15: "remove chat
                    about it under the claim." The card asks one thing — still
                    true or not anymore — so `labelChat`/`onChat` are left off,
@@ -9867,7 +9893,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                      about yourself should not wait on a slip finishing its
                      trip. `partly` is not reachable from here; see the note
                      above. */
-                  sayVerdict(claim.id, answer === 'keep' ? 'true' : 'not_true', undefined, claim.contested, claim.statementRevision);
+                  return sayVerdict(claim.id, answer === 'keep' ? 'true' : 'not_true', undefined, claim.contested, claim.statementRevision) ?? false;
                   /* NO RECEIPT AFTER A NO. There was one — "Noted. Say what's
                      true", a door into a chat under the slot — and the
                      founder took it out, 2026-10-15: "note * say whats true
@@ -9904,7 +9930,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   <p className="jar-pick-source">
                     {formatMessage(locale, "worldClaimAskedAgain", { month: monthTag(Date.parse(claimQueue[0].askedAgain.lastAnsweredAt), locale) })}
                   </p>
-                ) : null}
+                ) : <p className="jar-pick-source">{say('worldClaimUnanswered')}</p>}
                 {/* WHERE IT CAME FROM, IN ONE LINE — unchanged. Founder:
                     "how do we help the user deep dive into what inspirations
                     led to this ... without overwhelming the space we have?"

@@ -9,8 +9,8 @@
  * These cases drive `applyCandidates`, the same function the derivation
  * pipeline runs, against a real database — not a restated predicate in test
  * SQL, which is the "green while blind" shape docs/known-issues.md warns
- * about. No model is called: identical embeddings keep every decision above
- * the judge band, and the stub provider throws if the pipeline ever asks.
+ * about. No model is called: identical embeddings select the existing signal;
+ * `judgeSignalMatch` confirms the fixture's rephrasings name the same pattern.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -25,15 +25,13 @@ let t: TestDatabase;
 let seq = 0;
 
 const EMBEDDING_MODEL = "contract-test-embedding";
-/** Identical vectors → cosine 1 → attach without a judge. */
+/** Identical vectors select a nearby match; changed wording is judged. */
 const NEAR_EMBEDDING = [1, 0, 0, 0];
 /** Orthogonal → cosine 0 → always a mint. */
 const OTHER_EMBEDDING = [0, 1, 0, 0];
 
-const neverCalledProvider = {
-  judgeSignalMatch: async () => {
-    throw new Error("the judge must not be consulted in these scenarios");
-  },
+const matchingProvider = {
+  judgeSignalMatch: async () => ({ relation: 'same' }),
 } as unknown as ModelProvider;
 
 async function seedProfile(): Promise<string> {
@@ -68,7 +66,7 @@ async function derive(
       inspirationId,
       candidates: [{ statement, reason: null, quote: null, quoteSource: null, relatedEvidence: [], embedding }],
       embeddingModel: EMBEDDING_MODEL,
-      provider: neverCalledProvider,
+      provider: matchingProvider,
       preferredLocale: "en-US" as never,
       now: new Date(),
     });

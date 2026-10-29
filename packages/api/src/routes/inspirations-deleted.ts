@@ -100,11 +100,12 @@ export function registerDeletedRoutes(routes: Hono<AuthEnv>, getDatabase: typeof
       /* THE REVISION FENCE DOES NOT RESTART. The insert trigger starts a
          fresh revision row at 1, and anything still holding (id, revision)
          from before the delete — a queued job, a snapshot — would match it
-         again. Lifting both revisions to the restore's epoch-milliseconds
-         puts the restored row past every revision the old one ever had. */
+         again. Advance beyond the saved floors, independently of clocks.
+         Epoch milliseconds remain a fallback for legacy copies whose old
+         revisions were not retained; they cannot establish an exact floor. */
       await tx.update(inspirationRevisions).set({
-        personalRevision: sql`GREATEST(${inspirationRevisions.personalRevision}, ${at.getTime()}::bigint)`,
-        publicRevision: sql`GREATEST(${inspirationRevisions.publicRevision}, ${at.getTime()}::bigint)`,
+        personalRevision: sql`GREATEST(${inspirationRevisions.personalRevision}, ${at.getTime()}::bigint, ${copy.personalRevision + 1n}::bigint)`,
+        publicRevision: sql`GREATEST(${inspirationRevisions.publicRevision}, ${at.getTime()}::bigint, ${copy.publicRevision + 1n}::bigint)`,
       }).where(and(eq(inspirationRevisions.profileId, profileId), eq(inspirationRevisions.inspirationId, copy.id)));
       if (copy.reflections.length) {
         await tx.insert(reflections).values(copy.reflections.map((reflection, index) => ({ profileId, inspirationId: copy.id,

@@ -81,13 +81,23 @@ async function createReviewInTransaction(tx:Tx,profileId:string,input:{id:string
       return present(tx,profileId,active.id,includeCurrent,active);
     }
   }
-    const reviewed=sql<boolean>`EXISTS (SELECT 1 FROM ${reviewItems} WHERE ${reviewItems.profileId}=${inspirations.profileId}
-      AND ${reviewItems.inspirationId}=${inspirations.id} AND ${reviewItems.choice} IS NOT NULL)
-      OR EXISTS (SELECT 1 FROM ${reflections} WHERE ${reflections.profileId}=${inspirations.profileId}
-        AND ${reflections.inspirationId}=${inspirations.id} AND ${reflections.skipped}=false AND length(trim(${reflections.answer}))>0)`;
-    const lastReviewed=sql`(SELECT max(${reviewItems.decidedAt}) FROM ${reviewItems}
+    // Explicit correlation survives Drizzle's single-table SELECT projection,
+    // which otherwise strips column qualifiers inside this SQL expression.
+    const reviewed=sql<boolean>`EXISTS (SELECT 1 FROM review_items ri WHERE ri.profile_id=inspirations.profile_id
+      AND ri.inspiration_id=inspirations.id AND ri.choice IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM reflections fr WHERE fr.profile_id=inspirations.profile_id
+        AND fr.inspiration_id=inspirations.id AND fr.skipped=false AND length(trim(fr.answer))>0)`;
+    // A written reflection is engagement too. Using only Keep/Skip made a
+    // freshly answered original immediately eligible for another suggestion.
+    const lastReviewed=sql`(SELECT max(activity.at) FROM (
+      SELECT ${reviewItems.decidedAt} AS at FROM ${reviewItems}
       WHERE ${reviewItems.profileId}=${inspirations.profileId} AND ${reviewItems.inspirationId}=${inspirations.id}
-        AND ${reviewItems.choice} IS NOT NULL)`;
+        AND ${reviewItems.choice} IS NOT NULL
+      UNION ALL
+      SELECT ${reflections.createdAt} AS at FROM ${reflections}
+      WHERE ${reflections.profileId}=${inspirations.profileId} AND ${reflections.inspirationId}=${inspirations.id}
+        AND ${reflections.skipped}=false AND length(trim(${reflections.answer}))>0
+    ) activity)`;
     const candidates=await tx.select({id:inspirations.id,reviewed}).from(inspirations)
       .where(and(eq(inspirations.profileId,profileId),input.inspirationIds?inArray(inspirations.id,input.inspirationIds)
         :sql`(${lastReviewed} IS NULL OR ${lastReviewed}<now()-interval '24 hours')`))

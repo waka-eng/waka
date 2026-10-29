@@ -17,7 +17,7 @@ import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
 
-import { keeperKeys } from "../db/index.js";
+import { keeperKeys, profiles } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import {
   KEEPER_KEY_DISPLAY_CHARS,
@@ -71,39 +71,45 @@ export function createKeeperKeyRoutes(deps: KeeperKeyRouteDependencies = {}): Ho
     const db = getDatabase();
     const session = c.get("session");
 
-    const live = await db
-      .select({ id: keeperKeys.id })
-      .from(keeperKeys)
-      .where(and(eq(keeperKeys.profileId, session.profile.id), isNull(keeperKeys.revokedAt)));
-    if (live.length >= MAX_KEEPER_KEYS) {
-      return c.json({ error: `You may hold ${MAX_KEEPER_KEYS} keys` }, 409);
-    }
+    return db.transaction(async (tx) => {
+      const [profile] = await tx.select({ id: profiles.id }).from(profiles)
+        .where(and(eq(profiles.id, session.profile.id), eq(profiles.accountId, session.profile.accountId), eq(profiles.type, "human")))
+        .for("update");
+      if (!profile) return c.json({ error: "Profile not found" }, 404);
+      const live = await tx
+        .select({ id: keeperKeys.id })
+        .from(keeperKeys)
+        .where(and(eq(keeperKeys.profileId, session.profile.id), isNull(keeperKeys.revokedAt)));
+      if (live.length >= MAX_KEEPER_KEYS) {
+        return c.json({ error: `You may hold ${MAX_KEEPER_KEYS} keys` }, 409);
+      }
 
-    const minted = await mintKeeperKey();
-    const [row] = await db
-      .insert(keeperKeys)
-      .values({
-        profileId: session.profile.id,
-        tokenHash: minted.tokenHash,
-        prefix: minted.prefix,
-        label: parsed.data.label ?? null,
-      })
-      .returning({ id: keeperKeys.id, createdAt: keeperKeys.createdAt });
-
-    return c.json(
-      {
-        key: {
-          id: row!.id,
+      const minted = await mintKeeperKey();
+      const [row] = await tx
+        .insert(keeperKeys)
+        .values({
           profileId: session.profile.id,
-          /** shown this once; the row keeps only the hash */
-          secret: minted.secret,
+          tokenHash: minted.tokenHash,
           prefix: minted.prefix,
           label: parsed.data.label ?? null,
-          createdAt: row!.createdAt.toISOString(),
+        })
+        .returning({ id: keeperKeys.id, createdAt: keeperKeys.createdAt });
+
+      return c.json(
+        {
+          key: {
+            id: row!.id,
+            profileId: session.profile.id,
+            /** shown this once; the row keeps only the hash */
+            secret: minted.secret,
+            prefix: minted.prefix,
+            label: parsed.data.label ?? null,
+            createdAt: row!.createdAt.toISOString(),
+          },
         },
-      },
-      201,
-    );
+        201,
+      );
+    });
   });
 
   // GET /api/keeper-keys — the person's keys, newest first.

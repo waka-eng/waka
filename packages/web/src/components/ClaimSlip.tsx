@@ -60,7 +60,7 @@ export type PickAnswer = "keep" | "not";
    chat button (founder, 2026-10-15: "remove chat about it under the claim"). */
 interface Drag { pointerId: number; startX: number; startY: number; lastX: number; lastAt: number; velocity: number; moved: boolean }
 
-export function ClaimSlip({ id, tone, label, labelKeep, labelNot, header, more, children, onAnswer, onLeft, onOpen }: {
+export function ClaimSlip({ id, tone, label, labelKeep, labelNot, savingLabel, failureLabel, header, more, children, onAnswer, onLeft, onOpen }: {
   id: string;
   /** A reading WAKA made of you (warm, plain) or a sentence your agent picked (cool, quoted). */
   tone: "reading" | "pick";
@@ -68,6 +68,8 @@ export function ClaimSlip({ id, tone, label, labelKeep, labelNot, header, more, 
   label: string;
   labelKeep: string;
   labelNot: string;
+  savingLabel?:string;
+  failureLabel?:string;
   /** Who is presenting it, above the slip. Nothing for a reading: the big
       creature above is already the one asking. */
   header?: ReactNode;
@@ -84,7 +86,7 @@ export function ClaimSlip({ id, tone, label, labelKeep, labelNot, header, more, 
   onOpen?: () => void;
   /** The slip's contents. */
   children: ReactNode;
-  onAnswer: (answer: PickAnswer) => void;
+  onAnswer: (answer: PickAnswer) => void | boolean | Promise<boolean>;
   onLeft: (answer: PickAnswer) => void;
 }) {
   const slip = useRef<HTMLDivElement>(null);
@@ -96,19 +98,27 @@ export function ClaimSlip({ id, tone, label, labelKeep, labelNot, header, more, 
   const [dx, setDx] = useState(0);
   const [held, setHeld] = useState(false);
   const [leaving, setLeaving] = useState<PickAnswer | null>(null);
+  const [saving,setSaving]=useState(false);
+  const [failed,setFailed]=useState(false);
+  const attempt=useRef(0);
+  const committing=useRef(false);
   const timer = useRef<number | null>(null);
   const still = prefersStillness();
 
   useEffect(() => {
+    attempt.current++;
+    committing.current=false;
+    if(timer.current!==null){window.clearTimeout(timer.current);timer.current=null;}
     drag.current = null;
     setDx(0);
     setHeld(false);
     setLeaving(null);
+    setSaving(false);setFailed(false);
   }, [id]);
-  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
+  useEffect(() => () => { attempt.current++;if (timer.current !== null) window.clearTimeout(timer.current); }, []);
 
   const commit = useCallback((answer: PickAnswer) => {
-    if (leaving) return;
+    if (leaving || committing.current) return;
     /* Only when the slip leaves in the same click; otherwise its own trip
        (`leaving`) already holds the next press off. */
     carryFocus = Boolean(root.current?.contains(document.activeElement));
@@ -117,19 +127,35 @@ export function ClaimSlip({ id, tone, label, labelKeep, labelNot, header, more, 
       if (at - lastAnsweredAt < ANSWER_GAP_MS) return;
       lastAnsweredAt = at;
     }
-    onAnswer(answer);
-    if (still) { onLeft(answer); return; }
-    setLeaving(answer);
-    timer.current = window.setTimeout(() => {
-      timer.current = null;
-      onLeft(answer);
-      setLeaving(null);
-      setDx(0);
-    }, SLIP_LEAVE_MS);
+    committing.current=true;
+    const current=++attempt.current;
+    let animationDone=still,accepted=false;
+    const advance=()=>{
+      if(current!==attempt.current||!animationDone||!accepted)return;
+      committing.current=false;setSaving(false);
+      onLeft(answer);setLeaving(null);setDx(0);
+    };
+    setFailed(false);setLeaving(answer);
+    if(!still)timer.current=window.setTimeout(()=>{timer.current=null;animationDone=true;advance();},SLIP_LEAVE_MS);
+    // Send at the press and animate immediately; a failed save returns the
+    // same card. Neither a slow reply nor a double press can lose the answer.
+    let response:void|boolean|Promise<boolean>;
+    try{response=onAnswer(answer);}catch{response=false;}
+    setSaving(Boolean(response&&typeof response==='object'));
+    void Promise.resolve(response).then(result=>{
+      if(current!==attempt.current)return;
+      if(result===false)throw new Error('Review answer was not saved');
+      accepted=true;setSaving(false);advance();
+    }).catch(()=>{
+      if(current!==attempt.current)return;
+      if(timer.current!==null){window.clearTimeout(timer.current);timer.current=null;}
+      committing.current=false;carryFocus=false;
+      setSaving(false);setLeaving(null);setDx(0);setFailed(true);
+    });
   }, [leaving, onAnswer, onLeft, still]);
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (leaving || drag.current || event.button !== 0) return;
+    if (leaving || committing.current || drag.current || event.button !== 0) return;
     drag.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastAt: event.timeStamp, velocity: 0, moved: false };
   };
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -203,6 +229,7 @@ export function ClaimSlip({ id, tone, label, labelKeep, labelNot, header, more, 
       ref={root}
       className={`${tone === "reading" ? "jar-pick jar-pick--reading" : "jar-pick"}${(leaving ?? leaning) === "keep" ? " jar-pick--toward-keep" : (leaving ?? leaning) === "not" ? " jar-pick--toward-not" : ""}`}
       data-moving={held || leaving ? "1" : undefined}
+      aria-busy={saving||undefined}
       style={{ "--near": leaving ? 1 : progress } as CSSProperties}
     >
       {header}
@@ -252,6 +279,8 @@ export function ClaimSlip({ id, tone, label, labelKeep, labelNot, header, more, 
           <svg viewBox="0 0 7 12" width="7" height="12" aria-hidden="true"><path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       </p>
+      {saving&&savingLabel?<p className="jar-pick-source" role="status">{savingLabel}</p>:null}
+      {failed&&failureLabel?<p className="jar-pick-source" role="alert">{failureLabel}</p>:null}
     </div>
   );
 }

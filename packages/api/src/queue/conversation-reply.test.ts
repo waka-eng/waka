@@ -65,6 +65,7 @@ it.each([
 it('says whose memory the sources are only when there are sources to say it about',()=>{
   const text=(extra:Partial<ConversationReplyInput>)=>buildConversationReplyRequest({...input,...extra}).contents[0].parts[0].text;
   expect(text({perspective:'agent'})).toContain('from the person’s AI agent’s memory');
+  expect(text({perspective:'agent'})).toContain('Never speak as that agent');
   expect(text({perspective:'agent',sources:[]})).not.toContain('Every source below');
   expect(text({perspective:'both',sources:[]})).not.toContain('Each source has owner');
 });

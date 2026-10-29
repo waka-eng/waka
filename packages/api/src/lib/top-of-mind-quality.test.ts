@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { copiesSource, readingMatchesLocale, readingQualityIssue, reviewReadingEntries, type TopOfMindQualityContext } from './top-of-mind-quality.js';
 import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
-import { buildTopOfMindReviewRequest, buildTopOfMindSynthesisRequest, parseTopOfMindReview } from '../queue/gemini.js';
+import { applyTopOfMindComparison, buildTopOfMindComparisonRequest, buildTopOfMindReviewRequest, buildTopOfMindSynthesisRequest, parseTopOfMindReview } from '../queue/gemini.js';
 import type { TopOfMindSynthesisInput } from './model-provider.js';
 
 const context: TopOfMindQualityContext = {
@@ -65,6 +65,115 @@ describe('a reading connects different inspirations', () => {
 });
 
 describe('publication review', () => {
+  it.each([
+    { name: 'new idea', bodies: ['new', 'old'], count: 1, proofs: [[], []], changed: true },
+    { name: 'paraphrase', bodies: ['reworded', 'old'], count: 1, proofs: [[1], [0]], changed: false },
+    { name: 'merged repetition', bodies: ['full', 'full rephrased', 'short'], count: 1, proofs: [[1, 2], [0], [0]], leading: [true, true, true], changed: false },
+    { name: 'split repetition', bodies: ['full rephrased', 'short', 'full'], count: 2, proofs: [[2], [2], [0, 1]], leading: [true, true, true], changed: false },
+    { name: 'new detail in a broad topic', bodies: ['specific', 'general'], count: 1, proofs: [[], [0]], changed: true },
+    { name: 'changed focus', bodies: ['B', 'A', 'A', 'B'], count: 2, proofs: [[], [], [], []], changed: true },
+    { name: 'same leading focus', bodies: ['A', 'C', 'B', 'A', 'B', 'C'], count: 3, proofs: [[], [], [], [], [], []], changed: false },
+    { name: 'removed idea', bodies: ['A', 'A', 'B'], count: 1, proofs: [[], [], []], changed: true },
+    { name: 'rejected invention', bodies: ['A', 'invention', 'A'], count: 2, proofs: [[], [], []], changed: false, rejected: 1 },
+  ])('computes novelty from accepted directional coverage: $name', async fixture => {
+    const compared = vi.fn();
+    await reviewReadingEntries(fixture.bodies.map(body => ({ ...entry, type: 'pattern', body })), context,
+      { reviewTopOfMind: async input => ({ entries: (await approveReadingReview(input)).entries.map(row => ({ ...row,
+        grounded: row.index !== fixture.rejected, coveredByIndices: fixture.proofs[row.index],
+        coveredByLeadingEntry: fixture.leading?.[row.index] ?? (fixture.proofs[row.index]!.length === 1 && fixture.proofs[row.index]![0] === (row.index < fixture.count ? fixture.count : 0)),
+      })) }) }, undefined, { proposedCount: fixture.count, onCompared: compared });
+    expect(compared).toHaveBeenCalledWith(fixture.changed);
+  });
+  it('refuses a covering set containing a rejected row instead of trimming its proof', async () => {
+    await expect(reviewReadingEntries(['new claim', 'old claim', 'bad claim'].map(body => ({ ...entry, type: 'pattern', body })), context,
+      { reviewTopOfMind: async input => ({ entries: (await approveReadingReview(input)).entries.map(row => ({ ...row,
+        grounded: row.index !== 2, coveredByIndices: row.index === 0 ? [1, 2] : [],
+      })) }) }, undefined, { proposedCount: 1, onCompared: vi.fn() })).rejects.toThrow(/rejected content/);
+  });
+  it('keeps a valid leading proof when an exact duplicate appears later in the opposite reading', async () => {
+    const compared = vi.fn();
+    const entries = ['A connected observation.', 'The observation rephrased.', 'A connected observation.']
+      .map(body => ({ ...entry, type: 'pattern' as const, body }));
+    await reviewReadingEntries(entries, context, { reviewTopOfMind: async input => ({
+      entries: (await approveReadingReview(input)).entries.map(row => ({ ...row,
+        coveredByIndices: row.index === 0 ? [2] : [0], coveredByLeadingEntry: true,
+        leadingEntryIndex: row.index === 0 ? 1 : 0,
+      })),
+    }) }, undefined, { proposedCount: 1, onCompared: compared });
+    expect(compared).toHaveBeenCalledWith(false);
+  });
+  it('does not report an unchanged reading when source review rejects every entry', async () => {
+    const compared = vi.fn();
+    await expect(reviewReadingEntries(['Proposed.', 'Current.'].map(body => ({ ...entry, type: 'pattern', body })), context,
+      { reviewTopOfMind: async input => ({ entries: (await approveReadingReview(input)).entries.map(row => ({ ...row,
+        grounded: false, coveredByIndices: [], coveredByLeadingEntry: false,
+      })) }) }, undefined, { proposedCount: 1, onCompared: compared })).rejects.toThrow(/no approved/i);
+    expect(compared).not.toHaveBeenCalled();
+  });
+  it.each([undefined, 0, 2])('keeps the leading proof tied to its actual accepted target (%s)', async leadingEntryIndex => {
+    const compared = vi.fn();
+    await expect(reviewReadingEntries(['new claim', 'old claim', 'rejected claim'].map(body => ({ ...entry, type: 'pattern', body })), context,
+      { reviewTopOfMind: async input => ({ entries: (await approveReadingReview(input)).entries.map(row => ({ ...row,
+        grounded: row.index !== 2, coveredByLeadingEntry: row.index === 0,
+        ...(row.index === 0 ? { leadingEntryIndex } : {}),
+      })) }) }, undefined, { proposedCount: 1, onCompared: compared })).rejects.toThrow(/leading/);
+    expect(compared).not.toHaveBeenCalled();
+  });
+  it('bounds the experimental comparison and keeps original source text out of it', async () => {
+    const compared = vi.fn();
+    const provider = { reviewTopOfMind: vi.fn(approveReadingReview) };
+    expect(await reviewReadingEntries([{ ...entry, type: 'pattern' }, { ...entry, type: 'pattern' }],
+      context, provider, undefined, { proposedCount: 1, onCompared: compared })).toEqual(new Set([0, 1]));
+    expect(provider.reviewTopOfMind).toHaveBeenCalledTimes(1);
+    const input = provider.reviewTopOfMind.mock.calls[0]![0];
+    expect(input.comparison).toEqual({ proposedCount: 1 });
+    expect(input.entries.map(row => row.type)).toEqual(['pattern', 'pattern']);
+    expect(compared).toHaveBeenCalledWith(false);
+    const request = buildTopOfMindReviewRequest(input);
+    expect(request.generationConfig.responseSchema!.required).toEqual(['entries']);
+    expect(request.generationConfig.responseSchema!.properties!.entries).toMatchObject({ minItems: 2, maxItems: 2 });
+    const reviewed = await approveReadingReview(input);
+    const comparison = buildTopOfMindComparisonRequest(input, reviewed);
+    expect(comparison.generationConfig.maxOutputTokens).toBe(1800);
+    expect(comparison.contents[0]!.parts[0]!.text).toContain('"proposed":[{"index":0');
+    expect(comparison.contents[0]!.parts[0]!.text).toContain('"current":[{"index":1');
+    expect(comparison.contents[0]!.parts[0]!.text).not.toContain(input.inspirations[0]!.text);
+    expect(applyTopOfMindComparison(input, await approveReadingReview(input), {
+      coverage: [{ index: 0, coveredByIndices: [1], coveredByLeadingEntry: true }, { index: 1, coveredByIndices: [0], coveredByLeadingEntry: true }],
+    }).entries[0]!.coveredByIndices).toEqual([1]);
+    for (const coverage of [[], [{ index: 0, coveredByIndices: [1], coveredByLeadingEntry: true }],
+      [{ index: 0, coveredByIndices: [0], coveredByLeadingEntry: true }, { index: 1, coveredByIndices: [0], coveredByLeadingEntry: true }],
+      [{ index: 0, coveredByIndices: [1, 1], coveredByLeadingEntry: true }, { index: 1, coveredByIndices: [0], coveredByLeadingEntry: true }]]) {
+      expect(() => applyTopOfMindComparison(input, reviewed, { coverage })).toThrow(/comparison/);
+    }
+    expect(parseTopOfMindReview(await approveReadingReview(input, false)).entries[0]!.coveredByIndices).toEqual([1]);
+  });
+  it('refuses missing or malformed comparisons without invoking the decision callback', async () => {
+    for (const coveredByIndices of [undefined, null, 'false', [-1], [1.5], [0], [2], [1, 1]]) {
+      const compared = vi.fn();
+      await expect(reviewReadingEntries([{ ...entry, type: 'pattern' }, { ...entry, type: 'pattern' }], context,
+        { reviewTopOfMind: async input => ({ entries: (await approveReadingReview(input)).entries.map(row => ({ ...row, coveredByIndices })) } as never) },
+        undefined, { proposedCount: 1, onCompared: compared })).rejects.toThrow(/comparison/);
+      expect(compared).not.toHaveBeenCalled();
+    }
+    expect(() => parseTopOfMindReview({ entries: [{ index: 0, languageMatches: true, grounded: true,
+      synthesized: true, supportingInspirationIds: ['one', 'two'], coveredByIndices: '1' }] })).toThrow(/invalid verdict/);
+  });
+  it('rejects invalid comparison boundaries before making a model call', async () => {
+    const provider = { reviewTopOfMind: vi.fn(approveReadingReview) };
+    for (const proposedCount of [0, 2, -1, 1.5, 8]) {
+      await expect(reviewReadingEntries([{ ...entry, type: 'pattern' }, { ...entry, type: 'pattern' }], context,
+        provider, undefined, { proposedCount, onCompared: vi.fn() })).rejects.toThrow(/comparison input/);
+    }
+    expect(provider.reviewTopOfMind).not.toHaveBeenCalled();
+  });
+  it('does not commit a comparison before checking all entry verdicts', async () => {
+    const compared = vi.fn();
+    await expect(reviewReadingEntries([{ ...entry, type: 'pattern' }, { ...entry, type: 'pattern' }], context,
+      { reviewTopOfMind: async input => ({ ...await approveReadingReview(input), entries: [] }) },
+      undefined, { proposedCount: 1, onCompared: compared })).rejects.toThrow(/Incomplete/);
+    expect(compared).not.toHaveBeenCalled();
+  });
   it('reports negative review dimensions and invalid supporting sources without source text', async () => {
     const rejected = vi.fn();
     const accepted = await reviewReadingEntries([entry], context, { reviewTopOfMind: async () => ({ entries: [{
@@ -113,6 +222,18 @@ describe('publication review', () => {
       sourceTexts: new Map([...context.sourceTexts, ...duplicates.map(id => [id, context.sourceTexts.get('one')!] as const)]),
     }, { reviewTopOfMind: async input => {
       expect(input.entries[0]!.inspirationIds).toEqual(['dup1', 'two']);
+      return approveReadingReview(input);
+    } });
+  });
+  it('samples across cited signals before filling the review budget from one signal', async () => {
+    const contextWithMany = { ...context,
+      signalOrigins: new Map([['a', ['a1', 'a2', 'a3', 'a4']], ['b', ['two']]]),
+      sourceTexts: new Map([...context.sourceTexts, ...['a1', 'a2', 'a3', 'a4'].map((id, i) =>
+        [id, [`Independent observation number ${i} about a hidden Save control.`]] as const)]),
+    };
+    await reviewReadingEntries([entry], contextWithMany, { reviewTopOfMind: async input => {
+      expect(input.entries[0]!.inspirationIds).toEqual(['a1', 'two', 'a2', 'a3']);
+      expect(input.inspirations).toHaveLength(4);
       return approveReadingReview(input);
     } });
   });

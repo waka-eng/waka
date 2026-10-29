@@ -32,8 +32,8 @@
  */
 
 /**
- * Above this cosine, a candidate is the pattern an existing signal already
- * names, and the capture becomes evidence for it. Deliberately high: a false
+ * Above this cosine, identical wording can attach without a judge. Changed
+ * wording still needs a meaning check, including negation and time scope. A false
  * match quietly fuses two distinct patterns into one and there is no surface
  * anywhere that would show it happened, while a false mint shows up as a
  * near-duplicate the owner can merge.
@@ -44,8 +44,8 @@ export const SIGNAL_MATCH_MIN_COSINE = 0.86;
  * Between this and the match bar, distance alone cannot decide: statements
  * this close are sometimes one pattern reworded and sometimes two patterns
  * sharing a vocabulary. The band gets one judge call for the single nearest
- * candidate. Below it, minting needs no permission — and above the match bar,
- * attaching needs none.
+ * candidate. Below it, minting needs no judgment. Above the match bar only
+ * identical wording may attach directly; rephrasing still asks the judge.
  */
 export const SIGNAL_MERGE_JUDGE_MIN_COSINE = 0.7;
 
@@ -58,28 +58,16 @@ export function classifyMatch(similarity: number | null): "attach" | "judge" | "
 }
 
 /**
- * At or above this cosine to a DISMISSED signal's vector, a candidate is the
- * pattern its owner already threw out, and the ground refuses it: no mint, no
- * evidence, no judge call — one `suppressions` row naming the anchor instead.
- * The refusal is checked BEFORE the match, so a refused pattern cannot
- * re-enter as evidence for something else, and a refused candidate never
- * spends a model call.
+ * Retrieves the nearest DISMISSED statement for one semantic check. Only
+ * confirmed same meaning suppresses; proximity alone cannot reject a new
+ * view or temporary trial. Identical wording has priority and needs no call.
+ * Suppression precedes matching, so a refused pattern cannot re-enter as
+ * evidence for another signal. Each refusal names its anchor in `suppressions`.
  *
- * Deliberately the same number as the match bar today: "close enough to be
- * the same pattern" must mean one thing whether the pattern is wanted or
- * refused. A separate export all the same, because the two may need to tune
- * apart — a false refusal is visible in the antechamber and reversible by
- * restore, while a false match is the invisible fusion the match bar is set
- * high against.
+ * Deliberately retains the existing retrieval bar. Similarity thresholds and
+ * scan limits stay separate from the semantic verdict and owner restore.
  */
 export const SIGNAL_SUPPRESSION_MIN_COSINE = 0.86;
-
-/**
- * Two candidates from the *same* capture this close are one pattern said
- * twice. Higher than the match bar because both came from one model call on
- * one input, so genuine distinctness needs more separation to be believable.
- */
-export const SIGNAL_BATCH_DEDUPE_MIN_COSINE = 0.94;
 
 /** The gardener's suspect bar: at or above the attach threshold, two
     STANDING signals are close enough that derivation would have attached

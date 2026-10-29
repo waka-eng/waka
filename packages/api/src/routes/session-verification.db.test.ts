@@ -60,9 +60,9 @@ it('refuses expired credentials and omits them from the live connection list', a
   expect((await list()).sessions.map(row => row.profile.id)).toEqual([human]);
 });
 
-it('does not count a browser cookie as an MCP verification', async () => {
+it.each([undefined, 'Bearer ', 'bearer \t  ', 'Basic ignored'])('does not count a browser cookie as MCP verification with header %s', async authorization => {
   const response = await app.request('/api/auth/cli/verify', { method: 'POST',
-    headers: { Cookie: `waka_session=${humanToken}`, 'Content-Type': 'application/json' },
+    headers: { Cookie: `waka_session=${humanToken}`, 'Content-Type': 'application/json', ...(authorization === undefined ? {} : { Authorization: authorization }) },
     body: JSON.stringify({ profileId: human }) });
   expect(response.status).toBe(403);
 });
@@ -85,4 +85,11 @@ it('verifies an agent API key only for its bound profile and refuses it after re
   expect((await list()).sessions.every(row => row.verifiedAt === null)).toBe(true);
   expect((await app.request(`/api/agent-keys/${key.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${humanToken}` } })).status).toBe(200);
   expect((await verify(agent, key.secret)).status).toBe(401);
+});
+
+it('accepts a case-insensitive bearer scheme without treating browser cookies as proof', async () => {
+  const response = await app.request('/api/auth/cli/verify', { method: 'POST',
+    headers: { Authorization: `bearer ${agentToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profileId: agent }) });
+  expect(response.status).toBe(200);
 });

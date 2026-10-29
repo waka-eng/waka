@@ -12,6 +12,8 @@
  * while "a screenshot of some text" can never be.
  */
 
+import { z } from 'zod';
+import { callOpenRouter, getOpenRouterApiKey, OpenRouterHttpError } from './openrouter-http.js';
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
@@ -20,7 +22,8 @@ import {
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
 
-export const IMAGE_DESCRIPTION_MODEL = "gemini-3.1-flash-lite";
+export const IMAGE_DESCRIPTION_MODEL = "deepseek/deepseek-v4.1-flash-1017";
+const GEMINI_IMAGE_DESCRIPTION_MODEL = "gemini-3.1-flash-lite";
 
 /** Bounded like every other enrichment text: enough to read, not to bloat. */
 export const MAX_IMAGE_DESCRIPTION_CHARS = 2000;
@@ -89,6 +92,30 @@ interface GeminiGenerateResponse {
   }>;
 }
 
+const descriptionSchema = z.object({ description: z.string().trim().min(1) });
+
+async function describeWithDeepSeek(input: { bytes: Uint8Array; contentType: string; apiKey: string; fetchFn?: typeof fetch }): Promise<string> {
+  let payload: unknown;
+  try {
+    payload = await callOpenRouter({ model: IMAGE_DESCRIPTION_MODEL,
+      messages: [{ role: 'system', content: `${DESCRIPTION_PROMPT}\nReturn only JSON with a description string.` },
+        { role: 'user', content: [{ type: 'text', text: 'Describe the attached image.' },
+          { type: 'image_url', image_url: { url: `data:${input.contentType};base64,${base64FromBytes(input.bytes)}` } }] }],
+      temperature: 0, max_tokens: 800, reasoning: { enabled: false },
+      response_format: { type: 'json_schema', json_schema: { name: 'image_description', schema: {
+        type: 'object', properties: { description: { type: 'string' } }, required: ['description'], additionalProperties: false,
+      } } },
+    }, 'image description', { apiKey: input.apiKey, fetchFn: input.fetchFn });
+  } catch (error) {
+    const status = error instanceof OpenRouterHttpError ? error.status : undefined;
+    throw new ImageDescriptionError(status ? `Image description failed (HTTP ${status})` : 'Image description transport failed',
+      { transient: status === undefined || status === 408 || status === 429 || status >= 500 });
+  }
+  const parsed = descriptionSchema.safeParse(payload);
+  if (!parsed.success) throw new ImageDescriptionError('model returned no complete description', { transient: false });
+  return parsed.data.description.slice(0, MAX_IMAGE_DESCRIPTION_CHARS);
+}
+
 /**
  * Ask the model to describe one image. Throws `ImageDescriptionError` with a
  * `transient` flag so the queue can tell a bad day for the network from an
@@ -97,14 +124,12 @@ interface GeminiGenerateResponse {
 export async function describeImage(input: {
   bytes: Uint8Array;
   contentType: string;
+  /** Gemini fallback credential; never sent to OpenRouter. */
   apiKey?: string;
+  openRouterApiKey?: string;
   /** Injectable so the request shape can be asserted without a network. */
   fetchFn?: typeof fetch;
 }): Promise<string> {
-  const apiKey = input.apiKey ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new ImageDescriptionError("GEMINI_API_KEY is not set", { transient: false });
-  }
   if (input.bytes.length === 0) {
     throw new ImageDescriptionError("image is empty", { transient: false });
   }
@@ -119,9 +144,19 @@ export async function describeImage(input: {
     });
   }
 
+  const contentType = input.contentType.split(';')[0]!.trim().toLowerCase();
+  const openRouterApiKey = input.openRouterApiKey ?? getOpenRouterApiKey();
+  // OpenRouter only accepts PNG/JPEG/WebP/GIF. Keep iPhone HEIC/HEIF
+  // enrichment working on the existing Gemini path; do not send unsupported bytes.
+  if (openRouterApiKey && contentType !== 'image/heic' && contentType !== 'image/heif') {
+    return describeWithDeepSeek({ ...input, contentType, apiKey: openRouterApiKey });
+  }
+  const apiKey = input.apiKey ?? process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new ImageDescriptionError('GEMINI_API_KEY is not set for image fallback', { transient: false });
+
   const response = await fetchModelWithTimeout(
     input.fetchFn ?? fetch,
-    buildGeminiModelEndpoint(IMAGE_DESCRIPTION_MODEL, "generateContent"),
+    buildGeminiModelEndpoint(GEMINI_IMAGE_DESCRIPTION_MODEL, "generateContent"),
     {
       method: "POST",
       headers: buildGeminiJsonHeaders(apiKey),

@@ -58,6 +58,8 @@ it('does not expose or change another account transcript even on a public captur
 });
 it('rejects a late machine result after an owner correction, keeping the correction and original', async () => {
   const f = await fixture();
+  // Exercise a real in-flight reread, rather than a replay of cached success.
+  await t.sql`UPDATE attachments SET enrichment_status='pending' WHERE id=${f.id}`;
   await expect(enrichAttachment(f.id, { db: t.db as never, readAttachment: async () => {
     expect((await f.edit('Owner wins')).status).toBe(200);
     return { result: { status: 'ready', kind: 'audio_transcription', reason: null, text: 'Late machine words' } };

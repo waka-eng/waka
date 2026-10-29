@@ -3,23 +3,21 @@
  *
  * goal: the-legible-loop, Phase 3. A dismissed signal keeps its row, its
  * evidence and its embedding; the embedding becomes a suppression anchor,
- * and from then on a candidate near it is dropped instead of minted — with
+ * and from then on the same meaning is dropped instead of minted — with
  * EVERY refusal written to `suppressions`, naming the anchor. The word is
  * dismissed, not tombstone: restore ends the refusals and returns the
  * pattern to the loop's sight.
  *
  * These cases drive `applyCandidates` — the same function the derivation
  * pipeline runs — against a real database, with stub embeddings whose cosine
- * geometry is chosen by hand. Zero model calls anywhere: the refusal is
- * checked BEFORE the match, so a refused candidate never reaches the judge,
- * and the stub provider throws if the pipeline ever asks.
+ * geometry is chosen by hand. No live model is called. Changed wording
+ * requires a semantic same verdict before refusal; exact wording does not.
  *
  * This file is also the enforcing test behind two rendered claims:
- * `RECEIPTS.groundRefuses` in the web registry ("the ground will refuse
- * anything this close from now on") and the reading's refused-ground
+ * `RECEIPTS.groundRefuses` in the web registry and the reading's refused-ground
  * sentence. Renaming or deleting it fails those suites by design.
  */
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import {
@@ -41,10 +39,8 @@ const NEAR_EMBEDDING = [0.9, Math.sqrt(1 - 0.81), 0, 0];
 /** Orthogonal to everything above — always a mint. */
 const FAR_EMBEDDING = [0, 0, 1, 0];
 
-const neverCalledProvider = {
-  judgeSignalMatch: async () => {
-    throw new Error("a refused candidate must never spend a judge call");
-  },
+const matchingProvider = {
+  judgeSignalMatch: vi.fn(async () => ({ relation: 'same' as const })),
 } as unknown as ModelProvider;
 
 async function seedProfile(): Promise<string> {
@@ -79,7 +75,7 @@ async function derive(
       inspirationId,
       candidates: [{ statement, reason: null, quote: null, quoteSource: null, relatedEvidence: [], embedding }],
       embeddingModel: EMBEDDING_MODEL,
-      provider: neverCalledProvider,
+      provider: matchingProvider,
       preferredLocale: "en-US" as never,
       now: new Date(),
     });
@@ -117,6 +113,7 @@ afterAll(async () => {
 
 describe("the ground refuses, on the record", () => {
   beforeEach(async () => {
+    vi.mocked(matchingProvider.judgeSignalMatch).mockClear();
     t ??= await createTestDatabase();
     await t.truncateAll();
   });
@@ -195,6 +192,8 @@ describe("the ground refuses, on the record", () => {
     const first = await seedInspiration(profileId, "an early start");
     await derive(profileId, first, "Mornings are your best hours.", NEAR_EMBEDDING);
     expect(await suppressionRows(profileId)).toHaveLength(1);
+
+    expect(matchingProvider.judgeSignalMatch).toHaveBeenCalledOnce();
 
     const restored = await restoreProfileSignal(t.db as never, {
       profileId,

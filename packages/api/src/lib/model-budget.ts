@@ -1,8 +1,8 @@
 /**
  * How much of the shared model key one account may spend in an hour.
  *
- * There is a single Gemini API key behind the whole pipeline. Every job type
- * ends in a call against it — enrichment describes an image, derivation
+ * The pipeline shares model-provider credentials. Most job types
+ * use those credits — enrichment describes an image, derivation
  * extracts candidates, embeds them, and sometimes asks the merge judge, and a
  * synthesis writes a whole artifact — so the queue's throughput *is* the key's
  * spend. Until this existed, nothing bounded that per account: one signup
@@ -56,7 +56,7 @@ export const MODEL_BUDGET_RELEASE_MARGIN_MS = 1_000;
 
 /** What an account has already spent inside the current window. */
 export interface AccountModelUsage {
-  /** Jobs of this account's profiles that started inside the window. */
+  /** Claim/dispatch reservations charged to this account inside the window. */
   startedInWindow: number;
   /**
    * The oldest of those starts, or null when there are none. It is what says

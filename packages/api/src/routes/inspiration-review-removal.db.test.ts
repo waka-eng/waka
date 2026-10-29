@@ -33,7 +33,7 @@ it('cascades only the confirmed inspiration, its media/reflections and review it
   const f=await fixture(),other=await fixture();
   await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer) VALUES (${f.profileId},${f.id},'Why?','My answer')`;
   await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url) VALUES (${f.profileId},${f.id},'link','https://example.test/inspiration')`;
-  const session=await createReviewSession(t.db as never,f.profileId,{id:randomUUID()});
+  const session=await createReviewSession(t.db as never,f.profileId,{id:randomUUID(),inspirationIds:[f.id]});
   expect(session!.items).toHaveLength(1);
   const response=await remove(f,{sourceRevision:session!.items[0]!.currentRevision});expect(response.status).toBe(200);
   expect(await t.sql`SELECT id FROM reflections WHERE inspiration_id=${f.id}`).toHaveLength(0);

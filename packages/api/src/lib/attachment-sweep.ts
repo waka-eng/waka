@@ -7,8 +7,8 @@ export type DeleteAttachmentObjects = (keys: string[]) => Promise<void>;
 /**
  * Remove the bytes behind rows Postgres has just removed. Best-effort, after
  * commit, the same policy `inspirations-editing.ts` keeps for a deleted note:
- * a person deleting their own chat must not be blocked by a flaky bucket, and
- * bytes with no row are the recoverable half of that failure.
+ * a person deleting their own chat must not be blocked by a flaky bucket.
+ * Failures are logged; durable orphan cleanup remains an operational follow-up.
  */
 export const sweepAttachmentObjects: DeleteAttachmentObjects = async (keys) => {
   const unique = [...new Set(keys.filter((key) => key.length > 0))];
@@ -19,9 +19,12 @@ export const sweepAttachmentObjects: DeleteAttachmentObjects = async (keys) => {
   const client = makeAttachmentsS3Client();
   try {
     for (let start = 0; start < unique.length; start += 1000) {
-      await client.send(new DeleteObjectsCommand({ Bucket: bucket,
+      const result = await client.send(new DeleteObjectsCommand({ Bucket: bucket,
         Delete: { Objects: unique.slice(start, start + 1000).map((Key) => ({ Key })), Quiet: true } }),
       { abortSignal: AbortSignal.timeout(8000) });
+      if (result.Errors?.length) {
+        console.warn('[attachments] S3 sweep incomplete', { keyCount: result.Errors.length });
+      }
     }
   } catch (error) {
     console.warn('[attachments] S3 sweep failed', { keyCount: unique.length, error: error instanceof Error ? error.name : 'unknown' });

@@ -46,6 +46,7 @@ import {
 import { getDb } from "../lib/db.js";
 import { effectiveAttachmentStatus, effectiveAttachmentText } from '../lib/attachment-material.js';
 import { feedbackWordingCurrent } from '../lib/feedback-revisions.js';
+import { personalSignalReadable } from '../lib/personal-output.js';
 import { quoteForEvidence } from "../lib/salience.js";
 import {
   profileAccessError,
@@ -489,6 +490,8 @@ export async function listClaimsAwaitingVerdict(
            this query depend on that coupling holding. */
         isNull(signals.dismissedAt),
         inArray(signals.status, ["active", "emerging"] as const),
+        personalSignalReadable(input.profileId),
+        sql`NOT EXISTS (SELECT 1 FROM signal_contradictions sc WHERE sc.yielded_signal_id = ${signals.id})`,
         sql`NOT EXISTS (SELECT 1 FROM ${feedback} AS feedback
           WHERE feedback.profile_id = ${input.profileId}
             AND feedback.target_type::text = 'signal'
@@ -501,7 +504,7 @@ export async function listClaimsAwaitingVerdict(
        order follows the evidence, and confidence is deliberately not a term.
        Ranking by confidence here would rebuild the bias the queue exists to
        undo. */
-    .orderBy(sql`${signals.lastEvidenceAt} DESC NULLS LAST`, desc(signals.createdAt))
+    .orderBy(sql`${signals.lastEvidenceAt} DESC NULLS LAST`, desc(signals.createdAt),desc(signals.id))
     .limit(input.limit);
 
   /* The origins ride along: a claim shown with no sense of where it came from
@@ -593,6 +596,7 @@ export async function listClaimsToAskAgain(
         isNull(signals.lockedAt),
         isNull(signals.unsupportedAt),
         eq(signals.status, "active"),
+        personalSignalReadable(input.profileId),
         sql`last_answer.value IN ('true', 'partly')`,
         sql`last_answer.created_at < ${cutoff.toISOString()}::timestamptz`,
         sql`NOT EXISTS (SELECT 1 FROM signal_contradictions sc WHERE sc.yielded_signal_id = ${signals.id})`,

@@ -88,7 +88,10 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
   const flush = useCallback(async () => {
     if (!supported.current) {
       if (live.current.media.length || live.current.recordingCandidate || live.current.linkText?.trim()) throw new DraftProblem('worldDraftFilesUnavailable');
-      return null;
+      // Text-only saves rely on the durable save journal, not IndexedDB.
+      // Keep a revision identity so an identical newer draft is not cleared.
+      if (!live.current.revision) change(current => current);
+      return { id: live.current.id, revision: live.current.revision };
     }
     if (!live.current.revision) change(current => current);
     await pump();
@@ -97,18 +100,36 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
     if (!stored || stored.revision !== snapshot.revision) throw new DraftProblem('worldDraftChangedElsewhere');
     return { id: snapshot.id, revision: snapshot.revision };
   }, [change, pump]);
-  const settle = useCallback(async (submitted: { id: string; revision: number } | undefined, inspirationId: string) => {
-    if (!submitted || !owner.current) return;
+  const settle = useCallback(async (submitted: { id: string; revision: number } | undefined, inspirationId: string, assertCurrent?: () => void, submittedKeys: readonly string[] = []) => {
+    if (!submitted || !owner.current) return false;
+    assertCurrent?.();
     const epoch = generation.current, scopeAtStart = owner.current;
     await running.current;
-    await settleInspirationMediaDraft(scopeAtStart, submitted.id, submitted.revision, inspirationId);
-    if (!alive.current || generation.current !== epoch) return;
-    if (live.current.id === submitted.id && live.current.revision === submitted.revision) {
+    if (!alive.current || generation.current !== epoch) return false;
+    assertCurrent?.();
+    const settled = supported.current ? await settleInspirationMediaDraft(scopeAtStart, submitted.id, submitted.revision, inspirationId) : true;
+    if (!alive.current || generation.current !== epoch) return false;
+    assertCurrent?.();
+    // A newer draft keeps its words and new files, but not object tickets
+    // already consumed by this confirmed save. Each object belongs to one
+    // attachment; retaining it would make the next save fail with a conflict.
+    if (live.current.id === submitted.id && live.current.revision !== submitted.revision &&
+      live.current.media.some(item => item.uploaded && submittedKeys.includes(item.uploaded.key))) {
+      change(current => ({ ...current, media: current.media.filter(item => !item.uploaded || !submittedKeys.includes(item.uploaded.key)) }));
+      await pump();
+      if (!alive.current || generation.current !== epoch) return false;
+      assertCurrent?.();
+    }
+    // Compare after asynchronous cleanup, not before it: a newer revision
+    // can contain identical words and still belongs to the next capture.
+    if (settled && live.current.id === submitted.id && live.current.revision === submitted.revision) {
       const next = newInspirationDraft(); live.current = next; setDraft(next);
       const key = profileStorageKey(scopeAtStart, 'activeInspirationDraft');
       try { if (key) sessionStorage.setItem(key, next.id); } catch { /* lookup excludes saved tombstones */ }
+      return true;
     }
-  }, []);
+    return false;
+  }, [change, pump]);
   const discard = useCallback(async () => {
     const epoch = generation.current, scopeAtStart = owner.current;
     if (!scopeAtStart || !ready) return false;

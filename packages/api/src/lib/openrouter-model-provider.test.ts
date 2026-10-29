@@ -11,9 +11,8 @@
  *   2. Provider selection: the OpenRouter key's presence — and nothing
  *      else — picks the road; its absence keeps every environment on the
  *      incumbent (CI before the secret lands, a fresh checkout).
- *   3. The judge's null posture survives the road: a broken envelope or
- *      fenced-but-invalid JSON still lands on "independent", never a verdict
- *      nobody reached.
+ *   3. Missing or malformed judgments fail rather than inventing a relation;
+ *      only an explicit independent verdict authorizes that decision.
  *
  * WHAT THIS MOCKS, AND WHY: `fetch`, at the transport boundary — the suite
  * is about what WAKA sends and how it treats what comes back, not about
@@ -54,7 +53,7 @@ const chatReply = (content: string): Response =>
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
 
-describe('all generation tasks share the V4.1 Flash 1017 default',()=>{
+describe('task defaults keep signal processing on DeepSeek and Top of Mind generation/review on Terra',()=>{
   const locale={preferredLocale:'en-US' as const},profile={...locale,profileId:'synthetic-profile'};
   const sources=[{text:'I leave room for small experiments.',reflections:[],attachments:[]}];
   const cases:Array<[string,(provider:ModelProvider)=>Promise<unknown>]>=[
@@ -72,20 +71,86 @@ describe('all generation tasks share the V4.1 Flash 1017 default',()=>{
     ['principle matching',p=>p.judgePrincipleRelation({...locale,candidateStatement:'Try small experiments.',existingPrinciples:[{id:'existing',statement:'Try small experiments before committing.'}]})],
     ['declaration routing',p=>p.routeDeclaration({...locale,statement:'Try small experiments before committing.'})],
   ];
-  it.each(cases)('%s dispatches the common model once without enabling reasoning',async(_name,invoke)=>{
-    for(const key of ['WAKA_MODEL_CHAT','WAKA_MODEL_REFLECT','WAKA_MODEL_EXTRACT','WAKA_MODEL_SUPPORT','WAKA_MODEL_JUDGE','WAKA_MODEL_SYNTHESIZE','WAKA_MODEL_PRINCIPLES','WAKA_MODEL_PRINCIPLE_JUDGE','WAKA_MODEL_ROUTE'])vi.stubEnv(key,'');
+  it.each(cases)('%s dispatches its configured model once',async(name,invoke)=>{
+    for(const key of ['WAKA_MODEL_CHAT','WAKA_MODEL_REFLECT','WAKA_MODEL_EXTRACT','WAKA_MODEL_SUPPORT','WAKA_MODEL_JUDGE','WAKA_MODEL_SYNTHESIZE','WAKA_MODEL_TOP_OF_MIND_REVIEW','WAKA_MODEL_PRINCIPLES','WAKA_MODEL_PRINCIPLE_JUDGE','WAKA_MODEL_ROUTE'])vi.stubEnv(key,'');
     // An unusable result isolates dispatch from each task's output parser.
     // No account data, live provider, or database is used by this check.
     fetchMock.mockResolvedValueOnce(chatReply('{}'));
     await invoke(createOpenRouterModelProvider()).catch(()=>undefined);
     expect(fetchMock).toHaveBeenCalledOnce();
     const request=JSON.parse(fetchMock.mock.calls[0]![1].body);
-    expect(request.model).toBe('deepseek/deepseek-v4.1-flash-1017');
-    expect(request.reasoning).toEqual({enabled:false});
+    const terra = name === 'top of mind' || name === 'top of mind review';
+    expect(request.model).toBe(terra ? 'openai/gpt-6.1-terra' : 'deepseek/deepseek-v4.1-flash-1017');
+    expect(request.reasoning).toEqual(terra ? { effort: name === 'top of mind review' ? 'low' : 'medium', exclude: true } : {enabled:false});
   });
 });
 
 describe("the translation", () => {
+  it.each(['', 'deepseek/deepseek-v4.1-flash-1017'])('routes Top of Mind review separately from signal judging (override=%s)', async override => {
+    vi.stubEnv('WAKA_MODEL_JUDGE', 'signal-only/model');
+    vi.stubEnv('WAKA_MODEL_TOP_OF_MIND_REVIEW', override);
+    const verdict = { entries: [{ index: 0, languageMatches: true, grounded: true, synthesized: true, supportingInspirationIds: ['a', 'b'] }] };
+    fetchMock.mockResolvedValueOnce(chatReply(JSON.stringify(verdict)));
+    await expect(createOpenRouterModelProvider().reviewTopOfMind({ preferredLocale: 'en-US',
+      entries: [{ body: 'A supported connection.', inspirationIds: ['a','b'] }], inspirations: [],
+    })).resolves.toEqual(verdict);
+    const request = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(request.model).toBe(override || 'openai/gpt-6.1-terra');
+    expect(request.max_tokens).toBe(2400);
+    expect(request.response_format.json_schema.name).toBe('top_of_mind_review');
+    expect(request.reasoning).toEqual(override ? { enabled: false } : { effort: 'low', exclude: true });
+    if (!override) {
+      expect(request).not.toHaveProperty('temperature');
+      expect(request.response_format.json_schema.strict).toBe(true);
+    }
+  });
+  it.each(['', 'deepseek/deepseek-v4.1-flash-1017'])('keeps the synthesis override %s and its compatible reasoning parameters', async override => {
+    vi.stubEnv('WAKA_MODEL_SYNTHESIZE', override);
+    fetchMock.mockResolvedValueOnce(chatReply(JSON.stringify({ noChange: null, entries: [{ type: 'pattern',
+      body: 'Clear controls and predictable navigation can help people save.', belief: null, prompt: null, citedSignalIds: ['a','b'] }] })));
+    const result = await createOpenRouterModelProvider().synthesizeTopOfMind({ preferredLocale: 'en-US', profileId: 'synthetic',
+      signals: [], lockedEntries: [], currentEntries: [], recentFeedback: [], provisional: true });
+    expect(result.noChange).toBeUndefined();
+    expect(result.entries[0]).toMatchObject({ belief: undefined, prompt: undefined, citedSignalIds: ['a','b'] });
+    const request = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(request.model).toBe(override || 'openai/gpt-6.1-terra');
+    expect(request.max_tokens).toBe(8192);
+    expect(request.response_format.json_schema.name).toBe('top_of_mind');
+    if (override) {
+      expect(request.reasoning).toEqual({ enabled: false });
+      expect(request.temperature).toBe(0);
+    } else {
+      expect(request.reasoning).toEqual({ effort: 'medium', exclude: true });
+      expect(request).not.toHaveProperty('temperature');
+      const format = request.response_format.json_schema;
+      expect(format.strict).toBe(true);
+      expect(format.schema.required).toEqual(expect.arrayContaining(['entries', 'noChange']));
+      const item = format.schema.properties.entries.items;
+      expect(item.required.sort()).toEqual(Object.keys(item.properties).sort());
+      expect(item.properties.belief.anyOf).toContainEqual({ type: 'null' });
+      expect(item.properties.prompt.anyOf).toContainEqual({ type: 'null' });
+    }
+  });
+  it.each([true, false])('bounds the opt-in comparison and refuses incomplete matches (complete=%s)', async complete => {
+    const entries = [0, 1].map(index => ({ index, languageMatches: true, grounded: true, synthesized: true,
+      supportingInspirationIds: ['source-one', 'source-two'] }));
+    fetchMock.mockResolvedValueOnce(chatReply(JSON.stringify({ entries })))
+      .mockResolvedValueOnce(chatReply(JSON.stringify({ coverage: complete ? [{ index: 0, coveredByIndices: [1], coveredByLeadingEntry: true }, { index: 1, coveredByIndices: [0], coveredByLeadingEntry: true }] : [] })));
+    const pending = createOpenRouterModelProvider().reviewTopOfMind({ preferredLocale: 'en-US', comparison: { proposedCount: 1 },
+      entries: ['New phrasing.', 'Old phrasing.'].map(body => ({ type: 'pattern', body, inspirationIds: ['source-one', 'source-two'] })),
+      inspirations: [{ id: 'source-one', text: 'Original material stays in the quality request.', truncated: false }],
+    });
+    if (complete) expect((await pending).entries[0]!.coveredByIndices).toEqual([1]);
+    else await expect(pending).rejects.toThrow(/comparison/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const requests = fetchMock.mock.calls.map(call => JSON.parse(call[1].body));
+    expect(requests.map(request => request.max_tokens)).toEqual([2400, 1800]);
+    expect(requests.map(request => request.model)).toEqual(['openai/gpt-6.1-terra', 'deepseek/deepseek-v4.1-flash-1017']);
+    expect(requests[0].reasoning).toEqual({ effort: 'low', exclude: true });
+    expect(requests[1].reasoning).toEqual({ enabled: false });
+    expect(requests[1].messages[1].content).not.toContain('Original material stays');
+    expect(requests[1].messages[1].content).not.toContain('source-one');
+  });
   it('preserves the actual comparison and grounding output-token bounds',()=>{
     expect(toChatRequest(buildPrincipleRelationRequest({preferredLocale:'en-US',candidateStatement:'A rule.',existingPrinciples:[{id:'p',statement:'Another rule.'}]}),'model','principle_relation').max_tokens).toBe(1600);
     expect(toChatRequest(buildPrincipleGroundingRequest({preferredLocale:'en-US',signals:[],candidates:[]}), 'model','principle_grounding').max_tokens).toBe(512);
@@ -247,7 +312,13 @@ describe("the judge over the second road", () => {
     ).rejects.toThrow(ModelDidNotAnswerError);
   });
 
-  it("keeps the safe posture for a considered refusal — a content filter is terminal", async () => {
+  it.each(['{}', '{"relation":"uncertain"}'])('does not turn malformed OpenRouter relation %s into independent', async payload => {
+    fetchMock.mockResolvedValueOnce(chatReply(payload));
+    await expect(createOpenRouterModelProvider().judgeSignalMatch({ preferredLocale: 'en-US',
+      candidateStatement: 'I prefer mornings.', existingStatement: 'I prefer early hours.' })).rejects.toThrow(ModelDidNotAnswerError);
+  });
+
+  it("does not let a declined judgment bypass dismissal as an independent pattern", async () => {
     const provider = createOpenRouterModelProvider();
     fetchMock.mockResolvedValueOnce(
       new Response(
@@ -257,13 +328,10 @@ describe("the judge over the second road", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     );
-    const verdict = await provider.judgeSignalMatch({
+    await expect(provider.judgeSignalMatch({
       preferredLocale: "en-US",
       candidateStatement: "a",
       existingStatement: "b",
-    });
-    expect(verdict, "declined ≠ broken: retrying a refusal cannot help").toEqual({
-      relation: "independent",
-    });
+    })).rejects.toThrow(ModelDidNotAnswerError);
   });
 });

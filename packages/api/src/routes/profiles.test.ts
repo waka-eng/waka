@@ -73,7 +73,7 @@ function makeDb(options: { selects?: unknown[][]; returning?: unknown[][] } = {}
     chain.where = vi.fn(() => {
       const rows = selects.shift() ?? [];
       const result: any = Promise.resolve(rows);
-      result.orderBy = vi.fn(async () => rows);
+      result.orderBy = vi.fn(() => result);
       result.for = vi.fn(async () => rows);
       result.limit = vi.fn(async () => rows);
       return result;

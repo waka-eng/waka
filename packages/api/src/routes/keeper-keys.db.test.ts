@@ -106,6 +106,17 @@ describe("the keeper's standing key", () => {
     await t.truncateAll();
   });
 
+  it('enforces the five-key limit across concurrent creation requests', async () => {
+    const owner = await seedAccount('Cap');
+    const app = appFor(owner);
+    const create = () => app.request('/api/keeper-keys', { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ label: 'Concurrent fixture' }) });
+    for (let i = 0; i < 4; i++) expect((await create()).status).toBe(201);
+    const responses = await Promise.all([create(), create()]);
+    expect(responses.map(response => response.status).sort()).toEqual([201, 409]);
+    expect(await t.sql`SELECT id FROM keeper_keys WHERE profile_id=${owner.profileId} AND revoked_at IS NULL`).toHaveLength(5);
+  });
+
   it("acts as its person, and the session it resolves is scoped", async () => {
     const owner = await seedAccount("Ari");
     const { secret } = await issueKey(owner);
@@ -208,8 +219,11 @@ describe("the keeper's standing key", () => {
     expect(marks[0]!.reader_profile_id, "but the reader is named").toBe(owner.profileId);
   });
 
-  it("admits keep and recall, and nothing else", async () => {
+  it("admits own identity, connection proof, keep and recall without account powers", async () => {
     const passes: Array<[string, string]> = [
+      ["GET", "/api/auth/me"],
+      ["GET", "/api/profiles"],
+      ["POST", "/api/auth/cli/verify"],
       ["POST", "/api/inspirations"],
       ["GET", "/api/inspirations"],
       ["GET", "/api/inspirations/00000000-0000-0000-0000-000000000000"],
@@ -230,12 +244,15 @@ describe("the keeper's standing key", () => {
     }
 
     const refused: Array<[string, string]> = [
+      ["GET", "/api/auth/me/anything"],
+      ["GET", "/api/profiles/anything"],
+      ["GET", "/api/auth/cli/start"],
+      ["POST", "/api/auth/cli/consent"],
       ["PATCH", "/api/inspirations/00000000-0000-0000-0000-000000000000"],
       ["DELETE", "/api/inspirations/00000000-0000-0000-0000-000000000000"],
       ["POST", "/api/inspirations/00000000-0000-0000-0000-000000000000/reflections"],
       ["POST", "/api/inspirations/00000000-0000-0000-0000-000000000000/processing/retry"],
       ["POST", "/api/feedback"],
-      ["GET", "/api/profiles"],
       ["POST", "/api/profiles"],
       ["GET", "/api/export"],
       ["GET", "/api/sessions"],

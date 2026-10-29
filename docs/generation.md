@@ -258,20 +258,34 @@ Each surviving candidate is embedded (`gemini-embedding-001`, 768
 dimensions — the same family as capture embeddings, see
 `packages/api/src/lib/inspiration-embeddings.ts`). Then, in order:
 
-**Batch dedupe.** Candidates from one reply are compared to each other; at
-cosine ≥ `SIGNAL_BATCH_DEDUPE_MIN_COSINE` (0.94) they collapse — a model
-that says the same thing twice in one reply mints once.
+**Batch dedupe.** Identical candidate wording is embedded once. Different
+wording proceeds to matching even if its vector is identical: negation and
+temporary intent can be near-identical in vector space while meaning something
+different. Matching checks that meaning before joining their evidence.
 
 Next, the ground refuses: each candidate is compared against the vectors of
 the profile's **dismissed** signals (rows whose `dismissed_at` is set — the
 owner threw the pattern out, and the row, evidence and embedding all stayed).
-At or above `SIGNAL_SUPPRESSION_MIN_COSINE` (0.86) to any dismissed anchor,
-the candidate is dropped — no mint, no evidence, no judge call — and a
-`suppressions` row is written naming the anchor, snapshotting both statements
-and the cosine that decided. Every refusal is on the record; restoring the
-dismissed signal (clearing `dismissed_at`) returns the pattern to the loop's
-sight. Checked before the match on purpose: a pattern the owner refused must
-not re-enter as evidence for something else **[checked]**.
+The scan remains bounded to `MATCH_CANDIDATE_SCAN_LIMIT` (500) current vectors
+in the same profile and input policy. Identical trimmed wording takes priority
+and is suppressed without a model call. Otherwise the nearest anchor at or
+above `SIGNAL_SUPPRESSION_MIN_COSINE` (0.86) receives one semantic judgment:
+only `same` suppresses. `independent` and `opposed` proceed to normal matching;
+neither revives the dismissed signal nor creates a contradiction with it.
+Negation, uncertainty and temporal scope are part of meaning, not grounds for
+automatic refusal. This adds at most one suppression judgment per candidate
+(up to three per extraction pass), separate from normal matching. Other nearby
+anchors are not exhaustively judged; similarity remains a bounded retrieval
+step, not a guarantee of semantic recall.
+
+A `suppressions` row records each actual refusal, naming the anchor and both
+statements with their similarity. Missing, malformed, declined or unavailable
+judgments fail through existing bounded queue retries; they cannot silently
+mint, attach or record a refusal. Decisions precede source locks and the write
+pass rechecks source material, anchors and ordinary targets. Restore ends future
+refusal by that anchor without automatically replaying historical refusals.
+Suppression still precedes normal matching so a refused pattern cannot re-enter
+as evidence for something else. No timer or recurring DB read is added.
 
 **Match-or-mint.** Each candidate is compared against the profile's existing
 signal vectors — the `MATCH_CANDIDATE_SCAN_LIMIT` (500) most recently
@@ -281,15 +295,17 @@ applied by `packages/api/src/lib/signal-match-or-mint.ts` **[checked]**:
 
 | Similarity to nearest existing signal | Decision |
 |---|---|
-| ≥ `SIGNAL_MATCH_MIN_COSINE` (0.86) | **Attach** — the capture becomes evidence of that signal |
-| ≥ `SIGNAL_MERGE_JUDGE_MIN_COSINE` (0.7), < 0.86 | **Ask the judge** — one bounded model call: "do these two statements name the same durable pattern?" Yes → attach; no, uncertain, or any failure → mint |
+| ≥ `SIGNAL_MATCH_MIN_COSINE` (0.86) | **Attach identical wording**; changed wording asks the judge before adding evidence |
+| ≥ `SIGNAL_MERGE_JUDGE_MIN_COSINE` (0.7), < 0.86 | **Ask the judge** — one bounded call for the nearest statement; same meaning attaches, independent or opposed meanings mint separately |
 | < 0.7, or no comparable vector | **Mint** — a new signal is born `emerging` |
 
 The asymmetry is deliberate. A wrong merge fuses two patterns invisibly and
 corrupts both evidence trails; a wrong mint is a visible near-duplicate the
 owner can merge or delete. When this system errs, it errs recoverably —
 which is why the judge is told that uncertainty means different, and why
-every malformed or failed judge response also lands on mint.
+every malformed or failed judge response retries without writing evidence or
+inventing a new independent pattern. Judgments run before source locks and
+publication rechecks the source, current statements and job claim.
 
 **Writing evidence.** Attaching writes a `signal_evidence` row (M:N — one
 capture can evidence several signals; one signal accumulates many captures),
@@ -553,19 +569,23 @@ happened, not that the board moved — is younger than
 opens (`run_after = lastShift + 24h`), further enqueues collapse into it,
 and signals keep accruing underneath so the one shift that lands reads
 everything. A hold is not a failure — no error, no attempt spent. The
-sleeping row runs on the next wake after the floor opens (any keep wakes
-the worker; an absent profile's shift lands with the daily sweep). Two
+sleeping row receives a one-time wake at that deadline when Scheduler is
+configured; activity and the daily sweep remain fallback wakes. Two
 exemptions, both deliberate: `manual` refreshes — the person's own "Read it
 again", a language change — never wait, and a profile with no content
 version yet has nothing to hold stable. The machine holds a day; the person
 never does.
 
 A manual request also upgrades an already-held automatic row and wakes it.
-Known reading jobs enqueued or claimed during an asynchronous drain can request
-the existing bounded Lambda redelivery when short debounce/support waits outlive
-that drain. The wake checks job/profile/version, unread pending state, lease,
-attempt and near-term due time; it does not scan unrelated work or bypass budget
-or daily-floor checks. Automatic trailing requests retain their cadence rule.
+Supported pending jobs share one one-time schedule per profile/deadline,
+including budget, debounce, support and ordinary retry waits. A fresh group
+token prevents an old delivery or cancellation from affecting its replacement.
+Each claimed job also receives a one-time lease watchdog before provider work;
+settlement cancels it unless the original lease is still running. When precise
+scheduling is unavailable, known reading jobs can still request bounded native
+Lambda redelivery for short waits. All deliveries recheck current queue state;
+ordinary claims still enforce budget and daily-floor checks. Automatic trailing
+requests retain their cadence rule.
 Automatic requests arriving after a manual pass remain automatic; they do
 not inherit its bypass. All starts still pass the account's model budget.
 
@@ -641,7 +661,8 @@ list takes one greedy diversity pass (`diversifyRanked`): a candidate whose
 embedding sits at or above `SELECTION_DIVERSITY_MAX_COSINE` to an
 already-accepted one yields its slot. Empty slots are not refilled with echoes;
 the source signals remain in memory, neither deleted nor demoted. Only current
-statement hashes participate in this comparison. The bar sits inside the judge
+statement hashes from the current embedding model participate in this comparison;
+vectors from different models are not compared in one coordinate space. The bar sits inside the judge
 band on purpose: at 0.8 the pair is
 close enough that derivation would already be asking whether they are the
 same pattern, while genuinely different signals about one theme are
@@ -716,6 +737,36 @@ evidence, and one-source paraphrases with decorative citations are rejected.
 The reviewer must identify at least two distinct cited originals that contribute
 to the connection; its IDs are checked against current profile-owned evidence.
 
+A proposal that repeats dismissed words or changes the type of human-kept
+words is removed before review, matching what assembly can actually publish.
+It cannot masquerade as new machine material. An entirely refused proposal
+fails through the existing retry path. An approved first machine entry may
+fill a truly empty reading even if synthesis incorrectly says `noChange`.
+A human-only reading already carries meaning, so its no-change hint remains
+respected; existing human words and flags remain exact.
+
+**Novelty experiment — disabled.** An evaluation-only dependency can ask the
+reviewer to check coverage in both directions and check the two leading entries
+separately, then compare accepted content and focus in code. Coverage must retain
+body, belief, questions, certainty and time scope. A proof relying on rejected
+content fails rather than being partially salvaged. Its leading target is
+recorded explicitly so filtering cannot silently change the target.
+Whole-reading coverage may use an exact duplicate anywhere on the other side;
+that witness choice does not decide leading focus. Focus checks the actual
+first approved pair, using exact words or reciprocal leading-entry proofs.
+If source review approves nothing on either side, comparison fails explicitly
+instead of reporting an unchanged empty result. The publication reviewer
+permits supported abstractions across originals while preserving observations,
+expectations and measured outcomes as different kinds of evidence; a shared
+topic or a hedge cannot establish an unobserved causal benefit.
+It is not enabled by any route, worker or
+environment setting. The live accuracy gate failed, so normal refreshes still
+rely on synthesis's `noChange` hint and exact persisted-content comparison.
+The experimental comparison uses at most one additional judge call, capped at
+1,800 output tokens, with only derived entries and no original source text.
+It adds no DB queries or schedules. See the fixed rubric and measured gate in
+[`plans/top-of-mind-novelty.md`](plans/top-of-mind-novelty.md) before enabling or extending it.
+
 The synthesis prompt ends with a per-entry source audit: each generated entry
 must cite signals that jointly cover at least two different originals. Separate
 single-source entries do not satisfy that rule. This reminder changes no
@@ -731,13 +782,16 @@ Publication diagnostics record the profile, locale, entry index, failing field
 names, distinct-original count and controlled rejection codes for parsing,
 citations, content checks and semantic review. The queue's publication-check
 error includes the reason counts. A pre-commit assessment records accepted and
-rejected counts without claiming the artifact has been published. Neither
+rejected counts and the meaningful-change decision (null when not compared)
+without claiming the artifact has been published. Neither
 source text nor generated wording is included in these diagnostics.
 
 This adds at most one review call per refresh, using the configured judge model
 (Flash 1017 by default) and the existing job budget/retries. It reviews at most
 14 entries (seven proposed, seven carried), four originals per entry and 1,600
-characters per original, deduplicating originals across entries. Truncation is
+characters per original, deduplicating originals across entries. The source
+window takes turns across cited signals before filling with extra witnesses of
+one signal, so a well-evidenced first signal cannot hide the others. Truncation is
 explicit: missing text cannot be assumed to support a conclusion. Synthesis
 still reads signals; only the publication reviewer receives bounded original
 excerpts. All source text is fenced as data. Human-kept wording bypasses machine
@@ -763,11 +817,12 @@ wake failure cannot lose the durable job or turn the save into a failed request.
 
 | Guarantee | Mechanism |
 |---|---|
-| Every cited signal exists and belongs to this profile | Citations validated against the DB; invented ones dropped; an entry left citing nothing is dropped with it. An artifact that cites nothing is a horoscope. |
+| Every cited signal was offered from this profile | Any invalid citation rejects its entire entry; trimming references cannot salvage a partially unsupported claim. Other valid entries may still publish. |
 | Generated entries draw from different inspirations | Follow current evidence origins across the cited signals; require at least two distinct originals, with duplicate material counted once. |
 | Generated wording respects the selected language and does not copy inspirations | Check script/overlap, then independently review the actual language and supported connection against bounded original excerpts. Human-kept text remains exact. |
 | Locked entries survive **byte-identical** | Copied forward from storage, never from the model's reply — the model is asked to reproduce them and then not trusted to. Violations are counted and logged. |
 | Pins, dismissals, locks survive regeneration | Columns on entries, carried by code; the model never sees or controls them. |
+| Cosmetic machine echoes do not repeat in one reading | Normalize Unicode, case, whitespace and final punctuation for duplicate detection on proposals and no-change carry. Retain stored human choices verbatim, including deliberate duplicates. |
 | Rejected output cannot clear a valid reading | Keep the supported fallback, publish no unchecked proposal, and fail/retry the job instead of recording empty success. |
 | "Nothing changed" is a decision, not a silence | A no-move/no-signal pass carries the support-projected reading, not withheld machine conclusions. It compares that result to stored entries; removing stale text or updating citations is a change even if the model reports `noChange`. |
 | Stale generation cannot replace newer material | A per-profile revision is captured before input reads and locked/rechecked at commit, alongside the artifact-family lock and worker claim. Concurrent source, statement or human edits make generation retry. |
@@ -848,19 +903,253 @@ merge moves their memory):
 
 ---
 
+## Review: what WAKA asks, and when
+
+The current Home review is a human confirmation flow. Top of Mind appears
+first. Tapping the avatar cycles to an invitation only when an owned queue is
+available; choosing **Dive into review** opens the cards. An explicit older
+`?open=claims` link can also open it. No timer interrupts the reading. Agent
+profiles do not show the human's queue or ask the human to judge agent memory.
+
+A sitting contains at most **five cards total**, one visible at a time:
+
+| Priority | Eligible content | Order and repeat rule |
+| --- | --- | --- |
+| 1 | Pending captures proposed by a collector/MCP connection for the human to keep or decline | Oldest proposal first. Pending proposals expire after seven days, so they take the available slots first. Kept, declined and expired proposals do not return. |
+| 2 | Active or emerging signals with no feedback on their current wording | Most recent evidence first, then creation date and ID for stable ties. Confidence does not affect this order. A changed statement can return after its sources are revalidated. |
+| 3 | Active, unlocked signals whose latest answer on the current wording was `true` or `partly` more than 90 days ago (`CLAIM_REASK_DAYS`) | Oldest answer first, only in slots not taken by unanswered signals. A fresh answer restarts the interval. `not_true` on the same wording is not re-asked. |
+
+| Constant (`signals.ts`) | Value | Meaning |
+| --- | --- | --- |
+| `CLAIM_REASK_DAYS` | 90 | Minimum age of the current-wording `true`/`partly` answer before a re-ask. |
+
+Both signal queues require current, owned support before pagination. Dismissed,
+retired, explicitly unsupported signals, statements with a stale source or
+citation revision, and the yielded side of a settled contradiction are not
+offered. Even a remaining valid witness does not silently repair a stale one.
+Pending support is revalidated by the existing worker; asking the person is
+not a substitute for that check. An emerging signal with one current witness
+can still be offered for confirmation; the three-witness promotion bar is not
+an admission rule for asking a human.
+
+Selection uses SQL and the rules above, without another model call. Five is
+a bound on the current sitting, not a daily generation quota. Home reads the
+queue on arrival, profile change or reconnect; more can be offered on a later
+visit. Exiting leaves unanswered cards available. A failed queue read offers
+no cards from that endpoint; it does not claim the archive has been reviewed.
+The other endpoint can still contribute its cards.
+
+Answers send at the press. The outgoing animation starts immediately, but a
+reading card advances only after the write succeeds. Slow saves show progress
+and refuse another press; a failure restores the same card with retry wording.
+If the server rejects an outdated wording revision, only the existing sitting's
+IDs are rechecked against the current queue. A rejected choice is never applied
+to a new sentence, and refreshing does not refill the sitting's slots.
+Late callbacks from an old card or profile cannot remove a different card.
+`true`, `partly` and `not_true` are verdicts on the signal's current revision;
+they never edit or remove its original inspirations. Feedback can adjust
+confidence or settle a contradiction, but does not become a new independent
+capture. Keeping an agent pick uses the ordinary idempotent inspiration save.
+
+**Retained inspiration-review APIs.** The separate inspiration-review panel,
+selection flow and `/review/:id` UI were removed; their storage, owner access,
+answer history and compatibility routes remain. An automatic API selection
+resumes the one open session, otherwise chooses one original: never-reviewed
+first (newest first), then revisits by oldest engagement. A saved nonblank,
+unskipped reflection and a Keep/Skip choice both establish a 24-hour cooldown.
+An explicit source selection bypasses that cooldown and preserves its order,
+with at most five sources. Reads neither choose replacements for deleted
+sources nor generate questions. Requested questions bind current source
+revisions, the recent saved answer history and language context; stale AI
+premises are withheld while human answers remain. Repeated answers and
+context-only references cannot multiply the same evidence origin. These API
+rules do not describe a second current UI journey.
+
+Implementation: `packages/api/src/routes/signals.ts`,
+`packages/api/src/routes/claims.ts`, `packages/api/src/routes/harvest.ts`,
+`packages/api/src/lib/review-sessions.ts`,
+`packages/api/src/lib/review-dialogue.ts`,
+`packages/api/src/lib/review-answer-derivation.ts`,
+`packages/web/src/pages/Home.tsx` and
+`packages/web/src/components/ClaimSlip.tsx`.
+
+## Chat and retrieval: which memory a reply uses
+
+New chats belong to the selected profile. Its chat list, messages, drafts and
+saved takeaways stay in that profile. Normal new chats read only that profile's
+memory; an agent profile's sources are identified to the model as agent memory,
+not the human's biography. WAKA describes the selected agent's records without
+claiming to be that agent or to have performed its work. Existing human-owned
+`agent`/`both` conversations retain their explicitly chosen same-account scope;
+ownership is rechecked on each read. Their existing unavailable-agent fallback
+is the human owner's memory, as specified in the data model. No new perspective
+selector or cross-profile sharing is introduced by this review.
+
+The reply uses at most eight complete messages from this conversation, bounded
+to 8,000 characters. It drops assistant turns whose cited memory changed and
+discloses missing earlier context. It never loads another chat's transcript.
+Search uses human message text; a short continuation can include an earlier
+human topic, and attachment names provide a fallback when no human words exist.
+An explicit correction suppresses saved memory unless the person asks to compare
+it. A chat message does not itself create an inspiration, signal or Principle.
+
+Context includes readable owned Principles in rank order, current Top of Mind,
+and relevant owned inspiration material. An explicitly selected starting
+Principle or inspiration receives focus; clearing or deleting that source does
+not recreate it. Questions about changes in thinking may additionally read
+dated earlier Top of Mind versions. Dates are record dates, not proof of when
+the human formed a belief. Human-kept words remain available with support state.
+
+Inspiration retrieval matches literal terms across text, unskipped written
+reflections and ready enrichment. When current personal embeddings exist and
+the budget permits, one bounded query embedding adds semantic matches. It
+checks embedding model, dimensions, ownership and current canonical input hash;
+failed lookup falls back to lexical results. Diversity reduces repeated semantic
+matches. Scans, child counts and excerpts are bounded, so this is not exhaustive
+whole-archive reading. Only available enrichment is shown; pending attachments
+have no known contents. Excerpts are deterministic for citation reopening and
+may omit passages beyond their bounds.
+
+The text allowance remains 16,000 characters: 8,000 for Principles, 4,000 for
+readings and 4,000 for raw material. Individual source excerpts are capped at
+1,600 characters. Existing Both chats interleave source owners within shared
+limits. Chat-attached photos/files are stored with their message but their
+contents are **not read by the reply model**; the prompt says attached, not read.
+Ready enrichment on a saved inspiration is a separate source path.
+
+Send records the user message and reply intent in one transaction. The same
+message ID replays the saved result; different words under it conflict. Reply
+retry compares the previous request ID, and an ambiguous dispatch is not
+automatically purchased again. The existing limits remain three attempts per
+message per hour and twenty reserved provider slots per account per hour.
+Stop prevents late publication while preserving the user message and its
+dispatch accounting; the UI can continue with a new message. Failed replies
+can be retried explicitly within the budget.
+
+After generation, publication rechecks the current transcript, scope and source
+hashes under the conversation lock. It locks every selected profile's generation
+revision, plus the material revisions of raw captures passed to the model.
+The second fence also protects captures that have not formed signals yet.
+It uses nonwaiting source locks so a busy editor is not deadlocked or aborted
+by the reply. An unchanged selected context can publish atomically; a changed
+or busy source refuses publication and retains the user message and billed
+attempt. No database lock spans a model/embedding request. Unrelated agents
+remain writable.
+
+Citations must refer to supplied sources with exact quotes; invalid references
+reject the reply. Reopening revalidates identity, hash and quote offsets rather
+than serving a copied old source. Historical assistant words remain in the
+conversation, marked when their memory changed, and are excluded from future
+model history. Structural quote checking is not a proof that every sentence is
+semantically supported; live quality controls are measured separately. Citation
+and context APIs remain; their old UI drawer/list was removed.
+
+Implementation: `packages/api/src/lib/conversation-replies.ts`,
+`packages/api/src/lib/conversation-context.ts`,
+`packages/api/src/lib/conversation-material.ts`,
+`packages/api/src/lib/conversation-retrieval.ts`,
+`packages/api/src/lib/conversation-readings.ts`,
+`packages/api/src/routes/conversations.ts`,
+`packages/web/src/components/ConversationPanel.tsx` and
+`packages/web/src/lib/use-conversation-reply.ts`.
+
+## Deletion, restoration and erasure
+
+Once dispatched, deletion removes an inspiration from live memory transactionally. Browser Undo
+can cancel a pending delete; after dispatch, browser users can restore an owned
+profile's deleted copy for thirty days. A human browser session can manage its
+agents' copies too. Agent sessions and API keys delete permanently and cannot
+read or restore the deleted shelf. Every route still resolves ownership.
+
+The source deletion transaction locks the inspiration, its affected signals,
+attachments and final material revisions. It copies recoverable raw words,
+reflections and attachment metadata, deletes the live source and its evidence,
+cancels its source jobs, reconciles signals and Principles, and requests a
+reading refresh. A supplied source revision must still match or deletion is
+refused. Evidence loss does not license rewriting human-locked words; retained
+human statements can lose their support. Historical chat text is not rewritten
+by deleting a cited source; citation reopening and future context revalidate it.
+Accepted save identities remain as content-free tombstones, so retrying an old
+save cannot resurrect a deleted inspiration.
+
+Restore reuses the inspiration and attachment IDs, original capture date,
+words and corrected transcripts. It retains profile ownership, clears former
+conversation links and restarts pending enrichment and signal derivation.
+Signals, the reading and decision/experience links are not restored as a frozen
+snapshot. Repeated restore requests return the already restored source without
+inserting duplicates. Expired or foreign copies cannot be restored. Older copies
+missing their attachments explicitly report that loss.
+
+Migration 0081 stores both material revision floors in the deleted copy.
+Restore advances beyond each saved floor, rather than relying only on the clock;
+a pre-delete confirmed action or worker cannot match the restored incarnation.
+For legacy copies the prior floors are unknown, so the existing clock fallback
+remains. Export writes the stored bigint floors as decimal strings without
+losing precision.
+
+Removing an agent profile cascades its entire stack, deleted shelf, sessions,
+API keys and queued work. It cannot remove the human profile or a foreign
+account's agent. Account erasure removes every owned profile. It first deletes
+inventoried external objects, retaining the SQL inventory if storage fails.
+The final transaction locks the account and its current profiles, rechecks live
+and deleted attachment keys, and returns newly discovered keys for deletion
+outside the transaction before trying again. At most three external passes are
+made; continued uploads leave the account available for an explicit retry.
+Deadlocked SQL passes retry at most three times without repeating already
+successful object deletions. Legacy objects still referenced outside the erased
+account are preserved. The legacy settled group record survives with departed
+marks, according to the data-model doctrine.
+
+Ordinary permanent deletes and expiry/profile sweeps commit SQL first and then
+clean storage on a best-effort basis. Transport and per-object S3 failures are
+logged without private object keys or provider messages; they do not resurrect
+the deleted rows. Account erasure instead treats object failures as fatal and
+keeps inventory for retry. Neither policy yet supplies durable orphan cleanup
+or owner alert delivery. Upload URLs issued before deletion can also outlive
+SQL erasure until their expiry; unfinalized objects are outside that inventory.
+These storage/notification guarantees remain open production gates.
+
+Implementation: `packages/api/src/routes/inspirations-editing.ts`,
+`packages/api/src/routes/inspirations-deleted.ts`,
+`packages/api/src/lib/deleted-shelf.ts`,
+`packages/api/src/lib/attachment-sweep.ts`,
+`packages/api/src/lib/conversation-attachments.ts`,
+`packages/api/src/lib/account-erasure.ts` and
+`packages/api/src/routes/profiles.ts`.
+
 ## When the model fails
 
-Dev recovery additionally checks known overdue work every fifteen minutes,
-using the existing claim and budget path with five-minute grace and at most
-five claims in one pass. Scheduled cadence/budget waits and active leases are
-excluded. The daily sweep stays in place and production's cadence is unchanged.
-Recovery never creates a second job or resets its attempt budget; ambiguous
+Recovery inspection is an explicit operator action. It uses the existing
+claim/budget path, with five-minute grace and at most five claims in one pass.
+There is no periodic recovery heartbeat. Normal work wakes on enqueue; known
+pending deadlines and claimed leases receive self-deleting `at(...)` wakes
+when Scheduler is configured. The existing daily safety sweep and daily
+Principle cadence remain unchanged. No new regular DB pings are introduced.
+
+`packages/api/src/lib/background-job-wake.ts` validates identifiers and exact
+deadlines before normal queue draining. Completed, deleted, superseded, early
+and duplicate deliveries cannot authorize another claim. An invalid delivery
+does not query the database. A stale valid event can repair missing timers in
+its own profile, without running models. A delivered pending group is retired;
+unfinished members receive a fresh group token. Full metadata-recovery batches
+continue only after an additional query proves unarmed supported work remains.
+An empty batch creates no schedule. Timers carry identifiers/timestamps, never
+memory content. API deletions cancel recorded schedules after commit.
+
+The local API schedules only supported, unexhausted pending work and stops when
+none remains. It never schedules an idle tick around an unsupported or exhausted
+row. `pnpm dev:drain` and `pnpm --filter @waka/api nightly` are one-shot commands;
+`--watch` is refused before database access. `dev:local` runs maintenance once on
+boot and does not launch hourly database checks. File/build watching is separate.
+
+Recovery never creates a second job or resets the same request's attempt budget; ambiguous
 conversation dispatches retain their existing refusal-to-redispatch guard.
 Exhausted stale leases raise operational counts instead of being revived.
 The claim never reclaims a lease whose final attempt is spent. A worker that
-died during that attempt would leave the row `running` forever, so the daily
-scheduled run settles such a lease once it is 24 hours old. No worker can
-still hold a lease that old: the Lambda times out at 14 minutes. The row
+died during that attempt would leave the row `running` forever. Its one-time
+watchdog can settle that exact lease once it exceeds 15 minutes; the daily
+scheduled run retains its 24-hour fallback for missed or unarmed watchdogs.
+No Lambda worker can still hold either lease: it times out at 14 minutes. The row
 becomes `failed` (`abandoned_lease`), visible and re-runnable, and its attempts
 are not reset. If a newer request was flagged on it (`rerun_requested`), it
 becomes that request instead: pending, with a normal attempt budget.
@@ -884,9 +1173,12 @@ Two absences, told apart at the transport and never conflated again
 extraction became "this capture teaches nothing" forever, and a failed judge
 minted a duplicate signal):
 
-- **The model declined** — a safety block, a content filter. Terminal:
-  retrying the same material would be refused again, so callers keep their
-  safe postures (extraction: no candidates; the judges: independent).
+- **The model declined** — a safety block, a content filter. Extraction keeps
+  its no-candidates posture. Signal relation judging requires an actual verdict:
+  a refusal fails through the bounded queue instead of becoming `independent`
+  and bypassing an owner dismissal. It never records a semantic decision the
+  model did not make. Principle grounding/relation checks likewise require a
+  complete verdict.
 - **The road failed** — timeout, truncation, malformed envelope. The task
   throws, the job attempt fails, and the queue retries up to its
   `max_attempts`; an exhausted job parks as `failed`, visible and
@@ -968,8 +1260,9 @@ qualifies.
    signal, not a principle.
 3. **Evidence** — cites at least `PRINCIPLE_MIN_SIGNALS` (3) distinct
    signals with distinct statements from this profile's own history; duplicate
-   wording under multiple IDs does not clear the count. Uncited virtue is a
-   horoscope.
+   wording under multiple IDs does not clear the count. Case, whitespace and
+   Unicode compatibility variants count once, including on eligibility checks,
+   reads, promotion and support-loss maintenance. Uncited virtue is a horoscope.
 4. **Support** — evidence spanning at least `PRINCIPLE_MIN_SPAN_DAYS` (0)
    days and selected into at least `PRINCIPLE_MIN_TOM_APPEARANCES` (1)
    top-of-mind versions. Both computed over the UNION of the citing signals — the
@@ -992,6 +1285,8 @@ choices. Distillation distinguishes those cases before semantic grounding.
 Before matching/publication, structurally eligible generated candidates receive
 one semantic grounding batch against only their cited statements. Its limits
 are three candidates, 48 statements, 18,000 characters and 512 output tokens.
+Any malformed or unoffered citation rejects its whole candidate; removing a
+bad reference does not validate the instruction originally proposed with it.
 Every candidate must receive exactly one boolean verdict; a missing, duplicated,
 foreign, malformed or declined answer retries rather than accepting the claim.
 An unsupported verdict drops the candidate without touching standing human
@@ -1020,10 +1315,16 @@ restore demonstrated standing without changing the person's words or deciding
 an open dispute. Only unedited machine-owned principles are removed by this
 reconciliation.
 
+Promotion and support-loss maintenance use the same complete-citation check as
+reads: every cited signal must still be active, owned and readable, and both
+the signal wording and the Principle wording must match the cited revisions.
+Three valid citations cannot silently salvage a fourth withdrawn one. A fresh
+grounded match can renew citations before restoring demonstrated standing.
+
 **Generation is mint-or-match, when material changes.** A completed personal
-or room top-of-mind pass requests an eligibility check. Opening principles
+or agent top-of-mind pass requests an eligibility check. Opening principles
 can request missing work through a POST; GETs only read. The nightly cron
-(08:00 UTC) and local hourly pass recover missed work. All paths share a
+(08:00 UTC) and explicit local/boot passes recover missed work. All paths share a
 material fingerprint, so completed inputs are not regenerated on page opens.
 An unchanged reading (`no_change`) retains its audit row but counts as the
 preceding meaningful version for Principle appearances and work identity.
@@ -1035,8 +1336,8 @@ fingerprints also include current inspiration revisions and validated review
 material identities. These cover reflection/media edits and corrected review
 answers even when capture dates remain unchanged. Repeated support-check
 timestamps are excluded. This strengthens personal work identity to
-`principles-v4` for personal work (group work is `principles-v3`, retaining
-its public-statement-only inputs). The policy bump includes the new distinct
+`principles-v4` for personal and agent work (group Principle generation is
+retired). The policy bump includes the new distinct
 wording and semantic-grounding checks so an old completed empty result cannot
 permanently suppress them. An eligible profile can get one fresh pass under the new key
 when the normal scheduling path next runs, not from a GET or a data repair.
@@ -1103,10 +1404,9 @@ The authoritative values. Machine-checked against code — see
 
 | Constant | Value | One line |
 |---|---|---|
-| `SIGNAL_MATCH_MIN_COSINE` | 0.86 | At or above: attach as evidence |
+| `SIGNAL_MATCH_MIN_COSINE` | 0.86 | At or above: identical wording may attach; changed wording still needs semantic judgment |
 | `SIGNAL_MERGE_JUDGE_MIN_COSINE` | 0.7 | Band floor: ask the judge instead of minting blind |
 | `SIGNAL_SUPPRESSION_MIN_COSINE` | 0.86 | At or above a dismissed signal's vector: refuse the candidate, on the record |
-| `SIGNAL_BATCH_DEDUPE_MIN_COSINE` | 0.94 | Within one extraction batch, collapse near-identical candidates |
 | `SIGNAL_PROMOTION_MIN_EVIDENCE` | 3 | Evidence count where emerging becomes active |
 | `GARDENER_SUSPECT_MIN_COSINE` | 0.86 | Two STANDING signals this close are worth a judge's minute |
 | `GARDENER_SCAN_LIMIT` | 300 | Most-recently-evidenced signals one garden pass reads |
@@ -1205,24 +1505,79 @@ OpenRouter when `OPENROUTER_API_KEY` is present, and falls back
 to Gemini without it. Embeddings never switch roads — the stored vectors and
 every cosine threshold above live in `gemini-embedding-001`'s space.
 
-Top of Mind, Principles, signal extraction/support/judging, reflection,
-Review questions/derivation, declaration routing, and Talk with WAKA all
-default to `deepseek/deepseek-v4.1-flash-1017`. Deployment configuration explicitly
-sets `OPENROUTER_GENERATION_MODEL` for API and worker; dev also sets `WAKA_MODEL_CHAT` to the
-same model. Deployment verification checks both. Per-task model overrides
-remain available; no OpenRouter key still selects the Gemini provider rather
-than interpreting an OpenRouter model ID as a direct Gemini model. The chat
-switch does not enable production replies or change the 1,200-token output cap,
-source validation, or request budget. Image descriptions and audio
-transcription keep their direct Gemini models; changing those media clients
-is not part of this text-generation switch.
+Top of Mind synthesis and publication review default to `openai/gpt-6.1-terra`,
+with medium reasoning for synthesis and low reasoning for review. Signal extraction/support/judging,
+Principles, reflection, Review questions/derivation, declaration routing and
+Talk with WAKA keep `deepseek/deepseek-v4.1-flash-1017` without reasoning.
+API and worker share the deployment pins `OPENROUTER_GENERATION_MODEL` and
+the two Top of Mind overrides `WAKA_MODEL_SYNTHESIZE` and
+`WAKA_MODEL_TOP_OF_MIND_REVIEW`; dev also pins `WAKA_MODEL_CHAT` to DeepSeek.
+Absent or blank Top of Mind overrides use Terra regardless of the general
+generation or signal-judge defaults. The experimental semantic comparison
+retains the separate signal-judge setting and remains disabled.
+
+Terra reasoning omits the unsupported sampling temperature. Its unchanged
+8,192-token synthesis and 2,400-token review caps cover reasoning and visible
+JSON together; a partial
+or invalid response still fails rather than becoming a successful empty
+reading. Its strict JSON schema requires all properties; optional fields are
+nullable on the wire and normalize back to absent domain values. Other
+providers keep their existing schema encoding. Prompts, selected-language
+rules, citations and human locks retain
+their existing checks. The Gemini fallback is unchanged: without an OpenRouter
+key, all text-provider methods use direct `gemini-3.1-flash-lite`.
+
+With an OpenRouter key, PNG/JPEG/WebP/GIF image descriptions and verbatim
+visible-text extraction use `deepseek/deepseek-v4.1-flash-1017`. Private bytes
+travel inline, through the same timeout, privacy and cost-recording transport
+as text calls. HEIC/HEIF images keep direct `gemini-3.1-flash-lite` because
+OpenRouter does not accept those formats; the no-OpenRouter-key fallback also
+uses Gemini. The description stays capped at 800 output tokens/2,000 characters.
+
+Saved recording transcription remains direct `gemini-2.5-flash`, by owner
+decision after Voxtral Mini Transcribe 3 dropped the English half of a mixed
+Korean/English fixture. The prototype is inactive; its synthetic measurements
+and adapter patch are retained under `docs/craft/evidence/media-model-routing/`.
+The archived patch uses zero context; restore it with `git apply --unidiff-zero`.
+Existing byte/header/duration inspection still runs before a paid call: at
+most 12 MiB and five minutes (plus the final encoder frame). Neither media
+adapter switches providers after a failed configured request. Retryable
+failures remain owned by the durable queue; no adapter adds a polling loop or
+schedule. Numeric cost and token usage are recorded without transcripts,
+images or provider bodies.
+
+Embeddings remain direct Gemini calls. Browser dictation uses the
+browser/OS speech recognition service and does not select an app LLM.
+
+| Use | Configured model | Routing override |
+|---|---|---|
+| Signal extraction and inspiration categories | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_EXTRACT` |
+| Review-answer claim assessment and signal discovery | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_EXTRACT` |
+| Signal matching, contradiction/dismissal checks and gardening | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_JUDGE` |
+| Signal evidence support checks | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_SUPPORT` |
+| Top of Mind generation | GPT-6.1 Terra, medium reasoning | `WAKA_MODEL_SYNTHESIZE` |
+| Top of Mind language, grounding and synthesis-quality review | GPT-6.1 Terra, low reasoning | `WAKA_MODEL_TOP_OF_MIND_REVIEW` |
+| Experimental semantic novelty comparison (disabled) | DeepSeek V4.1 Flash 1017 if explicitly evaluated | `WAKA_MODEL_JUDGE` |
+| Principle generation and grounding review | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_PRINCIPLES` |
+| Principle equivalence/contradiction checks | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_PRINCIPLE_JUDGE` |
+| Declaration routing (principle vs inspiration) | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_ROUTE` |
+| Reflection follow-ups and Review question/connection writing | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_REFLECT` |
+| Chat replies grounded in saved memory | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_CHAT` |
+| Image description and visible-text extraction | DeepSeek V4.1 Flash 1017 | OpenRouter; direct Gemini 3.1 Flash Lite for HEIC/HEIF or no OpenRouter key |
+| Saved recording transcription | Gemini 2.5 Flash | Direct Gemini client; Voxtral migration held after mixed-language failure |
+| Inspiration, signal and search-query embeddings | gemini-embedding-001, 768 dimensions | Direct Gemini client; not text generation |
+
+Review-item selection, confidence arithmetic and the automatic reading cadence
+are deterministic application rules, not separate LLM calls. Existing vectors
+and cosine thresholds remain in the same embedding model's coordinate space.
 
 | Constant | Value | One line |
 |---|---|---|
-| `OPENROUTER_GENERATION_MODEL` | deepseek/deepseek-v4.1-flash-1017 | All OpenRouter generation tasks — the default road |
-| `OPENROUTER_MAX_OUTPUT_TOKENS` | 8192 | Bound on every answer — a small JSON artifact, never an essay; with reasoning declined, a truncated verdict cannot masquerade as "nothing here" |
+| `OPENROUTER_GENERATION_MODEL` | deepseek/deepseek-v4.1-flash-1017 | Default for OpenRouter text tasks except Top of Mind synthesis/review |
+| `OPENROUTER_TOP_OF_MIND_MODEL` | openai/gpt-6.1-terra | Default for Top of Mind synthesis and publication review |
+| `OPENROUTER_MAX_OUTPUT_TOKENS` | 8192 | Shared output ceiling; Terra synthesis spends reasoning and visible JSON within this cap |
 | `OPENROUTER_CHAT_URL` | https://openrouter.ai/api/v1/chat/completions | The second road's endpoint |
-| `GEMINI_GENERATION_MODEL` | gemini-3.1-flash-lite | Vision, and the whole road when no OpenRouter key is set |
+| `GEMINI_GENERATION_MODEL` | gemini-3.1-flash-lite | Text fallback when no OpenRouter key is set |
 | `GEMINI_EMBEDDING_MODEL` | gemini-embedding-001 | All vectors |
 | `GEMINI_EMBEDDING_DIMENSIONS` | 768 | Vector width |
 | `MAX_GEMINI_EMBEDDING_VALUES` | 4096 | Sanity ceiling on values accepted back per vector |
@@ -1232,10 +1587,9 @@ is not part of this text-generation switch.
 | `MAX_EXISTING_CATEGORIES` | 24 | Shelves the reading is shown before it names a new one, busiest first |
 | `MAX_TOP_OF_MIND_ENTRIES` | 7 | Entries one artifact may hold |
 
-All generation calls run at temperature 0 with schema-constrained JSON
-output; all user-originated text and enrichment output is delimiter-fenced
-and the system instructions pin the model against treating it as
-instructions.
+Generation remains schema-constrained JSON. All user-originated text and
+enrichment output is delimiter-fenced, and the system instructions pin the
+model against treating it as instructions.
 
 ### The per-account model budget (`packages/api/src/lib/model-budget.ts`)
 
@@ -1269,20 +1623,23 @@ build if a handler ever reaches a model entry point again.
 **What 60 starts actually bounds**, stated precisely, because a protection
 believed to be stronger than it is protects nothing:
 
-- **Starts, not executions.** `started_at` is overwritten on each claim, so a
-  job retried to its `max_attempts` (3) counts as one start, not three. The
-  true ceiling is up to 180 job executions per account per hour. The undercount
-  is bounded by `max_attempts` and by the backoff between attempts; the
-  alternative is a second table logging every start, which is a whole ledger to
-  maintain and reap for a correction of at most two.
-- **Jobs, not model calls.** One `derive_signals` job is one extraction, one
-  capture embedding, up to `MAX_SIGNAL_CANDIDATES` (3) candidate embeddings and
-  up to 3 merge-judge calls: at most 8, and it is a real bound, because
-  `parseSignalCandidates` slices the model's answer to the cap rather than
-  trusting the schema constraint to have been honoured. Every other job type is
-  one or two calls. So 60 starts is at most ~480 model calls an hour, times the
-  retry factor above in the pathological case where every job fails twice
-  before it succeeds.
+- **A recorded claim, not one mutable row.** Migration 0082 adds
+  `background_job_runs`: each ordinary queue claim records its account, opaque
+  job ID, request version, attempt and start time in the same SQL statement.
+  Retries and repeated edits cannot overwrite earlier usage, and deleting the
+  source job or agent profile does not refund it. Erasing the account removes
+  its operational rows. A hold refunds only that exact held claim, preserving
+  earlier failed attempts. Legacy job snapshots remain a fallback when no run
+  records that start; overwritten historical starts cannot be reconstructed.
+  Review-answer and chat dispatches retain their dedicated meters and are not
+  double-counted as ordinary queue starts. Run records expire after two days,
+  cleaned by the existing daily maintenance event, with no new polling.
+- **A throughput throttle, not an invoice ceiling.** The admission peek and
+  claim remain separate, so concurrent workers can slip past the hourly
+  threshold; stale-lease reclaim retains its existing grandfathered treatment.
+  One job can purchase several model calls, depending on stage, candidate
+  matches and reviews. These counts are not a hard dollar cap or proof of
+  exact billing. Actual provider usage remains separate operational telemetry.
 
 ---
 

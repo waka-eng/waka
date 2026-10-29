@@ -1,0 +1,57 @@
+{
+  "observedAt": "2026-10-29",
+  "review": {
+    "medium": {
+      "fixedCasesPassed": 12,
+      "fixedCases": 14,
+      "publicationCasesPassed": 0,
+      "publicationCases": 2
+    },
+    "low": {
+      "fixedCasesPassed": 14,
+      "fixedCases": 14,
+      "publicationCasesPassed": 0,
+      "publicationCases": 2
+    }
+  },
+  "usage": [
+    {
+      "log": "live-readings",
+      "requests": 6,
+      "pricedRequests": 6,
+      "reportedCostUsd": 0.0244223
+    },
+    {
+      "log": "live-readings-low",
+      "requests": 6,
+      "pricedRequests": 6,
+      "reportedCostUsd": 0.01117255
+    },
+    {
+      "log": "live-media",
+      "requests": 11,
+      "pricedRequests": 11,
+      "reportedCostUsd": 0.0030332483
+    },
+    {
+      "log": "live-media-v2",
+      "requests": 11,
+      "pricedRequests": 11,
+      "reportedCostUsd": 0.0030357983
+    },
+    {
+      "log": "segment-diagnostic",
+      "requests": 1,
+      "pricedRequests": 1,
+      "reportedCostUsd": 0.0002333332
+    },
+    {
+      "log": "live-active-media",
+      "requests": 11,
+      "pricedRequests": 1,
+      "reportedCostUsd": 1.60964e-05
+    }
+  ],
+  "syntheticInputsOnly": true,
+  "noGenerationPromptOrQualityThresholdChanges": true
+}

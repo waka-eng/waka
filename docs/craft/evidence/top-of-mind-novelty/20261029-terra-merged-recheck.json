@@ -1,0 +1,654 @@
+{
+  "observedAt": "2026-10-29",
+  "fixture": "same-idea-merged",
+  "expectedChanged": false,
+  "model": "openai/gpt-6.1-terra",
+  "comparisonTokenCap": 1800,
+  "qualityModel": "openai/gpt-6.1-terra",
+  "qualityReasoning": "low",
+  "syntheticOnly": true,
+  "applicationComparisonEnabled": false,
+  "sourceHashes": {
+    "packages/api/test/helpers/top-of-mind-novelty-cases.ts": "67a38e14a68d2a65de173f53f89c17f9ec60013d763083894590e601eb8302d6",
+    "packages/api/src/queue/gemini.ts": "92c59c043da08771196e82ba371fa17de640dfb53118ee881588cfece03c819b",
+    "packages/api/src/lib/top-of-mind-quality.ts": "4ec084ade81337f34468346067551a7dcae4e1d94e6b350f0e5e543fe9610f3e"
+  },
+  "runs": [
+    {
+      "comparisonEffort": "low",
+      "results": [
+        {
+          "mode": "comparison-only",
+          "comparisonModel": "openai/gpt-6.1-terra",
+          "qualityModel": "scripted",
+          "expected": false,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ],
+          "quality": {
+            "entries": [
+              {
+                "index": 0,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false,
+                "leadingEntryIndex": 1
+              },
+              {
+                "index": 1,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false,
+                "leadingEntryIndex": 0
+              },
+              {
+                "index": 2,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false,
+                "leadingEntryIndex": 0
+              }
+            ]
+          },
+          "compared": {
+            "entries": [
+              {
+                "index": 0,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [
+                  1
+                ],
+                "coveredByLeadingEntry": true,
+                "leadingEntryIndex": 1
+              },
+              {
+                "index": 1,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [
+                  0
+                ],
+                "coveredByLeadingEntry": true,
+                "leadingEntryIndex": 0
+              },
+              {
+                "index": 2,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false,
+                "leadingEntryIndex": 0
+              }
+            ]
+          },
+          "comparisonEffort": "low"
+        },
+        {
+          "mode": "quality-and-comparison",
+          "comparisonModel": "openai/gpt-6.1-terra",
+          "qualityModel": "openai/gpt-6.1-terra",
+          "expected": false,
+          "changed": false,
+          "approved": [],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ],
+          "quality": {
+            "entries": [
+              {
+                "index": 0,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ]
+              },
+              {
+                "index": 1,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ]
+              },
+              {
+                "index": 2,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ]
+              }
+            ]
+          },
+          "compared": {
+            "entries": [
+              {
+                "index": 0,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false
+              },
+              {
+                "index": 1,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false
+              },
+              {
+                "index": 2,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false
+              }
+            ]
+          },
+          "comparisonEffort": "low"
+        }
+      ],
+      "usage": [
+        {
+          "_aws": {
+            "Timestamp": 1793273886027,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001094,
+          "inputTokens": 519,
+          "outputTokens": 115,
+          "durationMs": 2438.926916
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793273892208,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.002885,
+          "inputTokens": 580,
+          "outputTokens": 461,
+          "durationMs": 6172.684249999999
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793273893953,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00065,
+          "inputTokens": 430,
+          "outputTokens": 44,
+          "durationMs": 1742.5510419999991
+        }
+      ],
+      "reportedCostUsd": 0.004629
+    },
+    {
+      "comparisonEffort": "medium",
+      "results": [
+        {
+          "mode": "comparison-only",
+          "comparisonModel": "openai/gpt-6.1-terra",
+          "comparisonEffort": "medium",
+          "qualityModel": "scripted",
+          "expected": false,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ],
+          "quality": {
+            "entries": [
+              {
+                "index": 0,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false,
+                "leadingEntryIndex": 1
+              },
+              {
+                "index": 1,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false,
+                "leadingEntryIndex": 0
+              },
+              {
+                "index": 2,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false,
+                "leadingEntryIndex": 0
+              }
+            ]
+          },
+          "compared": {
+            "entries": [
+              {
+                "index": 0,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [
+                  1
+                ],
+                "coveredByLeadingEntry": true,
+                "leadingEntryIndex": 1
+              },
+              {
+                "index": 1,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [
+                  0
+                ],
+                "coveredByLeadingEntry": true,
+                "leadingEntryIndex": 0
+              },
+              {
+                "index": 2,
+                "languageMatches": true,
+                "grounded": true,
+                "synthesized": true,
+                "supportingInspirationIds": [
+                  "a",
+                  "b"
+                ],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false,
+                "leadingEntryIndex": 0
+              }
+            ]
+          }
+        },
+        {
+          "mode": "quality-and-comparison",
+          "comparisonModel": "openai/gpt-6.1-terra",
+          "comparisonEffort": "medium",
+          "qualityModel": "openai/gpt-6.1-terra",
+          "expected": false,
+          "changed": false,
+          "approved": [],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ],
+          "quality": {
+            "entries": [
+              {
+                "index": 0,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": false,
+                "supportingInspirationIds": []
+              },
+              {
+                "index": 1,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": false,
+                "supportingInspirationIds": []
+              },
+              {
+                "index": 2,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": false,
+                "supportingInspirationIds": []
+              }
+            ]
+          },
+          "compared": {
+            "entries": [
+              {
+                "index": 0,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": false,
+                "supportingInspirationIds": [],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false
+              },
+              {
+                "index": 1,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": false,
+                "supportingInspirationIds": [],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false
+              },
+              {
+                "index": 2,
+                "languageMatches": true,
+                "grounded": false,
+                "synthesized": false,
+                "supportingInspirationIds": [],
+                "coveredByIndices": [],
+                "coveredByLeadingEntry": false
+              }
+            ]
+          }
+        }
+      ],
+      "usage": [
+        {
+          "_aws": {
+            "Timestamp": 1793273973669,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001154,
+          "inputTokens": 519,
+          "outputTokens": 127,
+          "durationMs": 2881.6749170000003
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793273980547,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.002955,
+          "inputTokens": 580,
+          "outputTokens": 475,
+          "durationMs": 6873.10075
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793273982358,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000675,
+          "inputTokens": 430,
+          "outputTokens": 49,
+          "durationMs": 1809.9634999999998
+        }
+      ],
+      "reportedCostUsd": 0.004784
+    }
+  ]
+}

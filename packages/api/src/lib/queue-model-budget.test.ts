@@ -60,6 +60,7 @@ interface QueuedRow {
  */
 class InMemoryBackgroundJobStore implements BackgroundJobStore {
   readonly rows: QueuedRow[] = [];
+  private runs: Array<{ jobId: string; accountId: string; startedAt: Date; attempt: number }> = [];
   private sequence = 0;
 
   enqueue(input: {
@@ -103,7 +104,7 @@ class InMemoryBackgroundJobStore implements BackgroundJobStore {
     const runnable = this.rows
       .filter(
         (row) =>
-          (row.status === "pending" && row.runAfter.getTime() <= now.getTime()) ||
+          (row.status === "pending" && row.attempts < MAX_ATTEMPTS && row.runAfter.getTime() <= now.getTime()) ||
           (row.status === "running" &&
             row.lockedAt !== null &&
             row.lockedAt.getTime() < now.getTime() - STALE_LOCK_MS &&
@@ -130,6 +131,7 @@ class InMemoryBackgroundJobStore implements BackgroundJobStore {
     row.attempts += 1;
     row.lockedAt = now;
     row.startedAt = now;
+    this.runs.push({ jobId: row.id, accountId: row.accountId, startedAt: now, attempt: row.attempts });
     return {
       id: row.id,
       profileId: row.profileId,
@@ -154,15 +156,11 @@ class InMemoryBackgroundJobStore implements BackgroundJobStore {
   }
 
   async usageForAccount(accountId: string, since: Date) {
-    const starts = this.rows
-      .filter(
-        (row) =>
-          row.accountId === accountId &&
-          row.startedAt !== null &&
-          row.startedAt.getTime() >= since.getTime(),
-      )
-      .map((row) => row.startedAt as Date)
-      .sort((a, b) => a.getTime() - b.getTime());
+    const legacy = this.rows.filter(row => row.startedAt !== null &&
+      !this.runs.some(run => run.jobId === row.id && run.startedAt.getTime() === row.startedAt!.getTime()));
+    const starts = [...this.runs, ...legacy].filter(row => row.accountId === accountId &&
+      row.startedAt !== null && row.startedAt.getTime() >= since.getTime())
+      .map(row => row.startedAt as Date).sort((a, b) => a.getTime() - b.getTime());
     return {
       startedInWindow: starts.length,
       oldestStartInWindow: starts[0] ?? null,
@@ -189,6 +187,9 @@ class InMemoryBackgroundJobStore implements BackgroundJobStore {
   async holdJob(job: BackgroundJob, until: Date) {
     const row = this.rows.find((r) => r.id === job.id);
     if (row) {
+      this.runs = this.runs.filter(run => !(run.jobId === row.id && run.attempt === job.attempts &&
+        run.startedAt.getTime() === new Date(job.startedAt!).getTime()));
+      row.startedAt = null;
       row.status = "pending";
       row.attempts = Math.max(0, row.attempts - 1);
       row.runAfter = until;

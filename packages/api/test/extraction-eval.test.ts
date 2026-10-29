@@ -208,6 +208,7 @@ function inputFor(c: Case, i: number): SignalCandidateExtractionInput {
     },
     reflections: [],
     attachments: [],
+    existingCategories: [],
     existingStatements: [],
     relatedInspirations: [],
   };

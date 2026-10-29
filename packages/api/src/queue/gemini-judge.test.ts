@@ -4,7 +4,7 @@
  * statements (same | independent | opposed), and its failure directions are
  * still asymmetric: a wrong `same` fuses patterns invisibly, and a wrong
  * `opposed` manufactures a dispute the person never had — so everything
- * uncertain or malformed must land on `independent`.
+ * genuine uncertainty may return `independent`; malformed output must fail.
  */
 
 import { describe, expect, it } from "vitest";
@@ -79,7 +79,7 @@ describe("parseSignalMatchJudgement", () => {
     null,
     "opposed",
     42,
-  ])("lands %j on independent — the conservative middle", (payload) => {
-    expect(parseSignalMatchJudgement(payload)).toEqual({ relation: "independent" });
+  ])("refuses %j rather than inventing an independent verdict", (payload) => {
+    expect(() => parseSignalMatchJudgement(payload)).toThrow('signal match judgement');
   });
 });

@@ -52,6 +52,21 @@ it('a late successful save leaves newer edits in the open draft', async () => {
   expect((await loadInspirationDraft(scope, saved.id))?.text).toBe('New thought');
 });
 
+it('settles consumed file tickets without removing newer files, links or an unchosen recording', async () => {
+  const submittedFile = { id: 'submitted', type: 'file' as const, uploaded: { key: 'objects/submitted.pdf', contentType: 'application/pdf', size: 3 } };
+  const newFile = { id: 'new', type: 'file' as const, uploaded: { key: 'objects/new.pdf', contentType: 'application/pdf', size: 3 } };
+  const candidate = { id: 'candidate', type: 'audio' as const, blob: new Blob(['new clip']) };
+  await act(async () => { hook.setText('Submitted'); hook.setMedia([submittedFile]); await hook.flush(); });
+  const saved = { id: hook.draft.id, revision: hook.draft.revision };
+  await act(async () => {
+    hook.setText('Newer words'); hook.setMedia([submittedFile, newFile, { id: 'link', type: 'link', url: 'https://example.test/new' }]);
+    hook.setRecordingCandidate(candidate); await hook.flush();
+    expect(await hook.settle(saved, 'saved-inspiration', undefined, ['objects/submitted.pdf'])).toBe(false);
+  });
+  expect(hook.draft).toMatchObject({ text: 'Newer words', media: [newFile, { id: 'link' }], recordingCandidate: { id: 'candidate' } });
+  expect((await loadInspirationDraft(scope, saved.id))?.media.map(item => item.id)).toEqual(['new', 'link']);
+});
+
 it('offers a separate draft after a competing tab wins without overwriting it', async () => {
   await act(async () => { hook.setText('Shared start'); await hook.flush(); });
   const original = hook.draft;

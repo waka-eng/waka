@@ -94,12 +94,16 @@ describe("reading distillation", () => {
   it("accepts a clean candidate and defaults an unknown type to maxim", () => {
     const parsed = parseDistilledPrinciples({
       candidates: [
-        { statement: " Prefer X over Y. ", type: "banana", citedSignalIds: ["s1", 2, "s2"] },
+        { statement: " Prefer X over Y. ", type: "banana", citedSignalIds: ["s1", "s2"] },
       ],
     });
     expect(parsed.candidates).toEqual([
       { statement: "Prefer X over Y.", type: "maxim", citedSignalIds: ["s1", "s2"] },
     ]);
+  });
+
+  it.each([2,'','   '])('rejects a whole candidate containing a malformed citation: %j',citation=>{
+    expect(parseDistilledPrinciples({candidates:[{statement:'An unsupported repair must not publish.',citedSignalIds:['s1','s2','s3',citation]}]}).candidates).toEqual([]);
   });
 
   it.each([null, "nope", {}, { candidates: "x" }, { candidates: [{}] }])(

@@ -28,6 +28,7 @@ function citation(
 ): CitationEvidence {
   return {
     signalId,
+    statement:signalId,
     evidenceAt: daysAgo.map((d) => new Date(NOW.getTime() - d * DAY)),
     tomVersionIds,
   };
@@ -73,6 +74,11 @@ describe("the longevity bar", () => {
     const verdict = computeCitationEligibility(set, NOW);
     expect(verdict.spanDays).toBe(5);
     expect(verdict.eligible).toBe(true);
+  });
+
+  it('counts normalized duplicate statements once even when their IDs differ',()=>{
+    const set=clearingSet().map((row,index)=>({...row,statement:['Same choice','  same   choice  ','ＳＡＭＥ choice'][index]!}));
+    expect(computeCitationEligibility(set,NOW)).toMatchObject({distinctSignals:1,eligible:false});
   });
 
   it("fails without enough top-of-mind survivals", () => {

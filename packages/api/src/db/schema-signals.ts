@@ -451,7 +451,8 @@ export const suppressions = pgTable(
     candidateStatement: text("candidate_statement").notNull(),
 
     /**
-     * The cosine that decided, at decision time. Stored because it cannot be
+     * The cosine at comparison time (retrieval, not the semantic verdict).
+     * Stored because it cannot be
      * recomputed later (vectors move when statements are re-embedded) and a
      * refusal a person cannot audit is not a record. Renders nowhere — the
      * numeral law binds the chrome, not the archive.

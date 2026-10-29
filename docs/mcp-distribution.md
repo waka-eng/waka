@@ -28,3 +28,34 @@ contain immutable URLs, so removing an old archive would break fresh installs
 of those configurations. The manifest points new setups at the latest release.
 Web builds check the archive hash and allowlist without requiring the private
 client checkout. Public URLs become available when the web deployment finishes.
+
+## Connection and access rules
+
+Set up an agent from Settings → Agent profiles → the agent → Connections & API
+keys. Copy the setup prompt first, or expand the manual steps. The instructions
+pin the profile ID, give each browser login its own `WAKA_HOME`, and use a
+profile-specific MCP server name. Public downloads require no repository access.
+
+- Browser approval creates a separate 30-day session for the chosen profile.
+  The consent page locks an explicitly requested profile and describes its
+  permissions. Revoking the connection removes that session; it does not erase
+  memory, end the browser session, revoke an API key, or remove local MCP config.
+- Agent API keys read and write only their agent. Personal keeper keys can read,
+  capture and propose captures for approval; they cannot edit/delete memory,
+  reach agents or make account decisions. Both can identify their own profile
+  and verify that binding. Keys have no automatic expiry and stay active until
+  revoked; there are at most five live keys per profile.
+- A legacy personal-profile browser-approved CLI session has full account
+  permissions, as the consent page states. It is broader than a keeper key.
+- Verification calls `waka_verify_connection` without saving memory. It proves
+  a matching live credential at that time. A configured server or an old
+  verification timestamp alone is not proof that the current connection works.
+- Scope chooses where the AI client enables WAKA. It does not change what the
+  credential can access. The one-launch Codex command applies to a new CLI
+  launch; existing configured MCP servers remain enabled.
+
+Published archive URLs are immutable. Re-running setup with the current package
+URL updates a client to the current parser; existing configurations retain their
+older URL. This review adds support for reading audio and decision captures
+without rejecting the entire inspiration list. It does not give the MCP capture
+tool an audio upload capability.

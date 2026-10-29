@@ -124,6 +124,18 @@ describe("extractSignalCandidates", () => {
     }
   });
 
+  it('labels a saved recording as transcript material without attributing its speaker to the owner', async () => {
+    process.env.GEMINI_API_KEY = 'test-key';
+    const fetchFn = vi.fn().mockResolvedValue(geminiResponse({ statements: [], category: null }));
+    vi.stubGlobal('fetch', fetchFn);
+    await createGeminiModelProvider().extractSignalCandidates({ ...EXTRACTION_INPUT,
+      attachments: [{ kind: 'audio_transcription', label: 'Recording', text: 'Words in the recording.' }],
+    });
+    const prompt: string = requestBodyOf(fetchFn).contents[0].parts[0].text;
+    expect(prompt).toContain('Transcript of a recording');
+    expect(prompt).toContain('speaker'); expect(prompt).not.toContain('Description of an image');
+  });
+
   it("returns grounded statements and drops blanks", async () => {
     process.env.GEMINI_API_KEY = "test-key";
     const fetchFn = vi.fn().mockResolvedValue(
@@ -311,6 +323,20 @@ describe("synthesizeTopOfMind", () => {
     expect(body.generationConfig.responseSchema.properties.entries.items.properties.type.enum)
       .toEqual(["pattern", "tension", "question", "hypothesis", "action"]);
     expect(body.contents[0].parts[0].text).toContain("<<<signals>>>");
+  });
+
+  it.each([{}, { relation: 'uncertain' }])('does not treat a malformed Gemini relation %j as independent', async payload => {
+    process.env.GEMINI_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(geminiResponse(payload)));
+    await expect(createGeminiModelProvider().judgeSignalMatch({ preferredLocale: 'en-US',
+      candidateStatement: 'I prefer mornings.', existingStatement: 'I prefer early hours.' })).rejects.toThrow(ModelDidNotAnswerError);
+  });
+  it('does not let a declined Gemini judgment bypass an owner dismissal', async () => {
+    process.env.GEMINI_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ promptFeedback: { blockReason: 'SAFETY' } }),
+      { status: 200, headers: { 'content-type': 'application/json' } })));
+    await expect(createGeminiModelProvider().judgeSignalMatch({ preferredLocale: 'en-US',
+      candidateStatement: 'I prefer mornings.', existingStatement: 'I prefer early hours.' })).rejects.toThrow(ModelDidNotAnswerError);
   });
 
   it("refuses to report an unusable response as a decision", async () => {

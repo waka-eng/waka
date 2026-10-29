@@ -71,6 +71,9 @@ async function resolveSessionFromToken(token: string): Promise<AuthenticatedSess
  * convention. Exported pure, so the list is a unit test away.
  */
 export function keeperKeyMayPass(method: string, path: string): boolean {
+  // MCP can prove its bound identity without gaining account permissions.
+  if (method === "GET" && (path === "/api/auth/me" || path === "/api/profiles")) return true;
+  if (method === "POST" && path === "/api/auth/cli/verify") return true;
   /* `/api/harvest` is the keeper key's other way in (2026-10-15): the
      person's own collector proposes sentences there for the person to
      decide on at a browser. Proposing only — the decision routes under it

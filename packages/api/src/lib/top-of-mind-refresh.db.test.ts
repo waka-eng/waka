@@ -1,5 +1,5 @@
 import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { setDefaultModelProviderForTests, type ModelProvider } from "./model-provider.js";
 import { enqueueTopOfMindRefresh, postgresBackgroundJobStore, processBackgroundJob, runBackgroundJobWorker } from "./queue.js";
@@ -26,7 +26,7 @@ async function material({ active = false } = {}) {
   const ids: string[] = [];
   for (let i = 0; i < 3; i++) {
     const [signal] = await t.sql`INSERT INTO signals (profile_id, statement)
-      VALUES (${profileId}, 'Small steps recur') RETURNING id`;
+      VALUES (${profileId}, ${`Distinct fixture pattern ${i}`}) RETURNING id`;
     ids.push(signal.id as string);
     for (let j = 0; j < (active ? 3 : 1); j++) {
       const [inspiration] = await t.sql`INSERT INTO inspirations (profile_id, text, visibility)
@@ -81,10 +81,10 @@ describe("top of mind completion receipts", () => {
     const claimed = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
     expect(claimed?.id).toBe(job.id);
     const steal = async () => { await t.sql`UPDATE background_jobs SET locked_at = now() + interval '2 seconds', attempts = attempts + 1 WHERE id = ${job.id}`; };
-    setDefaultModelProviderForTests({
-      distillPrinciples: async () => { await steal(); return { candidates: [{ type: 'maxim', statement: 'A stale principle', citedSignalIds: ids }] }; },
-    } as unknown as ModelProvider);
+    const distillPrinciples = vi.fn(async () => { await steal(); return { candidates: [{ type: 'maxim', statement: 'A stale principle', citedSignalIds: ids }] }; });
+    setDefaultModelProviderForTests({ distillPrinciples } as unknown as ModelProvider);
     await expect(processBackgroundJob(claimed!)).rejects.toThrow(/ownership changed/i);
+    expect(distillPrinciples).toHaveBeenCalledTimes(1);
     expect(await t.sql`SELECT id FROM top_of_minds`).toHaveLength(1);
     expect(await t.sql`SELECT id FROM principles`).toHaveLength(0);
   });

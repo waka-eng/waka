@@ -1,0 +1,285 @@
+{
+  "decision": "Owner chose to keep Gemini active after Voxtral dropped English in mixed-language speech.",
+  "syntheticInputsOnly": true,
+  "runs": [
+    {
+      "criteria": {
+        "speechMaxNormalizedCer": 0.05,
+        "nonSpeechMustBeEmpty": true,
+        "maxRequests": 11,
+        "limitations": [
+          "Synthetic speech/images only",
+          "One attempt per fixture",
+          "No physical microphones or noisy speech tested"
+        ]
+      },
+      "observedAt": "2026-10-29T11:17:56.913Z",
+      "models": {
+        "image": "deepseek/deepseek-v4.1-flash-1017",
+        "audio": "mistralai/voxtral-mini-transcribe-3-0"
+      },
+      "results": [
+        {
+          "id": "image-ocr",
+          "sha256": "8038e1956533698d1512e319d19b1bedce6806eeb75ea759ad8f280d94017af6",
+          "description": "The image contains the text \"VELVET ANTENNA\" in large black capital letters on a white background. It is a graphic wordmark or logo rendered in a blocky, pixelated typeface with squared-off letterforms and stepped diagonal edges. The two words are separated by a wide space.",
+          "passed": true,
+          "elapsedMs": 2806
+        },
+        {
+          "id": "english",
+          "mime": "audio/wav",
+          "sha256": "69056177a71e58f7d3361b2fb1675ce39315c900485fc6a521d558455a9cd1b5",
+          "transcript": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "reference": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "durationSeconds": 5.800875,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 781
+        },
+        {
+          "id": "korean",
+          "mime": "audio/wav",
+          "sha256": "1e2e1b46129be622d44e1a5349d2e89fde4398c1c904c292ae0e3c331747bedf",
+          "transcript": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고, 중요한 일에 집중하고 싶다.",
+          "reference": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+          "durationSeconds": 7.8113125,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 804
+        },
+        {
+          "id": "numbers",
+          "mime": "audio/wav",
+          "sha256": "27ed5ddea67aa6a18161e0ece230e7f164390979eecf6a8f75acbdd6ac7a2cbc",
+          "transcript": "금요일 오후 3시에 다시 돌아보자. 5분 동안 오늘 남긴 생각을 읽어 보고 싶다.",
+          "reference": "금요일 오후 세 시에 다시 돌아보자. 다섯 분 동안 오늘 남긴 생각을 읽어 보고 싶다.",
+          "durationSeconds": 5.94825,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 676
+        },
+        {
+          "id": "mixed",
+          "mime": "audio/wav",
+          "sha256": "2e1a6c2dfff75526a9c1bcdfc1ef76a0e25170d00916535d58d022640d46cdeb",
+          "transcript": "이번에는 작은 실험부터 시작하자.",
+          "reference": "이번에는 작은 실험부터 시작하자. Leave space for the work that matters.",
+          "durationSeconds": 4.8609375,
+          "normalizedCer": 0.6888888888888889,
+          "passed": false,
+          "elapsedMs": 587
+        },
+        {
+          "id": "silence",
+          "mime": "audio/wav",
+          "sha256": "d303811b8c84619667cd0501342f84ec6cbe69f7aa3856dcf52fabda374c92b8",
+          "transcript": "",
+          "reference": "",
+          "durationSeconds": 3,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 513
+        },
+        {
+          "id": "tone",
+          "mime": "audio/wav",
+          "sha256": "8ca179f47813f9a76519281c7fa2f7e1428870ededc49627af38fc3ec9109e36",
+          "transcript": "",
+          "reference": "",
+          "durationSeconds": 3,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 1027
+        },
+        {
+          "id": "english-m4a",
+          "mime": "audio/mp4",
+          "sha256": "7f0b531a3ceed6470fd9b171cd7a710941fbfe71a839786fcff0a8588e0a988e",
+          "transcript": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "reference": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "durationSeconds": 5.864875,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 584
+        },
+        {
+          "id": "english-webm",
+          "mime": "audio/webm",
+          "sha256": "c436f0527eb95097b9f4dce554234ce93f2a7f15b56f31d133b40f7b5eaac9ca",
+          "transcript": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "reference": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "durationSeconds": 5.921,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 694
+        },
+        {
+          "id": "korean-m4a",
+          "mime": "audio/mp4",
+          "sha256": "6f35f91d62d708292d703c2e3f9af6e5f268587857d329c215cf8c6d0faf0841",
+          "transcript": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고, 중요한 일에 집중하고 싶다.",
+          "reference": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+          "durationSeconds": 7.8753125,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 593
+        },
+        {
+          "id": "korean-webm",
+          "mime": "audio/webm",
+          "sha256": "acec0b5790a4ae0db0dd715b93d50c7ae9c6500587b68c2b52fafd54ce914c23",
+          "transcript": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고, 중요한 일에 집중하고 싶다.",
+          "reference": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+          "durationSeconds": 7.921,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 1428
+        }
+      ],
+      "requestVariant": "default"
+    },
+    {
+      "criteria": {
+        "speechMaxNormalizedCer": 0.05,
+        "nonSpeechMustBeEmpty": true,
+        "maxRequests": 11,
+        "limitations": [
+          "Synthetic speech/images only",
+          "One attempt per fixture",
+          "No physical microphones or noisy speech tested"
+        ]
+      },
+      "observedAt": "2026-10-29T11:20:33.116Z",
+      "models": {
+        "image": "deepseek/deepseek-v4.1-flash-1017",
+        "audio": "mistralai/voxtral-mini-transcribe-3-0"
+      },
+      "results": [
+        {
+          "id": "image-ocr",
+          "sha256": "8038e1956533698d1512e319d19b1bedce6806eeb75ea759ad8f280d94017af6",
+          "description": "The image contains the text \"VELVET ANTENNA\" in a blocky, pixelated black sans-serif font on a white background. It is a plain typographic wordmark or logo, with the two words separated by a wide space.",
+          "passed": true,
+          "elapsedMs": 885
+        },
+        {
+          "id": "english",
+          "mime": "audio/wav",
+          "sha256": "69056177a71e58f7d3361b2fb1675ce39315c900485fc6a521d558455a9cd1b5",
+          "transcript": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "reference": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "durationSeconds": 5.800875,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 1221
+        },
+        {
+          "id": "korean",
+          "mime": "audio/wav",
+          "sha256": "1e2e1b46129be622d44e1a5349d2e89fde4398c1c904c292ae0e3c331747bedf",
+          "transcript": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고, 중요한 일에 집중하고 싶다.",
+          "reference": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+          "durationSeconds": 7.8113125,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 918
+        },
+        {
+          "id": "numbers",
+          "mime": "audio/wav",
+          "sha256": "27ed5ddea67aa6a18161e0ece230e7f164390979eecf6a8f75acbdd6ac7a2cbc",
+          "transcript": "금요일 오후 3시에 다시 돌아보자. 5분 동안 오늘 남긴 생각을 읽어 보고 싶다.",
+          "reference": "금요일 오후 세 시에 다시 돌아보자. 다섯 분 동안 오늘 남긴 생각을 읽어 보고 싶다.",
+          "durationSeconds": 5.94825,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 1083
+        },
+        {
+          "id": "mixed",
+          "mime": "audio/wav",
+          "sha256": "2e1a6c2dfff75526a9c1bcdfc1ef76a0e25170d00916535d58d022640d46cdeb",
+          "transcript": "이번에는 작은 실험부터 시작하자.",
+          "reference": "이번에는 작은 실험부터 시작하자. Leave space for the work that matters.",
+          "durationSeconds": 4.8609375,
+          "normalizedCer": 0.6888888888888889,
+          "passed": false,
+          "elapsedMs": 1306
+        },
+        {
+          "id": "silence",
+          "mime": "audio/wav",
+          "sha256": "d303811b8c84619667cd0501342f84ec6cbe69f7aa3856dcf52fabda374c92b8",
+          "transcript": "",
+          "reference": "",
+          "durationSeconds": 3,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 734
+        },
+        {
+          "id": "tone",
+          "mime": "audio/wav",
+          "sha256": "8ca179f47813f9a76519281c7fa2f7e1428870ededc49627af38fc3ec9109e36",
+          "transcript": "",
+          "reference": "",
+          "durationSeconds": 3,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 510
+        },
+        {
+          "id": "english-m4a",
+          "mime": "audio/mp4",
+          "sha256": "7f0b531a3ceed6470fd9b171cd7a710941fbfe71a839786fcff0a8588e0a988e",
+          "transcript": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "reference": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "durationSeconds": 5.864875,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 922
+        },
+        {
+          "id": "english-webm",
+          "mime": "audio/webm",
+          "sha256": "3759b4fcd846b9770e7c0c895263d017f3fcf4e1e22eedcd9c50e57055a37fe7",
+          "transcript": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "reference": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+          "durationSeconds": 5.921,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 700
+        },
+        {
+          "id": "korean-m4a",
+          "mime": "audio/mp4",
+          "sha256": "6f35f91d62d708292d703c2e3f9af6e5f268587857d329c215cf8c6d0faf0841",
+          "transcript": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고, 중요한 일에 집중하고 싶다.",
+          "reference": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+          "durationSeconds": 7.8753125,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 675
+        },
+        {
+          "id": "korean-webm",
+          "mime": "audio/webm",
+          "sha256": "ef5fd6cbb72ec2f23a707e7593cb7065460d9bdc980391632e17d58bbb3c0f55",
+          "transcript": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고, 중요한 일에 집중하고 싶다.",
+          "reference": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+          "durationSeconds": 7.921,
+          "normalizedCer": 0,
+          "passed": true,
+          "elapsedMs": 732
+        }
+      ],
+      "requestVariant": "context-bias"
+    }
+  ],
+  "segmentDiagnostic": {
+    "status": 200,
+    "text": "이번에는 작은 실험부터 시작하자.",
+    "englishPresent": false
+  }
+}

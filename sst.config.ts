@@ -264,6 +264,8 @@ export default $config({
       GEMINI_API_KEY: geminiApiKey.value,
       OPENROUTER_API_KEY: openRouterApiKey.value,
       OPENROUTER_GENERATION_MODEL: "deepseek/deepseek-v4.1-flash-1017",
+      WAKA_MODEL_SYNTHESIZE: "openai/gpt-6.1-terra",
+      WAKA_MODEL_TOP_OF_MIND_REVIEW: "openai/gpt-6.1-terra",
       ...(process.env.WAKA_OPENROUTER_DATA_COLLECTION ? { WAKA_OPENROUTER_DATA_COLLECTION: process.env.WAKA_OPENROUTER_DATA_COLLECTION } : {}),
       ...(process.env.WAKA_OPENROUTER_REQUIRE_ZDR ? { WAKA_OPENROUTER_REQUIRE_ZDR: process.env.WAKA_OPENROUTER_REQUIRE_ZDR } : {}),
       // Chat enablement is dev-only and shared by API/worker. A manual dev
@@ -312,9 +314,9 @@ export default $config({
      * run daily instead of every minute — and a queue nobody is polling is a
      * database that can go to sleep.
      */
-    const readingWakeGroup = new aws.scheduler.ScheduleGroup("ReadingWakeGroup", {});
-    const readingWakeRole = new aws.iam.Role("ReadingWakeRole", {
-      assumeRolePolicy: readingWakeGroup.arn.apply(arn => JSON.stringify({ Version: "2012-10-17", Statement: [{
+    const jobWakeGroup = new aws.scheduler.ScheduleGroup("ReadingWakeGroup", {});
+    const jobWakeRole = new aws.iam.Role("ReadingWakeRole", {
+      assumeRolePolicy: jobWakeGroup.arn.apply(arn => JSON.stringify({ Version: "2012-10-17", Statement: [{
         Effect: "Allow", Principal: { Service: "scheduler.amazonaws.com" }, Action: "sts:AssumeRole",
         Condition: { ArnEquals: { "aws:SourceArn": arn } },
       }] })),
@@ -330,17 +332,17 @@ export default $config({
       environment: {
         ...runtimeEnvironment,
         WAKA_BACKGROUND_JOB_CRON_LIMIT: "25",
-        WAKA_READING_WAKE_GROUP: readingWakeGroup.name,
-        WAKA_READING_WAKE_ROLE: readingWakeRole.arn,
+        WAKA_BACKGROUND_JOB_WAKE_GROUP: jobWakeGroup.name,
+        WAKA_BACKGROUND_JOB_WAKE_ROLE: jobWakeRole.arn,
       },
       permissions: [
-        { actions: ["scheduler:CreateSchedule"], resources: [readingWakeGroup.arn.apply(arn => arn.replace(":schedule-group/", ":schedule/") + "/waka-reading-*")] },
-        { actions: ["iam:PassRole"], resources: [readingWakeRole.arn] },
+        { actions: ["scheduler:CreateSchedule", "scheduler:DeleteSchedule"], resources: [jobWakeGroup.arn.apply(arn => arn.replace(":schedule-group/", ":schedule/") + "/waka-job-*")] },
+        { actions: ["iam:PassRole"], resources: [jobWakeRole.arn] },
       ],
     });
 
     new aws.iam.RolePolicy("ReadingWakeInvoke", {
-      role: readingWakeRole.id,
+      role: jobWakeRole.id,
       policy: backgroundWorker.arn.apply(arn => JSON.stringify({ Version: "2012-10-17", Statement: [{
         Effect: "Allow", Action: "lambda:InvokeFunction", Resource: arn,
       }] })),
@@ -396,10 +398,12 @@ export default $config({
         // Which function to wake when work is enqueued. Absent (local, tests)
         // means the in-process drain owns it instead.
         WAKA_BACKGROUND_WORKER_FUNCTION: backgroundWorker.name,
+        WAKA_BACKGROUND_JOB_WAKE_GROUP: jobWakeGroup.name,
       },
       // Waking the worker is the whole point of the push model; without this
       // the invoke fails and every job waits for the daily safety net.
       permissions: [
+        { actions: ["scheduler:DeleteSchedule"], resources: [jobWakeGroup.arn.apply(arn => arn.replace(":schedule-group/", ":schedule/") + "/waka-job-*")] },
         {
           actions: ["lambda:InvokeFunction"],
           resources: [backgroundWorker.arn],

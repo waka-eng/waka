@@ -1,0 +1,2691 @@
+{
+  "observedAt": "2026-10-29",
+  "syntheticOnly": true,
+  "featureEnabled": false,
+  "frozenCorpusUnchanged": true,
+  "sourceHashes": {
+    "packages/api/test/helpers/top-of-mind-novelty-cases.ts": "67a38e14a68d2a65de173f53f89c17f9ec60013d763083894590e601eb8302d6",
+    "packages/api/src/queue/gemini.ts": "8f06d71db3db41accba9fb64a343a3d92978a2c410c21b2f40bde1dcc0693c03",
+    "packages/api/src/lib/top-of-mind-quality.ts": "89bb3a30cf66897df540f7f450c5256d20f9d7831ecd1bbf1871fee112640d81",
+    "packages/api/test/top-of-mind-review-eval.test.ts": "7da4e6c83c087229cdb6e4c98ceee03d9623df4a12cb2c45d2eaa7fb950bd237"
+  },
+  "rationales": {
+    "entries": [
+      {
+        "index": 0,
+        "languageMatches": true,
+        "grounded": false,
+        "synthesized": false,
+        "supportingInspirationIds": [],
+        "rationale": "The hidden Save control caused hesitation, but the expectation about Close does not show that predictable navigation reduces hesitation during capture."
+      },
+      {
+        "index": 1,
+        "languageMatches": true,
+        "grounded": false,
+        "synthesized": false,
+        "supportingInspirationIds": [],
+        "rationale": "The evidence does not show that predictable navigation makes capturing an idea less hesitant. The Close test reports an expectation, not an effect on capture."
+      },
+      {
+        "index": 2,
+        "languageMatches": true,
+        "grounded": false,
+        "synthesized": false,
+        "supportingInspirationIds": [],
+        "rationale": "The sources do not establish predictability across saving and returning or show that it may reduce capture hesitation."
+      },
+      {
+        "index": 3,
+        "languageMatches": true,
+        "grounded": true,
+        "synthesized": true,
+        "supportingInspirationIds": [
+          "a",
+          "b"
+        ],
+        "rationale": "The entry connects locating Save with anticipating the navigation outcome of Close."
+      },
+      {
+        "index": 4,
+        "languageMatches": true,
+        "grounded": false,
+        "synthesized": false,
+        "supportingInspirationIds": [],
+        "rationale": "Neither source mentions suppressed memories or evidence that capture controls could help visitors recover them."
+      },
+      {
+        "index": 5,
+        "languageMatches": true,
+        "grounded": false,
+        "synthesized": false,
+        "supportingInspirationIds": [],
+        "rationale": "Neither source establishes consistent avoidance of complex interfaces or fear of failure as a motive."
+      },
+      {
+        "index": 6,
+        "languageMatches": true,
+        "grounded": true,
+        "synthesized": false,
+        "supportingInspirationIds": [],
+        "rationale": "The claim is supported by a alone; b does not contribute to a connection."
+      }
+    ]
+  },
+  "boundaryChecks": {
+    "isolatedComparisonCases": 8,
+    "isolatedPassed": 8,
+    "realQualityAndComparisonCases": 3,
+    "realQualityAndComparisonPassedAfterClarification": 3,
+    "languageSuitesPassed": 2,
+    "languageAndSourceCases": 14,
+    "expectedApprovedIndicesPerLanguage": [
+      0
+    ],
+    "outcomeBasis": "Passing test assertions and Vitest summaries. Successful per-entry model verdicts were not retained by the console reporter; do not treat inferred assertions as raw model output."
+  },
+  "runs": [
+    {
+      "phase": "initial-diagnostic",
+      "requestCount": 1,
+      "pricedRequests": 1,
+      "reportedCostUsd": 0.0042,
+      "usage": [
+        {
+          "_aws": {
+            "Timestamp": 1793274644412,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0042,
+          "inputTokens": 615,
+          "outputTokens": 717,
+          "durationMs": 10001.159708
+        }
+      ],
+      "decisions": [],
+      "coverage": [],
+      "integration": [],
+      "failedTests": [],
+      "testSummary": [
+        "Test Files  1 passed (1)",
+        "Tests  1 passed (1)"
+      ]
+    },
+    {
+      "phase": "diagnostic-with-controls",
+      "requestCount": 1,
+      "pricedRequests": 1,
+      "reportedCostUsd": 0.005393,
+      "usage": [
+        {
+          "_aws": {
+            "Timestamp": 1793274771088,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.005393,
+          "inputTokens": 723,
+          "outputTokens": 934,
+          "durationMs": 11501.873292
+        }
+      ],
+      "decisions": [],
+      "coverage": [],
+      "integration": [],
+      "failedTests": [],
+      "testSummary": [
+        "Test Files  1 passed (1)",
+        "Tests  1 passed (1)"
+      ]
+    },
+    {
+      "phase": "broad-first-pass",
+      "requestCount": 37,
+      "pricedRequests": 37,
+      "reportedCostUsd": 0.04662,
+      "usage": [
+        {
+          "_aws": {
+            "Timestamp": 1793275092592,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.003446,
+          "inputTokens": 856,
+          "outputTokens": 518,
+          "durationMs": 6985.035667
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275100723,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.003554,
+          "inputTokens": 674,
+          "outputTokens": 576,
+          "durationMs": 8125.538375
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275103035,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001065,
+          "inputTokens": 525,
+          "outputTokens": 108,
+          "durationMs": 2307.6767499999987
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275107865,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.002236,
+          "inputTokens": 586,
+          "outputTokens": 330,
+          "durationMs": 4828.507708000001
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275110760,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001075,
+          "inputTokens": 525,
+          "outputTokens": 110,
+          "durationMs": 2894.042583999999
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275112452,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000865,
+          "inputTokens": 525,
+          "outputTokens": 68,
+          "durationMs": 1690.583499999997
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275116217,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001681,
+          "inputTokens": 586,
+          "outputTokens": 219,
+          "durationMs": 3764.8741249999985
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275118159,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000915,
+          "inputTokens": 430,
+          "outputTokens": 97,
+          "durationMs": 1941.3872919999958
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275120543,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001061,
+          "inputTokens": 526,
+          "outputTokens": 107,
+          "durationMs": 2380.670334000002
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275124108,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001637,
+          "inputTokens": 587,
+          "outputTokens": 210,
+          "durationMs": 3563.4265840000007
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275126253,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001071,
+          "inputTokens": 526,
+          "outputTokens": 109,
+          "durationMs": 2144.678832999998
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275128698,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001092,
+          "inputTokens": 482,
+          "outputTokens": 122,
+          "durationMs": 2442.6984589999993
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275130438,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000873,
+          "inputTokens": 493,
+          "outputTokens": 76,
+          "durationMs": 1738.6294999999955
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275132502,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00093,
+          "inputTokens": 500,
+          "outputTokens": 86,
+          "durationMs": 2062.5066670000015
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275134697,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00105,
+          "inputTokens": 500,
+          "outputTokens": 110,
+          "durationMs": 2193.923416999998
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275137471,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001238,
+          "inputTokens": 498,
+          "outputTokens": 148,
+          "durationMs": 2773.7678749999977
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275141591,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001661,
+          "inputTokens": 616,
+          "outputTokens": 209,
+          "durationMs": 4117.916999999994
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275143810,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000998,
+          "inputTokens": 493,
+          "outputTokens": 101,
+          "durationMs": 2216.727375000002
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275146411,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000926,
+          "inputTokens": 531,
+          "outputTokens": 79,
+          "durationMs": 2599.4970410000024
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275148336,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000897,
+          "inputTokens": 492,
+          "outputTokens": 81,
+          "durationMs": 1923.5030000000042
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275150410,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001011,
+          "inputTokens": 511,
+          "outputTokens": 100,
+          "durationMs": 2073.4176670000015
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275152761,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001189,
+          "inputTokens": 519,
+          "outputTokens": 134,
+          "durationMs": 2349.8845410000067
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275155362,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000903,
+          "inputTokens": 493,
+          "outputTokens": 82,
+          "durationMs": 2599.0892919999897
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275157267,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000832,
+          "inputTokens": 492,
+          "outputTokens": 68,
+          "durationMs": 1903.585208000004
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275159622,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001006,
+          "inputTokens": 521,
+          "outputTokens": 97,
+          "durationMs": 2354.634290999995
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275162339,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.0012,
+          "inputTokens": 550,
+          "outputTokens": 130,
+          "durationMs": 2715.8269169999985
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275164277,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.000919,
+          "inputTokens": 499,
+          "outputTokens": 84,
+          "durationMs": 1937.1382500000036
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275166170,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00087,
+          "inputTokens": 515,
+          "outputTokens": 71,
+          "durationMs": 1891.3462080000027
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275168370,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00109,
+          "inputTokens": 520,
+          "outputTokens": 114,
+          "durationMs": 2199.2417920000007
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275170487,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001054,
+          "inputTokens": 574,
+          "outputTokens": 96,
+          "durationMs": 2116.383625000002
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275173127,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001264,
+          "inputTokens": 519,
+          "outputTokens": 149,
+          "durationMs": 2638.2499160000007
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275176742,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001388,
+          "inputTokens": 553,
+          "outputTokens": 167,
+          "durationMs": 3611.1666250000126
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275178485,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00066,
+          "inputTokens": 430,
+          "outputTokens": 46,
+          "durationMs": 1742.547584
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275184506,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001478,
+          "inputTokens": 583,
+          "outputTokens": 179,
+          "durationMs": 6019.547582999992
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275185933,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00058,
+          "inputTokens": 430,
+          "outputTokens": 30,
+          "durationMs": 1426.807958999998
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275190389,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.002145,
+          "inputTokens": 580,
+          "outputTokens": 313,
+          "durationMs": 4454.1762089999975
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275192120,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00076,
+          "inputTokens": 430,
+          "outputTokens": 66,
+          "durationMs": 1731.0445000000036
+        }
+      ],
+      "decisions": [
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "english-paraphrase",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "korean-paraphrase",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "citation-order",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "question-rephrasing",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "same-idea-split",
+          "expected": false,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "rejected-invention-is-not-novelty",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "label-alone",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "new-supported-tension",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "changed-leading-focus",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "changed-time-scope",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "new-question",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "retired-focus",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "korean-new-tension",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "same-idea-merged",
+          "expected": false,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "name": "english-paraphrase",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "korean-paraphrase",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "citation-order",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "question-rephrasing",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "same-idea-split",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "rejected-invention-is-not-novelty",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "label-alone",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "new-supported-tension",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "changed-leading-focus",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                3
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 3,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "changed-time-scope",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            }
+          ]
+        },
+        {
+          "name": "new-question",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            }
+          ]
+        },
+        {
+          "name": "retired-focus",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "korean-new-tension",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "same-idea-merged",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 2,
+              "coveredBy": [],
+              "byLeading": false
+            }
+          ]
+        }
+      ],
+      "integration": [
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "english-paraphrase",
+          "approved": [],
+          "expected": false,
+          "expectedIndices": [
+            0,
+            1
+          ],
+          "error": "comparison_failed"
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "new-question",
+          "approved": [],
+          "expected": true,
+          "expectedIndices": [
+            0,
+            1
+          ],
+          "error": "comparison_failed"
+        },
+        {
+          "model": "openai/gpt-6.1-terra",
+          "name": "same-idea-merged",
+          "approved": [],
+          "expected": false,
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ],
+          "error": "comparison_failed"
+        }
+      ],
+      "failedTests": [
+        "FAIL  test/top-of-mind-review-eval.test.ts > live Top of Mind publication review > recognizes Korean prose with product names, mixed-language failures and optional fields",
+        "FAIL  test/top-of-mind-review-eval.test.ts > live novelty boundary controls > 'grounded-split' ('quality-and-comparison')",
+        "FAIL  test/top-of-mind-review-eval.test.ts > live Top of Mind novelty review > measures semantic coverage independently of source-quality decisions",
+        "FAIL  test/top-of-mind-review-eval.test.ts > live Top of Mind novelty review > checks quality and coverage together for rewording, a changed question and merged repetition"
+      ],
+      "testSummary": [
+        "Test Files  1 failed (1)",
+        "Tests  4 failed | 12 passed | 2 skipped (18)"
+      ]
+    },
+    {
+      "phase": "grounding-clarification",
+      "requestCount": 7,
+      "pricedRequests": 7,
+      "reportedCostUsd": 0.01054,
+      "usage": [
+        {
+          "_aws": {
+            "Timestamp": 1793275337966,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001744,
+          "inputTokens": 654,
+          "outputTokens": 218,
+          "durationMs": 4451.720166
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275341807,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00108,
+          "inputTokens": 525,
+          "outputTokens": 111,
+          "durationMs": 3838.6933329999993
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275346097,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001899,
+          "inputTokens": 654,
+          "outputTokens": 249,
+          "durationMs": 4286.912042
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275348249,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00105,
+          "inputTokens": 525,
+          "outputTokens": 105,
+          "durationMs": 2151.3632500000003
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275351897,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.00153,
+          "inputTokens": 655,
+          "outputTokens": 175,
+          "durationMs": 3645.5713749999995
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275354235,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_comparison",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.001071,
+          "inputTokens": 526,
+          "outputTokens": 109,
+          "durationMs": 2336.351166999997
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275358306,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.002166,
+          "inputTokens": 711,
+          "outputTokens": 291,
+          "durationMs": 4068.431124999999
+        }
+      ],
+      "decisions": [],
+      "coverage": [],
+      "integration": [],
+      "failedTests": [],
+      "testSummary": [
+        "Test Files  1 passed (1)",
+        "Tests  4 passed | 14 skipped (18)"
+      ]
+    },
+    {
+      "phase": "language-boundaries",
+      "requestCount": 2,
+      "pricedRequests": 2,
+      "reportedCostUsd": 0.005444,
+      "usage": [
+        {
+          "_aws": {
+            "Timestamp": 1793275492081,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.002919,
+          "inputTokens": 784,
+          "outputTokens": 427,
+          "durationMs": 5842.371
+        },
+        {
+          "_aws": {
+            "Timestamp": 1793275496833,
+            "CloudWatchMetrics": [
+              {
+                "Namespace": "WAKA/ModelUsage",
+                "Dimensions": [
+                  [
+                    "Stage",
+                    "Provider"
+                  ]
+                ],
+                "Metrics": [
+                  {
+                    "Name": "ModelRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "UnpricedRequests",
+                    "Unit": "Count"
+                  },
+                  {
+                    "Name": "CostUsd",
+                    "Unit": "None"
+                  }
+                ]
+              }
+            ]
+          },
+          "event": "model_usage",
+          "Stage": "other",
+          "Provider": "openrouter",
+          "operation": "top_of_mind_review",
+          "outcome": "received",
+          "ModelRequests": 1,
+          "UnpricedRequests": 0,
+          "CostUsd": 0.002525,
+          "inputTokens": 865,
+          "outputTokens": 332,
+          "durationMs": 4748.8108330000005
+        }
+      ],
+      "decisions": [],
+      "coverage": [],
+      "integration": [],
+      "failedTests": [],
+      "testSummary": [
+        "Test Files  1 passed (1)",
+        "Tests  2 passed | 17 skipped (19)"
+      ]
+    }
+  ]
+}

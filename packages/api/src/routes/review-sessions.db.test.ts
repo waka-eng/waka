@@ -94,7 +94,7 @@ it('rolls back choice and completion when the next review cannot be created',asy
 it('bundles only the current owned original and its matching revision when explicitly requested',async()=>{
   const p=await person(),other=await person(),id=await source(p.id);await source(other.id);
   await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer) VALUES (${p.id},${id},'Why?','A synthetic saved thought')`;
-  const response=await p.app.request('/reviews?include=current',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:randomUUID()})});
+  const response=await p.app.request('/reviews?include=current',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:randomUUID(),inspirationIds:[id]})});
   const session=await sessionBody(response);expect(session.currentInspiration).toMatchObject({id,profileId:p.id,materialRevision:session.items[0].currentRevision,reflections:[{answer:'A synthetic saved thought'}]});
   expect((await sessionBody(await p.app.request(`/reviews/${session.id}`)))).not.toHaveProperty('currentInspiration');
   await t.sql`UPDATE inspirations SET text='Current updated original' WHERE id=${id}`;
@@ -205,6 +205,22 @@ it('rotates older reviews before recent eligible reviews and never treats Next a
   expect((await start(p)).items[0]).toMatchObject({inspirationId:b,reason:'revisit'});
   expect(await t.sql`SELECT id FROM inspirations WHERE profile_id=${p.id}`).toHaveLength(2);
   expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
+});
+
+it('holds an inspiration for 24 hours after an authored reflection, then permits a revisit',async()=>{
+  const p=await person(),id=await source(p.id);
+  await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer) VALUES(${p.id},${id},'What mattered?','My own answer.')`;
+  expect(await (await post(p,'/',{id:randomUUID()})).json()).toEqual({session:null});
+  await t.sql`UPDATE reflections SET created_at=now()-interval '25 hours' WHERE inspiration_id=${id}`;
+  expect((await start(p)).items[0]).toMatchObject({inspirationId:id,reason:'revisit'});
+});
+
+it('does not treat a blank, unanswered or skipped reflection as a completed review',async()=>{
+  for(const [answer,skipped] of [[null,false],['',false],['   ',false],['Not an answer',true]] as const){
+    const p=await person(),id=await source(p.id);
+    await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer,skipped) VALUES(${p.id},${id},'What mattered?',${answer},${skipped})`;
+    expect((await start(p)).items[0]).toMatchObject({inspirationId:id,reason:'unreviewed'});
+  }
 });
 it('rejects cross-account reads/choices/manual sources and cross-tenant SQL links',async()=>{
   const p=await person(),other=await person(),a=await source(p.id),b=await source(other.id),session=await start(p,[a]);

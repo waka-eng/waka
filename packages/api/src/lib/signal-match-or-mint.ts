@@ -2,22 +2,14 @@
  * Match-or-mint: deciding whether a candidate statement is a pattern the
  * profile already holds, or a new one.
  *
- * For raw inspirations the decision is COSINE DISTANCE on embeddings. A
- * candidate's vector is compared against the profile's existing signal vectors
- * and `classifyMatch` reads the number: above the match bar it attaches as
- * evidence, below the judge band it mints. That is deliberate and it is the
- * reason the thresholds are named exports in
- * `signal-derivation-thresholds.ts` — the behaviour of this stage is tunable
- * arithmetic a test can pin down exactly, not a prompt whose answer changes
- * when a provider ships a new checkpoint.
+ * Cosine distance finds the nearest eligible signal. Above the attach bar,
+ * identical wording may attach directly; changed wording still needs a
+ * meaning check. Below the judge floor it mints without a relation call.
  *
- * There is exactly one model call in this file, and it is a tie-breaker: in
- * the band between the two bars, distance alone genuinely cannot tell one
- * pattern reworded from two patterns sharing a vocabulary, so the single
- * nearest candidate gets one bounded judge call. It can only move a decision
- * within the band for raw inspirations. Review answers additionally check
- * meaning for every nearby match, including above the attach bar: a changed
- * or negated position can have almost the same vector as its predecessor.
+ * Each candidate spends at most one match judgment on its single nearest
+ * target. Changed or negated positions can have almost identical vectors;
+ * time scope and certainty are part of their meaning. Review answers always
+ * check nearby matches, even when wording is identical.
  * A failure propagates
  * for retry rather than inventing an independent pattern. All judgments are
  * prepared before source locks and evidence writes.
@@ -26,12 +18,10 @@
  * is set never has its statement rewritten here, no matter how the candidate
  * that matched it is worded. See `restateSignal`.
  *
- * Upstream of the match sits the ground's refusal: a candidate at or above
- * `SIGNAL_SUPPRESSION_MIN_COSINE` to a DISMISSED signal's vector is dropped
- * before any of the above runs, and every refusal writes a `suppressions`
- * row naming its anchor. Arithmetic only, no model — and checked first, so a
- * pattern the owner threw out cannot re-enter as evidence for something else
- * (goals/the-legible-loop.md Phase 3).
+ * Dismissed wording is checked first. Exact wording is refused directly;
+ * otherwise similarity retrieves one nearby anchor and a semantic `same`
+ * verdict is required. Opposite views and different time scopes proceed to
+ * ordinary discovery. Refusals are recorded without reviving their anchor.
  */
 
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
@@ -46,6 +36,7 @@ import {
   type SignalStatus,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
+import { hashEmbeddingInput } from './inspiration-embeddings.js';
 import { getDb } from "./db.js";
 import type { normalizeSupportedLocale } from "./locales.js";
 import type { ModelProvider } from "./model-provider.js";
@@ -147,12 +138,19 @@ interface ApplyCandidatesInput {
 async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarget[], anchors: SuppressionAnchor[]) {
   const projected = targets.map((row) => ({ ...row }));
   const judgements = new Map<number, { statement: string; relation: "same" | "independent" | "opposed" }>();
+  const refusals = new Map<number, NonNullable<ReturnType<typeof findSuppressionAnchor>>>();
   for (const [index, candidate] of input.candidates.entries()) {
-    if (findSuppressionAnchor(candidate.embedding, anchors)) continue;
+    const anchor = findSuppressionAnchor(candidate, anchors);
+    if (anchor && (candidate.statement.trim() === anchor.anchor.statement.trim() ||
+      (await input.provider.judgeSignalMatch({ preferredLocale: input.preferredLocale,
+        candidateStatement: candidate.statement, existingStatement: anchor.anchor.statement })).relation === 'same')) {
+      refusals.set(index, anchor);
+      continue;
+    }
     const nearest = findBestMatch(candidate.embedding, projected);
     if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
     let decision = classifyMatch(nearest?.similarity ?? null);
-    if ((decision === "judge"||input.reviewSource) && nearest) {
+    if (nearest && (decision === "judge" || input.reviewSource || candidate.statement.trim() !== nearest.target.statement.trim())) {
       const judged = await input.provider.judgeSignalMatch({ preferredLocale: input.preferredLocale,
         candidateStatement: candidate.statement, existingStatement: nearest.target.statement });
       judgements.set(index, { statement: nearest.target.statement, relation: judged.relation });
@@ -167,7 +165,7 @@ async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarg
     } else projected.push({ id: `candidate:${index}`, statement: candidate.statement,
       status: "emerging", locked: false, withdrawn: false, embedding: candidate.embedding });
   }
-  return judgements;
+  return { judgements, refusals };
 }
 
 export async function applyCandidates(
@@ -178,7 +176,7 @@ export async function applyCandidates(
   const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
   const anchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
   const prior = JSON.stringify({ targets, anchors });
-  const judgements = await prepareJudgements(input, targets, anchors);
+  const { judgements, refusals } = await prepareJudgements(input, targets, anchors);
   await input.beforeWrites();
   const ids = [...new Set([...targets, ...anchors].map((row) => row.id))].sort();
   if (ids.length) await tx.select({ id: signals.id }).from(signals)
@@ -195,14 +193,9 @@ export async function applyCandidates(
   const touched = new Set<string>();
 
   for (const [candidateIndex, candidate] of input.candidates.entries()) {
-    // The ground refuses first, before the match is even looked at. A
-    // dismissed signal is a pattern its owner threw out; a candidate this
-    // close to one IS that pattern, and letting the match see it would
-    // re-admit it as evidence for something else — or spend a judge call
-    // deciding the fate of a sentence whose fate the owner already decided.
-    // Every refusal is written down: the silence this creates is a logged,
-    // legible silence, and restoring the anchor ends it.
-    const refused = findSuppressionAnchor(candidate.embedding, anchors);
+    // Apply only a prepared refusal after the anchor/source recheck. No
+    // provider call runs under source locks; proximity alone cannot reject.
+    const refused = refusals.get(candidateIndex);
     if (refused) {
       await tx.insert(suppressions).values({
         profileId: input.profileId,
@@ -224,7 +217,7 @@ export async function applyCandidates(
         whichever statement arrived second. */
     let opposesSignalId: string | null = null;
 
-    if ((decision === "judge"||input.reviewSource) && nearest) {
+    if (nearest && (decision === "judge" || input.reviewSource || candidate.statement.trim() !== nearest.target.statement.trim())) {
       // Reuse the pre-write verdict only for the exact planned statement.
       // No provider call runs while source rows are locked. Provider failures
       // already aborted preparation; they never become invented opposition
@@ -405,6 +398,7 @@ async function loadMatchTargets(
       status: signals.status,
       lockedAt: signals.lockedAt,
       embedding: signalEmbeddings.embedding,
+      inputHash: signalEmbeddings.inputHash,
     })
     .from(signals)
     .innerJoin(signalEmbeddings, eq(signalEmbeddings.signalId, signals.id))
@@ -425,7 +419,7 @@ async function loadMatchTargets(
       desc(signals.lastEvidenceAt), asc(signals.id))
     .limit(MATCH_CANDIDATE_SCAN_LIMIT + withdrawn.size);
 
-  return rows.map((row) => ({
+  return rows.filter(row => row.inputHash === hashEmbeddingInput(row.statement)).map((row) => ({
     id: row.id,
     statement: row.statement,
     status: row.status,
@@ -469,11 +463,12 @@ async function loadSuppressionAnchors(
   embeddingModel: string,
   inputPolicy?: string,
 ): Promise<SuppressionAnchor[]> {
-  return tx
+  const rows = await tx
     .select({
       id: signals.id,
       statement: signals.statement,
       embedding: signalEmbeddings.embedding,
+      inputHash: signalEmbeddings.inputHash,
     })
     .from(signals)
     .innerJoin(signalEmbeddings, eq(signalEmbeddings.signalId, signals.id))
@@ -487,17 +482,22 @@ async function loadSuppressionAnchors(
     )
     .orderBy(desc(signals.dismissedAt), asc(signals.id))
     .limit(MATCH_CANDIDATE_SCAN_LIMIT);
+  return rows.filter(row => row.inputHash === hashEmbeddingInput(row.statement));
 }
 
 function findSuppressionAnchor(
-  embedding: number[],
+  candidate: Pick<ResolvedCandidate, 'statement' | 'embedding'>,
   anchors: SuppressionAnchor[],
 ): { anchor: SuppressionAnchor; similarity: number } | null {
   let best: { anchor: SuppressionAnchor; similarity: number } | null = null;
 
   for (const anchor of anchors) {
-    const similarity = cosineSimilarity(embedding, anchor.embedding);
-    if (similarity === null || similarity < SIGNAL_SUPPRESSION_MIN_COSINE) continue;
+    const similarity = cosineSimilarity(candidate.embedding, anchor.embedding);
+    if (similarity === null) continue;
+    // An exact owner refusal wins even when a different nearby statement has
+    // a higher cosine. Vectors retrieve meaning; they cannot overrule words.
+    if (candidate.statement.trim() === anchor.statement.trim()) return { anchor, similarity };
+    if (similarity < SIGNAL_SUPPRESSION_MIN_COSINE) continue;
     if (!best || similarity > best.similarity) best = { anchor, similarity };
   }
 

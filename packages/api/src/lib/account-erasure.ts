@@ -1,3 +1,4 @@
+import { cancelBackgroundJobWakes } from './background-job-wake.js';
 /**
  * Permanent account erasure.
  *
@@ -42,10 +43,12 @@
 import { DeleteObjectsCommand, type ObjectIdentifier } from "@aws-sdk/client-s3";
 
 import { makeAttachmentsS3Client } from "./s3-client.js";
+import { unreferencedAttachmentKeys } from "./conversation-attachments.js";
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 
 import {
   accounts,
+  backgroundJobs,
   deletedInspirations,
   attachments,
   groupMembers,
@@ -83,23 +86,25 @@ function attachmentBucketName(): string {
 
 async function deleteAttachmentObjectsFromS3(keys: string[]): Promise<void> {
   if (keys.length === 0) return;
-  const client = makeAttachmentsS3Client();
   const bucket = attachmentBucketName();
-
-  for (let offset = 0; offset < keys.length; offset += 1_000) {
-    const objects: ObjectIdentifier[] = keys
-      .slice(offset, offset + 1_000)
-      .map((Key) => ({ Key }));
-    const result = await client.send(
-      new DeleteObjectsCommand({
-        Bucket: bucket,
-        Delete: { Objects: objects, Quiet: true },
-      }),
-    );
-    if (result.Errors?.length) {
-      throw new Error(`Failed to erase ${result.Errors.length} attachment object(s)`);
+  const client = makeAttachmentsS3Client();
+  try {
+    for (let offset = 0; offset < keys.length; offset += 1_000) {
+      const objects: ObjectIdentifier[] = keys
+        .slice(offset, offset + 1_000)
+        .map((Key) => ({ Key }));
+      const result = await client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: objects, Quiet: true },
+        }),
+        { abortSignal: AbortSignal.timeout(8000) },
+      );
+      if (result.Errors?.length) {
+        throw new Error(`Failed to erase ${result.Errors.length} attachment object(s)`);
+      }
     }
-  }
+  } finally { client.destroy(); }
 }
 
 /**
@@ -111,38 +116,33 @@ export async function eraseAccount(
   deps: EraseAccountDependencies = {},
 ): Promise<void> {
   const db = deps.db ?? getDb();
+  let removedJobPayloads: unknown[] = [];
 
-  const profileRows = await db
-    .select({ id: profiles.id })
-    .from(profiles)
-    .where(eq(profiles.accountId, accountId));
-  const profileIds = profileRows.map((row) => row.id);
-
-  let attachmentKeys: string[] = [];
-
-  if (profileIds.length > 0) {
-    const attachmentRows = await db
-      .select({ s3Key: attachments.s3Key })
-      .from(attachments)
-      .where(
-        and(inArray(attachments.profileId, profileIds), isNotNull(attachments.s3Key)),
-      );
-
-    const deletedRows = await db.select({ attachments: deletedInspirations.attachments }).from(deletedInspirations)
+  const readAttachmentKeys = async (reader: Pick<WakaDb, 'select'>, profileIds: string[]): Promise<string[]> => {
+    if (!profileIds.length) return [];
+    const live = await reader.select({ s3Key: attachments.s3Key }).from(attachments)
+      .where(and(inArray(attachments.profileId, profileIds), isNotNull(attachments.s3Key)));
+    const copies = await reader.select({ attachments: deletedInspirations.attachments }).from(deletedInspirations)
       .where(inArray(deletedInspirations.profileId, profileIds));
-    attachmentRows.push(...deletedRows.flatMap(row => row.attachments.map(item => ({ s3Key: item.s3Key }))));
-    attachmentKeys = [
-      ...new Set(
-        attachmentRows
-          .map((row) => row.s3Key)
-          .filter((key): key is string => typeof key === "string" && key.length > 0),
-      ),
-    ];
-  }
+    const keys = [...new Set([...live, ...copies.flatMap(row => row.attachments)]
+      .flatMap(row => row.s3Key ? [row.s3Key] : []))];
+    return unreferencedAttachmentKeys(reader, keys, profileIds);
+  };
+  const deleteObjects = deps.deleteAttachmentObjects ?? deleteAttachmentObjectsFromS3;
+  const initialProfiles = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.accountId, accountId));
+  const deletedKeys = new Set(await readAttachmentKeys(db, initialProfiles.map(row => row.id)));
+  await deleteObjects([...deletedKeys]);
 
-  await (deps.deleteAttachmentObjects ?? deleteAttachmentObjectsFromS3)(attachmentKeys);
-
-  const eraseRows = () => db.transaction(async (tx) => {
+  const eraseRows = () => db.transaction(async (tx): Promise<string[]> => {
+    // These FK parents fence new profiles and attachment inventories only
+    // during the final SQL pass. No network request runs under these locks.
+    const [account] = await tx.select({ id: accounts.id }).from(accounts).where(eq(accounts.id, accountId)).for('update');
+    if (!account) return [];
+    const currentProfiles = await tx.select({ id: profiles.id }).from(profiles)
+      .where(eq(profiles.accountId, accountId)).orderBy(asc(profiles.id)).for('update');
+    const profileIds = currentProfiles.map(row => row.id);
+    const pendingKeys = (await readAttachmentKeys(tx, profileIds)).filter(key => !deletedKeys.has(key));
+    if (pendingKeys.length) return pendingKeys;
     if (profileIds.length > 0) {
       /* THE DOOR IS MARKED BEFORE THE SEAT GOES. Erasing is leaving every
          room at once; the ledger records it the way `leaveGroup` would, and
@@ -263,20 +263,36 @@ export async function eraseAccount(
         .where(inArray(topOfMindEntrySignals.entryId, ownBoardEntryIds));
     }
 
-    await tx.delete(accounts).where(eq(accounts.id, accountId));
-  });
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      await eraseRows();
-      break;
-    } catch (error) {
-      // A publishing worker can hold a source while the account cascade
-      // holds its profile. Postgres rolls back one entire transaction; retry
-      // that transaction after the worker can finish. Object deletion above
-      // remains outside the retry and the rolled-back room changes repeat safely.
-      const failure = error as { code?: string; cause?: { code?: string } };
-      if ((failure.cause?.code ?? failure.code) !== '40P01' || attempt >= 2) throw error;
-      await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+    if (profileIds.length) {
+      const jobs = await tx.select({ payload: backgroundJobs.payload }).from(backgroundJobs)
+        .where(inArray(backgroundJobs.profileId, profileIds)).orderBy(backgroundJobs.id).for('update');
+      removedJobPayloads = jobs.map(row => row.payload);
     }
+    await tx.delete(accounts).where(eq(accounts.id, accountId));
+    return [];
+  });
+  const eraseRowsWithRetry = async (): Promise<string[]> => {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await eraseRows();
+      } catch (error) {
+        // A publishing worker can hold a source while the account cascade
+        // holds its profile. Postgres rolls back one entire transaction; retry
+        // that transaction after the worker can finish. Object deletion above
+        // remains outside this retry; rolled-back room changes repeat safely.
+        const failure = error as { code?: string; cause?: { code?: string } };
+        if ((failure.cause?.code ?? failure.code) !== '40P01' || attempt >= 2) throw error;
+        await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+      }
+    }
+  };
+  for (let pass = 0; ; pass += 1) {
+    const pendingKeys = await eraseRowsWithRetry();
+    if (!pendingKeys.length) { await cancelBackgroundJobWakes(removedJobPayloads); return; }
+    // Ongoing uploads must not create an unbounded HTTP request. Preserve
+    // the entire SQL inventory on failure so the owner can retry erasure.
+    if (pass >= 2) throw new Error('Attachments changed during account erasure; retry deletion');
+    await deleteObjects(pendingKeys);
+    for (const key of pendingKeys) deletedKeys.add(key);
   }
 }

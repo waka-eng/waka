@@ -33,6 +33,7 @@ import * as derivation from "./signal-derivation.js";
 import * as derivationThresholds from "./signal-derivation-thresholds.js";
 import * as synthesis from "./top-of-mind-synthesis.js";
 import * as gemini from "../queue/gemini.js";
+import * as signalRoutes from '../routes/signals.js';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const DOC_PATH = resolve(REPO_ROOT, "docs/generation.md");
@@ -44,6 +45,7 @@ const doc = readFileSync(DOC_PATH, "utf8");
  * schemas, functions, and classes are behavior, covered by their own tests.
  */
 const MODULES: Record<string, Record<string, unknown>> = {
+  'signals.ts':signalRoutes,
   "principle-generation.ts": principleGeneration,
   // Layer 2's tuning all lives in the thresholds module now. It is named here
   // *as well as* being reachable through the facade, and the redundancy is the
@@ -138,6 +140,13 @@ describe("docs/generation.md stays true to the code", () => {
   const exported = tuningExports();
   const documented = documentedRows();
 
+  it('keeps the review interval in both help translations aligned with the server',()=>{
+    for(const [locale,suffix] of [['en-US',' days'],['ko-KR','일']] as const){
+      const catalog=JSON.parse(readFileSync(resolve(REPO_ROOT,`packages/web/src/lib/i18n/messages/${locale}.json`),'utf8'));
+      expect(catalog['worldHowReviewBody']).toContain(`${signalRoutes.CLAIM_REASK_DAYS}${suffix}`);
+    }
+  });
+
   it("documents every exported tuning constant", () => {
     const missing = [...exported.keys()].filter((name) => !documented.has(name));
     expect(
@@ -188,12 +197,9 @@ describe("docs/generation.md stays true to the code", () => {
 });
 
 describe("the doc's [checked] structural claims", () => {
-  it("keeps the match thresholds ordered: judge band < match < batch dedupe", () => {
+  it("keeps the match thresholds ordered: judge band < identical-wording attach", () => {
     expect(derivation.SIGNAL_MERGE_JUDGE_MIN_COSINE).toBeLessThan(
       derivation.SIGNAL_MATCH_MIN_COSINE,
-    );
-    expect(derivation.SIGNAL_MATCH_MIN_COSINE).toBeLessThan(
-      derivation.SIGNAL_BATCH_DEDUPE_MIN_COSINE,
     );
   });
 
@@ -208,7 +214,7 @@ describe("the doc's [checked] structural claims", () => {
       resolve(REPO_ROOT, "packages/api/src/lib/signal-match-or-mint.ts"),
       "utf8",
     );
-    const refusal = source.indexOf("findSuppressionAnchor(candidate.embedding");
+    const refusal = source.indexOf("findSuppressionAnchor(candidate, anchors)");
     const match = source.indexOf("findBestMatch(candidate.embedding");
     expect(refusal).toBeGreaterThan(-1);
     expect(match).toBeGreaterThan(-1);
@@ -291,9 +297,9 @@ describe("the doc's [checked] structural claims", () => {
     const now = new Date("2026-08-21T00:00:00Z");
     const DAY = 86_400_000;
     const set = [
-      { signalId: "a", evidenceAt: [new Date(now.getTime() - 60 * DAY), new Date(now.getTime() - 55 * DAY)], tomVersionIds: ["v1", "v2"] },
-      { signalId: "b", evidenceAt: [new Date(now.getTime() - 35 * DAY)], tomVersionIds: ["v3", "v4"] },
-      { signalId: "c", evidenceAt: [new Date(now.getTime())], tomVersionIds: ["v5"] },
+      { signalId: "a", statement:"Pattern A", evidenceAt: [new Date(now.getTime() - 60 * DAY), new Date(now.getTime() - 55 * DAY)], tomVersionIds: ["v1", "v2"] },
+      { signalId: "b", statement:"Pattern B", evidenceAt: [new Date(now.getTime() - 35 * DAY)], tomVersionIds: ["v3", "v4"] },
+      { signalId: "c", statement:"Pattern C", evidenceAt: [new Date(now.getTime())], tomVersionIds: ["v5"] },
     ];
     expect(principleGeneration.computeCitationEligibility(set, now).eligible).toBe(true);
     for (const one of set) {

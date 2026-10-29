@@ -179,6 +179,12 @@ is enforced twice, deliberately: a positive route allowlist at the
 of the access matrix underneath — a standing credential in a config file
 on disk must not be the account's admin, however it is presented.
 
+A keeper key can identify and verify its own binding through
+`GET /api/auth/me`, `GET /api/profiles` (self only) and
+`POST /api/auth/cli/verify` (matching profile only). These exact endpoints
+support MCP setup; they cannot start a login, mint credentials or administer
+profiles. Account and sibling memory remain inaccessible.
+
 Since 2026-10-15 the key has one more verb: it may **propose** sentences to
 the harvest basket (`POST /api/harvest`, below). Proposing is not deciding:
 reading the basket, keeping and letting go are `humanSessionsOnly`, so a
@@ -222,6 +228,11 @@ person's own memory. This explicit perspective mechanism is retained for
 existing human-owned conversations; the profile-scoped UI starts new chats with `mine` and does not
 automatically read another profile's memory.
 
+For a chat owned directly by an agent profile, `mine` still means that owning
+profile. The reply input labels its sources as agent memory and describes them
+as that agent's records, not the human's biography or work performed by WAKA.
+This attribution does not change the stored perspective or borrow human saves.
+
 Milestone 6 adds `conversation_reply_requests`, separate from user messages.
 One pending/running reply is allowed per conversation. An initial request or
 explicit retry compares the last request ID under the conversation lock: a
@@ -237,6 +248,13 @@ conversation deletion until profile erasure so deletion cannot reset the budget.
 
 Stop is a publication fence, not a promise to undo provider billing. New messages,
 memory changes, deletion and lost worker ownership prevent late publication.
+The final source check and reply insert hold the selected memories' generation
+revisions and the selected raw inspirations' material revisions. Raw captures
+need their own fence because they can enter chat before forming any signal and
+therefore need not advance a profile's generation revision when edited. These
+locks exist only in the final transaction, never across a provider call. A busy
+editor wins rather than waiting back on its source row; the message and paid
+dispatch record remain, with an explicit retry required after failed publication.
 Replies cite numbered current sources with verified quotes; persisted reference
 metadata contains only source identity and a content/state hash. Historical
 assistant words whose references changed are labeled and excluded from future
@@ -246,7 +264,8 @@ revalidated when opening a citation; no stale copied excerpt is served.
 `context_sources` stores only the selected source identities/hashes, separate
 from the citations actually used in the answer. It is null for older attempts
 without selection metadata; new attempts record even an empty selection.
-The memory drawer revalidates that selection. Conversation deletion erases
+The retained context API revalidates that selection; the current UI does not
+expose the former memory drawer or a separate citation list. Conversation deletion erases
 both sets of reference metadata while retaining the budget timestamps.
 
 Client-generated conversation/message IDs make retry idempotent. A replay with
@@ -375,6 +394,26 @@ and a daily safety sweep. The development fifteen-minute recovery timer was
 removed on 2026-10-15 because its idle queries repeatedly woke the serverless
 database. There is no periodic recovery heartbeat or missing-heartbeat alarm.
 
+When Scheduler is configured, `packages/api/src/lib/background-job-wake.ts`
+creates only self-deleting, one-time `at(...)` schedules for actual queue work:
+one pending wake per profile/deadline group, and a watchdog for a claimed job's
+15-minute lease. The watchdog is armed before provider work; a scheduling
+failure releases the unspent claim as a support hold. Completion, source
+deletion and profile/account erasure cancel recorded timers after settlement
+or commit. A still-running original lease keeps its watchdog if settlement
+failed. No source words or credentials enter the schedule payload.
+
+Each pending group has a fresh token. A replacement cancels the old generation;
+late or duplicate deliveries cannot drain an armed newer generation. Deliveries
+recheck profile, exact deadline or lease/attempt, request version and current
+status before ordinary claims. Invalid or early events do not run models.
+A full recovery batch schedules one continuation only after proving that
+unarmed work remains; an empty queue never schedules a successor. Recovery
+runs after activity, an explicit inspection or the existing daily sweep.
+Scheduler transport retries and Lambda async retries are bounded, not a poll.
+Missed delivery still has the daily fallback; cloud timing, cancellation and
+notification delivery require deployed verification.
+
 An explicitly invoked recovery inspection can still use the claim predicate
 and a five-minute grace from `run_after` or lease expiry. It takes at most five
 overdue claims in one pass, retaining fairness, account budgets, request
@@ -385,7 +424,20 @@ An inspection emits stage-level overdue counts, oldest overdue age, exhausted
 leases and a check count. The two passive backlog/exhausted-work alarms do not
 query the database and treat missing samples as non-breaching. Notifications
 require an explicit SNS topic. The development deployment verifies through
-EventBridge reads that the worker's daily sweep is its only scheduled trigger.
+EventBridge reads that the worker's daily sweep is its only recurring trigger;
+job-specific Scheduler events must use `at(...)`, never `rate(...)` or cron.
+
+Local queue drains and maintenance commands are one-shot; the local API only
+sets a timer for a known supported pending job and stops when no work remains.
+No hourly maintenance or seconds-based drain loop runs from `dev:local`.
+
+`background_job_runs` (migration 0082) is account-scoped operational metadata,
+not memory: opaque job ID, request version, attempt and start timestamp. A claim
+and its run record commit together. It preserves throughput accounting across
+job reuse and source/profile removal. It has no raw words or credentials, no
+job/profile FK that could refund spent work, and an account FK that cascades on
+account erasure. Holds refund only their own claim. Records older than two days
+are removed by existing daily maintenance; they create no timer or poll.
 
 Ordinary job failures are retried with backoff (three attempts by default;
 repeated malformed output can stop earlier), then retained as failed with a
@@ -504,8 +556,11 @@ independent repeated experiences.
 
 The approved later review/conversation/export contracts are detailed in
 [the personal capture contract](plans/2026-10-02-capture-foundation-contract.md).
-Review session storage/routes now implement the selection contract below;
-the opt-in conversation reply contract is specified above. Review skipping is
+The current avatar review offers collector picks and current signal verdicts;
+its ordering and repeat rules are in [generation.md](generation.md#review-what-waka-asks-and-when).
+The inspiration-review UI was removed. The session storage/routes below remain
+for compatibility, retained answers and owner export; they are not a second
+current UI journey. The opt-in conversation reply contract is specified above. Review skipping is
 session-local, a review selection is not a verdict on a principle, and multiple
 source references do not multiply one authored response. A selected principle
 may be explicitly exported as an image under that contract; this extends the
@@ -526,12 +581,12 @@ written; stale tabs cannot overwrite a newer session decision. A repeated
 create uses the same session id and input hash rather than creating a second
 review. Review metadata is exported and cascades with the profile.
 
-The current Review UI opens one inspiration at a time, with reflection,
-Next inspiration and explicit removal, without a selection or batch-reflection
-stage. New suggested sessions contain one source, prioritizing those without a
+The retained review API selects one inspiration at a time. New suggested
+sessions contain one source, prioritizing those without a
 saved reflection or prior review choice, then newest first. Sources with a
-confirmed review choice in the last 24 hours are held back; eligible revisits
-rotate by oldest review choice first. Explicit legacy manifests retain their
+confirmed review choice or authored, nonblank, unskipped reflection in the last
+24 hours are held back; eligible revisits rotate by oldest engagement first.
+Explicit legacy manifests retain their
 five-source bound and original order so old sessions and request replays remain
 valid. A new inspiration never changes an open session's fixed manifest.
 
@@ -744,6 +799,13 @@ agent's relayed excerpt, an agent's own observation.
   cached on the attachment and re-derived only if the attachment
   changes. Enrichment exists so layer-2 extraction can read what the
   human *saved*, not only what they typed.
+  Successful link/image/audio material is reused on worker replay; a slower
+  attempt cannot replace committed success with a failed read. Source ownership,
+  source identity and worker claims are rechecked before reuse or publication;
+  audio transcript revisions still fence human corrections. Enrichment and its
+  learning request commit together. Document files (PDF, Office, text files)
+  are stored for opening, with analysis marked unavailable; they are not parsed
+  into memory automatically.
 - **Reflections** — the short Q&A a human attaches at capture (or later)
   — are layer-1 detail on the inspiration: kept, human-authored, and
   input to personal extraction. Guided follow-up questions use saved answers
@@ -791,6 +853,24 @@ agent's relayed excerpt, an agent's own observation.
   generation receipt. Reopen/focus checks are read-only; an explicit retry may
   resend the unchanged intent. Matching drafts settle before the pending record
   is removed, newer drafts survive, and continuation happens after cleanup.
+  A save binds its words, selected attachments and draft identity/revision at
+  the Save press, before asynchronous storage flushes. Only its own upload
+  receipt writes can advance that submitted revision; human edits cannot.
+  Each file's presign and upload have a two-minute transfer deadline; failures
+  preserve the original bytes and earlier completed receipts for retry.
+  Settlement compares revisions after cleanup;
+  identical words do not make a newer draft the submitted one. Text-only saves
+  retain this identity when IndexedDB is unavailable, relying on the durable
+  local save journal rather than claiming file storage succeeded. Removed-save
+  reconciliation also awaits draft settlement before releasing the journal.
+  The bounded save deadline covers settlement as well as network requests.
+  Async settlement checks the active save attempt after each wait, so a late
+  cleanup cannot change a newer draft or finish an already superseded retry.
+  A newer draft retains its words and new attachments, while cleanup removes
+  uploaded object tickets consumed by the confirmed save (or its removed-save
+  tombstone). One uploaded object belongs to one attachment; retaining that
+  ticket would make the next inspiration conflict. Cleanup is durable before
+  the pending save identity is released.
   Validation rejection permits editing; an ambiguous response does not release
   its identity. Corrupt records are never auto-submitted; a confirmed reset
   preserves uninterpreted bytes in a separate, never-auto-adopted recovery key.
@@ -1067,6 +1147,12 @@ that reads `inspirations` has to learn to skip a deleted row.
   only when no live attachment or other deleted copy references them.
 - Legacy copies with `had_photo` but no attachment snapshot can restore text
   only; the UI and restore response explicitly say their attachments are gone.
+- **Restore revisions never restart.** Migration 0081 retains the deleted
+  source's `personal_revision` and `public_revision` as bigint floors. Restore
+  advances each independently above its saved floor, even with a repeated or
+  backwards clock. Exports encode these integers as decimal strings. Legacy
+  copies default to zero because their old revisions were not recorded; the
+  epoch-millisecond fallback remains, but cannot recover an unknown old floor.
 - Signals and the reading are regenerated. Experience, decision citations and
   conversation-origin links are not restored.
 
@@ -1102,7 +1188,9 @@ The standing credential an agent profile holds (meeting decision,
 `humanSessionsOnly` apply unchanged — a key is a way in, never a wider set
 of powers once in. Only the secret's SHA-256 lands in `agent_keys`
 (sessions-table posture); the secret is shown once at issue time. Revocation
-is a timestamp and takes effect on the key's next request.
+is a timestamp and takes effect on the key's next request. Agent and keeper keys have
+no automatic expiry; each profile can hold five live keys. Issuance counts and
+inserts under its profile lock, so concurrent requests cannot exceed the cap.
 
 ## Keeper keys
 
@@ -1127,6 +1215,24 @@ evidence.
   inspiration can support any number of signals. New inspirations
   strengthen existing signals (more evidence, higher confidence) or spawn
   new ones. Signals are *patterns*, not per-capture fragments.
+  Similarity retrieves a nearby match; changed wording still needs a semantic
+  judgment before sharing evidence, including above the normal attach bar.
+  Negation, certainty and time scope must remain distinct. Within one reply,
+  only identical wording is deduplicated before matching. Vectors whose input
+  hash no longer matches the statement cannot match or suppress candidates.
+  Dismissal suppresses the same meaning, not every neighboring topic. Within
+  the current bounded anchor scan, identical wording takes priority and needs
+  no model call. Otherwise the nearest dismissed statement above the existing
+  similarity bar receives one semantic check: only `same` suppresses;
+  `independent` or `opposed` continues ordinary discovery without reviving the
+  dismissed signal or creating a dispute with it. Missing, malformed or declined
+  judgments fail the attempt rather than inventing a verdict. All decisions
+  precede source locks; current anchors and source revisions are rechecked
+  before writes. Restore stops future suppression, without replaying historical
+  refusals automatically. Nothing here creates a timer or periodic DB read.
+  Signal wording follows the capture's language; the profile language setting
+  governs the Top of Mind reading. Recording transcripts are labeled as source
+  material without assuming the speaker's views belong to the profile owner.
 - **Server-generated**: the background pipeline (classification,
   embeddings, the context graph) exists to produce and maintain signals.
   Those mechanisms are internal machinery; the signal is the product.
@@ -1178,6 +1284,20 @@ agent's distilled working memory.
   the actual language and whether distinct cited originals meaningfully support
   the connection, not merely whether citations exist. Rejected replies retry
   without replacing a valid reading; human-kept wording remains exact.
+  New entries must cite only signals offered from that profile; any invalid
+  citation rejects the whole entry. Publication review samples across cited
+  signals within its existing source budget. Cosmetic machine echoes are
+  removed on generated and no-change versions; human choices remain verbatim,
+  including deliberate duplicates. Signal diversity compares current wording
+  hashes only within the current embedding model's coordinate space.
+- **Human choices precede publication.** Proposals repeating dismissed words
+  or retyping human-kept words are removed before source review. A valid first
+  machine entry may fill a truly empty reading despite an incorrect
+  `noChange` hint. A reading containing human edits remains a meaningful baseline.
+  Semantic novelty comparison remains an inactive experiment:
+  its live accuracy gate failed. Normal refreshes use the existing synthesis
+  hint and exact persisted-content comparison; no new schedule or recurring
+  database read is enabled.
 - **Current support is projected when read.** Personal current and historical
   version reads check the entire citation set against standing, owned evidence.
   A retired, dismissed, unsupported, missing or foreign-evidenced signal cannot
@@ -1223,8 +1343,8 @@ artifacts**.
 - **Five qualification tests**, all required for a minted principle:
   *context* (still instructs with every proper noun and number deleted),
   *directive* (prescribes the next choice; a fact about the person is a
-  signal), *evidence* (cites ≥3 distinct signals from this profile's own
-  history), *support* (dated evidence and representation in ≥1 top-of-mind
+  signal), *evidence* (cites ≥3 signals with distinct normalized statements
+  from this profile's own history), *support* (dated evidence and representation in ≥1 top-of-mind
   versions), *completion* (can never be finished; anything checkable-off
   is a goal). Exact thresholds live in
   [generation.md](generation.md) and are drift-locked once implemented.
@@ -1257,12 +1377,9 @@ artifacts**.
   the layers.
 - **Generated from changed material**: three active, evidenced signals and
   at least one citing top-of-mind version can support an initial principle.
-  Personal and room top-of-mind jobs request generation; opening the view
+  Personal and agent top-of-mind jobs request generation; opening the view
   can queue missed work. Requests are deduplicated by material fingerprint.
   A nightly cron and hourly local recovery pass cover missed triggers.
-  Rooms own principles through their group profile, with membership-gated
-  reads and citations restricted to currently visible room signals. Room
-  curation is read-only; personal edits keep their existing locking behavior.
   State maintenance is immediate SQL. No calendar wait is required.
 - **The canonical rendering is machine-facing**: one deterministic
   markdown document (rank-ordered, stable ids, a self-describing

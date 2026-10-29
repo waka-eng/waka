@@ -804,7 +804,9 @@ export async function enrichAttachment(
   let result: AttachmentEnrichmentVerdict;
   let link: Partial<LinkEnrichment> = {};
 
-  if (deps.readAttachment) {
+  if (attachment.enrichmentStatus === 'ready' && attachment.enrichmentKind && attachment.enrichmentText?.trim()) {
+    result = { status: 'ready', kind: attachment.enrichmentKind, reason: null, text: attachment.enrichmentText };
+  } else if (deps.readAttachment) {
     const outcome = await deps.readAttachment(attachment);
     result = outcome.result;
     link = outcome.link ?? {};
@@ -815,11 +817,7 @@ export async function enrichAttachment(
   } else if (attachment.type === "image") {
     result = await enrichImageAttachment(attachment);
   } else if (attachment.type === 'audio') {
-    // Reclaimed/replayed work reuses this owned attachment's committed text.
-    // Human transcript corrections are a separate C06 write contract.
-    result = attachment.enrichmentStatus === 'ready' && attachment.enrichmentKind === 'audio_transcription'
-      ? { status: 'ready', kind: 'audio_transcription', reason: null, text: attachment.enrichmentText ?? '' }
-      : await enrichAudioAttachment(attachment);
+    result = await enrichAudioAttachment(attachment);
   } else {
     result = { status: "unavailable", reason: "unsupported_attachment_type" };
   }
@@ -828,15 +826,21 @@ export async function enrichAttachment(
   const persisted = await db.transaction(async (tx) => {
     const [parent] = await tx.select({ id: inspirations.id }).from(inspirations)
       .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, attachment.profileId))).for("update");
-    if (!parent) return false;
+    if (!parent) return { status: 'missing' } as const;
     const [current] = await tx.select().from(attachments).where(eq(attachments.id, attachmentId)).for("update");
-    if (!current) return false;
+    if (!current) return { status: 'missing' } as const;
     if (current.url !== attachment.url || current.type !== attachment.type || current.s3Key !== attachment.s3Key ||
       current.contentType !== attachment.contentType || current.profileId !== attachment.profileId || current.inspirationId !== attachment.inspirationId ||
       (current.type === 'audio' && current.transcriptRevision !== attachment.transcriptRevision)) {
       throw new Error("Attachment material changed during enrichment; retry current source");
     }
     await deps.beforeCommit?.(tx);
+    // Capture-time material is cached for every readable attachment type.
+    // Reclaimed work and a slower concurrent attempt must not reread it or
+    // downgrade a committed success. Recheck the source/claim before reuse.
+    if (current.enrichmentStatus === 'ready' && current.enrichmentKind && current.enrichmentText?.trim()) {
+      return { status: 'ready', kind: current.enrichmentKind, reason: null, text: current.enrichmentText } as const;
+    }
     const nextText = result.status === "ready" ? (result.text ?? link.text ?? null) : null;
     const transcriptChanged = current.type === 'audio' && (current.enrichmentStatus !== result.status || current.enrichmentText !== nextText ||
       current.enrichmentKind !== (result.status === 'ready' ? result.kind : null));
@@ -867,9 +871,9 @@ export async function enrichAttachment(
       await requestSignalDerivation({ profileId: attachment.profileId, inspirationId,
         reason: "edited" }, tx);
     }
-    return true;
+    return result;
   });
 
-  if (persisted) await wakeCommittedBackgroundJobs();
-  return persisted ? result : { status: "missing" };
+  if (persisted.status !== 'missing') await wakeCommittedBackgroundJobs();
+  return persisted;
 }

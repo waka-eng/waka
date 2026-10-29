@@ -253,6 +253,27 @@ describe("the claims awaiting a word", () => {
     expect(await queueFor(person)).toHaveLength(0);
   });
 
+  it('withholds stale support before pagination so a valid claim is not crowded out',async()=>{
+    const person=await seedPerson('stale-page');
+    const stale=await claimWith(person,'A source that changed.','emerging',1);
+    const valid=await claimWith(person,'A current supported reading.','emerging',1);
+    await t.sql`UPDATE signals SET last_evidence_at=now()+interval '1 hour' WHERE id=${stale}`;
+    await t.sql`UPDATE inspirations SET text='The original now says something else.' WHERE id IN
+      (SELECT inspiration_id FROM signal_evidence WHERE signal_id=${stale})`;
+    const response=await appFor(person).request('/api/claims?limit=1');
+    const body=await response.json() as {claims:ClaimRow[]};
+    expect(body.claims.map(row=>row.id)).toEqual([valid]);
+  });
+
+  it('withholds an unsupported claim and an unanswered claim whose final source was deleted',async()=>{
+    const person=await seedPerson('withdrawn');
+    const unsupported=await claimWith(person,'An explicitly withdrawn reading.','emerging',1);
+    const removed=await claimWith(person,'No longer backed by an original.','emerging',1);
+    await t.sql`UPDATE signals SET unsupported_at=now() WHERE id=${unsupported}`;
+    await t.sql`DELETE FROM inspirations WHERE id IN (SELECT inspiration_id FROM signal_evidence WHERE signal_id=${removed})`;
+    expect(await queueFor(person)).toEqual([]);
+  });
+
   it("counts partly as answered", async () => {
     /* `partly` is a verdict, not a deferral. Nothing downstream reads it yet —
        selection tests only `true` and `not_true` — but a person who answered
@@ -281,6 +302,11 @@ describe("the claims awaiting a word", () => {
           statement_revision = statement_revision + 1
       WHERE id = ${id}`;
 
+    // A wording change must be revalidated against its sources before asking
+    // the owner to judge the new sentence. Script that storage result here.
+    expect(await queueFor(person)).toEqual([]);
+    await t.sql`UPDATE signal_evidence e SET statement_revision=s.statement_revision FROM signals s
+      WHERE s.id=e.signal_id AND s.id=${id}`;
     const queue = await queueFor(person);
     expect(queue).toHaveLength(1);
     expect(queue[0]!.statement).toBe("You like tools that make the first move.");
@@ -303,6 +329,17 @@ describe("the claims awaiting a word", () => {
 
     expect(await queueFor(mine)).toHaveLength(1);
     expect(await queueFor(theirs)).toHaveLength(0);
+  });
+
+  it('does not ask about a reading that yielded when its owner settled a contradiction',async()=>{
+    const person=await seedPerson('settled-pair');
+    const winner=await claimWith(person,'The choice the owner kept.','active',3);
+    const yielded=await claimWith(person,'The alternative that yielded.','active',3);
+    const [a,b]=[winner,yielded].sort();
+    await t.sql`INSERT INTO signal_contradictions(profile_id,a_signal_id,b_signal_id,resolved_at,yielded_signal_id)
+      VALUES(${person.profileId},${a!},${b!},now(),${yielded})`;
+    await answer(person,winner,'true');
+    expect(await queueFor(person)).toEqual([]);
   });
 
   it("asks the most recently evidenced first, never the most confident", async () => {
@@ -353,6 +390,15 @@ describe("the yeses that have aged", () => {
     const queue = await askedAgain(person);
     expect(queue.map((row) => row.id)).toEqual([id]);
     expect(queue[0]!.askedAgain?.lastAnsweredAt, "the card needs to know when the last yes was").toBeTruthy();
+  });
+
+  it('does not re-ask an aged yes while any of its source material awaits revalidation',async()=>{
+    const person=await seedPerson('aged-stale');
+    const id=await claimWith(person,'An old yes with changed evidence.','active',3);
+    await answeredDaysAgo(person,id,'true',CLAIM_REASK_DAYS+5);
+    await t.sql`UPDATE inspirations SET text='Changed evidence still waiting to be checked.' WHERE id IN
+      (SELECT inspiration_id FROM signal_evidence WHERE signal_id=${id} LIMIT 1)`;
+    expect(await askedAgain(person)).toEqual([]);
   });
 
   it("does not ask again about a recent yes, a no, or the person's own words", async () => {

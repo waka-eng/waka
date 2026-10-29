@@ -180,6 +180,63 @@ it('fences source edits during lookup before dispatching the answer',async()=>{
   await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
   expect((await f.state()).phase).toBe('stale');expect(answer).not.toHaveBeenCalled();
 });
+
+it.each([
+  ['mine','inspiration'],['agent','inspiration'],['both','inspiration'],
+  ['agent','principle'],['both','principle'],
+] as const)('serializes final publication with edits to the selected %s %s',async(perspective,kind)=>{
+  const f=await fixture();
+  const [agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','Selected agent') RETURNING id`;
+  const [source]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${agent.id},'A quiet morning leaves room for an agent experiment.') RETURNING id`;
+  let sourceId=perspective==='mine'?f.sourceId:source.id;
+  if(kind==='principle'){
+    const [principle]=await t.sql`INSERT INTO principles(profile_id,statement,origin,rank,locked_at)
+      VALUES(${agent.id},'Prefer quiet mornings for experiments.','declared',1,now()) RETURNING id`;
+    sourceId=principle.id;
+  }
+  const [other]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','Other agent') RETURNING id`;
+  const [unrelated]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${other.id},'An unrelated memory.') RETURNING id`;
+  await t.sql`UPDATE conversations SET perspective=${perspective},agent_profile_id=${perspective==='mine'?null:agent.id} WHERE id=${f.id}`;
+  await f.request();const job=await claim();
+  const url=new URL(connection);url.searchParams.set('options',`-c search_path=${t.schemaName}`);
+  const peer=postgres(url.toString(),{max:1,prepare:false,onnotice:()=>{}}),key=randomUUID();
+  await t.sql.unsafe(`CREATE FUNCTION hold_chat_publication() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN PERFORM pg_advisory_xact_lock(hashtextextended(TG_ARGV[0],0));RETURN NEW;END $$`);
+  await t.sql.unsafe(`CREATE TRIGGER hold_chat_publication BEFORE INSERT ON conversation_messages
+    FOR EACH ROW WHEN (NEW.role='assistant') EXECUTE FUNCTION hold_chat_publication('${key}')`);
+  let worker:Promise<void>|undefined;
+  try{
+    await peer`SELECT pg_advisory_lock(hashtextextended(${key},0))`;
+    worker=processConversationReply(t.db as never,job,f.id,(await f.state()).requestId!,async()=>{},{embeddingClient:null});
+    await vi.waitFor(async()=>{
+      const [row]=await peer`SELECT count(*)::int AS waiting FROM pg_locks WHERE locktype='advisory' AND NOT granted
+        AND classid=((hashtextextended(${key},0)>>32)&4294967295)::oid
+        AND objid=(hashtextextended(${key},0)&4294967295)::oid`;
+      expect(row.waiting).toBe(1);
+    },{timeout:3000,interval:20});
+    // This pause is after the final source read. An edit must serialize with
+    // publication, while a different agent's memory remains independently writable.
+    await peer.begin(async tx=>{
+      await tx`SET LOCAL lock_timeout='150ms'`;
+      await tx`UPDATE inspirations SET text='The unrelated agent can still write.' WHERE id=${unrelated.id}`;
+    });
+    let blocked=false;
+    try{await peer.begin(async tx=>{
+      await tx`SET LOCAL lock_timeout='150ms'`;
+      if(kind==='principle')await tx`UPDATE principles SET statement='Changed before the reply published.' WHERE id=${sourceId}`;
+      else await tx`UPDATE inspirations SET text='Changed before the reply published.' WHERE id=${sourceId}`;
+    });}catch(error){expect((error as {code?:string}).code).toBe('55P03');blocked=true;}
+    expect(blocked).toBe(true);
+  }finally{
+    await peer`SELECT pg_advisory_unlock(hashtextextended(${key},0))`;
+    await worker;await peer.end();
+    await t.sql`DROP TRIGGER hold_chat_publication ON conversation_messages`;
+    await t.sql`DROP FUNCTION hold_chat_publication()`;
+  }
+  expect((await f.state()).phase).toBe('ready');
+  const [current]=kind==='principle'?await t.sql`SELECT statement AS text FROM principles WHERE id=${sourceId}`:await t.sql`SELECT text FROM inspirations WHERE id=${sourceId}`;
+  expect(current.text).toContain('experiment');
+});
 it('uses the last available provider slot for an answer rather than exceeding the budget with lookup',async()=>{
   const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
   await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
@@ -190,6 +247,35 @@ it('uses the last available provider slot for an answer rather than exceeding th
   expect((await f.state()).phase).toBe('ready');expect(embed).not.toHaveBeenCalled();expect(answer).toHaveBeenCalledOnce();
   const [request]=await t.sql`SELECT retrieval_dispatched_at FROM conversation_reply_requests WHERE id=${state.requestId}`;
   expect(request.retrieval_dispatched_at).toBeNull();
+});
+
+it('labels the owning agent profile’s memory for the model without mixing in human saves',async()=>{
+  const f=await fixture();
+  const [agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','Noah') RETURNING id`;
+  await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${agent.id},'I used quiet morning experiments while developing a tool.')`;
+  const chatId=randomUUID();
+  expect((await f.post(`?profile=${agent.id}`,{id:chatId,firstMessage:{id:randomUUID(),content:'What do quiet morning experiments suggest about this agent?',requestReply:true}})).status).toBe(200);
+  await processBackgroundJob(await claim());
+  const input=answer.mock.calls[0]![0];
+  expect(input.perspective).toBe('agent');
+  expect(input.sources.length).toBeGreaterThan(0);
+  expect(input.sources.every(source=>source.owner==='agent')).toBe(true);
+  expect(JSON.stringify(input.sources)).not.toContain('A quiet morning gives me room for an experiment.');
+  expect((await t.sql`SELECT profile_id,perspective FROM conversations WHERE id=${chatId}`)[0]).toMatchObject({profile_id:agent.id,perspective:'mine'});
+});
+
+it('yields publication to an active source editor without blocking or repeating the model call',async()=>{
+  const f=await fixture();await f.request();const job=await claim();
+  const url=new URL(connection);url.searchParams.set('options',`-c search_path=${t.schemaName}`);
+  const peer=postgres(url.toString(),{max:1,prepare:false,onnotice:()=>{}});
+  try{await peer.begin(async tx=>{
+    await tx`UPDATE inspirations SET text='The owner is changing this raw capture.' WHERE id=${f.sourceId}`;
+    await processBackgroundJob(job);
+    expect(await f.state()).toMatchObject({phase:'failed',failureCode:'publication_unconfirmed'});
+    expect(answer).toHaveBeenCalledTimes(1);
+  });}finally{await peer.end();}
+  expect((await t.sql`SELECT text FROM inspirations WHERE id=${f.sourceId}`)[0].text).toBe('The owner is changing this raw capture.');
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${f.id}`).toHaveLength(1);
 });
 it('counts both reserved provider slots of earlier hybrid attempts',async()=>{
   const f=await fixture();

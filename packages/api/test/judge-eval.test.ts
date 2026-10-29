@@ -5,12 +5,13 @@
  *     WAKA_MODEL_JUDGE=<candidate> pnpm --filter @waka/api eval:judge
  *
  * The judge's one question is whether two statements name the same durable
- * pattern (docs/generation.md, the 0.70–0.86 band): its failure modes are
+ * pattern (docs/generation.md, nearby matches with changed wording): its failure modes are
  * exactly two, and the bar below prices them the way the prompt does. A
  * missed merge leaves a visible duplicate a person can still merge; a
  * phantom OPPOSITION manufactures a dispute the person never had. So the
- * gate is: overall accuracy ≥ 80%, and ZERO invented oppositions — a model
- * that is right often but fabricates disputes loses outright.
+ * gate is: overall accuracy ≥ 80%, ZERO invented oppositions and ZERO false
+ * same-meaning verdicts. False sameness would silently suppress a different
+ * view when the comparator is a dismissed signal.
  *
  * Half the bench is Korean, deliberately: the archive this product actually
  * holds is majority Korean, and English-only fixtures would certify models
@@ -60,6 +61,9 @@ const BENCH: Pair[] = [
   { a: "새로운 도구를 배우는 것 자체가 즐겁다.", b: "Small tools beat big platforms.", expected: "independent", note: "tools as joy vs tools as choice, cross-language" },
   { a: "I prefer written plans to spoken ones.", b: "Plans rarely survive first contact anyway.", expected: "independent", note: "preference vs skepticism — could gain separate evidence" },
   { a: "저는 결정을 미루는 편이다.", b: "결정을 내리면 뒤돌아보지 않는다.", expected: "independent", note: "before vs after a decision — both can be true (ko)" },
+  { a: "I prefer quiet mornings for focused work.", b: "This week only I want to try quiet mornings for focused work; I have not decided whether I like them.", expected: "independent", note: "undecided trial is not an established preference or its denial" },
+  { a: "I used to prefer quiet mornings.", b: "I now prefer busy mornings.", expected: "independent", note: "explicit past and current positions are different time scopes" },
+  { a: "나는 아침에 혼자 일하는 것을 좋아한다.", b: "이번 주에만 아침에 혼자 일해 보려고 한다. 나에게 맞는지는 아직 모르겠다.", expected: "independent", note: "temporary undecided trial (ko)" },
 
   /* ---- opposed: cannot both hold ---- */
   { a: "Mornings are my most productive hours.", b: "I am useless before noon; everything good happens at night.", expected: "opposed", note: "direct contradiction (en)" },
@@ -93,12 +97,13 @@ async function judgeAll(): Promise<Array<Pair & { got: string }>> {
 
 describe.skipIf(!HAS_KEY)("the judge, on the bench", () => {
   it(
-    "clears the bar: ≥80% overall, zero invented oppositions",
+    "clears the bar: ≥80% overall, zero invented oppositions or false sameness",
     { timeout: 180_000 },
     async () => {
       const results = await judgeAll();
       const misses = results.filter((r) => r.got !== r.expected);
       const inventedOpposition = misses.filter((r) => r.got === "opposed");
+      const falseSameness = misses.filter((r) => r.got === "same");
       const accuracy = (results.length - misses.length) / results.length;
 
       for (const m of misses) {
@@ -107,13 +112,14 @@ describe.skipIf(!HAS_KEY)("the judge, on the bench", () => {
         );
       }
       console.log(
-        `[judge-eval] ${results.length - misses.length}/${results.length} correct (${Math.round(accuracy * 100)}%), invented oppositions: ${inventedOpposition.length}`,
+        `[judge-eval] ${results.length - misses.length}/${results.length} correct (${Math.round(accuracy * 100)}%), invented oppositions: ${inventedOpposition.length}, false sameness: ${falseSameness.length}`,
       );
 
       expect(
         inventedOpposition,
         "a phantom opposition manufactures a dispute the person never had",
       ).toHaveLength(0);
+      expect(falseSameness, 'different meanings must not be merged or suppressed').toHaveLength(0);
       expect(accuracy, "the judge must clear 80% on the bench").toBeGreaterThanOrEqual(0.8);
     },
   );

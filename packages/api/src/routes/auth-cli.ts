@@ -52,7 +52,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
-import { accounts, agentKeys, cliLoginCodes, profiles, sessions, type ProfileType } from "../db/index.js";
+import { accounts, agentKeys, cliLoginCodes, keeperKeys, profiles, sessions, type ProfileType } from "../db/index.js";
 import { SESSION_TTL_SECONDS, signSessionToken } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
 import {
@@ -338,13 +338,17 @@ cliAuthRoutes.post("/verify", requireAuth, async (c) => {
   const session = c.get("session");
   const input = z.object({ profileId: z.string().uuid() }).strict().safeParse(await c.req.json().catch(() => null));
   if (!input.success) return c.json({ error: "A profile ID is required" }, 400);
-  if (!c.req.header("authorization")?.startsWith("Bearer ") || session.keyScoped || input.data.profileId !== session.profile.id) {
+  if (!c.req.header("authorization")?.toLowerCase().startsWith("bearer ") || input.data.profileId !== session.profile.id) {
     return c.json({ error: "This connection does not match the selected profile" }, 403);
   }
   const verifiedAt = new Date();
-  // Standing agent keys have no session row. Their activity is shown on the
-  // agent's API keys page; normal sign-ins retain their explicit setup proof.
-  const [verified] = session.sessionId.startsWith('agent-key:')
+  // Standing keys have no session row, so verification updates key activity.
+  // Browser-approved sign-ins retain their separate explicit setup proof.
+  const [verified] = session.keyScoped
+    ? await getDb().update(keeperKeys).set({ lastUsedAt: verifiedAt })
+      .where(and(eq(keeperKeys.id, session.sessionId.slice('keeper-key:'.length)),
+        eq(keeperKeys.profileId, session.profile.id), isNull(keeperKeys.revokedAt))).returning({ id: keeperKeys.id })
+    : session.sessionId.startsWith('agent-key:')
     ? await getDb().update(agentKeys).set({ lastUsedAt: verifiedAt })
       .where(and(eq(agentKeys.id, session.sessionId.slice('agent-key:'.length)),
         eq(agentKeys.profileId, session.profile.id), isNull(agentKeys.revokedAt))).returning({ id: agentKeys.id })

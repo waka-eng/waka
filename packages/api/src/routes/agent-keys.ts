@@ -58,7 +58,7 @@ export function createAgentKeyRoutes(deps: AgentKeyRouteDependencies = {}): Hono
   routes.use("*", humanSessionsOnly);
 
   /** The agent profile, if the acting account holds it. */
-  async function ownedAgent(db: WakaDb, accountId: string, profileId: string) {
+  async function ownedAgent(db: Pick<WakaDb, "select">, accountId: string, profileId: string) {
     const [row] = await db
       .select({ id: profiles.id, name: profiles.name })
       .from(profiles)
@@ -69,7 +69,7 @@ export function createAgentKeyRoutes(deps: AgentKeyRouteDependencies = {}): Hono
           eq(profiles.type, "agent"),
         ),
       )
-      .limit(1);
+      .limit(1).for("update");
     return row ?? null;
   }
 
@@ -86,42 +86,44 @@ export function createAgentKeyRoutes(deps: AgentKeyRouteDependencies = {}): Hono
 
     const db = getDatabase();
     const session = c.get("session");
-    const agent = await ownedAgent(db, session.profile.accountId, parsed.data.profileId);
-    if (!agent) return c.json({ error: "Agent profile not found" }, 404);
+    return db.transaction(async (tx) => {
+      const agent = await ownedAgent(tx, session.profile.accountId, parsed.data.profileId);
+      if (!agent) return c.json({ error: "Agent profile not found" }, 404);
 
-    const live = await db
-      .select({ id: agentKeys.id })
-      .from(agentKeys)
-      .where(and(eq(agentKeys.profileId, agent.id), isNull(agentKeys.revokedAt)));
-    if (live.length >= MAX_KEYS_PER_AGENT) {
-      return c.json({ error: `An agent may hold ${MAX_KEYS_PER_AGENT} keys` }, 409);
-    }
+      const live = await tx
+        .select({ id: agentKeys.id })
+        .from(agentKeys)
+        .where(and(eq(agentKeys.profileId, agent.id), isNull(agentKeys.revokedAt)));
+      if (live.length >= MAX_KEYS_PER_AGENT) {
+        return c.json({ error: `An agent may hold ${MAX_KEYS_PER_AGENT} keys` }, 409);
+      }
 
-    const minted = await mintAgentKey();
-    const [row] = await db
-      .insert(agentKeys)
-      .values({
-        profileId: agent.id,
-        tokenHash: minted.tokenHash,
-        prefix: minted.prefix,
-        label: parsed.data.label ?? null,
-      })
-      .returning({ id: agentKeys.id, createdAt: agentKeys.createdAt });
-
-    return c.json(
-      {
-        key: {
-          id: row!.id,
+      const minted = await mintAgentKey();
+      const [row] = await tx
+        .insert(agentKeys)
+        .values({
           profileId: agent.id,
-          /** shown this once; the row keeps only the hash */
-          secret: minted.secret,
+          tokenHash: minted.tokenHash,
           prefix: minted.prefix,
           label: parsed.data.label ?? null,
-          createdAt: row!.createdAt.toISOString(),
+        })
+        .returning({ id: agentKeys.id, createdAt: agentKeys.createdAt });
+
+      return c.json(
+        {
+          key: {
+            id: row!.id,
+            profileId: agent.id,
+            /** shown this once; the row keeps only the hash */
+            secret: minted.secret,
+            prefix: minted.prefix,
+            label: parsed.data.label ?? null,
+            createdAt: row!.createdAt.toISOString(),
+          },
         },
-      },
-      201,
-    );
+        201,
+      );
+    });
   });
 
   // GET /api/agent-keys — every key on the account's agents, newest first.

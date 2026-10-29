@@ -1,0 +1,2 @@
+ALTER TABLE "deleted_inspirations" ADD COLUMN "personal_revision" bigint DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "deleted_inspirations" ADD COLUMN "public_revision" bigint DEFAULT 0 NOT NULL;

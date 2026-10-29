@@ -14,9 +14,9 @@
  *
  * Two invariants are enforced here rather than trusted:
  *
- *   - **Every cited signal exists and belongs to this profile.** A citation
- *     the model invented is dropped, and an entry left with no citation is
- *     dropped with it. An artifact that cites nothing is a horoscope.
+ *   - **Every cited signal was offered from this profile.** An entry with
+ *     any invalid citation is rejected whole; trimming a reference must not
+ *     turn a partially ungrounded claim into a publishable one.
  *
  *   - **Human decisions survive regeneration.** Entries the owner locked,
  *     pinned, or dismissed are copied forward verbatim from the previous
@@ -55,7 +55,7 @@ import {
   attachments,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
-import { hashEmbeddingInput } from "./inspiration-embeddings.js";
+import { GEMINI_EMBEDDING_MODEL, hashEmbeddingInput } from "./inspiration-embeddings.js";
 import { getDb } from "./db.js";
 import { computeSignalConfidence, selectIndependentEvidence, type ConfidenceEvidence } from "./signal-lifecycle.js";
 import {loadSignalEvidence} from './review-evidence.js';
@@ -189,6 +189,8 @@ export interface TopOfMindRefreshDependencies {
   db?: WakaDb;
   modelProvider?: ModelProvider;
   now?: Date;
+  /** Evaluation only. The live novelty gate failed; no route/worker enables it. */
+  experimentalNoveltyReview?: boolean;
   /** Worker claim fence, inside the final transaction after input validation. */
   beforeCommit?: (tx: Pick<WakaTx, "select">) => Promise<void>;
   onPublished?: (tx: WakaTx, publication: { profileId: string; result: BackgroundJobResult }) => Promise<void>;
@@ -508,7 +510,7 @@ async function selectSignals(
     .select({ signalId: signalEmbeddings.signalId, inputHash: signalEmbeddings.inputHash, embedding: signalEmbeddings.embedding })
     .from(signalEmbeddings)
     .where(
-      and(eq(signalEmbeddings.profileId, profileId), inArray(
+      and(eq(signalEmbeddings.profileId, profileId), eq(signalEmbeddings.model, GEMINI_EMBEDDING_MODEL), inArray(
         signalEmbeddings.signalId,
         scored.map((s) => s.id),
       )),
@@ -725,7 +727,7 @@ async function loadLiveArtifact(
 }
 
 /** Locked, pinned, and dismissed are the three ways a human touched an entry. */
-function isHumanTouched(entry: CarriedEntry): boolean {
+function isHumanTouched(entry: Pick<CarriedEntry, 'lockedAt' | 'pinnedAt' | 'dismissedAt'>): boolean {
   return entry.lockedAt !== null || entry.pinnedAt !== null || entry.dismissedAt !== null;
 }
 
@@ -760,16 +762,15 @@ function contestedCarryAllowed(entry:{type:TopOfMindEntryType;citedSignalIds:str
 
 /**
  * Keep only what the database can vouch for: citations that name a signal
- * this profile actually holds, and entries that still have at least one after
- * the filter. An entry with no citation left is not a weaker entry, it is an
- * unsourced claim about someone.
+ * this profile actually offered. A failed citation rejects the entire entry;
+ * no partial claim is salvaged by trimming its references.
  */
 export function validateSynthesizedEntries(
   entries: TopOfMindSynthesisEntry[],
   knownSignalIds: Set<string>,
   contested: ReadonlyMap<string, readonly string[]> = new Map(),
   statements?: ReadonlyMap<string,string>,
-  onRejected?: (index: number, reason: 'no_owned_citations' | 'unresolved_conflict') => void,
+  onRejected?: (index: number, reason: 'no_owned_citations' | 'invalid_citations' | 'unresolved_conflict') => void,
 ): ValidationOutcome {
   let droppedCitations = 0;
   const validated: TopOfMindSynthesisEntry[] = [];
@@ -781,6 +782,7 @@ export function validateSynthesizedEntries(
       return false;
     });
     if (cited.length === 0) { onRejected?.(index, 'no_owned_citations'); continue; }
+    if (cited.length !== entry.citedSignalIds.length) { onRejected?.(index, 'invalid_citations'); continue; }
     if(!contestedEntryAllowed({...entry,citedSignalIds:cited},contested)) { onRejected?.(index, 'unresolved_conflict'); continue; }
     const belief=cited.some(id=>contested.get(id)?.length)?undefined:statements?machineBelief({...entry,citedSignalIds:cited},statements):entry.belief;
     validated.push({ ...entry, belief, citedSignalIds: [...new Set(cited)] });
@@ -816,6 +818,20 @@ export interface PersistedEntry {
   pinnedAt: Date | null;
   dismissedAt: Date | null;
   citedSignalIds: string[];
+}
+
+const entryWordingKey = (body: string) => body.normalize('NFKC').toLowerCase().trim().replace(/\s+/gu, ' ').replace(/[.!?。！？]+$/u, '');
+
+/** Keep human choices verbatim, including deliberate duplicates. Machine
+ * echoes and cosmetic variants of kept/dismissed wording add nothing new. */
+function deduplicateMachineEntries(entries: PersistedEntry[]): PersistedEntry[] {
+  const seen = new Set(entries.filter(isHumanTouched).map(entry => entryWordingKey(entry.body)));
+  return entries.filter(entry => {
+    if (isHumanTouched(entry)) return true;
+    const key = entryWordingKey(entry.body);
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
 }
 
 /**
@@ -881,7 +897,7 @@ export function assembleEntries(input: {
       citedSignalIds: entry.citedSignalIds,
     }));
 
-  return [...pinned, ...locked, ...generated, ...dismissed];
+  return deduplicateMachineEntries([...pinned, ...locked, ...generated, ...dismissed]);
 }
 
 /**
@@ -918,7 +934,7 @@ export function isUnchanged(previous: CarriedEntry[], next: PersistedEntry[]): b
 
 /** Carry the projected reading, optionally regrounding exact protected words. */
 function carryEverything(previous: LiveArtifactSnapshot, generated: TopOfMindSynthesisEntry[]): PersistedEntry[] {
-  return [...previous.entries]
+  return deduplicateMachineEntries([...previous.entries]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((entry) => ({
       type: entry.type,
@@ -931,7 +947,7 @@ function carryEverything(previous: LiveArtifactSnapshot, generated: TopOfMindSyn
       citedSignalIds: entry.supportChanged
         ? generated.find((candidate) => candidate.body === entry.body && candidate.type === entry.type && candidate.citedSignalIds.length > 0)?.citedSignalIds ?? entry.citedSignalIds
         : entry.citedSignalIds,
-    }));
+    })));
 }
 
 async function writeVersion(
@@ -1156,6 +1172,7 @@ export async function refreshTopOfMindForProfile(
 
   let generated: TopOfMindSynthesisEntry[] = [];
   let modelSaidNoChange = false;
+  let reviewedChange: boolean | undefined;
   let droppedCitations = 0;
   let lockViolations = 0;
   let generationFailure: unknown = null;
@@ -1165,6 +1182,7 @@ export async function refreshTopOfMindForProfile(
     contestedCarryAllowed(entry, selection.contested) && readingQualityIssue(entry, quality) === null);
   let approvedPrevious = new Set(priorCandidates.map(entryKey));
   const keptWording = (entry: TopOfMindSynthesisEntry) => lockedBefore.some(kept => kept.type === entry.type && kept.body === entry.body);
+  const humanBodies = new Set((liveBefore?.entries ?? []).filter(isHumanTouched).map(entry => entry.body));
   const contested = new Map(selected.map(signal=>[signal.id,signal.contestedWithIds??[]]));
   const selectedStatements = new Map(selected.map(signal=>[signal.id,signal.statement]));
   const rejected: Record<string, number> = {};
@@ -1234,8 +1252,14 @@ export async function refreshTopOfMindForProfile(
         selectedStatements,
         (entryIndex, reason) => reportRejection('checks', reason, { entryIndex }),
       );
-      generated = validated.entries.filter((entry, entryIndex) => keptWording(entry) || readingQualityIssue(entry, quality,
-        detail => reportRejection('checks', detail.reason, { entryIndex, fields: detail.fields, distinctOrigins: detail.distinctOrigins })) === null);
+      generated = validated.entries.filter((entry, entryIndex) => {
+        if (keptWording(entry)) return true;
+        // Assembly never publishes these words as a machine entry. Do not
+        // let a dismissed proposal or retyped human choice manufacture novelty.
+        if (humanBodies.has(entry.body)) { reportRejection('checks', 'human_choice', { entryIndex }); return false; }
+        return readingQualityIssue(entry, quality,
+          detail => reportRejection('checks', detail.reason, { entryIndex, fields: detail.fields, distinctOrigins: detail.distinctOrigins })) === null;
+      });
       if ((synthesis.rejectedEntries || synthesis.entries.some(entry => !keptWording(entry))) && !generated.some(entry => !keptWording(entry))) {
         generationFailure = new Error(`Top of mind generation failed publication checks: ${rejectionSummary()}`);
       }
@@ -1258,9 +1282,17 @@ export async function refreshTopOfMindForProfile(
   const machineEntries = generated.filter(entry => !keptWording(entry));
   try {
     const approved = await reviewReadingEntries([...machineEntries, ...priorCandidates], quality, provider,
-      (entryIndex, reasons) => { for (const reason of reasons) reportRejection('review', reason, { entryIndex }); });
+      (entryIndex, reasons) => { for (const reason of reasons) reportRejection('review', reason, { entryIndex }); },
+      deps.experimentalNoveltyReview && machineEntries.length && priorCandidates.length ? { proposedCount: machineEntries.length,
+        onCompared: meaningfullyChanged => { reviewedChange = meaningfullyChanged; modelSaidNoChange = !meaningfullyChanged; } } : undefined);
     generated = generated.filter(entry => keptWording(entry) || approved.has(machineEntries.indexOf(entry)));
     approvedPrevious = new Set(priorCandidates.filter((_, index) => approved.has(machineEntries.length + index)).map(entryKey));
+    if (liveBefore && liveBefore.entries.every(entry => entry.dismissedAt !== null) && generated.some(entry => !keptWording(entry))) {
+      // A truly empty reading has nothing visible to repeat. Human-only
+      // readings still carry meaning, so their noChange hint remains respected.
+      reviewedChange = true;
+      modelSaidNoChange = false;
+    }
     if (machineEntries.length && !generated.some(entry => !keptWording(entry))) {
       generationFailure = new Error(`Top of mind generation failed publication review: ${rejectionSummary()}`);
     }
@@ -1274,7 +1306,7 @@ export async function refreshTopOfMindForProfile(
 
   console.info('[top-of-mind] publication assessment', JSON.stringify({ profileId: input.profileId,
     locale: preferredLocale, acceptedEntries: generated.filter(entry => !keptWording(entry)).length,
-    rejected, canPublish: generationFailure === null }));
+    rejected, meaningfullyChanged: reviewedChange ?? null, canPublish: generationFailure === null }));
 
   const written = await db.transaction(async (tx) => {
     await acquireTopOfMindArtifactLock(tx, { profileId: input.profileId });

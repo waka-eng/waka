@@ -40,7 +40,7 @@ before it gets a name anywhere else.
 | An agent's standing credential | `agent_keys` | API key | access to one agent's memory until you revoke it | Agent API key | **today** |
 | Native single-use sign-in handoff | `mobile_login_codes` | No new public name | finish signing in to your personal account | M2 implementation |
 | Decay / retirement | `dormant_at` | **setting** | a signal long unused sets like dusk | Decay / retirement policy | reserved |
-| Suppression (owner-refused pattern) | `dismissed_at`, `suppressions` — `anchor_signal_id`, `candidate_statement` | **refused ground** | the ground will refuse anything this close from now on | Suppression record (logged, reversible, deletes nothing) | **today** |
+| Suppression (owner-refused pattern) | `dismissed_at`, `suppressions` — `anchor_signal_id`, `candidate_statement` | **refused ground** | WAKA will also set aside rewordings of this pattern | Suppression record (logged, reversible, deletes nothing) | **today** |
 | Ratified standing (per cited ground) | `citedSignals[].answered` (computed from feedback + locks, never stored) | **agreed light** | what you have answered holds full ink; what only WAKA thinks sits dim | Ratified provenance standing | **today** |
 | Activity narration (view of records) | `GET /api/weather` — told sentences derived from stored rows only | **the weather** | what the loop did, told as days — never a number, never a ping | Derived activity narration (no stored summaries) | **today** |
 | Suppression log surface | `weather.antechamber[]` — refused candidates + anchors | **the antechamber** | the dim place where what was read but not kept still stands | Suppression log view (delta surface) | **today** |

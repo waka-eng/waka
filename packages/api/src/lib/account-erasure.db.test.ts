@@ -29,6 +29,8 @@
  * stubbed — those bytes live outside the database).
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import postgres from "postgres";
+import { randomUUID } from "node:crypto";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { eraseAccount } from "./account-erasure.js";
@@ -389,6 +391,127 @@ describe("the gate: a member's erasure and the room's record, side by side", () 
     expect(working).toHaveBeenCalledWith(["key-one", "key-two"]);
     expect(await t.sql`SELECT id FROM accounts WHERE id = ${person.accountId}`).toHaveLength(0);
   });
+  it('sweeps attachments from a profile created while external erasure is running', async () => {
+    const person = await seedPerson('Erasing');
+    const [source] = await t.sql`INSERT INTO inspirations (profile_id,text)
+      VALUES (${person.profileId},'initial source') RETURNING id`;
+    await t.sql`INSERT INTO attachments (profile_id,inspiration_id,type,url,s3_key)
+      VALUES (${person.profileId},${source.id},'image','https://example.test/initial','erasure/initial')`;
+    const deleteObjects = vi.fn(async (_keys: string[]) => {
+      if (deleteObjects.mock.calls.length !== 1) return;
+      const [agent] = await t.sql`INSERT INTO profiles (account_id,type,name)
+        VALUES (${person.accountId},'agent','Late agent') RETURNING id`;
+      const [late] = await t.sql`INSERT INTO inspirations (profile_id,text)
+        VALUES (${agent.id},'late source') RETURNING id`;
+      await t.sql`INSERT INTO attachments (profile_id,inspiration_id,type,url,s3_key)
+        VALUES (${agent.id},${late.id},'image','https://example.test/late','erasure/late-live')`;
+      await t.sql`INSERT INTO deleted_inspirations (id,profile_id,text,kind,source,visibility,kept_at,attachments)
+        VALUES (gen_random_uuid(),${agent.id},'late copy','image','app','private',now(),
+          '[{"s3Key":"erasure/late-deleted"}]'::jsonb)`;
+    });
+    await eraseAccount(person.accountId, { db: t.db as never, deleteAttachmentObjects: deleteObjects });
+    expect(deleteObjects.mock.calls.flatMap(([keys]) => keys)).toEqual([
+      'erasure/initial', 'erasure/late-live', 'erasure/late-deleted',
+    ]);
+    expect(await t.sql`SELECT id FROM accounts WHERE id=${person.accountId}`).toHaveLength(0);
+  });
+
+  it('preserves legacy stored objects still referenced by another account, live or deleted', async () => {
+    const owner = await seedPerson('Legacy erasure'), other = await seedPerson('Legacy survivor');
+    const [source] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${owner.profileId},'source') RETURNING id`;
+    const [survivor] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${other.profileId},'survivor') RETURNING id`;
+    for (const key of ['legacy/live', 'legacy/deleted', 'erase/only-owner']) {
+      await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key)
+        VALUES(${owner.profileId},${source.id},'image','https://example.test/file',${key})`;
+    }
+    await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key)
+      VALUES(${other.profileId},${survivor.id},'image','https://example.test/file','legacy/live')`;
+    await t.sql`INSERT INTO deleted_inspirations(id,profile_id,text,source,visibility,kept_at,attachments)
+      VALUES(gen_random_uuid(),${other.profileId},'retained','app','private',now(),'[{"s3Key":"legacy/deleted"}]'::jsonb)`;
+    const deleteObjects = vi.fn(async () => undefined);
+    await eraseAccount(owner.accountId, { db: t.db as never, deleteAttachmentObjects: deleteObjects });
+    expect(deleteObjects).toHaveBeenCalledExactlyOnceWith(['erase/only-owner']);
+    expect(await t.sql`SELECT id FROM accounts WHERE id=${owner.accountId}`).toHaveLength(0);
+    expect(await t.sql`SELECT s3_key FROM attachments WHERE profile_id=${other.profileId}`).toEqual([{ s3_key: 'legacy/live' }]);
+    expect(await t.sql`SELECT id FROM deleted_inspirations WHERE profile_id=${other.profileId}`).toHaveLength(1);
+  });
+
+  it('keeps the complete inventory if an additional external erasure fails, then retries safely', async () => {
+    const owner = await seedPerson('Retry inventory');
+    const [source] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${owner.profileId},'source') RETURNING id`;
+    const deleteObjects = vi.fn(async (_keys: string[]) => {
+      if (deleteObjects.mock.calls.length === 1) {
+        await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key)
+          VALUES(${owner.profileId},${source.id},'image','https://example.test/late','retry/late')`;
+      } else throw new Error('additional object deletion failed');
+    });
+    await expect(eraseAccount(owner.accountId, { db: t.db as never, deleteAttachmentObjects: deleteObjects }))
+      .rejects.toThrow('additional object deletion failed');
+    expect(await t.sql`SELECT id FROM accounts WHERE id=${owner.accountId}`).toHaveLength(1);
+    expect(await t.sql`SELECT s3_key FROM attachments WHERE profile_id=${owner.profileId}`).toEqual([{ s3_key: 'retry/late' }]);
+    const retry = vi.fn(async () => undefined);
+    await eraseAccount(owner.accountId, { db: t.db as never, deleteAttachmentObjects: retry });
+    expect(retry).toHaveBeenCalledExactlyOnceWith(['retry/late']);
+    expect(await t.sql`SELECT id FROM accounts WHERE id=${owner.accountId}`).toHaveLength(0);
+  });
+
+  it('bounds inventory churn and leaves account deletion retryable', async () => {
+    const owner = await seedPerson('Still uploading');
+    const [source] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${owner.profileId},'source') RETURNING id`;
+    const deleteObjects = vi.fn(async (_keys: string[]) => {
+      const key = `churn/${deleteObjects.mock.calls.length}`;
+      await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key)
+        VALUES(${owner.profileId},${source.id},'image','https://example.test/late',${key})`;
+    });
+    await expect(eraseAccount(owner.accountId, { db: t.db as never, deleteAttachmentObjects: deleteObjects }))
+      .rejects.toThrow('Attachments changed during account erasure; retry deletion');
+    expect(deleteObjects).toHaveBeenCalledTimes(3);
+    expect(await t.sql`SELECT id FROM accounts WHERE id=${owner.accountId}`).toHaveLength(1);
+    expect(await t.sql`SELECT id FROM attachments WHERE profile_id=${owner.profileId}`).toHaveLength(3);
+  });
+
+  it('fences new attachments and profiles during the final cascade without blocking another account', async () => {
+    const owner = await seedPerson('Final cascade'), other = await seedPerson('Independent');
+    const [source] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${owner.profileId},'source') RETURNING id`;
+    const url = new URL(process.env.DB_CONNECTION_URL!);
+    url.searchParams.set('options', `-c search_path=${t.schemaName}`);
+    const peer = postgres(url.toString(), { max: 1, prepare: false, onnotice: () => {} });
+    const key = randomUUID();
+    await t.sql`CREATE FUNCTION hold_account_erasure() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN PERFORM pg_advisory_xact_lock(hashtextextended(TG_ARGV[0],0)); RETURN OLD; END $$`;
+    await t.sql.unsafe(`CREATE TRIGGER hold_account_erasure BEFORE DELETE ON accounts FOR EACH ROW
+      EXECUTE FUNCTION hold_account_erasure('${key}')`);
+    await peer`SELECT pg_advisory_lock(hashtextextended(${key},0))`;
+    const worker = erase(owner.accountId);
+    void worker.catch(() => {});
+    try {
+      await vi.waitFor(async () => {
+        const [row] = await peer`SELECT count(*)::int AS waiting FROM pg_locks WHERE locktype='advisory'
+          AND NOT granted AND objid=(hashtextextended(${key},0)&4294967295)::oid`;
+        expect(row!.waiting).toBe(1);
+      }, { timeout: 3000, interval: 20 });
+      await peer`INSERT INTO profiles(account_id,type,name) VALUES(${other.accountId},'agent','Independent agent')`;
+      await expect(peer.begin(async tx => {
+        await tx`SET LOCAL lock_timeout='150ms'`;
+        await tx`INSERT INTO profiles(account_id,type,name) VALUES(${owner.accountId},'agent','Blocked agent')`;
+      })).rejects.toMatchObject({ code: '55P03' });
+      await expect(peer.begin(async tx => {
+        await tx`SET LOCAL lock_timeout='150ms'`;
+        await tx`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key)
+          VALUES(${owner.profileId},${source.id},'image','https://example.test/late','blocked/key')`;
+      })).rejects.toMatchObject({ code: '55P03' });
+    } finally {
+      await peer`SELECT pg_advisory_unlock(hashtextextended(${key},0))`;
+      try { await worker; } finally {
+        await peer.end();
+        await t.sql`DROP TRIGGER hold_account_erasure ON accounts`;
+        await t.sql`DROP FUNCTION hold_account_erasure()`;
+      }
+    }
+    expect(await t.sql`SELECT id FROM accounts WHERE id=${owner.accountId}`).toHaveLength(0);
+    expect(await t.sql`SELECT id FROM profiles WHERE account_id=${other.accountId}`).toHaveLength(2);
+  });
+
 });
 
 /**

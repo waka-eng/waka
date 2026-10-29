@@ -97,6 +97,24 @@ or delivery channel is configured or verified yet. This gate remains open:
   Deduplicate repeated failures and avoid paging on expected async retry signals.
   Console-only alarm state exercises do not satisfy this delivery gate.
 
+### Production gate: external object cleanup (reviewed 2026-10-28)
+
+- [ ] Persist cleanup inventory independently of deleted profiles/copies and
+  retry ordinary expiry/permanent/profile cleanup failures, including S3
+  per-object errors returned in a successful HTTP response. Current post-commit
+  cleanup logs a safe count but can leave untracked objects on failure.
+- [ ] Cover presigned uploads that are issued before deletion but finalized
+  late or never finalized. The five-minute PUT URL is not revoked by SQL
+  deletion; current account erasure can inventory only recorded attachments
+  and retained copies. Exercise deletion during an outstanding PUT and prove
+  eventual removal of unreferenced bytes, preserving any remaining references.
+- [ ] Connect cleanup failures/backlog to the owner delivery gate above and
+  prove detection, retry, delivery and eventual object removal end to end.
+
+No cloud lifecycle, cleanup queue or notification destination was configured
+by this local logic review. Successful SQL deletion alone is not evidence of
+complete external-object erasure.
+
 ## Verification and budget
 
 Use targeted checks from AGENTS.md and explicit disposable loopback databases

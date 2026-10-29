@@ -1,0 +1,116 @@
+--- a/packages/api/src/lib/audio-transcription.test.ts
++++ b/packages/api/src/lib/audio-transcription.test.ts
+@@ -4 +4 @@
+-import { describe, expect, it, vi } from 'vitest';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+@@ -20,0 +21,2 @@
++beforeEach(() => vi.stubEnv('OPENROUTER_API_KEY', ''));
++afterEach(() => vi.unstubAllEnvs());
+@@ -22,0 +25,43 @@
++  it('sends inspected audio to Voxtral with its own key, privacy rules and automatic language detection', async () => {
++    vi.stubEnv('OPENROUTER_API_KEY', 'openrouter-key');
++    vi.stubEnv('WAKA_OPENROUTER_REQUIRE_ZDR', '1');
++    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ text: '여백을 남기자. Leave room to think.',
++      usage: { cost: 0.000058, input_tokens: 10, output_tokens: 8 } })));
++    const result = await run(fetchFn);
++    expect(result).toMatchObject({ model: AUDIO_TRANSCRIPTION_MODEL, transcript: '여백을 남기자. Leave room to think.', durationSeconds: 1 });
++    const [url, init] = fetchFn.mock.calls[0]!;
++    expect(url).toBe('https://openrouter.ai/api/v1/audio/transcriptions');
++    expect(init!.headers).toMatchObject({ Authorization: 'Bearer openrouter-key' });
++    expect(init!.headers).not.toHaveProperty('x-goog-api-key');
++    const sent = JSON.parse(init!.body as string);
++    expect(sent).toMatchObject({ model: 'mistralai/voxtral-mini-transcribe-3-0',
++      input_audio: { data: Buffer.from(wave()).toString('base64'), format: 'wav' },
++      response_format: 'json', temperature: 0, provider: { data_collection: 'deny', zdr: true } });
++    expect(sent).not.toHaveProperty('language');
++    expect(fetchFn).toHaveBeenCalledOnce();
++  });
++  it('sends actual browser WebM to Voxtral as webm, preserving an empty no-speech result', async () => {
++    const bytes = await readFile(new URL('../../test/fixtures/audio/browser-tone.webm', import.meta.url));
++    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response('{"text":""}'));
++    expect((await run(fetchFn, { bytes, contentType: 'audio/webm;codecs=opus', openRouterApiKey: 'openrouter-key' })).transcript).toBe('');
++    expect(JSON.parse(fetchFn.mock.calls[0]![1]!.body as string).input_audio.format).toBe('webm');
++  });
++  it.each([400,401,403,408,429,503])('classifies Voxtral HTTP %s without leaking a body or trying another provider', async status => {
++    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response('private-provider-body', { status }));
++    await expect(run(fetchFn, { openRouterApiKey: 'openrouter-key' })).rejects.toMatchObject({
++      code: `transcription_http_${status}`, transient: status === 408 || status === 429 || status >= 500,
++    });
++    expect(fetchFn).toHaveBeenCalledOnce();
++  });
++  it.each([{ text: 1 }, {}, { text: 'x'.repeat(MAX_TRANSCRIPT_CHARS+1) }, { text: 'partial', finish_reason: 'length' }, { text: 'partial', error: {} }])('refuses incomplete or invalid Voxtral output %#', async body => {
++    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(body)));
++    await expect(run(fetchFn, { openRouterApiKey: 'openrouter-key' })).rejects.toMatchObject({ transient: true });
++    expect(fetchFn).toHaveBeenCalledOnce();
++  });
++  it('does not dispatch canceled Voxtral work and keeps network errors safe and retryable', async () => {
++    const fetchFn = vi.fn<typeof fetch>().mockRejectedValue(new Error('private-network-details'));
++    await expect(run(fetchFn, { openRouterApiKey: 'openrouter-key', signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'transcription_canceled', transient: false });
++    expect(fetchFn).not.toHaveBeenCalled();
++    await expect(run(fetchFn, { openRouterApiKey: 'openrouter-key' })).rejects.toMatchObject({ code: 'transcription_transport_failed', transient: true });
++    expect(fetchFn).toHaveBeenCalledOnce();
++  });
+@@ -35 +80 @@
+-    expect(result).toMatchObject({ model: AUDIO_TRANSCRIPTION_MODEL, durationSeconds: 1, mimeType: 'audio/wav', transcript: '여백을 남기자. Leave room to think.' });
++    expect(result).toMatchObject({ model: 'gemini-2.5-flash', durationSeconds: 1, mimeType: 'audio/wav', transcript: '여백을 남기자. Leave room to think.' });
+--- a/packages/api/src/lib/audio-transcription.ts
++++ b/packages/api/src/lib/audio-transcription.ts
+@@ -5,0 +6,2 @@
++import { buildOpenRouterHeaders, getOpenRouterApiKey, openRouterPrivacyPreferences } from './openrouter-http.js';
++import { recordModelUsage } from './model-usage.js';
+@@ -7 +9,3 @@
+-export const AUDIO_TRANSCRIPTION_MODEL = 'gemini-2.5-flash';
++export const AUDIO_TRANSCRIPTION_MODEL = 'mistralai/voxtral-mini-transcribe-3-0';
++const GEMINI_AUDIO_TRANSCRIPTION_MODEL = 'gemini-2.5-flash';
++const OPENROUTER_TRANSCRIPTION_URL = 'https://openrouter.ai/api/v1/audio/transcriptions';
+@@ -68,0 +73,37 @@
++async function transcribeWithVoxtral(input: {
++  bytes: Uint8Array; apiKey: string; fetchFn?: typeof fetch; signal?: AbortSignal;
++}, media: Awaited<ReturnType<typeof inspectTranscriptionAudio>>) {
++  const provider = openRouterPrivacyPreferences();
++  const formats: Record<string, string> = { 'audio/wav': 'wav', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3' };
++  const started = performance.now();
++  let response: Response;
++  try {
++    response = await fetchModelWithTimeout(input.fetchFn ?? fetch, OPENROUTER_TRANSCRIPTION_URL, {
++      method: 'POST', headers: buildOpenRouterHeaders(input.apiKey), signal: input.signal,
++      body: JSON.stringify({ model: AUDIO_TRANSCRIPTION_MODEL,
++        input_audio: { data: Buffer.from(input.bytes).toString('base64'), format: formats[media.mimeType] },
++        response_format: 'json', temperature: 0, ...(Object.keys(provider).length ? { provider } : {}),
++      }),
++    });
++  } catch {
++    recordModelUsage('openrouter', 'audio transcription', null, performance.now() - started, 'unknown');
++    throw new AudioTranscriptionError(input.signal?.aborted ? 'transcription_canceled' : 'transcription_transport_failed', !input.signal?.aborted);
++  }
++  let body: unknown;
++  try { body = await response.json(); } catch {
++    recordModelUsage('openrouter', 'audio transcription', null, performance.now() - started, response.ok ? 'unknown' : 'http_error');
++    if (!response.ok) throw new AudioTranscriptionError(`transcription_http_${response.status}`,
++      response.status === 408 || response.status === 429 || response.status >= 500);
++    throw new AudioTranscriptionError('transcription_invalid_response', true);
++  }
++  recordModelUsage('openrouter', 'audio transcription', body, performance.now() - started, response.ok ? 'received' : 'http_error');
++  if (input.signal?.aborted) throw new AudioTranscriptionError('transcription_canceled', false);
++  if (!response.ok) throw new AudioTranscriptionError(`transcription_http_${response.status}`,
++    response.status === 408 || response.status === 429 || response.status >= 500);
++  const parsed = z.object({ text: z.string().max(MAX_TRANSCRIPT_CHARS),
++    error: z.unknown().optional(), finish_reason: z.string().nullish() }).safeParse(body);
++  if (!parsed.success || parsed.data.error !== undefined) throw new AudioTranscriptionError('transcription_invalid_output', true);
++  if (parsed.data.finish_reason && parsed.data.finish_reason !== 'stop') throw new AudioTranscriptionError('transcription_incomplete', true);
++  return { ...media, model: AUDIO_TRANSCRIPTION_MODEL, transcript: parsed.data.text.trim() };
++}
++
+@@ -72 +113 @@
+-  bytes: Uint8Array; contentType: string; apiKey?: string; fetchFn?: typeof fetch; signal?: AbortSignal;
++  bytes: Uint8Array; contentType: string; apiKey?: string; openRouterApiKey?: string; fetchFn?: typeof fetch; signal?: AbortSignal;
+@@ -74,0 +116,3 @@
++  if (input.signal?.aborted) throw new AudioTranscriptionError('transcription_canceled', false);
++  const openRouterApiKey = input.openRouterApiKey ?? getOpenRouterApiKey();
++  if (openRouterApiKey) return transcribeWithVoxtral({ ...input, apiKey: openRouterApiKey }, media);
+@@ -81 +125 @@
+-      buildGeminiModelEndpoint(AUDIO_TRANSCRIPTION_MODEL, 'generateContent'), {
++      buildGeminiModelEndpoint(GEMINI_AUDIO_TRANSCRIPTION_MODEL, 'generateContent'), {
+@@ -118 +162 @@
+-  return { ...media, model: AUDIO_TRANSCRIPTION_MODEL, transcript: parsed.transcript.trim() };
++  return { ...media, model: GEMINI_AUDIO_TRANSCRIPTION_MODEL, transcript: parsed.transcript.trim() };

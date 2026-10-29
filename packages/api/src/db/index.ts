@@ -52,3 +52,5 @@ export * from "./schema-groups";
 export * from "./schema-group-coedit";
 export * from "./schema-background-jobs";
 export * from "./schema-feedback";
+
+export * from "./schema-background-job-runs";

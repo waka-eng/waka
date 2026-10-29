@@ -310,8 +310,8 @@ api_pid=$!
 if [[ "${WAKA_NO_NIGHTLY:-}" != "1" ]]; then
   (
     sleep 5
-    echo "  Principles + garden: hourly recovery pass (WAKA_NO_NIGHTLY=1 to skip)"
-    exec pnpm --filter @waka/api nightly --watch
+    echo "  Principles + garden: one boot pass (WAKA_NO_NIGHTLY=1 to skip)"
+    exec pnpm --filter @waka/api nightly
   ) &
   nightly_pid=$!
 fi

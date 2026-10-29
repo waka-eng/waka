@@ -108,6 +108,18 @@ describe("the agent's standing key", () => {
     await t.truncateAll();
   });
 
+  it('enforces the five-key limit across concurrent creation requests', async () => {
+    const owner = await seedAccount('Cap');
+    const profileId = await seedAgentFor(owner, 'cap-agent');
+    const app = appFor(owner);
+    const create = () => app.request('/api/agent-keys', { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profileId, label: 'Concurrent fixture' }) });
+    for (let i = 0; i < 4; i++) expect((await create()).status).toBe(201);
+    const responses = await Promise.all([create(), create()]);
+    expect(responses.map(response => response.status).sort()).toEqual([201, 409]);
+    expect(await t.sql`SELECT id FROM agent_keys WHERE profile_id=${profileId} AND revoked_at IS NULL`).toHaveLength(5);
+  });
+
   it("acts as its agent, and as nothing else", async () => {
     const owner = await seedAccount("Ari");
     const agentId = await seedAgentFor(owner, "marketing-agent");

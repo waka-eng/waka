@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {and,asc,desc,eq,gte,inArray,sql} from 'drizzle-orm';
-import {backgroundJobs,conversationMessages,conversationReplyRequests,conversations,generationRevisions,inspirationEmbeddings,profiles,type BackgroundJob,type ConversationReference} from '../db/index.js';
+import {backgroundJobs,conversationMessages,conversationReplyRequests,conversations,generationRevisions,inspirationEmbeddings,inspirationRevisions,profiles,type BackgroundJob,type ConversationReference} from '../db/index.js';
 import type {getDb} from './db.js';
 import {CONVERSATION_LIMITS,conversationHash,conversationMemory,conversationRepliesEnabled,currentConversationReferences,currentConversationReferenceGroups,memoryProfiles,readPerspectiveContext,conversationPromptSources,type ConversationMemory} from './conversation-context.js';
 import {getDefaultModelProvider,type ConversationReplyInput} from './model-provider.js';
@@ -101,8 +101,13 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
   const window=conversationReplyWindow(projected),history=window.history,searchQuery=window.searchQuery;
   const contextChanged=messages.length>8||window.cut||projected.some(row=>row.memoryChanged);
   let retrievalTrace:ConversationRetrievalTrace|undefined;
-  const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,searchQuery,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]},sources=[...context.principles,...context.reading,...context.inspirations];
-  const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));
+  const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,searchQuery,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]};
+  const [profile]=await db.select({locale:profiles.preferredLocale,type:profiles.type}).from(profiles).where(eq(profiles.id,profileId));
+  // New chats belong to their selected profile. `mine` means that profile's
+  // memory; when it is an agent, its work must not become the human's biography.
+  const sources=[...context.principles,...context.reading,...context.inspirations]
+    .map(source=>profile?.type==='agent'?{...source,owner:'agent' as const}:source);
+  const perspective=profile?.type==='agent'?'agent':memory.perspective;
   /* Pinning a keep into `sources` puts it in front of the model; pointing
    * `focusSourceNumber` at it is what tells the model that THIS is the one the
    * person is talking about. Without the second half, "the agent can read it"
@@ -125,7 +130,7 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     sources.findIndex(source=>source.kind==='principle'&&source.id===conversation.initialPrincipleId),
     sources.findIndex(source=>source.kind==='inspiration'&&source.id===conversation.initialInspirationId),
   ].find(index=>index>=0)??-1;
-  const input:ConversationReplyInput={...(memory.perspective!=='mine'?{perspective:memory.perspective}:{}),preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
+  const input:ConversationReplyInput={...(perspective!=='mine'?{perspective}:{}),preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
   return {input,searchQuery,sources,memory,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){
@@ -257,7 +262,28 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
   catch{await finish('failed','provider_failed');return;}
   try{await db.transaction(async tx=>{
     const [conversation]=await tx.select().from(conversations).where(and(eq(conversations.profileId,job.profileId),eq(conversations.id,id))).for('update');
-    if(!conversation||conversation.deletedAt)return;await lockMemory(tx,job.profileId);await beforeCommit(tx);
+    if(!conversation||conversation.deletedAt)return;
+    await lockMemory(tx,job.profileId);
+    // The final proof and write must serialize with every memory actually
+    // selected by this chat. Do not hold these locks across provider calls,
+    // or wait back on an agent editor that may already own a source row.
+    const memory=await conversationMemory(tx,job.profileId,conversation);
+    for(const profileId of memoryProfiles(memory).filter(id=>id!==job.profileId)){
+      const [revision]=await tx.select({profileId:generationRevisions.profileId}).from(generationRevisions)
+        .where(eq(generationRevisions.profileId,profileId)).for('update',{noWait:true});
+      if(!revision)throw new Error('Conversation memory is unavailable');
+    }
+    // Raw captures can enter chat before they have any signal evidence, so
+    // their edits need not advance the profile's generation revision yet.
+    // Lock the selected captures' own material revisions as well.
+    const sourceIds=[...new Set(work.sources.filter(source=>source.kind==='inspiration').map(source=>source.id))];
+    if(sourceIds.length){
+      const rows=await tx.select({id:inspirationRevisions.inspirationId}).from(inspirationRevisions)
+        .where(and(inArray(inspirationRevisions.profileId,memoryProfiles(memory)),inArray(inspirationRevisions.inspirationId,sourceIds)))
+        .orderBy(asc(inspirationRevisions.profileId),asc(inspirationRevisions.inspirationId)).for('share',{noWait:true});
+      if(rows.length!==sourceIds.length)throw new Error('Conversation sources are unavailable');
+    }
+    await beforeCommit(tx);
     const [request]=await tx.select().from(conversationReplyRequests).where(and(eq(conversationReplyRequests.profileId,job.profileId),eq(conversationReplyRequests.id,requestId))).for('update');
     if(!request||request.status!=='running')return;
     const current=request.userMessageId?await inputFor(tx,job.profileId,id,request.userMessageId,queryVector):null;

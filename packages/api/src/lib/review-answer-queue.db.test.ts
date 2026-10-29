@@ -143,6 +143,15 @@ it('names only existing principles with current owned support from this review',
     await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id,statement_revision,material_revision)
       VALUES(${f.profileId},${f.profileId},${signal.id},${source.id},1,1)`;signalIds.push(signal.id);
   }
+  // A demonstrated Principle needs active signals, each with three independent
+  // origins. The existing review/raw witness supplies the first one.
+  for(const signalId of signalIds){
+    for(let i=0;i<2;i++){
+      const [source]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},${`Another independent context ${i} for ${signalId}`}) RETURNING id`;
+      await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id) VALUES(${f.profileId},${f.profileId},${signalId},${source.id})`;
+    }
+    await t.sql`UPDATE signals SET status='active' WHERE id=${signalId}`;
+  }
   const [principle]=await t.sql`INSERT INTO principles(profile_id,statement,type,origin,rank) VALUES(${f.profileId},'An existing supported principle','maxim','declared',0) RETURNING id`;
   for(const signalId of signalIds)await t.sql`INSERT INTO principle_signals(profile_id,principle_id,signal_id,statement_revision,principle_statement_revision)
     VALUES(${f.profileId},${principle.id},${signalId},1,1)`;

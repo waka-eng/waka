@@ -153,16 +153,16 @@ describe("citations are checked against what the profile holds", () => {
 
   /**
    * A hallucinated id would otherwise be written as a foreign key and fail the
-   * insert, taking the whole refresh with it — one invented citation must not
-   * cost someone their regeneration.
+   * insert. Reject its whole entry while allowing other valid entries in
+   * the same proposal to proceed.
    */
-  it("drops an invented citation rather than writing it", () => {
+  it("rejects an entry with an invented citation rather than salvaging its remaining references", () => {
     const result = validateSynthesizedEntries(
       [{ type: "pattern", body: "Half-grounded.", citedSignalIds: ["signal-a", "signal-zzz"] }],
       owned,
     );
 
-    expect(result.entries[0]!.citedSignalIds).toEqual(["signal-a"]);
+    expect(result.entries).toEqual([]);
     expect(result.droppedCitations).toBe(1);
   });
 });

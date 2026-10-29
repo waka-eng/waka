@@ -210,12 +210,14 @@ describe('pending support is not current proof', () => {
     const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${f.profileId}, 'A quiet walk helps me choose') RETURNING id`;
     const provider = { ...supported,
       extractSignalCandidates: async () => ({ statements: [{ statement: 'Quiet walking helps me choose', quote: 'A quiet walk helps me choose' }] }),
+      judgeSignalMatch: vi.fn(async () => ({ relation: 'same' as const })),
       reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => ({ entries: [{ type: 'hypothesis', body: 'Quiet walking is a current thread', citedSignalIds: input.signals.map((signal) => signal.id) }] }),
     } as unknown as ModelProvider;
     const outcome = await deriveSignalsForInspiration({ inspirationId: source.id as string, reason: 'created' }, {
       db: t.db as never, modelProvider: provider, embeddingClient: { model, embed: async () => vector },
     });
     expect(outcome.matchedSignalIds).toEqual([f.signalId]);
+    expect(provider.judgeSignalMatch).toHaveBeenCalledOnce();
     expect((await t.sql`SELECT statement_revision::text FROM signals WHERE id = ${f.signalId}`)[0].statement_revision).toBe('2');
     expect((await t.sql`SELECT payload FROM background_jobs WHERE type::text = 'review_signal_support'`)[0].payload)
       .toEqual({ inspirationId: f.sourceId });

@@ -26,11 +26,16 @@ import {recordModelUsage} from './model-usage.js';
 
 export const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-/** The default for every generation task (owner request, 2026-10-22).
+/** The shared text-task default (owner request, 2026-10-22).
+    Top of Mind synthesis and review have their own explicit model below.
     Pin the October 17 V4.1 snapshot, not a floating `-latest` alias. A model
     change is an owner decision with verification, never a silent upgrade. */
 export const OPENROUTER_GENERATION_MODEL =
   process.env.OPENROUTER_GENERATION_MODEL ?? "deepseek/deepseek-v4.1-flash-1017";
+
+/** Owner choice: Top of Mind synthesis and review use Terra (2026-10-29).
+ * Each task retains its own override. */
+export const OPENROUTER_TOP_OF_MIND_MODEL = "openai/gpt-6.1-terra";
 
 export function getOpenRouterApiKey(): string | null {
   const key = process.env.OPENROUTER_API_KEY?.trim();
@@ -51,12 +56,14 @@ export function buildOpenRouterHeaders(apiKey: string): Record<string, string> {
 /** The OpenAI-shaped chat request this transport sends. */
 export interface OpenRouterChatRequest {
   model: string;
-  messages: Array<{ role: "system" | "user"; content: string }>;
+  messages: Array<{ role: "system" | "user"; content: string | Array<
+    { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+  > }>;
   temperature?: number;
   max_tokens?: number;
   /** OpenRouter's unified reasoning control; providers that cannot honor it
       ignore it, which is the behavior we want */
-  reasoning?: { enabled?: boolean; effort?: 'low'; exclude?: boolean };
+  reasoning?: { enabled?: boolean; effort?: 'low' | 'medium'; exclude?: boolean };
   provider?:{data_collection?:'deny';zdr?:true};
   response_format?:
     | { type: "json_object" }
@@ -114,11 +121,20 @@ export function openRouterPrivacyPreferences(){
   return {...(collection==='deny'||zdr==='1'?{data_collection:'deny' as const}:{}),...(zdr==='1'?{zdr:true as const}:{})};
 }
 
+/** A status-only failure lets media adapters retain their retry policy. */
+export class OpenRouterHttpError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'OpenRouterHttpError';
+  }
+}
+
 export async function callOpenRouter(
   request: OpenRouterChatRequest,
   label: string,
+  options: { apiKey?: string; fetchFn?: typeof fetch } = {},
 ): Promise<unknown | null | typeof MODEL_DECLINED> {
-  const apiKey = getOpenRouterApiKey();
+  const apiKey = options.apiKey ?? getOpenRouterApiKey();
   if (!apiKey) {
     throw new Error("OpenRouter API key is not configured (OPENROUTER_API_KEY).");
   }
@@ -128,7 +144,7 @@ export async function callOpenRouter(
   /* one quiet line per call while the road is new — which task, which model */
   console.log(`[openrouter] ${label} → ${request.model}`);
   const started=performance.now();let response:Response;
-  try{response=await fetchModelWithTimeout(fetch, OPENROUTER_CHAT_URL, {
+  try{response=await fetchModelWithTimeout(options.fetchFn ?? fetch, OPENROUTER_CHAT_URL, {
     method: "POST",
     headers: buildOpenRouterHeaders(apiKey),
     body: JSON.stringify(dispatched),
@@ -136,11 +152,12 @@ export async function callOpenRouter(
 
   if (!response.ok) {
     const billing=await response.clone().json().catch(()=>null);recordModelUsage('openrouter',label,billing,performance.now()-started,'http_error');
-    throw new Error(
+    throw new OpenRouterHttpError(
       formatSafeGeminiError(
         `OpenRouter ${label} failed`,
         await safeGeminiErrorDetails(response),
       ),
+      response.status,
     );
   }
 

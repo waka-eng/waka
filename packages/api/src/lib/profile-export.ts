@@ -206,7 +206,8 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
        keeps (found in review, 2026-10-15). */
     /* Only what is still on the shelf: a copy past its month is gone, even
        if no sweep has reached it yet. */
-    deletedInspirations: await db.select().from(deletedInspirations).where(and(eq(deletedInspirations.profileId, profileId), gte(deletedInspirations.deletedAt, deletedShelfCutoff(new Date())))).orderBy(asc(deletedInspirations.deletedAt), asc(deletedInspirations.id)),
+    deletedInspirations: (await db.select().from(deletedInspirations).where(and(eq(deletedInspirations.profileId, profileId), gte(deletedInspirations.deletedAt, deletedShelfCutoff(new Date())))).orderBy(asc(deletedInspirations.deletedAt), asc(deletedInspirations.id)))
+      .map(row => ({ ...row, personalRevision: row.personalRevision.toString(), publicRevision: row.publicRevision.toString() })),
     /* A candidate past its week has lapsed whether or not the basket was
        opened since, so its words are not exported as if they were waiting. */
     harvestCandidates: (await db.select({ id: harvestCandidates.id, text: harvestCandidates.text, title: harvestCandidates.title, context: harvestCandidates.context,

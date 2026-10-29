@@ -10,6 +10,14 @@ it('records precise returned cost and tokens without private provider fields',()
   expect(result).toMatchObject({Stage:'development',Provider:'openrouter',operation:'conversation',CostUsd:.004,UnpricedRequests:0,inputTokens:500,outputTokens:30,ModelRequests:1});
   expect(JSON.stringify(result)).not.toMatch(/PRIVATE_OUTPUT|PRIVATE_ID|choices/);
 });
+it('records transcription usage and classifies image calls without storing media or transcripts',()=>{
+  const write=vi.spyOn(process.stdout,'write').mockImplementation(()=>true);
+  recordModelUsage('openrouter','audio transcription',{text:'PRIVATE_TRANSCRIPT',usage:{cost:.00035,input_tokens:100,output_tokens:20}},50,'received');
+  expect(JSON.parse(write.mock.calls[0][0] as string)).toMatchObject({operation:'audio_transcription',CostUsd:.00035,inputTokens:100,outputTokens:20});
+  expect(write.mock.calls[0][0]).not.toContain('PRIVATE_TRANSCRIPT');
+  recordModelUsage('openrouter','image description',null,10,'unknown');
+  expect(JSON.parse(write.mock.calls[1][0] as string)).toMatchObject({operation:'image_description',UnpricedRequests:1});
+});
 it.each([{}, {usage:{cost:-1}},{usage:{cost:'0.004'}}])('missing or invalid cost stays explicitly unpriced %#',body=>{
   const write=vi.spyOn(process.stdout,'write').mockImplementation(()=>true);recordModelUsage('openrouter','PRIVATE_LABEL',body,100,'received');
   const result=JSON.parse(write.mock.calls[0][0] as string);expect(result.UnpricedRequests).toBe(1);expect(result).not.toHaveProperty('CostUsd');expect(result.operation).toBe('other');

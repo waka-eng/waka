@@ -9,7 +9,7 @@
  * `profile_id`, the link matches (profile, conversation, staged message, id),
  * and once linked the composite FK holds the row to its message.
  */
-import { and, asc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, notInArray, or, sql } from 'drizzle-orm';
 import { attachments, deletedInspirations } from '../db/index.js';
 import type { getDb } from './db.js';
 import type { DeleteAttachmentObjects } from './attachment-sweep.js';
@@ -146,15 +146,18 @@ export function attachmentSearchText(list: ReadonlyArray<Pick<MessageAttachment,
  * Of these keys, the ones no remaining row names. Every door refuses a key
  * already attached (`assertAttachmentKeysUnused`), but rows written before
  * those checks may share one; a sweep must never take bytes a row still
- * shows.
+ * shows. Account erasure supplies the profiles it will remove, since their
+ * rows must remain inventoried until external deletion succeeds.
  */
-export async function unreferencedAttachmentKeys(db: Reader, keys: string[]) {
+export async function unreferencedAttachmentKeys(db: Reader, keys: string[], removedProfileIds: string[] = []) {
   const unique = [...new Set(keys.filter((key) => key.length > 0))];
   if (!unique.length) return [];
-  const held = new Set((await db.select({ s3Key: attachments.s3Key }).from(attachments).where(inArray(attachments.s3Key, unique)))
+  const held = new Set((await db.select({ s3Key: attachments.s3Key }).from(attachments).where(and(inArray(attachments.s3Key, unique),
+    removedProfileIds.length ? notInArray(attachments.profileId, removedProfileIds) : undefined)))
     .map((row) => row.s3Key));
   const copies = await db.select({ keys: sql<Array<string | null>>`jsonb_path_query_array(${deletedInspirations.attachments}, '$[*].s3Key')` }).from(deletedInspirations)
-    .where(or(...unique.map(key => sql`${deletedInspirations.attachments} @> ${JSON.stringify([{ s3Key: key }])}::jsonb`)));
+    .where(and(or(...unique.map(key => sql`${deletedInspirations.attachments} @> ${JSON.stringify([{ s3Key: key }])}::jsonb`)),
+      removedProfileIds.length ? notInArray(deletedInspirations.profileId, removedProfileIds) : undefined));
   for (const copy of copies) for (const key of copy.keys) if (key) held.add(key);
   return unique.filter((key) => !held.has(key));
 }

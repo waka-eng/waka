@@ -1,22 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as jobWakes from './lib/background-job-wake.js';
 import { handler, isScheduledEvent } from "./background-worker.js";
 import { sweepStaleStagedAttachments } from "./lib/conversation-attachments.js";
 import { sweepDeletedShelf } from "./lib/deleted-shelf.js";
-import { runBackgroundJobWorker,readBackgroundJobRecoveryState,settleAbandonedExhaustedLeases,hasNearTermBackgroundJobRetry,hasNearTermRequestedReading,type BackgroundJobRetryWake } from "./lib/queue.js";
+import { runBackgroundJobWorker,readBackgroundJobRecoveryState,settleAbandonedExhaustedLeases,sweepBackgroundJobRuns,hasNearTermBackgroundJobRetry,hasNearTermRequestedReading,type BackgroundJobRetryWake } from "./lib/queue.js";
 
-/** WHAT THIS MOCKS, AND WHY: `runBackgroundJobWorker` supplies completed pass
+/** WHAT THIS MOCKS, AND WHY (gate G6): `runBackgroundJobWorker` supplies completed pass
  * counts; `readBackgroundJobRecoveryState` supplies eligibility counts. SQL
- * eligibility and real claims are tested separately on disposable Postgres. */
+ * eligibility and real claims are tested separately on disposable Postgres.
+ * The job-wake helpers isolate Scheduler transport; their actual state queries
+ * and cancellation races are covered in background-job-wake.db.test.ts. */
 
 /** A pass over an empty queue: nothing taken, nothing pushed out of the way. */
 const IDLE_PASS = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
+
+vi.mock('./lib/background-job-wake.js', async original => ({
+  ...await original<typeof import('./lib/background-job-wake.js')>(),
+  armBackgroundJobLease: vi.fn(), cancelBackgroundJobLease: vi.fn(), cancelBackgroundJobWakes: vi.fn(),
+  prepareBackgroundJobWake: vi.fn(), recoverBackgroundJobWakes: vi.fn(), retireBackgroundJobWake: vi.fn(),
+}));
 
 vi.mock("./lib/queue.js", async original => ({
   ...await original<typeof import('./lib/queue.js')>(),
   runBackgroundJobWorker: vi.fn(),
   readBackgroundJobRecoveryState:vi.fn(),
   settleAbandonedExhaustedLeases:vi.fn(),
+  sweepBackgroundJobRuns:vi.fn(),
   hasNearTermBackgroundJobRetry:vi.fn(),
   hasNearTermRequestedReading:vi.fn(),
 }));
@@ -35,9 +45,17 @@ vi.mock("./lib/db.js", async original => ({
 }));
 
 beforeEach(() => {
+  vi.mocked(jobWakes.armBackgroundJobLease).mockReset().mockResolvedValue(true);
+  vi.mocked(jobWakes.cancelBackgroundJobLease).mockReset().mockResolvedValue(undefined);
+  vi.mocked(jobWakes.cancelBackgroundJobWakes).mockReset().mockResolvedValue(undefined);
+  vi.mocked(jobWakes.prepareBackgroundJobWake).mockReset().mockResolvedValue(false);
+  vi.mocked(jobWakes.recoverBackgroundJobWakes).mockReset().mockResolvedValue(undefined);
+  vi.mocked(jobWakes.retireBackgroundJobWake).mockReset().mockResolvedValue(undefined);
+
   vi.mocked(sweepStaleStagedAttachments).mockReset().mockResolvedValue(0);
   vi.mocked(sweepDeletedShelf).mockReset().mockResolvedValue(0);
   vi.mocked(settleAbandonedExhaustedLeases).mockReset().mockResolvedValue(0);
+  vi.mocked(sweepBackgroundJobRuns).mockReset().mockResolvedValue(0);
   // `mockReset` and not `clearAllMocks`, because the tests below queue
   // one-shot results with `mockResolvedValueOnce`. Clearing only forgets the
   // calls; an unconsumed one-shot survives into the next test and answers a
@@ -198,10 +216,12 @@ describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads"
     expect(sweepStaleStagedAttachments).not.toHaveBeenCalled();
     expect(sweepDeletedShelf).not.toHaveBeenCalled();
     expect(settleAbandonedExhaustedLeases, "never on the drain or recovery path").not.toHaveBeenCalled();
+    expect(sweepBackgroundJobRuns).not.toHaveBeenCalled();
     await handler(scheduled);
     expect(sweepStaleStagedAttachments).toHaveBeenCalledTimes(1);
     expect(sweepDeletedShelf).toHaveBeenCalledTimes(1);
     expect(settleAbandonedExhaustedLeases).toHaveBeenCalledTimes(1);
+    expect(sweepBackgroundJobRuns).toHaveBeenCalledTimes(1);
     expect(runBackgroundJobWorker).toHaveBeenCalledTimes(3);
   });
   it("a failed abandoned-lease settle never costs the other sweeps or the queue its pass", async () => {
@@ -231,5 +251,41 @@ describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads"
     expect(runBackgroundJobWorker).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith("[deleted-shelf-sweep] failed", "db down");
     warn.mockRestore();
+  });
+});
+
+describe('one-time recovery events', () => {
+  it('returns without a drain or follow-up scheduling for an invalid delivery', async () => {
+    await expect(handler({ mode: 'job_wake', wake: { profileId: 'stale' } })).resolves.toMatchObject({ claimed: 0, passes: 0 });
+    expect(runBackgroundJobWorker).not.toHaveBeenCalled(); expect(jobWakes.recoverBackgroundJobWakes).not.toHaveBeenCalled();
+  });
+  it('a stale valid delivery only repairs missing timers in its own profile without running models', async () => {
+    vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_ROLE', 'role'); vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_GROUP', 'group');
+    const wake = { kind: 'pending', profileId: '00000000-0000-4000-8000-000000000002',
+      runAfter: '2026-10-29T12:00:00.000000Z', token: '00000000-0000-4000-8000-000000000003' };
+    await expect(handler({ mode: 'job_wake', wake }, { invokedFunctionArn: 'worker' })).resolves.toMatchObject({ claimed: 0, passes: 0 });
+    expect(jobWakes.prepareBackgroundJobWake).toHaveBeenCalledExactlyOnceWith(wake);
+    expect(jobWakes.recoverBackgroundJobWakes).toHaveBeenCalledExactlyOnceWith('worker', wake.profileId);
+    expect(runBackgroundJobWorker).not.toHaveBeenCalled(); expect(jobWakes.retireBackgroundJobWake).not.toHaveBeenCalled();
+  });
+  it('a recovery batch only arms known work and does not run model jobs', async () => {
+    await handler({ mode: 'wake_recovery' }, { invokedFunctionArn: 'worker' });
+    expect(jobWakes.recoverBackgroundJobWakes).toHaveBeenCalledExactlyOnceWith('worker');
+    expect(runBackgroundJobWorker).not.toHaveBeenCalled();
+  });
+  it('uses exact scheduling instead of extra native retry pings when configured', async () => {
+    vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_ROLE', 'role'); vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_GROUP', 'group');
+    vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'worker');
+    vi.mocked(runBackgroundJobWorker).mockResolvedValueOnce({ ...IDLE_PASS, claimed: 1, retried: 1 }).mockResolvedValue(IDLE_PASS);
+    vi.mocked(hasNearTermBackgroundJobRetry).mockResolvedValue(true);
+    await expect(handler({ mode: 'enqueue' }, { invokedFunctionArn: 'worker' })).resolves.toMatchObject({ retried: 1 });
+    const options = vi.mocked(runBackgroundJobWorker).mock.calls[0]![0]!;
+    expect(options.onClaimed).toBeTypeOf('function'); expect(options.onSettled).toBeTypeOf('function');
+    const job = { id: 'job', payload: {} } as import('./db/index.js').BackgroundJob;
+    await options.onClaimed!(job); expect(jobWakes.armBackgroundJobLease).toHaveBeenCalledWith(job, 'worker');
+    await options.onSettled!(job); expect(jobWakes.cancelBackgroundJobLease).toHaveBeenCalledWith(job);
+    vi.mocked(jobWakes.armBackgroundJobLease).mockResolvedValue(false);
+    await expect(options.onClaimed!(job)).rejects.toMatchObject({ reason: 'support' });
+    expect(hasNearTermBackgroundJobRetry).not.toHaveBeenCalled();
   });
 });

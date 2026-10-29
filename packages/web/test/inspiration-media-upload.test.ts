@@ -1,7 +1,7 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/api` methods `presignAttachment`
  * and `uploadToPresignedUrl` supply network outcomes. The actual sequential
  * uploader and durable-receipt callbacks run; owned IndexedDB has its own suite. */
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { presignAttachment, uploadToPresignedUrl } from '../src/lib/api';
 import { uploadInspirationMedia } from '../src/lib/inspiration-media-upload';
 import { draftProblem } from '../src/lib/draft-problem';
@@ -13,6 +13,7 @@ beforeEach(() => {
   vi.mocked(presignAttachment).mockImplementation(async file => ({ profileId: 'owner', key: `objects/${file.filename}`, uploadUrl: 'https://objects.test/upload', expiresAt: '', headers: { 'Content-Type': file.contentType, 'Content-Length': String(file.size) } }));
   vi.mocked(uploadToPresignedUrl).mockResolvedValue(undefined);
 });
+afterEach(() => vi.useRealTimers());
 function fixture() {
   let media: InspirationDraftMedia[] = ['first', 'second', 'third'].map(id => ({ id, type: 'image', name: `${id}.png`, blob: new Blob(['photo'], { type: 'image/png' }) }));
   const controller = new AbortController();
@@ -62,4 +63,19 @@ it('stops before the next upload if making the first receipt durable fails', asy
 it('does not upload a selected file with a validation problem', async () => {
   const f = fixture(); await expect(f.run([{...f.media[0]!, validationError:'Too large'}])).rejects.toThrow('worldComposerFileNeedsAttention');
   expect(presignAttachment).not.toHaveBeenCalled(); expect(uploadToPresignedUrl).not.toHaveBeenCalled();
+});
+
+it('bounds a stalled transfer while retaining all bytes and making failure retryable', async () => {
+  vi.useFakeTimers(); const f = fixture(); let signal: AbortSignal | undefined;
+  vi.mocked(uploadToPresignedUrl).mockImplementationOnce((_url, _blob, _headers, current) => new Promise((_resolve, reject) => {
+    signal = current; current!.addEventListener('abort', () => reject(current!.reason), { once: true });
+  }));
+  const result = f.run().catch(error => error);
+  await vi.advanceTimersByTimeAsync(120_000);
+  expect(signal?.aborted).toBe(true);
+  expect(await result).toMatchObject({ message: 'worldComposerUploadFailed' });
+  expect(f.media[0]?.uploadError).toBe('worldComposerUploadFailed');
+  expect(f.media.every(item => item.blob?.size === 5 && !item.uploaded)).toBe(true);
+  expect(presignAttachment).toHaveBeenCalledOnce();
+  await f.run(); expect(f.media.every(item => item.uploaded && !item.uploadError)).toBe(true);
 });

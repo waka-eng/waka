@@ -5,6 +5,8 @@ const operations:Record<string,string>={
   'principle relation judgement':'principle_relation','principle grounding':'principle_grounding','declaration routing':'declaration',
   'reflection follow-up':'reflection','review question':'review_question','review derivation':'review_derivation',
   'embedding':'embedding',
+  'top-of-mind comparison':'top_of_mind_comparison',
+  'image description':'image_description','audio transcription':'audio_transcription',
 };
 const numeric=(n:unknown)=>typeof n==='number'&&Number.isFinite(n)&&n>=0?n:null;
 /** Numeric usage only. Unknown billing is never silently counted as free.
@@ -16,8 +18,8 @@ export function recordModelUsage(provider:'openrouter'|'gemini',label:string,bod
   const raw=provider==='openrouter'?data.usage:data.usageMetadata;
   const usage=raw&&typeof raw==='object'?raw as Record<string,unknown>:{};
   const cost=provider==='openrouter'?numeric(usage.cost):null;
-  const input=numeric(provider==='openrouter'?usage.prompt_tokens:usage.promptTokenCount);
-  const output=numeric(provider==='openrouter'?usage.completion_tokens:usage.candidatesTokenCount);
+  const input=numeric(provider==='openrouter'?(usage.prompt_tokens??usage.input_tokens):usage.promptTokenCount);
+  const output=numeric(provider==='openrouter'?(usage.completion_tokens??usage.output_tokens):usage.candidatesTokenCount);
   emitOperationalMetric({
     _aws:{Timestamp:Date.now(),CloudWatchMetrics:[{Namespace:'WAKA/ModelUsage',Dimensions:[['Stage','Provider']],Metrics:[
       {Name:'ModelRequests',Unit:'Count'},{Name:'UnpricedRequests',Unit:'Count'},...(cost!==null?[{Name:'CostUsd',Unit:'None'}]:[])]}]},

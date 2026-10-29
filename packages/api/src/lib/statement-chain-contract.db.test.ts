@@ -31,10 +31,9 @@ let seq = 0;
 const EMBEDDING_MODEL = "chain-contract-embedding";
 const NEAR_EMBEDDING = [1, 0, 0, 0];
 
-const neverCalledProvider = {
-  judgeSignalMatch: async () => {
-    throw new Error("identical embeddings never reach the judge band");
-  },
+// `judgeSignalMatch` confirms these fixture restatements have the same meaning.
+const matchingProvider = {
+  judgeSignalMatch: async () => ({ relation: 'same' }),
 } as unknown as ModelProvider;
 
 async function seedProfile(): Promise<string> {
@@ -62,7 +61,7 @@ async function derive(
       inspirationId: insp.id as string,
       candidates: [{ statement, reason: null, quote: null, quoteSource: null, relatedEvidence: [], embedding: NEAR_EMBEDDING }],
       embeddingModel: EMBEDDING_MODEL,
-      provider: neverCalledProvider,
+      provider: matchingProvider,
       preferredLocale: "en-US" as never,
       now: new Date(),
     });

@@ -10,17 +10,26 @@ export async function uploadInspirationMedia(input: {
   uploading: (id: string) => void;
   persist: (id: string, update: Pick<InspirationDraftMedia, 'uploaded' | 'uploadError'>) => Promise<void>;
 }) {
+  const submitted: InspirationDraftMedia[] = [];
   for (const item of input.media) {
     input.assertCurrent();
     if (item.validationError) throw new DraftProblem('worldComposerFileNeedsAttention');
-    if (!item.blob || item.uploaded) continue;
+    if (!item.blob || item.uploaded) { submitted.push(item); continue; }
     input.uploading(item.id);
     let uploaded: InspirationDraftMedia['uploaded'];
+    // Bound each transfer, including its presign. Its local bytes survive a
+    // timeout and retry gets a fresh ticket; completed earlier files remain.
+    const transfer = new AbortController();
+    const abort = () => transfer.abort(input.signal.reason);
+    if (input.signal.aborted) abort(); else input.signal.addEventListener('abort', abort, { once: true });
+    const deadline = setTimeout(() => transfer.abort(new DOMException('Upload timed out', 'TimeoutError')), 120_000);
     try {
-      const signed = await presignAttachment({ filename: item.name || 'attachment', contentType: item.blob.type, size: item.blob.size }, input.signal, { profile: input.profileId });
+      const signed = await presignAttachment({ filename: item.name || 'attachment', contentType: item.blob.type, size: item.blob.size }, transfer.signal, { profile: input.profileId });
       input.assertCurrent();
-      await uploadToPresignedUrl(signed.uploadUrl, item.blob, signed.headers, input.signal);
+      if (transfer.signal.aborted) throw transfer.signal.reason;
+      await uploadToPresignedUrl(signed.uploadUrl, item.blob, signed.headers, transfer.signal);
       input.assertCurrent();
+      if (transfer.signal.aborted) throw transfer.signal.reason;
       uploaded = { key: signed.key, contentType: item.blob.type, size: item.blob.size };
     } catch (reason) {
       input.assertCurrent();
@@ -37,8 +46,13 @@ export async function uploadInspirationMedia(input: {
          to "could not save" while the tile beside it said the upload failed.
          Every failure here is an upload failure; the original rides along. */
       throw Object.assign(new DraftProblem('worldComposerUploadFailed'), { cause: reason });
+    } finally {
+      clearTimeout(deadline);
+      input.signal.removeEventListener('abort', abort);
     }
     await input.persist(item.id, { uploaded, uploadError: undefined });
     input.assertCurrent();
+    submitted.push({ ...item, uploaded, uploadError: undefined });
   }
+  return submitted;
 }

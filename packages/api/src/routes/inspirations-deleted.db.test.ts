@@ -13,12 +13,12 @@ vi.mock('../lib/db.js',()=>({getDb:()=>state.db}));
 let t:TestDatabase,sequence=0;
 beforeEach(async()=>{t??=await createTestDatabase();await t.truncateAll();state.db=t.db;});
 afterAll(async()=>{await t?.cleanup();});
-async function fixture(options:{keyScoped?:boolean}={}){
+async function fixture(options:{keyScoped?:boolean;now?:()=>Date}={}){
   const [account]=await t.sql`INSERT INTO accounts(email) VALUES (${`shelf-${++sequence}@example.test`}) RETURNING id`;
   const [profile]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES (${account.id},'human','Keeper') RETURNING id`;
   const [source]=await t.sql`INSERT INTO inspirations(profile_id,text,kind,created_at) VALUES (${profile.id},'Small first moves','note','2026-03-01T10:00:00Z') RETURNING id`;
   await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer) VALUES (${profile.id},${source.id},'Why?','Because starting is the hard part')`;
-  const app=new Hono<AuthEnv>();app.route('/api/inspirations',createInspirationsRoutes({getDatabase:()=>t.db as never,authMiddleware:async(c,next)=>{
+  const app=new Hono<AuthEnv>();app.route('/api/inspirations',createInspirationsRoutes({getDatabase:()=>t.db as never,now:options.now,authMiddleware:async(c,next)=>{
     c.set('session',{sessionId:randomUUID(),...(options.keyScoped?{keyScoped:true}:{}),account:{id:account.id,email:'k@example.test'},profile:{id:profile.id,accountId:account.id,type:'human',name:'Keeper',preferredLocale:'en-US'}} as never);await next();
   }}));return {app,profileId:profile.id as string,id:source.id as string};
 }
@@ -189,4 +189,38 @@ it('resumes enrichment that was pending when an inspiration was deleted',async()
   const jobs=await t.sql`SELECT payload FROM background_jobs WHERE type='enrich_attachment' AND profile_id=${f.profileId}`;
   expect(jobs).toHaveLength(1);
   expect(jobs[0].payload).toMatchObject({attachmentId:attachment.id,inspirationId:f.id});
+});
+
+it('advances both revisions on repeated restores even when the clock goes backwards', async () => {
+  let at = new Date('2026-10-28T12:00:00Z');
+  const f = await fixture({ now: () => at });
+  await t.sql`DELETE FROM reflections WHERE inspiration_id=${f.id}`;
+  for (let round = 0; round < 3; round++) {
+    const [before] = await t.sql`SELECT personal_revision::text AS p, public_revision::text AS q
+      FROM inspiration_revisions WHERE inspiration_id=${f.id}`;
+    expect((await f.app.request(`/api/inspirations/${f.id}`, { method: 'DELETE' })).status).toBe(200);
+    expect((await f.app.request(`/api/inspirations/deleted/${f.id}/restore`, { method: 'POST' })).status).toBe(200);
+    const [after] = await t.sql`SELECT personal_revision::text AS p, public_revision::text AS q
+      FROM inspiration_revisions WHERE inspiration_id=${f.id}`;
+    expect(BigInt(after!.p)).toBeGreaterThan(BigInt(before!.p));
+    expect(BigInt(after!.q)).toBeGreaterThan(BigInt(before!.q));
+    const staleDelete = await f.app.request(`/api/inspirations/${f.id}`, { method: 'DELETE',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceRevision: before!.p }) });
+    expect(staleDelete.status).toBe(409);
+    if (round === 1) at = new Date(at.getTime() - 1_000);
+  }
+});
+it('restores above stored revisions larger than the clock and exports them without losing precision', async () => {
+  const f = await fixture();
+  const personal = '9007199254740993', publicRevision = '9007199254741003';
+  await t.sql`UPDATE inspiration_revisions SET personal_revision=${personal}::bigint,
+    public_revision=${publicRevision}::bigint WHERE inspiration_id=${f.id}`;
+  expect((await f.app.request(`/api/inspirations/${f.id}`, { method: 'DELETE' })).status).toBe(200);
+  const exported = JSON.parse(JSON.stringify(await assembleProfileExport(t.db as never, f.profileId)));
+  expect(exported.deletedInspirations[0]).toMatchObject({ personalRevision: personal, publicRevision });
+  expect((await f.app.request(`/api/inspirations/deleted/${f.id}/restore`, { method: 'POST' })).status).toBe(200);
+  const [after] = await t.sql`SELECT personal_revision::text AS p, public_revision::text AS q
+    FROM inspiration_revisions WHERE inspiration_id=${f.id}`;
+  expect(BigInt(after!.p)).toBeGreaterThan(BigInt(personal));
+  expect(BigInt(after!.q)).toBeGreaterThan(BigInt(publicRevision));
 });

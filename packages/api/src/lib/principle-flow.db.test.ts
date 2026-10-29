@@ -323,8 +323,9 @@ describe("principles across personal profiles", () => {
     await t.sql`UPDATE signals SET statement='The same repeated wording.' WHERE id IN ${t.sql(ids)}`;
     await t.sql`UPDATE signal_evidence e SET statement_revision=s.statement_revision FROM signals s WHERE s.id=e.signal_id AND s.profile_id=${profileId}`;
     await t.sql`UPDATE top_of_mind_entry_signals c SET statement_revision=s.statement_revision FROM signals s WHERE s.id=c.signal_id AND s.profile_id=${profileId}`;
-    const result=await refreshPrinciplesForProfile({profileId},{db:t.db as never,modelProvider:provider});
-    expect(result.minted).toBe(0);expect(result.dropped).toBe(1);
+    const result=await refreshPrinciplesForProfile({profileId},{db:t.db as never,modelProvider:{...provider,
+      distillPrinciples:async()=>{throw new Error('Duplicate patterns must stop before paid work');}}});
+    expect(result).toMatchObject({status:'below_bar',minted:0,dropped:0});
     expect(await t.sql`SELECT id FROM principles WHERE profile_id=${profileId}`).toHaveLength(0);
   });
 

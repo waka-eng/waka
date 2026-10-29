@@ -97,6 +97,7 @@ function bar(name: "SPAN" | "SIGNALS" | "TOM"): number {
 
 export interface CitationEvidence {
   signalId: string;
+  statement: string;
   /** Evidence timestamps of the signal itself. */
   evidenceAt: Date[];
   /** Distinct meaningful reading versions; no-change audits share their anchor. */
@@ -124,7 +125,8 @@ export function computeCitationEligibility(
   citations: CitationEvidence[],
   now: Date,
 ): EligibilityVerdict {
-  const distinctSignals = new Set(citations.map((row) => row.signalId)).size;
+  const distinctSignals = Math.min(new Set(citations.map(row=>row.signalId)).size,
+    new Set(citations.map((row) => row.statement.normalize('NFKC').trim().replace(/\s+/g,' ').toLowerCase())).size);
 
   const times = citations
     .flatMap((row) => row.evidenceAt)
@@ -188,12 +190,13 @@ export function promoteDecision(
 async function loadCitationEvidence(
   db: WakaDb | WakaTx,
   profileId: string,
-  signalIds: string[],
+  signalRows: Array<{id:string;statement:string}>,
 ): Promise<Map<string, CitationEvidence>> {
   const out = new Map<string, CitationEvidence>();
+  const signalIds=signalRows.map(row=>row.id);
   if (signalIds.length === 0) return out;
-  for (const id of signalIds) {
-    out.set(id, { signalId: id, evidenceAt: [], tomVersionIds: [] });
+  for (const row of signalRows) {
+    out.set(row.id, { signalId: row.id, statement:row.statement, evidenceAt: [], tomVersionIds: [] });
   }
   // Dated by the CAPTURE that witnesses it, not by when the link was noticed
   // — same rule as confidence and selection. The span describes the
@@ -315,7 +318,7 @@ export async function loadPrincipleMaterial(db: WakaDb | WakaTx, profileId: stri
     .from(signals).where(and(eq(signals.profileId, profileId), eq(signals.status, "active"),
       personalSignalReadable(profileId)));
   const activeSignals = rows;
-  const evidence = await loadCitationEvidence(db, profileId, activeSignals.map((row) => row.id));
+  const evidence = await loadCitationEvidence(db, profileId, activeSignals);
   return { activeSignals, evidence, groupProfile,
     preferredLocale: profile?.preferredLocale ?? "en-US",
     eligibility: computeCitationEligibility([...evidence.values()], new Date()) };
@@ -424,8 +427,7 @@ export async function refreshPrinciplesForProfile(
   let valid: PrincipleCandidate[] = [];
   for (const candidate of candidates) {
     const statement = candidate.statement.trim();
-    const cited = [...new Set(candidate.citedSignalIds)].filter((id) => activeIds.has(id));
-    const distinctStatements = new Set(cited.map(id=>distillInput.signals.find(row=>row.id===id)!.statement.normalize('NFKC').trim().replace(/\s+/g,' ').toLowerCase()));
+    const cited = [...new Set(candidate.citedSignalIds)];
     const verdict = computeCitationEligibility(
       cited.map((id) => evidence.get(id)!).filter(Boolean),
       now,
@@ -433,7 +435,7 @@ export async function refreshPrinciplesForProfile(
     if (
       statement.length === 0 ||
       statement.length > PRINCIPLE_MAX_STATEMENT_LENGTH ||
-      distinctStatements.size < bar("SIGNALS") ||
+      cited.some(id=>!activeIds.has(id)) ||
       !verdict.eligible
     ) {
       result.dropped += 1;
@@ -617,8 +619,17 @@ export async function promoteIfDemonstrated(
   principleId: string,
   now: Date,
 ): Promise<boolean> {
+  // Evidence belongs to this exact instruction and its entire citation set.
+  // Three surviving links cannot silently repair a fourth withdrawn link.
+  const [current] = await db
+    .select({ state: principles.state, unsupportedAt: principles.unsupportedAt,
+      supportCurrent:personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS) })
+    .from(principles)
+    .where(and(eq(principles.id, principleId),eq(principles.profileId,profileId)))
+    .limit(1);
+  if (!current?.supportCurrent) return false;
   const cited = await db
-    .select({ signalId: principleSignals.signalId })
+    .select({ id: signals.id, statement:signals.statement })
     .from(principleSignals)
     .innerJoin(signals, eq(signals.id, principleSignals.signalId))
     .where(and(eq(principleSignals.principleId, principleId), eq(signals.status, "active"),
@@ -626,15 +637,10 @@ export async function promoteIfDemonstrated(
   const evidence = await loadCitationEvidence(
     db,
     profileId,
-    cited.map((row) => row.signalId),
+    cited,
   );
   const verdict = computeCitationEligibility([...evidence.values()], now);
-  const [current] = await db
-    .select({ state: principles.state, unsupportedAt: principles.unsupportedAt })
-    .from(principles)
-    .where(eq(principles.id, principleId))
-    .limit(1);
-  if (!current || !verdict.eligible ||
+  if (!verdict.eligible ||
     (!promoteDecision(current.state, true) && current.unsupportedAt === null)) return false;
 
   const updated = await db
@@ -644,6 +650,7 @@ export async function promoteIfDemonstrated(
       unsupportedAt: null, heldSince: now, updatedAt: now,
     })
     .where(and(eq(principles.id, principleId), eq(principles.profileId, profileId),
+      personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS),
       or(eq(principles.state, "aspirational"), isNotNull(principles.unsupportedAt))))
     .returning({ id: principles.id });
   return updated.length > 0;
@@ -686,7 +693,7 @@ export async function reconcilePrinciplesAfterSignalLoss(
       // Read standing under the row lock: a committed human edit must be
       // observed before deciding whether automatic deletion is allowed.
       const [row] = await tx
-        .select()
+        .select({...getTableColumns(principles),supportCurrent:personalPrincipleSupportCurrent(input.profileId,PRINCIPLE_MIN_SIGNALS)})
         .from(principles)
         .where(and(eq(principles.id, principleId), eq(principles.profileId, input.profileId)))
         .for("update")
@@ -694,12 +701,12 @@ export async function reconcilePrinciplesAfterSignalLoss(
       if (!row) return;
 
       const cited = await tx
-        .select({ signalId: principleSignals.signalId })
+        .select({ id: signals.id, statement:signals.statement })
         .from(principleSignals)
         .innerJoin(signals, eq(signals.id, principleSignals.signalId))
         .where(and(eq(principleSignals.principleId, principleId), eq(signals.status, "active")));
-      const evidence = await loadCitationEvidence(tx, input.profileId, cited.map((c) => c.signalId));
-      const action = reconcileAction(row, computeCitationEligibility([...evidence.values()], now).eligible);
+      const evidence = await loadCitationEvidence(tx, input.profileId, cited);
+      const action = reconcileAction(row, row.supportCurrent && computeCitationEligibility([...evidence.values()], now).eligible);
       if (action === "keep") return;
 
       if (action === "demote") {

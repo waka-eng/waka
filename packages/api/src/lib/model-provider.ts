@@ -253,7 +253,11 @@ export interface TopOfMindSynthesisResult {
 /** Independent publication review, using only this profile's current sources. */
 export interface TopOfMindReviewInput {
   preferredLocale: SupportedLocale;
+  /** Evaluation-only comparison, disabled in ordinary refreshes pending the
+   * novelty gate. Entries start with the proposal, then the current reading. */
+  comparison?: { proposedCount: number };
   entries: Array<{
+    type?: TopOfMindSynthesisEntry['type'];
     body: string;
     belief?: string | null;
     prompt?: string | null;
@@ -269,6 +273,13 @@ export interface TopOfMindReviewResult {
     grounded: boolean;
     synthesized: boolean;
     supportingInspirationIds: string[];
+    /** Smallest opposite-reading set covering this entry's complete meaning.
+     * [] means uncovered. Required on both sides during an evaluation. */
+    coveredByIndices?: number[];
+    /** Whether the opposite reading's first accepted entry alone covers it. */
+    coveredByLeadingEntry?: boolean;
+    /** Index of the specific leading entry the comparison actually saw. */
+    leadingEntryIndex?: number;
   }>;
 }
 
@@ -297,9 +308,9 @@ export interface SignalMatchJudgementInput {
  * judging already used, brought down to layer 2: `same` attaches, and
  * `opposed` mints WITH an undirected `contradicts` relation so the dispute
  * is held on the record instead of dissolved by whichever statement came
- * second. `independent` is the conservative middle and every failure mode
- * lands there: a duplicate is visible and mergeable, a phantom opposition
- * manufactures a dispute the person never had.
+ * second. `independent` is an explicit verdict for genuine semantic
+ * uncertainty. Missing, malformed or declined answers throw instead of
+ * inventing a new pattern or silently overriding an owner dismissal.
  */
 export interface SignalMatchJudgement {
   relation: "same" | "independent" | "opposed";
@@ -427,11 +438,11 @@ export class DeclarationNotConsideredError extends Error {
  */
 /**
  * THE MODEL DECLINED — a considered refusal (a safety block, a content
- * filter), which is terminal: retrying the same material cannot help, so
- * callers keep their safe postures for it (extraction: nothing here;
- * judges: independent). Distinct from `null`, which means the road failed
- * and the attempt should be retried. The transport is the only layer that
- * can tell the two apart, so it says which one happened.
+ * filter). The transport distinguishes it from `null` (a failed request).
+ * Callers choose the safe outcome: extraction returns no candidates, while
+ * a relation/grounding operation requires a verdict and fails through the
+ * bounded queue rather than inventing one. A decline is never a semantic
+ * independent or unsupported verdict.
  */
 export const MODEL_DECLINED: unique symbol = Symbol("the model declined to answer");
 

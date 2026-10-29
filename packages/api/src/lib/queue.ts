@@ -212,6 +212,8 @@ export interface DrainBackgroundJobsOptions {
   /** Internal wake hint, never permission to claim. Rechecked after the drain
    * against the exact failed transition so later holds/deferrals invalidate it. */
   onTransientRetry?: (retry: BackgroundJobRetryWake) => void;
+  onClaimed?: (job: BackgroundJob) => Promise<void>;
+  onSettled?: (job: BackgroundJob) => Promise<void>;
   /**
    * Where the loop reads and writes its rows. Defaults to Postgres; a test
    * hands it a queue it can hold in memory, which is what makes the budget
@@ -809,7 +811,10 @@ async function scheduleNextPendingBackgroundJobDrain(): Promise<void> {
   const [next] = await getDb()
     .select({ runAfter: backgroundJobs.runAfter })
     .from(backgroundJobs)
-    .where(eq(backgroundJobs.status, "pending"))
+    // Include future deadlines, but only for work this worker can run.
+    // An unsupported/exhausted row must not create an immediate idle loop.
+    .where(and(eq(backgroundJobs.status, "pending"),
+      runnableBackgroundJobPredicate('infinity', undefined, 'background_jobs')))
     .orderBy(asc(backgroundJobs.runAfter))
     .limit(1);
   if (!next) return;
@@ -923,6 +928,7 @@ export async function drainBackgroundJobs(
     result.claimed += 1;
 
     try {
+      await options.onClaimed?.(job);
       const completion = await (options.processor ?? processBackgroundJob)(job);
       if (await store.markSucceeded(job, completion ?? null)) result.succeeded += 1;
     } catch (err) {
@@ -951,6 +957,8 @@ export async function drainBackgroundJobs(
         result.retried += 1;
         options.onTransientRetry?.({id:job.id,profileId:job.profileId,attempts:job.attempts,updatedAt:failedAt,runAfter:calculateBackoffRunAfter(job.attempts,failedAt)});
       }
+    } finally {
+      await options.onSettled?.(job);
     }
   }
 
@@ -1411,6 +1419,7 @@ function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string,
       (
         ${row}.status = 'pending'::background_job_status
         AND ${row}.run_after <= ${nowIso}::timestamptz
+        AND ${row}.attempts < ${row}.max_attempts
       )
       OR (
         ${row}.status = 'running'::background_job_status
@@ -1460,6 +1469,16 @@ export async function readBackgroundJobRecoveryState(database:Pick<ReturnType<ty
  */
 export const ABANDONED_LEASE_SECONDS = 24 * 60 * 60;
 const MAX_ABANDONED_LEASES_PER_SWEEP = 100;
+
+/** Retain operational claim history for two days. Called only by the existing
+ * daily maintenance event, never an idle timer or an ordinary enqueue. */
+export async function sweepBackgroundJobRuns(database: Pick<ReturnType<typeof getDb>, 'execute'> = getDb(), now = new Date()): Promise<number> {
+  const [row] = await database.execute<{ removed: number }>(sql`
+    WITH removed AS (DELETE FROM background_job_runs
+      WHERE started_at < ${new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString()}::timestamptz RETURNING 1)
+    SELECT count(*)::int AS removed FROM removed`);
+  return row?.removed ?? 0;
+}
 
 /**
  * Daily housekeeping only — never on the drain path. An abandoned final
@@ -1569,12 +1588,18 @@ async function readAccountModelUsage(
     SELECT
       count(*)::int AS started,min(meter.started_at) AS oldest
     FROM (
-      SELECT job.profile_id,job.started_at FROM background_jobs job WHERE job.type::text NOT IN ('derive_review_answer','generate_conversation_reply')
+      SELECT run.account_id,run.started_at FROM background_job_runs run
+      UNION ALL
+      -- Legacy/older-worker snapshots remain counted until their window closes.
+      -- A recorded claim is counted once, even when its source row is reused.
+      SELECT profile.account_id,job.started_at FROM background_jobs job JOIN profiles profile ON profile.id=job.profile_id
+        WHERE job.type::text NOT IN ('derive_review_answer','generate_conversation_reply')
         AND NOT ${retiredGroupWork(sql`job`)}
-      UNION ALL SELECT r.profile_id,r.started_at FROM review_model_runs r
-      UNION ALL SELECT c.profile_id,c.dispatched_at FROM conversation_reply_requests c WHERE c.dispatched_at IS NOT NULL
-    ) meter JOIN profiles AS profile ON profile.id=meter.profile_id
-    WHERE profile.account_id=${accountId}::uuid AND meter.started_at>=${since.toISOString()}::timestamptz
+        AND NOT EXISTS (SELECT 1 FROM background_job_runs run WHERE run.job_id=job.id AND run.started_at=job.started_at)
+      UNION ALL SELECT profile.account_id,r.started_at FROM review_model_runs r JOIN profiles profile ON profile.id=r.profile_id
+      UNION ALL SELECT profile.account_id,c.dispatched_at FROM conversation_reply_requests c JOIN profiles profile ON profile.id=c.profile_id WHERE c.dispatched_at IS NOT NULL
+    ) meter
+    WHERE meter.account_id=${accountId}::uuid AND meter.started_at>=${since.toISOString()}::timestamptz
   `);
 
   const [row] = rows as unknown as Array<{ started: number | string; oldest: Date | string | null }>;
@@ -1677,6 +1702,7 @@ async function settleRetiredGroupWorkInPlace(jobId: string, now: Date): Promise<
 async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Promise<ClaimedBackgroundJob | null> {
   const nowIso = now.toISOString();
   const rows = await getDb().execute(sql<BackgroundJob>`
+    WITH claimed AS (
     UPDATE background_jobs AS job
     SET
       status = 'running'::background_job_status,
@@ -1725,6 +1751,14 @@ async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Pro
       -- Retired room work is recognised at claim time (see retiredGroupJob).
       COALESCE((SELECT tenant.type::text = 'group' FROM profiles tenant
         WHERE tenant.id = job.profile_id), false) AS "tenantIsGroup"
+    ), recorded AS (
+      INSERT INTO background_job_runs(account_id,job_id,request_version,attempt,started_at)
+      SELECT profile.account_id,claimed.id,claimed."requestVersion",claimed.attempts,claimed."startedAt"
+      FROM claimed JOIN profiles profile ON profile.id=claimed."profileId"
+      WHERE profile.account_id IS NOT NULL
+        AND claimed.type::text NOT IN ('derive_review_answer','generate_conversation_reply')
+    )
+    SELECT * FROM claimed
   `);
 
   const result = rows as unknown as ClaimedBackgroundJob[];
@@ -1768,6 +1802,7 @@ async function markJobSucceeded(job: BackgroundJob, completion: BackgroundJobRes
  */
 async function holdBackgroundJob(job: BackgroundJob, until: Date, reason: 'support' | 'cadence' = 'cadence'): Promise<void> {
   await getDb().execute(sql`
+    WITH held AS (
     UPDATE background_jobs
     SET status = 'pending'::background_job_status,
         locked_at = NULL,
@@ -1783,6 +1818,12 @@ async function holdBackgroundJob(job: BackgroundJob, until: Date, reason: 'suppo
     WHERE id = ${job.id}::uuid AND status = 'running'
       AND locked_at = ${coerceNullableDate(job.lockedAt)?.toISOString() ?? null}::timestamptz
       AND attempts = ${job.attempts}
+    RETURNING id
+    )
+    DELETE FROM background_job_runs run WHERE run.job_id IN (SELECT id FROM held)
+      AND run.request_version=${job.requestVersion.toString()}::bigint
+      AND run.attempt=${job.attempts}
+      AND run.started_at=${coerceNullableDate(job.lockedAt)?.toISOString() ?? null}::timestamptz
   `);
 }
 

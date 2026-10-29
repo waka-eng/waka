@@ -1,0 +1,1812 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-10-29",
+  "qualityModel": "deepseek/deepseek-v4.1-flash-1017",
+  "comparisonEnabledInApp": false,
+  "corpusSha256": "67a38e14a68d2a65de173f53f89c17f9ec60013d763083894590e601eb8302d6",
+  "promptSourceSha256": "f7bfc964fa84b4de28b0aa0311535607133856e8d19575585b7ffb4459de4791",
+  "notes": [
+    "One measured pass per candidate, no prompt/label/threshold changes.",
+    "Quality model was held fixed; candidate override is test-only.",
+    "Costs are actual API telemetry, not projected production pricing.",
+    "Small synthetic sample; not population accuracy or deployed timings."
+  ],
+  "candidates": [
+    {
+      "model": "openai/gpt-4.1-mini",
+      "directCorrect": 11,
+      "directTotal": 14,
+      "originalCorrect": 11,
+      "originalTotal": 13,
+      "falseNovelty": [
+        "same-idea-split",
+        "same-idea-merged"
+      ],
+      "missedChange": [
+        "changed-time-scope"
+      ],
+      "protocolFailures": [],
+      "integrationCorrect": 1,
+      "integrationTotal": 3,
+      "sourceQualitySuitesPassed": 1,
+      "sourceQualitySuitesTotal": 2,
+      "gatePassed": false,
+      "requestCount": 22,
+      "comparisonRequestCount": 17,
+      "totalCostUsd": "0.005240316",
+      "comparisonCostUsd": "0.0047236",
+      "comparisonMeanCostUsd": "0.0002778588235294117647058823529",
+      "unpricedRequests": 0,
+      "comparisonMedianMs": 1167,
+      "comparisonMaxMs": 1662,
+      "cases": [
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "english-paraphrase",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "korean-paraphrase",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "citation-order",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "question-rephrasing",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "same-idea-split",
+          "expected": false,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "rejected-invention-is-not-novelty",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "label-alone",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "new-supported-tension",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "changed-leading-focus",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "changed-time-scope",
+          "expected": true,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "new-question",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "retired-focus",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "korean-new-tension",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "same-idea-merged",
+          "expected": false,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "name": "english-paraphrase",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "korean-paraphrase",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "citation-order",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "question-rephrasing",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "same-idea-split",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0,
+                1
+              ],
+              "byLeading": false
+            }
+          ]
+        },
+        {
+          "name": "rejected-invention-is-not-novelty",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "label-alone",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "new-supported-tension",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "changed-leading-focus",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                3
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 3,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": false
+            }
+          ]
+        },
+        {
+          "name": "changed-time-scope",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": false
+            }
+          ]
+        },
+        {
+          "name": "new-question",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            }
+          ]
+        },
+        {
+          "name": "retired-focus",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "korean-new-tension",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "same-idea-merged",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 2,
+              "coveredBy": [],
+              "byLeading": false
+            }
+          ]
+        }
+      ],
+      "integrationCases": [
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "english-paraphrase",
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expected": false,
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "new-question",
+          "changed": false,
+          "approved": [],
+          "expected": true,
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1-mini",
+          "name": "same-idea-merged",
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expected": false,
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "directCorrect": 13,
+      "directTotal": 14,
+      "originalCorrect": 13,
+      "originalTotal": 13,
+      "falseNovelty": [
+        "same-idea-merged"
+      ],
+      "missedChange": [],
+      "protocolFailures": [],
+      "integrationCorrect": 2,
+      "integrationTotal": 3,
+      "sourceQualitySuitesPassed": 2,
+      "sourceQualitySuitesTotal": 2,
+      "gatePassed": false,
+      "requestCount": 22,
+      "comparisonRequestCount": 17,
+      "totalCostUsd": "0.004679196",
+      "comparisonCostUsd": "0.0041632",
+      "comparisonMeanCostUsd": "0.0002448941176470588235294117647",
+      "unpricedRequests": 0,
+      "comparisonMedianMs": 776,
+      "comparisonMaxMs": 1405,
+      "cases": [
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "english-paraphrase",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "korean-paraphrase",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "citation-order",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "question-rephrasing",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "same-idea-split",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "rejected-invention-is-not-novelty",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            2
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "label-alone",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "new-supported-tension",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "changed-leading-focus",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "changed-time-scope",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "new-question",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "retired-focus",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "korean-new-tension",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "same-idea-merged",
+          "expected": false,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "name": "english-paraphrase",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "korean-paraphrase",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "citation-order",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "question-rephrasing",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "same-idea-split",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "rejected-invention-is-not-novelty",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "label-alone",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "new-supported-tension",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "changed-leading-focus",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                3
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 3,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "changed-time-scope",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            }
+          ]
+        },
+        {
+          "name": "new-question",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            }
+          ]
+        },
+        {
+          "name": "retired-focus",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "korean-new-tension",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "same-idea-merged",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1,
+                2
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        }
+      ],
+      "integrationCases": [
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "english-paraphrase",
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expected": false,
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "new-question",
+          "changed": true,
+          "approved": [
+            0,
+            1
+          ],
+          "expected": true,
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "google/gemini-2.5-flash",
+          "name": "same-idea-merged",
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expected": false,
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "model": "openai/gpt-4.1",
+      "directCorrect": 10,
+      "directTotal": 14,
+      "originalCorrect": 10,
+      "originalTotal": 13,
+      "falseNovelty": [
+        "same-idea-split",
+        "same-idea-merged"
+      ],
+      "missedChange": [
+        "changed-time-scope",
+        "new-question"
+      ],
+      "protocolFailures": [],
+      "integrationCorrect": 1,
+      "integrationTotal": 3,
+      "sourceQualitySuitesPassed": 1,
+      "sourceQualitySuitesTotal": 2,
+      "gatePassed": false,
+      "requestCount": 22,
+      "comparisonRequestCount": 17,
+      "totalCostUsd": "0.024714572",
+      "comparisonCostUsd": "0.024108",
+      "comparisonMeanCostUsd": "0.001418117647058823529411764706",
+      "unpricedRequests": 0,
+      "comparisonMedianMs": 890,
+      "comparisonMaxMs": 3172,
+      "cases": [
+        {
+          "model": "openai/gpt-4.1",
+          "name": "english-paraphrase",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "korean-paraphrase",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "citation-order",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "question-rephrasing",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "same-idea-split",
+          "expected": false,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "rejected-invention-is-not-novelty",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "label-alone",
+          "expected": false,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "new-supported-tension",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "changed-leading-focus",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "changed-time-scope",
+          "expected": true,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "new-question",
+          "expected": true,
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "retired-focus",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "korean-new-tension",
+          "expected": true,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "same-idea-merged",
+          "expected": false,
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "name": "english-paraphrase",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "korean-paraphrase",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "citation-order",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "question-rephrasing",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "same-idea-split",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0,
+                1
+              ],
+              "byLeading": false
+            }
+          ]
+        },
+        {
+          "name": "rejected-invention-is-not-novelty",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "label-alone",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "new-supported-tension",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "changed-leading-focus",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                3
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 3,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "changed-time-scope",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "new-question",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "retired-focus",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "korean-new-tension",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                2
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 1,
+              "coveredBy": [],
+              "byLeading": false
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        },
+        {
+          "name": "same-idea-merged",
+          "coverage": [
+            {
+              "index": 0,
+              "coveredBy": [
+                1,
+                2
+              ],
+              "byLeading": false
+            },
+            {
+              "index": 1,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            },
+            {
+              "index": 2,
+              "coveredBy": [
+                0
+              ],
+              "byLeading": true
+            }
+          ]
+        }
+      ],
+      "integrationCases": [
+        {
+          "model": "openai/gpt-4.1",
+          "name": "english-paraphrase",
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expected": false,
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "new-question",
+          "changed": false,
+          "approved": [
+            0,
+            1
+          ],
+          "expected": true,
+          "expectedIndices": [
+            0,
+            1
+          ]
+        },
+        {
+          "model": "openai/gpt-4.1",
+          "name": "same-idea-merged",
+          "changed": true,
+          "approved": [
+            0,
+            1,
+            2
+          ],
+          "expected": false,
+          "expectedIndices": [
+            0,
+            1,
+            2
+          ]
+        }
+      ]
+    }
+  ],
+  "totalCostUsd": "0.034634084"
+}
