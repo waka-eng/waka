@@ -31,12 +31,17 @@ client checkout. Public URLs become available when the web deployment finishes.
 
 ## Connection and access rules
 
-For personal memory, open **Settings → My profile · MCP**. Create a named
-personal API key, copy the setup prompt, and enter the key locally in your AI
-client. The prompt pins the human profile and uses key authentication; it
+For personal memory, open **Settings → My profile · MCP**. The **MCP setup**
+tab guides three steps: create or choose a personal key, connect the AI client
+with a setup prompt (manual instructions are secondary), and test with
+`waka_verify_connection`. Enter the key locally, never in chat. The prompt pins the human profile and uses key authentication; it
 does not use the broader personal browser-login session. After verification,
 the save prompt adds inspirations directly to My profile. Manage or revoke
-that key from the same page. Creating an agent profile is unnecessary.
+that key in the adjacent **API keys** tab. A key is a standing credential for
+apps and scripts as well as MCP; agent MCP can alternatively use browser sign-in.
+Creating an agent profile is unnecessary. The test reply proves the MCP binding;
+the manual activity refresh only reports the selected key’s last use. It does
+not label general API activity as MCP verification and does not poll.
 
 For agent memory, open **Settings → Agent profiles → the agent** and choose
 MCP connections or API keys. Copy the setup prompt first, or expand the manual steps. The instructions
