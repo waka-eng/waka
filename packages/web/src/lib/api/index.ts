@@ -9,6 +9,7 @@
  *   auth.ts                      auth.ts          /api/auth
  *   profiles.ts                  profiles.ts      /api/profiles
  *   sessions.ts                  sessions.ts      /api/sessions
+ *   profile-keys.ts              keeper-keys.ts, agent-keys.ts /api/keeper-keys, /api/agent-keys
  *   inspirations.ts              inspirations.ts  /api/inspirations   (layer 1)
  *   attachments.ts               attachments.ts   /api/attachments
  *   signals.ts                   signals.ts       /api/signals        (layer 2)
@@ -45,6 +46,8 @@
  * simply gone. THE ROUTES STAND, and that is deliberate: `DELETE
  * /api/agent-keys/:id` is the only way to retire the rows minted while
  * the secret was displayed, so it outlives its client.
+ * Profile key management is now restored in `profile-keys.ts`: personal
+ * keys under My profile, agent keys under the selected agent's settings.
  *
  * A TABLE THAT NAMES A DELETED FILE IS WORSE THAN NO TABLE, which is why
  * this is a fix and not a tidy-up: the rows survived the deletion of the

@@ -185,6 +185,13 @@ A keeper key can identify and verify its own binding through
 support MCP setup; they cannot start a login, mint credentials or administer
 profiles. Account and sibling memory remain inaccessible.
 
+Settings exposes these personal credentials under **My profile · MCP**, with
+creation, one-time secret display, setup and revocation. Setup pins the human
+profile and uses its keeper key, not an account-admin browser session. Direct
+MCP captures then belong to the person's stack; existing agent connections
+remain bound to their own stacks. Choosing `source: app` alone never changes
+the destination profile.
+
 Since 2026-10-15 the key has one more verb: it may **propose** sentences to
 the harvest basket (`POST /api/harvest`, below). Proposing is not deciding:
 reading the basket, keeping and letting go are `humanSessionsOnly`, so a

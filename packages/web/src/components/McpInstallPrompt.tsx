@@ -4,7 +4,7 @@ import { McpCopyBlock } from './McpCopyBlock';
 
 export function McpInstallPrompt({ locale, profile, apiUrl, packageOrigin, client, scope, authMethod, hideCopy = false, onCopied, onCopyFailed }: {
   locale: SupportedLocale;
-  profile: { id: string; name: string };
+  profile: { id: string; name: string; type?: 'human' | 'agent' };
   apiUrl: string;
   packageOrigin: string;
   client: McpClient;

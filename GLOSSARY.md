@@ -38,6 +38,7 @@ before it gets a name anywhere else.
 | An agent's memory owner | `profiles.type = agent` | Agent profile | each agent profile owns one separate agent memory | Agent profile | **today** |
 | A device or MCP client's access | `sessions.profile_id` | Connection | a connection acting as one profile; disconnecting preserves its memory | Profile-bound session | **today** |
 | An agent's standing credential | `agent_keys` | API key | access to one agent's memory until you revoke it | Agent API key | **today** |
+| A person's limited standing credential | `keeper_keys` | Personal API key | read your memory and add inspirations to My profile until you revoke it | Personal API key | **today** |
 | Native single-use sign-in handoff | `mobile_login_codes` | No new public name | finish signing in to your personal account | M2 implementation |
 | Decay / retirement | `dormant_at` | **setting** | a signal long unused sets like dusk | Decay / retirement policy | reserved |
 | Suppression (owner-refused pattern) | `dismissed_at`, `suppressions` — `anchor_signal_id`, `candidate_statement` | **refused ground** | WAKA will also set aside rewordings of this pattern | Suppression record (logged, reversible, deletes nothing) | **today** |

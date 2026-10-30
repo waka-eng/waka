@@ -4,22 +4,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { McpCopyBlock } from './McpCopyBlock';
 import { McpInstallPrompt } from './McpInstallPrompt';
 
-import { createAgentKey, fetchAgentKeys, revokeAgentKey, type ApiAgentKey } from '../lib/api/agent-keys';
+import { createProfileKey, fetchProfileKeys, revokeProfileKey, type ApiProfileKey, type KeyProfile } from '../lib/api/profile-keys';
 import { formatMessage, t, type SupportedLocale } from '../lib/locales';
 
 /** Mounted with the profile ID as its key. Secrets live only in this view. */
-export function AgentApiKeys({ profile, locale }: {
-  profile: { id: string; name: string };
+export function ProfileApiKeys({ profile, locale }: {
+  profile: KeyProfile & { name: string };
   locale: SupportedLocale;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const [client, setClient] = useState<McpClient>('claude');
-  const [keys, setKeys] = useState<ApiAgentKey[] | null>(null);
+  const personal = profile.type === 'human';
+  const [keys, setKeys] = useState<ApiProfileKey[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [label, setLabel] = useState('');
-  const [fresh, setFresh] = useState<(ApiAgentKey & { secret: string }) | null>(null);
+  const [fresh, setFresh] = useState<(ApiProfileKey & { secret: string }) | null>(null);
   const [copy, setCopy] = useState<'copied' | 'failed' | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const alive = useRef(true);
@@ -32,11 +33,11 @@ export function AgentApiKeys({ profile, locale }: {
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const rows = await fetchAgentKeys(profile.id);
+      const rows = await fetchProfileKeys(profile);
       if (alive.current) setKeys(rows);
     } catch { if (alive.current) setError(say('profileApiKeysLoadError')); }
     finally { if (alive.current) setLoading(false); }
-  }, [profile.id, say]);
+  }, [profile.id, profile.type, say]);
   useEffect(() => {
     alive.current = true; void load();
     return () => { alive.current = false; };
@@ -45,7 +46,7 @@ export function AgentApiKeys({ profile, locale }: {
     if (!label.trim() || busy) return;
     setBusy('create'); setError(''); setCopy(null);
     try {
-      const key = await createAgentKey(profile.id, label.trim());
+      const key = await createProfileKey(profile, label.trim());
       if (!alive.current) return;
       const { secret: _secret, ...summary } = key;
       setKeys(rows => [summary, ...(rows ?? [])]); setFresh(key); setLabel('');
@@ -55,7 +56,7 @@ export function AgentApiKeys({ profile, locale }: {
   const revoke = async (id: string) => {
     setBusy(id); setError('');
     try {
-      await revokeAgentKey(id);
+      await revokeProfileKey(profile, id);
       if (!alive.current) return;
       setKeys(rows => rows?.filter(key => key.id !== id) ?? null);
       if (fresh?.id === id) setFresh(null);
@@ -69,10 +70,10 @@ export function AgentApiKeys({ profile, locale }: {
   const install = mcpSetupCommands({ profile, apiUrl, packageOrigin, installed: false, client, scope: 'user' })[0]!;
   return <>
     <div className="waka-session-list-heading">
-      <h3>{formatMessage(locale, 'profileApiKeysForAgent', { name: profile.name })}</h3>
+      <h3>{personal ? say('profilePersonalMcpHeading') : formatMessage(locale, 'profileApiKeysForProfile', { name: profile.name })}</h3>
       <button type="button" className="waka-settings-erase" disabled={loading || busy !== null} onClick={() => void load()}>{say('profileConnectionsRefresh')}</button>
     </div>
-    <p className="waka-settings-note">{say('profileApiKeysHint')}</p>
+    <p className="waka-settings-note">{say(personal ? 'profilePersonalMcpHint' : 'profileApiKeysHint')}</p>
     <h4 className="waka-mcp-instruction-title">{say('profileApiKeysCreateStep')}</h4>
     <p className="waka-settings-note">{say('profileApiKeysCreateHint')}</p>
     {error ? <p className="waka-account-failed" role="alert">{error}</p> : null}
@@ -84,6 +85,7 @@ export function AgentApiKeys({ profile, locale }: {
       </label>
       <div className="waka-session-actions">
         <button type="button" className="waka-settings-erase" onClick={() => {
+          if (!navigator.clipboard?.writeText) { setCopy('failed'); return; }
           void navigator.clipboard.writeText(fresh.secret).then(() => setCopy('copied'), () => setCopy('failed'));
         }}>{say('profileApiKeysCopy')}</button>
         <button type="button" className="waka-settings-erase" onClick={() => { setFresh(null); setCopy(null); }}>{say('profileApiKeysSaved')}</button>
@@ -127,6 +129,11 @@ export function AgentApiKeys({ profile, locale }: {
           </li>
         </ol>
       </details>
+      {personal ? <>
+        <h4 className="waka-mcp-instruction-title">{say('profilePersonalMcpSaveTitle')}</h4>
+        <McpCopyBlock locale={locale} prompt copyLabel={say('profilePersonalMcpCopySave')}
+          text={formatMessage(locale, 'profilePersonalMcpSavePrompt', { name: profile.name, id: profile.id })} />
+      </> : null}
     </details>
     {keys && keys.length > 0 ? <>
       <h4 className="waka-mcp-instruction-title">{say('profileApiKeysActive')}</h4>

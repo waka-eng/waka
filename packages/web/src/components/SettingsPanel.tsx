@@ -32,9 +32,9 @@ import { McpInstallPrompt } from './McpInstallPrompt';
  * rather than in a commit nobody reads, because removing a feature's only
  * door is the kind of decision that should stay arguable:
  *
- *   Personal API keys and historical read grants remain outside this view.
- *   Agent API keys now live beside that agent's connections: creation is
- *   explicit, the secret is shown once, and every active key can be revoked.
+ *   Personal MCP keys live under My profile; agent keys live beside their
+ *   connections. Creation is explicit, secrets are shown once, and every
+ *   active key can be revoked. Historical read grants remain unexposed.
  *
  *   CONNECTIONS and THE READ RECORD — who you are connected to and who has
  *   read you. Both are about people-to-people reading, and the product has
@@ -81,7 +81,7 @@ import { McpInstallPrompt } from './McpInstallPrompt';
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ProfilePortrait } from './ProfilePortrait';
-import { AgentApiKeys } from './AgentApiKeys';
+import { ProfileApiKeys } from './ProfileApiKeys';
 
 import { ApiError } from "../lib/api";
 import {
@@ -120,7 +120,7 @@ export interface SettingsPanelProps {
 }
 
 /** The current Settings subpage; null is the overview. */
-type Open = null | "agents" | "sessions" | "danger";
+type Open = null | "personal" | "agents" | "sessions" | "danger";
 
 export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(props.locale, key), [props.locale]);
@@ -147,6 +147,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
      every time the gear is pressed would put a round trip behind a press
      whose usual purpose is to read an email address or sign out. */
   const [agents, setAgents] = useState<ApiOwnedProfile[] | null>(null);
+  const [personalProfile, setPersonalProfile] = useState<ApiOwnedProfile | null>(null);
   useEffect(() => {
     if (agents !== null) props.onAgentProfilesChange?.(agents);
   }, [agents, props.onAgentProfilesChange]);
@@ -168,7 +169,8 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   useEffect(() => { if (eraseAgent) erasePrompt.current?.focus(); }, [eraseAgent]);
   const [newAgent, setNewAgent] = useState("");
   useEffect(() => {
-    if (open !== "agents" || agents !== null) return;
+    if (open !== "agents" && open !== "personal") return;
+    if (open === "agents" ? agents !== null : personalProfile !== null) return;
     let current = true;
     setAgentLoadFailed(false);
     fetchProfiles()
@@ -177,10 +179,16 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
          offered to rename as a memory and to delete as one (audit f2afcbe2,
          desk/51). Deleting yourself is the account card's job, behind its
          own typed confirmation, not a two-press row here. */
-      .then((rows) => { if (current) setAgents(rows.filter((row) => row.type === "agent")); })
+      .then((rows) => {
+        if (!current) return;
+        const human = rows.find(row => row.type === 'human');
+        if (open === 'personal' && !human) throw new Error('Personal profile missing');
+        setPersonalProfile(human ?? null);
+        setAgents(rows.filter(row => row.type === 'agent'));
+      })
       .catch(() => { if (current) setAgentLoadFailed(true); });
     return () => { current = false; };
-  }, [open, agents, agentAttempt]);
+  }, [open, personalProfile, agents, agentAttempt]);
 
   const renameFlight = useRef<Promise<boolean> | null>(null);
   const saveAgentName = async (agent: ApiOwnedProfile, value = agentNames[agent.id] ?? agent.name) => {
@@ -260,7 +268,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             setConnectionProfile(null);
           }}><span aria-hidden="true">←</span></button> : null}
         <h2 ref={heading} tabIndex={-1}>{connectionProfile?.name ?? say(open === "agents" ? "profileAgentProfilesTitle"
-          : open === "sessions" ? "profileSessionsTitle" : open === "danger" ? "profileDelete" : "worldSettingsOpen")}</h2>
+          : open === "personal" ? "profilePersonalTitle" : open === "sessions" ? "profileSessionsTitle" : open === "danger" ? "profileDelete" : "worldSettingsOpen")}</h2>
       </header>
       <div className="waka-settings-content" key={open ?? "overview"}>
       {open === null ? <>
@@ -290,6 +298,14 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
         <span className="waka-account-failed" role="alert">{say("profileSaveError")}</span>
       ) : null}
       </> : null}
+
+      <Group id="personal" open={open} setOpen={setOpen} label={say('profilePersonalMcpTitle')}>
+        {personalProfile ? <ProfileApiKeys key={personalProfile.id} locale={props.locale} profile={personalProfile} />
+          : agentLoadFailed || agents !== null ? <>
+            <p className="waka-account-failed" role="alert">{say('profilePersonalMcpLoadError')}</p>
+            <button type="button" className="waka-settings-erase" onClick={() => setAgentAttempt(attempt => attempt + 1)}>{say('worldRetry')}</button>
+          </> : <p className="waka-settings-note" role="status">{say('worldInspirationsLoad')}</p>}
+      </Group>
 
       <Group id="agents" open={open} setOpen={setOpen} label={say("profileAgentProfilesTitle")}>
         <p className="waka-settings-note">{say("profileAgentProfilesHint")}</p>
@@ -473,7 +489,7 @@ function ProfileConnections({ locale, profile }: { locale: SupportedLocale; prof
       <button type="button" aria-pressed={view === 'keys'} onClick={() => { setView('keys'); setConfirm(null); }}>{say('profileApiKeysTitle')}</button>
     </div> : null}
     {error ? <span className="waka-account-failed" role="alert">{error}</span> : null}
-    {view === 'keys' && profile ? <AgentApiKeys key={profile.id} locale={locale} profile={profile} />
+    {view === 'keys' && profile ? <ProfileApiKeys key={profile.id} locale={locale} profile={profile} />
       : (view === 'setup' || view === 'verify') && profile ? <SessionSetup key={view} locale={locale} profile={profile}
         connection={view === 'verify' ? testSession : undefined}
         onDone={() => { setView('connections'); void load(); }} /> : <>

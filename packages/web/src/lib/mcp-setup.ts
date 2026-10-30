@@ -9,7 +9,7 @@ const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
 export const mcpPackageUrl = (origin: string) => new URL(`/downloads/${distribution.filename}`, origin).href;
 
 type SetupTarget = {
-  profile: { id: string; name: string }; apiUrl: string; client: McpClient; scope: McpScope;
+  profile: { id: string; name: string; type?: 'human' | 'agent' }; apiUrl: string; client: McpClient; scope: McpScope;
   packageOrigin?: string;
 };
 
@@ -21,6 +21,7 @@ export function mcpSetupPrompt(options: SetupTarget & { locale: SupportedLocale;
   const details = JSON.stringify({
     packageUrl, packageVersion: distribution.version, minimumNodeVersion: 20,
     apiUrl, profileId: profile.id, profileName: profile.name, serverName: `waka-${profile.id}`,
+    ...(profile.type ? { profileType: profile.type } : {}),
     client: mcpClientName(client),
     scope: scope === 'project' ? 'current project only' : client === 'codex' && scope === 'launch' ? 'one Codex CLI launch only' : 'user configuration across sessions',
     persistConfiguration: client !== 'codex' || scope !== 'launch',
@@ -29,7 +30,9 @@ export function mcpSetupPrompt(options: SetupTarget & { locale: SupportedLocale;
     ...(authMethod === 'browser' ? { login: { command: 'npx', args: [...args, 'waka-login', apiUrl,
       '--profile', profile.id, '--device', `${mcpClientName(client)} · ${profile.name}`] } } : {}),
   }, null, 2);
-  const auth = formatMessage(locale, authMethod === 'key' ? 'profileMcpPromptKeyAuth' : 'profileMcpPromptBrowserAuth', {
+  const auth = formatMessage(locale, authMethod === 'key'
+    ? profile.type === 'human' ? 'profileMcpPromptPersonalKeyAuth' : 'profileMcpPromptKeyAuth'
+    : 'profileMcpPromptBrowserAuth', {
     home: `~/.waka/profiles/${encodeURIComponent(profile.id)}`,
   });
   return formatMessage(locale, 'profileMcpSetupPrompt', { client: mcpClientName(client), details, auth });

@@ -31,8 +31,15 @@ client checkout. Public URLs become available when the web deployment finishes.
 
 ## Connection and access rules
 
-Set up an agent from Settings → Agent profiles → the agent → Connections & API
-keys. Copy the setup prompt first, or expand the manual steps. The instructions
+For personal memory, open **Settings → My profile · MCP**. Create a named
+personal API key, copy the setup prompt, and enter the key locally in your AI
+client. The prompt pins the human profile and uses key authentication; it
+does not use the broader personal browser-login session. After verification,
+the save prompt adds inspirations directly to My profile. Manage or revoke
+that key from the same page. Creating an agent profile is unnecessary.
+
+For agent memory, open **Settings → Agent profiles → the agent** and choose
+MCP connections or API keys. Copy the setup prompt first, or expand the manual steps. The instructions
 pin the profile ID, give each browser login its own `WAKA_HOME`, and use a
 profile-specific MCP server name. Public downloads require no repository access.
 
