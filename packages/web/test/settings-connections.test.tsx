@@ -200,193 +200,83 @@ it("hides expired sessions from the list and counts in Korean", async () => {
   expect(host.querySelector('button[aria-label="Work laptop 연결 해제"]')).toBeNull();
 });
 
-it("guides installation, browser consent and a real MCP check as separate steps with copyable commands", async () => {
+it('sets up an agent with one prompt, no wizard or key instructions', async () => {
   await openConnections();
-  await act(async () => button("Set up MCP").click());
-  await act(async () => button('Install manually instead').click());
-  expect(host.textContent).toContain("Step 1 of 3");
-  expect(host.querySelector("pre")?.textContent).toContain("npx --yes --package");
-  expect(host.textContent).not.toContain("--device");
-  await act(async () => button("Copy command").click());
-  expect(copied[0]).toContain("waka-mcp --version");
-  expect(host.querySelector('[role="status"]')?.textContent).toBe("Copied");
-  await act(async () => button("Next: Sign in").click());
-  expect(host.textContent).toContain("Step 2 of 3");
-  expect(host.textContent).toContain("Connect as profile");
-  expect(host.textContent).toContain("Read and write only this agent’s own memory");
-  await act(async () => button("Copy command").click());
-  expect(copied[1]).toContain(`waka-login '${window.location.origin}'`);
-  expect(copied[1]).toContain("--device 'Claude Code · noah'");
-  expect(copied[1]).toContain("--profile 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'");
-  await act(async () => button("Next: Connect client").click());
-  expect(host.textContent).toContain("Step 3 of 3");
-  expect(host.querySelector("pre")?.textContent).toContain("claude mcp add");
-  expect(host.textContent).toContain("Use waka_verify_connection");
-  expect(host.textContent).toContain('In Terminal');
-  expect(host.textContent).toContain('In Claude Code');
-  expect(host.textContent).toContain('Back in WAKA');
-  await act(async () => button('Copy test prompt').click());
-  expect(copied.at(-1)).toContain('profileId "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"');
-
-  rows.push({ ...session("new-session"), deviceLabel: "Claude Code · noah",
-    profile: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'noah', type: 'agent' }, verifiedAt: new Date(Date.now() + 1000).toISOString() });
-  await act(async () => button("Check connection").click());
-  await act(async () => button("View connections").click());
-  expect(host.querySelectorAll('.waka-session-card')).toHaveLength(2);
-  expect(host.textContent).toContain("Claude Code · noah");
-  expect(host.querySelector('button[aria-pressed="true"]')?.textContent).toBe("MCP connections");
-});
-
-it("lets existing installations reconnect with a pinned server entry without cloning again", async () => {
-  await openConnections();
-  await act(async () => button("Set up MCP").click());
-  await act(async () => button('Install manually instead').click());
-  await act(async () => button("Reconnect an existing setup").click());
-  expect(host.textContent).toContain("Step 1 of 2");
-  expect(host.querySelector("pre")?.textContent).toContain("waka-login");
-  await act(async () => button("Next: Connect client").click());
-  expect(host.textContent).toContain("Step 2 of 2");
-  expect(host.querySelector("pre")?.textContent).toContain("WAKA_PROFILE_ID");
-  expect(host.querySelector("pre")?.textContent).toContain("claude mcp remove --scope user 'waka-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'");
-  expect(host.querySelector("pre")?.textContent).toContain("WAKA_API_KEY=''");
-  expect(host.textContent).toContain("Restart Claude Code");
-});
-
-it('generates separate pinned login and MCP commands for Noah and anotherone',async()=>{
-  await openConnections();
-  await act(async()=>button('Set up MCP').click());
-  await act(async () => button('Install manually instead').click());
-  await act(async()=>button('Reconnect an existing setup').click());
-  const noah=host.querySelector('pre')!.textContent!;
-  expect(noah).toContain('WAKA_HOME="$HOME/.waka/profiles/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"');
-  expect(noah).toContain("WAKA_PROFILE_ID='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'");
-  await chooseAnotherAgent();
-  await act(async()=>button('Set up MCP').click());
-  await act(async () => button('Install manually instead').click());
-  await act(async()=>button('Reconnect an existing setup').click());
-  const another=host.querySelector('pre')!.textContent!;
-  expect(another).toContain("--profile 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'");
-  expect(another).not.toContain('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-  expect(another).toContain('Claude Code · anotherone');
-  await act(async()=>button('Next: Connect client').click());
-  const server=host.querySelector('pre')!.textContent!;
-  expect(server).toContain("waka-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
-  expect(server).toContain("WAKA_PROFILE_ID='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'");
-  expect(server).toContain('WAKA_HOME="$HOME/.waka/profiles/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"');
-  expect(host.querySelector('blockquote')?.textContent).toContain('profileId "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"');
-});
-
-it('keeps MCP setup pinned to the agent whose settings are open',async()=>{
-  await openConnections('en-US','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
-  await act(async()=>button('Set up MCP').click());
-  await act(async () => button('Install manually instead').click());
-  await act(async()=>button('Reconnect an existing setup').click());
-  expect([...host.querySelectorAll('select option')].map(option => option.textContent)).toEqual(['Claude Code', 'Codex']);
-  expect(host.querySelector('pre')?.textContent).toContain('Claude Code · anotherone');
-  expect(host.querySelector('pre')?.textContent).not.toContain('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-});
-
-it('requires a fresh verification for the selected profile and device', async () => {
-  await openConnections();
+  expect(host.textContent).not.toContain('without an API key');
   await act(async () => button('Set up MCP').click());
-  await act(async () => button('Install manually instead').click());
-  await act(async () => button('Reconnect an existing setup').click());
-  await act(async () => button('Next: Connect client').click());
-  const noah = { ...session('noah'), deviceLabel: 'Claude Code · noah',
-    profile: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'noah', type: 'agent' as const },
-    verifiedAt: '2020-01-01T00:00:00Z' };
-  rows.push(noah);
-  await act(async () => button('Check connection').click());
-  expect(host.textContent).toContain('No new verification received');
-  noah.verifiedAt = new Date(Date.now() + 1000).toISOString();
-  noah.deviceLabel = 'A different app';
-  await act(async () => button('Check connection').click());
-  expect(host.textContent).toContain('No new verification received');
-  noah.deviceLabel = 'Claude Code · noah';
-  noah.expiresAt = '2020-01-01T00:00:00Z';
-  await act(async () => button('Check connection').click());
-  expect(host.textContent).toContain('No new verification received');
-  noah.expiresAt = '2099-01-01T00:00:00Z';
-  await act(async () => button('Check connection').click());
-  expect(host.textContent).toContain('Verified for noah · Claude Code · noah');
-  await chooseAnotherAgent();
-  await act(async () => button('Set up MCP').click());
-  await act(async () => button('Install manually instead').click());
-  await act(async () => button('Reconnect an existing setup').click());
-  await act(async () => button('Next: Connect client').click());
-  await act(async () => button('Check connection').click());
-  expect(host.textContent).toContain('No new verification received');
-  expect(host.textContent).not.toContain('Verified for noah');
-  failRead = true;
-  await act(async () => button('Check connection').click());
-  expect(host.textContent).toContain('Could not check the connection');
-});
-
-it('offers one-launch Codex setup and verifies only that client on the selected agent', async () => {
-  await openConnections();
-  await act(async () => button('Set up MCP').click());
-  await act(async () => button('Install manually instead').click());
-  await act(async () => {
-    const client = host.querySelector('select')!;
-    client.value = 'codex'; client.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  await act(async () => button('Next: Sign in').click());
-  expect(host.querySelector('pre')?.textContent).toContain('Codex · noah');
-  await act(async () => button('Next: Connect client').click());
-  await act(async () => {
-    const scope = host.querySelector('select')!;
-    scope.value = 'launch'; scope.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  expect(host.querySelector('pre')?.textContent).toContain('codex -c');
-  expect(host.textContent).toContain('for this launch only');
-  const verified = { ...session('codex-noah'), deviceLabel: 'Claude Code · noah',
-    profile: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'noah', type: 'agent' as const },
-    verifiedAt: new Date(Date.now() + 1000).toISOString(), expiresAt: '2099-01-01T00:00:00Z' };
-  rows.push(verified);
-  await act(async () => button('Check connection').click());
-  expect(host.textContent).toContain('No new verification received');
-  verified.deviceLabel = 'Codex · noah';
-  await act(async () => button('Check connection').click());
-  expect(host.textContent).toContain('Verified for noah · Codex · noah');
-});
-
-it('offers a profile-bound setup prompt before manual installation and keeps its scope explicit', async () => {
-  await openConnections();
-  await act(async () => button('Set up MCP').click());
-  expect(host.querySelector('#waka-mcp-step')?.textContent).toBe('Set up with a prompt');
-  expect(button('Copy setup prompt').closest('.waka-session-actions')).not.toBeNull();
-  expect(button('Check connection')).toBeUndefined();
+  expect(host.querySelector('#waka-mcp-setup-title')?.textContent).toBe('Agent · noah');
+  expect(document.activeElement).toBe(host.querySelector('#waka-mcp-setup-title'));
   expect(host.querySelector('pre')).toBeNull();
+  expect(host.querySelectorAll('select')).toHaveLength(1);
+  expect(host.querySelectorAll('.waka-mcp-setup button')).toHaveLength(1);
+  expect(host.textContent).not.toMatch(/Step 1|Install manually|Create key|30 days/);
+  await act(async () => button('Copy setup prompt').click());
+  const prompt = copied.at(-1)!;
+  const data = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(prompt)![1]!);
+  expect(data).toMatchObject({profileId: rows[1]!.profile.id, profileType: 'agent', scope: 'current project only'});
+  expect(data.login.args).toContain(rows[1]!.profile.id);
+  expect(prompt).toContain('waka_verify_connection');
+  expect(prompt).toContain('Do not save, edit, or delete any memory');
+  expect(prompt).toContain('Let me complete the browser approval');
+  expect(button('Check connection')).toBeUndefined();
+  expect(host.textContent).not.toContain('Verified for');
+  expect(requests.every(request => request.method === 'GET')).toBe(true);
+  expect(requests.some(request => /keys/.test(request.path))).toBe(false);
+});
+
+it('copies only the chosen agent and client without creating a session', async () => {
+  await openConnections();
+  await act(async () => button('Set up MCP').click());
+  await act(async () => button('Copy setup prompt').click());
+  expect(copied.at(-1)).toContain('Claude Code · noah');
+  await chooseAnotherAgent();
+  await act(async () => button('Set up MCP').click());
   await act(async () => {
     const client = host.querySelector('select')!;
     client.value = 'codex'; client.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  await act(async () => {
-    const scope = host.querySelectorAll('select')[1]!;
-    scope.value = 'launch'; scope.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await act(async () => button('Copy setup prompt').click());
   const prompt = copied.at(-1)!;
-  expect(prompt).toContain('"profileId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"');
-  expect(prompt).toContain('one Codex CLI launch only');
-  expect(prompt).toContain('Codex · noah');
-  expect(prompt).not.toContain('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+  expect(prompt).toContain('Codex · anotherone');
+  expect(prompt).toContain('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+  expect(prompt).not.toContain('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  expect(prompt).toContain('current project only');
+  expect(host.textContent).toContain('Agent · anotherone');
   expect(requests.every(request => request.method === 'GET')).toBe(true);
-  await act(async () => button('Check connection').click());
-  expect(host.textContent).toContain('No new verification received');
-  await act(async () => button('Install manually instead').click());
-  expect(host.textContent).toContain('Step 1 of 3');
-  expect(host.querySelector('pre')?.textContent).toContain('npx --yes --package');
-  await act(async () => button('Set up with a prompt').click());
-  expect(host.querySelector('pre')).toBeNull();
 });
 
-it('allows manual copying and checking when the clipboard is unavailable', async () => {
-  await openConnections();
-  await act(async () => button('Set up MCP').click());
+it('allows manual copying when the clipboard is unavailable without claiming verification', async () => {
+  await openConnections('ko-KR');
+  await act(async () => button('MCP 설정').click());
+  expect(host.textContent).toContain('에이전트 · noah');
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
-  await act(async () => button('Copy setup prompt').click());
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Select the text and copy it manually');
-  expect(host.querySelector('blockquote')?.textContent).toContain('waka_verify_connection');
-  expect(button('Check connection')).toBeDefined();
+  await act(async () => button('설정 프롬프트 복사').click());
+  expect(host.textContent).toContain('waka_verify_connection');
+  expect(host.querySelectorAll('blockquote')).toHaveLength(1);
+  expect(host.querySelectorAll('.waka-mcp-setup button')).toHaveLength(1);
+});
+
+it('rejects stale, expired and cross-profile verification and recovers from a failed check', async () => {
+  await openConnections();
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Test connection for Work laptop"]')!.click());
+  const target = rows[1]!;
+  const expectedProfile = target.profile;
+  target.verifiedAt = '2020-01-01T00:00:00Z';
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('No new verification received');
+  target.verifiedAt = new Date(Date.now() + 1000).toISOString();
+  target.expiresAt = '2020-01-01T00:00:00Z';
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('No new verification received');
+  target.expiresAt = '2099-01-01T00:00:00Z';
+  target.profile = {...expectedProfile, id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'};
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('No new verification received');
+  target.profile = expectedProfile;
+  failRead = true;
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('Could not check the connection');
+  failRead = false;
+  await act(async () => button('Check connection').click());
+  expect(host.textContent).toContain('Verified for noah · Work laptop');
 });

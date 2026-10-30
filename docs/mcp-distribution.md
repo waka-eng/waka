@@ -31,22 +31,25 @@ client checkout. Public URLs become available when the web deployment finishes.
 
 ## Connection and access rules
 
-For personal memory, open **Settings → My profile · MCP**. The **MCP setup**
-tab guides three steps: create or choose a personal key, connect the AI client
-with a setup prompt (manual instructions are secondary), and test with
-`waka_verify_connection`. Enter the key locally, never in chat. The prompt pins the human profile and uses key authentication; it
-does not use the broader personal browser-login session. After verification,
-the save prompt adds inspirations directly to My profile. Manage or revoke
-that key in the adjacent **API keys** tab. A key is a standing credential for
-apps and scripts as well as MCP; agent MCP can alternatively use browser sign-in.
-Creating an agent profile is unnecessary. The test reply proves the MCP binding;
-the manual activity refresh only reports the selected key’s last use. It does
-not label general API activity as MCP verification and does not poll.
+For personal memory, open **Settings → My profile · MCP → MCP setup**.
+For agent memory, open **Settings → Agent profiles → the agent → Set up MCP**.
+Both show the destination and one setup prompt to paste into Claude Code or
+Codex. The prompt installs the public client for the current project, preserves
+unrelated settings, and calls `waka_verify_connection` without changing memory.
+The AI must confirm the returned profile name and ID before reporting success.
+There is no installation wizard or key management in the MCP setup view.
 
-For agent memory, open **Settings → Agent profiles → the agent** and choose
-MCP connections or API keys. Copy the setup prompt first, or expand the manual steps. The instructions
-pin the profile ID, give each browser login its own `WAKA_HOME`, and use a
-profile-specific MCP server name. Public downloads require no repository access.
+Personal setup uses a personal key, never the broader personal browser-login
+session. If needed, the prompt directs the user to **My profile · MCP → API keys**
+to create one and enter it locally, never in chat. All key instructions,
+configuration examples, activity, creation and revocation live in **API keys**
+under the relevant profile. Agent setup uses browser approval by default;
+key-based agent setup remains available from the API keys tab.
+
+Instructions pin the profile ID and use a profile-specific MCP server name.
+Browser login has a separate `WAKA_HOME` per profile. Existing agent connections
+can be retested or disconnected from the connection list. Key activity alone
+is never presented as verified MCP access. Nothing polls for a connection.
 
 - Browser approval creates a separate 30-day session for the chosen profile.
   The consent page locks an explicitly requested profile and describes its

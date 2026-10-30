@@ -78,9 +78,9 @@ it('opens an agent with no connections and pins setup to its identity', async ()
   expect(host.querySelector('h2')?.textContent).toBe('noah');
   expect(host.textContent).toContain('No live sign-in connections for noah');
   expect(host.textContent).not.toContain('Other client');
-  await click('Set up MCP'); await click('Install manually instead'); await click('Next: Sign in');
+  await click('Set up MCP'); await click('Copy setup prompt');
   expect([...host.querySelectorAll('select option')].map(option => option.textContent)).toEqual(['Claude Code', 'Codex']);
-  expect(host.textContent).toContain(`--profile '${noah.id}'`);
+  expect(copied.at(-1)).toContain(noah.id);
   expect(host.textContent).not.toContain(another.id);
 });
 
@@ -210,9 +210,10 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
   keys.push(key('Personal laptop', personal.id), { ...key('Old personal key', personal.id), revokedAt: '2026-10-22T00:00:00Z' });
   await openPersonal();
   expect(host.querySelector('h2')?.textContent).toBe('My profile');
-  expect(host.textContent).toContain('add inspirations directly to My profile');
-  expect(host.textContent).toContain('cannot edit or delete memories, or access agent profiles');
+  expect(host.textContent).toContain('My profile · You');
+  expect(calls.some(c => c.path.includes('keys'))).toBe(false);
   await click('API keys');
+  expect(host.textContent).toContain('cannot edit or delete memories, or access agent profiles');
   expect(host.textContent).toContain('Personal laptop');
   for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent profile name']) expect(host.textContent).not.toContain(hidden);
   expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys']);
@@ -221,48 +222,40 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
   expect(document.activeElement).toBe(host.querySelector('[data-settings-target="personal"]'));
 });
 
-it('creates a personal key and pins setup and direct saving to the human profile without a browser login', async () => {
+it('keeps personal keys in their tab and copies a profile-bound setup prompt without a secret', async () => {
   await openPersonal();
+  expect(button('Create key')).toBeUndefined();
+  expect(calls.map(c=>c.path)).toEqual(['/api/profiles']);
+  await click('API keys');
   await input('Key name, e.g. Work laptop', 'My Codex'); await click('Create key');
   expect(calls.find(c => c.method === 'POST')).toEqual({ path: '/api/keeper-keys', method: 'POST', body: { label: 'My Codex' } });
   expect(host.querySelector<HTMLInputElement>('input[readonly]')?.value).toBe(secret);
-  expect(host.textContent).toContain('Step 1 of 3');
-  expect(button('Copy setup prompt')).toBeUndefined();
-  await click('I’ve saved the key');
-  expect(host.textContent).toContain('Step 2 of 3');
+  await click('Copy configuration');
+  expect(copied.at(-1)).toContain('YOUR_API_KEY');
+  expect(copied.at(-1)).not.toContain(secret);
+  await click('MCP setup');
   expect(host.querySelector('input[readonly]')).toBeNull();
-  expect(document.activeElement).toBe(host.querySelector('#waka-personal-mcp-step'));
+  expect(host.textContent).not.toContain('My Codex');
+  expect(host.querySelectorAll('.waka-mcp-setup button')).toHaveLength(1);
   await click('Copy setup prompt');
   const prompt = copied.at(-1)!;
   const details = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(prompt)![1]!);
-  expect(details).toMatchObject({ profileId: personal.id, profileType: 'human', serverName: `waka-${personal.id}` });
+  expect(details).toMatchObject({ profileId: personal.id, profileType: 'human', serverName: `waka-${personal.id}`, scope: 'current project only' });
   expect(details.login).toBeUndefined();
+  expect(prompt).toContain('Settings → My profile · MCP → API keys');
   expect(prompt).toContain('Do not use browser login or create an agent profile');
+  expect(prompt).toContain('Never ask me to paste the key into chat');
   expect(prompt).not.toContain(noah.id); expect(prompt).not.toContain(secret);
-  for (const client of ['claude','codex']) {
-    await act(async () => {
-      const select = host.querySelector('select')!;
-      select.value = client; select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    await click('Copy configuration');
-    expect(copied.at(-1)).toContain(personal.id);
-    expect(copied.at(-1)).toContain('YOUR_API_KEY');
-    expect(copied.at(-1)).not.toContain(secret);
-  }
-  await click('Next: Test connection');
-  expect(host.textContent).toContain('Step 3 of 3');
-  await click('Copy test prompt');
-  expect(copied.at(-1)).toContain(`profileId "${personal.id}"`);
-  await click('Copy save prompt');
-  expect(copied.at(-1)).toContain(`profileId "${personal.id}"`);
-  expect(copied.at(-1)).toContain('source "app"');
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back to Settings"]')!.click());
-  await click('Agent profiles');
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Settings for noah"]')!.click());
+  await act(async () => {
+    const select = host.querySelector('select')!;
+    select.value = 'codex'; select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await click('Copy setup prompt');
+  expect(copied.at(-1)).toContain('Codex');
+  expect(copied.at(-1)).toContain(personal.id);
   await click('API keys');
   expect(host.querySelector('input[readonly]')).toBeNull();
-  expect(host.innerHTML).not.toContain(secret);
-  expect(host.textContent).not.toContain('My Codex');
+  expect(host.textContent).toContain('My Codex');
 });
 
 it('revokes a personal key without touching an agent key, session or memory', async () => {
@@ -284,15 +277,14 @@ it('retries a failed personal profile load and translates personal setup in Kore
   expect(calls.every(c => c.path === '/api/profiles')).toBe(true);
   fail = null;
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-settings-erase')!.click());
-  expect(host.textContent).toContain('개인 API 키로 내 기억을 읽고');
-  await click('다음: 클라이언트 연결');
+  expect(host.textContent).toContain('내 프로필 · You');
   await click('설정 프롬프트 복사');
   expect(copied.at(-1)).toContain('브라우저 로그인이나 에이전트 프로필 생성을 사용하지 마세요');
   expect(copied.at(-1)).toContain(personal.id);
 });
 
 it('never reveals a late personal key in agent settings', async () => {
-  await openPersonal();
+  await openPersonal(); await click('API keys');
   const original = vi.mocked(fetch).getMockImplementation()!;
   let release!: () => void;
   const pending = new Promise<void>(resolve => { release = resolve; });
@@ -322,7 +314,7 @@ it('does not fall back to an agent when the personal profile is unavailable', as
 });
 
 it('does not display a returned key bound to a different profile', async () => {
-  await openPersonal();
+  await openPersonal(); await click('API keys');
   const original = vi.mocked(fetch).getMockImplementation()!;
   vi.mocked(fetch).mockImplementation((...args) => args[1]?.method === 'POST'
     ? Promise.resolve(Response.json({ key: { ...key('wrong-profile'), secret } })) : original(...args));
@@ -333,53 +325,34 @@ it('does not display a returned key bound to a different profile', async () => {
 });
 
 
-it('reuses an existing personal key through setup, keeps activity separate from verification, and refreshes only on request', async () => {
-  const chosen = key('Personal laptop', personal.id);
-  keys.push(chosen, key('Other personal app', personal.id));
-  await openPersonal();
-  expect([...host.querySelectorAll('.waka-session-tabs button')].map(b => b.textContent)).toEqual(['MCP setup', 'API keys']);
-  expect(host.textContent).toContain('Use a key you already saved');
-  await click('Next: Connect client');
-  const promptButton = button('Copy setup prompt');
-  const manual = host.querySelector('summary')!;
-  expect(promptButton.compareDocumentPosition(manual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect((manual.parentElement as HTMLDetailsElement).open).toBe(false);
-  await click('Next: Test connection');
-  expect(host.textContent).toContain('Not used yet');
-  expect(calls.some(c => c.method !== 'GET')).toBe(false);
-  expect(calls.filter(c => c.path === '/api/keeper-keys')).toHaveLength(1);
-  keys.find(k => k.label === 'Other personal app')!.lastUsedAt = new Date().toISOString();
-  await click('Refresh key activity');
-  expect(host.textContent).toContain('Not used yet');
-  chosen.lastUsedAt = new Date().toISOString();
-  await click('Refresh key activity');
-  expect(host.textContent).not.toContain('Not used yet');
-  expect(host.textContent).toContain('Confirm MCP success from the test reply');
-  expect(host.textContent).not.toContain('Verified for');
-  await click('View API keys');
-  expect(host.querySelector('.waka-session-tabs [aria-pressed="true"]')?.textContent).toBe('API keys');
-  expect(host.querySelector('blockquote')).toBeNull();
-});
-
-it('keeps a failed activity check recoverable and refuses a revoked selected key', async () => {
-  keys.push(key('Personal laptop', personal.id));
-  await openPersonal(); await click('Next: Connect client'); await click('Next: Test connection');
-  fail = 'GET'; await click('Refresh key activity');
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not load API keys');
-  fail = null;
-  keys = keys.filter(k => k.profileId !== personal.id);
-  await click('Refresh key activity');
-  expect(host.textContent).toContain('This key is no longer active');
-  await click('Previous step');
-  expect(button('Next: Test connection').disabled).toBe(true);
-});
-
-it('does not lose the management view or create a second key while reusing one at the limit', async () => {
+it('offers personal setup even when keys cannot load or five keys are active', async () => {
   keys.push(...Array.from({length:5}, (_,i)=>key(`Personal ${i}`,personal.id)));
+  fail = 'GET';
   await openPersonal();
-  expect(button('Create another key').disabled).toBe(true);
-  expect(button('Next: Connect client').disabled).toBe(false);
+  expect([...host.querySelectorAll('.waka-session-tabs button')].map(b=>b.textContent)).toEqual(['MCP setup', 'API keys']);
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+  expect(host.querySelector('input')).toBeNull();
+  expect(host.textContent).not.toMatch(/Create key|Last used|Revoke|Step 1/);
+  await click('Copy setup prompt');
+  expect(copied.at(-1)).toContain(personal.id);
+  expect(calls.map(c=>c.path)).toEqual(['/api/profiles']);
   await click('API keys');
+  expect(host.textContent).toContain('Could not load API keys');
+  fail = null; await click('Refresh');
   expect(host.textContent).toContain('Five keys are active');
+  expect(button('Create key').disabled).toBe(true);
+  await click('MCP setup');
+  expect(button('Copy setup prompt').disabled).toBe(false);
+  expect(host.textContent).not.toContain('Personal 0');
   expect(calls.some(c=>c.method==='POST')).toBe(false);
+});
+
+it('keeps personal setup manually copyable if clipboard access fails', async () => {
+  await openPersonal();
+  Object.defineProperty(navigator,'clipboard',{configurable:true,value:undefined});
+  await click('Copy setup prompt');
+  expect(host.textContent).toContain('Select the text and copy it manually');
+  expect(host.textContent).toContain(personal.id);
+  expect(host.textContent).toContain('waka_verify_connection');
+  expect(calls.map(c=>c.path)).toEqual(['/api/profiles']);
 });

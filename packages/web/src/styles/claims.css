@@ -5727,6 +5727,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   min-height: 0;
 }
 
+/* Keep connection instructions readable; profile editing returns with the list. */
+.waka-settings-body:has(> .waka-mcp-setup) > :is(.waka-agent-details, .waka-settings-danger) {
+  display: none;
+}
+
 .waka-mcp-setup > div:not(.waka-session-actions) {
   flex: 1 1 auto;
   min-height: 0;
@@ -7086,6 +7091,29 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-mcp-key-steps > li { padding-inline-start: var(--sp-4); }
 .waka-mcp-key-setup > summary { cursor: pointer; padding-block: var(--sp-12); }
 .waka-mcp-prompt-scroll { max-height: min(14rem, 36dvh); overflow: auto; overscroll-behavior: contain; }
+
+/* Compact setup copy; controls retain their touch targets and iOS-safe field size. */
+.waka-mcp-setup--compact,
+.waka-mcp-setup--compact .waka-settings-note,
+.waka-mcp-setup--compact .waka-mcp-choice { font-size: var(--t-meta); line-height: 1.5; }
+.waka-mcp-setup--compact h3,
+.waka-mcp-setup--compact .waka-mcp-commands,
+.waka-mcp-setup--compact .waka-settings-erase,
+.waka-settings-body:has(> .waka-mcp-setup--compact) > .waka-session-tabs button { font-size: var(--t-ui); }
+.waka-mcp-setup--compact .waka-mcp-commands { line-height: 1.5; }
+.waka-mcp-setup--compact .waka-mcp-choice { margin: var(--sp-8) 0; }
+.waka-mcp-setup--compact .waka-session-command { padding: var(--sp-8) var(--sp-12); }
+
+.waka-api-keys { display: flex; flex-direction: column; gap: var(--sp-8); font-size: var(--t-ui); line-height: 1.5; }
+.waka-api-keys .waka-settings-note,
+.waka-api-keys .waka-mcp-choice,
+.waka-api-keys .waka-account-field > span { font-size: var(--t-meta); }
+.waka-api-keys h3,
+.waka-api-keys h4,
+.waka-api-keys summary,
+.waka-api-keys button,
+.waka-api-keys .waka-mcp-commands,
+.waka-settings-body:has(> .waka-api-keys) > .waka-session-tabs button { font-size: var(--t-ui); }
 }
 
 @layer chrome {
