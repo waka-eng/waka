@@ -100,3 +100,5 @@ export * from "./top-of-mind";
 export * from "./feedback";
 export * from "./public-profiles";
 export * from "./weather";
+
+export { listInspirationReviews } from './inspiration-relevance';

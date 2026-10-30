@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { t, type SupportedLocale } from '../lib/locales';
 
-export function HomeActions({ locale, onPrinciples, onReview }: {
-  locale: SupportedLocale; onPrinciples: () => void; onReview?: () => void;
+export function HomeActions({ locale, onPrinciples, onReview, onRetryReview }: {
+  locale: SupportedLocale; onPrinciples: () => void; onReview?: () => void; onRetryReview?: () => void;
 }) {
   const [open, setOpen] = useState(false), root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -19,7 +19,8 @@ export function HomeActions({ locale, onPrinciples, onReview }: {
     <button ref={trigger} type="button" className="waka-corner" aria-expanded={open} onClick={() => setOpen(value => !value)}>{t(locale, 'worldReadingActions')}</button>
     <div className="waka-home-actions-list" hidden={!open}>
       <button onClick={() => { setOpen(false); onPrinciples(); }}>{t(locale, 'worldViewPrinciples')}</button>
-      {onReview ? <button onClick={() => { setOpen(false); onReview(); }}>{t(locale, 'worldActionsReview')}</button> : <span>{t(locale, 'worldActionsNoReview')}</span>}
+      {onRetryReview?<button onClick={()=>{setOpen(false);onRetryReview();}}>{t(locale,'worldReviewLoadRetry')}</button>:null}
+      {onReview ? <button onClick={() => { setOpen(false); onReview(); }}>{t(locale, 'worldActionsReview')}</button> : !onRetryReview ? <span>{t(locale, 'worldActionsNoReview')}</span> : null}
     </div>
   </div>;
 }

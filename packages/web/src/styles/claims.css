@@ -7135,3 +7135,25 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 
 }
+
+@layer chrome {
+/* A bounded preview leaves all choices visible; Open inspiration shows the full original. */
+.waka-inspiration-review-text { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--t-body); line-height: 1.55; margin: var(--sp-12) 0; }
+.waka-inspiration-relevance { font-size: var(--t-meta); line-height: 1.5; opacity: .85; margin-bottom: var(--sp-16); }
+.waka-inspiration-relevance button { font: inherit; text-decoration: underline; text-underline-offset: 3px; min-height: var(--sp-44); }
+
+.waka-inspiration-review-question { margin: 0 0 var(--sp-10); font-size: var(--t-lead); line-height: 1.4; font-weight: 500; }
+.waka-inspiration-review-action { background: none; border: 0; color: inherit; font: inherit; font-size: var(--t-meta); padding: var(--sp-8) var(--sp-10); min-height: var(--sp-44); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.waka-inspiration-review-action:disabled { opacity: .5; cursor: wait; }
+
+}
+
+@layer chrome {
+  /* MEASURED 390×844: long originals clipped the answer controls at the old
+     46dvh cap. At 320×568, three preview lines and the remaining viewport
+     keep both answers and Exit review visible. */
+  @media (max-height: 740px) {
+    .waka-inspiration-review-text { -webkit-line-clamp: 3; }
+    .jar-char-say:has(.waka-inspiration-review-text) { max-height: calc(100dvh - 140px); }
+  }
+}

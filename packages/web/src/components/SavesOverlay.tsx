@@ -39,6 +39,7 @@
  * an ellipsis mid-word, and the full text is one press away on the item
  * itself — the grid is for finding the thing, not for reading it.
  */
+import { InspirationRelevanceControl } from "./InspirationRelevanceControl";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { DialogSurface } from "./DialogSurface";
@@ -87,7 +88,8 @@ const NOTE_READ_LIMIT_MS = 20_000;
    it is the moment just after the press and not a pending state. */
 const UNDO_MS = 6000;
 
-export function SavesOverlay({ locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, newSaveLabel, note: noteAddress, onNoteAddress, viewState, topRequest }: {
+export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, newSaveLabel, note: noteAddress, onNoteAddress, viewState, topRequest }: {
+  canReview?:boolean; onRelevanceChanged?:()=>void;
   topRequest?: number;
   viewState?: ListViewState;
   /**
@@ -1671,6 +1673,7 @@ export function SavesOverlay({ locale, profileId, scope = null, ownerName, title
               trailing={<span id={NOTE_ACTIONS_SLOT} />}
               owner={ownerName ? formatMessage(locale, "worldSavingToProfile", { name: ownerName }) : undefined}
             >
+              {canReview&&profileId&&loaded?<InspirationRelevanceControl key={open.id} id={open.id} profileId={profileId} locale={locale} onChanged={onRelevanceChanged}/>:null}
               <InspirationAttachments items={open.attachments.filter(item => item.type !== "link")} locale={locale} quiet />
 
               {/* THE WORDS ARE THE PAGE. No border, no fill, no label — the

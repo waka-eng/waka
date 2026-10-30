@@ -16,12 +16,20 @@ export async function loadReviewAnswerMaterial(db:Reader,profileId:string,answer
   const refs=await db.select().from(reviewAnswerSources).where(and(eq(reviewAnswerSources.profileId,profileId),eq(reviewAnswerSources.answerId,answerId)))
     .orderBy(asc(reviewAnswerSources.inspirationId));
   const sources=[];
+  let excludedOrigin=false;
   if(!row.answer.deletedAt)for(const ref of refs){
     const material=await loadInspirationMaterial(db,profileId,ref.inspirationId,'personal');
-    if(!material)throw new Error('Review origin changed while loading');
+    if(!material){
+      const [excluded]=await db.select({excluded:inspirations.memoryExcludedAt}).from(inspirations).where(and(eq(inspirations.profileId,profileId),eq(inspirations.id,ref.inspirationId)));
+      if(excluded?.excluded){excludedOrigin=true;continue;}
+      throw new Error('Review origin changed while loading');
+    }
     sources.push({material,referenced:ref.referenced});
   }
-  const questionIncluded=!row.answer.deletedAt&&row.questionCurrent===true;
+  // A cross-source answer can repeat excluded material even when that source
+  // is removed from its lineage. Keep the answer, but retire the whole witness.
+  if(excludedOrigin)sources.length=0;
+  const questionIncluded=!row.answer.deletedAt&&row.questionCurrent===true&&sources.length===refs.length;
   const identity={policy:'review-answer-material-v1',answerId,sessionId:row.answer.sessionId,answerRevision:row.answer.revision,
     deleted:row.answer.deletedAt!==null,questionIncluded,
     sources:sources.map(({material,referenced})=>({id:material.inspiration.id,revision:material.identity.revision!,referenced,hash:material.identity.hash}))};

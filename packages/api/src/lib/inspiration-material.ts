@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { attachments, inspirations, reflections, type InspirationEmbeddingScope } from "../db/index.js";
 import { getDb } from "./db.js";
 import { hashEmbeddingInput } from "./inspiration-embeddings.js";
@@ -31,7 +31,7 @@ export async function loadInspirationMaterial(db: Db, profileId: string, inspira
   return measurePerformanceStage('material_read','inspiration',async()=>{
   const revision = await readInspirationRevision(db, profileId, inspirationId, scope);
   const parentQuery = db.select().from(inspirations)
-    .where(and(eq(inspirations.profileId, profileId), eq(inspirations.id, inspirationId))).limit(1);
+    .where(and(eq(inspirations.profileId, profileId), eq(inspirations.id, inspirationId), isNull(inspirations.memoryExcludedAt))).limit(1);
   const [inspiration] = await (lock ? parentQuery.for("update") : parentQuery);
   if (!inspiration) return null;
   if (revision === null) throw new Error("Source material revision is missing");
@@ -87,9 +87,9 @@ export async function assertMaterialCurrent(db: Db, snapshot: InspirationMateria
     (snapshot.identity.revision !== undefined && current.identity.revision !== snapshot.identity.revision)) throw new Error("Source material changed; retry current inputs");
   for (const source of related) {
     const [row] = await db.select({ id: inspirations.id, text: inspirations.text, createdAt: inspirations.createdAt,
-      visibility: inspirations.visibility }).from(inspirations)
+      visibility: inspirations.visibility, memoryExcludedAt: inspirations.memoryExcludedAt }).from(inspirations)
       .where(and(eq(inspirations.profileId, snapshot.inspiration.profileId), eq(inspirations.id, source.id)));
-    if (!row || row.text !== source.text || row.createdAt.getTime() !== source.createdAt.getTime() ||
+    if (!row || row.memoryExcludedAt || row.text !== source.text || row.createdAt.getTime() !== source.createdAt.getTime() ||
       (snapshot.identity.scope === "public" && row.visibility !== "public")) {
       throw new Error("Related material changed; retry current inputs");
     }

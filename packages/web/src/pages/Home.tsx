@@ -132,6 +132,9 @@ import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { useOpenClaimsLink } from "../lib/open-claims-link";
+import { InspirationReviewCard } from "../components/InspirationReviewCard";
+import { listInspirationReviews } from "../lib/api";
+import type { InspirationRelevance } from "../lib/api/inspiration-relevance";
 import { ClaimSlip } from "../components/ClaimSlip";
 import { HarvestReasons } from "../components/HarvestReasons";
 import { AgentPick } from "../components/AgentPick";
@@ -1740,6 +1743,8 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      rather than closed over — `sayVerdict` is built once and the wall moves
      under it. */
   const answeringAsRef = useRef<string | undefined>(undefined);
+  const [inspirationReviewQueue, setInspirationReviewQueue] = useState<InspirationRelevance[]>([]);
+  const [reviewLoadFailed,setReviewLoadFailed]=useState(false);
   const [claimQueue, setClaimQueue] = useState<ApiClaim[]>([]);
   /**
    * WHAT A COLLECTOR PICKED FROM YOUR DAY, WAITING TO BE KEPT OR LET GO.
@@ -1765,7 +1770,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /** A candidate that was swiped away and is being asked "why not". */
   const [harvestWhy, setHarvestWhy] = useState<{ candidate: ApiHarvestCandidate; busy: boolean; failed: boolean } | null>(null);
   /** What the invitation counts: your agent's picks and WAKA's readings, both swiped the same way. */
-  const toReview = harvestQueue.length + claimQueue.length;
+  const toReview = harvestQueue.length + inspirationReviewQueue.length + claimQueue.length;
   const startReview = useCallback(() => { setReviewing(true); }, []);
   /* THE SITTING ENDS WHEN THERE IS NOTHING LEFT TO ASK — after the last
      card's own goodbye (`worldSittingDone`), not on top of a "why not" the
@@ -2060,25 +2065,21 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   useEffect(() => { if (standingAsAgent) setHarvestWhy(null); }, [standingAsAgent]);
   const loadClaims = useCallback(() => {
     const load = ++queueLoadRef.current;
-    if (standingAsAgent) { setClaimQueue([]); setHarvestQueue([]); setQueueLoaded(true); return; }
+    if (standingAsAgent) { setClaimQueue([]); setHarvestQueue([]); setInspirationReviewQueue([]); setReviewLoadFailed(false); setQueueLoaded(true); return; }
     /* Whether the queue on screen is an answer or a load in flight — what an
        old `?open=claims` link waits on before deciding (see above). */
     setQueueLoaded(false);
-    /* The basket loads beside the claims. A failure is an empty basket:
-       nothing here is broken for the person, nothing is being asked. */
-    const basket = listHarvest().catch(() => []);
-    const asked = listClaims({ limit: REVIEW_CARD_LIMIT })
-      .then(({ claims }) => claims)
-      /* A queue that cannot be fetched is silence, not an error on the home
-         screen: nothing here is broken for the person, there is simply
-         nothing being asked. */
-      .catch(() => []);
-    void Promise.all([basket, asked]).then(([picks,claims]) => {
-      if (load !== queueLoadRef.current || standingAsAgentRef.current) return;
-      // One sitting has five slots in total. Picks expire, so they go first.
-      const selected=picks.slice(0,REVIEW_CARD_LIMIT);
-      setHarvestQueue(selected);
-      setClaimQueue(claims.slice(0,REVIEW_CARD_LIMIT-selected.length));
+    setReviewLoadFailed(false);
+    const originalReviews=storageScope?.profileId ? listInspirationReviews(storageScope.profileId) : Promise.resolve([]);
+    void Promise.allSettled([listHarvest(),listClaims({limit:REVIEW_CARD_LIMIT}),originalReviews]).then(([basket,asked,originals])=>{
+      if(load!==queueLoadRef.current||standingAsAgentRef.current)return;
+      const due=originals.status==='fulfilled'?originals.value.slice(0,2):[];
+      // Reserve up to two slots so a backlog of proposals cannot starve originals.
+      const picks=basket.status==='fulfilled'?basket.value.slice(0,REVIEW_CARD_LIMIT-due.length):[];
+      const claims=asked.status==='fulfilled'?asked.value.claims:[];
+      setInspirationReviewQueue(due);setHarvestQueue(picks);
+      setClaimQueue(claims.slice(0,REVIEW_CARD_LIMIT-due.length-picks.length));
+      setReviewLoadFailed([basket,asked,originals].some(result=>result.status==='rejected'));
       setQueueLoaded(true);
     });
   }, [standingAsAgent,storageScope?.profileId]);
@@ -2090,9 +2091,15 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
        `correcting` above. */
     setClaimQueue([]);
     setHarvestQueue([]);
+    setInspirationReviewQueue([]);
     loadClaims();
     return () => { queueLoadRef.current++; };
   }, [phase, offline, loadClaims]);
+  const previousReviewView=useRef(viewOpen);
+  useEffect(()=>{
+    const previous=previousReviewView.current;previousReviewView.current=viewOpen;
+    if(previous&&previous!=='claims'&&!viewOpen&&phase==='ready'&&!offline&&!reviewing)loadClaims();
+  },[viewOpen,phase,offline,reviewing,loadClaims]);
   const composerOpenRef = useRef(mouthOpen); composerOpenRef.current = mouthOpen;
   /* ═══ THE WORLD STEPS ASIDE FOR A DESTINATION, CANVAS INCLUDED ═════════
      Founder: "I like the now page's navy blue and the other navy blue
@@ -9853,7 +9860,28 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 }}
               />
             ) : null}
-            {reviewing && !mouthOpen && !harvestWhy && !harvestQueue[0] && claimQueue[0] ? (
+            {reviewing && !mouthOpen && !harvestWhy && !harvestQueue[0] && inspirationReviewQueue[0] && storageScope ? (
+              <InspirationReviewCard key={`${storageScope.profileId}:${inspirationReviewQueue[0].id}`}
+                item={inspirationReviewQueue[0]} profileId={storageScope.profileId} locale={locale} more={toReview>1}
+                onChanged={async choice=>{
+                  verifyReadingRef.current(true);
+                  if(choice!=='not_relevant')return;
+                  const queueAtSend=queueLoadRef.current;
+                  // Removing support can retire a signal already in this sitting.
+                  // Refresh existing IDs only; never refill the five-card session.
+                  try {
+                    const {claims}=await listClaims({limit:REVIEW_CARD_LIMIT});
+                    if(queueAtSend===queueLoadRef.current&&!standingAsAgentRef.current){
+                      setClaimQueue(queue=>queue.flatMap(row=>{const current=claims.find(fresh=>fresh.id===row.id);return current?[current]:[];}));
+                    }
+                  } catch {
+                    if(queueAtSend===queueLoadRef.current&&!standingAsAgentRef.current){setClaimQueue([]);setReviewLoadFailed(true);}
+                  }
+                }}
+                onOpen={()=>{const id=inspirationReviewQueue[0]!.id;setReviewing(false);viewNavigationRef.current.write({...EMPTY_VIEW,open:'saves',note:id});}}
+                onDone={()=>{const id=inspirationReviewQueue[0]!.id;setInspirationReviewQueue(queue=>queue.filter(row=>row.id!==id));}} />
+            ) : null}
+            {reviewing && !mouthOpen && !harvestWhy && !harvestQueue[0] && !inspirationReviewQueue[0] && claimQueue[0] ? (
               /* THE SAME SLIP AS YOUR AGENT'S PICK, IN THE OTHER MATERIAL.
                  Founder, 2026-10-15: "let's have this design for 'keep it or
                  not it' for the first type of claim too ... better than the
@@ -11601,7 +11629,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
       ) : null}
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         actions={!viewNavigation.view?.open && !viewNavigation.view?.conversationId && !mouthOpen ? <HomeActions key={memoryScope?.profileId ?? 'preview'} locale={locale}
-          onPrinciples={toPrinciples} onReview={atWall.kind === 'self' && canOfferReview ? startReview : undefined} /> : undefined}
+          onPrinciples={toPrinciples} onReview={atWall.kind === 'self' && canOfferReview ? startReview : undefined}
+          onRetryReview={atWall.kind==='self'&&reviewLoadFailed?loadClaims:undefined} /> : undefined}
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
            Founder: "I kind of want to give the feeling of, rather than my
            agent moving rooms, it kind of switches itself up to its agent
@@ -11705,6 +11734,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           reaches any of them; this paragraph is the pointer for anyone
           following an old reference here. */}
       {conversationScope&&conversationProfile&&viewNavigation.view?.open==='saves'?<SavesOverlay
+        canReview={conversationProfile.type==='human'} onRelevanceChanged={()=>verifyReadingRef.current(true)}
         onNoteOpen={savedNoteChanged}
         note={viewNavigation.view.note}
         onNoteAddress={noteAddressChanged}

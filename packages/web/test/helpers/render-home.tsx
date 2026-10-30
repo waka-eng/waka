@@ -159,6 +159,7 @@ export function apiMockFrom(_facts: WorldFacts) {
   const none = async () => [];
   return {
     fetchProfiles: none,
+    listInspirationReviews: none,
     fetchTopOfMindVersions: none,
   };
 }

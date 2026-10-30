@@ -104,6 +104,7 @@ const REGISTER: Record<string, string> = {
      back under the same id and date. */
   restoreInspiration: "deleteInspiration",
   forgetDeletedInspiration: "RULED: the shelf's own exit — a copy the person asked to be rid of before the month is up; the confirm is a second press in the shelf row, and the inspiration itself was already deleted",
+  reviewInspiration: "RULED: relevance is reversible from the original in the archive using the same verb; confirmation and Later only schedule the next check, and neither deletes the original",
   updateInspiration: "RULED: an edit is its own inverse — edit it again",
   /* THE REFLECTION PAIR IS GONE, AND THIS IS THE COMMIT IT GOES IN
      (2026-10-10). `createReflection` / `deleteReflection` was a whole and

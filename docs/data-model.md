@@ -563,9 +563,19 @@ independent repeated experiences.
 
 The approved later review/conversation/export contracts are detailed in
 [the personal capture contract](plans/2026-10-02-capture-foundation-contract.md).
-The current avatar review offers collector picks and current signal verdicts;
-its ordering and repeat rules are in [generation.md](generation.md#review-what-waka-asks-and-when).
-The inspiration-review UI was removed. The session storage/routes below remain
+The current avatar review offers collector picks, saved-inspiration relevance
+checks, and current signal verdicts. Relevance is metadata on the original:
+`memory_excluded_at` keeps an original in the archive while excluding it from
+machine memory; `review_after` schedules its next user-initiated check.
+`review_version`, `review_request_id`, and `review_choice` fence concurrent and
+retried decisions. A relevance choice is not signal feedback and never adds
+evidence or rewrites the original. “Later” defers seven days; “Still relevant”
+defers thirty days. “No longer relevant” withdraws its derived support and
+keeps its words and attachments. The archive can make it relevant again.
+Human-locked wording is preserved under the existing unsupported rules.
+Eligibility is calculated on reads, with no scheduled database polling.
+Current ordering and repeat rules are in [generation.md](generation.md#review-what-waka-asks-and-when).
+The older, separate inspiration-reflection UI was removed. Its session storage/routes below remain
 for compatibility, retained answers and owner export; they are not a second
 current UI journey. The opt-in conversation reply contract is specified above. Review skipping is
 session-local, a review selection is not a verdict on a principle, and multiple

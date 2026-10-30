@@ -37,7 +37,7 @@
  * `signal-derivation-thresholds.ts` for the failure it produced.
  */
 
-import { and, count, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 
 import {
   inspirationEmbeddings,
@@ -154,7 +154,7 @@ export async function deriveSignalsForInspiration(
   const [inspirationRow] = await db
     .select()
     .from(inspirations)
-    .where(eq(inspirations.id, input.inspirationId))
+    .where(and(eq(inspirations.id, input.inspirationId), isNull(inspirations.memoryExcludedAt)))
     .limit(1);
 
   if (!inspirationRow) {
@@ -479,6 +479,7 @@ async function findRelatedInspirations(
         eq(inspirationEmbeddings.profileId, input.profileId),
         eq(inspirationEmbeddings.model, input.model),
         eq(inspirationEmbeddings.inputScope, "personal"),
+        isNull(inspirations.memoryExcludedAt),
       ),
     )
     .orderBy(desc(inspirations.createdAt))

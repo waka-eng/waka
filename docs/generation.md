@@ -907,7 +907,7 @@ merge moves their memory):
 
 The current Home review is a human confirmation flow. Top of Mind appears
 first. Tapping the avatar cycles to an invitation only when an owned queue is
-available; choosing **Dive into review** opens the cards. An explicit older
+available; choosing **Dive into review** or **Actions → Review suggestions** opens the cards. An explicit older
 `?open=claims` link can also open it. No timer interrupts the reading. Agent
 profiles do not show the human's queue or ask the human to judge agent memory.
 
@@ -915,9 +915,10 @@ A sitting contains at most **five cards total**, one visible at a time:
 
 | Priority | Eligible content | Order and repeat rule |
 | --- | --- | --- |
-| 1 | Pending captures proposed by a collector/MCP connection for the human to keep or decline | Oldest proposal first. Pending proposals expire after seven days, so they take the available slots first. Kept, declined and expired proposals do not return. |
-| 2 | Active or emerging signals with no feedback on their current wording | Most recent evidence first, then creation date and ID for stable ties. Confidence does not affect this order. A changed statement can return after its sources are revalidated. |
-| 3 | Active, unlocked signals whose latest answer on the current wording was `true` or `partly` more than 90 days ago (`CLAIM_REASK_DAYS`) | Oldest answer first, only in slots not taken by unanswered signals. A fresh answer restarts the interval. `not_true` on the same wording is not re-asked. |
+| 1 | Pending captures proposed by a collector/MCP connection for the human to keep or decline | Oldest proposal first. Pending proposals expire after seven days, so they take the slots remaining after reserving up to two for due originals. Kept, declined and expired proposals do not return. |
+| 2 | Saved originals due for a relevance check (up to two reserved slots) | First check thirty days after saving; then thirty days after “Still relevant,” or seven days after “Later.” Oldest due first, with creation date/ID ties. “No longer relevant” stays in the archive, stops returning, and withdraws its derived support. It can be made relevant again from the archive. |
+| 3 | Active or emerging signals with no feedback on their current wording | Most recent evidence first, then creation date and ID for stable ties. Confidence does not affect this order. A changed statement can return after its sources are revalidated. |
+| 4 | Active, unlocked signals whose latest answer on the current wording was `true` or `partly` more than 90 days ago (`CLAIM_REASK_DAYS`) | Oldest answer first, only in slots not taken by unanswered signals. A fresh answer restarts the interval. `not_true` on the same wording is not re-asked. |
 
 | Constant (`signals.ts`) | Value | Meaning |
 | --- | --- | --- |
@@ -934,10 +935,8 @@ an admission rule for asking a human.
 
 Selection uses SQL and the rules above, without another model call. Five is
 a bound on the current sitting, not a daily generation quota. Home reads the
-queue on arrival, profile change or reconnect; more can be offered on a later
-visit. Exiting leaves unanswered cards available. A failed queue read offers
-no cards from that endpoint; it does not claim the archive has been reviewed.
-The other endpoint can still contribute its cards.
+queue on arrival, profile change, reconnect, or returning Home from another page; more can be offered on a later
+visit. Exiting leaves unanswered cards available. A failed queue read offers a retry in Actions; successful endpoints can still contribute cards. Relevance checks use current source revisions and a versioned, idempotent decision. No choice is replayed onto edited material. No cron, timer, background scan, or LLM is used to select these originals.
 
 Answers send at the press. The outgoing animation starts immediately, but a
 reading card advances only after the write succeeds. Slow saves show progress

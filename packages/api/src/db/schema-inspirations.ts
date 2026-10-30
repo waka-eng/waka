@@ -123,6 +123,12 @@ export const inspirations = pgTable(
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Retained in the archive, excluded from machine memory by the owner. */
+    memoryExcludedAt: timestamp("memory_excluded_at", { withTimezone: true }),
+    reviewAfter: timestamp("review_after", { withTimezone: true }),
+    reviewVersion: integer("review_version").notNull().default(0),
+    reviewRequestId: uuid("review_request_id"),
+    reviewChoice: text("review_choice").$type<'relevant' | 'not_relevant' | 'later'>(),
   },
   (table) => ({
     // The archive's default read: newest first, scoped to one profile.

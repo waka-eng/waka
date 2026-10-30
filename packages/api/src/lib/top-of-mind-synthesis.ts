@@ -559,7 +559,7 @@ async function loadReadingQualityContext(db: WakaDb, profileId: string,
   if (!ids.length) return { locale, signalOrigins, sourceTexts };
   const [originals, answers, media] = await Promise.all([
     db.select({ id: inspirations.id, text: inspirations.text }).from(inspirations)
-      .where(and(eq(inspirations.profileId, profileId), inArray(inspirations.id, ids))),
+      .where(and(eq(inspirations.profileId, profileId), inArray(inspirations.id, ids), isNull(inspirations.memoryExcludedAt))),
     db.select({ id: reflections.inspirationId, text: reflections.answer }).from(reflections)
       .where(and(eq(reflections.profileId, profileId), inArray(reflections.inspirationId, ids), eq(reflections.skipped, false))),
     db.select({ id: attachments.inspirationId, text: effectiveAttachmentText }).from(attachments)

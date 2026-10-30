@@ -33,7 +33,7 @@ export async function loadSignalEvidence(db:Reader,profileId:string,signalIds:st
 
 export function reviewEvidenceCurrent(evidenceName='signal_review_evidence',signalName='signals'){
   const c=(table:string,name:string)=>sql`${sql.identifier(table)}.${sql.identifier(name)}`;
-  return sql`review_evidence_current(${c(evidenceName,'profile_id')},${c(evidenceName,'signal_id')},${c(evidenceName,'answer_id')},${c(signalName,'statement_revision')})`;
+  return sql`(NOT EXISTS (SELECT 1 FROM signal_review_evidence_sources excluded_source JOIN inspirations excluded ON excluded.id=excluded_source.inspiration_id AND excluded.profile_id=excluded_source.profile_id WHERE excluded_source.profile_id=${c(evidenceName,'profile_id')} AND excluded_source.signal_id=${c(evidenceName,'signal_id')} AND excluded_source.answer_id=${c(evidenceName,'answer_id')} AND excluded.memory_excluded_at IS NOT NULL) AND review_evidence_current(${c(evidenceName,'profile_id')},${c(evidenceName,'signal_id')},${c(evidenceName,'answer_id')},${c(signalName,'statement_revision')}))`;
 }
 
 /** Caller holds current-material and generation fences before these writes. */

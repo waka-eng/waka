@@ -816,5 +816,18 @@
   "worldReadingDiscard": "변경 내용 버리기",
   "profileMcpAgentTarget": "에이전트 · {name}",
   "profileMcpSimpleHint": "복사해서 {client}에 붙여 넣으세요.",
-  "profileMcpExplanation": "MCP로 AI가 이 프로필의 기억을 읽고 영감을 저장할 수 있어요."
+  "profileMcpExplanation": "MCP로 AI가 이 프로필의 기억을 읽고 영감을 저장할 수 있어요.",
+  "worldInspirationReviewQuestion": "이 영감은 지금도 나에게 중요한가요?",
+  "worldInspirationStillRelevant": "지금도 중요해요",
+  "worldInspirationNotRelevant": "이제는 아니에요",
+  "worldInspirationReviewOriginal": "내가 저장한 영감",
+  "worldInspirationReviewExplain": "이제 중요하지 않은 영감도 보관돼요. 시그널과 읽기 생성에는 사용하지 않아요.",
+  "worldInspirationReviewLater": "나중에",
+  "worldInspirationReviewReload": "변경된 영감 확인",
+  "worldInspirationReviewChanged": "영감이 변경됐어요. 다시 확인한 후 답해 주세요.",
+  "worldInspirationExcluded": "시그널과 읽기 생성에 사용하지 않아요.",
+  "worldInspirationIncluded": "시그널과 읽기 생성에 사용해요.",
+  "worldInspirationMakeRelevant": "다시 사용하기",
+  "worldReviewLoadRetry": "검토를 불러오지 못했어요 · 다시 시도",
+  "worldInspirationReviewOpen": "영감 열기"
 }

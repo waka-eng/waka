@@ -816,5 +816,18 @@
   "worldReadingDiscard": "Discard changes",
   "profileMcpAgentTarget": "Agent · {name}",
   "profileMcpSimpleHint": "Copy and paste into {client}.",
-  "profileMcpExplanation": "MCP lets your AI read this profile’s memory and save inspirations."
+  "profileMcpExplanation": "MCP lets your AI read this profile’s memory and save inspirations.",
+  "worldInspirationReviewQuestion": "Is this still relevant to you?",
+  "worldInspirationStillRelevant": "Still relevant",
+  "worldInspirationNotRelevant": "No longer relevant",
+  "worldInspirationReviewOriginal": "Your saved inspiration",
+  "worldInspirationReviewExplain": "No longer relevant keeps the original, but stops using it for signals and readings.",
+  "worldInspirationReviewLater": "Later",
+  "worldInspirationReviewReload": "Read updated inspiration",
+  "worldInspirationReviewChanged": "This inspiration changed. Read it again before answering.",
+  "worldInspirationExcluded": "Not used for signals or readings.",
+  "worldInspirationIncluded": "Available for signals and readings.",
+  "worldInspirationMakeRelevant": "Make relevant again",
+  "worldReviewLoadRetry": "Couldn’t load reviews · Retry",
+  "worldInspirationReviewOpen": "Open inspiration"
 }

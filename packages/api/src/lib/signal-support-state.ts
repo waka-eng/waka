@@ -10,7 +10,8 @@ const column = (table: string, name: string) => sql`${sql.identifier(table)}.${s
 
 export function evidenceSupportCurrent(evidenceName = 'signal_evidence', signalName = 'signals') {
   const evidence = (name: string) => column(evidenceName, name);
-  return sql`(coalesce(${evidence('statement_revision')}, 1) = ${column(signalName, 'statement_revision')}
+  return sql`(EXISTS (SELECT 1 FROM inspirations relevant WHERE relevant.id=${evidence('inspiration_id')} AND relevant.profile_id=${evidence('owner_profile_id')} AND relevant.memory_excluded_at IS NULL)
+    AND coalesce(${evidence('statement_revision')}, 1) = ${column(signalName, 'statement_revision')}
     AND coalesce(${evidence('material_revision')}::numeric,
       CASE WHEN ${evidence('material')}->>'policy' = 'inspiration-material-v1'
         AND ${evidence('material')}->>'revision' ~ '^[1-9][0-9]*$'

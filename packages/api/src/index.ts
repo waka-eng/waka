@@ -36,6 +36,7 @@ import { feedbackRoutes } from "./routes/feedback.js";
 import { healthRoutes } from "./routes/health.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { createReviewSessionRoutes } from './routes/review-sessions.js';
+import { createInspirationRelevanceRoutes } from './routes/inspiration-relevance.js';
 import { createConversationRoutes } from './routes/conversations.js';
 import { profilesRoutes } from "./routes/profiles.js";
 import { principlesMarkdownRoutes, principlesRoutes } from "./routes/principles.js";
@@ -124,6 +125,7 @@ app.route("/api/admin/background-jobs", adminBackgroundJobsRoutes);
 // Layer 1 — capture, edit, delete, and search the raw archive.
 app.route("/api/inspirations", inspirationsRoutes);
 app.route('/api/review-sessions',createReviewSessionRoutes());
+app.route('/api/inspiration-relevance',createInspirationRelevanceRoutes());
 app.route('/api/conversations',createConversationRoutes());
 
 // Presigned uploads. The router applies requireAuth at the mount point, so
