@@ -9,7 +9,7 @@
  * `readingPaused`, and this hook is how home, principles and claims read it.
  *
  * ONE RULE: THE LATEST GET IS THE STATE. It asks once when enabled, on focus,
- * and — only while the reading is paused — every 30 seconds. A failed GET
+ * and after an explicit retry. A failed GET
  * changes nothing (a notice that was showing stays). Retry is one POST; when
  * it answers or fails, one fresh GET decides what shows. A Retry bumps a counter when
  * it is pressed and again when its POST answers or fails, and a GET that started under
@@ -32,8 +32,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchPrincipleStatus, retryPausedReading, type ApiPrincipleStatus } from './api';
 import { settleAtLeast } from './settle-at-least';
 
-/** While paused, how often to ask again. */
-const PAUSED_RECHECK_MS = 30_000;
 /** How long a retry may go unanswered before the button says so. */
 const STILL_TRYING_AFTER_MS = 20_000;
 
@@ -70,11 +68,6 @@ export function useReadingPaused(enabled: boolean) {
   }, [enabled, check]);
 
   const paused = enabled && status?.readingPaused === true;
-  useEffect(() => {
-    if (!paused) return;
-    const timer = window.setInterval(check, PAUSED_RECHECK_MS);
-    return () => window.clearInterval(timer);
-  }, [paused, check]);
 
   const retry = useCallback(() => {
     retryCounter += 1;

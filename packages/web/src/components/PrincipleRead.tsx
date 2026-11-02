@@ -4,7 +4,7 @@ import { formatMessage, t, type SupportedLocale } from "../lib/i18n";
 
 /**
  * The selected profile's principles: a lead line and status. Only the
- * active view polls. (Rooms' principles left with rooms, 2026-10-12.)
+ * active view reads on entry and briefly checks ongoing work.
  */
 export function PrincipleRead({ active, locale, onRead, profileId, name }: {
   active: boolean; locale: SupportedLocale; profileId?: string; name?: string;
@@ -24,11 +24,13 @@ export function PrincipleRead({ active, locale, onRead, profileId, name }: {
     let ensured = false;
     let consecutiveFailures = 0;
     let timer: number | undefined;
-    let delay = 60_000;
+    let delay: number | undefined;
+    let pendingChecks = 0;
     const read = async () => {
       if (running || document.hidden) return;
       window.clearTimeout(timer);
       running = true;
+      delay = undefined;
       try {
         const result = await (profileId ? fetchPrincipleRead(profileId) : fetchPrincipleRead());
         if (disposed) return;
@@ -37,25 +39,24 @@ export function PrincipleRead({ active, locale, onRead, profileId, name }: {
         setStatus(result.status);
         setFailed(false);
         consecutiveFailures = 0;
-        delay = result.status.phase === "processing" || result.status.phase === "pending"
-          ? 10_000 : 60_000;
+        if ((result.status.phase === "processing" || result.status.phase === "pending") && pendingChecks++ < 12) delay = 10_000;
         // Refresh requests act as the session's profile. An agent shown by
         // its human owner waits for its own worker rather than refreshing the human.
-        if (!profileId && !ensured && ((result.status.eligible && !result.status.supportPending && result.status.phase === 'pending') ||
-          ((result.status.eligible || result.status.supportPending) && result.status.phase === 'failed' && attempt > retriedAttempt.current))) {
+        if (!profileId && !ensured && (result.status.eligible || result.status.supportPending) && result.status.phase === 'failed' && attempt > retriedAttempt.current) {
           const retry = attempt > retriedAttempt.current;
           retriedAttempt.current = attempt;
           await requestPrincipleRead(retry);
           ensured = true;
+          delay = 10_000;
           if (!disposed) setStatus({ ...result.status, phase: result.status.supportPending ? 'pending' : 'processing' });
         }
       } catch {
         consecutiveFailures += 1;
-        delay = consecutiveFailures < 3 ? consecutiveFailures * 1_000 : 10_000;
+        delay = consecutiveFailures < 3 ? consecutiveFailures * 1_000 : undefined;
         if (!disposed && consecutiveFailures >= 3) setFailed(true);
       } finally {
         running = false;
-        if (!disposed) timer = window.setTimeout(() => void read(), delay);
+        if (!disposed && delay !== undefined) timer = window.setTimeout(() => void read(), delay);
       }
     };
     void read();

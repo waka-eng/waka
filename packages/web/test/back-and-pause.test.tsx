@@ -173,7 +173,7 @@ describe("a paused reading", () => {
     expect(retryPausedReading).toHaveBeenCalledTimes(1);
   });
 
-  it("re-checks every 30s while paused, and a failed check leaves the notice up", async () => {
+  it("does not poll while paused and checks again on focus", async () => {
     vi.mocked(fetchPrincipleStatus).mockReset().mockResolvedValue(status(true));
     vi.useFakeTimers();
     try {
@@ -181,14 +181,12 @@ describe("a paused reading", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(0); });
       expect(container!.textContent).toContain("Reading is paused");
       const gets = vi.mocked(fetchPrincipleStatus).mock.calls.length;
-      vi.mocked(fetchPrincipleStatus).mockRejectedValue(new Error("offline"));
-      await act(async () => { await vi.advanceTimersByTimeAsync(30_100); });
-      expect(vi.mocked(fetchPrincipleStatus).mock.calls.length, "no re-check while paused").toBe(gets + 1);
-      expect(container!.textContent, "a failed check took the notice down").toContain("Reading is paused");
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+      expect(vi.mocked(fetchPrincipleStatus)).toHaveBeenCalledTimes(gets);
       vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(false));
-      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      await act(async () => { window.dispatchEvent(new Event('focus')); });
+      expect(container!.textContent).toBe("");
     } finally { vi.useRealTimers(); }
-    expect(container!.textContent).toBe("");
   });
 
   it("shows the notice without Retry unless the caller says this is a person (canRetry defaults off)", async () => {

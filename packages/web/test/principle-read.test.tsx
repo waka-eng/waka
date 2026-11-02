@@ -141,17 +141,17 @@ describe("principle read", () => {
     expect(fetchPrincipleRead).toHaveBeenCalledTimes(4);
   });
 
-  it("queues missing work once and displays completion without a page reload", async () => {
+  it("observes pending work without requesting generation and displays completion", async () => {
     vi.mocked(requestPrincipleRead).mockResolvedValue();
     vi.mocked(fetchPrincipleRead).mockResolvedValueOnce({ principles: [], status: { ...ready, phase: "pending" } })
       .mockResolvedValue({ principles: [principle], status: ready });
     const read = vi.fn();
     await act(async () => root.render(<PrincipleRead active locale="en-US" onRead={read} />));
-    expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
+    expect(requestPrincipleRead).not.toHaveBeenCalled();
     expect(host.textContent).toContain("Reading the patterns for principles…");
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(read).toHaveBeenCalledWith([principle]);
-    expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
+    expect(requestPrincipleRead).not.toHaveBeenCalled();
   });
 
   it("shows an ongoing read without queueing the same work again", async () => {
@@ -163,6 +163,19 @@ describe("principle read", () => {
     expect(requestPrincipleRead).not.toHaveBeenCalled();
   });
 
+  it("does not refresh settled principles on a timer", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [principle], status: ready });
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    await act(async () => vi.advanceTimersByTimeAsync(600_000));
+    expect(fetchPrincipleRead).toHaveBeenCalledTimes(1);
+    expect(requestPrincipleRead).not.toHaveBeenCalled();
+  });
+  it("stops checking work that remains pending", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "pending" } });
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    await act(async () => vi.advanceTimersByTimeAsync(600_000));
+    expect(fetchPrincipleRead).toHaveBeenCalledTimes(13);
+  });
   it("does not fetch an inactive wall", async () => {
     await act(async () => root.render(<PrincipleRead active={false} locale="en-US" />));
     await act(async () => vi.advanceTimersByTimeAsync(30_000));
