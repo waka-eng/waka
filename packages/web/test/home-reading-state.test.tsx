@@ -65,7 +65,14 @@ it('shows the real empty state only after the owned response confirms no reading
      about is unchanged — the real empty state appears only once an OWNED
      response has confirmed there is nothing, never while a read is still in
      flight. */
-  expect(settled()?.textContent).toContain('No top of mind formed yet');
+  /* AND WITH ONE SAVE IT SAYS WHAT WILL HAPPEN (home brief §3b/§6): 0–4
+     saves read "Save a few things and I'll tell you what I notice.", with
+     "A few saved so far" once there is one — no number. "No top of mind
+     formed yet" is for a profile past five saves. */
+  expect(settled()?.textContent).toContain('Save a few things and I’ll tell you what I notice.');
+  const bubble=world!.container.querySelector('.jar-char-bubble');
+  expect(bubble?.textContent).toContain('A few saved so far');
+  expect(bubble?.textContent).not.toMatch(/\d/);
   /* AND THE POSTER NO LONGER SAYS IT TOO. The same sentence in two registers
      sixty pixels apart, with the bubble overlapping the words, is exactly
      what the founder reported. */
@@ -75,7 +82,9 @@ it('shows the real empty state only after the owned response confirms no reading
 it('does not tell someone to capture their first inspiration until both reads confirm the empty state',async()=>{
   facts.inspirations=[];world=await mountWorld(facts);expectLoading();
   await act(async()=>reads.requests[0]!.resolve(null));
-  expect(settled()?.textContent).toContain('Nothing kept to come back to yet.');
+  expect(settled()?.textContent).toContain('Save a few things and I’ll tell you what I notice.');
+  // With nothing kept, nothing is "saved so far" either.
+  expect(world!.container.querySelector('.jar-char-bubble')?.textContent).not.toContain('A few saved so far');
   expect(world.container.textContent).not.toContain('Loading your top of mind');
 });
 it('shows a read failure, preserves a Capture draft, and coalesces explicit read-only retries',async()=>{

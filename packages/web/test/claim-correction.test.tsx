@@ -46,6 +46,7 @@ import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import { apiMockFrom, dataMockFrom, diveIntoReview, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 import { createFeedback, listClaims } from "../src/lib/api";
+import * as dataModule from "../src/lib/data";
 import { loadSignal, loadTopOfMind } from "../src/lib/data";
 import { createConversation } from "../src/lib/api/conversations";
 import { SLIP_LEAVE_MS as LEAVE_MS } from "../src/components/ClaimSlip";
@@ -103,7 +104,8 @@ beforeAll(() => {
   installCanvasStub(); setViewport(1280, 900);
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
-afterEach(() => { world?.unmount(); vi.clearAllMocks(); vi.mocked(loadTopOfMind).mockResolvedValue(null); vi.useRealTimers(); });
+let seasonedSpy: { mockRestore: () => void } | null = null;
+afterEach(() => { world?.unmount(); seasonedSpy?.mockRestore(); seasonedSpy = null; vi.clearAllMocks(); vi.mocked(loadTopOfMind).mockResolvedValue(null); vi.useRealTimers(); });
 
 /** The two directions, read by their words rather than by their order. */
 function direction(label: string): HTMLButtonElement {
@@ -402,17 +404,67 @@ async function press(target: EventTarget, key: string) {
   await world.step(4);
 }
 
-it("counts what waits in the invitation, in the singular and the plural", async () => {
-  await mountQueue(CLAIM);
+/* ═══ THE COUNT IS GONE (home brief, waka-design-brief.md §3b) ════════════
+   The invitation used to count — "There is 1 thing to review!" / "There are
+   3 things to review!" with "Dive into review". The brief: "never an
+   exclamation mark, never a badge, never 'Dive into review'", and the
+   founder's own law, states render, numerals never. What waits is now "More
+   to look at" under the companion — and only past a first session and five
+   saves, where the bubble has stopped saying "save a few things". A
+   tentative signal is asked IN the bubble, so it is not counted as more. */
+const SEASONED = { inspirations: Array.from({ length: 5 }, (_, n) => ({ id: `kept-${n}`, text: `A capture ${n}`, daysAgo: 3 + n })), groups: [] };
+const moreLink = () => world.container.querySelector<HTMLButtonElement>(".waka-says-more");
+async function mountSeasoned(...claims: Array<typeof CLAIM>) {
+  vi.mocked(listClaims).mockResolvedValue({ claims, more: false });
+  /* The module mock is built from the one-save FACTS; these tests need a
+     profile past "save a few things", so the field answers with five. */
+  seasonedSpy = vi.spyOn(dataModule, "loadInspirations").mockImplementation(dataMockFrom(SEASONED).loadInspirations as never);
+  world = await mountWorld(SEASONED, { routerTools: <Where /> });
+}
+
+it("offers what waits as More to look at — no count, no exclamation, no Dive", async () => {
+  await mountQueue(CLAIM, SECOND);
+  // Fewer than five saves: the bubble is still "save a few things", and asks nothing.
+  expect(moreLink()).toBeNull();
   expect(invite()).toBeNull();
-  await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
-  expect(inviteSays()).toBe("There is 1 thing to review!");
-  expect(invite()?.querySelector("button.jar-char-bubble-act")?.textContent?.trim()).toBe("Dive into review");
   world.unmount();
 
-  await mountQueue(CLAIM, SECOND, { ...CLAIM, id: "claim-3", statement: "You finish what you start." });
-  await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
-  expect(inviteSays()).toBe("There are 3 things to review!");
+  await mountSeasoned(CLAIM, SECOND, { ...CLAIM, id: "claim-3", statement: "You finish what you start." });
+  expect(moreLink()?.textContent).toBe("More to look at");
+  const said = world.container.textContent ?? "";
+  expect(said).not.toMatch(/to review!|Dive into review/);
+  expect(said).not.toMatch(/\b[23] things\b/);
+  await act(async () => moreLink()!.click());
+  await world.step(2);
+  expect(card(), "More to look at did not open the review").not.toBeNull();
+});
+
+it("asks a tentative signal in the bubble, and Yes records it and lets it go without leaving", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as never);
+  await mountSeasoned(CLAIM);
+  const bubble = () => world.container.querySelector(".jar-char-bubble")?.textContent ?? "";
+  expect(bubble()).toContain("I might be noticing");
+  expect(bubble()).toContain(CLAIM.statement);
+  // The one tentative signal is the one shown, so nothing is "more".
+  expect(moreLink()).toBeNull();
+  const before = where.pathname + where.search;
+  const yes = [...world.container.querySelectorAll<HTMLButtonElement>(".jar-char-bubble button")].find((node) => node.textContent === "Yes")!;
+  await act(async () => yes.click());
+  await world.step(2);
+  expect(createFeedback).toHaveBeenCalledWith(expect.objectContaining({ targetType: "signal", targetId: CLAIM.id, value: "true", targetRevision: CLAIM.statementRevision }));
+  expect(bubble()).not.toContain(CLAIM.statement);
+  expect(where.pathname + where.search, "answering navigated").toBe(before);
+  expect(world.container.querySelector('[role="dialog"]')).toBeNull();
+});
+
+it("files Not really as not true from the bubble", async () => {
+  vi.mocked(createFeedback).mockResolvedValue({} as never);
+  await mountSeasoned(CLAIM);
+  const notReally = [...world.container.querySelectorAll<HTMLButtonElement>(".jar-char-bubble button")].find((node) => node.textContent === "Not really")!;
+  await act(async () => notReally.click());
+  await world.step(2);
+  expect(createFeedback).toHaveBeenCalledWith(expect.objectContaining({ targetId: CLAIM.id, value: "not_true" }));
+  expect(world.container.querySelector(".jar-char-bubble")?.textContent ?? "").not.toContain(CLAIM.statement);
 });
 
 it("shows no card until the dive, and the first card has the keys once in", async () => {
@@ -545,13 +597,15 @@ it('shows Top of Mind before pending reviews and cycles only on avatar presses',
   const tap = () => act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
   expect(bubbleText()).toContain(body);
   expect(invite()).toBeNull();
-  await tap(); expect(inviteSays()).toBe('There are 2 things to review!');
-  await tap(); expect(invite()).toBeNull(); expect(bubbleText()).not.toContain(body);
+  /* Review is no longer a stop on the cycle (home brief §3b): reading →
+     activity → principles → reading, and the reading never yields to a
+     count of what waits. */
+  await tap(); expect(invite()).toBeNull(); expect(bubbleText() ?? '').not.toContain(body);
   await tap(); expect(bubbleText()).toContain('Which principles are guiding you lately?');
   await tap(); expect(bubbleText()).toContain(body);
   expect(world.container.querySelectorAll('.jar-char-bubble')).toHaveLength(1);
   // A complete cycle in one event turn must still end on the reading.
-  await act(async () => { for (let i = 0; i < 4; i++) world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click(); });
+  await act(async () => { for (let i = 0; i < 3; i++) world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click(); });
   expect(bubbleText()).toContain(body);
   await diveIntoReview(world.container, world.step);
   await press(document.body, 'Escape');
