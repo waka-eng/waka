@@ -7007,30 +7007,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-profile-error { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; font-size: var(--t-ui); max-width: min(25rem, calc(100vw - 6rem)); }
 .waka-profile-error button { min-height: 44px; text-decoration: underline; }
 
-/* Stable destinations sit below the home page's single primary action. */
-.waka-primary-navigation {
-  position: fixed; z-index: 60; left: 50%; transform: translateX(-50%);
-  bottom: calc(var(--sp-20) + env(safe-area-inset-bottom));
-  width: min(28rem, calc(100vw - var(--sp-32) - env(safe-area-inset-left) - env(safe-area-inset-right)));
-  pointer-events: auto;
-}
-.waka-dock.waka-dock--tabs {
-  position: static; transform: none; width: 100%; max-width: none;
-  justify-content: space-around; border-radius: var(--sp-24);
-}
-.waka-dock--tabs .waka-dock-item {
-  flex: 1; min-width: 0; min-height: 52px; padding: var(--sp-6) var(--sp-4);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: var(--sp-4); font-size: var(--t-fine);
-}
-.waka-dock--tabs svg { width: var(--sp-20); height: var(--sp-20); }
-.waka-primary-capture {
-  display: flex; align-items: center; justify-content: center; gap: var(--sp-8);
-  width: min(20rem, 100%); min-height: var(--sp-44); margin: 0 auto var(--sp-16);
-  padding: var(--sp-12) var(--sp-20); border: 0; border-radius: var(--r-pill);
-  background: var(--ink); color: var(--w-ground); font: inherit; font-size: var(--t-body); cursor: pointer;
-}
-.waka-primary-capture svg { width: var(--sp-20); height: var(--sp-20); }
+/* The tab bar and the "+ New inspiration" pill that stood here were removed
+   with the home brief (waka-design-brief.md §3c); the home bar's rules are in
+   home-surface.css. */
 
 /* The selected identity stays visible; a menu accommodates any number of names. */
 .waka-profile-switcher { position: relative; pointer-events: auto; min-width: 0; }

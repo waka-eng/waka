@@ -82,6 +82,11 @@ const SHEETS: ReadonlyArray<{ file: string; what: string }> = [
   { file: "components/PrincipleShare.tsx", what: "sharing a principle — never opted in" },
   { file: "components/ReadingChanges.tsx", what: "what changed in the reading — never opted in" },
   { file: "components/ShareSheet.tsx", what: "sharing a save or the top of mind — never opted in, like the principle share" },
+  /* ARRIVED WITH THE HOME BRIEF (waka-design-brief.md §3d): a save opened
+     from the stream under the companion. It holds no typed words, only a
+     two-press delete, so nothing is lost if it closes — whether it should
+     take press-away is for `lib/dismiss.ts` to say. */
+  { file: "components/HomeStream.tsx", what: "a save opened from the home stream — content, what it supports, delete" },
   /* TWO ROWS LEFT THIS LEDGER ON 2026-10-12 (founder: "방 없애" — remove
      rooms): `space-kinds/GroupPanel.tsx`, the room form, which held a
      half-typed name and never opted in; and `space/settings/

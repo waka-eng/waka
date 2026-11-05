@@ -228,10 +228,10 @@ const pastDays = () =>
     .filter((ms) => railEnd - ms >= DAY / 2)
     .sort((a, b) => b - a);
 
-function inspirationRow(): HTMLElement {
-  const row = [...layout.container.querySelectorAll<HTMLElement>(".waka-dock .waka-dock-item, .waka-primary-capture")].find((item) => item.textContent?.trim() === "New inspiration");
-  if (!row) throw new Error("no Inspiration row in the bar");
-  return row;
+/* The home bar (waka-design-brief.md §3c): the one primary control, docked
+   at the bottom whatever the dial or the camera is doing. */
+function homeBarField(): HTMLTextAreaElement | null {
+  return layout.container.querySelector<HTMLTextAreaElement>("form.waka-bar[data-primary='true'] textarea.waka-bar-field");
 }
 function one(selector: string): HTMLElement {
   const el = layout.container.querySelector<HTMLElement>(selector);
@@ -653,28 +653,27 @@ describe("the mouth while the dial is away from now", () => {
     ).not.toContain("--away");
   });
 
+  /* THE DOOR TO SAVING IS THE HOME BAR NOW (waka-design-brief.md §3c). The
+     bar's "New inspiration" wound the dial back to now and opened the
+     notepad; that row is gone, and the field it led to is docked at the
+     bottom of home in every state of the dial and the camera — so what is
+     held is that it is there, and takes the key, in the past and on the
+     ground alike. */
   it("offers capture in the past, returns to now, and focuses the existing composer", async () => {
     await windToDay(endOfDayOf(keptMs[2]));
     expect(one(".jar-mouth-slot").hasAttribute("inert")).toBe(true);
-    /* THE BAR'S "New inspiration" IS THE ONE DOOR NOW: the pill that duplicated
-       it above the bar went (audit f2afcbe2). Same act: back to now, the
-       notepad. */
-    const shortcut = inspirationRow();
-    await act(async () => shortcut.click());
-    await layout.step(40);
-
-    const field = one(".jar-mouth-field");
-    expect(field.getAttribute("placeholder")).toBe("A thought, link, photo or recording…");
+    const field = homeBarField();
+    expect(field, "the home bar is not on screen in the past").toBeTruthy();
+    expect(field!.getAttribute("placeholder")).toBe("Paste, type, or drop anything");
+    await act(async () => field!.focus());
     expect(document.activeElement).toBe(field);
   });
 
   it("offers capture from the ground and brings the pen back into view", async () => {
     await layout.toField();
-    expect(one(".jar-mouth-slot").hasAttribute("inert")).toBe(true);
-    await act(async () => inspirationRow().click());
-    await layout.step(80);
-    const field = one(".jar-mouth-field");
+    const field = homeBarField();
+    expect(field, "the home bar is not on screen on the ground").toBeTruthy();
+    await act(async () => field!.focus());
     expect(document.activeElement).toBe(field);
-    expect(one(".jar-mouth-slot").hasAttribute("inert")).toBe(false);
   });
 });

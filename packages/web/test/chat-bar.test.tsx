@@ -12,7 +12,7 @@ import { act } from 'react';
 import { useLocation } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, barShape, chatField, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { mountWorld, dataMockFrom, apiMockFrom, barShape, chatField, pressChatCorner, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { createConversation, fetchConversation, fetchConversationReply, listConversations, type ApiConversation } from '../src/lib/api/conversations';
 
 /**
@@ -78,10 +78,13 @@ async function settle() {
 const row = (name: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-page-back, .waka-primary-capture, .waka-over-new')]
   .find((node) => node.textContent?.trim() === name);
 
-/** A new chat, opened the way a person opens one: the bar's Chat on Now. */
+/* The home bar (waka-design-brief.md §3c): one field, and no tabs. */
+const homeBar = () => world!.container.querySelector<HTMLFormElement>('form.waka-bar[data-primary="true"]');
+
+/** A new chat, opened the way a person opens one: Actions → Past chats → New chat. */
 async function aNewChat(): Promise<void> {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-  await act(async () => row('Chats')!.click()); await settle();
+  await pressChatCorner(world.container); await settle();
   const chat = row('New chat');
   expect(chat, 'Now offers no Chat in the bar').toBeTruthy();
   await act(async () => chat!.click()); await settle();
@@ -173,19 +176,21 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
     await act(async () => close!.click()); await settle();
     expect(location.pathname, 'Close left the chat up').not.toContain('/chat/');
     expect(open(), 'Close on a chat went somewhere other than home').toBeNull();
-    expect(barShape(world!.container), 'home is not back to creation and history').toEqual(['Home', 'Inspirations', 'Chats']);
+    expect(homeBar(), 'home is not back to its one field').toBeTruthy();
+    expect(world!.container.querySelector('nav.waka-dock'), 'home grew a tab bar again').toBeNull();
     expect(world!.container.querySelector('.chat-composer'), 'the chat\'s composer outlived the chat').toBeNull();
 
-    await act(async () => row('Chats')!.click()); await settle();
+    await pressChatCorner(world!.container); await settle();
     await act(async () => row('New chat')!.click()); await settle();
     const allChats = row('All chats');
     expect(allChats, 'a chat offers no way to the chats list').toBeTruthy();
     await act(async () => allChats!.click()); await settle();
     expect(location.pathname, 'All chats left the chat up').not.toContain('/chat/');
     expect(open(), 'All chats did not open the chats list').toBe('conversations');
-    /* On the list the bar is ↩ │ Close (the list's own ruling, held in
-       `home-navigation.test.tsx`). */
-    expect(barShape(world!.container)).toEqual(['Home', 'Inspirations', 'Chats']);
+    /* On the list there are no tabs any more (§3c); the way out is the
+       page's own back control, and reached from a chat it leads back there. */
+    expect(world!.container.querySelector('nav.waka-dock'), 'the list grew a tab bar again').toBeNull();
+    expect(world!.container.querySelector('button.waka-page-back')?.textContent?.trim()).toBe('Back to chat');
   });
 
   it('returns from history to the same principle-started draft', async () => {
@@ -203,27 +208,24 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
     expect((await chatField(world.container)).value).toBe('Keep this question with its starting point.');
   });
 
-  /* THE GLYPHS IN FRONT OF THE TWO WORDS (founder, 2026-10-18: "add + icon in
-     front of Inspiration, and chat icon in front of Chat at bottom bar").
-     Decorative: hidden from assistive tech, so each row's name is still its
-     word alone, and only on the two words that make a new one, never on
-     "All chats", which opens a list. */
-  it('draws a plus before Inspiration and a chat bubble before Chat, hidden, names unchanged', async () => {
+  /* THE TABS AND THE PILL ARE GONE (waka-design-brief.md §3c). The glyphs
+     in front of "Inspiration" and "Chat" (founder, 2026-10-18) went with the
+     words they stood in front of. What remains to hold: home's one control is
+     the field, its ＋ carries the one hidden plus glyph and is named by its
+     label, and the chats list is still reached — from the corner — and still
+     answers "All chats" from inside a chat. */
+  it('replaces the tabs and the pill with one field, and still reaches the chats', async () => {
     world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-    expect(barShape(world!.container)).toEqual(['Home', 'Inspirations', 'Chats']);
-    for (const [name, kind] of [['New inspiration', 'plus'], ['Home', 'home'], ['Inspirations', 'capture'], ['Chats', 'chat']] as const) {
-      const button = row(name);
-      expect(button, `no bar row reads ${name}`).toBeTruthy();
-      const glyphs = button!.querySelectorAll('svg');
-      expect(glyphs.length, `${name} carries no single glyph`).toBe(1);
-      const glyph = glyphs[0]!;
-      expect(glyph.getAttribute('data-home-action-icon')).toBe(kind);
-      expect(glyph.getAttribute('aria-hidden')).toBe('true');
-      expect(glyph.getAttribute('focusable')).toBe('false');
-      expect(button!.firstElementChild, `the ${kind} glyph is not in front of ${name}`).toBe(glyph);
-      expect(button!.hasAttribute('aria-label'), `${name} gained an aria-label over its word`).toBe(false);
-    }
-    await act(async () => row('Chats')!.click()); await settle();
+    expect(world!.container.querySelectorAll('[data-primary="true"]'), 'home has more or less than one primary control').toHaveLength(1);
+    expect(homeBar(), 'the one primary control is not the home bar').toBeTruthy();
+    expect(world!.container.querySelector('nav.waka-dock, .waka-primary-capture, .waka-primary-navigation'), 'a tab or the pill came back').toBeNull();
+    const plus = homeBar()!.querySelector<HTMLButtonElement>('button.waka-bar-tool[aria-haspopup="menu"]');
+    expect(plus?.getAttribute('aria-label')).toBe('Add a photo, file, or voice');
+    const glyphs = plus!.querySelectorAll('svg');
+    expect(glyphs).toHaveLength(1);
+    expect(glyphs[0]!.getAttribute('data-home-action-icon')).toBe('plus');
+    expect(glyphs[0]!.getAttribute('aria-hidden')).toBe('true');
+    await pressChatCorner(world!.container); await settle();
     await act(async () => row('New chat')!.click()); await settle();
     expect(row('All chats')?.textContent).toBe('All chats');
   });

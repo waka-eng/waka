@@ -22,7 +22,7 @@ import { useLocation } from 'react-router-dom';
 import type { ApiOwnedProfile } from '../src/lib/api/profiles';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressDockRow, closeOverlay, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressAction, pressDockRow, closeOverlay, leaveForHome, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { ApiError, createInspiration, fetchPrinciples, updatePrinciple } from '../src/lib/api';
 import { fetchPrincipleRead } from '../src/lib/api/principles';
 import { loadInspirations, loadSignals, loadTopOfMind } from '../src/lib/data';
@@ -163,17 +163,17 @@ function twoAgents() {
 it('opens history directly for the standing agent without starting a note or conversation', async () => {
   twoAgents();
   world = await mountWorld(FACTS); await settle();
-  const dock = (label: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock button')]
-    .find(button => button.textContent?.trim() === label)!;
-  const close = async () => { await act(async () => dock('Home').click()); await settle(); };
+  /* The two histories are the corner's Search and Past chats since the tabs
+     went (waka-design-brief.md §3c); each list goes home by the page's Home. */
+  const close = async () => { await closeOverlay(world.container); await settle(); };
   for (const name of ['noah', 'another']) {
     await act(async () => face(name)!.click()); await settle();
-    await act(async () => dock('Inspirations').click()); await settle();
+    await pressAction(world.container, 'Search'); await settle();
     const archive = world.container.querySelector('.waka-over[data-jar-surface]')!;
     expect(archive.textContent).toContain(`Only agent-${name} kept this`);
     expect(world.container.querySelector('textarea.jar-composer-text')).toBeNull();
     await close();
-    await act(async () => dock('Chats').click()); await settle();
+    await pressAction(world.container, 'Past chats'); await settle();
     expect(vi.mocked(listConversations).mock.lastCall?.[0]).toBe(`agent-${name}`);
     expect(createConversation).not.toHaveBeenCalled();
     await close();
@@ -665,7 +665,9 @@ it('isolates each agent’s inspirations, chat list, transcript, and chat URL', 
     const list=world.container.querySelector('.waka-over[data-jar-surface]')!;
     expect(list.textContent).toContain('Only '+name+' chat');
     expect(list.textContent).not.toContain('Only '+(name==='noah'?'another':'noah')+' chat');
-    await closeOverlay(world.container); await settle();
+    /* Reached from a chat, the list's back leads to that chat, and the
+       chat's Close goes home — there are no tabs to jump home from (§3c). */
+    await leaveForHome(world.container); await settle();
   }
   expect(CHATS.rows.map(row=>({profile:row.profileId,text:row.messages[0].content}))).toEqual([
     {profile:'agent-noah',text:'Only noah chat'}, {profile:'agent-another',text:'Only another chat'},
@@ -683,16 +685,19 @@ it('saves a capture into the selected agent without adding it to the human or an
   PROFILES.rows = ['noah','another'].map((name,i)=>({id:`agent-${name}`,accountId:'account-1',name,type:'agent',avatarUrl:null,preferredLocale:'en-US',createdAt:`2026-10-0${i+1}T00:00:00Z`}));
   world=await mountWorld(FACTS); await settle();
   await act(async()=>face('noah')!.click()); await settle();
-  await pressDockRow(world.container,'Inspirations'); await settle();
+  await chooseFromMenu(world.container,'Inspirations'); await settle();
   const newNote=world.container.querySelector<HTMLButtonElement>('.waka-over-head .waka-over-new')!;
   expect(newNote.textContent).toBe('New inspiration');
+  /* The archive's new-save door leads to the home bar now (waka-design-
+     brief.md §3c), on the agent's wall as on yours; the bar saves to the
+     wall it stands on. */
   await act(async()=>newNote.click()); await settle();
-  const area=world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
+  const area=world.container.querySelector<HTMLTextAreaElement>('form.waka-bar textarea.waka-bar-field')!;
   await act(async()=>{
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,'A new Noah observation');
     area.dispatchEvent(new Event('input',{bubbles:true}));
   });
-  await act(async()=>world.container.querySelector<HTMLButtonElement>('button[aria-label="Save inspiration"]')!.click()); await settle();
+  await act(async()=>world.container.querySelector<HTMLButtonElement>('form.waka-bar button[aria-label="Save"]')!.click()); await settle();
   expect(createInspiration).toHaveBeenCalledWith(expect.objectContaining({text:'A new Noah observation'}),expect.objectContaining({profile:'agent-noah'}));
   expect(CAPTURES.rows.map(row=>row.profileId)).toEqual(['agent-noah']);
   await chooseFromMenu(world.container,'Inspirations'); await settle();

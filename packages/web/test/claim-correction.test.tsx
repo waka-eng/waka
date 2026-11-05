@@ -443,15 +443,21 @@ it("makes the bar one way out while reviewing: Exit review mode", async () => {
   /* Founder, 2026-10-15: "in the review mode, bottom bar should say exit
      review mode." */
   const bar = () => [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")].map((n) => n.textContent?.trim());
+  /* Home has no tab bar since the home brief (waka-design-brief.md §3c):
+     its one control is the docked field, which steps aside for review. */
+  const homeBar = () => world.container.querySelector("form.waka-bar[data-primary='true']");
   await mountQueue(CLAIM, SECOND);
-  expect(bar(), "the bar before review").toEqual(["Home", "Inspirations", "Chats"]);
+  expect(bar(), "the bar before review").toEqual([]);
+  expect(homeBar(), "home's field before review").toBeTruthy();
   await diveIntoReview(world.container, world.step);
   expect(bar(), "the bar while reviewing").toEqual(["Exit review mode"]);
+  expect(homeBar(), "home's field stood beside review's one way out").toBeNull();
   const exit = [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")].find((n) => n.textContent?.trim() === "Exit review mode")!;
   await act(async () => { exit.click(); });
   expect(card(), "Exit review mode left the cards up").toBeNull();
   expect(invite(), "Exit review mode should return to the reading").toBeNull();
-  expect(bar(), "the bar after review").toEqual(["Home", "Inspirations", "Chats"]);
+  expect(bar(), "the bar after review").toEqual([]);
+  expect(homeBar(), "home's field did not come back after review").toBeTruthy();
 });
 
 it("keeps → for the card while reviewing, and gives it back to Principles when the last card is answered", async () => {

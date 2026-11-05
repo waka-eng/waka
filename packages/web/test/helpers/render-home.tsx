@@ -549,7 +549,7 @@ function isReturnRow(node: HTMLElement): boolean {
 /** Press the bar row named exactly `label`, or say what the bar offers. */
 export async function pressDockRow(container: HTMLElement, label: string): Promise<void> {
   if (label === "New chat" && !dockRows(container).some(node => accessibleName(node) === label)) {
-    await pressDockRow(container, "Chats");
+    await pressChatCorner(container);
     await pressDockRowWhenItAppears(container, "New chat", "the chat list's primary action");
     return;
   }
@@ -633,9 +633,11 @@ async function pressKey(container: HTMLElement, key: string): Promise<void> {
  * route to the control moves, so this helper carries that one difference and
  * the assertions stay where they were.
  *
- * "Inspirations" / "Your inspirations" uses home's archive shortcut,
- * closing the current page first when needed.
- *   - "Chats" → the bar's Chat (a new chat), then "All chats" in its bar;
+ * "Inspirations" / "Your inspirations" → the corner menu's Search, closing
+ * the current page first when needed. The Inspirations tab is gone
+ * (waka-design-brief.md §3c: one docked field replaces the tabs and the
+ * pill), and the archive is reached from Actions → Search.
+ *   - "Chats" → Actions → Past chats, for the same reason;
  *   - "Principles" → ArrowRight on Now, the keyboard twin of pulling the
  *     creature right;
  *   - "Now" → the bar's Close when it has one (a note, a chat, and since
@@ -645,8 +647,8 @@ async function pressKey(container: HTMLElement, key: string): Promise<void> {
  */
 export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
   if (label === "Inspirations" || label === "Your inspirations") {
-    if (dockClose(container)) await closeOverlay(container);
-    await pressDockRowWhenItAppears(container, "Inspirations", "the Inspirations tab");
+    await leaveForHome(container);
+    await pressAction(container, "Search");
     return;
   }
   if (label === "Chats") {
@@ -659,7 +661,7 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
   }
   if (label === "Now") {
     if (!container.querySelector(".waka-over[data-jar-surface]") && !dockClose(container)
-      && !container.querySelector('.waka-dock .waka-dock-item[aria-current="page"]')) return;
+      && !pageBack(container)) return;
     await closeOverlay(container);
     return;
   }
@@ -668,15 +670,47 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
 
 /**
  * THE CHATS LIST. The name is kept so every suite reaching for the
- * conversations door reads the same; the door is two presses now.
+ * conversations door reads the same.
  *
- * Founder, 2026-10-15: the bar's Chat opens a NEW chat, and the list of chats
- * is reached from a chat's bar, whose first word is "All chats" — not from a
- * header above it, since nothing sits in a corner any more.
+ * The Chats tab is gone (waka-design-brief.md §3c); the list of past chats is
+ * the corner menu's "Past chats", reached from home.
  */
 export async function pressChatCorner(container: HTMLElement): Promise<void> {
-  if (dockClose(container)) await closeOverlay(container);
-  await pressDockRowWhenItAppears(container, "Chats", "the Chats tab");
+  await leaveForHome(container);
+  await pressAction(container, "Past chats");
+}
+
+/** The page's own back control, when it is drawn. */
+function pageBack(container: HTMLElement): HTMLButtonElement | null {
+  return container.querySelector<HTMLButtonElement>("button.waka-page-back");
+}
+
+/** Leave whatever page is open, so the corner menu (home only) is on screen. */
+export async function leaveForHome(container: HTMLElement): Promise<void> {
+  for (let turn = 0; turn < 4; turn += 1) {
+    if (container.querySelector(".waka-home-actions button.waka-corner")) return;
+    if (!dockClose(container) && !pageBack(container) && !container.querySelector(".waka-over[data-jar-surface]")) return;
+    await closeOverlay(container);
+  }
+}
+
+/**
+ * PRESS A ROW OF THE CORNER MENU ("Actions"): Search, Past chats, View
+ * principles, Review. Waits a few flushes for the menu, which stands only on
+ * home at rest.
+ */
+export async function pressAction(container: HTMLElement, label: string): Promise<void> {
+  let trigger: HTMLButtonElement | null = null;
+  for (let turn = 0; turn < 40 && !trigger; turn += 1) {
+    trigger = container.querySelector<HTMLButtonElement>(".waka-home-actions button.waka-corner");
+    if (!trigger) await act(async () => { await Promise.resolve(); });
+  }
+  if (!trigger) throw new Error(`the corner menu (Actions) is not on screen, so ${label} cannot be pressed`);
+  if (trigger.getAttribute("aria-expanded") !== "true") await act(async () => trigger!.click());
+  const rows = [...container.querySelectorAll<HTMLButtonElement>(".waka-home-actions-list button")];
+  const row = rows.find((node) => accessibleName(node) === label);
+  if (!row) throw new Error(`no corner-menu row named ${label}. It offers: ${rows.map(accessibleName).join(", ")}`);
+  await act(async () => row.click());
 }
 
 /**
@@ -694,12 +728,19 @@ export async function pressChatCorner(container: HTMLElement): Promise<void> {
  * `home-navigation.test.tsx`'s to test.
  */
 export async function closeOverlay(container: HTMLElement): Promise<void> {
-  if (!container.querySelector(".waka-dock")) throw new Error("no visible way out: the dock is not on screen");
   const close = dockClose(container);
   if (close) {
     await act(async () => close.click());
     return;
   }
+  /* Over either list there is no bar any more (the tabs went, §3c); the way
+     out a person sees is the page's back control, which says "Home". */
+  const back = pageBack(container);
+  if (back) {
+    await act(async () => back.click());
+    return;
+  }
+  if (!container.querySelector(".waka-dock")) throw new Error("no visible way out: neither the dock nor the page's back control is on screen");
   const home = dockRows(container).find(node => accessibleName(node) === "Home");
   if (home) {
     await act(async () => home.click());

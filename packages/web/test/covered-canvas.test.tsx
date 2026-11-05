@@ -7,7 +7,7 @@
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { apiMockFrom, dataMockFrom, mountWorld, pressAction, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import type { SimApi } from '../src/canvas/simulation';
 
 const facts = vi.hoisted(() => ({ inspirations: [{ id: 'kept', text: 'A quiet morning', daysAgo: 1 }] }));
@@ -24,7 +24,12 @@ beforeAll(() => { installCanvasStub(); setViewport(390, 844); (globalThis as { I
 beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
 afterEach(() => { world?.unmount(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
-it.each(['Inspirations', 'Chats'])('parks the covered canvas on %s and resumes when Home returns', async label => {
+/* The lists are opened from the corner's Search and Past chats since the
+   tabs went (waka-design-brief.md §3c), and left by the page's own Home. */
+const open = (label: string) => pressAction(world.container, label);
+const home = async () => { await act(async () => world.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click()); };
+
+it.each(['Search', 'Past chats'])('parks the covered canvas on %s and resumes when Home returns', async label => {
   world = await mountWorld(facts);
   const context = world.container.querySelector<HTMLCanvasElement>('.jar-canvas')!.getContext('2d')!;
   const draw = vi.fn(context.clearRect);
@@ -35,10 +40,8 @@ it.each(['Inspirations', 'Chats'])('parks the covered canvas on %s and resumes w
   await world.step(120);
   expect(draw.mock.calls.length).toBe(120);
   expect(features).toHaveBeenCalled();
-  const tab = (name: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-primary-navigation button')]
-    .find(button => button.textContent?.trim() === name)!;
   draw.mockClear(); features.mockClear();
-  await act(async () => tab(label).click());
+  await open(label);
   await world.step(120);
   expect(draw).toHaveBeenCalled(); // Clear the old creature before sleeping.
   expect(features).not.toHaveBeenCalled();
@@ -47,7 +50,7 @@ it.each(['Inspirations', 'Chats'])('parks the covered canvas on %s and resumes w
   await world.step(600);
   expect(draw.mock.calls.length).toBe(0);
   expect(schedule).not.toHaveBeenCalled();
-  await act(async () => tab('Home').click());
+  await home();
   await world.step(120);
   draw.mockClear();
   await world.step(120);
@@ -62,15 +65,13 @@ const pointer = (target: EventTarget, type: string, x: number, y: number) => {
     pointerType: 'mouse', clientX: x, clientY: y, buttons: type === 'pointerdown' ? 1 : 0 }));
 };
 
-it.each(['Inspirations', 'Chats'])('removes the avatar click target and hover cursor on %s', async label => {
+it.each(['Search', 'Past chats'])('removes the avatar click target and hover cursor on %s', async label => {
   world = await mountWorld(facts);
   const root = world.container.querySelector<HTMLElement>('.jar')!;
   const spot = simulation().creatureAt()!;
-  const tab = (name: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-primary-navigation button')]
-    .find(button => button.textContent?.trim() === name)!;
   await act(async () => { pointer(window, 'pointermove', spot.x, spot.y); pointer(window, 'pointermove', spot.x, spot.y); });
   expect(root.style.cursor).toBe('pointer');
-  await act(async () => tab(label).click());
+  await open(label);
   expect(root.style.cursor).toBe(''); // No pointer movement needed to clear it.
   expect(world.container.querySelector('.jar-char-press')).toBeNull();
   await world.step(120);
@@ -84,7 +85,7 @@ it.each(['Inspirations', 'Chats'])('removes the avatar click target and hover cu
   await world.step(120);
   expect(root.style.cursor).toBe('');
   expect(schedule).not.toHaveBeenCalled();
-  await act(async () => tab('Home').click());
+  await home();
   await world.step(120);
   expect(world.container.querySelector('.jar-char-press--lit')).toBeNull();
   const returned = simulation().creatureAt()!;

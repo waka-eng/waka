@@ -5241,7 +5241,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const origin = listOrigin.current;
     listOrigin.current = null;
     if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id, origin.principleId);
-    else openOverHome(null);
+    /* "BACK HOME" GOES HOME. With no list origin this used to step back
+       through history (`openOverHome(null)`), which was right while the
+       Home tab was the way home and wrong now that this is: two archive
+       entries in a row landed the press on the earlier archive. */
+    else closePage();
   };
 
   /**
@@ -11434,7 +11438,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
           onRemoveMedia={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
           onFiles={(files, door) => { void addInspirationFiles(files, door); }}
-          onSubmit={() => { void keepIt(); }}
+          /* A save made with the dial in the past, or the camera on the
+             ground, lands at NOW — so the press that saves also brings the
+             world back to now, the way the old door did before it opened
+             the notepad. It is the person's own press, so the world may move. */
+          onSubmit={() => { if (!atNow && dial) windTo(dial.end); simApiRef.current?.toTop(); void keepIt(); }}
           busy={preparingInspiration || checkingFiles || Boolean(inspirationSave.pending) || inspirationSave.busy || !composerDraft.ready}
           error={mouthNote || dictation.error}
           savedAt={savedAt} savedLater={savedLater}

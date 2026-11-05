@@ -23,7 +23,12 @@
  * 7 modal call sites, one covered. The saved-inspiration progress sheet was
  * briefly added on 2026-10-28, then removed: background work belongs to the
  * operator. There are still 7 modal call sites, one covered. Reading edits
- * confirm discard.
+ * confirm discard. The home brief (waka-design-brief.md §3d, 2026-11-05)
+ * added the save sheet opened from the home stream: 8 modal call sites, one
+ * covered. It does NOT take press-away, deliberately: it carries a two-press
+ * delete, and a stray press outside while "Delete for good / Keep it" is up
+ * must not be how that question gets answered. It closes by its visible
+ * Close or by Escape, like the share sheet.
  *
  * That is worse than an uncovered sheet, because the file holding the rule
  * was the one place anybody auditing dismissal would look, and it reported

@@ -37,7 +37,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
-import { apiMockFrom, dataMockFrom, mountWorld, pressDockRow, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
+import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 
 const FACTS = {
   inspirations: Array.from({ length: 3 }, (_, i) => ({ id: `own-${i}`, text: `something I kept, ${i}`, daysAgo: i + 1 })),
@@ -318,7 +318,9 @@ it("does not let the notepad record while the archive's recording is still finis
   await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
   await settle();
   expect(archiveOpen()).toBe(false);
-  await pressDockRow(world.container, "New inspiration");
+  /* The notepad is reached by its address since the pill went
+     (waka-design-brief.md §3c). */
+  await act(async () => { go("/?compose=1"); });
   await settle();
   const notepadRecord = () => q<HTMLButtonElement>('.waka-dock .waka-dock-tool[aria-label="Record"]');
   expect(notepadRecord(), "the notepad under the archive is not on screen").toBeTruthy();

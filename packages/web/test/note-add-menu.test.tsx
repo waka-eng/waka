@@ -76,11 +76,10 @@ async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
 async function openNotepad(): Promise<void> {
-  world = await mountWorld(FACTS); await settle();
-  const inspiration = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-primary-capture')]
-    .find(row => row.textContent?.trim() === 'New inspiration');
-  expect(inspiration, 'the bar offers no Inspiration row').toBeTruthy();
-  await act(async () => inspiration!.click()); await settle();
+  /* By its address: the pill that opened it is gone (waka-design-brief.md
+     §3c — saving from home is the home bar), and the notepad is still a
+     place, reached at ?compose=1. */
+  world = await mountWorld(FACTS, { initialEntries: ['/?compose=1'] }); await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad did not open').toBeTruthy();
 }
 const plus = () => world.container.querySelector<HTMLButtonElement>('nav.waka-dock .waka-dock-making button[aria-haspopup="menu"]');

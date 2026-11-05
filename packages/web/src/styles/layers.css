@@ -67,17 +67,24 @@
  * tree, because the last version of this table was stale for two sheets and
  * nothing could tell:
  *
- *   product   global.css:10 (58 rules), system.css:2 (13), home.css:10 (358)
- *   chrome    chrome.css:2 (260), chat.css:1 (65), claims.css:26 (318),
- *             home.css:4584 (22), home-surface.css:19 (54)
+ *   product   global.css:10 (59 rules), system.css:2 (13), home.css:10 (274)
+ *   chrome    chrome.css:2 (270), chat.css:1 (107), claims.css:26 (581),
+ *             home.css:3802 (22), home-surface.css:19 (55)
  *   register  system.css:481 (1 rule, see below)
+ *
+ *   (RE-MEASURED 2026-11-05 with `rulesIn` from the gate itself, when the
+ *   home brief added home-surface.css. The gate checks that every sheet is
+ *   NAMED here, not that its counts are current, and most of them had
+ *   drifted — claims.css read 318 and holds 581. The numbers above are the
+ *   gate's own count on that day; they will drift again, and the names are
+ *   what is enforced.)
  *   base      nothing yet — declared so resets and element defaults have a
  *             floor to land on when they are separated out
  *
- *   UNLAYERED, AND THEREFORE BEATING ALL OF THE ABOVE — 32 rules, down from
- *   350:
+ *   UNLAYERED, AND THEREFORE BEATING ALL OF THE ABOVE — 20 rules on
+ *   2026-11-05 (17 + 3), down from 350:
  *
- *     home.css           30 rules — the `.jar-where-*` / `.jar-when*` /
+ *     home.css           17 rules — the `.jar-where-*` / `.jar-when*` /
  *                       `.jar-here*` run and the `.jar-drift-*` /
  *                       `.waka-over--talk*` / `.jar-up*` run. Not a decision
  *                       anybody made: an append past a closing brace. (The
@@ -88,7 +95,7 @@
  *                       deletion is work for whoever next moves a layer;
  *                       what this paragraph is for is the SHAPE of the bug,
  *                       which is unchanged.)
- *     layers.css          2 rules — `:focus-visible` and `.jar
+ *     layers.css          3 rules — `:focus-visible` and `.jar
  *                       :focus-visible`, and they are DELIBERATE. The
  *                       argument is below and the unlayered position IS the
  *                       mechanism.

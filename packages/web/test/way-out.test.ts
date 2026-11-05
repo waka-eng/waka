@@ -473,9 +473,14 @@ describe("every surface has a way out you can see", () => {
     expect(code(home), "the bar's groups no longer hang off the making row, or the return row on a list").toMatch(
       /const barOwner: 'inspiration' \| 'talk' \| 'return' \| null = making \?\? \(listing \? 'return' : null\);/);
 
-    // The page toolbar is reserved for creating/editing; peer destinations
-    // use PrimaryNavigation, whose selected-tab behavior is exercised by Home.
-    expect(code(home)).toContain("!making && !savedNoteOpen && !reviewing");
+    // The page toolbar is reserved for creating/editing. The peer tabs are
+    // gone (waka-design-brief.md §3c): home stands on its one field, the bar
+    // is drawn only while making, reviewing or reading a saved note, and a
+    // list's way out is the page's own back control, drawn whenever a list
+    // is up.
+    expect(code(home)).toContain("const barShown = phase === 'ready' && atNowView && !mouthOpen && !reviewing;");
+    expect(code(home)).toContain("(making||reviewing||savedNoteOpen) ?");
+    expect(code(home)).toContain("visible={savedNoteOpen || making === 'talk' || listing}");
     expect(code(home)).toContain("making === 'inspiration' ? [{ id: 'inspiration'");
     expect(code(home)).toContain("making === 'talk' ? [{ id: 'talk'");
 
@@ -494,7 +499,11 @@ describe("every surface has a way out you can see", () => {
       /const close = closeSavedNote\.current;\s*if \(close\) \{ close\(\); return; \}/);
     expect(back, "Back consumes the list origin once").toMatch(
       /const origin = listOrigin\.current;\s*listOrigin\.current = null;/);
-    expect(back).toContain("else openOverHome(null);");
+    /* With no list origin, "Back home" goes straight home (closePage), not
+       back through history — with the tabs gone (waka-design-brief.md §3c)
+       this IS the way home, and two archive entries in a row used to land
+       it on the earlier archive. */
+    expect(back, "Back home from a list goes home, not back through history").toContain("else closePage();");
     expect(code(home)).toMatch(/<PageBack\s+navigationKey=\{viewNavigation.href\} onBack=\{backPage\}/);
 
     /* EVERY ROW IS THE SAME SLOT (2026-10-16): Chat's row was a bare inline
@@ -541,7 +550,9 @@ describe("every surface has a way out you can see", () => {
        the bar if the bar is actually up while it is open — which is exactly
        what was NOT true of a conversation until it was fixed, and exactly
        what being trapped feels like. */
-    const condition = /: phase==='ready'&&([^?]*)\?[\s\S]{0,40}?<nav className="waka-dock"/.exec(home);
+    /* Its own expression since the tabs went (§3c): it was the else-branch of
+       the tabs' ternary, and now stands alone. */
+    const condition = /\{phase==='ready'&&([^\n]*?) \? \(\s*<nav className="waka-dock"/.exec(home);
     expect(condition, "the dock's render condition could not be found").toBeTruthy();
     expect(
       condition![1],
