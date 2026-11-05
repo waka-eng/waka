@@ -752,18 +752,33 @@ export async function closeOverlay(container: HTMLElement): Promise<void> {
 /**
  * STEP INTO REVIEW, the way a person now reaches a claim card or a pick.
  *
- * Founder, 2026-10-15: "the entry point into the card swipe left and right
- * should be the agent should say 'there are x things to review!' and the CTA
- * becomes 'Dive into review'". The cards no longer lie on home waiting; the
- * creature's bubble counts them and this press is the way in. Pass the
- * world's `step` to run the frame that hands the first card focus.
+ * It used to be the creature's bubble — "There are x things to review!" with
+ * "Dive into review" (founder, 2026-10-15). The home brief removed that bubble
+ * (waka-design-brief.md §3b: "never an exclamation mark, never a badge, never
+ * 'Dive into review'"); what waits is offered as "More to look at" under the
+ * companion once the profile is past its first session and five saves, and
+ * always from the corner menu's "Review suggestions". This presses the corner
+ * row, which is reachable whatever the fixture's save count. It waits for the
+ * row because it only appears once the queue has loaded. Pass the world's
+ * `step` to run the frame that hands the first card focus.
  */
 export async function diveIntoReview(container: HTMLElement, step?: (frames?: number) => Promise<void>): Promise<void> {
-  if (!container.querySelector('.jar-char-bubble--review')) {
-    await pressWhenItAppears(container, '.jar-char-press', 'the avatar that offers review');
+  for (let turn = 0; turn < 60; turn += 1) {
+    const trigger = container.querySelector<HTMLButtonElement>(".waka-home-actions button.waka-corner");
+    if (trigger) {
+      if (trigger.getAttribute("aria-expanded") !== "true") await act(async () => trigger.click());
+      const row = [...container.querySelectorAll<HTMLButtonElement>(".waka-home-actions-list button")]
+        .find((node) => accessibleName(node) === "Review suggestions");
+      if (row) {
+        await act(async () => row.click());
+        if (step) await step(2);
+        return;
+      }
+      await act(async () => trigger.click());
+    }
+    await act(async () => { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); });
   }
-  await pressWhenItAppears(container, ".jar-char-bubble--review button.jar-char-bubble-act", "the review invitation's Dive into review");
-  if (step) await step(2);
+  throw new Error("the corner menu never offered Review suggestions");
 }
 
 /** The capture entry is a field now, not a button that opens one. */
