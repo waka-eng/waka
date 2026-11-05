@@ -1,0 +1,389 @@
+/*
+ * THE HOME SURFACE — the bar, the stream, and a save's sheet
+ * (waka-design-brief.md §2, §3c, §3d, §5, §7).
+ *
+ * ONE SCALE, ONE PALETTE, NOTHING ELSE. Every font-size here is a
+ * `--type-*` step (13 / 15 / 16 / 20 / 24 / 32) and every colour is one of
+ * the brief's tokens; `test/brief-tokens.test.ts` reads this file and fails
+ * on a raw px font size, a hex colour or a step that is not on the scale.
+ * Readability is changed by changing the token, never a value in here.
+ *
+ * SMALL TEXT SITS ON A SURFACE (§2). Nothing under 16px is set straight on
+ * the starfield: "Saved", the error, the chips and the stream's labels all
+ * sit on the dark glass, and the statements on paper.
+ *
+ * `@layer chrome`, after claims.css, because the bar replaces chrome that
+ * lived there (the dock) and has to stand at that precedence to win ties
+ * with it rather than by specificity.
+ */
+@layer chrome {
+
+/* ── THE BAR (§3c) ─────────────────────────────────────────────────────── */
+
+.waka-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  width: min(640px, 100%);
+  margin-inline: auto;
+  padding: var(--sp-8) var(--sp-16) calc(var(--sp-12) + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  gap: var(--sp-6);
+  font-family: var(--font-sans);
+}
+
+/* WHEN THE STREAM RUNS UNDER IT, THE BAR STANDS ON GROUND. Its field is
+   glass, and glass over a card shows the card's words through the field
+   (measured on the first build: a save's sentence read through the
+   placeholder). So while a stream exists the bar's own column is the
+   stream's glass laid over the ground — opaque, the same colour the sheet
+   reads as. With no stream it stays clear over the stars. */
+.jar:has(.waka-stream-sheet:not(:empty)) .waka-bar {
+  background: linear-gradient(var(--bg-glass), var(--bg-glass)), var(--bg);
+}
+
+.waka-bar-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--w-edge);
+  border-radius: var(--radius-field);
+  transition: border-color var(--motion-dur) var(--motion-ease);
+}
+
+.waka-bar-field {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--sp-44);
+  max-height: 40svh;
+  margin: 0;
+  padding: var(--sp-10) var(--sp-6);
+  resize: none;
+  overflow-y: auto;
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  font: inherit;
+  /* 16px on phones, which is also what keeps iOS from zooming on focus. */
+  font-size: var(--type-body);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+}
+.waka-bar-field::placeholder { color: var(--ink-secondary); opacity: 1; }
+.waka-bar-field:focus { outline: none; }
+/* The field's focus is the row's: the whole rounded field is the control. */
+.waka-bar-row:focus-within { border-color: var(--accent); }
+
+.waka-bar-tool,
+.waka-bar-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--sp-44);
+  height: var(--sp-44);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.waka-bar-tool {
+  background: transparent;
+  color: var(--ink-secondary);
+}
+.waka-bar-send {
+  background: var(--paper);
+  color: var(--paper-ink);
+}
+.waka-bar-tool:disabled,
+.waka-bar-send:disabled { cursor: default; }
+.waka-bar .waka-add { position: relative; display: inline-flex; }
+.waka-bar .waka-add-menu { bottom: calc(100% + var(--sp-8)); left: 0; }
+
+.waka-bar-notice,
+.waka-bar-error,
+.waka-bar-hint {
+  justify-self: center;
+  margin: 0;
+  padding: var(--sp-6) var(--sp-14);
+  border-radius: var(--r-pill);
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  color: var(--ink);
+  font-size: var(--type-13);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-heading);
+}
+/* "Saved" rises and leaves; it is not a state that stays. Empty, it takes
+   no room, so the bar does not jump when it goes. */
+.waka-bar-notice {
+  order: -2;
+  transition: opacity var(--motion-dur) var(--motion-ease);
+}
+.waka-bar-notice:not([data-shown]) { position: absolute; opacity: 0; pointer-events: none; }
+.waka-bar-hint { order: 2; }
+.waka-bar-error { order: 3; justify-self: stretch; border-radius: var(--radius-card); }
+
+.waka-bar-media {
+  order: -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.waka-bar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding-inline-start: var(--sp-12);
+  border-radius: var(--r-pill);
+  background: var(--bg-glass);
+  border: 1px solid var(--w-edge);
+  color: var(--ink);
+  font-size: var(--type-13);
+}
+.waka-bar-chip[data-problem] { border-style: dashed; }
+.waka-bar-chip-remove {
+  width: var(--sp-32);
+  height: var(--sp-32);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-size: var(--type-16);
+  cursor: pointer;
+}
+
+/* ── THE STREAM (§3d) ──────────────────────────────────────────────────── */
+
+/* The scroller stands from 42svh down and lets every press through except
+   on the sheet itself, so the companion above and around it stays the
+   world's. Its spacer holds the sheet below the fold with `--stream-peek`
+   of it showing over the bar. */
+.waka-stream-scroller {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 42svh;
+  bottom: 0;
+  z-index: 5;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: none;
+  scrollbar-width: none;
+}
+.waka-stream-scroller::-webkit-scrollbar { display: none; }
+.waka-stream-spacer { height: calc(100% - var(--stream-peek)); }
+.waka-stream-sheet {
+  pointer-events: auto;
+  width: min(640px, 100%);
+  min-height: 100%;
+  margin-inline: auto;
+  padding-bottom: calc(var(--sp-96) + var(--sp-24) + env(safe-area-inset-bottom, 0px));
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--w-edge);
+  border-bottom: 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  font-family: var(--font-sans);
+}
+.waka-stream-sheet:empty { display: none; }
+
+.waka-stream-section + .waka-stream-section { margin-top: var(--sp-16); }
+.waka-stream-label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: var(--sp-16) var(--sp-16) var(--sp-8);
+  /* Opaque, for the bar's reason: the cards scroll under a stuck label, and
+     glass let their words read through it. The colour the sheet reads as. */
+  background: linear-gradient(var(--bg-glass), var(--bg-glass)), var(--bg);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  color: var(--ink-secondary);
+  font-size: var(--type-13);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-heading);
+}
+.waka-stream-list {
+  display: grid;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: 0 var(--sp-16);
+  list-style: none;
+}
+
+.waka-stream-card {
+  display: grid;
+  gap: var(--sp-4);
+  width: 100%;
+  margin: 0;
+  padding: var(--sp-12) var(--sp-16);
+  text-align: start;
+  background: var(--w-raised);
+  border: 1px solid var(--w-edge);
+  border-radius: var(--radius-card);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.waka-stream-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: var(--type-13);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-heading);
+}
+.waka-stream-chip {
+  padding: 0 var(--sp-8);
+  border: 1px solid var(--w-edge);
+  border-radius: var(--r-pill);
+}
+.waka-stream-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  font-size: var(--type-16);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+/* What the app says to you is on paper (§2): a pattern and a principle are
+   the app noticing something, so they wear the bubble's cream. */
+.waka-stream-statement {
+  display: grid;
+  gap: var(--sp-4);
+  padding: var(--sp-12) var(--sp-16);
+  border-radius: var(--radius-card);
+  background: var(--paper);
+  color: var(--paper-ink);
+}
+.waka-stream-statement p {
+  margin: 0;
+  max-width: var(--measure-reading);
+  font-size: var(--type-16);
+  line-height: var(--leading-body);
+}
+.waka-stream-statement .waka-stream-meta { color: var(--paper-muted); }
+/* A tentative one is said in words ("Still forming") and drawn open rather
+   than filled — two cues, neither of them colour alone (§9.6). */
+.waka-stream-statement[data-forming] {
+  background: transparent;
+  color: var(--ink);
+  border: 1px dashed var(--ink-secondary);
+}
+.waka-stream-statement[data-forming] .waka-stream-meta { color: var(--ink-secondary); }
+
+/* ── A SAVE'S SHEET (§3d) ──────────────────────────────────────────────── */
+
+.waka-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+.waka-sheet {
+  width: min(640px, 100%);
+  max-height: 88svh;
+  overflow-y: auto;
+  padding: var(--sp-24) var(--sp-16) calc(var(--sp-24) + env(safe-area-inset-bottom, 0px));
+  background: var(--paper);
+  color: var(--paper-ink);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  font-family: var(--font-sans);
+}
+.waka-sheet .waka-stream-meta { color: var(--paper-muted); }
+.waka-sheet-text {
+  margin: var(--sp-8) 0 0;
+  max-width: var(--measure-reading);
+  font-size: var(--type-16);
+  line-height: var(--leading-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.waka-sheet-heading {
+  margin: var(--sp-24) 0 var(--sp-8);
+  color: var(--paper-muted);
+  font-size: var(--type-13);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-heading);
+}
+.waka-sheet-quiet {
+  margin: 0;
+  color: var(--paper-muted);
+  font-size: var(--type-15);
+  line-height: var(--leading-body);
+}
+.waka-sheet .waka-stream-list { padding: 0; }
+.waka-sheet .waka-stream-statement {
+  background: transparent;
+  color: var(--paper-ink);
+  border: 1px solid var(--paper-muted);
+}
+.waka-sheet .waka-stream-statement[data-forming] { border-style: dashed; }
+.waka-sheet .waka-stream-statement[data-forming] .waka-stream-meta { color: var(--paper-muted); }
+.waka-sheet-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  margin-top: var(--sp-24);
+}
+.waka-sheet-action {
+  min-height: var(--sp-44);
+  padding: 0 var(--sp-16);
+  border: 1px solid var(--paper-muted);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--paper-ink);
+  font: inherit;
+  font-size: var(--type-16);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.waka-sheet .waka-bar-error { background: transparent; color: var(--paper-ink); padding-inline: 0; }
+
+/* ── FOCUS, IN THE ACCENT (§5: "Ask mode, focus rings, nothing else") ──── */
+/* Drawn as a shadow so the product's unlayered `:focus-visible` floor
+   (layers.css) still holds; a surface may draw a different focus, never
+   none. */
+.waka-bar button:focus-visible,
+.waka-stream button:focus-visible,
+.waka-sheet button:focus-visible {
+  filter: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+
+/* ── THE WORLD MAKES ROOM AS THE STREAM RISES (§3d) ────────────────────── */
+/* `--stream-p` is 0 at rest and 1 when the stream has risen to its stop
+   (written by Home from the scroll). The companion slides from where it
+   stands to the middle of the zone left above the stream; it is moved,
+   never scaled, so its words keep their size. `translate`, not `transform`,
+   so it composes with whatever motion the bubble already wears. */
+.jar .jar-canvas,
+.jar .jar-char-bubble {
+  translate: 0 calc(var(--stream-p, 0) * (21svh - var(--jar-char-mid, 50svh)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waka-bar-notice,
+  .waka-bar-row { transition: none; }
+}
+
+}

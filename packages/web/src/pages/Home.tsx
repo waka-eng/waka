@@ -77,7 +77,7 @@ import { EMPTY_VIEW, readViewLocation, resolveViewWall, viewHref, type ViewLocat
 import { InspirationSearch } from '../components/InspirationSearch';
 
 import { useDismissAway } from "../lib/dismiss";
-import { isEditableTarget } from "../lib/surface-input";
+import { isEditableTarget, isNativeSurface } from "../lib/surface-input";
 import { profileStorageKey, readProfileText, writeProfileText, type ProfileStorageScope } from "../lib/profile-storage";
 import { createCompanionUpdates } from "../lib/companion-updates";
 import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
@@ -94,7 +94,8 @@ import { attachmentLabel } from '../lib/attachment-label';
 import { Menu } from '../components/Menu';
 import { usePageMenu } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
-import { PrimaryNavigation } from '../components/PrimaryNavigation';
+import { InspirationBar } from '../components/InspirationBar';
+import { HomeStream, streamSignals } from '../components/HomeStream';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
 import { ShareSheet, inspirationShareTarget, type ShareTarget } from '../components/ShareSheet';
@@ -267,6 +268,9 @@ import "../styles/home.css";
    rendered with no styling at all for one commit. A surface that moves has to
    bring its sheet. */
 import "../styles/chat.css";
+// The home bar, the stream and a save's sheet (waka-design-brief.md). After
+// chat.css so it stands last in `chrome` and wins ties with the dock it replaced.
+import "../styles/home-surface.css";
 
 /**
  * How many dates the dial will list before it rolls up a grain — days to
@@ -275,6 +279,10 @@ import "../styles/chat.css";
  */
 const DIAL_STOPS = 10;
 const REVIEW_CARD_LIMIT = 5;
+/** How much of the stream shows above the home bar at rest — enough for its
+    first label and the top of its first card, so "there is more below" is
+    seen rather than said (home brief §3d, "below the fold, pull up"). */
+const STREAM_PEEK_PX = 148;
 /**
  * HOW LONG THE CREATURE HOLDS ITS OFFER UP BEFORE GOING BACK TO THE READING.
  *
@@ -2196,6 +2204,11 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
   /** The one honest line: it did not keep. Never a modal, never a silence. */
   const [mouthNoteState, setMouthNoteState] = useState({ text: "", conflict: false });
+  /* THE HOME BAR (home brief §3c). `savedAt` is bumped once per completed
+     save and is what raises the bar's 1.5s "Saved"; `barFieldRef` is its
+     field, which "/" and every "new save" door focus. */
+  const [savedAt, setSavedAt] = useState(0);
+  const barFieldRef = useRef<HTMLTextAreaElement>(null);
   const mouthNote = mouthNoteState.text;
   /* A note is plain words unless it was said by `sayMouthProblem` below,
      which also remembers WHICH problem as a flag — the separate-draft offer
@@ -2680,7 +2693,10 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     profileId: viewNavigation.view?.wallId ?? storageScope.profileId,
   } : null, [storageScope, viewNavigation.view?.wallId]);
   const listViews = useProfileListViews(conversationScope);
-  const [listTopRequest, setListTopRequest] = useState(0);
+  /* Re-pressing the tab you were on used to bump this and scroll its list
+     to the top. The tabs are gone (home brief §3c), so nothing asks; the
+     lists keep the prop for the day something does. */
+  const listTopRequest = 0;
   const conversationAgent = agentRoster?.find(profile => profile.id === conversationScope?.profileId);
   const conversationProfile = conversationScope?.profileId === storageScope?.profileId
     ? { name: auth?.profile?.name ?? say('worldWallMe'), type: 'human' as const }
@@ -5182,8 +5198,20 @@ const RETRY_READ_LIMIT_MS = 20_000;
         leaveOpen();
       } else setMouthNote("");
       mouthFieldRef.current?.focus();
-    } else openMouth();
-  }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth, leaveOpen]);
+    } else if (composerDraft.current.current.recordingCandidate) {
+      /* The one draft the home bar cannot hold: an audio recording waiting
+         for keep-or-replace. That choice lives on the notepad, so the
+         notepad is still where this door leads while one is pending. */
+      openMouth();
+    } else {
+      /* ═══ EVERY "NEW SAVE" DOOR LEADS TO THE BAR (home brief §3c) ═════
+         The pill that opened the notepad is gone; saving is the field at
+         the bottom of the home. A door pressed from over a list closes the
+         list first, so the focus lands in a field somebody can see. */
+      if (viewNavigationRef.current.view?.open) viewNavigationRef.current.closeToHome();
+      window.requestAnimationFrame(() => barFieldRef.current?.focus());
+    }
+  }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth, leaveOpen, composerDraft]);
 
   /** The way out that keeps the words: the page folds, the draft stays. */
   const saveAsDraft = useCallback(() => {
@@ -5317,8 +5345,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
            how the character jumps up and down, but for a few sec, make that
            say 'I'm inspired!' and the CTA should be let's chat about it." The
            bubble's act is the chat about THIS save (see the bubble below). */
-        setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
-        if(initiated&&memoryScope)setRecentInspiration({owner:`${memoryScope.accountId}:${memoryScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
+        /* ═══ "SAVED" BELONGS TO THE BAR NOW (home brief §3c, §6) ═══════
+           The companion used to take the save over — "I'm inspired!" in
+           its bubble, with a chat about the save as its act. The brief's
+           state table says the bubble is UNCHANGED while a save lands: it
+           is the Top of Mind surface, and a save is not news about your
+           mind. So the confirmation is the bar's 1.5s "Saved", and the
+           jump above (`acknowledge('kept')`) stays — it answers what the
+           person just did, which is the one motion the law allows. */
+        if (initiated) setSavedAt(value => value + 1);
         viewNavigationRef.current.closeComposer();
       } };
     },
@@ -5329,7 +5364,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
     onEditRejected: (intent) => {
       if (intent.operation !== 'inspiration') return;
       const draft = restoreInspirationDraft(profileStorageKey(memoryScope, 'draft'), intent.input.text, draftRef.current);
-      draftRef.current = draft; setDraft(draft); setMouthOpen(true); setCharSay('');
+      /* Brief §6, "Save failed": the field gets its words back and the
+         failure is said under it. The bar IS the field, so nothing opens. */
+      draftRef.current = draft; setDraft(draft); setMouthNote(say('worldComposerSaveFailed'));
     },
   };
 
@@ -5392,6 +5429,22 @@ const RETRY_READ_LIMIT_MS = 20_000;
     (text) => { draftRef.current = text; setDraft(text); setMouthNote(''); },
     locale,
   );
+  /* HOLD, SPEAK, LET GO, KEPT (home brief §3c). The bar's voice is held:
+     the press opens the microphone into the field, the release closes it,
+     and the save waits for the microphone to have actually closed — the
+     engine's last words arrive after `stop()`, and saving on the release
+     itself would keep the sentence without its end. */
+  const saveWhenHeard = useRef(false);
+  /* `keepIt` is declared further down; the effect reads it through this. */
+  const keepItRef = useRef<() => Promise<void>>(async () => undefined);
+  const wasListening = useRef(false);
+  useEffect(() => {
+    const ended = wasListening.current && !dictation.listening;
+    wasListening.current = dictation.listening;
+    if (!ended || !saveWhenHeard.current) return;
+    saveWhenHeard.current = false;
+    if (draftRef.current.trim()) void keepItRef.current();
+  }, [dictation.listening]);
 
   /* ═══ AND EVERY WAY OUT OF THE NOTEPAD RELEASES THE MICROPHONE ════════
      `dictation.stop()` had exactly ONE call site — the Stop control in the
@@ -5654,6 +5707,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     }
     finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
   }, [inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase, momentWhy, say]);
+  keepItRef.current = keepIt;
 
   /* ═══ THREE DOORS INTO ONE DRAFT ═══════════════════════════════════════
      'photo' is the chooser, the drop and the paste: every file is sniffed.
@@ -6863,7 +6917,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [phase, atNowView, principlesOpen, principlesCrossing, panelOpen, mouthOpen, savedNoteOpen, seek, thingShare, prov, toPrinciples, openOverHome, reviewing, harvestWhy]);
   /** read by the loop's key handler, which is built once */
   const openSeekRef = useRef<() => void>(() => undefined);
-  openSeekRef.current = () => setSeek((s) => (s === null ? "" : s));
+  /* "/" FOCUSES THE HOME BAR (home brief §7). It was "find, everywhere";
+     on the home at rest it is now the field, because saving is the one act
+     there and find moved into the corner menu as "Search". Anywhere the bar
+     is not standing, "/" still finds. */
+  const findNow = useCallback(() => setSeek((s) => (s === null ? "" : s)), []);
+  openSeekRef.current = () => {
+    if (barFieldRef.current) barFieldRef.current.focus();
+    else findNow();
+  };
   /* `foundRef` AND `readingLit` WENT WITH THE ORBS THEY LIT. A search's
      matches and the saves under the reading you had open were published to
      the field — "this one, and everything else sinks" — and the field
@@ -7519,6 +7581,111 @@ const RETRY_READ_LIMIT_MS = 20_000;
   };
 
   const backgroundHidden = Boolean(viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose || walkingHome);
+
+  /* ═══ THE STREAM UNDER THE COMPANION (home brief §3d) ═════════════════
+     Shown on your own home at rest: not over a list, not over the notepad,
+     not mid-review, and not on an agent's wall (whose saves are the agent's
+     and are not loaded as a list here — see the PR's stubs). */
+  const streamShown = phase === 'ready' && atNowView && !mouthOpen && !reviewing && atWall.kind === 'self';
+  const streamScrollerRef = useRef<HTMLDivElement>(null);
+  /* PRINCIPLES ARE READ FOR THE STREAM. They used to be read only when the
+     principles page opened; the stream shows them at the bottom of home, so
+     home reads them once per profile, the same GET that page makes. */
+  useEffect(() => {
+    if (!streamShown || principlesRead || offline || !memoryProfileId) return;
+    let live = true;
+    void fetchPrinciples({ profile: memoryProfileId }).then(rows => { if (live) acceptPrinciples(rows); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [streamShown, principlesRead, offline, memoryProfileId, acceptPrinciples]);
+  /* THE COMPANION'S ZONE SHRINKS AS THE STREAM RISES — and only then.
+     "The world never moves unless the user moved it": this is the user
+     scrolling, and the world answers by sliding up out of the stream's way
+     (`--stream-p`, 0 at rest → 1 when the stream has risen to its stop). It
+     is never scaled: the companion and its words keep their size. Written
+     once per frame from the scroller's own scroll event, so nothing is
+     sampled — the position IS the event. */
+  useEffect(() => {
+    const scroller = streamScrollerRef.current;
+    const root = scroller?.closest<HTMLElement>('.jar');
+    if (!scroller || !root) return;
+    let frame = 0;
+    const write = () => {
+      frame = 0;
+      const travel = scroller.clientHeight - STREAM_PEEK_PX;
+      const p = travel > 0 ? Math.min(1, Math.max(0, scroller.scrollTop / travel)) : 0;
+      root.style.setProperty('--stream-p', p.toFixed(3));
+    };
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(write); };
+    /* THE WHEEL OVER THE WORLD SCROLLS THE STREAM. The world swallows the
+       wheel (no camera travel by gesture, a founder ruling) and that stays
+       true — the camera does not move. What moves is the page under it,
+       which is where a wheel over a home with a stream is asking to go. */
+    const onWheel = (event: WheelEvent) => {
+      if (scroller.contains(event.target as Node) || isNativeSurface(event.target)) return;
+      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      scroller.scrollBy({ top: event.deltaY });
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    root.addEventListener('wheel', onWheel, { passive: true });
+    write();
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      root.removeEventListener('wheel', onWheel);
+      if (frame) window.cancelAnimationFrame(frame);
+      root.style.removeProperty('--stream-p');
+    };
+  }, [streamShown]);
+  /* ═══ DROP ANYTHING, ANYWHERE, AND IT IS KEPT (home brief §3c) ════════
+     "Dropping a file or image anywhere on the screen saves it." While the
+     bar stands, the whole window takes a drop: the files go through the
+     same door the ＋'s "Add file" uses (which still hands a picture to the
+     photo sniffer, so a photo is kept as a photo) and then the same save
+     as Enter. A drop over a sheet or a list is that surface's, not ours. */
+  const barShown = phase === 'ready' && atNowView && !mouthOpen && !reviewing;
+  const addFilesRef = useRef(addInspirationFiles);
+  addFilesRef.current = addInspirationFiles;
+  useEffect(() => {
+    if (!barShown) return;
+    const ours = (event: DragEvent) => Boolean(event.dataTransfer?.types.includes('Files'))
+      && !(event.target instanceof Element && event.target.closest('[role="dialog"], .waka-sheet-scrim'));
+    const onOver = (event: DragEvent) => { if (ours(event)) event.preventDefault(); };
+    const onDrop = (event: DragEvent) => {
+      if (!ours(event) || !event.dataTransfer?.files.length) return;
+      event.preventDefault();
+      const files = [...event.dataTransfer.files];
+      void addFilesRef.current(files, 'file').then(() => keepItRef.current());
+    };
+    window.addEventListener('dragover', onOver);
+    window.addEventListener('drop', onDrop);
+    return () => { window.removeEventListener('dragover', onOver); window.removeEventListener('drop', onDrop); };
+  }, [barShown]);
+  /* ═══ A SAVE IN FLIGHT, AND A SAVE WITH NO CONNECTION (home brief §6) ═══
+     The save is already an outbox: `useAuthoredSave` writes the intent to
+     this device before it posts, keeps it when the network fails
+     ('uncertain'), and sends it again on `online`; the server de-duplicates
+     on its request id. So "queue locally" is true already, and what the
+     brief adds is how it LOOKS: the field clears the moment it is sent, the
+     save stands at the top of the stream before the server answers, and
+     with no connection the bar says "Saved, will sync" and the card says it
+     has not gone yet. The draft underneath is not touched — if the save is
+     refused, `onEditRejected` puts the words back in the field. */
+  const pendingSave = inspirationSave.pending && inspirationSave.pending.operation === 'inspiration' && !inspirationSave.pending.rejected
+    ? inspirationSave.pending : null;
+  const savedLater = Boolean(pendingSave) && inspirationSave.phase === 'uncertain';
+  useEffect(() => { if (savedLater) setSavedAt(value => value + 1); }, [savedLater]);
+  const pendingCardId = pendingSave ? `pending:${pendingSave.requestId}` : null;
+  const streamInspirations = useMemo<Inspiration[]>(() => {
+    const kept = inspirations ?? [];
+    if (!pendingSave || pendingSave.operation !== 'inspiration') return kept;
+    const text = pendingSave.input.text;
+    return [{ id: `pending:${pendingSave.requestId}`, preview: text, isPublic: false, kind: null, source: 'app',
+      capturedMs: pendingSave.createdAt, updatedMs: pendingSave.createdAt, attachments: [], reflectionCount: 0, category: null }, ...kept];
+  }, [inspirations, pendingSave]);
+  const deleteFromStream = useCallback(async (id: string) => {
+    simApiRef.current?.acknowledge('let-go');
+    await deleteInspiration(id, memoryProfileId ? { profile: memoryProfileId } : {});
+    inspirationRemovedFromView(id);
+  }, [memoryProfileId, inspirationRemovedFromView]);
   return (
     <div
       ref={measured.root}
@@ -11250,22 +11417,49 @@ const RETRY_READ_LIMIT_MS = 20_000;
           navigation always visible." A conversation is a page like the rest
           of them now, so it keeps the bar like the rest of them. */}
       {phase === 'ready' && (listing || making) && !viewNavigation.view?.sharePrinciple ? <PageBack
-        navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making === 'talk' || (listing && Boolean(listOrigin.current))}
+        navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making === 'talk' || listing}
         belowCorners={listing && !savedNoteOpen}
         label={say(savedNoteOpen ? 'worldBackToAll' : making === 'talk' ? 'worldAllChats' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
-      {phase === 'ready' && !viewNavigation.view?.sharePrinciple && !making && !savedNoteOpen && !reviewing ? (
-        <PrimaryNavigation locale={locale}
-          onReselect={() => setListTopRequest(value => value + 1)}
-          current={atNowView ? 'home' : viewNavigation.view?.open === 'saves' ? 'inspirations' : viewNavigation.view?.open === 'conversations' ? 'chats' : null}
-          onNavigate={destination => {
-            listOrigin.current = null;
-            commitOpenNote();
-            if (destination === 'home') closePage();
-            else openOverHome(destination === 'inspirations' ? 'saves' : 'conversations');
-          }}
-          capture={atNowView ? { label: say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves'), onClick: startNewInspiration } : undefined}
-        />
-      ) : phase==='ready'&&!viewNavigation.view?.sharePrinciple ? (
+      {/* ═══ THE TABS AND THE PILL ARE GONE (home brief §3c) ════════════
+          Home / Inspirations / Chats and "+ New inspiration" were two stacked
+          primary controls; the brief replaces both with one docked field.
+          What the tabs reached is still reached: what you saved is the
+          stream under the companion, Search and Past chats are in the
+          corner menu, and the lists those open keep "Back home" above (the
+          PageBack's `listing` case, which used to rely on the tabs). */}
+      {barShown ? (
+        <InspirationBar locale={locale} text={pendingSave ? '' : draft} inputRef={barFieldRef}
+          onText={(text, caret) => { mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
+          media={pendingSave ? [] : inputMedia}
+          onRemoveMedia={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
+            else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
+          onFiles={(files, door) => { void addInspirationFiles(files, door); }}
+          onSubmit={() => { void keepIt(); }}
+          busy={preparingInspiration || checkingFiles || Boolean(inspirationSave.pending) || inspirationSave.busy || !composerDraft.ready}
+          error={mouthNote || dictation.error}
+          savedAt={savedAt} savedLater={savedLater}
+          voice={dictationAvailable() ? { listening: dictation.listening,
+            onHoldStart: () => { saveWhenHeard.current = true; dictation.start(); },
+            onHoldEnd: () => { dictation.stop(); } } : undefined} />
+      ) : null}
+      {streamShown ? (
+        /* The SCROLLER is the native surface, not the sheet: `[data-jar-surface]`
+           makes whatever wears it a scroll container, and the sticky section
+           labels need exactly one — this one — to stick to. */
+        <div ref={streamScrollerRef} className="waka-stream-scroller" data-jar-surface="1"
+          style={{ ['--stream-peek' as string]: `${STREAM_PEEK_PX}px` }}>
+          <div className="waka-stream-spacer" aria-hidden="true" />
+          <div className="waka-stream-sheet" data-jar-chrome="1">
+            <HomeStream locale={locale} inspirations={streamInspirations}
+              pendingIds={pendingCardId && savedLater ? new Set([pendingCardId]) : undefined}
+              optimisticIds={pendingCardId ? new Set([pendingCardId]) : undefined}
+              signals={streamSignals(signals)} principles={principles}
+              textOf={id => detailsRef.current.get(id)?.text}
+              onDelete={deleteFromStream} />
+          </div>
+        </div>
+      ) : null}
+      {phase==='ready'&&!viewNavigation.view?.sharePrinciple&&(making||reviewing||savedNoteOpen) ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
             ...(reviewing && !making ? [{ id: 'review', label: 'worldReviewExit' as const, here: false,
@@ -11630,7 +11824,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         actions={!viewNavigation.view?.open && !viewNavigation.view?.conversationId && !mouthOpen ? <HomeActions key={memoryScope?.profileId ?? 'preview'} locale={locale}
           onPrinciples={toPrinciples} onReview={atWall.kind === 'self' && canOfferReview ? startReview : undefined}
-          onRetryReview={atWall.kind==='self'&&reviewLoadFailed?loadClaims:undefined} /> : undefined}
+          onRetryReview={atWall.kind==='self'&&reviewLoadFailed?loadClaims:undefined}
+          /* "Search" opens the archive, which leads with its own search field
+             and still holds what the stream does not: editing a save, and
+             the deleted shelf. It was the Inspirations tab. */
+          onSearch={() => openOverHome('saves')} onChats={() => openOverHome('conversations')} /> : undefined}
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
            Founder: "I kind of want to give the feeling of, rather than my
            agent moving rooms, it kind of switches itself up to its agent

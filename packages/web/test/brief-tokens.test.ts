@@ -190,3 +190,26 @@ describe("the brief's motion eases out and never overshoots", () => {
     expect(y1 - x1 + (y2 - x2)).toBeGreaterThan(0);
   });
 });
+
+describe("the home surface is built only from the brief's scale and palette", () => {
+  const css = SHEETS["home-surface.css"]!;
+
+  it("sets every font size from a --type-* step", () => {
+    const sizes = [...css.matchAll(/font-size:\s*([^;]+);/g)].map((m) => m[1]!.trim());
+    expect(sizes.length).toBeGreaterThan(0);
+    const offScale = sizes.filter((v) => !/^var\(--type-(13|15|16|20|24|32|body)\)$/.test(v));
+    expect(offScale, "a font size that is not one of the six steps").toEqual([]);
+  });
+
+  it("names no colour of its own — every colour is a token", () => {
+    expect(css.match(/#[0-9a-f]{3,8}\b/gi) ?? [], "a hex colour").toEqual([]);
+    expect(css.match(/\brgba?\(/g) ?? [], "an rgb() colour").toEqual([]);
+    // §2: secondary text is a colour, not opacity — no text dimmed by it.
+    const dimmed = [...css.matchAll(/opacity:\s*([\d.]+)/g)].map((m) => Number(m[1])).filter((o) => o > 0 && o < 0.72);
+    expect(dimmed, "text dimmed below 0.72 opacity").toEqual([]);
+  });
+
+  it("uses weight 300 nowhere (it is only for 24px and up, and nothing here is)", () => {
+    expect(css).not.toMatch(/font-weight:\s*(300|var\(--weight-light\))/);
+  });
+});
