@@ -36,20 +36,15 @@
 
 :root {
   /* ---------------------------------------------------------------------
-   * Color tokens
+   * Color tokens live in chrome.css, once.
    *
-   * Lifted verbatim from index.html so the React rebuild renders pixel-
-   * compatible against the prototype. `--error` is new (the prototype
-   * never surfaced inline error states); it follows Material's var(--error)
-   * for accessible contrast against the parchment background.
+   * This block used to declare the founding parchment palette (--bg #f4f2ee,
+   * --ink #0f0f0e, …). Every one of those names is redeclared in chrome.css,
+   * which sits in a later cascade layer, so none of these values was ever
+   * reachable at runtime (layers.css says so, measured). They are deleted
+   * rather than kept as a second definition of the home brief's tokens —
+   * see the brief block in chrome.css and test/brief-tokens.test.ts.
    * -------------------------------------------------------------------*/
-  --bg: #f4f2ee;
-  --ink: #0f0f0e;
-  --muted: #6f6b63;
-  --line: #e4e1d9;
-  --cell: #fbfaf7;
-  --accent: #0f0f0e;
-  --error: #b3261e;
 
   /**
    * ═══ ONE FACE, AND NOW IT REALLY IS ONE ════════════════════════════════

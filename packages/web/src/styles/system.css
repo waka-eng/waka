@@ -196,6 +196,47 @@
   --t-micro: 8px;
 
   /* -----------------------------------------------------------------------
+   * THE HOME SURFACE'S SCALE (waka-design-brief.md §2, §5)
+   *
+   * Six steps and nothing between them: 13 / 15 / 16 / 20 / 24 / 32. Named
+   * by pixel value for the reason the spacing grid above is — a step that
+   * says what it is cannot be misread at the call site, and "a size that is
+   * not one of these" becomes a thing a gate can see.
+   *
+   * This scale is ADDITIVE in this commit, on purpose. The `--t-*` ladder
+   * above still dresses every existing surface, and retuning it here would
+   * repaint the chat, the principles and the settings sheet — which the
+   * brief puts out of scope. The rebuilt home surface is built on these
+   * steps only, and `test/brief-tokens.test.ts` holds its stylesheet to
+   * them once it exists.
+   *
+   * The rules ride with the scale so they are tokens rather than numbers
+   * repeated at call sites:
+   *   - nothing below 13px; body 16px on phones, 15px from the desktop step;
+   *   - weight 300 only at 24px and above, everything else 400 or 500;
+   *   - reading measure 68ch, body leading 1.5, heading leading 1.3;
+   *   - motion ease-out, inside 180-240ms, never overshooting.
+   * -------------------------------------------------------------------- */
+  --type-13: 13px;
+  --type-15: 15px;
+  --type-16: 16px;
+  --type-20: 20px;
+  --type-24: 24px;
+  --type-32: 32px;
+  --type-body: var(--type-16);
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --leading-body: 1.5;
+  --leading-heading: 1.3;
+  --measure-reading: 68ch;
+  /* Decelerating, with no overshoot: both control points sit on or above
+     the diagonal (so it leaves fast and settles) and inside [0, 1] (so it
+     never bounces past where it is going). */
+  --motion-ease: cubic-bezier(0, 0, 0.2, 1);
+  --motion-dur: 200ms;
+
+  /* -----------------------------------------------------------------------
    * VOICE
    *
    * Three faces, three jobs, and the job decides -- not the surface.
@@ -271,6 +312,13 @@
      `--ink` rather than as a literal so it follows the ground if the ground
      ever inverts. */
   --focus: color-mix(in srgb, var(--ink) 55%, transparent);
+}
+
+/* Body steps down one notch where there is a desktop's reading distance
+   (brief §2: 16px on phones, 15px on desktop). The breakpoint is the
+   product's existing phone/desktop line (max-width 760px elsewhere). */
+@media (min-width: 761px) {
+  :root { --type-body: var(--type-15); }
 }
 
 /* ==========================================================================

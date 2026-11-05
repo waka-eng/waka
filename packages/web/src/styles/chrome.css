@@ -244,10 +244,43 @@ body {
      screens wear this light without being rewritten. --error is drained of
      hue on purpose: there is no red in Waka. */
   --bg: var(--moon-ground);
-  --paper: var(--moon-ground);
   --ink: var(--moon-ink);
-  --accent: var(--moon-ink);
   --muted: var(--moon-muted);
+
+  /* ═══ THE HOME BRIEF'S TOKENS, DEFINED ONCE (waka-design-brief.md §5) ═══
+     This block is the only place these names are declared; a gate
+     (`test/brief-tokens.test.ts`) fails on a second definition anywhere in
+     the stylesheets, because "change the token, not the component" only
+     works if there is exactly one token to change.
+
+     The brief's values are starting points and its RELATIONSHIPS are the
+     contract. Three values here differ from the brief's literals, each to
+     keep a surface the founder asked to keep exactly as it is:
+
+     - `--bg` stays the existing starfield ground (#05080f), not #0B0D12.
+       Every ratio the brief asks of it still holds, and slightly better.
+     - `--paper` is the cream the speech bubble already wears — the
+       creature's light mixed into the ground — not #EDE6D6. It is built
+       from the :root primitives (`--moon-warm` is the same #fff2dc as
+       `--jar-live`), not from the `--jar-*` names, because those are
+       declared on `.jar` and do not resolve on `body`, where this block lives — a token defined
+       here from them is invalid everywhere and paints nothing. It used to
+       be a second name for the dark ground; its eight readers now say
+       `--w-ground`, which is the same value under an honest name.
+     - `--paper-muted` is #595349, not #6B655A. On the bubble's real cream
+       the brief's literal measures 3.67:1 and fails its own 4.5:1 floor;
+       this is the nearest step on the same hue that clears it (4.84:1). */
+  --ink-secondary: #a8a196;
+  --bg-glass: rgba(22, 24, 30, 0.86);
+  --glass-blur: 16px;
+  --paper: color-mix(in srgb, var(--moon-warm) 84%, var(--moon-ground));
+  --paper-ink: #11131a;
+  --paper-muted: #595349;
+  /* Ask mode and focus rings. Nothing else may read it. */
+  --accent: #d9b86a;
+  --radius-field: 22px;
+  --radius-card: 16px;
+  --space-unit: 8px;
   --line: var(--moon-edge);
   /* The one border in this product that has to be seen rather than sensed.
      See `--moon-field-edge`. */
