@@ -370,15 +370,137 @@
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
 }
 
+/* ── THE BUBBLE: TOP OF MIND, IN FULL (§3b) ──────────────────────────────── */
+/* Width min(560px, 100% − 32px) (§7). Every word shows; when there are more
+   words than room above the companion, the reading scrolls inside the
+   paper rather than being cut (the bubble's own `overflow-y: auto`). */
+.jar .jar-char-bubble { padding: var(--sp-56) var(--sp-16) 0; }
+.jar .jar-char-bubble .jar-char-bubble-body { max-width: min(560px, 100%); }
+.jar .jar-char-bubble--reading .jar-char-bubble-body { width: min(560px, 100%); max-width: min(560px, 100%); }
+.jar .jar-char-bubble-of {
+  color: var(--paper-muted);
+  font-size: var(--type-13);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-heading);
+}
+.jar .jar-char-bubble-reading,
+.jar .jar-char-bubble--reading .jar-char-bubble-reading {
+  max-width: var(--measure-reading);
+  color: var(--paper-ink);
+  font-size: var(--type-16);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+}
+.waka-says-scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+  gap: var(--sp-8);
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.jar .jar-char-bubble--reading .waka-reading-preview { flex: none; }
+.jar .jar-char-bubble--reading .jar-char-bubble-reading { overflow: visible; }
+.jar .jar-char-bubble--reading .jar-char-bubble-acts { flex-shrink: 0; }
+.waka-says-pager { align-self: center; }
+.jar .jar-char-bubble-act,
+.jar .jar-char-bubble--reading .jar-char-bubble-act {
+  min-height: var(--sp-44);
+  color: var(--paper-ink);
+  font-size: var(--type-15);
+  font-weight: var(--weight-medium);
+}
+.jar .jar-char-bubble-act[aria-expanded="true"] { text-decoration: underline; text-underline-offset: var(--sp-4); }
+
+/* "Why?" opens inside the paper: the saves the entry rests on. */
+.waka-says-why {
+  display: grid;
+  gap: var(--sp-6);
+  align-self: stretch;
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--paper-muted);
+  text-align: start;
+}
+.waka-says-why-list { display: grid; gap: var(--sp-6); }
+.waka-says-why-row {
+  color: var(--paper-ink);
+  font-size: var(--type-15);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+.waka-says-why-row::before { content: "“"; }
+.waka-says-why-row::after { content: "”"; }
+.jar .waka-says-edit { justify-self: start; min-height: var(--sp-44); padding-inline: 0; text-decoration: underline; text-underline-offset: var(--sp-4); }
+
+/* Pages are dots — a state, not a number. 44px to press, 8px to see. */
+.waka-says-pager { display: flex; justify-content: center; gap: 0; }
+.waka-says-dot {
+  display: grid;
+  place-items: center;
+  width: var(--sp-32);
+  height: var(--sp-32);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.waka-says-dot::after {
+  content: "";
+  width: var(--sp-8);
+  height: var(--sp-8);
+  border-radius: 50%;
+  border: 1px solid var(--paper-ink);
+}
+.waka-says-dot[aria-current="true"]::after { background: var(--paper-ink); }
+
+/* "More to look at": under the companion, quiet — no count, no badge. It is
+   16px in the secondary ink because it stands on the starfield, where §2
+   allows nothing smaller. It follows the companion when the stream rises. */
+.waka-says-more {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--jar-char-mid, 50svh) + var(--stream-p, 0) * (21svh - var(--jar-char-mid, 50svh)) + var(--jar-char, 120px) / 2 + var(--sp-12));
+  translate: -50% 0;
+  z-index: 4;
+  min-height: var(--sp-44);
+  padding: 0 var(--sp-12);
+  border: 0;
+  background: transparent;
+  color: var(--ink-secondary);
+  font: inherit;
+  font-family: var(--font-sans);
+  font-size: var(--type-16);
+  text-decoration: underline;
+  text-underline-offset: var(--sp-4);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.jar .waka-says-dot:focus-visible,
+.jar .waka-says-more:focus-visible,
+.jar .jar-char-bubble-act:focus-visible {
+  filter: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
 /* ── THE WORLD MAKES ROOM AS THE STREAM RISES (§3d) ────────────────────── */
 /* `--stream-p` is 0 at rest and 1 when the stream has risen to its stop
    (written by Home from the scroll). The companion slides from where it
    stands to the middle of the zone left above the stream; it is moved,
    never scaled, so its words keep their size. `translate`, not `transform`,
    so it composes with whatever motion the bubble already wears. */
-.jar .jar-canvas,
-.jar .jar-char-bubble {
+.jar .jar-canvas {
   translate: 0 calc(var(--stream-p, 0) * (21svh - var(--jar-char-mid, 50svh)));
+}
+/* The bubble is not slid with it but SHORTENED: its box runs from the top of
+   the screen to just above where the companion now stands, so its bottom
+   stays on the companion and a long reading scrolls inside it rather than
+   leaving the screen when the stream is up. */
+.jar .jar-char-bubble {
+  height: calc(var(--jar-char-mid, 50svh) + var(--stream-p, 0) * (21svh - var(--jar-char-mid, 50svh)) - var(--jar-char, 120px) / 2 - var(--sp-12));
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -283,6 +283,12 @@ const REVIEW_CARD_LIMIT = 5;
     first label and the top of its first card, so "there is more below" is
     seen rather than said (home brief §3d, "below the fold, pull up"). */
 const STREAM_PEEK_PX = 148;
+/** Below this many saves the bubble says what will happen, not what it sees
+    (home brief §3b/§6: the empty state covers 0–4 saves). */
+const FEW_SAVES = 5;
+/** When this page was opened. A profile whose every save is newer than this
+    is in its first session, and the brief asks for no review prompts there. */
+const PAGE_OPENED_AT = Date.now();
 /**
  * HOW LONG THE CREATURE HOLDS ITS OFFER UP BEFORE GOING BACK TO THE READING.
  *
@@ -1435,6 +1441,14 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     if (!notes || notes.length === 0) return null;
     return notes.find((n) => n.pinned) ?? [...notes].sort((a, b) => a.sortOrder - b.sortOrder)[0];
   }, [notes]);
+  /* ═══ EVERY ENTRY, ONE PER PAGE (home brief §3b) ══════════════════════
+     The bubble showed the lead and nothing of the rest. The brief pages
+     them: the same order `lead` is chosen by — the pinned one first, then
+     the reading's own order — so page one is still the lead. */
+  const readingEntries = useMemo<Entry[]>(() => (notes ?? []).length
+    ? [...notes!].sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.sortOrder - b.sortOrder) : [], [notes]);
+  const [readingAt, setReadingAt] = useState(0);
+  const shownEntry = readingEntries[Math.min(readingAt, readingEntries.length - 1)] ?? lead;
 
   /**
    * READ EVERYTHING AGAIN.
@@ -1920,6 +1934,17 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
    * stop, and the reason the queue is keyed to the wall at all.
    */
   const standingAsAgent = atWall.kind === 'agent';
+  /* ═══ WHAT THE BUBBLE MAY ASK, AND WHEN (home brief §3b, §6) ═════════
+     `fieldBeyond` counts saves past the loaded window, so a profile with
+     more than a window's worth reads as many — which is all this needs. */
+  const savesKept = (inspirations?.length ?? 0) + fieldBeyond;
+  const firstSession = !(inspirations ?? []).some(row => row.capturedMs < PAGE_OPENED_AT) && !fieldBeyond;
+  /* "No review prompts in the first session", and none while the bubble is
+     still saying "save a few things". */
+  const reviewsAllowed = !standingAsAgent && !firstSession && savesKept >= FEW_SAVES;
+  /* The tentative state is for the time BEFORE a reading: with one, the
+     backlog link carries whatever is waiting instead. */
+  const tentativeClaim = reviewsAllowed && !lead ? claimQueue.find(claim => claim.status === 'emerging') ?? null : null;
   /**
    * THE BUBBLE GOES DOWN WHILE THE CREATURE TURNS, AND COMES BACK AFTER.
    *
@@ -2145,7 +2170,9 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   // cursor synchronous so rapid taps cannot replay the same choice.
   const creatureSpeaks = useCallback(() => {
     if (!atNowView || reviewing) return;
-    const choices: CompanionPrompt[] = ['reading', ...(canOfferReview ? ['review' as const] : []), 'activity', 'principles'];
+    /* `review` left the cycle with its bubble (home brief §3b); the backlog is
+       "More to look at", under the reading. */
+    const choices: CompanionPrompt[] = ['reading', 'activity', 'principles'];
     const current = promptChoiceRef.current.scope === promptScope ? promptChoiceRef.current.kind : 'reading';
     const next = choices[(choices.indexOf(current) + 1) % choices.length]!;
     promptChoiceRef.current = { scope: promptScope, kind: next };
@@ -2158,7 +2185,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     if (litTimer.current !== null) window.clearTimeout(litTimer.current);
     litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
     if (next === 'activity' && sayLineRef.current) sayTheWeatherRef.current(sayLineRef.current);
-  }, [atNowView, reviewing, canOfferReview, promptScope, setCharSay]);
+  }, [atNowView, reviewing, promptScope, setCharSay]);
   useEffect(() => {
     if (atNowView && !reviewing && promptChoice.scope === promptScope) return;
     speechEpoch += 1;
@@ -3996,7 +4023,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
     (standingBundle?.inspirationTotal === 0 || (standingBundle?.inspirationTotal === undefined && agentRoster?.find(profile => profile.id === atWall.id)?.hasInspirations === false));
   const restingWord = standingAsAgent
     ? agentIsEmpty ? say("worldAgentNoMemories") : wallChromeNow.get(spaceKey(atWall))?.formingAlt ?? say("worldFormingNothingAdopted")
-    : say(inspirations?.length || fieldBeyond ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
+    /* 0–4 saves: what will happen ("Save a few things and I'll tell you what
+       I notice"); from five on, the honest "no top of mind yet". */
+    : say(savesKept >= FEW_SAVES ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
 
   /**
    * WHAT EACH WALL'S CLAIM RESTS ON.
@@ -7685,6 +7714,42 @@ const RETRY_READ_LIMIT_MS = 20_000;
     return [{ id: `pending:${pendingSave.requestId}`, preview: text, isPublic: false, kind: null, source: 'app',
       capturedMs: pendingSave.createdAt, updatedMs: pendingSave.createdAt, attachments: [], reflectionCount: 0, category: null }, ...kept];
   }, [inspirations, pendingSave]);
+  const [answering, setAnswering] = useState(false);
+  const [answerFailed, setAnswerFailed] = useState(false);
+  /* Yes / Not really on a tentative signal: recorded through the same
+     verdict the review sends, then the card leaves the queue — no page,
+     no sheet (§9.5). A failure keeps the card and says so. */
+  const answerTentative = async (claim: ApiClaim, value: 'true' | 'not_true') => {
+    if (answering) return;
+    setAnswering(true); setAnswerFailed(false);
+    try {
+      const sent = sayVerdict(claim.id, value, undefined, claim.contested, claim.statementRevision);
+      const ok = sent ? await sent : false;
+      if (ok) setClaimQueue(queue => queue.filter(row => row.id !== claim.id));
+      else setAnswerFailed(true);
+    } catch { setAnswerFailed(true); }
+    finally { setAnswering(false); }
+  };
+  /* "Why?" — the saves an entry rests on: its cited signals' evidence, in
+     the order the signals are cited, at most four, each said by the save's
+     own preview. */
+  const whyFor = (entry: Entry | null): Array<{ id: string; preview: string }> => {
+    const out: Array<{ id: string; preview: string }> = [];
+    const seen = new Set<string>();
+    /* Read through each cited signal's own `inspirationIds` — `citations` is
+       keyed the other way (a save → the signals citing it), which is what the
+       field needs and not what this asks. */
+    for (const cited of entry?.citedSignals ?? []) {
+      for (const id of signals?.find(row => row.id === cited.id)?.inspirationIds ?? []) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const preview = inspirations?.find(row => row.id === id)?.preview;
+        if (preview) out.push({ id, preview });
+        if (out.length >= 4) return out;
+      }
+    }
+    return out;
+  };
   const deleteFromStream = useCallback(async (id: string) => {
     simApiRef.current?.acknowledge('let-go');
     await deleteInspiration(id, memoryProfileId ? { profile: memoryProfileId } : {});
@@ -9441,22 +9506,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
               it is the only thing on screen that came from the product rather
               than from you — so it carries the door into a conversation
               about itself. */}
-          {/* Review is offered only when selected by an avatar tap. Pending
-              work never takes the reading's place on arrival. */}
-          {!mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'review' ? (
-            <div className="jar-char-bubble jar-char-bubble--review" data-jar-chrome="1" data-jar-interactive="1">
-              <span className="jar-char-bubble-body">
-                <span className="jar-char-bubble-reading" role="status">
-                  {formatMessage(locale, 'worldReviewWaiting', { count: toReview })}
-                </span>
-                <span className="jar-char-bubble-acts">
-                  <button type="button" className="jar-char-bubble-act" onClick={startReview}>
-                    {say('worldReviewDive')}
-                  </button>
-                </span>
-              </span>
-            </div>
-          ) : null}
+          {/* THE "N THINGS TO REVIEW!" BUBBLE IS GONE (home brief §3b: "never an
+              exclamation mark, never a badge, never 'Dive into review'").
+              What is waiting is offered as "More to look at" under the
+              reading, and a tentative signal is asked in the bubble itself. */}
           {/* Taps change the invitation on this profile; dragging right
               still opens Principles. The release click after a drag is ignored. */}
           {!backgroundHidden && !mouthOpen && !reviewing ? (
@@ -9706,13 +9759,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       lead && !standingAsAgent ? (
                         <>
                           <span className="jar-char-bubble-of">{say('worldBubbleActMine')}</span>
-                          <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
+                          <ReadingBubbleText key={`human:${shownEntry?.id ?? lead.id}`} text={(shownEntry ?? lead).body} locale={locale}
+                            why={whyFor(shownEntry ?? lead)}
+                            pager={readingEntries.length > 1 ? { count: readingEntries.length, at: Math.min(readingAt, readingEntries.length - 1), onGo: setReadingAt } : undefined}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true),
                               onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
-                            onChat={() => { void talkAbout({ id: '', text: lead.body }); }} chatDisabled={talking}
+                            onChat={() => { void talkAbout({ id: '', text: (shownEntry ?? lead).body }); }} chatDisabled={talking}
                             onShare={storageScope && !offline ? () => setThingShare({
-                              kind: "topOfMind", text: lead.body,
+                              kind: "topOfMind", text: (shownEntry ?? lead).body,
                               proof: formatMessage(locale, "worldShareOnMyMind", { date: dateStamp(Date.now(), locale) }),
                             }) : undefined} />
                         </>
@@ -9771,8 +9826,35 @@ const RETRY_READ_LIMIT_MS = 20_000;
                            is the notepad. The offer ("Feeling inspired?
                            Save it.") and this line are the two that name
                            it, and they go to the same place. */
-                        <>
+                        tentativeClaim ? (
+                          /* ═══ "I MIGHT BE NOTICING" (home brief §3b, §6) ═══
+                             No reading yet, but a signal is forming. The
+                             bubble says it tentatively and the only two acts
+                             are the answer — "Yes" / "Not really" — which is
+                             the review flow for the common case, done where
+                             the sentence is (Law 11: under a statement about
+                             the person, the controls answer it). The answer
+                             goes through the same `sayVerdict` the review
+                             uses, and the card leaves without a page change. */
+                          <>
+                            <span className="jar-char-bubble-of">{say('worldBubbleTentative')}</span>
+                            <span className="jar-char-bubble-reading">{tentativeClaim.statement}</span>
+                            <span className="jar-char-bubble-acts">
+                              <button type="button" className="jar-char-bubble-act" disabled={answering}
+                                onClick={() => { void answerTentative(tentativeClaim, 'true'); }}>{say('worldBubbleYes')}</button>
+                              <button type="button" className="jar-char-bubble-act" disabled={answering}
+                                onClick={() => { void answerTentative(tentativeClaim, 'not_true'); }}>{say('worldBubbleNotReally')}</button>
+                            </span>
+                            {answerFailed ? <span className="jar-char-bubble-of" role="alert">{say('worldReviewAnswerFailed')}</span> : null}
+                          </>
+                        ) : <>
                           <span className="jar-char-bubble-reading">{restingWord}</span>
+                          {/* "N SAVED SO FAR", WITHOUT THE N (home brief §6,
+                              and "states render, numerals never"): between
+                              the first save and the fifth, the bubble says
+                              that some have been kept, not how many. */}
+                          {!standingAsAgent && savesKept > 0 && savesKept < FEW_SAVES
+                            ? <span className="jar-char-bubble-of waka-says-few">{say('worldBubbleFewSaved')}</span> : null}
                           {/* NEVER ON THE AGENT. Founder, 2026-10-15: "you
                               cannot add inspiration for the agent mode. only
                               your agent can add inspiration. remove that as
@@ -9794,6 +9876,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     )}
                   </span>
                 </div>
+              ) : null}
+              {/* ═══ "MORE TO LOOK AT" — THE BACKLOG, QUIETLY (§3b) ═══
+                  It replaces "There is N thing to review!" and its
+                  "Dive into review": no count, no exclamation, no
+                  badge. Shown when anything is waiting beyond what
+                  the bubble is already asking, and never in a
+                  first session. */}
+              {reviewsAllowed && canOfferReview && toReview - (tentativeClaim ? 1 : 0) > 0 ? (
+                <button type="button" className="waka-says-more" data-jar-chrome="1" data-jar-interactive="1" onClick={startReview}>{say('worldBubbleMore')}</button>
               ) : null}
             </>
           ) : null}

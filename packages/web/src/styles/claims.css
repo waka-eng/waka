@@ -7021,17 +7021,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-profile-menu button > span:nth-child(2) { flex: 1; }
 
 .waka-reading-preview { flex-shrink: 0; width: 100%; }
-.jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
-  overflow: hidden;
-}
-/* MEASURED at 1280×900: five lead-size lines fit above the action row. */
-@media (min-height: 900px) {
-  .jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading { -webkit-line-clamp: 5; line-clamp: 5; }
-}
+/* The reading was clamped to four or five lines here, with "Read in full"
+   for the rest. The home brief (§3b) shows every word in the bubble — "No
+   truncation with '…'" — so the clamp went with the button it served. */
 /* MEASURED at 874×402: two complete lines leave both actions inside the bubble. */
 @media (max-height: 500px) {
   .jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading { -webkit-line-clamp: 2; line-clamp: 2; }
