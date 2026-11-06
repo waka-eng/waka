@@ -71,10 +71,10 @@ describe("describeImage", () => {
     expect(fetchFn.mock.calls[0]![1]!.headers).not.toHaveProperty('Authorization');
   });
 
-  it.each([400, 401, 403, 408, 429, 503])('preserves the retry policy for OpenRouter HTTP %s without falling back', async status => {
+  it.each([400, 401, 402, 403, 408, 429, 503])('preserves the retry policy for OpenRouter HTTP %s without falling back', async status => {
     const fetchFn = vi.fn<typeof fetch>(async () => jsonResponse({ error: { message: 'private-provider-body' } }, status));
     const attempt = describeImage({ bytes: PNG, contentType: 'image/png', openRouterApiKey: 'openrouter-key', apiKey: 'gemini-key', fetchFn });
-    await expect(attempt).rejects.toMatchObject({ transient: status === 408 || status === 429 || status >= 500 });
+    await expect(attempt).rejects.toMatchObject({ transient: status === 402 || status === 408 || status === 429 || status >= 500 });
     await expect(attempt).rejects.not.toThrow('private-provider-body');
     expect(fetchFn).toHaveBeenCalledOnce();
   });
@@ -175,8 +175,8 @@ describe("describeImage", () => {
     ).rejects.toMatchObject({ transient: false });
   });
 
-  it("treats a provider timeout (408) as transient, not unavailable", async () => {
-    for (const status of [408, 503]) {
+  it("treats a provider timeout (408) or exhausted credit (402) as transient, not unavailable", async () => {
+    for (const status of [402, 408, 503]) {
       const timedOut = vi.fn(async () => jsonResponse({ error: "timeout" }, status));
       await expect(
         describeImage({
