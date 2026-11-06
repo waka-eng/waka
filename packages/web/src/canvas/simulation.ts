@@ -483,6 +483,8 @@ const MOOD_BLINK = 0.4;
    eyes narrow to this share of their height: weighing, not dozing. */
 const THINK_EYE_X = 1.5;
 const THINK_EYE_Y = -1.9;
+/* LISTENING (see `listen`): straight down, toward the field under it. */
+const LISTEN_EYE_Y = 2;
 const THINK_BLINK = 1.6;
 const THINK_SQUINT = 0.74;
 /* The ease the glasses come on with: `thinkNow` covers ~96% of the way in
@@ -732,6 +734,14 @@ export interface SimApi {
    * little, and blink slower — and a pair of reading glasses goes on.
    */
   think: (on: boolean) => void;
+  /**
+   * LISTENING (home brief §3c): while the home bar is in Ask mode the
+   * companion's eyes rest on the field below it — "the mascot's eyes turn
+   * toward the field". Only the gaze moves; nothing else about the creature
+   * changes, and the pointer and the idle glance leave its eyes alone until
+   * it stops listening.
+   */
+  listen: (on: boolean) => void;
   /**
    * Where the companion stands on screen right now — its centre in viewport
    * pixels and its body width. The crossing into Principles draws its own
@@ -1955,6 +1965,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       mood: 0,
       /** reviewing with you: glasses on, eyes up and aside, slower blink — see `think` */
       thinking: false,
+      listening: false,
       /** 0 → 1, how far the glasses and the thinking face have come on (eased) */
       thinkNow: 0,
     };
@@ -5025,8 +5036,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
              mood most visibly changes */
           companion.idleAt =
             now + (30000 + Math.random() * 30000) * (1 - companion.mood * MOOD_GLANCE);
-          const subject = idleSubject();
-          if (subject) {
+          /* While listening, its eyes stay on the field: no idle glance. */
+          const subject = companion.listening ? null : idleSubject();
+          if (companion.listening) { /* keep looking at the field */ } else if (subject) {
             /* it looks at a MEMORY of yours, chosen for being alive and near.
                `attendTo` is the same turn-and-lean the world already uses when
                you send it somewhere — reused rather than reinvented, so a
@@ -5042,7 +5054,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
                this same frame whenever the sky is empty, which is the normal
                case, so setting it was a statement that read as live and did
                nothing. The horizontal drift is the whole of this gesture. */
-            companion.eyeTX = (Math.random() - 0.5) * 1.6;
+            if (!companion.listening) companion.eyeTX = (Math.random() - 0.5) * 1.6;
           }
         }
         const forming = false; /* nothing forms overhead since the sky went */
@@ -5530,6 +5542,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       const d = Math.hypot(dx, dy) || 1;
       if (performance.now() < companion.attendUntil) return; /* it is looking at something */
       if (companion.thinking) return; /* it is thinking: the gaze is turned inward, not to the pointer */
+      if (companion.listening) return; /* it is listening: the gaze is on the field */
       companion.eyeTX = clamp((dx / d) * 2, -2, 2);
       companion.eyeTY = clamp((dy / d) * 2, -2, 2);
       /* The cursor says what a tap would do. Every other move is plenty for a
@@ -6001,6 +6014,13 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         /* Up by most of a body: enough to clear a question asked beneath it
            on a phone, measured at 390 × 844, and not so far that it leaves. */
         companion.aside = on ? -companion.size * 0.95 : 0;
+        wake();
+      },
+      listen: (on: boolean) => {
+        if (companion.listening === on) return;
+        companion.listening = on;
+        companion.eyeTX = 0;
+        companion.eyeTY = on ? LISTEN_EYE_Y : 0;
         wake();
       },
       think: (on: boolean) => {

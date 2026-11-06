@@ -80,7 +80,7 @@ import { startJourney, startReplyTiming, observeReplyTiming, cancelReplyTiming }
  * left; a reply that fails, stops or is rate-limited still prints a sentence
  * saying which. A quiet surface is not the same as a quiet failure.
  */
-import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
+import {useEffect,useLayoutEffect,useMemo,useRef,useState,type MutableRefObject} from 'react';
 import {createPortal} from 'react-dom';
 import {createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
@@ -150,13 +150,24 @@ const offlineNow=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
 const refusalOf=(reason:unknown):MessageKey=>reason instanceof PhotoRefused?reason.reason
   :reason instanceof FileRefused?(reason.reason==='too_large'?'worldAttachTooLarge':reason.reason==='empty'?'worldPhotoEmpty':'worldAttachUnsupported'):'worldAttachFailed';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory,agent=null,profile=null,toolsSlot}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory,agent=null,profile=null,toolsSlot,inline=false,sendRef}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
   profile?:{name:string;type:'human'|'agent'}|null;
   /** The account's agent, when it has one: a new chat may talk with it, or with both. */
   agent?:{id:string;name:string}|null;
   /** The id of an element the page's bar lends for the mic and the ＋ (`CHAT_TOOLS_SLOT`).
       Absent, both stay in this panel's own footer, as a panel standing alone has them. */
-  toolsSlot?:string}){
+  toolsSlot?:string;
+  /* ASK MODE ON THE HOME BAR (waka-design-brief.md §3c): "the bar grows into
+     a thread above the field". `inline` draws this panel as that thread —
+     the transcript and the reply, no page chrome and no composer of its own
+     — and `sendRef` is how the home bar hands it words. It is the SAME send
+     as this panel's own Send (`edit` then `save`), so drafts, retries,
+     limits and the reply all behave exactly as they do on the chat page;
+     there is no second chat pipeline. The function resolves true when the
+     words left (or are on their way), false when they are still waiting
+     here — so the bar can keep them in its field rather than lose them. */
+  inline?:boolean;
+  sendRef?:MutableRefObject<((text:string)=>Promise<boolean>)|null>}){
   /* ═══ WHO YOU ARE TALKING WITH ═══════════════════════════════════════
      Founder, 2026-10-15: "new chat should also let you select if you want
      to chat with me vs my agent or both perspectives." Chosen before the
@@ -667,8 +678,26 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       title={vacant<=0?say('worldAttachLimit'):undefined}
       onPhotos={files=>{void pick(files,'photo');}} onFiles={files=>{void pick(files,'file');}}/>
   </>;
-  return <main ref={root} className="chat-page">
-    {toolsSlot&&toolsHost&&canCompose?createPortal(tools('waka-dock-tool chat-dictate','waka-dock-tool'),toolsHost):null}
+  /* Rebound every render, so the bar always calls today's `save` (it closes
+     over this render's reply and limit state, as the Send button's does). */
+  /* Offered only once this panel can take words: a new chat still reading
+     its settings would refuse them, and the home bar would get them back
+     instead of a sent message — so until then the bar sees no sender, and
+     "Talk about this" waits for one. */
+  const canTake=!loading&&!(generationEnabled===null&&!error);
+  useEffect(()=>{
+    if(!sendRef)return;
+    if(!canTake){sendRef.current=null;return;}
+    sendRef.current=async(text:string)=>{
+      edit(text);
+      await save();
+      const left=draftRef.current;
+      return !left||Boolean(left.pending)||left.content!==text;
+    };
+    return()=>{sendRef.current=null;};
+  });
+  return <main ref={root} className={`chat-page${inline?' chat-page--inline':''}`}>
+    {!inline&&toolsSlot&&toolsHost&&canCompose?createPortal(tools('waka-dock-tool chat-dictate','waka-dock-tool'),toolsHost):null}
     {/* NO ROW ACROSS THE TOP AT ALL. `.chat-top` held "Your memory" and a
         `···` menu, and a comment arguing it was "not a second header" — which
         it was, on a product whose other screens have one bar and two corner
@@ -858,7 +887,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             <span role="status">{say(reply.waiting?'worldConversationReplyWaiting':'worldConversationThinking')}</span></div>:null}
         </div>
       </div>
-      {canCompose?<footer className="chat-composer">
+      {canCompose&&!inline?<footer className="chat-composer">
         {/* ═══ THE COMPOSER, ON THE ANATOMY THE REFERENCE SPELLS OUT ══════
             Founder, with a screenshot of the old one: "this is really ugly.
             So can you research some actual components that are used to

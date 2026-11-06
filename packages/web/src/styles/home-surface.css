@@ -63,7 +63,7 @@
   min-height: var(--sp-44);
   max-height: 40svh;
   margin: 0;
-  padding: var(--sp-10) var(--sp-6);
+  padding: var(--sp-10) var(--sp-4);
   resize: none;
   overflow-y: auto;
   background: transparent;
@@ -161,6 +161,79 @@
   font-size: var(--type-16);
   cursor: pointer;
 }
+
+/* ── ASK MODE (§3c, §6, §9.6) ───────────────────────────────────────────── */
+/* The mode is said without colour first: the pressed half of the toggle is
+   filled paper and the other is an outline (a luminance difference, which
+   survives desaturation), the placeholder changes, and the thread appears.
+   The accent border is on top of those, never instead of them. */
+.waka-bar-mode {
+  flex: none;
+  display: inline-flex;
+  align-self: center;
+  margin-inline-start: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--w-edge);
+  border-radius: var(--r-pill);
+}
+.waka-bar-mode button {
+  min-height: var(--sp-36);
+  padding: 0 var(--sp-8);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: var(--type-15);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.waka-bar-mode button[aria-pressed="true"] {
+  background: var(--paper);
+  color: var(--paper-ink);
+}
+.waka-bar[data-mode="ask"] .waka-bar-row,
+.waka-bar[data-mode="ask"] .waka-bar-row:focus-within {
+  border-color: var(--accent);
+  border-width: 2px;
+}
+
+/* The thread grows above the field, on ground (small text is not set on the
+   starfield, §2), and is not drawn at all until there is something in it. */
+.waka-ask-thread {
+  order: -3;
+  max-height: 55svh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: linear-gradient(var(--bg-glass), var(--bg-glass)), var(--bg);
+  border: 1px solid var(--w-edge);
+  border-radius: var(--radius-card);
+}
+.waka-ask-thread:not(:has(.chat-message, .chat-reply-status, .chat-notice, .chat-thinking)) { display: none; }
+.chat-page--inline {
+  position: static;
+  height: auto;
+  max-height: 55svh;
+  background: transparent;
+}
+.chat-page--inline .chat-opening,
+.chat-page--inline .chat-with-note,
+.chat-page--inline .chat-profile { display: none; }
+.chat-page--inline .chat-scroll { max-height: 55svh; }
+.chat-page--inline .chat-bubble,
+.chat-page--inline .chat-said {
+  font-size: var(--type-16);
+  line-height: var(--leading-body);
+}
+.chat-page--inline .chat-meta,
+.chat-page--inline .chat-reply-status,
+.chat-page--inline .chat-notice,
+.chat-page--inline .chat-thinking {
+  color: var(--ink-secondary);
+  font-size: var(--type-13);
+}
+.waka-bar-mode button:focus-visible { filter: none; box-shadow: 0 0 0 2px var(--accent); }
 
 /* ── THE STREAM (§3d) ──────────────────────────────────────────────────── */
 

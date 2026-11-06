@@ -187,3 +187,26 @@ it('dictates while the voice row is held and stops on release; the keyboard togg
   await act(async () => { row().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
   expect(onHoldEnd).toHaveBeenCalledTimes(2);
 });
+
+it('asks in Ask mode: the toggle, the placeholder and the thread say so, and Esc goes back to Save', async () => {
+  const onMode = vi.fn(), onSubmit = vi.fn();
+  const render = (on: boolean) => root.render(<InspirationBar {...bar({ text: 'what have I been circling?', onSubmit })}
+    ask={{ on, onMode, thread: <p className="chat-message">a thread</p> }} />);
+  await act(async () => render(false));
+  const toggle = () => [...host.querySelectorAll<HTMLButtonElement>('.waka-bar-mode button')].map((b) => [b.textContent, b.getAttribute('aria-pressed')]);
+  expect(toggle()).toEqual([['Save', 'true'], ['Ask', 'false']]);
+  expect(host.querySelector('.waka-ask-thread')).toBeNull();
+  await act(async () => [...host.querySelectorAll<HTMLButtonElement>('.waka-bar-mode button')][1]!.click());
+  expect(onMode).toHaveBeenLastCalledWith(true);
+  await act(async () => render(true));
+  // §9.6 — said without colour: the pressed half, the placeholder, the thread, the arrow's name.
+  expect(toggle()).toEqual([['Save', 'false'], ['Ask', 'true']]);
+  expect(field().placeholder).toBe('Ask about what you’ve saved');
+  expect(host.querySelector('.waka-ask-thread')?.textContent).toBe('a thread');
+  expect(host.querySelector('form')?.getAttribute('data-mode')).toBe('ask');
+  expect(host.querySelector('button[type="submit"]')?.getAttribute('aria-label')).toBe('Ask');
+  // The ＋ steps aside: a question is words.
+  expect(host.querySelector('.waka-bar-tool')).toBeNull();
+  await press('Enter'); expect(onSubmit).toHaveBeenCalledTimes(1);
+  await press('Escape'); expect(onMode).toHaveBeenLastCalledWith(false);
+});

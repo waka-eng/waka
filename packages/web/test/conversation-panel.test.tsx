@@ -811,3 +811,22 @@ it('retries a failed reply against the saved message without sending another use
   expect(saveConversationMessage).toHaveBeenCalledTimes(sent);
   expect(stored.messages.filter(message=>message.role==='user')).toHaveLength(1);
 });
+/* ASK MODE ON THE HOME BAR (waka-design-brief.md §3c). Inline, the panel is
+   only the thread — no field or Send of its own — and the home bar sends
+   through `sendRef`, which is this panel's own Send: the same create, the
+   same first-message identity. */
+it('inline: draws no composer of its own and sends what the home bar hands it',async()=>{
+  const sendRef:{current:((text:string)=>Promise<boolean>)|null}={current:null};
+  vi.mocked(createConversation).mockImplementationOnce(async(_profile,conversationId,_signal,_principle,first)=>({...stored,id:conversationId,revision:1,generationEnabled:false,
+    messages:[{id:first!.id,content:first!.content,profileId:scope.profileId,conversationId,position:1,role:'user',createdAt:stored.createdAt}]}));
+  await act(async()=>root.render(<ConversationPanel scope={scope} id={null} locale="en-US" onChoose={choose} inline sendRef={sendRef}/>));
+  await act(async()=>{await Promise.resolve();});
+  expect(host.querySelector('.chat-page--inline')).not.toBeNull();
+  expect(host.querySelector('textarea')).toBeNull();
+  expect(host.querySelector('.chat-composer')).toBeNull();
+  expect(typeof sendRef.current).toBe('function');
+  let sent=false;
+  await act(async()=>{sent=await sendRef.current!('What have I been circling?');});
+  expect(sent).toBe(true);
+  expect(vi.mocked(createConversation).mock.calls.at(-1)![4]?.content).toBe('What have I been circling?');
+});

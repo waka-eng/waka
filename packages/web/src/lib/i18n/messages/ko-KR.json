@@ -857,5 +857,11 @@
   "worldBubbleTentative": "이런 게 보이는 것 같아요",
   "worldBubbleYes": "맞아요",
   "worldBubbleNotReally": "글쎄요",
-  "worldBubbleMore": "더 볼 것이 있어요"
+  "worldBubbleMore": "더 볼 것이 있어요",
+  "worldBarAskLabel": "저장한 것에 대해 묻기",
+  "worldBarAskPlaceholder": "저장한 것에 대해 물어보세요",
+  "worldBarMode": "저장 또는 묻기",
+  "worldBarModeSave": "저장",
+  "worldBarModeAsk": "묻기",
+  "worldBarAsk": "묻기"
 }

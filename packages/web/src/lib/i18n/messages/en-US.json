@@ -857,5 +857,11 @@
   "worldBubbleTentative": "I might be noticing",
   "worldBubbleYes": "Yes",
   "worldBubbleNotReally": "Not really",
-  "worldBubbleMore": "More to look at"
+  "worldBubbleMore": "More to look at",
+  "worldBarAskLabel": "Ask about what you’ve saved",
+  "worldBarAskPlaceholder": "Ask about what you’ve saved",
+  "worldBarMode": "Save or ask",
+  "worldBarModeSave": "Save",
+  "worldBarModeAsk": "Ask",
+  "worldBarAsk": "Ask"
 }

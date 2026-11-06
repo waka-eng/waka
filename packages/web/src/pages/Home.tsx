@@ -7619,7 +7619,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
      Shown on your own home at rest: not over a list, not over the notepad,
      not mid-review, and not on an agent's wall (whose saves are the agent's
      and are not loaded as a list here — see the PR's stubs). */
-  const streamShown = phase === 'ready' && atNowView && !mouthOpen && !reviewing && atWall.kind === 'self';
+  /* Ask mode (see ASK MODE below) — declared here because the stream hides behind its thread. */
+  const [askOn, setAskOn] = useState(false);
+  const streamShown = phase === 'ready' && atNowView && !mouthOpen && !reviewing && atWall.kind === 'self' && !askOn;
   const streamScrollerRef = useRef<HTMLDivElement>(null);
   /* PRINCIPLES ARE READ FOR THE STREAM. They used to be read only when the
      principles page opened; the stream shows them at the bottom of home, so
@@ -7750,6 +7752,43 @@ const RETRY_READ_LIMIT_MS = 20_000;
     }
     return out;
   };
+  /* ═══ ASK MODE (home brief §3c, §6, §7) ════════════════════════════════
+     "Chat is a mode of the same field, not a tab." In Ask, the home bar's
+     field asks about what was saved and the conversation grows above it —
+     the real conversation panel, drawn inline, sending through its own Send
+     (see `ConversationPanel`'s `sendRef`), so a question asked here is a chat
+     like any other and is in Past chats afterwards. The thread stays the
+     same while you come and go from Ask; Past chats is where you start a
+     different one. */
+  const [askText, setAskText] = useState('');
+  const [askId, setAskId] = useState<string | null>(null);
+  const askRow = useRef<ApiConversation | null>(null);
+  const askSend = useRef<((text: string) => Promise<boolean>) | null>(null);
+  const askSeed = useRef<string | null>(null);
+  const asking = askOn && barShown;
+  /* The companion listens while you ask: its eyes rest on the field. */
+  useEffect(() => { simApiRef.current?.listen(asking); }, [asking]);
+  useEffect(() => { if (!barShown) setAskOn(false); }, [barShown]);
+  const ask = useCallback(async (text: string) => {
+    const words = text.trim();
+    if (!words) return;
+    setAskText('');
+    const sent = askSend.current ? await askSend.current(words) : false;
+    if (!sent) setAskText(current => current || words);
+  }, []);
+  /* "Talk about this" opens Ask with the entry as the opening message — the
+     same words `talkAbout` sends, now in the thread over the field rather
+     than on a page of its own. Sent once the thread is up to take it. */
+  const askAbout = useCallback((text: string) => { askSeed.current = text; setAskOn(true); }, []);
+  useEffect(() => {
+    if (!asking || !askSeed.current) return;
+    const seed = askSeed.current;
+    let frame = window.requestAnimationFrame(function tryNow() {
+      if (askSend.current) { askSeed.current = null; void ask(seed); }
+      else frame = window.requestAnimationFrame(tryNow);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [asking, ask]);
   const deleteFromStream = useCallback(async (id: string) => {
     simApiRef.current?.acknowledge('let-go');
     await deleteInspiration(id, memoryProfileId ? { profile: memoryProfileId } : {});
@@ -9765,7 +9804,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true),
                               onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
-                            onChat={() => { void talkAbout({ id: '', text: (shownEntry ?? lead).body }); }} chatDisabled={talking}
+                            onChat={() => askAbout((shownEntry ?? lead).body)} chatDisabled={talking}
                             onShare={storageScope && !offline ? () => setThingShare({
                               kind: "topOfMind", text: (shownEntry ?? lead).body,
                               proof: formatMessage(locale, "worldShareOnMyMind", { date: dateStamp(Date.now(), locale) }),
@@ -11523,8 +11562,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
           corner menu, and the lists those open keep "Back home" above (the
           PageBack's `listing` case, which used to rely on the tabs). */}
       {barShown ? (
-        <InspirationBar locale={locale} text={pendingSave ? '' : draft} inputRef={barFieldRef}
-          onText={(text, caret) => { mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
+        <InspirationBar locale={locale} text={asking ? askText : pendingSave ? '' : draft} inputRef={barFieldRef}
+          onText={(text, caret) => { if (asking) { setAskText(text); return; } mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
+          ask={conversationScope && conversationProfile && !offline ? { on: asking, onMode: on => { setAskOn(on); window.requestAnimationFrame(() => barFieldRef.current?.focus()); },
+            thread: <ConversationPanel key={`ask:${conversationScope.profileId}:${askId ?? 'new'}`} inline sendRef={askSend}
+              scope={conversationScope} id={askId} locale={locale} profile={conversationProfile}
+              initialConversation={askRow.current?.id === askId ? askRow.current ?? undefined : undefined}
+              onCreated={row => { if (row.profileId === conversationScope.profileId) askRow.current = row; }}
+              onChoose={next => setAskId(next)} /> } : undefined}
           media={pendingSave ? [] : inputMedia}
           onRemoveMedia={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
@@ -11533,9 +11578,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
              ground, lands at NOW — so the press that saves also brings the
              world back to now, the way the old door did before it opened
              the notepad. It is the person's own press, so the world may move. */
-          onSubmit={() => { if (!atNow && dial) windTo(dial.end); simApiRef.current?.toTop(); void keepIt(); }}
-          busy={preparingInspiration || checkingFiles || Boolean(inspirationSave.pending) || inspirationSave.busy || !composerDraft.ready}
-          error={mouthNote || dictation.error}
+          onSubmit={() => { if (asking) { void ask(askText); return; } if (!atNow && dial) windTo(dial.end); simApiRef.current?.toTop(); void keepIt(); }}
+          busy={asking ? false : preparingInspiration || checkingFiles || Boolean(inspirationSave.pending) || inspirationSave.busy || !composerDraft.ready}
+          error={asking ? '' : mouthNote || dictation.error}
           savedAt={savedAt} savedLater={savedLater}
           voice={dictationAvailable() ? { listening: dictation.listening,
             onHoldStart: () => { saveWhenHeard.current = true; dictation.start(); },
