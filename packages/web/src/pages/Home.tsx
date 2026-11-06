@@ -94,8 +94,9 @@ import { attachmentLabel } from '../lib/attachment-label';
 import { Menu } from '../components/Menu';
 import { usePageMenu } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
-import { InspirationBar } from '../components/InspirationBar';
+import { InspirationBar, SAVED_NOTICE_MS } from '../components/InspirationBar';
 import { HomeStream, streamSignals } from '../components/HomeStream';
+import { SHARED_KEY, SHARED_MAX_AGE_MS, sharedText, type SharedPayload } from '../components/ShareArrival';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
 import { ShareSheet, inspirationShareTarget, type ShareTarget } from '../components/ShareSheet';
@@ -7789,6 +7790,40 @@ const RETRY_READ_LIMIT_MS = 20_000;
     });
     return () => window.cancelAnimationFrame(frame);
   }, [asking, ask]);
+  /* ═══ A SHARE ARRIVING FROM OUTSIDE (home brief §4) ═══════════════════
+     `/share` (the share sheet, the bookmarklet) left what was shared in this
+     tab's session; it is saved here through the same outbox as the bar —
+     queued offline, de-duplicated by its request id — but NOT through the
+     bar's draft, so whatever half-written thing is already in the field is
+     neither sent with it nor lost (the outbox settles only the words it
+     sent). "Saved" is the only thing shown. A bookmarklet's little window
+     closes itself once it has said so. */
+  const closeAfterSave = useRef(false);
+  useEffect(() => {
+    /* The outbox only takes a save once the draft store is ready (it is
+       `enabled` on it); a cold arrival from the share sheet got here first. */
+    if (phase !== 'ready' || offline || !memoryScope || !composerDraft.ready || inspirationSave.pending || inspirationSave.busy) return;
+    let payload: SharedPayload | null = null;
+    try {
+      const raw = sessionStorage.getItem(SHARED_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(SHARED_KEY);
+      payload = JSON.parse(raw) as SharedPayload;
+    } catch { return; }
+    if (!payload || Date.now() - payload.at > SHARED_MAX_AGE_MS) return;
+    const { text, url } = sharedText(payload);
+    if (!text) return;
+    const words = url ? text.replace(url, '').trim() : text;
+    closeAfterSave.current = payload.via === 'bookmarklet' && Boolean(window.opener);
+    inspirationSave.start({ operation: 'inspiration', input: { text, kind: url && !words ? 'link' : url ? 'mixed' : 'note', source: 'app',
+      ...(url ? { attachments: [{ type: 'link' as const, url }] } : {}) } });
+  }, [phase, offline, memoryScope, composerDraft.ready, inspirationSave.pending, inspirationSave.busy, inspirationSave.start]);
+  useEffect(() => {
+    if (!savedAt || !closeAfterSave.current) return;
+    closeAfterSave.current = false;
+    const timer = window.setTimeout(() => window.close(), SAVED_NOTICE_MS + 200);
+    return () => window.clearTimeout(timer);
+  }, [savedAt]);
   const deleteFromStream = useCallback(async (id: string) => {
     simApiRef.current?.acknowledge('let-go');
     await deleteInspiration(id, memoryProfileId ? { profile: memoryProfileId } : {});
@@ -11562,7 +11597,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           corner menu, and the lists those open keep "Back home" above (the
           PageBack's `listing` case, which used to rely on the tabs). */}
       {barShown ? (
-        <InspirationBar locale={locale} text={asking ? askText : pendingSave ? '' : draft} inputRef={barFieldRef}
+        <InspirationBar locale={locale} text={asking ? askText : pendingSave && pendingSave.input.text.trim() === draft.trim() ? '' : draft} inputRef={barFieldRef}
           onText={(text, caret) => { if (asking) { setAskText(text); return; } mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
           ask={conversationScope && conversationProfile && !offline ? { on: asking, onMode: on => { setAskOn(on); window.requestAnimationFrame(() => barFieldRef.current?.focus()); },
             thread: <ConversationPanel key={`ask:${conversationScope.profileId}:${askId ?? 'new'}`} inline sendRef={askSend}
@@ -11570,7 +11605,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               initialConversation={askRow.current?.id === askId ? askRow.current ?? undefined : undefined}
               onCreated={row => { if (row.profileId === conversationScope.profileId) askRow.current = row; }}
               onChoose={next => setAskId(next)} /> } : undefined}
-          media={pendingSave ? [] : inputMedia}
+          media={pendingSave && pendingSave.input.text.trim() === draft.trim() ? [] : inputMedia}
           onRemoveMedia={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
           onFiles={(files, door) => { void addInspirationFiles(files, door); }}

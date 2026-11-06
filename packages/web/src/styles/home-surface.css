@@ -583,6 +583,25 @@
   height: calc(var(--jar-char-mid, 50svh) + var(--stream-p, 0) * (21svh - var(--jar-char-mid, 50svh)) - var(--jar-char, 120px) / 2 - var(--sp-12));
 }
 
+/* ── SAVE FROM ANYWHERE (§4): the bookmarklet in Settings ───────────────── */
+/* A thing to drag, so it looks like one: a paper pill, not a link in a line
+   of text. */
+.waka-bookmarklet {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--sp-44);
+  padding: 0 var(--sp-16);
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--paper-ink);
+  font-size: var(--type-15);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  cursor: grab;
+}
+.waka-bookmarklet:focus-visible { filter: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+
 @media (prefers-reduced-motion: reduce) {
   .waka-bar-notice,
   .waka-bar-row { transition: none; }

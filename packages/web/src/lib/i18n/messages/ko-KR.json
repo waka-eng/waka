@@ -863,5 +863,8 @@
   "worldBarMode": "저장 또는 묻기",
   "worldBarModeSave": "저장",
   "worldBarModeAsk": "묻기",
-  "worldBarAsk": "묻기"
+  "worldBarAsk": "묻기",
+  "profileSaveAnywhere": "어디서든 저장하기",
+  "profileBookmarkletHint": "이것을 북마크 바로 끌어다 놓으세요. 어떤 페이지에서든 누르면 그 페이지나 선택한 글이 저장돼요.",
+  "profileBookmarkletName": "WAKA에 저장"
 }

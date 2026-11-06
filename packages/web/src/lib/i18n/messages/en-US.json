@@ -863,5 +863,8 @@
   "worldBarMode": "Save or ask",
   "worldBarModeSave": "Save",
   "worldBarModeAsk": "Ask",
-  "worldBarAsk": "Ask"
+  "worldBarAsk": "Ask",
+  "profileSaveAnywhere": "Save from anywhere",
+  "profileBookmarkletHint": "Drag this to your bookmarks bar. Press it on any page to save the page, or the words you’ve selected.",
+  "profileBookmarkletName": "Save to WAKA"
 }
