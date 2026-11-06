@@ -79,16 +79,17 @@ it('raises "Saved" for 1.5s per save, and says "Saved, will sync" with no connec
   await act(async () => root.render(<InspirationBar {...props} savedAt={0} />));
   const notice = () => host.querySelector('[role="status"]')!;
   expect(notice().textContent).toBe('');
-  await act(async () => root.render(<InspirationBar {...props} savedAt={1} />));
+  const first = Date.now();
+  await act(async () => root.render(<InspirationBar {...props} savedAt={first} />));
   expect(notice().textContent).toBe('Saved');
   await act(async () => { vi.advanceTimersByTime(SAVED_NOTICE_MS - 1); });
   expect(notice().textContent).toBe('Saved');
   await act(async () => { vi.advanceTimersByTime(1); });
   expect(notice().textContent).toBe('');
   // A re-render alone does not bring it back; only a new save does.
-  await act(async () => root.render(<InspirationBar {...props} savedAt={1} text="x" />));
+  await act(async () => root.render(<InspirationBar {...props} savedAt={first} text="x" />));
   expect(notice().textContent).toBe('');
-  await act(async () => root.render(<InspirationBar {...props} savedAt={2} savedLater />));
+  await act(async () => root.render(<InspirationBar {...props} savedAt={Date.now()} savedLater />));
   expect(notice().textContent).toBe('Saved, will sync');
 });
 
@@ -209,4 +210,30 @@ it('asks in Ask mode: the toggle, the placeholder and the thread say so, and Esc
   expect(host.querySelector('.waka-bar-tool')).toBeNull();
   await press('Enter'); expect(onSubmit).toHaveBeenCalledTimes(1);
   await press('Escape'); expect(onMode).toHaveBeenLastCalledWith(false);
+});
+
+it('in Save, the field is a door to the notepad: a press or a typed key opens it, focus alone does not', async () => {
+  const onOpenNotepad = vi.fn();
+  await act(async () => root.render(<InspirationBar {...bar({ onOpenNotepad })} ask={{ on: false, onMode: () => {} }} />));
+  expect(field().readOnly).toBe(true);
+  await act(async () => field().focus());
+  expect(onOpenNotepad).not.toHaveBeenCalled(); // focus comes back here when the notepad closes
+  await act(async () => field().click());
+  expect(onOpenNotepad).toHaveBeenCalledTimes(1);
+  await press('a');
+  expect(onOpenNotepad).toHaveBeenCalledTimes(2);
+  await press('Tab');
+  expect(onOpenNotepad).toHaveBeenCalledTimes(2);
+  // Ask still types in place.
+  await act(async () => root.render(<InspirationBar {...bar({ onOpenNotepad })} ask={{ on: true, onMode: () => {} }} />));
+  expect(field().readOnly).toBe(false);
+});
+
+it('still says "Saved" when it only appears after the save — as it does coming back from the notepad', async () => {
+  const savedAt = Date.now();
+  await act(async () => { vi.advanceTimersByTime(400); }); // the notepad folds; the bar comes back
+  await act(async () => root.render(<InspirationBar {...bar({ savedAt })} />));
+  expect(host.querySelector('[role="status"]')?.textContent).toBe('Saved');
+  await act(async () => { vi.advanceTimersByTime(SAVED_NOTICE_MS - 400); });
+  expect(host.querySelector('[role="status"]')?.textContent).toBe('');
 });

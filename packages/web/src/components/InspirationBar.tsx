@@ -23,7 +23,7 @@
  * `data-primary="true"` is the brief's automated check (§9.2): the home
  * renders exactly one element that carries it, and this is that element.
  */
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 
 import { attachmentLabel } from '../lib/attachment-label';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
@@ -46,7 +46,9 @@ export function InspirationBar(props: {
   busy: boolean;
   /** A save that failed, or a file that cannot be kept — said under the field. */
   error: string;
-  /** Bumped once per completed save; each bump raises "Saved" again. */
+  /** When the last save completed (epoch ms; 0 for none). "Saved" stands
+      for 1.5s from that moment — also when the bar only appears after it,
+      as it does when the save came from the notepad. */
   savedAt: number;
   /** Set when the save is queued here rather than sent (no connection). */
   savedLater?: boolean;
@@ -62,22 +64,32 @@ export function InspirationBar(props: {
    * only one.
    */
   ask?: { on: boolean; onMode: (ask: boolean) => void; thread?: ReactNode };
+  /**
+   * SAVE OPENS THE NOTEPAD (founder, 2026-11-05, with the notepad on screen:
+   * "i want save to open up a notepad like [this]"). When given, the field
+   * in Save mode is a door rather than a place to type: pressing it — or
+   * reaching it with "/" — opens the full-page notepad, which keeps the
+   * draft and has its own Save. This overrides the brief's "Enter saves
+   * immediately" for Save mode; Ask mode still types in place.
+   */
+  onOpenNotepad?: () => void;
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const asking = Boolean(props.ask?.on);
+  const notepadDoor = Boolean(props.onOpenNotepad) && !asking;
   const hasSomething = Boolean(props.text.trim() || (!asking && props.media.length));
 
   /* "SAVED" IS A MOMENT, NOT A STATE. It shows for 1.5s from the save that
      raised it and then leaves; a second save inside that window restarts it
-     rather than stacking. Keyed on `savedAt`, so a re-render alone cannot
-     bring it back. */
+     rather than stacking. Measured from the save's own time, not from when
+     this bar mounted: a save made on the notepad lands while the bar is not
+     on screen, and the bar that comes back must still say so. */
   const [notice, setNotice] = useState(false);
-  const seen = useRef(props.savedAt);
   useEffect(() => {
-    if (props.savedAt === seen.current) return;
-    seen.current = props.savedAt;
+    const left = props.savedAt ? SAVED_NOTICE_MS - (Date.now() - props.savedAt) : 0;
+    if (left <= 0) { setNotice(false); return; }
     setNotice(true);
-    const timer = window.setTimeout(() => setNotice(false), SAVED_NOTICE_MS);
+    const timer = window.setTimeout(() => setNotice(false), left);
     return () => window.clearTimeout(timer);
   }, [props.savedAt]);
 
@@ -91,6 +103,11 @@ export function InspirationBar(props: {
   }, [props.text, props.inputRef]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (notepadDoor) {
+      if (event.key === 'Tab' || event.key === 'Escape' || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key.length === 1 || event.key === 'Enter') { event.preventDefault(); props.onOpenNotepad!(); }
+      return;
+    }
     /* The first Enter of a Korean sentence belongs to the IME, not to us. */
     if (event.nativeEvent.isComposing || event.key !== 'Enter') {
       /* Esc leaves Ask (brief §7); in Save it lets go of the field. */
@@ -139,6 +156,12 @@ export function InspirationBar(props: {
           onFiles={(files) => props.onFiles(files, 'file')}
           voice={props.voice ? { label: say('worldBarVoice'), ...props.voice } : undefined} />}
         <textarea ref={props.inputRef} className="waka-bar-field" rows={1} value={props.text}
+          readOnly={notepadDoor}
+          aria-haspopup={notepadDoor ? 'dialog' : undefined}
+          /* Pressed or typed into — never merely focused: focus comes back
+             here when the notepad closes, and a door that opened on focus
+             would open again the moment you left it. */
+          onClick={notepadDoor ? () => props.onOpenNotepad!() : undefined}
           aria-label={say(asking ? 'worldBarAskPlaceholder' : 'worldBarPlaceholder')} placeholder={say(asking ? 'worldBarAskPlaceholder' : 'worldBarPlaceholder')}
           aria-describedby={props.error ? 'waka-bar-error' : undefined}
           aria-invalid={props.error ? true : undefined}

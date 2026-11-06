@@ -688,16 +688,16 @@ it('saves a capture into the selected agent without adding it to the human or an
   await chooseFromMenu(world.container,'Inspirations'); await settle();
   const newNote=world.container.querySelector<HTMLButtonElement>('.waka-over-head .waka-over-new')!;
   expect(newNote.textContent).toBe('New inspiration');
-  /* The archive's new-save door leads to the home bar now (waka-design-
-     brief.md §3c), on the agent's wall as on yours; the bar saves to the
-     wall it stands on. */
+  /* The archive's new-save door opens the notepad (founder: "i want save
+     to open up a notepad"), on the agent's wall as on yours; the notepad
+     saves to the wall it stands on. */
   await act(async()=>newNote.click()); await settle();
-  const area=world.container.querySelector<HTMLTextAreaElement>('form.waka-bar textarea.waka-bar-field')!;
+  const area=world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
   await act(async()=>{
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,'A new Noah observation');
     area.dispatchEvent(new Event('input',{bubbles:true}));
   });
-  await act(async()=>world.container.querySelector<HTMLButtonElement>('form.waka-bar button[aria-label="Save"]')!.click()); await settle();
+  await act(async()=>world.container.querySelector<HTMLButtonElement>('button[aria-label="Save inspiration"]')!.click()); await settle();
   expect(createInspiration).toHaveBeenCalledWith(expect.objectContaining({text:'A new Noah observation'}),expect.objectContaining({profile:'agent-noah'}));
   expect(CAPTURES.rows.map(row=>row.profileId)).toEqual(['agent-noah']);
   await chooseFromMenu(world.container,'Inspirations'); await settle();

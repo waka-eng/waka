@@ -5228,18 +5228,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
         leaveOpen();
       } else setMouthNote("");
       mouthFieldRef.current?.focus();
-    } else if (composerDraft.current.current.recordingCandidate) {
-      /* The one draft the home bar cannot hold: an audio recording waiting
-         for keep-or-replace. That choice lives on the notepad, so the
-         notepad is still where this door leads while one is pending. */
-      openMouth();
     } else {
-      /* ═══ EVERY "NEW SAVE" DOOR LEADS TO THE BAR (home brief §3c) ═════
-         The pill that opened the notepad is gone; saving is the field at
-         the bottom of the home. A door pressed from over a list closes the
-         list first, so the focus lands in a field somebody can see. */
-      if (viewNavigationRef.current.view?.open) viewNavigationRef.current.closeToHome();
-      window.requestAnimationFrame(() => barFieldRef.current?.focus());
+      /* EVERY "NEW SAVE" DOOR OPENS THE NOTEPAD. The home brief (§3c) had
+         them lead to the bar to type in place; the founder, looking at the
+         notepad: "i want save to open up a notepad like this". So the bar's
+         field in Save mode is a door to this, and so is every other one. */
+      openMouth();
     }
   }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth, leaveOpen, composerDraft]);
 
@@ -5387,7 +5381,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            mind. So the confirmation is the bar's 1.5s "Saved", and the
            jump above (`acknowledge('kept')`) stays — it answers what the
            person just did, which is the one motion the law allows. */
-        if (initiated) setSavedAt(value => value + 1);
+        if (initiated) setSavedAt(Date.now());
         viewNavigationRef.current.closeComposer();
       } };
     },
@@ -6957,7 +6951,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
      is not standing, "/" still finds. */
   const findNow = useCallback(() => setSeek((s) => (s === null ? "" : s)), []);
   openSeekRef.current = () => {
-    if (barFieldRef.current) barFieldRef.current.focus();
+    /* In Ask, "/" is the field; in Save, the field is a door to the
+       notepad, so "/" opens the notepad. */
+    if (barFieldRef.current && askOnRef.current) barFieldRef.current.focus();
+    else if (barFieldRef.current) startNewInspiration();
     else findNow();
   };
   /* `foundRef` AND `readingLit` WENT WITH THE ORBS THEY LIT. A search's
@@ -7622,6 +7619,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
      and are not loaded as a list here — see the PR's stubs). */
   /* Ask mode (see ASK MODE below) — declared here because the stream hides behind its thread. */
   const [askOn, setAskOn] = useState(false);
+  const askOnRef = useRef(false);
+  askOnRef.current = askOn;
   const streamShown = phase === 'ready' && atNowView && !mouthOpen && !reviewing && atWall.kind === 'self' && !askOn;
   const streamScrollerRef = useRef<HTMLDivElement>(null);
   /* PRINCIPLES ARE READ FOR THE STREAM. They used to be read only when the
@@ -7708,7 +7707,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const pendingSave = inspirationSave.pending && inspirationSave.pending.operation === 'inspiration' && !inspirationSave.pending.rejected
     ? inspirationSave.pending : null;
   const savedLater = Boolean(pendingSave) && inspirationSave.phase === 'uncertain';
-  useEffect(() => { if (savedLater) setSavedAt(value => value + 1); }, [savedLater]);
+  useEffect(() => { if (savedLater) setSavedAt(Date.now()); }, [savedLater]);
   const pendingCardId = pendingSave ? `pending:${pendingSave.requestId}` : null;
   const streamInspirations = useMemo<Inspiration[]>(() => {
     const kept = inspirations ?? [];
@@ -11597,9 +11596,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
           corner menu, and the lists those open keep "Back home" above (the
           PageBack's `listing` case, which used to rely on the tabs). */}
       {barShown ? (
-        <InspirationBar locale={locale} text={asking ? askText : pendingSave && pendingSave.input.text.trim() === draft.trim() ? '' : draft} inputRef={barFieldRef}
+        <InspirationBar locale={locale} onOpenNotepad={startNewInspiration} text={asking ? askText : pendingSave && pendingSave.input.text.trim() === draft.trim() ? '' : draft} inputRef={barFieldRef}
           onText={(text, caret) => { if (asking) { setAskText(text); return; } mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
-          ask={conversationScope && conversationProfile && !offline ? { on: asking, onMode: on => { setAskOn(on); window.requestAnimationFrame(() => barFieldRef.current?.focus()); },
+          ask={conversationScope && conversationProfile && !offline ? { on: asking, onMode: on => { setAskOn(on); if (on) window.requestAnimationFrame(() => barFieldRef.current?.focus()); },
             thread: <ConversationPanel key={`ask:${conversationScope.profileId}:${askId ?? 'new'}`} inline sendRef={askSend}
               scope={conversationScope} id={askId} locale={locale} profile={conversationProfile}
               initialConversation={askRow.current?.id === askId ? askRow.current ?? undefined : undefined}

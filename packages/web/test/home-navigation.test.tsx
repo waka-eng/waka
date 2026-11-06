@@ -1096,27 +1096,26 @@ it('keeps background inspiration processing out of Actions', async () => {
 });
 
 
-/* THE ARCHIVE'S OWN "NEW INSPIRATION" LEADS TO THE HOME BAR (waka-design-
-   brief.md §3c): it closes the list and puts the key in the one field, rather
-   than opening the notepad. It still names a retained draft. */
+/* THE ARCHIVE'S OWN "NEW INSPIRATION" OPENS THE NOTEPAD — as every save
+   door does (founder, 2026-11-05: "i want save to open up a notepad"). It
+   still names a retained draft, now reached back through the corner menu. */
 it('starts a capture directly from a populated archive and names a retained draft', async () => {
   world = await mountWorld(FACTS, { initialEntries: ['/?open=saves'], routerTools: <RouterTools/> }); await settle();
   const action = () => world.container.querySelector<HTMLButtonElement>('.waka-over-head .waka-over-new')!;
   expect(action().textContent?.trim()).toBe('New inspiration');
   await act(async () => action().click()); await settle();
   expect(new URLSearchParams(location.search).get('open')).toBeNull();
-  expect(new URLSearchParams(location.search).get('compose')).toBeNull();
-  const field = homeField()!;
-  expect(field, 'the archive\'s new-save door did not lead to the home bar').toBeTruthy();
-  expect(document.activeElement, 'the home bar\'s field did not take the key').toBe(field);
+  expect(new URLSearchParams(location.search).get('compose')).toBe('1');
+  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'A draft from the archive');
-    field!.dispatchEvent(new Event('input', { bubbles: true }));
+    field.dispatchEvent(new Event('input', { bubbles: true }));
   }); await settle();
+  await act(async () => close()!.click()); await settle();
   await pressAction(world.container, 'Search'); await settle();
   expect(action().textContent?.trim()).toBe('Continue draft');
   await act(async () => action().click()); await settle();
-  expect(homeField()?.value).toBe('A draft from the archive');
+  expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value).toBe('A draft from the archive');
 });
 
 it('shows only owned profiles when a signed-in account has no agents', async () => {
