@@ -223,7 +223,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
             </>
           ) : (
             <>
-              <p className={error ? "onb-error" : "onb-hint"} role="status">{error || say("onboardingNoteHint")}</p>
+              <p className={error || voiceProblem ? "onb-error" : "onb-hint"} role="status">{error || voiceProblem || say("onboardingNoteHint")}</p>
               <form className="onb-note" onSubmit={(event) => { event.preventDefault(); void save(); }}>
                 <textarea ref={area} rows={1} value={text} placeholder={say("onboardingNotePlaceholder")} aria-label={say("onboardingNotePlaceholder")}
                   disabled={saving} onChange={(event) => setText(event.currentTarget.value)} />

@@ -34,6 +34,9 @@
   color: var(--onb-ink);
   font-family: Jost, Pretendard, sans-serif;
   font-weight: 400;
+  /* Korean breaks between words, never inside one. */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
   display: flex;
   justify-content: center;
 }
