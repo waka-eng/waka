@@ -28,6 +28,7 @@ import { Fragment, useRef, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../lib/auth-context";
+import { onboardingPreviewRequested } from "../lib/onboarding-preview";
 import { LoadingHome } from "./LoadingHome";
 
 export interface RequireAuthProps {
@@ -70,7 +71,9 @@ export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps
     return <Navigate to="/onboarding" replace state={{ from }} />;
   }
 
-  if (account?.onboardingCompletedAt && location.pathname === "/onboarding") {
+  /* A dev server's `?preview=1` lets an onboarded account walk the flow; it
+     saves nothing and stamps nothing (`lib/onboarding-preview.ts`). */
+  if (account?.onboardingCompletedAt && location.pathname === "/onboarding" && !onboardingPreviewRequested(location.search)) {
     return <Navigate to="/" replace />;
   }
 

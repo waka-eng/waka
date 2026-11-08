@@ -76,6 +76,7 @@ import {
   writeOnboardingMarker,
   type OnboardingStep,
 } from "../lib/onboarding-progress";
+import { onboardingPreviewRequested } from "../lib/onboarding-preview";
 import { safeInAppPath } from '../lib/sign-in-destination';
 import "../styles/onboarding.css";
 
@@ -114,11 +115,14 @@ export default function OnboardingPage(): JSX.Element {
   const [attempt, setAttempt] = useState(0);
   const accountId = account?.id ?? null;
   const profileId = profile?.id ?? null;
+  /* DEV ONLY: `?preview=1` walks the flow without saving or stamping anything. */
+  const preview = onboardingPreviewRequested(location.search);
 
   /* WHERE THIS PERSON IS — the server's count of their saves, and the two
      marks this browser keeps. See `lib/onboarding-progress.ts`. */
   useEffect(() => {
     if (!profileId || !accountId) return;
+    if (preview) { setPhase({ kind: "intro" }); return; }
     const controller = new AbortController();
     setPhase({ kind: "loading" });
     fetchInspirationSnapshot(profileId, controller.signal).then((snapshot) => {
@@ -134,6 +138,8 @@ export default function OnboardingPage(): JSX.Element {
      standing on /onboarding. */
   const finish = useCallback(async (destination: string) => {
     if (!profile) return;
+    /* A preview stamps nothing: it returns home exactly as it found the account. */
+    if (preview) { navigate("/", { replace: true }); return; }
     setLeaving(true); setLeaveError("");
     try {
       await updateProfile({ name: profile.name, preferredLocale: normalizeSupportedLocale(profile.preferredLocale), completeOnboarding: true });
@@ -144,7 +150,7 @@ export default function OnboardingPage(): JSX.Element {
       setLeaving(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, accountId, navigate, updateProfile, locale]);
+  }, [profile, accountId, navigate, updateProfile, locale, preview]);
 
   /* THE READ. Asked once the three are in, raced against the screen's
      patience; past it, the person goes in and home shows the read when it
@@ -152,6 +158,10 @@ export default function OnboardingPage(): JSX.Element {
   useEffect(() => {
     if (phase.kind !== "reading" || !profileId) return;
     let live = true;
+    if (preview) {
+      const timer = window.setTimeout(() => { if (live) setPhase({ kind: "reveal", reading: say("onboardingPreviewRead") }); }, 2500);
+      return () => { live = false; window.clearTimeout(timer); };
+    }
     void (async () => {
       let known = answers;
       if (known.length < ONBOARDING_QUESTIONS) {
@@ -181,6 +191,7 @@ export default function OnboardingPage(): JSX.Element {
 
   const talk = async (reading: string) => {
     if (!profileId) return;
+    if (preview) { navigate("/", { replace: true }); return; }
     setLeaving(true); setLeaveError("");
     const conversationId = crypto.randomUUID();
     try {
@@ -191,15 +202,20 @@ export default function OnboardingPage(): JSX.Element {
     await finish(`/chat/${encodeURIComponent(conversationId)}`);
   };
 
+  const marker = preview ? <p className="onb-preview-mark" aria-label={say("onboardingPreviewMarkLabel")}>{say("onboardingPreviewMark")}</p> : null;
+  const screen = renderStep();
+  return marker ? <>{screen}{marker}</> : screen;
+
+  function renderStep(): JSX.Element {
   if (phase.kind === "name") {
     return <NameStep onNamed={() => setPhase(onboardingStep({ saved: 0, marker: readOnboardingMarker(accountId), hasName: true }))} />;
   }
   if (phase.kind === "intro") {
-    return <OnboardingIntro locale={locale} onDone={() => { writeOnboardingMarker(accountId, { introSeen: true }); setPhase({ kind: "question", index: 0 }); }} />;
+    return <OnboardingIntro locale={locale} onDone={() => { if (!preview) writeOnboardingMarker(accountId, { introSeen: true }); setPhase({ kind: "question", index: 0 }); }} />;
   }
   if (phase.kind === "question" && profileId) {
     return <OnboardingQuestion key={phase.index} locale={locale} index={phase.index} profileId={profileId}
-      calling={calling} onTouched={() => setCalling(false)} onSaved={saved(phase.index)} />;
+      calling={calling} onTouched={() => setCalling(false)} onSaved={saved(phase.index)} simulate={preview} />;
   }
   if (phase.kind === "reading") {
     return <OnboardingReading locale={locale} error={leaveError} busy={leaving}
@@ -223,6 +239,7 @@ export default function OnboardingPage(): JSX.Element {
       </div>
     </main>
   );
+  }
 }
 
 function NameStep({ onNamed }: { onNamed: () => void }): JSX.Element {

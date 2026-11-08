@@ -424,6 +424,22 @@
 
 .onb-wait { align-items: center; justify-content: center; gap: var(--sp-16); }
 
+/* DEV PREVIEW MARK — small, faint, out of the way, but always there. */
+.onb-preview-mark {
+  position: fixed;
+  top: max(var(--sp-8), env(safe-area-inset-top));
+  right: var(--sp-12);
+  z-index: 4;
+  margin: 0;
+  padding: 2px var(--sp-8);
+  border: 1px solid var(--onb-ink-faint, #6f6b63);
+  border-radius: 999px;
+  font-size: var(--t-meta);
+  font-family: Jost, Pretendard, sans-serif;
+  color: var(--onb-ink-quiet, #8f8a80);
+  pointer-events: none;
+}
+
 /* ─── motion, from the frames ──────────────────────────────────────── */
 @keyframes onb-enter { from { opacity: 0; } to { opacity: 1; } }
 @keyframes onb-sink { 0% { transform: translateY(0) rotate(var(--r)); opacity: .9; } 100% { transform: translateY(60px) rotate(var(--r)); opacity: .12; } }

@@ -45,8 +45,11 @@ type Mode = "choose" | "write" | "photo" | "voice";
 
 const WAVE = [10, 18, 26, 14, 22, 30, 16, 24, 12, 20, 28, 14, 10];
 
-export function OnboardingQuestion({ locale, index, profileId, calling, onTouched, onSaved }: {
+export function OnboardingQuestion({ locale, index, profileId, calling, onTouched, onSaved, simulate = false }: {
   locale: SupportedLocale;
+  /** Dev preview: nothing is uploaded or saved; the answer is handed back as
+      though it had been (`lib/onboarding-preview.ts`). */
+  simulate?: boolean;
   index: number;
   profileId: string;
   /** The bar glows until the person first touches it. */
@@ -130,6 +133,14 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
     if (!canSave) return;
     setSaving(true); setError("");
     const controller = new AbortController();
+    if (simulate) {
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+      const words = text.trim();
+      const kind = photo ? (words ? "mixed" : "image") : audio ? (words ? "mixed" : "audio") : "note";
+      onSaved({ id: `preview-${index}`, profileId, text: words, kind, source: "app" } as ApiInspiration);
+      setSaving(false);
+      return;
+    }
     try {
       const media: InspirationDraftMedia[] = [];
       if (photo) media.push({ id: "photo", type: "image", ...(photo.file.name ? { name: photo.file.name.slice(0, 255) } : {}), blob: photo.file, uploaded: uploaded.current.get("photo") });
