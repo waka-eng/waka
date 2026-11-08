@@ -5810,6 +5810,12 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     mq.addEventListener("change", onMq);
     const ro = new ResizeObserver(measure);
     ro.observe(root);
+    /* iOS CAN CHANGE THE VISIBLE HEIGHT WITHOUT RESIZING THE ROOT — a toolbar
+       collapsing, the keyboard leaving — and a stale tall `view.h` centres the
+       creature under the bar (founder's phone, 2026-11-05: body hidden behind
+       the bar, bubble sitting on it). Re-measure when the viewport says so. */
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", measure);
     /* HQ's content grows when the ambition and the band arrive, which moves
        the companion's slot — so that block's height is observed too */
     if (measured.hqInner.current) ro.observe(measured.hqInner.current);
@@ -6723,6 +6729,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       clock.running = false;
       cancelAnimationFrame(clock.raf);
       ro.disconnect();
+      vv?.removeEventListener("resize", measure);
       root.style.cursor = "";
       root.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("pointermove", onMove);
