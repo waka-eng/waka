@@ -4,6 +4,7 @@ import { getDb } from './db.js';
 import { readInspirationProcessingStatus } from './inspiration-processing-status.js';
 import { enqueueDeriveSignals, enqueueTopOfMindRefresh, recoverPendingSignalSupport, STALE_LOCK_SECONDS, wakeCommittedBackgroundJobs } from './queue.js';
 import { recoverAttachmentAnalysis } from './attachment-analysis-retry.js';
+import { effectiveAttachmentStatus } from './attachment-material.js';
 import { parseTopOfMindRefreshResult } from './top-of-mind-refresh-status.js';
 
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
@@ -36,8 +37,12 @@ export async function recoverInspirationProcessing(db: ReturnType<typeof getDb>,
     if (!status || !status.canRetry) return status;
     await recoverPendingSignalSupport(tx, input.profileId);
     if (status.stage === 'enrichment') {
+      // The same effective status the processing read waits on: a transient
+      // failure (network, rate limit, an out-of-credit 402) rests as
+      // 'failed' and is read again here; a corrected recording or image
+      // already has the owner's words and is not re-read at a model's cost.
       const missing = await tx.select({ id: attachments.id }).from(attachments).where(and(eq(attachments.profileId, input.profileId),
-        eq(attachments.inspirationId, input.inspirationId), sql`(${attachments.enrichmentStatus} IS NULL OR ${attachments.enrichmentStatus}::text IN ('pending','failed'))`));
+        eq(attachments.inspirationId, input.inspirationId), sql`(${effectiveAttachmentStatus} IS NULL OR ${effectiveAttachmentStatus}::text IN ('pending','failed'))`));
       for (const attachment of missing) {
         await recoverAttachmentAnalysis(tx, { profileId: input.profileId, attachmentId: attachment.id });
       }
