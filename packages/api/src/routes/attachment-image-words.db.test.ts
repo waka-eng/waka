@@ -92,7 +92,7 @@ it('reads an image that failed on an out-of-credit 402 again through inspiration
   const f = await fixture({ status: 'failed', text: null, reason: 'Image description failed (HTTP 402)' });
   // The queue spent its attempts while the account had no credit.
   await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,attempts,max_attempts,idempotency_key)
-    VALUES (${f.profileId},'enrich_attachment',${t.sql.json({ attachmentId: f.id, inspirationId: f.sourceId })},'failed',5,5,${`enrich_attachment:${f.id}`})`;
+    VALUES (${f.profileId},'enrich_attachment',${JSON.stringify({ attachmentId: f.id, inspirationId: f.sourceId })}::jsonb,'failed',5,5,${`enrich_attachment:${f.id}`})`;
   expect(await (await f.app.request(f.path)).json()).toMatchObject({ status: 'retrying', canRetry: true });
   const input = { profileId: f.profileId, inspirationId: f.sourceId };
   expect(await readInspirationProcessingStatus(t.db as never, input)).toMatchObject({ stage: 'enrichment', phase: 'failed', canRetry: true });
