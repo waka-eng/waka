@@ -49,6 +49,60 @@ export async function retryAttachmentTranscript(id: string, revision: string, si
   return checkedTranscript(id, await postJson<ApiAttachmentTranscript>(apiPath(`/attachments/${encodeURIComponent(id)}/transcript/retry`), { revision }, 'Could not retry transcription', signal));
 }
 
+/**
+ * "The words I read" under a saved image — mirrors `imageWordsState` in
+ * `packages/api/src/lib/image-words.ts`.
+ * - reading:    the first read is queued or running.
+ * - ready:      `text` holds words to show (the machine's, or the owner's fix).
+ * - unreadable: the model found no words, or can never read this image.
+ * - retrying:   a read failed for a reason that can pass (network, rate limit,
+ *               out of credit). With `canRetry` true nothing is queued: call
+ *               `retryImageWords` once to queue another read.
+ */
+export type ImageWordsStatus = 'reading' | 'ready' | 'unreadable' | 'retrying';
+const IMAGE_WORDS_STATUSES: readonly ImageWordsStatus[] = ['reading', 'ready', 'unreadable', 'retrying'];
+/** Inline on `ApiAttachment.enrichment.words` for an inspiration's image. */
+export interface ApiImageWordsSummary {
+  status: ImageWordsStatus;
+  /** What to quote: the owner's fix when there is one, else the words read. */
+  text: string | null;
+  /** The machine's words alone (null when it read none). */
+  read: string | null;
+  /** The owner's fix; null means none. */
+  correction: string | null;
+  /** Echo back on `correctImageWords`; a stale one is 409 `words_changed`. */
+  revision: string;
+}
+/** `GET|PATCH /attachments/:id/words` — owner-only, job-aware status. */
+export interface ApiImageWords extends ApiImageWordsSummary {
+  attachmentId: string; inspirationId: string; profileId: string;
+  correctedAt: string | null; canEdit: boolean; canRetry: boolean; retryAfter: string | null;
+}
+function isImageWordsSummary(row: ApiImageWordsSummary) {
+  return Boolean(row) && IMAGE_WORDS_STATUSES.includes(row.status) && typeof row.revision === 'string' && /^\d+$/.test(row.revision) &&
+    [row.text, row.read, row.correction].every(value => value === null || typeof value === 'string');
+}
+function checkedImageWords(id: string, row: ApiImageWords) {
+  if (!isImageWordsSummary(row) || row.attachmentId !== id || typeof row.canEdit !== 'boolean' || typeof row.canRetry !== 'boolean' ||
+    !(row.correctedAt === null || (typeof row.correctedAt === 'string' && Number.isFinite(Date.parse(row.correctedAt)))) ||
+    !(row.retryAfter === null || (typeof row.retryAfter === 'string' && Number.isFinite(Date.parse(row.retryAfter))))) {
+    throw new ApiError({ status: 200, code: 'invalid_response', message: 'Could not verify these words' });
+  }
+  return row;
+}
+export async function fetchImageWords(id: string, signal?: AbortSignal) {
+  return checkedImageWords(id, await getJson<ApiImageWords>(apiPath(`/attachments/${encodeURIComponent(id)}/words`), 'Could not load the words', signal));
+}
+/** Fix: `correction` is the line as it appears (non-empty, ≤2000 chars);
+ * `null` returns to the words read. Flows into signals, embeddings and chat. */
+export async function correctImageWords(id: string, input: { revision: string; correction: string | null }, signal?: AbortSignal) {
+  return checkedImageWords(id, await patchJson<ApiImageWords>(apiPath(`/attachments/${encodeURIComponent(id)}/words`), input, 'Could not save the words', signal));
+}
+/** Queue another read now. 202 with the new state; 429 `words_retry_limit`. */
+export async function retryImageWords(id: string, signal?: AbortSignal) {
+  return checkedImageWords(id, await postJson<ApiImageWords>(apiPath(`/attachments/${encodeURIComponent(id)}/words/retry`), {}, 'Could not read the image again', signal));
+}
+
 export async function fetchAttachmentUrl(id: string, signal?: AbortSignal): Promise<string> {
   const body = await getJson<{ attachmentId: string; url: string }>(apiPath(`/attachments/${encodeURIComponent(id)}/url`), 'Could not open this attachment', signal);
   if (body.attachmentId !== id || !/^https?:\/\//i.test(body.url)) throw new ApiError({ status: 200, code: 'invalid_response', message: 'Could not open this attachment' });
@@ -78,6 +132,10 @@ export interface ApiAttachmentEnrichment {
   } | null;
   /** Present for image attachments; null for anything else. */
   image: { width: number | null; height: number | null } | null;
+  /** Present for an inspiration's image; null for anything else. Row-derived:
+   * use `fetchImageWords` for the job-aware status and `canRetry`. Optional
+   * only so older cached payloads still parse. */
+  words?: ApiImageWordsSummary | null;
 }
 
 /**

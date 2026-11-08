@@ -131,6 +131,8 @@ const REGISTER: Record<string, string> = {
   finalizeAttachment: "RULED: the other half of that upload",
   correctAttachmentTranscript: "RULED: edit again or use original wording (a null correction); neither operation changes the recording or the retained machine transcript",
   retryAttachmentTranscript: "RULED: resumes analysis of an existing recording without creating authored content; corrections stay authoritative and the recording remains removable",
+  correctImageWords: "RULED: fix again or return to the words read (a null correction); neither operation changes the image or the retained machine reading",
+  retryImageWords: "RULED: resumes reading an existing image without creating authored content; a fix stays authoritative and the image remains removable",
   retryAttachmentAnalysis: "RULED: retries only failed attachment analysis, preserves the original, and never duplicates the capture; the original remains removable",
   /* EIGHT REVIEW VERBS, ALL GONE IN THE SAME COMMIT (2026-10-10):
      `startReviewSession`, `advanceReviewSession`, `chooseReviewInspiration`,
