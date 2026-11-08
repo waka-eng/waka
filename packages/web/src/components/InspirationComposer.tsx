@@ -32,6 +32,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react';
 import { DialogSurface } from './DialogSurface';
 import { Companion } from './Companion';
+import { ReadWordsQuote, type ReadWords } from './ImageWords';
+import type { FixOutcome } from '../lib/use-image-words';
 import { HomeActionIcon } from './HomeActionIcon';
 import { NotePage } from './NotePage';
 import { AuthoredSaveNotice } from './AuthoredSaveNotice';
@@ -229,23 +231,7 @@ function MediaPreview({ item, recording = false, label }: { item: InspirationDra
   if (item.type === 'audio' && url) return <audio ref={audio} controls={!recording} src={url} preload="metadata" aria-label={label ?? item.name} />;
   return null;
 }
-/**
- * ═══ SEAM: "THE WORDS I READ" (design E3, E3′) ══════════════════════════════
- *
- * The text the server reads off a screenshot, shown quoted under it with a
- * Fix, so a person can see it understood. The API that reads it is being
- * built elsewhere; this is the shape the notepad takes it in, and nothing is
- * drawn while it is absent.
- *
- *   reading     — the words are being read; a quiet line says so.
- *   ready       — `text` is quoted under the picture, with Fix.
- *   unreadable  — the creature asks which line stuck, the picture softens,
- *                 and a line says it will try again and the save is safe.
- *
- * It belongs to the photo the page is showing large (`hero`); `Home` hands it
- * in as `readWords` for that attachment's id.
- */
-export interface ReadWords { status: 'reading' | 'ready' | 'unreadable'; text?: string }
+export type { ReadWords } from './ImageWords';
 
 /** The creature, small, beside what it says. ALWAYS THE APP'S OWN
     CHARACTER (founder: "all characters should be this app's real
@@ -275,25 +261,6 @@ function HeroPhoto({ item, name, blurred, removeLabel, disabled, onRemove }: {
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" /></svg>
     </button>
   </figure>;
-}
-
-/** The quoted words under the picture, with Fix (design E3). */
-function ReadWordsQuote({ words, locale, onFix, disabled }: { words: ReadWords; locale: SupportedLocale; onFix?: (text: string) => void; disabled: boolean }) {
-  const say = (key: Parameters<typeof t>[1]) => t(locale, key);
-  const [fixing, setFixing] = useState<string | null>(null);
-  if (words.status === 'unreadable') return <p className="waka-note-retry">{say('worldReadWordsRetry')}</p>;
-  return <div className="waka-note-read">
-    <div className="waka-note-read-body">
-      <p className="waka-note-read-label">{say('worldReadWordsLabel')}</p>
-      {words.status === 'reading' ? <p className="waka-note-read-quiet" role="status">{say('worldReadWordsReading')}</p>
-        : fixing !== null ? <textarea className="waka-note-read-fix" aria-label={say('worldReadWordsLabel')} value={fixing} autoFocus
-            onChange={event => setFixing(event.target.value)} />
-        : <p className="waka-note-read-text">“{words.text}”</p>}
-    </div>
-    {words.status === 'ready' && onFix ? (fixing === null
-      ? <button type="button" className="waka-note-read-act" disabled={disabled} onClick={() => setFixing(words.text ?? '')}>{say('worldReadWordsFix')}</button>
-      : <button type="button" className="waka-note-read-act" disabled={disabled || !fixing.trim()} onClick={() => { onFix(fixing.trim()); setFixing(null); }}>{say('worldReadWordsFixDone')}</button>) : null}
-  </div>;
 }
 
 export function InspirationComposer(props: {
@@ -343,8 +310,8 @@ export function InspirationComposer(props: {
   onDocuments?: (files: File[]) => void;
   /** What the server read off the large photo, when it has said (seam). */
   readWords?: ReadWords | null;
-  /** Correct those words; absent, Fix is not offered (seam). */
-  onFixReadWords?: (text: string) => void;
+  /** Correct those words; absent, Fix is not offered. Resolves to an outcome. */
+  onFixReadWords?: (text: string) => Promise<FixOutcome>;
   /** A share that arrived from another app (design F5): the creature asks
       why, with Add a note / That's all. It still waits for Save. */
   arrival?: boolean;
@@ -392,7 +359,7 @@ export function InspirationComposer(props: {
      stays on the shelf of tiles under it. */
   const hero = props.media.find(item => item.type === 'image' && item.blob && !item.validationError && !item.uploadError) ?? null;
   const shelf = hero ? props.media.filter(item => item !== hero) : props.media;
-  const unreadable = Boolean(hero && props.readWords?.status === 'unreadable');
+  const unreadable = Boolean(hero && (props.readWords?.status === 'unreadable' || props.readWords?.status === 'retrying'));
   const line = hero
     ? say(unreadable ? 'worldNoteAskUnreadable' : props.readWords?.status === 'ready' ? 'worldNoteAskLine' : 'worldNoteAskPhoto')
     : props.arrival ? say('worldShareArrived') : null;

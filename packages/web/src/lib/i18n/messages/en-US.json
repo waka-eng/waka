@@ -875,5 +875,9 @@
   "worldConversationAboutSave": "You kept this",
   "profileSaveAnywhereShareTitle": "Android and desktop",
   "profileSaveAnywhereShareHint": "Install WAKA from your browser and it shows up in the share menu.",
-  "profileSaveAnywhereBrowserTitle": "Any browser"
+  "profileSaveAnywhereBrowserTitle": "Any browser",
+  "worldReadWordsChanged": "These words changed while you were fixing them. Here they are now — check them and try again.",
+  "worldReadWordsFixFailed": "Couldn't save that. Your line is still here — try again.",
+  "worldReadWordsTypeLine": "Type the line",
+  "worldReadWordsLine": "The line that stuck"
 }

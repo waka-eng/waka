@@ -398,7 +398,7 @@ it('makes a photo the page\'s picture, and draws the words it read only when the
   /* The words get the whole bar; the row is under them. */
   expect(host.querySelector('.waka-note-bar')!.firstElementChild?.tagName).toBe('TEXTAREA');
 
-  const fix = vi.fn();
+  const fix = vi.fn(async () => 'saved' as const);
   props.readWords = { status: 'ready', text: 'Nobody feels ready.' }; props.onFixReadWords = fix; await mount();
   expect(host.querySelector('.waka-note-says')?.textContent).toBe('What made this line stick with you?');
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
@@ -409,8 +409,12 @@ it('makes a photo the page\'s picture, and draws the words it read only when the
   props.readWords = { status: 'unreadable' }; await mount();
   expect(host.querySelector('.waka-note-says')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
   expect(host.querySelector('.waka-note-hero')?.hasAttribute('data-blurred')).toBe(true);
-  expect(host.textContent).toContain('Your screenshot is saved either way.');
+  /* Unreadable promises nothing; only a read queued again says it will retry. */
+  expect(host.textContent).not.toContain('Your screenshot is saved either way.');
   expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Type the line, or just Save');
+  props.readWords = { status: 'retrying' }; await mount();
+  expect(host.querySelector('.waka-note-says')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
+  expect(host.textContent).toContain('Your screenshot is saved either way.');
 });
 
 /* F5: a share from another app is asked about, and still waits for Save. */

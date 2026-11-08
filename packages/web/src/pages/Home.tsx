@@ -131,6 +131,7 @@ import { inspectAttachmentFile, FileRefused } from "../lib/api/file-accept";
 import { deleteAccount } from "../lib/api/auth";
 import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
+import { useImageWords } from "../lib/use-image-words";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { useOpenClaimsLink } from "../lib/open-claims-link";
 import { InspirationReviewCard } from "../components/InspirationReviewCard";
@@ -5225,12 +5226,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
      draft — and not by the notepad merely being closed, which it also is
      while it is on its way open (and may blink through while the page's
      own address settles). */
-  /* SEAM: "THE WORDS I READ" (design E3). Returns what the server read off
-     the photo the notepad shows large, as `{ status: 'reading' | 'ready' |
-     'unreadable', text? }`, or null when nothing has been said — and null
-     draws nothing. The reading API is another branch's work; when it lands,
-     look the hero (`media.find(item => item.type === 'image')`) up by id in
-     whatever it returns and answer here. */
+  /* "THE WORDS I READ" IN THE NOTEPAD (design E3). The server reads an
+     image's words only AFTER the save (`enrichment.words`), so a draft's
+     photo has none yet: the words land on the "Kept" bubble (`keptWords`)
+     and on the saved note (`SavedImageWords`), and this answers null for a
+     draft. A dev build may preview the states via the window hook below. */
   const readWordsFor = (media: readonly InspirationDraftMedia[]): ReadWords | null => {
     void media;
     /* DEV ONLY, FOR LOOKING AT THE STATES: with no API behind the seam yet,
@@ -5636,7 +5636,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
     || (!composerDraft.ready ? say('worldComposerOpening') : '')
     || (uploadingMediaId ? say('worldComposerUploading') : '')
     || (recording.phase === 'idle' && recording.notice ? say(recording.notice) : '')
-    || (preparingInspiration || inspirationSave.busy ? say('worldSaving') : draft.trim() || inputMedia.length ? say('worldDraftWord') : '');
+    /* "Unsaved changes" WENT (2026-11-08). It sat between the tools and
+       Save in the note bar, crowding the row on a 375px phone, and said what
+       Save's own brightness already says (Law 4): full ink means there is
+       something to keep. "Saving…" stays — that one is news. */
+    || (preparingInspiration || inspirationSave.busy ? say('worldSaving') : '');
 
   const keepIt = useCallback(async () => {
     let text = draftRef.current.trim();
@@ -6244,6 +6248,18 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const keptConnection = (kept: { id: string; text: string } | null): string | null => { void kept; return null; };
   const inspirationOwner=memoryScope?`${memoryScope.accountId}:${memoryScope.profileId}`:null;
   const visibleInspiration=recentInspiration?.owner===inspirationOwner?recentInspiration:null;
+  /* ═══ THE WORDS READ OFF WHAT WAS JUST KEPT (design E4, E3/E3′) ════════
+     A screenshot's words are read by the server after the save, so the
+     "Kept" bubble is the first place they can be shown: quoted under
+     "Kept", or the question when it could not read them. Asked only while
+     that bubble is up. */
+  const keptImageId = visibleInspiration?.attachments.find(item => item.type === 'image')?.id ?? null;
+  const keptWords = useImageWords(charSay === say('worldBubbleKept') ? keptImageId : null).words;
+  /** What a chat about the save opens with: the note, and the words read. */
+  const keptSubject = (kept: { id: string; text: string }) => {
+    const read = keptWords?.status === 'ready' && kept.id === visibleInspiration?.id ? keptWords.text?.trim() : '';
+    return { id: kept.id, text: [kept.text.trim(), read ? `“${read}”` : ''].filter(Boolean).join('\n\n') };
+  };
 
   useEffect(() => {
     setReflectOpen(false);
@@ -9946,6 +9962,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 {charSay === say('worldBubbleKept') && keptConnection(visibleInspiration) ? <>
                   <span className="jar-char-bubble-of">{say('worldBubbleKept')}</span>
                   <span className="jar-char-bubble-reading" role="status">{keptConnection(visibleInspiration)}</span>
+                </> : charSay === say('worldBubbleKept') && keptWords ? <>
+                  <span className="jar-char-bubble-of">{say('worldBubbleKept')}</span>
+                  <span className="jar-char-bubble-reading" role="status">{keptWords.status === 'ready' && keptWords.text ? `“${keptWords.text}”`
+                    : keptWords.status === 'reading' ? say('worldReadWordsReading') : say('worldNoteAskUnreadable')}</span>
                 </> : <span className="jar-char-bubble-reading" role="status">{companionLine}</span>}
                 {/* ═══ CHAT WHEN THERE IS SOMETHING, SAVE WHEN THERE IS NOT ══
                     Founder, of "Quiet lately — Let's talk about it":
@@ -9969,9 +9989,16 @@ const RETRY_READ_LIMIT_MS = 20_000;
                      (E5); See all pulls up the saves. A keep with no words
                      has nothing to talk about yet, so it offers See all. */
                   <span className="jar-char-bubble-acts">
-                    {visibleInspiration?.text.trim() ? <button type="button" className="jar-char-bubble-act"
+                    {visibleInspiration && (keptWords?.status === 'unreadable' || keptWords?.status === 'retrying') ? (
+                      /* "Which line stuck?" is answered on the saved note,
+                         where the line becomes its words (a Fix). */
+                      <button type="button" className="jar-char-bubble-act"
+                        onClick={() => { setCharSay(''); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: visibleInspiration.id }); }}>
+                        {say('worldReadWordsTypeLine')}
+                      </button>
+                    ) : visibleInspiration && keptSubject(visibleInspiration).text ? <button type="button" className="jar-char-bubble-act"
                       disabled={talking}
-                      onClick={() => { void talkAbout(visibleInspiration); }}>
+                      onClick={() => { void talkAbout(keptSubject(visibleInspiration)); }}>
                       {say(talking ? 'worldTalkOpening' : 'worldBubbleTalkAboutIt')}
                     </button> : null}
                     <button type="button" className="jar-char-bubble-act"

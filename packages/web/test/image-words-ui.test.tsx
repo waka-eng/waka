@@ -1,0 +1,63 @@
+// @vitest-environment jsdom
+/** WHAT THIS MOCKS, AND WHY (gate G6): `lib/api/attachments`'s three words
+ * calls — the seam `useImageWords` reads through — so each status and the
+ * revision conflict can be chosen. Nothing else. */
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+
+vi.mock('../src/lib/api/attachments', async original => ({ ...await original<typeof import('../src/lib/api/attachments')>(),
+  fetchImageWords: vi.fn(), correctImageWords: vi.fn(), retryImageWords: vi.fn() }));
+import { correctImageWords, fetchImageWords, retryImageWords, type ApiImageWords } from '../src/lib/api/attachments';
+import { ApiError } from '../src/lib/api/http';
+import { SavedImageWords } from '../src/components/ImageWords';
+
+const row = (over: Partial<ApiImageWords>): ApiImageWords => ({ attachmentId: 'a', inspirationId: 'i', profileId: 'p', status: 'ready',
+  text: 'Nobody feels ready.', read: 'Nobody feels ready.', correction: null, revision: 'r1', correctedAt: null, canEdit: true, canRetry: false, retryAfter: null, ...over });
+let host: HTMLDivElement, root: Root;
+beforeEach(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; host = document.createElement('div'); document.body.append(host); root = createRoot(host); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.clearAllMocks(); vi.useRealTimers(); });
+const mount = () => act(async () => root.render(<SavedImageWords attachmentId="a" locale="en-US" />));
+const press = (name: string) => act(async () => [...host.querySelectorAll('button')].find(b => b.textContent === name)!.click());
+const type = (value: string) => act(async () => { const field = host.querySelector('textarea')!;
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, value); field.dispatchEvent(new Event('input', { bubbles: true })); });
+
+it('quotes the words read off a saved screenshot, and Fix sends the line with its revision', async () => {
+  vi.mocked(fetchImageWords).mockResolvedValue(row({}));
+  vi.mocked(correctImageWords).mockResolvedValue(row({ text: 'Nobody feels ready, ever.', correction: 'Nobody feels ready, ever.', revision: 'r2' }));
+  await mount();
+  expect(host.querySelector('.waka-note-read-label')?.textContent).toBe('The words I read');
+  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
+  await press('Fix'); await type('Nobody feels ready, ever.'); await press('Done');
+  expect(correctImageWords).toHaveBeenCalledWith('a', { revision: 'r1', correction: 'Nobody feels ready, ever.' });
+  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready, ever.”');
+});
+
+it('on a stale revision, reads the words again, keeps the line, and says so plainly', async () => {
+  vi.mocked(fetchImageWords).mockResolvedValueOnce(row({})).mockResolvedValueOnce(row({ text: 'Changed elsewhere.', revision: 'r9' }));
+  vi.mocked(correctImageWords).mockRejectedValue(new ApiError({ status: 409, code: 'words_changed', message: 'changed' }));
+  await mount();
+  await press('Fix'); await type('My line'); await press('Done');
+  expect(fetchImageWords).toHaveBeenCalledTimes(2);
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('These words changed while you were fixing them.');
+  expect(host.querySelector('textarea')?.value, 'the typed line was lost').toBe('My line');
+});
+
+it('asks which line stuck when it could not read them, retries once when nothing is queued, and says it will try again', async () => {
+  vi.useFakeTimers();
+  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: true }));
+  vi.mocked(retryImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: false }));
+  await mount();
+  expect(retryImageWords).toHaveBeenCalledTimes(1);
+  expect(host.textContent).toContain("I couldn't make out the words. Which line stuck?");
+  expect(host.textContent).toContain("I'll try reading it again in a bit.");
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  expect(retryImageWords, 'it asked for a read again on every poll').toHaveBeenCalledTimes(1);
+  expect(vi.mocked(fetchImageWords).mock.calls.length).toBeGreaterThan(1);
+});
+
+it('offers no Fix where the server says the words may not be edited', async () => {
+  vi.mocked(fetchImageWords).mockResolvedValue(row({ canEdit: false }));
+  await mount();
+  expect([...host.querySelectorAll('button')].map(b => b.textContent)).not.toContain('Fix');
+});

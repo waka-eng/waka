@@ -5117,13 +5117,16 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .jar:has(.jar-char-bubble--reading) .jar-hq-inner--compact {
   visibility: hidden;
 }
+/* A SAID THING, NOT A READING PANEL (from design/one-pill-dock). Founder:
+   "the speech bubble is way too big." 24rem holds ~40 characters a line on
+   web — a spoken measure — at the same three lines as a phone. */
 .jar-char-bubble--reading .jar-char-bubble-body {
-  width: min(28rem, 100%);
-  max-width: 28rem;
+  width: min(24rem, 100%);
+  max-width: 24rem;
   max-height: 100%;
   min-height: 0;
   gap: var(--sp-6);
-  padding: var(--sp-12) var(--sp-24) 0;
+  padding: var(--sp-12) var(--sp-20) 0;
   border-radius: var(--sp-24);
 }
 .jar-char-bubble--reading .jar-char-bubble-of {
@@ -5135,13 +5138,14 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   overflow-y: auto;
   overscroll-behavior: contain;
   overflow-wrap: anywhere;
-  font-size: var(--t-lead);
+  /* 16 is the phone floor for reading; 17 caps it so web never shouts. */
+  font-size: clamp(16px, 1.1vw, 17px);
   font-weight: 400;
   line-height: 1.45;
 }
 .jar-char-bubble--reading .jar-char-bubble-acts {
   flex-shrink: 0;
-  margin: var(--sp-4) calc(var(--sp-24) * -1) 0;
+  margin: var(--sp-4) calc(var(--sp-20) * -1) 0;
 }
 .jar-char-bubble--reading .jar-char-bubble-act {
   min-height: var(--waka-corner);
@@ -7366,6 +7370,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-note-read-body { flex: 1; min-width: 0; }
 .waka-note-read-label { margin: 0 0 var(--sp-4); color: var(--muted); font-size: var(--t-meta); }
 .waka-note-read-text { margin: 0; font-size: var(--t-input); line-height: 1.45; overflow-wrap: anywhere; }
+.waka-note-read-ask { margin: 0 0 var(--sp-4); font-size: var(--t-input); line-height: 1.45; }
 .waka-note-read-quiet { margin: 0; color: var(--muted); font-size: var(--t-ui); }
 .waka-note-read-fix { width: 100%; min-height: var(--sp-64); box-sizing: border-box; padding: var(--sp-8); border: 1px solid var(--line); border-radius: var(--sp-12); background: none; color: var(--ink); font: inherit; font-size: var(--t-input); }
 .jar-inspiration-composer .waka-note-read-act { flex: none; min-height: var(--sp-44); padding: 0 var(--sp-10); border: 0; background: none; color: var(--muted); font-size: var(--t-ui); }
@@ -7379,4 +7384,24 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-save-anywhere-row > strong { font-size: var(--t-input); font-weight: 400; color: var(--ink); }
 .waka-save-anywhere-row > small { font-size: var(--t-ui); line-height: 1.45; color: var(--muted); }
 .waka-save-anywhere-row > .waka-bookmarklet { margin-top: var(--sp-4); }
+}
+
+@layer chrome {
+/* ONE GUTTER ON A PHONE, NOT TWO (from design/one-pill-dock). Founder, of the
+   archive on a phone: "too much padding on left and right." The page's 20
+   and the list column's own 24 stacked to 44 while the corners sit at 16;
+   the column drops its own so the list lines up under the corners.
+
+   MEASURED in Chromium against this sheet, the list's first line from the
+   viewport's left edge, before → after: 320, 390, 430, 560 and 680px wide
+   all 44 → 16; at 700 the 650px column has just stopped filling the page
+   (centred at 25, text at 49 before) and this rule's last width gives 25;
+   701 and up are unchanged (49.5 at 701, 83 at 768, 211 at 1024). 700 is
+   where the column stops touching the page's sides, not a picked width. */
+@media (max-width: 700px) {
+  .waka-over:not(.waka-over--note) { padding-inline: 0; }
+  .waka-page:not(.waka-page--note) {
+    padding-inline: max(var(--sp-16), env(safe-area-inset-left)) max(var(--sp-16), env(safe-area-inset-right));
+  }
+}
 }

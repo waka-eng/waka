@@ -295,7 +295,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      "Check again" asks at once. */
   const savedOrigin=conversation?.initialInspiration??null;
   const opening=conversation?.messages?.[0];
-  const originRepeated=Boolean(savedOrigin&&(conversation?.messageWindowStart??1)<=1&&opening?.role==='user'&&savedOrigin.text.trim()&&opening.content.trim().startsWith(savedOrigin.text.trim()));
+  /* A screenshot kept with no note has no text of its own: the opening turn
+     then carries the words read off it, and is the save's face on top. */
+  const originRepeated=Boolean(savedOrigin&&(conversation?.messageWindowStart??1)<=1&&opening?.role==='user'&&opening.content.trim().startsWith(savedOrigin.text.trim()));
   const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
   /* Only a 404 (`terminal`) is not a reply in flight: Send comes back and the
      notice offers a reload. An answer older than the screen (`behind`) keeps
