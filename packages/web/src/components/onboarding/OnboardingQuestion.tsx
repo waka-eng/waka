@@ -35,7 +35,7 @@ import { whyOf } from "../../lib/why-failed";
 import { ONBOARDING_QUESTIONS } from "../../lib/onboarding-progress";
 import { Creature, Dots, Glyph } from "./Creature";
 
-export const QUESTIONS: Array<{ ask: MessageKey; hint: MessageKey }> = [
+const QUESTIONS: Array<{ ask: MessageKey; hint: MessageKey }> = [
   { ask: "onboardingAskStuck", hint: "onboardingAskStuckHint" },
   { ask: "onboardingAskConversation", hint: "onboardingAskConversationHint" },
   { ask: "onboardingAskMore", hint: "onboardingAskMoreHint" },

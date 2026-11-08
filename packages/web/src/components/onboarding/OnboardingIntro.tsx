@@ -13,6 +13,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 
 import { t, type SupportedLocale } from "../../lib/locales";
+import { WALK_MS } from "../../character/walk";
+import { WalkingCompanion } from "../WalkingCompanion";
+import { OWNER_BEING } from "../../character/body";
 import { Creature, Dots, Glyph } from "./Creature";
 
 const PLATE_W = 390;
@@ -124,19 +127,28 @@ function Reads({ say }: { say: (key: Parameters<typeof t>[1]) => string }) {
   );
 }
 
+/* THE OTHER PERSON WALKS OVER (founder: "use that same animation here for the
+   other character to walk towards the main character"). `WalkingCompanion`
+   is the walk between Now and Principles, travelling: it starts off to the
+   right, turns to face yours, steps across and turns back to face you. The
+   light passes between them only once it has arrived. */
+const ARRIVE_FROM = 150;
+const SET_OFF_MS = 400;
+
 function People({ say }: { say: (key: Parameters<typeof t>[1]) => string }) {
+  const arrivedAt = `${(SET_OFF_MS + WALK_MS) / 1000}s`;
   return (
     <>
       <span style={at(66, 300, { position: "absolute", transformOrigin: "50% 100%", animation: "onb-lean 5s ease-in-out infinite alternate" })}>
         <Creature size="medium" bodyClassName="onb-body-glow" />
       </span>
-      <span style={at(224, 300, { position: "absolute", animation: "onb-arrive 5s ease-out infinite alternate" })}>
-        <span style={{ display: "block", transformOrigin: "50% 100%", animation: "onb-lean-back 5s ease-in-out infinite alternate" }}>
-          <Creature size="medium" other bodyClassName="onb-body-glow" />
+      <span className="onb-creature" style={at(224, 300, { position: "absolute", width: 100, height: 76 })}>
+        <span className="onb-creature-real">
+          <WalkingCompanion size={88} being={OWNER_BEING} cool distance={ARRIVE_FROM} delayMs={SET_OFF_MS} />
         </span>
       </span>
       <span className="onb-dot-light" style={{ left: 150, top: 324, width: 12, height: 12, background: "#fff6e4",
-        boxShadow: "0 0 22px 4px rgba(255,240,210,0.7)", animation: "onb-pass 5s ease-in-out infinite alternate" }} />
+        boxShadow: "0 0 22px 4px rgba(255,240,210,0.7)", animation: `onb-pass 5s ease-in-out ${arrivedAt} infinite alternate both` }} />
       <div className="onb-words" style={{ top: 470 }}>
         <h1 className="onb-title">{say("onboardingPeopleTitle")}</h1>
         <p className="onb-sub">{say("onboardingPeopleBody")}</p>

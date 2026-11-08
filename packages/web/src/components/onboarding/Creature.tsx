@@ -16,7 +16,7 @@
  */
 import type { CSSProperties } from "react";
 
-import { agentBeing, OWNER_BEING } from "../../character/body";
+import { OWNER_BEING } from "../../character/body";
 import { Companion } from "../Companion";
 
 type Size = "tiny" | "small" | "medium" | "large";
@@ -29,8 +29,9 @@ const GEOMETRY: Record<Size, { w: number; h: number; body: number }> = {
   large: { w: 116, h: 86, body: 100 },
 };
 
-/** The other person in "find your people": another body, in colder light. */
-const ANOTHER = agentBeing("waka/onboarding/another-person");
+/* The other person in "find your people" is the SAME round body as yours —
+   founder: "the walking character was better shaped ... it felt more round" —
+   told apart only by colder light (`cool`). */
 
 export function Creature({
   size = "large", eyes = "open", other = false, className = "", style, bodyClassName = "",
@@ -51,7 +52,7 @@ export function Creature({
         {/* Yours lights when pressed, as everywhere; somebody else's is a
             picture of a person you have not met yet. */}
         <Companion size={g.body} eyes={eyes === "closed" ? "shut" : "open"}
-          being={other ? ANOTHER : OWNER_BEING} cool={other} pressable={!other} />
+          being={OWNER_BEING} cool={other} pressable={!other} />
       </span>
     </span>
   );

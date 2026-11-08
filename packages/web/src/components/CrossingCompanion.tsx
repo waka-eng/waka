@@ -28,6 +28,7 @@ import { useEffect, useRef } from "react";
 
 import { OWNER_BEING } from "../character/body";
 import { REST_BLEED, turnedPose } from "../character/raster";
+import { WALK_HEADROOM, WALK_STEPS_MS, WALK_TURN_MS, placeStep, walkBeat } from "../character/walk";
 import { renderScale } from "../canvas/scale";
 import { clamp01, easeInOut as ease } from "../lib/num";
 import { rampFromCss, rasterGrain } from "../canvas/palette";
@@ -38,11 +39,10 @@ export interface CreatureSpot { x: number; y: number; size: number }
    acknowledgement — the walk is long enough for three steps, and the glide
    is what is left. The three beats are shared with the sky, which streams
    past for exactly the walk; the page waits on `onDone`, not on a clock. */
-export const CROSS_TURN_MS = 240;
-export const CROSS_WALK_MS = 900;
+export const CROSS_TURN_MS = WALK_TURN_MS;
+export const CROSS_WALK_MS = WALK_STEPS_MS;
 export const CROSS_GLIDE_MS = 720;
 const CROSS_MS = CROSS_TURN_MS * 2 + CROSS_WALK_MS + CROSS_GLIDE_MS;
-const STEPS = 3;
 
 /* Past the mark and back: the last few pixels of a float that has weight. */
 const easeOutBack = (t: number) => { const c1 = 1.15, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
@@ -70,7 +70,7 @@ export function CrossingCompanion({ from, to, dir, going, onDone }: {
   const fixedTo = typeof to === "function" ? null : to;
   const walkAt = going === "in" ? from : (fixedTo ?? from);
   const size = walkAt.size;
-  const pad = Math.ceil(size * (REST_BLEED + 0.12));
+  const pad = Math.ceil(size * (REST_BLEED + WALK_HEADROOM));
   const box = size + pad * 2;
 
   useEffect(() => {
@@ -133,29 +133,16 @@ export function CrossingCompanion({ from, to, dir, going, onDone }: {
       const stretch = gliding && gp >= gather ? Math.sin(Math.PI * u) * 0.07 : 0;
 
       /* what it does there: turn, walk, turn back */
-      const w = t - walkStart;
-      const turnIn = ease(clamp01(w / CROSS_TURN_MS));
-      const turnOut = ease(clamp01((w - CROSS_TURN_MS - CROSS_WALK_MS) / CROSS_TURN_MS));
-      const yaw = dir * (Math.PI / 2) * (turnIn - turnOut);
-      const walking = clamp01((w - CROSS_TURN_MS * 0.5) / (CROSS_WALK_MS + CROSS_TURN_MS * 0.5)) * (1 - turnOut);
-      const phase = clamp01((w - CROSS_TURN_MS) / CROSS_WALK_MS) * STEPS * Math.PI;
-      const inWalk = w > CROSS_TURN_MS && w < CROSS_TURN_MS + CROSS_WALK_MS;
-      const bob = inWalk ? Math.abs(Math.sin(phase)) * size * 0.07 : 0;
-      const stride = inWalk ? Math.sin(phase) : 0;
-      const lean = dir * 0.07 * walking;
+      /* The walk's beats are `character/walk.ts`'s, shared with onboarding's
+         creature that actually travels. */
+      const { yaw, bob, stride, lean, land } = walkBeat(t - walkStart, dir, size);
 
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.clearRect(0, 0, node.width, node.height);
       g.scale(dpr, dpr);
-      g.translate(box / 2, box / 2 - bob);
-      g.rotate(lean);
       /* a little squash at each footfall: the body lands, then lifts — and
          the crouch before a rise and the stretch during it, all from its feet */
-      const land = inWalk ? Math.pow(1 - Math.abs(Math.sin(phase)), 6) * 0.05 : 0;
-      const squash = land + crouch - stretch;
-      g.translate(0, size * 0.45);
-      g.scale(1 + squash, 1 - squash);
-      g.translate(-size / 2, -size / 2 - size * 0.45);
+      placeStep(g, size, box, { bob, lean }, land + crouch - stretch);
       turnedPose(g, size, ramp, OWNER_BEING, 1, dpr, yaw, stride, look, grain);
 
       if (t < CROSS_MS) frame = requestAnimationFrame(step);
