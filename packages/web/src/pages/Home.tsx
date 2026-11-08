@@ -94,7 +94,7 @@ import { attachmentLabel } from '../lib/attachment-label';
 import { Menu } from '../components/Menu';
 import { usePageMenu } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
-import { PrimaryNavigation } from '../components/PrimaryNavigation';
+import { HomeBar } from '../components/HomeBar';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
 import { SHARED_KEY, SHARED_MAX_AGE_MS, sharedText, type SharedPayload } from '../components/ShareArrival';
@@ -311,6 +311,8 @@ const SPEAK_GRACE_MS = 220;
    fetch on a normal connection, so the light and the sentence read as one
    event rather than two. */
 const LIT_MS = 1400;
+/** How long "Saved" stands above the home bar after a save (design F3). */
+const BAR_SAVED_MS = 1800;
 /** How far the creature is pulled right, in CSS px, before the pull is the walk to Principles. */
 const CREATURE_PULL = 56;
 
@@ -2681,7 +2683,10 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     profileId: viewNavigation.view?.wallId ?? storageScope.profileId,
   } : null, [storageScope, viewNavigation.view?.wallId]);
   const listViews = useProfileListViews(conversationScope);
-  const [listTopRequest, setListTopRequest] = useState(0);
+  /* Re-pressing the tab you stood on bumped this to scroll its list to the
+     top. The tabs are gone (design E1), so nothing asks; the lists keep the
+     prop for the day something does. */
+  const listTopRequest = 0;
   const conversationAgent = agentRoster?.find(profile => profile.id === conversationScope?.profileId);
   const conversationProfile = conversationScope?.profileId === storageScope?.profileId
     ? { name: auth?.profile?.name ?? say('worldWallMe'), type: 'human' as const }
@@ -5240,7 +5245,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const origin = listOrigin.current;
     listOrigin.current = null;
     if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id, origin.principleId);
-    else openOverHome(null);
+    /* "HOME" GOES HOME. This stepped back through history, which was right
+       while the bar's Home tab was the way home and wrong now the labelled
+       Back is (design E1): two archive entries in a row landed the press on
+       the earlier archive. */
+    else closePage();
   };
 
   /**
@@ -5346,6 +5355,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            bubble's act is the chat about THIS save (see the bubble below). */
         setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
         if (initiated && closeAfterSave.current) { closeAfterSave.current = false; window.setTimeout(() => window.close(), 1700); }
+        if (initiated) flashSaved();
         if(initiated&&memoryScope)setRecentInspiration({owner:`${memoryScope.accountId}:${memoryScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
         viewNavigationRef.current.closeComposer();
       } };
@@ -5449,6 +5459,24 @@ const RETRY_READ_LIMIT_MS = 20_000;
   useEffect(() => {
     if (!mouthOpen && dictation.listening) dictation.stop();
   }, [mouthOpen, dictation.listening, dictation.stop]);
+
+  /* ═══ SAY IT: THE NOTEPAD, ALREADY LISTENING (design E1) ═══════════════
+     The bar's Say it opens the notepad and the microphone in the same
+     press — the page and the engine are asked for inside one gesture, so
+     the browser's permission prompt belongs to the press that wanted it,
+     and both state changes commit together (the release above sees the
+     notepad open, not a microphone left on over the world). TAP to start,
+     TAP Done to stop — never held: holding is unusable while walking or
+     retelling a conversation. Where the browser cannot transcribe, the
+     recorder takes the same press. */
+  const sayIntoNewNote = () => {
+    if (!atNow && dial) windTo(dial.end);
+    simApiRef.current?.toTop();
+    if (mouthOpen) mouthFieldRef.current?.focus(); else openMouth();
+    setMouthNote('');
+    if (dictationAvailable()) dictation.start();
+    else if (supportedRecordingType()) startNotepadRecording();
+  };
 
   /* ═══ THE SAVE RULE, SAID ONCE, AND NOW ACTUALLY ONCE ═════════════════
      `lib/keep-ready.ts` was written so this condition exists in one place,
@@ -6105,6 +6133,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
    * its visibility on screen around a textarea (founder, 2026-08-25: "have
    * reflect workflow in modal"). Null unless the mouth asked.
    */
+  /* ═══ "SAVED", ABOVE THE BAR, FOR A MOMENT (design F3) ═════════════════
+     A save lands without a page change; the bar says so where the pull to
+     Saves stands, and gives the spot back after `BAR_SAVED_MS`. */
+  const [barSaved, setBarSaved] = useState(false);
+  const barSavedTimer = useRef<number | null>(null);
+  const flashSaved = useCallback(() => {
+    setBarSaved(true);
+    if (barSavedTimer.current !== null) window.clearTimeout(barSavedTimer.current);
+    barSavedTimer.current = window.setTimeout(() => { barSavedTimer.current = null; setBarSaved(false); }, BAR_SAVED_MS);
+  }, []);
+  useEffect(() => () => { if (barSavedTimer.current !== null) window.clearTimeout(barSavedTimer.current); }, []);
   const [recentInspiration,setRecentInspiration]=useState<{owner:string;id:string;text:string;attachments:InspirationDetail['attachments']}|null>(null);
   /**
    * FROM KEEPING A THING TO TALKING ABOUT IT.
@@ -11277,23 +11316,34 @@ const RETRY_READ_LIMIT_MS = 20_000;
           surface that made this rule: "this should be its own page, so bottom
           navigation always visible." A conversation is a page like the rest
           of them now, so it keeps the bar like the rest of them. */}
-      {phase === 'ready' && (listing || making) && !viewNavigation.view?.sharePrinciple ? <PageBack
-        navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making === 'talk' || (listing && Boolean(listOrigin.current))}
-        belowCorners={listing && !savedNoteOpen}
+      {/* PRINCIPLES TAKES THE PAGE'S BACK TOO. Its way out was the bar's
+          Home tab; the tabs are gone (design E1), so the labelled Back in
+          the corner is what returns from it, as it does from the lists. */}
+      {phase === 'ready' && (listing || making || principlesOpen) && !viewNavigation.view?.sharePrinciple ? <PageBack
+        navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making === 'talk' || listing || principlesOpen}
+        belowCorners={(listing || principlesOpen) && !savedNoteOpen}
         label={say(savedNoteOpen ? 'worldBackToAll' : making === 'talk' ? 'worldAllChats' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
-      {phase === 'ready' && !viewNavigation.view?.sharePrinciple && !making && !savedNoteOpen && !reviewing ? (
-        <PrimaryNavigation locale={locale}
-          onReselect={() => setListTopRequest(value => value + 1)}
-          current={atNowView ? 'home' : viewNavigation.view?.open === 'saves' ? 'inspirations' : viewNavigation.view?.open === 'conversations' ? 'chats' : null}
-          onNavigate={destination => {
-            listOrigin.current = null;
-            commitOpenNote();
-            if (destination === 'home') closePage();
-            else openOverHome(destination === 'inspirations' ? 'saves' : 'conversations');
+      {/* ═══ THE HOME BAR (design E1) ══════════════════════════════════════
+          Write · Photo · Say it in one pill, Chat beside it — see
+          `HomeBar`. It stands on the home at rest and nowhere else: the
+          lists and the principles leave by the labelled Back above, the
+          notepad and a chat have their own bars. Inspirations and Chats
+          are reached from the corner's Actions (Search, Past chats). */}
+      {phase === 'ready' && atNowView && !reviewing && !savedNoteOpen && !viewNavigation.view?.sharePrinciple ? (
+        <HomeBar locale={locale}
+          /* NEVER ON THE AGENT: "you cannot add inspiration for the agent
+             mode" (founder, 2026-10-15). Only Chat stands there. */
+          save={standingAsAgent ? undefined : {
+            onWrite: startNewInspiration,
+            onPhotos: files => { startNewInspiration(); void addInspirationFiles(files); },
+            onSay: sayIntoNewNote,
+            canSay: dictationAvailable() || Boolean(supportedRecordingType()),
+            photoDisabled: !composerDraft.available,
           }}
-          capture={atNowView ? { label: say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves'), onClick: startNewInspiration } : undefined}
+          onChat={() => { listOrigin.current = null; openTalk(null); }}
+          saved={barSaved}
         />
-      ) : phase==='ready'&&!viewNavigation.view?.sharePrinciple ? (
+            ) : phase==='ready'&&(making||reviewing||savedNoteOpen)&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
             ...(reviewing && !making ? [{ id: 'review', label: 'worldReviewExit' as const, here: false,
@@ -11658,7 +11708,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         actions={!viewNavigation.view?.open && !viewNavigation.view?.conversationId && !mouthOpen ? <HomeActions key={memoryScope?.profileId ?? 'preview'} locale={locale}
           onPrinciples={toPrinciples} onReview={atWall.kind === 'self' && canOfferReview ? startReview : undefined}
-          onRetryReview={atWall.kind==='self'&&reviewLoadFailed?loadClaims:undefined} /> : undefined}
+          onRetryReview={atWall.kind==='self'&&reviewLoadFailed?loadClaims:undefined}
+          /* "Search" opens the archive, which leads with its own search
+             field and keeps what a save's own page holds (editing, the
+             deleted shelf). It was the bar's Inspirations tab; Past chats
+             was its Chats tab. */
+          onSearch={() => { listOrigin.current = null; openOverHome('saves'); }}
+          onChats={() => { listOrigin.current = null; openOverHome('conversations'); }} /> : undefined}
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
            Founder: "I kind of want to give the feeling of, rather than my
            agent moving rooms, it kind of switches itself up to its agent

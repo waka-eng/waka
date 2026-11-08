@@ -7,7 +7,7 @@
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { apiMockFrom, closeOverlay, dataMockFrom, pressDockRow, mountWorld, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import type { SimApi } from '../src/canvas/simulation';
 
 const facts = vi.hoisted(() => ({ inspirations: [{ id: 'kept', text: 'A quiet morning', daysAgo: 1 }] }));
@@ -35,10 +35,11 @@ it.each(['Inspirations', 'Chats'])('parks the covered canvas on %s and resumes w
   await world.step(120);
   expect(draw.mock.calls.length).toBe(120);
   expect(features).toHaveBeenCalled();
-  const tab = (name: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-primary-navigation button')]
-    .find(button => button.textContent?.trim() === name)!;
+  /* Inspirations and Chats are the corner's Actions → Search / Past chats
+     now (design E1), and Home is the list's labelled Back. */
+  const tab = (name: string) => ({ click: () => name === 'Home' ? closeOverlay(world.container) : pressDockRow(world.container, name) });
   draw.mockClear(); features.mockClear();
-  await act(async () => tab(label).click());
+  await tab(label).click();
   await world.step(120);
   expect(draw).toHaveBeenCalled(); // Clear the old creature before sleeping.
   expect(features).not.toHaveBeenCalled();
@@ -47,7 +48,7 @@ it.each(['Inspirations', 'Chats'])('parks the covered canvas on %s and resumes w
   await world.step(600);
   expect(draw.mock.calls.length).toBe(0);
   expect(schedule).not.toHaveBeenCalled();
-  await act(async () => tab('Home').click());
+  await tab('Home').click();
   await world.step(120);
   draw.mockClear();
   await world.step(120);
@@ -66,11 +67,12 @@ it.each(['Inspirations', 'Chats'])('removes the avatar click target and hover cu
   world = await mountWorld(facts);
   const root = world.container.querySelector<HTMLElement>('.jar')!;
   const spot = simulation().creatureAt()!;
-  const tab = (name: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-primary-navigation button')]
-    .find(button => button.textContent?.trim() === name)!;
+  /* Inspirations and Chats are the corner's Actions → Search / Past chats
+     now (design E1), and Home is the list's labelled Back. */
+  const tab = (name: string) => ({ click: () => name === 'Home' ? closeOverlay(world.container) : pressDockRow(world.container, name) });
   await act(async () => { pointer(window, 'pointermove', spot.x, spot.y); pointer(window, 'pointermove', spot.x, spot.y); });
   expect(root.style.cursor).toBe('pointer');
-  await act(async () => tab(label).click());
+  await tab(label).click();
   expect(root.style.cursor).toBe(''); // No pointer movement needed to clear it.
   expect(world.container.querySelector('.jar-char-press')).toBeNull();
   await world.step(120);
@@ -84,7 +86,7 @@ it.each(['Inspirations', 'Chats'])('removes the avatar click target and hover cu
   await world.step(120);
   expect(root.style.cursor).toBe('');
   expect(schedule).not.toHaveBeenCalled();
-  await act(async () => tab('Home').click());
+  await tab('Home').click();
   await world.step(120);
   expect(world.container.querySelector('.jar-char-press--lit')).toBeNull();
   const returned = simulation().creatureAt()!;

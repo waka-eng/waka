@@ -132,8 +132,6 @@
   "worldAttachmentRetryPreview": "미리보기 다시 시도",
   "worldAttachmentSavedLink": "저장한 링크",
   "worldBackHome": "홈",
-  "worldNavInspirations": "영감",
-  "worldNavChats": "대화",
   "worldViewPrinciples": "원칙 보기",
   "worldBackToChat": "채팅으로 돌아가기",
   "worldBack": "뒤로",
@@ -832,5 +830,13 @@
   "worldInspirationIncluded": "시그널과 읽기 생성에 사용해요.",
   "worldInspirationMakeRelevant": "다시 사용하기",
   "worldReviewLoadRetry": "검토를 불러오지 못했어요 · 다시 시도",
-  "worldInspirationReviewOpen": "영감 열기"
+  "worldInspirationReviewOpen": "영감 열기",
+  "worldBarLabel": "남기기",
+  "worldBarWrite": "쓰기",
+  "worldBarPhoto": "사진",
+  "worldBarSay": "말하기",
+  "worldBarChat": "대화",
+  "worldBarSaves": "저장한 것",
+  "worldActionsSearch": "검색",
+  "worldActionsChats": "지난 대화"
 }

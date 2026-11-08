@@ -12,7 +12,7 @@ import { act } from 'react';
 import { useLocation } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, barShape, chatField, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { mountWorld, dataMockFrom, apiMockFrom, barShape, chatField, homeBarShape, pressHomeBar, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { createConversation, fetchConversation, fetchConversationReply, listConversations, type ApiConversation } from '../src/lib/api/conversations';
 
 /**
@@ -75,16 +75,15 @@ afterEach(() => { world?.unmount(); world = undefined; vi.clearAllMocks(); vi.us
 async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world!.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
-const row = (name: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-page-back, .waka-primary-capture, .waka-over-new')]
+const row = (name: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-page-back, .waka-home-bar button, .waka-over-new')]
   .find((node) => node.textContent?.trim() === name);
 
 /** A new chat, opened the way a person opens one: the bar's Chat on Now. */
 async function aNewChat(): Promise<void> {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-  await act(async () => row('Chats')!.click()); await settle();
-  const chat = row('New chat');
-  expect(chat, 'Now offers no Chat in the bar').toBeTruthy();
-  await act(async () => chat!.click()); await settle();
+  /* The round Chat beside the home bar's pill (design E1) opens a new chat. */
+  expect(homeBarShape(world.container), 'Now offers no Chat beside the bar').toContain('Chat');
+  await pressHomeBar(world.container, 'Chat'); await settle();
   expect(location.pathname, 'Chat on Now did not open a new chat').toBe('/chat/new');
   await chatField(world.container);
 }
@@ -173,19 +172,19 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
     await act(async () => close!.click()); await settle();
     expect(location.pathname, 'Close left the chat up').not.toContain('/chat/');
     expect(open(), 'Close on a chat went somewhere other than home').toBeNull();
-    expect(barShape(world!.container), 'home is not back to creation and history').toEqual(['Home', 'Inspirations', 'Chats']);
+    expect(homeBarShape(world!.container), 'home is not back to the home bar').toEqual(['Write', 'Photo', 'Say it', 'Chat']);
     expect(world!.container.querySelector('.chat-composer'), 'the chat\'s composer outlived the chat').toBeNull();
 
-    await act(async () => row('Chats')!.click()); await settle();
-    await act(async () => row('New chat')!.click()); await settle();
+    await pressHomeBar(world!.container, 'Chat'); await settle();
     const allChats = row('All chats');
     expect(allChats, 'a chat offers no way to the chats list').toBeTruthy();
     await act(async () => allChats!.click()); await settle();
     expect(location.pathname, 'All chats left the chat up').not.toContain('/chat/');
     expect(open(), 'All chats did not open the chats list').toBe('conversations');
-    /* On the list the bar is ↩ │ Close (the list's own ruling, held in
-       `home-navigation.test.tsx`). */
-    expect(barShape(world!.container)).toEqual(['Home', 'Inspirations', 'Chats']);
+    /* On the list the way out is the labelled Back in the corner; the home
+       bar stands only on the home itself. */
+    expect(world!.container.querySelector('.waka-home-bar'), 'the home bar stands over the chats list').toBeNull();
+    expect(world!.container.querySelector('button.waka-page-back'), 'the chats list has no visible way back').toBeTruthy();
   });
 
   it('returns from history to the same principle-started draft', async () => {
@@ -203,28 +202,26 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
     expect((await chatField(world.container)).value).toBe('Keep this question with its starting point.');
   });
 
-  /* THE GLYPHS IN FRONT OF THE TWO WORDS (founder, 2026-10-18: "add + icon in
-     front of Inspiration, and chat icon in front of Chat at bottom bar").
-     Decorative: hidden from assistive tech, so each row's name is still its
-     word alone, and only on the two words that make a new one, never on
-     "All chats", which opens a list. */
-  it('draws a plus before Inspiration and a chat bubble before Chat, hidden, names unchanged', async () => {
+  /* THE HOME BAR'S GLYPHS (design E1): each door carries one glyph over its
+     word — lines for Write, a picture for Photo, a microphone for Say it —
+     decorative and hidden, so each name is still the word alone. The round
+     Chat is a glyph with a name, since it has no word beside it. */
+  it('draws one hidden glyph over each door\'s word, and names the round Chat', async () => {
     world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-    expect(barShape(world!.container)).toEqual(['Home', 'Inspirations', 'Chats']);
-    for (const [name, kind] of [['New inspiration', 'plus'], ['Home', 'home'], ['Inspirations', 'capture'], ['Chats', 'chat']] as const) {
-      const button = row(name);
-      expect(button, `no bar row reads ${name}`).toBeTruthy();
+    expect(homeBarShape(world!.container)).toEqual(['Write', 'Photo', 'Say it', 'Chat']);
+    for (const [name, kind] of [['Write', 'write'], ['Photo', 'photo'], ['Say it', 'record'], ['Chat', 'bubble']] as const) {
+      const button = [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-row button')]
+        .find(node => (node.textContent?.trim() || node.getAttribute('aria-label')) === name);
+      expect(button, `no home bar button reads ${name}`).toBeTruthy();
       const glyphs = button!.querySelectorAll('svg');
       expect(glyphs.length, `${name} carries no single glyph`).toBe(1);
       const glyph = glyphs[0]!;
       expect(glyph.getAttribute('data-home-action-icon')).toBe(kind);
       expect(glyph.getAttribute('aria-hidden')).toBe('true');
-      expect(glyph.getAttribute('focusable')).toBe('false');
       expect(button!.firstElementChild, `the ${kind} glyph is not in front of ${name}`).toBe(glyph);
-      expect(button!.hasAttribute('aria-label'), `${name} gained an aria-label over its word`).toBe(false);
+      if (name !== 'Chat') expect(button!.hasAttribute('aria-label'), `${name} gained an aria-label over its word`).toBe(false);
     }
-    await act(async () => row('Chats')!.click()); await settle();
-    await act(async () => row('New chat')!.click()); await settle();
+    await pressHomeBar(world!.container, 'Chat'); await settle();
     expect(row('All chats')?.textContent).toBe('All chats');
   });
 });

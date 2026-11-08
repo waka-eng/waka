@@ -442,16 +442,17 @@ it("steps back out to Top of Mind on Escape", async () => {
 it("makes the bar one way out while reviewing: Exit review mode", async () => {
   /* Founder, 2026-10-15: "in the review mode, bottom bar should say exit
      review mode." */
-  const bar = () => [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")].map((n) => n.textContent?.trim());
+  const bar = () => [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item, .waka-home-bar-row button")]
+    .map((n) => n.textContent?.trim() || n.getAttribute("aria-label"));
   await mountQueue(CLAIM, SECOND);
-  expect(bar(), "the bar before review").toEqual(["Home", "Inspirations", "Chats"]);
+  expect(bar(), "the bar before review").toEqual(["Write", "Photo", "Say it", "Chat"]);
   await diveIntoReview(world.container, world.step);
   expect(bar(), "the bar while reviewing").toEqual(["Exit review mode"]);
   const exit = [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")].find((n) => n.textContent?.trim() === "Exit review mode")!;
   await act(async () => { exit.click(); });
   expect(card(), "Exit review mode left the cards up").toBeNull();
   expect(invite(), "Exit review mode should return to the reading").toBeNull();
-  expect(bar(), "the bar after review").toEqual(["Home", "Inspirations", "Chats"]);
+  expect(bar(), "the bar after review").toEqual(["Write", "Photo", "Say it", "Chat"]);
 });
 
 it("keeps → for the card while reviewing, and gives it back to Principles when the last card is answered", async () => {

@@ -132,8 +132,6 @@
   "worldAttachmentRetryPreview": "Retry preview",
   "worldAttachmentSavedLink": "Saved link",
   "worldBackHome": "Home",
-  "worldNavInspirations": "Inspirations",
-  "worldNavChats": "Chats",
   "worldViewPrinciples": "View principles",
   "worldBackToChat": "Back to chat",
   "worldBack": "Back",
@@ -832,5 +830,13 @@
   "worldInspirationIncluded": "Available for signals and readings.",
   "worldInspirationMakeRelevant": "Make relevant again",
   "worldReviewLoadRetry": "Couldn’t load reviews · Retry",
-  "worldInspirationReviewOpen": "Open inspiration"
+  "worldInspirationReviewOpen": "Open inspiration",
+  "worldBarLabel": "Save something",
+  "worldBarWrite": "Write",
+  "worldBarPhoto": "Photo",
+  "worldBarSay": "Say it",
+  "worldBarChat": "Chat",
+  "worldBarSaves": "Saves",
+  "worldActionsSearch": "Search",
+  "worldActionsChats": "Past chats"
 }
