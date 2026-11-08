@@ -78,6 +78,7 @@ import { ProfileMcpSetup } from './ProfileMcpSetup';
  * made deliberately, because links to those pages are already in the world.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { bookmarkletHref } from "../lib/bookmarklet";
 import { ProfilePortrait } from './ProfilePortrait';
 import { ProfileApiKeys } from './ProfileApiKeys';
 
@@ -121,6 +122,10 @@ export interface SettingsPanelProps {
 type Open = null | "personal" | "agents" | "sessions" | "danger";
 
 export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
+  /* React will not render a `javascript:` href, by design; the bookmarklet's
+     one is set on the element after it mounts. */
+  const bookmarklet = useRef<HTMLAnchorElement>(null);
+  useEffect(() => { bookmarklet.current?.setAttribute('href', bookmarkletHref(window.location.origin)); });
   const say = useCallback((key: Parameters<typeof t>[1]) => t(props.locale, key), [props.locale]);
   const [open, setOpen] = useState<Open>(props.initialAgentId ? "agents" : null);
   const [connectionProfile, setConnectionProfile] = useState<ApiOwnedProfile | null>(null);
@@ -295,6 +300,15 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
       {props.failed ? (
         <span className="waka-account-failed" role="alert">{say("profileSaveError")}</span>
       ) : null}
+
+      {/* SAVE FROM ANYWHERE: the bookmarklet opens this app's /share with
+          the page it was pressed on (see lib/bookmarklet.ts). */}
+      <div className="waka-account-field waka-save-anywhere">
+        <span>{say("profileSaveAnywhere")}</span>
+        <small>{say("profileBookmarkletHint")}</small>
+        <a ref={bookmarklet} className="waka-bookmarklet" draggable
+          onClick={(event) => event.preventDefault()}>{say("profileBookmarkletName")}</a>
+      </div>
       </> : null}
 
       <Group id="personal" open={open} setOpen={setOpen} label={say('profilePersonalMcpTitle')}>

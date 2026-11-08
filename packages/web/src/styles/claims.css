@@ -5581,6 +5581,22 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   color: var(--muted);
 }
 
+/* SAVE FROM ANYWHERE: the bookmarklet is a thing to drag, so it looks like
+   one, a pill rather than a link in a line of text. Edged, not filled. */
+.waka-bookmarklet {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--sp-44);
+  padding: 0 var(--sp-16);
+  border: 1px solid var(--field-edge);
+  border-radius: var(--r-pill);
+  color: var(--ink);
+  font-size: var(--t-ui);
+  text-decoration: none;
+  cursor: grab;
+}
+
 .waka-account-field input,
 .waka-account-field select {
   width: 100%;

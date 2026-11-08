@@ -29,6 +29,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { RequireAuth } from "./components/RequireAuth";
+import { ShareArrival } from "./components/ShareArrival";
 import { SurfaceBoundary } from "./components/SurfaceBoundary";
 import { AuthProvider } from "./lib/auth-context";
 import { ArchiveRecordingBoundary } from "./lib/archive-recording-boundary";
@@ -161,6 +162,8 @@ ReactDOM.createRoot(root).render(
               do not know anything is wrong. `SurfaceBoundary` says what
               broke and offers the way back. */}
           <Route path="/login" element={<SurfaceBoundary surface="the door"><LoginPage /></SurfaceBoundary>} />
+          {/* What the phone's share sheet and the bookmarklet send. */}
+          <Route path="/share" element={<RequireAuth><ShareArrival /></RequireAuth>} />
           {/* THE ARCHIVE AND THE PRINCIPLES ARE NOT PAGES ANY MORE.
               Founder: "for your inspirations, after I click on it, I feel
               like I'm lost how to go back to the previous screen, and I

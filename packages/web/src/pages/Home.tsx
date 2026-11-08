@@ -97,6 +97,7 @@ import { HomeActionIcon } from '../components/HomeActionIcon';
 import { PrimaryNavigation } from '../components/PrimaryNavigation';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
+import { SHARED_KEY, SHARED_MAX_AGE_MS, sharedText, type SharedPayload } from '../components/ShareArrival';
 import { ShareSheet, inspirationShareTarget, type ShareTarget } from '../components/ShareSheet';
 import { type CreatureSpot } from '../components/CrossingCompanion';
 import { prefersStillness } from '../lib/motion';
@@ -5184,6 +5185,32 @@ const RETRY_READ_LIMIT_MS = 20_000;
       mouthFieldRef.current?.focus();
     } else openMouth();
   }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth, leaveOpen]);
+  /* ═══ A SHARE ARRIVING FROM OUTSIDE ═════════════════════════════════
+     `/share` (the phone's share menu, the bookmarklet) left what was shared
+     in this tab's session. It lands in the notepad, after anything already
+     written there, and waits for Save. It is never saved on arrival: any
+     page on the web can open `/share` with words of its choosing, and a
+     signed-in visitor's memory must not take them in without a press. The
+     bookmarklet's small window closes itself once that save lands. */
+  const closeAfterSave = useRef(false);
+  useEffect(() => {
+    if (phase !== 'ready' || !memoryScope || !composerDraft.ready) return;
+    let payload: SharedPayload | null = null;
+    try {
+      const raw = sessionStorage.getItem(SHARED_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(SHARED_KEY);
+      payload = JSON.parse(raw) as SharedPayload;
+    } catch { return; }
+    if (!payload || Date.now() - payload.at > SHARED_MAX_AGE_MS) return;
+    const { text } = sharedText(payload);
+    if (!text) return;
+    const before = draftRef.current.trim();
+    const next = before ? `${before}\n\n${text}` : text;
+    draftRef.current = next; setDraft(next);
+    closeAfterSave.current = payload.via === 'bookmarklet' && Boolean(window.opener);
+    startNewInspiration();
+  }, [phase, memoryScope, composerDraft.ready, setDraft, startNewInspiration]);
 
   /** The way out that keeps the words: the page folds, the draft stays. */
   const saveAsDraft = useCallback(() => {
@@ -5318,6 +5345,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            say 'I'm inspired!' and the CTA should be let's chat about it." The
            bubble's act is the chat about THIS save (see the bubble below). */
         setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
+        if (initiated && closeAfterSave.current) { closeAfterSave.current = false; window.setTimeout(() => window.close(), 1700); }
         if(initiated&&memoryScope)setRecentInspiration({owner:`${memoryScope.accountId}:${memoryScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
         viewNavigationRef.current.closeComposer();
       } };
