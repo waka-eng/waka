@@ -41,9 +41,7 @@ export function OnboardingReading({ locale, error = "", busy = false, onContinue
         {error && onContinue ? (
           <div className="onb-reading-wait">
             <p className="onb-error" role="alert">{error}</p>
-            <div className="onb-pill">
-              <button type="button" className="onb-word-btn" disabled={busy} onClick={onContinue}>{say("onboardingContinue")}</button>
-            </div>
+            <button type="button" className="onb-go" disabled={busy} onClick={onContinue}>{say("onboardingContinue")}</button>
           </div>
         ) : <p className="onb-reading-wait">{say("onboardingReadingWait")}</p>}
       </div>
@@ -86,9 +84,7 @@ export function OnboardingReveal({ locale, reading, behind, busy, error, onTalk,
         <p className="onb-sharpen">{say("onboardingSharpen")}</p>
         <div className="onb-grow" />
         {error ? <p className="onb-error" role="alert">{error}</p> : null}
-        <div className="onb-pill">
-          <button type="button" className="onb-word-btn" disabled={busy} onClick={onContinue}>{say("onboardingContinue")}</button>
-        </div>
+        <button type="button" className="onb-go" disabled={busy} onClick={onContinue}>{say("onboardingContinue")}</button>
       </div>
     </main>
   );

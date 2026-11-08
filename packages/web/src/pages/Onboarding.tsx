@@ -233,7 +233,7 @@ export default function OnboardingPage(): JSX.Element {
         {phase.kind === "unreachable" ? (
           <>
             <p className="onb-hint" role="alert">{say("onboardingLoadFailed")}</p>
-            <button type="button" className="onb-pill-word" onClick={() => setAttempt((value) => value + 1)}>{say("worldRetry")}</button>
+            <button type="button" className="onb-go" onClick={() => setAttempt((value) => value + 1)}>{say("worldRetry")}</button>
           </>
         ) : null}
       </div>

@@ -185,7 +185,7 @@ export function OnboardingIntro({ locale, onDone }: { locale: SupportedLocale; o
         </div>
         <div className="onb-foot">
           <Dots count={FRAMES} on={frame + 1} />
-          <button type="button" className="onb-pill-word" onClick={next}>
+          <button type="button" className="onb-go" onClick={next}>
             {last ? say("onboardingStart") : say("onboardingNext")}
           </button>
         </div>

@@ -93,6 +93,8 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
+  /* This box is as big as the aura it holds; only the body's own button
+     inside it takes a press (`.waka-companion-press`). */
   pointer-events: none;
 }
 
@@ -163,6 +165,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 64px;
   padding: 0 var(--sp-16) var(--sp-28);
 }
 .onb-dots { display: flex; gap: var(--sp-8); padding-left: var(--sp-12); }
@@ -179,16 +182,19 @@
   border-radius: 999px;
   background: var(--onb-pill);
 }
-.onb-pill-word {
-  height: 64px;
-  padding: 0 var(--sp-28);
+/* THE WORD THAT MOVES ON — Next, Start, Continue, Try again. Plain text at
+   full white, never a filled pill (founder: "next button too big"; and
+   nothing in a bottom row fills). 44px tall so it is still easy to hit. */
+.onb .onb-go {
+  min-height: 44px;
+  padding: 0 var(--sp-20);
   border: 0;
-  border-radius: 999px;
-  background: var(--onb-pill);
+  background: none;
   color: var(--onb-white);
   font-size: 16px;
   cursor: pointer;
 }
+.onb .onb-go:disabled { color: var(--onb-ink-faint); cursor: default; }
 
 /* ─── questions ────────────────────────────────────────────────────── */
 .onb-ask {
@@ -422,8 +428,7 @@
 .onb-read-acts button + button { border-left: 1px solid var(--onb-bubble-rule); }
 .onb-read-acts button:disabled { color: var(--onb-bubble-soft); cursor: default; }
 .onb-sharpen { margin: var(--sp-18) 0 0; font-size: var(--t-meta); color: var(--onb-ink-quiet); text-align: center; max-width: 260px; }
-.onb-reveal .onb-pill { margin-bottom: var(--sp-28); padding: var(--sp-6) var(--sp-10); }
-.onb-reveal .onb-pill .onb-word-btn { padding: 0 var(--sp-24); font-size: var(--t-body); }
+.onb-reveal > .onb-go { margin-bottom: var(--sp-36); }
 
 .onb-wait { align-items: center; justify-content: center; gap: var(--sp-16); }
 
