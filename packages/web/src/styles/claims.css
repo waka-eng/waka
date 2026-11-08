@@ -7329,9 +7329,15 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 /* THE CREATURE, SMALL, BESIDE WHAT IT SAYS — the real `Companion`, never drawn here. */
 .waka-note-line { display: flex; align-items: center; gap: var(--sp-10); margin: var(--sp-8) 0 var(--sp-14); }
-/* The figure holds a 40px seat; its glow spills past it without taking room. */
+/* The figure holds a 40px seat. */
 .waka-note-creature { position: relative; flex: none; width: 40px; height: 40px; }
-.waka-note-creature canvas { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+/* At this size the Companion's aura box is wider than the page's gutter and
+   the scrolling page clips it into a visible square, so the small figure is
+   worn without it: the same grain-textured body, its own box only. */
+.waka-note-creature > .waka-companion {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: var(--waka-companion-size); height: var(--waka-companion-size); background: none;
+}
 .waka-note-says {
   margin: 0; padding: var(--sp-8) var(--sp-14); border-radius: 16px 16px 16px 4px;
   background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep)); color: var(--waka-on-light);
