@@ -5221,7 +5221,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [phase, memoryScope, composerDraft.ready, setDraft, startNewInspiration]);
 
   const [shareArrived, setShareArrived] = useState(false);
-  useEffect(() => { if (!mouthOpen) setShareArrived(false); }, [mouthOpen]);
+  /* Forgotten by the two ways a note ends — kept, or folded away as a
+     draft — and not by the notepad merely being closed, which it also is
+     while it is on its way open (and may blink through while the page's
+     own address settles). */
   /* SEAM: "THE WORDS I READ" (design E3). Returns what the server read off
      the photo the notepad shows large, as `{ status: 'reading' | 'ready' |
      'unreadable', text? }`, or null when nothing has been said — and null
@@ -5243,6 +5246,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
       composerEpoch.current += 1; uploadController.current?.abort(); preparingInspirationRef.current = false;
       setPreparingInspiration(false); setUploadingMediaId(null);
     }
+    setShareArrived(false);
     void recording.stop().then(() => { setMouthOpen(false); setMouthNote(''); viewNavigationRef.current.closeToHome(); });
   }, [recording.stop]);
 
@@ -5380,6 +5384,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            says "Saved" for a moment instead and the question stays. */
         if (initiated && atWallRef.current.kind === 'self' && tentativeUpRef.current) flashSaved();
         else setCharSay(atWallRef.current.kind === 'self' ? say('worldBubbleKept') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
+        if (initiated) setShareArrived(false);
         if (initiated && closeAfterSave.current) { closeAfterSave.current = false; window.setTimeout(() => window.close(), 1700); }
         if(initiated&&memoryScope)setRecentInspiration({owner:`${memoryScope.accountId}:${memoryScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
         viewNavigationRef.current.closeComposer();
@@ -7645,7 +7650,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
      for — and never on an agent's wall, whose patterns are the agent's. */
   const tentativeClaim = !standingAsAgent && !lead ? claimQueue.find(claim => claim.status === 'emerging') ?? null : null;
   const tentativeUpRef = useRef(false);
-  tentativeUpRef.current = Boolean(tentativeClaim) && atNowView && !reviewing;
+  /* Read when a save lands — which is while the notepad is still up, so it
+     asks whether the bubble WILL be asking when home comes back, not
+     whether home is on screen this instant. */
+  tentativeUpRef.current = Boolean(tentativeClaim) && !reviewing;
   const [answering, setAnswering] = useState(false);
   const [answerFailed, setAnswerFailed] = useState(false);
   /* Yes / Not really: the same verdict the review sends, then the claim

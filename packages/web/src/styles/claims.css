@@ -7291,7 +7291,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* ═══ THE NOTE BAR AND THE PICTURE (design E3, E3′, F5, Writing, PhotoNote) ═══
    The mic and the attach glyphs keep `.waka-dock-tool`, re-seated here; "Done"
    needs room the 44px circle does not have. */
-.jar-composer-body { display: flex; flex-direction: column; flex: 1; gap: 0; }
+.jar-composer-body { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 0; }
 .waka-note-bar {
   display: flex; flex-direction: column; flex: 1; min-height: calc(var(--sp-44) * 3); margin-top: var(--sp-12);
   box-sizing: border-box; padding: var(--sp-14) var(--sp-8) var(--sp-4) var(--sp-16);
@@ -7299,7 +7299,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .jar-composer-body[data-hero] .waka-note-bar { flex: none; min-height: 0; margin-top: 0; }
 .jar-inspiration-composer .waka-note-bar .jar-composer-text {
-  flex: 1; min-height: 0; max-height: none; margin: 0; padding: 0 var(--sp-10) 0 0;
+  /* The page owns this field's height (it fills the bar); the notepad's
+     autosize writes an inline height that must not win here. */
+  flex: 1; min-height: 0; max-height: none; height: auto !important; margin: 0; padding: 0 var(--sp-10) 0 0;
   border: 0; resize: none; font-size: var(--t-input); line-height: 1.45; color: var(--ink);
 }
 .jar-composer-body[data-hero] .waka-note-bar .jar-composer-text {
@@ -7310,7 +7312,14 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .waka-note-bar-row { display: flex; align-items: center; gap: var(--sp-4); min-height: var(--sp-44); margin-left: calc(var(--sp-10) * -1); }
 .waka-note-bar-tools { display: flex; align-items: center; flex: none; }
-.waka-note-bar-state { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--t-meta); text-align: center; }
+.waka-note-bar-state {
+  /* A one-word state stays on the row; a sentence with its act (a save that
+     could not be confirmed, and Try again) wraps inside the slot rather
+     than spilling out of the bar. */
+  flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 var(--sp-4);
+  color: var(--muted); font-size: var(--t-meta); line-height: 1.35; text-align: center; overflow-wrap: anywhere;
+}
+.jar-inspiration-composer .waka-note-bar-state button { min-height: var(--sp-32); padding: 0 var(--sp-4); border: 0; background: none; color: var(--ink); font-size: var(--t-meta); text-decoration: underline; }
 .waka-note-bar .waka-dock-tool { border: 0; background: none; color: var(--ink); }
 .waka-note-bar .waka-dock-tool:disabled { opacity: 0.4; }
 .waka-note-bar .waka-dock-tool--live { width: auto; padding: 0 var(--sp-12); font-size: var(--t-input); }
@@ -7320,8 +7329,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 /* THE CREATURE, SMALL, BESIDE WHAT IT SAYS — the real `Companion`, never drawn here. */
 .waka-note-line { display: flex; align-items: center; gap: var(--sp-10); margin: var(--sp-8) 0 var(--sp-14); }
-.waka-note-creature { flex: none; display: grid; place-items: center; }
-.waka-note-creature canvas { display: block; }
+/* The figure holds a 40px seat; its glow spills past it without taking room. */
+.waka-note-creature { position: relative; flex: none; width: 40px; height: 40px; }
+.waka-note-creature canvas { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
 .waka-note-says {
   margin: 0; padding: var(--sp-8) var(--sp-14); border-radius: 16px 16px 16px 4px;
   background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep)); color: var(--waka-on-light);
