@@ -69,7 +69,8 @@
  *
  *   product   global.css:10 (58 rules), system.css:2 (12), home.css:10 (358)
  *   chrome    chrome.css:2 (260), chat.css:1 (65), claims.css:26 (318),
- *             home.css:4584 (22)
+ *             home.css:4584 (22), onboarding.css:13 (about 100 — the
+ *             onboarding screens, loaded with that page)
  *   register  system.css:432 (1 rule, see below)
  *   base      nothing yet — declared so resets and element defaults have a
  *             floor to land on when they are separated out

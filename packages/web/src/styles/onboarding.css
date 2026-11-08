@@ -9,6 +9,8 @@
  * beside it (saving is one tap, I read what you keep, a light passes
  * between two people). All of it stops under prefers-reduced-motion.
  */
+/* assigned to the `chrome` layer — see styles/layers.css for the order */
+@layer chrome {
 .onb {
   --onb-ground: #0c0e14;
   --onb-ground-lift: #1a1d29;
@@ -68,8 +70,13 @@
   box-sizing: border-box;
 }
 
-.onb button { font-family: inherit; text-decoration: none; min-height: 0; }
-.onb button:disabled { opacity: 1; }
+/* Specific enough to beat chrome.css's `button[type="submit"]` and
+   `button:disabled` in the same layer: Save here is a word, never underlined,
+   and dim is its colour rather than an opacity. */
+.onb button,
+.onb button[type="submit"] { font-family: inherit; text-decoration: none; min-height: 0; }
+.onb button:disabled,
+.onb button[type="submit"]:disabled { opacity: 1; }
 .onb button:focus-visible,
 .onb textarea:focus-visible { outline: 2px solid var(--onb-ink); outline-offset: 2px; }
 
@@ -281,7 +288,7 @@
   color: var(--onb-white);
   cursor: pointer;
 }
-.onb-word-btn {
+.onb .onb-word-btn {
   height: 44px;
   padding: 0 var(--sp-12);
   border: 0;
@@ -290,7 +297,7 @@
   font-size: 16px;
   cursor: pointer;
 }
-.onb-word-btn:disabled,
+.onb .onb-word-btn:disabled,
 .onb-icon-btn:disabled { color: var(--onb-ink-faint); cursor: default; }
 
 /* PHOTO: the image is the hero. */
@@ -361,7 +368,7 @@
   cursor: pointer;
 }
 .onb-mic--on { animation: onb-ring 1.4s ease-out infinite; }
-.onb-listen .onb-word-btn { height: 52px; padding: 0 var(--sp-16); }
+.onb .onb-listen .onb-word-btn { height: 52px; padding: 0 var(--sp-16); }
 
 /* ─── reading and reveal ───────────────────────────────────────────── */
 .onb-reading { align-items: center; }
@@ -440,4 +447,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .onb *, .onb *::before, .onb *::after { animation: none !important; }
+}
 }

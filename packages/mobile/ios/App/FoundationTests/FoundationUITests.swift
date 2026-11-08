@@ -230,10 +230,13 @@ final class AccountsUITests: XCTestCase {
         name.tap(); name.typeText("Native signup fixture")
         let submit = app.webViews.buttons.matching(NSPredicate(format: "label ==[c] %@", "create account")).element(boundBy: 1)
         submit.tap()
-        // A supplied name completes onboarding in the existing signup API.
-        XCTAssertTrue(capture.waitForExistence(timeout: 20))
+        // A name at signup no longer completes onboarding: the intro and the
+        // three first saves follow it (web `pages/Onboarding.tsx`), and a
+        // relaunch resumes there rather than at home.
+        let next = app.webViews.buttons["Next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 20))
         app.terminate(); app.launch()
-        XCTAssertTrue(capture.waitForExistence(timeout: 15))
+        XCTAssertTrue(next.waitForExistence(timeout: 15))
         var request = URLRequest(url: URL(string: "http://127.0.0.1:8787/api/mobile-fixture/expire")!); request.httpMethod = "POST"
         let (_, response) = try await URLSession.shared.data(for: request)
         XCTAssertEqual((response as! HTTPURLResponse).statusCode, 200)
