@@ -1548,16 +1548,38 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
      `--moon-warm`"). So this reads: the world's light, or, where the world
      has not been built yet, the same light from the vocabulary that is
      always there. */
+  /* A PRESS STRENGTHENS AND WIDENS THIS LIGHT (`--waka-companion-reach`,
+     `--waka-companion-spread`, written by `Companion` from the world's own
+     flare numbers); at rest both are 1 and this is the gradient it always was. */
   background: radial-gradient(
     circle at 50% 50%,
-    color-mix(in srgb, var(--jar-live, var(--moon-warm)) 22%, transparent) 0%,
-    color-mix(in srgb, var(--jar-live, var(--moon-warm)) 9%, transparent) 15%,
-    transparent 55%
+    color-mix(in srgb, var(--jar-live, var(--moon-warm)) calc(22% * var(--waka-companion-reach, 1)), transparent) 0%,
+    color-mix(in srgb, var(--jar-live, var(--moon-warm)) calc(9% * var(--waka-companion-reach, 1)), transparent) calc(15% * var(--waka-companion-spread, 1)),
+    transparent calc(55% * var(--waka-companion-spread, 1))
   );
 }
 
 .waka-companion-body {
   display: block;
+}
+
+/* THE BODY IS THE BUTTON, not the aura: the press target is the drawing's
+   own box (never under 44px), so the light around it still takes no press
+   and never swallows the sentence beside it. Nothing about the button is
+   drawn — no fill, no border; the only answer to a press is the light. */
+.waka-companion > .waka-companion-press {
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ═══ RAISED, AND PUT BACK DOWN ═══════════════════════════════════════════
@@ -2391,9 +2413,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-ground-being .waka-companion {
   background: radial-gradient(
     circle at 50% 50%,
-    color-mix(in srgb, var(--jar-live, var(--moon-warm)) calc(8% + 26% * var(--charge, 0)), transparent) 0%,
-    color-mix(in srgb, var(--jar-live, var(--moon-warm)) calc(3% + 10% * var(--charge, 0)), transparent) 15%,
-    transparent 55%
+    color-mix(in srgb, var(--jar-live, var(--moon-warm)) calc((8% + 26% * var(--charge, 0)) * var(--waka-companion-reach, 1)), transparent) 0%,
+    color-mix(in srgb, var(--jar-live, var(--moon-warm)) calc((3% + 10% * var(--charge, 0)) * var(--waka-companion-reach, 1)), transparent) calc(15% * var(--waka-companion-spread, 1)),
+    transparent calc(55% * var(--waka-companion-spread, 1))
   );
 }
 

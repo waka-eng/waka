@@ -93,7 +93,7 @@ import { bakeBeing, buildPalette, MACHINE_CELLS, type BeingSprites, type Palette
 import { renderScale } from "./scale";
 import { VIGNETTE, mix, rgbCss } from "./sprites";
 import type { Measured } from "./measured";
-import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, EYE_SHUT, FACE_R, GLASS_GLINT, GLASS_MAGNIFY, GLASS_R, GLASS_RIM_ALPHA, GLASS_TINT, GLASS_W, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
+import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, EYE_SHUT, FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, FACE_R, GLASS_GLINT, GLASS_MAGNIFY, GLASS_R, GLASS_RIM_ALPHA, GLASS_TINT, GLASS_W, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import {
@@ -2580,7 +2580,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
      */
     const wallSaving = new Map<string, number>();
     /** The aura's reach right now: the eased saving reading, plus the flare. */
-    const auraLit = () => clamp01(companion.savingNow + companion.flare * 0.5);
+    const auraLit = () => clamp01(companion.savingNow + companion.flare * FLARE_REACH);
     /** The same reach without the flare: what the saving says, not the
         beat of light an event just added to it. See `sayLine`. */
     const savingLit = () => clamp01(companion.savingNow);
@@ -4272,7 +4272,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            here rather than in a document because the next person to put
            the two screenshots side by side will reach for exactly this
            number. */
-        const auraR = companion.size * lerp(1.25, 2.1, lit) * (1 + companion.flare * 0.25);
+        const auraR = companion.size * lerp(1.25, 2.1, lit) * (1 + companion.flare * FLARE_SPREAD);
         for (let i = 0; i < 4; i++) {
           const ph = t * (0.16 + i * 0.05) + i * 1.9;
           const off = view.reduced ? 0 : companion.size * 0.08;
@@ -4985,7 +4985,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         companion.ant = 0;
       }
       if (companion.flare > 0) {
-        companion.flare = Math.max(0, companion.flare - dt / 0.7);
+        companion.flare = Math.max(0, companion.flare - dt / FLARE_SECONDS);
         easing = true;
       }
       if (companion.hopAt > 0) {

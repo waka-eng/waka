@@ -46,10 +46,12 @@ export function Creature({
 }): JSX.Element {
   const g = GEOMETRY[size];
   return (
-    <span aria-hidden="true" className={`onb-creature ${className}`.trim()} style={{ width: g.w, height: g.h, ...style }}>
+    <span aria-hidden={other ? true : undefined} className={`onb-creature ${className}`.trim()} style={{ width: g.w, height: g.h, ...style }}>
       <span className={`onb-creature-real ${bodyClassName}`.trim()}>
+        {/* Yours lights when pressed, as everywhere; somebody else's is a
+            picture of a person you have not met yet. */}
         <Companion size={g.body} eyes={eyes === "closed" ? "shut" : "open"}
-          being={other ? ANOTHER : OWNER_BEING} cool={other} label="" />
+          being={other ? ANOTHER : OWNER_BEING} cool={other} pressable={!other} />
       </span>
     </span>
   );

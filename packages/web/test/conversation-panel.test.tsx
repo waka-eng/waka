@@ -427,8 +427,12 @@ it('keeps the surface to a transcript, a box and nothing at rest',async()=>{
      photos" and "Add file". Standing alone — no bar lending it a slot — the
      panel keeps it in its own footer, beside Send; on the home page it rides
      in the bar (`chat-bar.test.tsx`). Its two rows are not buttons until it
-     is pressed. */
-  expect(named()).toEqual(['Add photo or file','Send']);
+     is pressed.
+
+     AND THE CREATURE ABOVE THEM (2026-11): pressed, it lights, as it does
+     at home (`Companion`). It is the opening's own face rather than a new
+     control, and it does nothing else. */
+  expect(named()).toEqual(['Light up WAKA','Add photo or file','Send']);
   expect(host.querySelector('textarea')!.value).toBe('A sentence in the box');
 });
 it('keeps the full-page composer within the visible keyboard viewport',async()=>{

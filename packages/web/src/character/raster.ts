@@ -42,6 +42,16 @@ export const EYE_INK = "#2b2822";
     short dark line rather than nothing; the rest pose's `eyes: "shut"` uses
     the same floor, so a page's sleeping creature is the world's mid-blink. */
 export const EYE_SHUT = 0.12;
+/* ═══ A PRESS SHINES ═══════════════════════════════════════════════════
+   The flare: an event of light, raised to 1 by a press and decaying to 0.
+   The world's loop reads all three, and so does `Companion` off the canvas,
+   so a creature pressed on a page lights the way it does at home. */
+/** Seconds for a full flare to decay to nothing, linearly. */
+export const FLARE_SECONDS = 0.7;
+/** How much a full flare adds to the aura's strength (`auraLit`). */
+export const FLARE_REACH = 0.5;
+/** How much a full flare widens the aura's radius. */
+export const FLARE_SPREAD = 0.25;
 /** Reading glasses, worn only while reviewing — "big soft rounds", the
     founder's pick of six drawn pairs (2026-10-15). A lens's radius, as a
     fraction of the body: oversized, so the pair nearly meets over the nose. */
