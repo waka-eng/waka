@@ -203,23 +203,39 @@
 }
 .onb-ask-dots { height: 56px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .onb-ask-dots--tight { height: 48px; }
-.onb-ask-gap { flex: 0 1 154px; min-height: var(--sp-12); }
+/* THE OPTICAL CENTRE. The free room between the dots and the bar holds the
+   bubble and creature centred, then nudged up: the bottom padding is a share
+   of the room itself (5% of the stage's height), so the nudge scales with the
+   window instead of being a fixed offset. */
+.onb-center {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-12) 0 calc(var(--sp-12) + 5dvh);
+}
+.onb-group { display: flex; flex-direction: column; align-items: center; width: 100%; }
+/* THE BUBBLE, at the home bubble's and iOS body's size: 17px, 14px under it,
+   300px at most (about three quarters of a phone). */
 .onb-bubble {
   width: 300px;
   max-width: 100%;
   box-sizing: border-box;
-  padding: var(--sp-14) var(--sp-20) var(--sp-16);
+  padding: var(--sp-12) var(--sp-18);
   background: var(--onb-bubble);
   color: var(--onb-bubble-ink);
   border-radius: 22px;
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-6);
+  gap: var(--sp-4);
   box-shadow: 0 0 40px rgba(216, 207, 190, 0.18);
 }
-.onb-bubble-ask { margin: 0; font-size: 19px; line-height: 1.4; font-weight: 400; }
-.onb-bubble-hint { margin: 0; font-size: 14px; line-height: 1.45; color: var(--onb-bubble-soft); }
+.onb-bubble-ask { margin: 0; font-size: 17px; line-height: 1.4; font-weight: 400; }
+.onb-bubble-hint { margin: 0; font-size: 14px; line-height: 1.4; color: var(--onb-bubble-soft); }
 .onb-tail {
   width: 0;
   height: 0;
@@ -316,11 +332,11 @@
 .onb-photo-head { display: flex; align-items: center; gap: var(--sp-10); width: 100%; }
 .onb-photo-ask {
   margin: 0;
-  padding: var(--sp-8) var(--sp-14);
+  padding: var(--sp-12) var(--sp-18);
   background: var(--onb-bubble);
   color: var(--onb-bubble-ink);
   border-radius: 16px 16px 16px 4px;
-  font-size: var(--t-body);
+  font-size: 17px;
   line-height: 1.4;
 }
 .onb-photo {
@@ -396,12 +412,11 @@
 }
 
 .onb-reveal { align-items: center; padding: 0 var(--sp-16); }
-.onb-reveal-gap { flex: 0 1 186px; min-height: var(--sp-40); }
 .onb-read {
   width: 100%;
-  max-width: 352px;
+  max-width: 300px;
   box-sizing: border-box;
-  padding: var(--sp-12) var(--sp-20) 0;
+  padding: var(--sp-12) var(--sp-18) 0;
   background: var(--onb-bubble);
   color: var(--onb-bubble-ink);
   border-radius: 24px;
@@ -412,10 +427,10 @@
   box-shadow: 0 0 40px rgba(216, 207, 190, 0.18);
 }
 .onb-read-label { margin: 0; font-size: var(--t-meta); color: var(--onb-bubble-soft); }
-.onb-read-body { margin: 0; font-size: 17px; line-height: 1.45; }
+.onb-read-body { margin: 0; font-size: 17px; line-height: 1.4; }
 .onb-read-why { margin: var(--sp-4) 0 0; padding: 0; list-style: none; text-align: left; display: flex; flex-direction: column; gap: var(--sp-6); }
 .onb-read-why li { font-size: 14px; line-height: 1.4; color: var(--onb-bubble-ink); padding-left: var(--sp-10); border-left: 2px solid var(--onb-bubble-rule); }
-.onb-read-acts { display: flex; margin: var(--sp-4) calc(-1 * var(--sp-20)) 0; border-top: 1px solid var(--onb-bubble-rule); }
+.onb-read-acts { display: flex; margin: var(--sp-4) calc(-1 * var(--sp-18)) 0; border-top: 1px solid var(--onb-bubble-rule); }
 .onb-read-acts button {
   flex: 1;
   min-height: 44px;

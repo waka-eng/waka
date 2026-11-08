@@ -258,16 +258,21 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
     <main className="onb onb--lift">
       <div className="onb-stage onb-ask">
         <div className="onb-ask-dots"><Dots count={ONBOARDING_QUESTIONS} on={index + 1} className="onb-dots--center" /></div>
-        <div className="onb-ask-gap" />
-        <div className="onb-bubble">
-          <h1 className="onb-bubble-ask">{say(question.ask)}</h1>
-          <p className="onb-bubble-hint">{say(question.hint)}</p>
+        {/* THE ASK SITS AT THE OPTICAL CENTRE of whatever room is left between
+            the dots and the bar — centred, then nudged up — so it holds on a
+            short phone, a tall one and a desktop window alike. */}
+        <div className="onb-center">
+          <div className="onb-group">
+            <div className="onb-bubble">
+              <h1 className="onb-bubble-ask">{say(question.ask)}</h1>
+              <p className="onb-bubble-hint">{say(question.hint)}</p>
+            </div>
+            <span className="onb-tail" aria-hidden="true" />
+            <div className="onb-tail-gap" />
+            <Creature size="large" />
+          </div>
         </div>
-        <span className="onb-tail" aria-hidden="true" />
-        <div className="onb-tail-gap" />
-        <Creature size="large" />
         {mode === "voice" ? said : null}
-        <div className="onb-grow" />
         {mode === "choose" ? (
           <>
             {error ? <p className="onb-error" role="alert">{error}</p> : (

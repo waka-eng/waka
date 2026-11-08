@@ -64,7 +64,8 @@ export function OnboardingReveal({ locale, reading, behind, busy, error, onTalk,
   return (
     <main className="onb onb--lift">
       <div className="onb-stage onb-reveal">
-        <div className="onb-reveal-gap" />
+        <div className="onb-center">
+          <div className="onb-group">
         <section className="onb-read" aria-label={say("onboardingEarlyRead")}>
           <p className="onb-read-label">{say("onboardingEarlyRead")}</p>
           <p className="onb-read-body">{reading}</p>
@@ -82,7 +83,8 @@ export function OnboardingReveal({ locale, reading, behind, busy, error, onTalk,
         <div className="onb-tail-gap" />
         <Creature size="large" />
         <p className="onb-sharpen">{say("onboardingSharpen")}</p>
-        <div className="onb-grow" />
+          </div>
+        </div>
         {error ? <p className="onb-error" role="alert">{error}</p> : null}
         <button type="button" className="onb-go" disabled={busy} onClick={onContinue}>{say("onboardingContinue")}</button>
       </div>
