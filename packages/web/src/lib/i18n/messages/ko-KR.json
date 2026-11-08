@@ -43,8 +43,8 @@
   "onboardingTitle": "나의 기록을 준비하세요.",
   "profileBackHome": "홈으로",
   "profileSaveAnywhere": "어디서든 저장하기",
-  "profileBookmarkletHint": "이것을 북마크 바로 끌어다 놓으세요. 어떤 페이지에서든 누르면 그 페이지나 선택한 글이 저장돼요.",
-  "profileBookmarkletName": "WAKA에 저장",
+  "profileBookmarkletHint": "이것을 북마크 바로 끌어다 놓고, 어떤 페이지에서든 눌러 남기세요.",
+  "profileBookmarkletName": "WAKA에 남기기",
   "profileConnectionAgentAccess": "이 에이전트의 메모리만 읽고 씁니다. 나의 개인 메모리나 다른 에이전트에는 접근할 수 없습니다.",
   "profileConnectionCancel": "취소",
   "profileConnectionCopied": "복사했어요",
@@ -871,5 +871,9 @@
   "worldNotePlaceholderLine": "문장을 적거나, 그냥 저장하세요",
   "worldShareArrived": "공유한 링크를 받았어요. 왜인지 말해 줄래요?",
   "worldShareAddNote": "메모 남기기",
-  "worldShareThatsAll": "이게 다예요"
+  "worldShareThatsAll": "이게 다예요",
+  "worldConversationAboutSave": "남겨 둔 것",
+  "profileSaveAnywhereShareTitle": "안드로이드와 데스크톱",
+  "profileSaveAnywhereShareHint": "브라우저에서 WAKA를 설치하면 공유 메뉴에 나타나요.",
+  "profileSaveAnywhereBrowserTitle": "모든 브라우저"
 }

@@ -43,8 +43,8 @@
   "onboardingTitle": "Set up your archive.",
   "profileBackHome": "Back home",
   "profileSaveAnywhere": "Save from anywhere",
-  "profileBookmarkletHint": "Drag this to your bookmarks bar. Press it on any page to save the page, or the words you’ve selected.",
-  "profileBookmarkletName": "Save to WAKA",
+  "profileBookmarkletHint": "Drag this to your bookmarks bar, then tap it on any page to keep it.",
+  "profileBookmarkletName": "Keep in WAKA",
   "profileConnectionAgentAccess": "Read and write only this agent’s own memory. No access to your personal memory or other agents.",
   "profileConnectionCancel": "Cancel",
   "profileConnectionCopied": "Copied",
@@ -871,5 +871,9 @@
   "worldNotePlaceholderLine": "Type the line, or just Save",
   "worldShareArrived": "Got the link you shared. Want to say why?",
   "worldShareAddNote": "Add a note",
-  "worldShareThatsAll": "That's all"
+  "worldShareThatsAll": "That's all",
+  "worldConversationAboutSave": "You kept this",
+  "profileSaveAnywhereShareTitle": "Android and desktop",
+  "profileSaveAnywhereShareHint": "Install WAKA from your browser and it shows up in the share menu.",
+  "profileSaveAnywhereBrowserTitle": "Any browser"
 }

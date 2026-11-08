@@ -6211,11 +6211,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
     setTalking(true);
     try {
       const conversationId = crypto.randomUUID();
+      /* E5: A CHAT STARTS FROM THE SAVE. A real save's id pins it as what
+         the chat is about, so the chat shows it on top and the reply reads
+         it first; the creature answers with the first question. */
       await createConversation(profileId, conversationId, undefined, undefined, {
         id: crypto.randomUUID(),
         content: kept.text,
         requestReply: true,
-      });
+      }, undefined, kept.id || undefined);
       setRecentInspiration(null);
       navigate(viewHref({ ...EMPTY_VIEW, wallId: profileId === storageScope?.profileId ? null : profileId, conversationId }));
     } catch {

@@ -811,3 +811,16 @@ it('retries a failed reply against the saved message without sending another use
   expect(saveConversationMessage).toHaveBeenCalledTimes(sent);
   expect(stored.messages.filter(message=>message.role==='user')).toHaveLength(1);
 });
+/* DESIGN E5: A CHAT STARTS FROM THE SAVE. "Talk about it" pins the save as
+   `initialInspiration`; it stands on top, and the opening turn that only
+   repeated it is not printed again, so the creature's question comes first. */
+it('shows the save a chat was opened from on top, without repeating it as your turn',async()=>{
+  stored={...stored,generationEnabled:true,revision:2,initialInspiration:{id:'kept',text:'Nobody feels ready.'},messages:[
+    {id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Nobody feels ready.',createdAt:'2026-10-03T01:00:00Z'},
+    {id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:2,role:'assistant',content:'What are you waiting to feel ready for?',createdAt:'2026-10-03T01:00:01Z'}]};
+  await mount();
+  const topic=host.querySelector('.chat-topic[data-about="save"]');
+  expect(topic?.textContent).toContain('You kept this');
+  expect(topic?.querySelector('blockquote')?.textContent).toBe('Nobody feels ready.');
+  expect([...host.querySelectorAll('.chat-message')].map(node=>node.getAttribute('data-role'))).toEqual(['assistant']);
+});

@@ -293,6 +293,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      failures, leaving Send off for good; `useConversationReply` now keeps
      retrying until the server answers, the line says it is retrying, and
      "Check again" asks at once. */
+  const savedOrigin=conversation?.initialInspiration??null;
+  const opening=conversation?.messages?.[0];
+  const originRepeated=Boolean(savedOrigin&&(conversation?.messageWindowStart??1)<=1&&opening?.role==='user'&&savedOrigin.text.trim()&&opening.content.trim().startsWith(savedOrigin.text.trim()));
   const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
   /* Only a 404 (`terminal`) is not a reply in flight: Send comes back and the
      notice offers a reload. An answer older than the screen (`behind`) keeps
@@ -710,6 +713,13 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               word under it ("Marked as disputed") went, because a principle's
               standing is the principles surface's sentence to say. */}
           {first?<div className="chat-topic"><span>{say('worldConversationStartingFrom')}</span><blockquote>{first.statement}</blockquote></div>:null}
+          {/* ═══ THE SAVE ON TOP (design E5) ═════════════════════════════
+              A chat opened from a save ("Talk about it") carries it as
+              `initialInspiration`. It stands on top as what the chat is
+              about, and the opening turn that only repeated it is not
+              printed again under it — so the first thing said in the chat
+              is the creature's question. */}
+          {savedOrigin?<div className="chat-topic" data-about="save"><span>{say('worldConversationAboutSave')}</span><blockquote>{originRepeated?conversation!.messages[0]!.content:savedOrigin.text}</blockquote></div>:null}
           {/* ═══ THE ONE YOU ARE TALKING TO IS ON SCREEN ════════════════
               Founder, of the home screen: "this is my only favorite screen
               of the experience." Of this one, empty: "nothing here feels
@@ -784,6 +794,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               as two separate sayings. */}
           <div className="chat-messages" role="log" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
             {(conversation?.messages??[]).map((message,at,all)=>{
+              if(at===0&&originRepeated)return null;
               /* AND THE ONE BEING SENT IS A NEIGHBOUR LIKE ANY OTHER. The
                  draft used to be rendered after this `map` with a fixed
                  `data-run="fl"`, which made a question you had just pressed

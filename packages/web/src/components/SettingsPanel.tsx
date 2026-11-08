@@ -303,11 +303,22 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 
       {/* SAVE FROM ANYWHERE: the bookmarklet opens this app's /share with
           the page it was pressed on (see lib/bookmarklet.ts). */}
-      <div className="waka-account-field waka-save-anywhere">
-        <span>{say("profileSaveAnywhere")}</span>
-        <small>{say("profileBookmarkletHint")}</small>
-        <a ref={bookmarklet} className="waka-bookmarklet" draggable
-          onClick={(event) => event.preventDefault()}>{say("profileBookmarkletName")}</a>
+      {/* ONE ROW PER PLACE YOU MIGHT BE (design F6). Only the doors that
+          exist today are listed: the iPhone share extension and dropping
+          onto the home are drawn in the frame but not built yet, and a row
+          promising them would be a control that lies (Law 1). */}
+      <div className="waka-account-field waka-save-anywhere" role="group" aria-labelledby="waka-save-anywhere-title">
+        <span id="waka-save-anywhere-title">{say("profileSaveAnywhere")}</span>
+        <div className="waka-save-anywhere-row">
+          <strong>{say("profileSaveAnywhereShareTitle")}</strong>
+          <small>{say("profileSaveAnywhereShareHint")}</small>
+        </div>
+        <div className="waka-save-anywhere-row">
+          <strong>{say("profileSaveAnywhereBrowserTitle")}</strong>
+          <small>{say("profileBookmarkletHint")}</small>
+          <a ref={bookmarklet} className="waka-bookmarklet" draggable
+            onClick={(event) => event.preventDefault()}>{say("profileBookmarkletName")}</a>
+        </div>
       </div>
       </> : null}
 

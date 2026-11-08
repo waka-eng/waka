@@ -7355,3 +7355,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .jar-inspiration-composer .waka-note-read-act { flex: none; min-height: var(--sp-44); padding: 0 var(--sp-10); border: 0; background: none; color: var(--muted); font-size: var(--t-ui); }
 .waka-note-retry { margin: var(--sp-12) 0 0; padding-left: var(--sp-14); color: var(--muted); font-size: var(--t-meta); line-height: 1.5; }
 }
+
+@layer chrome {
+/* SAVE FROM ANYWHERE, ONE ROW PER PLACE (design F6): a name, a line on how,
+   and a hairline between. */
+.waka-save-anywhere-row { display: grid; gap: var(--sp-4); padding: var(--sp-14) 0; border-top: 1px solid var(--line); }
+.waka-save-anywhere-row > strong { font-size: var(--t-input); font-weight: 400; color: var(--ink); }
+.waka-save-anywhere-row > small { font-size: var(--t-ui); line-height: 1.45; color: var(--muted); }
+.waka-save-anywhere-row > .waka-bookmarklet { margin-top: var(--sp-4); }
+}

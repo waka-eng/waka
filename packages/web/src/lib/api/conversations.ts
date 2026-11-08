@@ -47,7 +47,8 @@ export async function listConversations(profile:string,signal?:AbortSignal,query
 export async function fetchConversation(profile:string,id:string,signal?:AbortSignal,from?:number){return checked(await readWindow(profile,`/${encodeURIComponent(id)}`,signal,from),profile,id);}
 /** `talkWith` picks whose memory the reply reads — see `conversations.perspective`
     on the server. Absent is the person's own, as every chat before it. */
-export async function createConversation(profile:string,id:string,signal?:AbortSignal,principleId?:string,firstMessage?:{id:string;content:string;requestReply?:boolean;attachmentIds?:string[]},talkWith?:{perspective:'agent'|'both';agentId:string}){return checked(await writeWindow(profile,'',{id,...(principleId?{principleId}:{}),...(firstMessage?{firstMessage}:{}),...(talkWith?talkWith:{})},'Could not start the conversation.',signal),profile,id);}
+/** `inspirationId` pins a save as what the chat is about (design E5): the server keeps it as `initialInspiration`, reads it first for the reply, and the chat shows it on top. */
+export async function createConversation(profile:string,id:string,signal?:AbortSignal,principleId?:string,firstMessage?:{id:string;content:string;requestReply?:boolean;attachmentIds?:string[]},talkWith?:{perspective:'agent'|'both';agentId:string},inspirationId?:string){return checked(await writeWindow(profile,'',{id,...(principleId?{principleId}:{}),...(inspirationId?{inspirationId}:{}),...(firstMessage?{firstMessage}:{}),...(talkWith?talkWith:{})},'Could not start the conversation.',signal),profile,id);}
 /* `pinConversationInspiration` WENT WITH THE DRAWER THAT CALLED IT.
    Founder: "let's get rid of the side part and referencing inspiration ...
    it's too complicated right now." The ROUTE is live and tested — PATCH
