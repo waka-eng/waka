@@ -95,6 +95,7 @@ import { Menu } from '../components/Menu';
 import { usePageMenu } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { HomeBar } from '../components/HomeBar';
+import { HomeStream, streamSignals } from '../components/HomeStream';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
 import { SHARED_KEY, SHARED_MAX_AGE_MS, sharedText, type SharedPayload } from '../components/ShareArrival';
@@ -5353,9 +5354,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
            how the character jumps up and down, but for a few sec, make that
            say 'I'm inspired!' and the CTA should be let's chat about it." The
            bubble's act is the chat about THIS save (see the bubble below). */
-        setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
+        /* ═══ "KEPT", SAID BY THE ONE WHO JUST JUMPED (design E4) ═════════
+           The bubble answers the save with "Kept" and two acts — Talk about
+           it, See all. EXCEPT while it is asking something (a pattern still
+           forming, F3): a save does not talk over a question, so the bar
+           says "Saved" for a moment instead and the question stays. */
+        if (initiated && atWallRef.current.kind === 'self' && tentativeUpRef.current) flashSaved();
+        else setCharSay(atWallRef.current.kind === 'self' ? say('worldBubbleKept') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
         if (initiated && closeAfterSave.current) { closeAfterSave.current = false; window.setTimeout(() => window.close(), 1700); }
-        if (initiated) flashSaved();
         if(initiated&&memoryScope)setRecentInspiration({owner:`${memoryScope.accountId}:${memoryScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
         viewNavigationRef.current.closeComposer();
       } };
@@ -6201,6 +6207,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
       setTalking(false);
     }
   }, [navigate, say, memoryScope?.profileId, storageScope?.profileId, talking]);
+  /* ═══ SEAM: THE ONE CONNECTION A SAVE MAKES (design E4) ═════════════════
+     The frame has the bubble answer a save with one line on what it connects
+     to ("That's the third thing you've kept about starting before you feel
+     ready.") — never a summary. Nothing on the server writes that line yet,
+     so this returns null and the bubble says "Kept" alone. When it exists,
+     return it here (from the save's response or a follow-up read keyed by
+     `kept.id`) and the bubble shows "Kept" small above it, as drawn. */
+  const keptConnection = (kept: { id: string; text: string } | null): string | null => { void kept; return null; };
   const inspirationOwner=memoryScope?`${memoryScope.accountId}:${memoryScope.profileId}`:null;
   const visibleInspiration=recentInspiration?.owner===inspirationOwner?recentInspiration:null;
 
@@ -7585,6 +7599,59 @@ const RETRY_READ_LIMIT_MS = 20_000;
     catch { setCharSay(say('worldLinkCopyFailed')); }
   };
 
+  /* ═══ "WHY?" — THE SAVES BEHIND A READ (design F2, from #463) ═════════
+     Read through each cited signal's own `inspirationIds` (`citations` is
+     keyed the other way, a save → the signals citing it), in the order the
+     signals are cited, at most three (the bubble holds three rows without
+     scrolling, as drawn), each said by the save's own preview. */
+  const whyFor = (entry: Entry | null): Array<{ id: string; preview: string }> => {
+    const out: Array<{ id: string; preview: string }> = [];
+    const seen = new Set<string>();
+    for (const cited of entry?.citedSignals ?? []) {
+      for (const id of signals?.find(row => row.id === cited.id)?.inspirationIds ?? []) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const preview = inspirations?.find(row => row.id === id)?.preview;
+        if (preview) out.push({ id, preview });
+        if (out.length >= 3) return out;
+      }
+    }
+    return out;
+  };
+  /* ═══ A PATTERN STILL FORMING, ASKED IN THE BUBBLE (design F3) ════════
+     Only before there is a read — with one, the read is what the bubble is
+     for — and never on an agent's wall, whose patterns are the agent's. */
+  const tentativeClaim = !standingAsAgent && !lead ? claimQueue.find(claim => claim.status === 'emerging') ?? null : null;
+  const tentativeUpRef = useRef(false);
+  tentativeUpRef.current = Boolean(tentativeClaim) && atNowView && !reviewing;
+  const [answering, setAnswering] = useState(false);
+  const [answerFailed, setAnswerFailed] = useState(false);
+  /* Yes / Not really: the same verdict the review sends, then the claim
+     leaves the queue — no page, no sheet. A failure keeps it and says so. */
+  const answerTentative = async (claim: ApiClaim, value: 'true' | 'not_true') => {
+    if (answering) return;
+    setAnswering(true); setAnswerFailed(false);
+    try {
+      const sent = sayVerdict(claim.id, value, undefined, claim.contested, claim.statementRevision);
+      const ok = sent ? await sent : false;
+      if (ok) setClaimQueue(queue => queue.filter(row => row.id !== claim.id));
+      else setAnswerFailed(true);
+    } catch { setAnswerFailed(true); }
+    finally { setAnswering(false); }
+  };
+  /* ═══ SAVES → PATTERNS → PRINCIPLES (design F4) ══════════════════════════
+     Pulled up over the home; it goes down again whenever home is left.
+     Principles are read for it once per profile, the same GET their own
+     page makes. */
+  const [streamOpen, setStreamOpen] = useState(false);
+  const streamShown = streamOpen && phase === 'ready' && atNowView && !reviewing && !mouthOpen && atWall.kind === 'self';
+  useEffect(() => { if (!atNowView || reviewing) setStreamOpen(false); }, [atNowView, reviewing]);
+  useEffect(() => {
+    if (!streamShown || principlesRead || offline || !memoryProfileId) return;
+    let live = true;
+    void fetchPrinciples({ profile: memoryProfileId }).then(rows => { if (live) acceptPrinciples(rows); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [streamShown, principlesRead, offline, memoryProfileId, acceptPrinciples]);
   const backgroundHidden = Boolean(viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose || walkingHome);
   return (
     <div
@@ -9601,8 +9668,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                          empty state both knew; only the sentence did not. */
                       lead && !standingAsAgent ? (
                         <>
-                          <span className="jar-char-bubble-of">{say('worldBubbleActMine')}</span>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
+                            label={say('worldBubbleOnYourMind')}
+                            why={whyFor(lead)} onSeeAll={() => setStreamOpen(true)}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true),
                               onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
@@ -9667,7 +9735,26 @@ const RETRY_READ_LIMIT_MS = 20_000;
                            is the notepad. The offer ("Feeling inspired?
                            Save it.") and this line are the two that name
                            it, and they go to the same place. */
-                        <>
+                        tentativeClaim ? (
+                          /* ═══ "I MIGHT BE NOTICING" (design F3, from #463) ═══
+                             No read yet, but a pattern is forming. The bubble
+                             says it tentatively and the only acts are the
+                             answer — Law 11: under a statement about you, the
+                             controls answer it. Recorded through the same
+                             `sayVerdict` the review uses; the card leaves the
+                             queue with no page change. */
+                          <>
+                            <span className="jar-char-bubble-of">{say('worldBubbleTentative')}</span>
+                            <span className="jar-char-bubble-reading">{tentativeClaim.statement}</span>
+                            <span className="jar-char-bubble-acts">
+                              <button type="button" className="jar-char-bubble-act" disabled={answering}
+                                onClick={() => { void answerTentative(tentativeClaim, 'true'); }}>{say('worldBubbleYes')}</button>
+                              <button type="button" className="jar-char-bubble-act" disabled={answering}
+                                onClick={() => { void answerTentative(tentativeClaim, 'not_true'); }}>{say('worldBubbleNotReally')}</button>
+                            </span>
+                            {answerFailed ? <span className="jar-char-bubble-of" role="alert">{say('worldReviewAnswerFailed')}</span> : null}
+                          </>
+                        ) : <>
                           <span className="jar-char-bubble-reading">{restingWord}</span>
                           {/* NEVER ON THE AGENT. Founder, 2026-10-15: "you
                               cannot add inspiration for the agent mode. only
@@ -9731,7 +9818,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     speech bubbles should have an action at the end." This
                     is the bubble that reports what has been happening, and
                     it led into a chat on a press nothing advertised. */}
-                <span className="jar-char-bubble-reading" role="status">{companionLine}</span>
+                {charSay === say('worldBubbleKept') && keptConnection(visibleInspiration) ? <>
+                  <span className="jar-char-bubble-of">{say('worldBubbleKept')}</span>
+                  <span className="jar-char-bubble-reading" role="status">{keptConnection(visibleInspiration)}</span>
+                </> : <span className="jar-char-bubble-reading" role="status">{companionLine}</span>}
                 {/* ═══ CHAT WHEN THERE IS SOMETHING, SAVE WHEN THERE IS NOT ══
                     Founder, of "Quiet lately — Let's talk about it":
                     "determine when it's appropriate to say 'lets chat about
@@ -9749,16 +9839,19 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 {/* AFTER A SAVE, THE CHAT IS ABOUT WHAT WAS SAVED — not about
                     the words "I'm inspired!". A keep with no words (a file and
                     nothing else) has nothing to talk about yet, so no act. */}
-                {charSay === say('worldImInspired') ? (
-                  visibleInspiration?.text.trim() ? (
-                    <span className="jar-char-bubble-acts">
-                      <button type="button" className="jar-char-bubble-act"
-                        disabled={talking}
-                        onClick={() => { void talkAbout(visibleInspiration); }}>
-                        {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
-                      </button>
-                    </span>
-                  ) : null
+                {charSay === say('worldBubbleKept') ? (
+                  /* E4: Talk about it opens a chat with this save on top
+                     (E5); See all pulls up the saves. A keep with no words
+                     has nothing to talk about yet, so it offers See all. */
+                  <span className="jar-char-bubble-acts">
+                    {visibleInspiration?.text.trim() ? <button type="button" className="jar-char-bubble-act"
+                      disabled={talking}
+                      onClick={() => { void talkAbout(visibleInspiration); }}>
+                      {say(talking ? 'worldTalkOpening' : 'worldBubbleTalkAboutIt')}
+                    </button> : null}
+                    <button type="button" className="jar-char-bubble-act"
+                      onClick={() => { setCharSay(''); setStreamOpen(true); }}>{say('worldBubbleSeeAll')}</button>
+                  </span>
                 ) : sayIsAboutNothing(charSay) ? (
                   standingAsAgent ? null : (
                     <span className="jar-char-bubble-acts">
@@ -11323,6 +11416,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
         navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making === 'talk' || listing || principlesOpen}
         belowCorners={(listing || principlesOpen) && !savedNoteOpen}
         label={say(savedNoteOpen ? 'worldBackToAll' : making === 'talk' ? 'worldAllChats' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
+      {streamShown ? (
+        <HomeStream locale={locale} inspirations={inspirations ?? []} signals={streamSignals(signals)} principles={principles}
+          onClose={() => setStreamOpen(false)}
+          onOpenSave={id => { setStreamOpen(false); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }} />
+      ) : null}
       {/* ═══ THE HOME BAR (design E1) ══════════════════════════════════════
           Write · Photo · Say it in one pill, Chat beside it — see
           `HomeBar`. It stands on the home at rest and nowhere else: the
@@ -11342,6 +11440,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           }}
           onChat={() => { listOrigin.current = null; openTalk(null); }}
           saved={barSaved}
+          pull={standingAsAgent || streamShown ? undefined : { onOpen: () => setStreamOpen(true) }}
         />
             ) : phase==='ready'&&(making||reviewing||savedNoteOpen)&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">

@@ -7061,13 +7061,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
+  /* THREE LINES, everywhere (design F1): "Why?" and "Talk about this" carry
+     the rest, and pressing the sentence opens it in full. */
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   overflow: hidden;
-}
-/* MEASURED at 1280×900: five lead-size lines fit above the action row. */
-@media (min-height: 900px) {
-  .jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading { -webkit-line-clamp: 5; line-clamp: 5; }
 }
 /* MEASURED at 874×402: two complete lines leave both actions inside the bubble. */
 @media (max-height: 500px) {
@@ -7189,12 +7187,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .waka-home-bar-row { display: flex; align-items: center; gap: var(--sp-8); }
 .waka-home-bar-pill {
-  flex: 0 1 auto; min-width: 0; margin-inline: auto; display: flex; align-items: center; justify-content: center; gap: var(--sp-4);
+  flex: 1 1 auto; min-width: 0; max-width: calc(80px * 3 + var(--sp-4) * 2 + var(--sp-20)); margin-inline: auto; display: flex; align-items: center; justify-content: center; gap: var(--sp-4);
   height: var(--sp-64); box-sizing: border-box; padding: var(--sp-6) var(--sp-10);
   border-radius: var(--r-pill); background: var(--waka-raised);
 }
 .waka-home-bar-door {
-  appearance: none; flex: 0 1 80px; min-width: 0; height: calc(var(--sp-48) + var(--sp-4));
+  appearance: none; flex: 1 1 0; min-width: 0; height: calc(var(--sp-48) + var(--sp-4));
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-4);
   padding: 0; border: 0; border-radius: var(--r-pill); background: none;
   color: var(--ink); font-family: var(--waka-face); font-size: var(--t-meta); line-height: 1; white-space: nowrap; cursor: pointer;
@@ -7225,4 +7223,62 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   100% { opacity: 0; transform: translateY(-6px); }
 }
 @media (prefers-reduced-motion: reduce) { .waka-home-bar-saved { animation: none; } }
+}
+
+@layer chrome {
+/* ═══ THE READ'S SENTENCE IS ITS OWN "READ IN FULL" (design F1) ══════════ */
+.waka-reading-open {
+  appearance: none; display: block; width: 100%; padding: 0; border: 0; background: none;
+  color: inherit; font: inherit; text-align: inherit; cursor: pointer;
+}
+/* ═══ "WHY?" — BECAUSE YOU KEPT THESE (design F2) ═══════════════════════════
+   One quoted save per row, left-aligned, hairlines between, in the
+   bubble's own ink: the person's words, not the machine's. */
+.waka-says-why { display: flex; flex-direction: column; align-self: stretch; max-height: 40dvh; overflow-y: auto; }
+.waka-says-why-row {
+  display: block; padding: var(--sp-8) 0; border-top: 1px solid color-mix(in srgb, var(--waka-on-light) 11%, transparent);
+  font-size: var(--t-body); line-height: 1.4; text-align: start; overflow-wrap: anywhere;
+}
+
+/* ═══ SAVES → PATTERNS → PRINCIPLES (design F4) ═════════════════════════════
+   Pulled up over the home, under the corners and behind the home bar, on
+   the world's own ground. A 16px gutter on a phone; a reading column on a
+   desk. Saves are raised cards; a pattern or principle wears the bubble's
+   paper (it is something said about you); one still forming is dashed and
+   says so. */
+.waka-stream {
+  position: fixed; z-index: 59; left: 0; right: 0;
+  /* It stops above the home bar rather than running under it: the bar is
+     not drawn over words you are reading. */
+  bottom: calc(var(--sp-28) + var(--sp-64) + var(--sp-8) + env(safe-area-inset-bottom));
+  top: calc(var(--waka-corner) + var(--sp-20) + env(safe-area-inset-top));
+  display: flex; flex-direction: column; align-items: center;
+  background: var(--paper); color: var(--ink); font-family: var(--waka-face);
+}
+.waka-stream-close {
+  flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-2);
+  min-height: var(--sp-44); padding: 0 var(--sp-16); border: 0; background: none;
+  color: var(--muted); font: inherit; font-size: var(--t-ui); cursor: pointer;
+}
+.waka-stream-close:hover, .waka-stream-close:focus-visible { color: var(--ink); }
+.waka-stream-scroll {
+  flex: 1; min-height: 0; width: min(36rem, 100%); box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 var(--sp-16) var(--sp-32);
+  -webkit-mask-image: linear-gradient(180deg, currentColor 85%, transparent);
+  mask-image: linear-gradient(180deg, currentColor 85%, transparent);
+}
+.waka-stream-label { margin: var(--sp-14) 0 var(--sp-8); font-size: var(--t-ui); font-weight: 400; color: var(--muted); }
+.waka-stream-list { display: flex; flex-direction: column; gap: var(--sp-8); margin: 0; padding: 0; list-style: none; }
+.waka-stream-save {
+  appearance: none; display: flex; flex-direction: column; gap: var(--sp-4); width: 100%;
+  padding: var(--sp-12) var(--sp-16); border: 0; border-radius: var(--sp-16);
+  background: var(--waka-raised); color: var(--ink); font: inherit; text-align: start; cursor: pointer;
+}
+.waka-stream-meta { font-size: var(--t-ui); color: var(--muted); }
+.waka-stream-words { font-size: var(--t-input); line-height: 1.4; overflow-wrap: anywhere; }
+.waka-stream-statement {
+  display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-12) var(--sp-16); border-radius: var(--sp-16);
+  background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep)); color: var(--waka-on-light);
+}
+.waka-stream-statement[data-forming] { background: none; color: var(--ink); border: 1px dashed var(--muted); }
 }
