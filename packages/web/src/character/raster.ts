@@ -37,6 +37,11 @@ export const EYE_R = 0.038;
     illustration, not interface text, and it is the same brown-black at every
     aliveness. */
 export const EYE_INK = "#2b2822";
+/** How tall an eye is when it is shut, as a fraction of its open height. The
+    loop's blink squashes toward this and stops there, so a closed eye is a
+    short dark line rather than nothing; the rest pose's `eyes: "shut"` uses
+    the same floor, so a page's sleeping creature is the world's mid-blink. */
+export const EYE_SHUT = 0.12;
 /** Reading glasses, worn only while reviewing — "big soft rounds", the
     founder's pick of six drawn pairs (2026-10-15). A lens's radius, as a
     fraction of the body: oversized, so the pair nearly meets over the nose. */
@@ -275,6 +280,8 @@ export function turnedPose(
   /** The world's film, so a page's creature is the same matte material as
       the world's (founder: "use exact same code ... for the character"). */
   grain: CanvasPattern | null = null,
+  /** Eyes closed: each eye squashed to `EYE_SHUT` of its height. */
+  shut = false,
 ): void {
   /* ═══ BAKE AT LEAST AS LARGE AS WE PAINT ═══════════════════════════════
      The factor was `round(size / BODY_PX * 4)` with no `dpr` in it, while
@@ -356,7 +363,7 @@ export function turnedPose(
     const ca = Math.cos(lon + yaw);
     if (ca <= 0) continue;
     g.beginPath();
-    g.ellipse(Math.sin(lon + yaw) * size * FACE_R, eyY, er * Math.max(ca, 0.2), er * (1 - 0.22 * Math.abs(look)), 0, 0, Math.PI * 2);
+    g.ellipse(Math.sin(lon + yaw) * size * FACE_R, eyY, er * Math.max(ca, 0.2), er * (1 - 0.22 * Math.abs(look)) * (shut ? EYE_SHUT : 1), 0, 0, Math.PI * 2);
     g.fill();
   }
   g.restore();
@@ -408,6 +415,9 @@ export function restPose(
       forgot the argument. */
   dpr: number,
   grain: CanvasPattern | null = null,
+  /** "shut" for a page whose creature is reading with its eyes closed — a
+      pose, not a behaviour: it never changes while the page is up. */
+  eyes: "open" | "shut" = "open",
 ): void {
-  turnedPose(g, size, ramp, be, lit, dpr, 0, 0, 0, grain);
+  turnedPose(g, size, ramp, be, lit, dpr, 0, 0, 0, grain, eyes === "shut");
 }

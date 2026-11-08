@@ -39,8 +39,11 @@ import { REST_BLEED, coolRamp, restPose } from "../character/raster";
 import { renderScale } from "../canvas/scale";
 import { MACHINE_CELLS, pixelate, rampFromCss, rasterGrain } from "../canvas/palette";
 
-export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel = false, label = "WAKA" }: {
+export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel = false, label = "WAKA", eyes = "open" }: {
   size?: number;
+  /** "shut" while it reads (onboarding's intro and reading screens). The same
+      body with its eyes at the loop's blink floor — see `EYE_SHUT`. */
+  eyes?: "open" | "shut";
   /** Whose body. Your own by default; an agent's is `agentBeing(agentId)`. */
   being?: Being;
   /** An agent is the same creature in colder light (`coolRamp`). */
@@ -88,7 +91,7 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
     const tile = rasterGrain(ramp.dorm);
     const grain = tile ? g.createPattern(tile, "repeat") : null;
     if (!pixel) {
-      restPose(g, size, ramp, being, 1, dpr, grain);
+      restPose(g, size, ramp, being, 1, dpr, grain, eyes);
       return;
     }
     /* Drawn whole, then stepped: the world quantises the BODY sprite, so the
@@ -100,10 +103,10 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
     if (!sg) return;
     sg.scale(dpr, dpr);
     sg.translate(pad, pad);
-    restPose(sg, size, ramp, being, 1, dpr, grain);
+    restPose(sg, size, ramp, being, 1, dpr, grain, eyes);
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.drawImage(pixelate(sharp, MACHINE_CELLS * (box / size)), 0, 0);
-  }, [size, being, cool, pixel]);
+  }, [size, being, cool, pixel, eyes]);
 
   /* The element is the padded box too, so the drawing is not squashed back
      into `size` by CSS — which would reintroduce the crop as a scale. */

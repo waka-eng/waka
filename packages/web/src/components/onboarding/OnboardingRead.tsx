@@ -35,7 +35,7 @@ export function OnboardingReading({ locale, error = "", busy = false, onContinue
             <span key={motion} className="onb-orb" style={{ width: size, height: size, background: colour,
               boxShadow: `0 0 18px ${colour}`, animation: `${motion} ease-in-out infinite alternate` }} />
           ))}
-          <Creature size="large" eyes="closed" glow={80} style={{ position: "absolute", left: 0, top: 0 }} />
+          <Creature size="large" eyes="closed" style={{ position: "absolute", left: 0, top: 0 }} />
         </div>
         <p className="onb-reading-words" role="status">{say("onboardingReading")}</p>
         {error && onContinue ? (
@@ -82,7 +82,7 @@ export function OnboardingReveal({ locale, reading, behind, busy, error, onTalk,
         </section>
         <span className="onb-tail" aria-hidden="true" />
         <div className="onb-tail-gap" />
-        <Creature size="large" glow={70} />
+        <Creature size="large" />
         <p className="onb-sharpen">{say("onboardingSharpen")}</p>
         <div className="onb-grow" />
         {error ? <p className="onb-error" role="alert">{error}</p> : null}

@@ -83,15 +83,18 @@
 .onb button:focus-visible,
 .onb textarea:focus-visible { outline: 2px solid var(--onb-ink); outline-offset: 2px; }
 
-/* ─── the creature ─────────────────────────────────────────────────── */
+/* ─── the creature ───────────────────────────────────────────────────
+   The real `Companion`, centred in the frame's footprint for it. Its aura is
+   its own (`.waka-companion`); it overflows the footprint, as light does,
+   and never moves the layout. */
 .onb-creature { position: relative; display: block; flex-shrink: 0; }
-.onb-creature > span { position: absolute; display: block; }
-.onb-creature-body { background: radial-gradient(circle at 45% 30%, #f3eee4, #cfc7b8 75%); }
-.onb-creature-arm { border-radius: 50%; background: #d3ccbe; }
-.onb-creature-eye { border-radius: 50%; background: var(--onb-bubble-ink); }
-.onb-creature-eye--closed { border-radius: 2px; }
-.onb-creature--cool .onb-creature-body { background: radial-gradient(circle at 45% 30%, #e7ecf3, #b9c2cf 75%); }
-.onb-creature--cool .onb-creature-arm { background: #c3cad5; }
+.onb-creature-real {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
 
 /* ─── intro frames ─────────────────────────────────────────────────── */
 .onb-intro { touch-action: pan-y; user-select: none; }
@@ -452,7 +455,7 @@
 @keyframes onb-lift { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-6px) rotate(3deg); } }
 @keyframes onb-arrive { 0% { transform: translateX(120px); opacity: 0; } 30%, 100% { transform: translateX(0); opacity: 1; } }
 @keyframes onb-pass { 0%, 35% { transform: translateX(0); opacity: 0; } 45% { opacity: 1; } 70% { transform: translateX(118px); opacity: 1; } 80%, 100% { transform: translateX(118px); opacity: 0; } }
-@keyframes onb-glow { 0%, 60%, 100% { box-shadow: 0 0 50px rgba(236, 230, 218, 0.25); } 72% { box-shadow: 0 0 90px rgba(236, 230, 218, 0.55); } }
+@keyframes onb-glow { 0%, 60%, 100% { filter: brightness(1); } 72% { filter: brightness(1.18); } }
 @keyframes onb-lean { 0%, 35% { transform: rotate(0); } 55%, 100% { transform: rotate(6deg); } }
 @keyframes onb-lean-back { 0%, 35% { transform: rotate(0); } 55%, 100% { transform: rotate(-6deg); } }
 @keyframes onb-call { 0%, 100% { box-shadow: 0 0 0 rgba(236, 230, 218, 0); } 50% { box-shadow: 0 0 28px rgba(236, 230, 218, 0.28); } }

@@ -93,7 +93,7 @@ import { bakeBeing, buildPalette, MACHINE_CELLS, type BeingSprites, type Palette
 import { renderScale } from "./scale";
 import { VIGNETTE, mix, rgbCss } from "./sprites";
 import type { Measured } from "./measured";
-import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, FACE_R, GLASS_GLINT, GLASS_MAGNIFY, GLASS_R, GLASS_RIM_ALPHA, GLASS_TINT, GLASS_W, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
+import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, EYE_SHUT, FACE_R, GLASS_GLINT, GLASS_MAGNIFY, GLASS_R, GLASS_RIM_ALPHA, GLASS_TINT, GLASS_W, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import {
@@ -4546,7 +4546,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           const ca = Math.cos(a);
           if (ca <= 0) continue;
           /* at the edge a blink is a flicker, so it is suppressed there */
-          const eh = (ca < 0.3 ? 1 : Math.max(0.12, 1 - companion.blink)) * lerp(1, THINK_SQUINT, companion.thinkNow);
+          const eh = (ca < 0.3 ? 1 : Math.max(EYE_SHUT, 1 - companion.blink)) * lerp(1, THINK_SQUINT, companion.thinkNow);
           ctx!.globalAlpha = clamp01(ca / Math.sin(0.25));
           const ex = Math.sin(a) * bw * FACE_R * cosLat + companion.eyeX * ca;
           if (formMachine) {

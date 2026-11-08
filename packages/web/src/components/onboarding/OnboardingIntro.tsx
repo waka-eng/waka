@@ -63,7 +63,7 @@ function Pile({ say }: { say: (key: Parameters<typeof t>[1]) => string }) {
         <p>{say("onboardingPileSavedPost")}</p>
         <div className="onb-pile-line" style={{ width: "70%", marginTop: 10 }} />
       </div>
-      <Creature size="small" glow={40} style={at(157, 430, { position: "absolute" })} />
+      <Creature size="small" style={at(157, 430, { position: "absolute" })} />
       <div className="onb-words" style={{ top: 540 }}>
         <h1 className="onb-title">{say("onboardingPileTitle")}</h1>
         <p className="onb-sub">{say("onboardingPileBody")}</p>
@@ -78,7 +78,7 @@ function OneTap({ say }: { say: (key: Parameters<typeof t>[1]) => string }) {
   ];
   return (
     <>
-      <Creature size="large" glow={70} eyeTop={38}
+      <Creature size="large"
         style={at(137, 150, { position: "absolute", transformOrigin: "50% 100%", animation: "onb-catch 2.4s ease-in-out infinite" })} />
       <div className="onb-words" style={{ top: 300 }}>
         <h1 className="onb-title">{say("onboardingTapTitle")}</h1>
@@ -114,7 +114,7 @@ function Reads({ say }: { say: (key: Parameters<typeof t>[1]) => string }) {
             ["--d" as string]: d, animation: `onb-orbit ${duration} linear ${delay} infinite` }} />
         ))}
       </div>
-      <Creature size="large" eyes="closed" hands="up" glow={80}
+      <Creature size="large" eyes="closed"
         style={at(137, 262, { position: "absolute", animation: "onb-lift 3s ease-in-out infinite" })} />
       <div className="onb-words" style={{ top: 470 }}>
         <h1 className="onb-title">{say("onboardingReadTitle")}</h1>
@@ -128,11 +128,11 @@ function People({ say }: { say: (key: Parameters<typeof t>[1]) => string }) {
   return (
     <>
       <span style={at(66, 300, { position: "absolute", transformOrigin: "50% 100%", animation: "onb-lean 5s ease-in-out infinite alternate" })}>
-        <Creature size="medium" glow={50} bodyClassName="onb-body-glow" />
+        <Creature size="medium" bodyClassName="onb-body-glow" />
       </span>
       <span style={at(224, 300, { position: "absolute", animation: "onb-arrive 5s ease-out infinite alternate" })}>
         <span style={{ display: "block", transformOrigin: "50% 100%", animation: "onb-lean-back 5s ease-in-out infinite alternate" }}>
-          <Creature size="medium" cool look="left" glow={50} bodyClassName="onb-body-glow" />
+          <Creature size="medium" other bodyClassName="onb-body-glow" />
         </span>
       </span>
       <span className="onb-dot-light" style={{ left: 150, top: 324, width: 12, height: 12, background: "#fff6e4",

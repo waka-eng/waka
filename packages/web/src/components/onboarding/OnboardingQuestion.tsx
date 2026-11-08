@@ -216,7 +216,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
         <div className="onb-stage onb-ask">
           <div className="onb-ask-dots onb-ask-dots--tight"><Dots count={ONBOARDING_QUESTIONS} on={index + 1} className="onb-dots--center" /></div>
           <div className="onb-photo-head">
-            <Creature size="tiny" glow={20} />
+            <Creature size="tiny" />
             <p className="onb-photo-ask">{say("onboardingPhotoAsk")}</p>
           </div>
           <div className="onb-photo">
@@ -265,7 +265,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
         </div>
         <span className="onb-tail" aria-hidden="true" />
         <div className="onb-tail-gap" />
-        <Creature size="large" glow={60} />
+        <Creature size="large" />
         {mode === "voice" ? said : null}
         <div className="onb-grow" />
         {mode === "choose" ? (
