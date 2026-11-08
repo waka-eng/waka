@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {and,asc,desc,eq,inArray,sql} from 'drizzle-orm';
 import {attachments,inspirations,inspirationRevisions,reflections} from '../db/index.js';
 import type {getDb} from './db.js';
-import {effectiveAttachmentStatus,effectiveAttachmentText} from './attachment-material.js';
+import {correctedAttachment,effectiveAttachmentStatus,effectiveAttachmentText} from './attachment-material.js';
 import {attachmentSearchText} from './conversation-attachments.js';
 
 type Reader=Pick<ReturnType<typeof getDb>,'select'>;
@@ -45,7 +45,7 @@ export async function readConversationMaterial(db:Reader,profileId:string,terms:
       ORDER BY created_at DESC,id LIMIT 4) q),'[]'::jsonb)`,
     media:sql<Array<{text:string;type:string;corrected:boolean}>>`COALESCE((SELECT jsonb_agg(q) FROM (
       SELECT left(${effectiveAttachmentText},601) AS text,${attachments.type} AS type,
-        (${attachments.type}='audio' AND ${attachments.transcriptCorrection} IS NOT NULL) AS corrected
+        ${correctedAttachment} AS corrected
       FROM ${attachments} WHERE ${attachments.profileId}=${profileId}::uuid AND ${attachments.inspirationId}=${inspirations.id}
         AND ${effectiveAttachmentStatus}='ready' AND length(trim(coalesce(${effectiveAttachmentText},'')))>0
       ORDER BY ${attachments.createdAt},${attachments.id} LIMIT 4) q),'[]'::jsonb)`,
@@ -102,7 +102,7 @@ export async function readConversationMaterial(db:Reader,profileId:string,terms:
   return rows.map(row=>{
     const parts=[...(row.text.trim()?[{label:row.answers.length||row.media.length?'Saved text':'',text:row.text}]:[]),
       ...row.answers.slice(0,3).map(answer=>({label:'Reflection (your words)',text:answer.text})),
-      ...row.media.slice(0,3).map(item=>({label:item.type==='audio'?item.corrected?'Audio transcript (your correction)':'Audio transcript':item.type==='image'?'Image description (generated)':'Link content',text:item.text}))];
+      ...row.media.slice(0,3).map(item=>({label:item.type==='audio'?item.corrected?'Audio transcript (your correction)':'Audio transcript':item.type==='image'?item.corrected?'Words in the image (your correction)':'Image description (generated)':'Link content',text:item.text}))];
     const allowance=Math.floor((1600-Math.max(0,parts.length-1)*2)/Math.max(1,parts.length));
     const formatted=parts.map(part=>part.label?`${part.label}:\n${part.text}`:part.text);
     const text=formatted.map(part=>part.slice(0,allowance)).join('\n\n');
