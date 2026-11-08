@@ -83,46 +83,34 @@ async function openNotepad(): Promise<void> {
   await act(async () => inspiration!.click()); await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad did not open').toBeTruthy();
 }
-const plus = () => world.container.querySelector<HTMLButtonElement>('nav.waka-dock .waka-dock-making button[aria-haspopup="menu"]');
-const menu = () => world.container.querySelector<HTMLElement>('nav.waka-dock [role="menu"]');
-const rows = () => [...(menu()?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
 /** Hand the chooser behind a row a file, the way the operating system would. */
 async function choose(accepting: (accept: string) => boolean, file: File): Promise<void> {
-  const input = [...world.container.querySelectorAll<HTMLInputElement>('nav.waka-dock input[type="file"]')].find(node => accepting(node.accept));
-  expect(input, 'the ＋ has no chooser for this').toBeTruthy();
+  const input = [...world.container.querySelectorAll<HTMLInputElement>('.waka-note-bar input[type="file"], .jar-inspiration-composer input[type="file"], nav.waka-dock input[type="file"]')].find(node => accepting(node.accept));
+  expect(input, 'the bar has no chooser for this').toBeTruthy();
   Object.defineProperty(input!, 'files', { configurable: true, value: [file] });
   await act(async () => { input!.dispatchEvent(new Event('change', { bubbles: true })); });
   await settle();
 }
 
-it('opens a menu above the ＋ with Add photo and Add file, and Escape closes only the menu', async () => {
+/* PHOTO AND FILE SIT ON THE BAR, NO ＋ MENU (founder, 2026-11-05): two
+   presses, each opening its own chooser directly, and no menu in between. */
+it('puts Add photo and Add file directly on the note bar, with no ＋ menu', async () => {
   await openNotepad();
-  expect(plus(), 'the note\'s bar has no ＋').toBeTruthy();
-  expect(plus()!.getAttribute('aria-label')).toBe('Add photo or file');
-  expect(plus()!.getAttribute('aria-expanded')).toBe('false');
-  expect(menu(), 'the menu is open before anything was pressed').toBeNull();
-
-  await act(async () => plus()!.click());
-  expect(menu(), 'pressing ＋ opened no menu').toBeTruthy();
-  expect(plus()!.getAttribute('aria-expanded')).toBe('true');
-  expect(rows().map(row => row.textContent?.trim()), 'the menu is not its two rows').toEqual(['Add photo', 'Add file']);
-  expect(document.activeElement, 'the first row did not take focus').toBe(rows()[0]);
-
-  /* The arrows walk it. */
-  await act(async () => { menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); });
-  expect(document.activeElement, 'ArrowDown did not reach Add file').toBe(rows()[1]);
-
-  await act(async () => { menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
-  await settle();
-  expect(menu(), 'Escape left the menu open').toBeNull();
-  expect(document.activeElement, 'focus did not come back to the ＋').toBe(plus());
-  expect(world.container.querySelector('.jar-inspiration-composer'), 'Escape on the menu closed the note too').toBeTruthy();
-
-  /* AND A PRESS ANYWHERE ELSE closes it. */
-  await act(async () => plus()!.click());
-  expect(menu()).toBeTruthy();
-  await act(async () => { document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
-  expect(menu(), 'a press outside left the menu open').toBeNull();
+  const bar = world.container.querySelector<HTMLElement>('.waka-note-bar-row')!;
+  expect(bar, 'the notepad has no note bar').toBeTruthy();
+  expect(bar.querySelector('button[aria-haspopup="menu"]'), 'the ＋ menu is back on the note bar').toBeNull();
+  const photo = bar.querySelector<HTMLButtonElement>('button[aria-label="Add photo"]');
+  const file = bar.querySelector<HTMLButtonElement>('button[aria-label="Add file"]');
+  expect(photo?.querySelector('[data-home-action-icon="photo"]'), 'no photo press on the bar').toBeTruthy();
+  expect(file?.querySelector('[data-home-action-icon="file"]'), 'no file press on the bar').toBeTruthy();
+  const clicked: string[] = [];
+  for (const input of world.container.querySelectorAll<HTMLInputElement>('.jar-inspiration-composer input[type="file"]'))
+    input.addEventListener('click', event => { event.preventDefault(); clicked.push(input.accept); });
+  await act(async () => photo!.click());
+  await act(async () => file!.click());
+  expect(clicked[0], 'Add photo did not open the photo chooser').toContain('image/png');
+  expect(clicked[1], 'Add file did not open the file chooser').toContain('application/pdf');
+  expect(world.container.querySelector('[role="menu"]'), 'a menu opened').toBeNull();
 });
 
 it('puts a chosen file on the shelf as a file tile and saves it as type file under kind note', async () => {
@@ -135,7 +123,7 @@ it('puts a chosen file on the shelf as a file tile and saves it as type file und
   expect(tile!.querySelector('[data-home-action-icon="file"]'), 'the tile has no file glyph').toBeTruthy();
   expect(tile!.textContent, 'the tile does not say how big it is').toMatch(/\d+ KB/);
 
-  const save = world.container.querySelector<HTMLButtonElement>('nav.waka-dock button.waka-dock-tool--keep');
+  const save = world.container.querySelector<HTMLButtonElement>('.waka-note-bar button.waka-dock-tool--keep');
   expect(save?.disabled, 'Save is dim with a file on the note').toBe(false);
   await act(async () => save!.click()); await settle();
   expect(presignAttachment, 'the file was never uploaded').toHaveBeenCalled();
@@ -146,23 +134,12 @@ it('puts a chosen file on the shelf as a file tile and saves it as type file und
   expect(input.attachments).toEqual([expect.objectContaining({ type: 'file', contentType: 'application/pdf', name: 'Lease.pdf' })]);
 });
 
-/* Audit f2afcbe2 (mob): the menu stayed open over the note after a pick
-   reached the chooser without the row's own press closing it first. */
-it('puts the menu away when a file arrives, however the chooser was reached', async () => {
-  await openNotepad();
-  const plus = world.container.querySelector<HTMLButtonElement>('nav.waka-dock button[aria-haspopup="menu"]')!;
-  await act(async () => plus.click()); await settle();
-  expect(menu(), 'the ＋ did not open its menu').toBeTruthy();
-  await choose(accept => accept.includes('application/pdf'), new File(['%PDF-1.7'], 'A.pdf', { type: 'application/pdf' }));
-  expect(menu(), 'the menu stayed open after a file was picked').toBeNull();
-});
-
 it('an unnamed file is called "File" on its tile and saved with no name at all', async () => {
   await openNotepad();
   await choose(accept => accept.includes('application/pdf'), new File(['%PDF-1.7 a lease'], '', { type: 'application/pdf' }));
   const tile = world.container.querySelector('.jar-shelf .jar-tile');
   expect(tile?.getAttribute('title'), 'the unnamed file has no label on screen').toBe('File');
-  const save = world.container.querySelector<HTMLButtonElement>('nav.waka-dock button.waka-dock-tool--keep');
+  const save = world.container.querySelector<HTMLButtonElement>('.waka-note-bar button.waka-dock-tool--keep');
   await act(async () => save!.click()); await settle();
   const [attached] = vi.mocked(createInspiration).mock.calls[0]![0].attachments!;
   expect(attached, 'the screen\'s label was saved as the file\'s name').not.toHaveProperty('name');
@@ -177,18 +154,15 @@ it('marks a file the server would refuse before anything is uploaded', async () 
   expect(presignAttachment, 'a refused file was uploaded').not.toHaveBeenCalled();
 });
 
-it('gives a saved note open in the archive the same ＋, and attaches a chosen file to it as type file', async () => {
+it('gives a saved note open in the archive the same direct presses, and attaches a chosen file to it as type file', async () => {
   vi.mocked(finalizeAttachment).mockImplementation(() => new Promise(() => undefined));
   world = await mountWorld(FACTS); await settle();
   await chooseFromMenu(world.container, 'Inspirations'); await settle();
   await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-list-row')!.click()); await settle();
   const lent = () => world.container.querySelector<HTMLElement>('nav.waka-dock #waka-note-tools');
-  const add = lent()?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
-  expect(add, 'the saved note has no ＋ in its bar').toBeTruthy();
-  expect(lent()!.querySelector('[data-home-action-icon="photo"]'), 'the saved note still has a photo button in its bar').toBeNull();
-  await act(async () => add!.click());
-  expect(rows().map(row => row.textContent?.trim())).toEqual(['Add photo', 'Add file']);
-  await act(async () => { menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  expect(lent()?.querySelector('button[aria-haspopup="menu"]'), 'the saved note still has a ＋ menu').toBeNull();
+  expect(lent()?.querySelector('button[aria-label="Add photo"] [data-home-action-icon="photo"]'), 'the saved note has no Add photo').toBeTruthy();
+  expect(lent()?.querySelector('button[aria-label="Add file"] [data-home-action-icon="file"]'), 'the saved note has no Add file').toBeTruthy();
   await choose(accept => accept.includes('application/pdf'), new File(['plain words'], 'notes.md', { type: '' }));
   /* A `.md` arrives with no type; the verdict's type is the one sent. */
   expect(vi.mocked(presignAttachment).mock.calls[0]![0]).toMatchObject({ filename: 'notes.md', contentType: 'text/markdown' });

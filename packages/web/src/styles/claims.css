@@ -682,8 +682,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   gap: var(--sp-6);
   width: auto;
   padding: 0 var(--sp-12);
-  background: var(--ink);
-  color: var(--bg);
+  /* NEVER FILLED (founder, 2026-11-05: "the button should never fill up
+     like this … it's either disabled or the text is fully white"). Full ink
+     when it can keep, dimmed by `:disabled` above when it cannot. */
+  background: none;
+  color: var(--ink);
+  font-size: var(--t-input);
 }
 
 /* ═══ WHERE A PASSING SENTENCE GOES ═══════════════════════════════════════
@@ -7281,4 +7285,73 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep)); color: var(--waka-on-light);
 }
 .waka-stream-statement[data-forming] { background: none; color: var(--ink); border: 1px dashed var(--muted); }
+}
+
+@layer chrome {
+/* ═══ THE NOTE BAR AND THE PICTURE (design E3, E3′, F5, Writing, PhotoNote) ═══
+   The mic and the attach glyphs keep `.waka-dock-tool`, re-seated here; "Done"
+   needs room the 44px circle does not have. */
+.jar-composer-body { display: flex; flex-direction: column; flex: 1; gap: 0; }
+.waka-note-bar {
+  display: flex; flex-direction: column; flex: 1; min-height: calc(var(--sp-44) * 3); margin-top: var(--sp-12);
+  box-sizing: border-box; padding: var(--sp-14) var(--sp-8) var(--sp-4) var(--sp-16);
+  border-radius: var(--sp-28); background: var(--waka-raised);
+}
+.jar-composer-body[data-hero] .waka-note-bar { flex: none; min-height: 0; margin-top: 0; }
+.jar-inspiration-composer .waka-note-bar .jar-composer-text {
+  flex: 1; min-height: 0; max-height: none; margin: 0; padding: 0 var(--sp-10) 0 0;
+  border: 0; resize: none; font-size: var(--t-input); line-height: 1.45; color: var(--ink);
+}
+.jar-composer-body[data-hero] .waka-note-bar .jar-composer-text {
+  /* With a picture the note is a line that grows with what is typed, not a
+     page: the field sizes to its words (the notepad's own autosize sets an
+     inline height for the page-sized field, which is not this one). */
+  flex: none; min-height: calc(var(--t-input) * 1.45); max-height: 24dvh; height: auto !important; field-sizing: content;
+}
+.waka-note-bar-row { display: flex; align-items: center; gap: var(--sp-4); min-height: var(--sp-44); margin-left: calc(var(--sp-10) * -1); }
+.waka-note-bar-tools { display: flex; align-items: center; flex: none; }
+.waka-note-bar-state { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--t-meta); text-align: center; }
+.waka-note-bar .waka-dock-tool { border: 0; background: none; color: var(--ink); }
+.waka-note-bar .waka-dock-tool:disabled { opacity: 0.4; }
+.waka-note-bar .waka-dock-tool--live { width: auto; padding: 0 var(--sp-12); font-size: var(--t-input); }
+.jar-inspiration-composer .waka-note-bar .waka-dock-save { flex: none; min-height: var(--sp-44); border: 0; background: none; color: var(--ink); font-size: var(--t-input); }
+.jar-inspiration-composer .waka-note-bar .waka-dock-save:disabled { opacity: 0.4; }
+.waka-note-hint { margin: auto 0 var(--sp-8); padding-top: var(--sp-16); text-align: center; color: var(--muted); font-size: var(--t-ui); }
+
+/* THE CREATURE, SMALL, BESIDE WHAT IT SAYS — the real `Companion`, never drawn here. */
+.waka-note-line { display: flex; align-items: center; gap: var(--sp-10); margin: var(--sp-8) 0 var(--sp-14); }
+.waka-note-creature { flex: none; display: grid; place-items: center; }
+.waka-note-creature canvas { display: block; }
+.waka-note-says {
+  margin: 0; padding: var(--sp-8) var(--sp-14); border-radius: 16px 16px 16px 4px;
+  background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep)); color: var(--waka-on-light);
+  font-size: var(--t-body); line-height: 1.4;
+}
+.waka-note-arrival { display: flex; gap: var(--sp-8); margin: 0 0 var(--sp-12) 50px; }
+.jar-inspiration-composer .waka-note-arrival-act { min-height: var(--sp-44); padding: 0 var(--sp-14); border: 1px solid var(--line); border-radius: var(--r-pill); background: none; color: var(--ink); font-size: var(--t-ui); }
+
+/* THE PICTURE IS THE POST: full width, large, the whole of it shown. */
+.waka-note-hero {
+  position: relative; flex: none; margin: 0; width: 100%; height: min(340px, 36dvh);
+  border-radius: 18px; overflow: hidden; background: var(--waka-raised);
+}
+.waka-note-hero img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.waka-note-hero[data-blurred] img { filter: blur(1.5px); }
+.waka-note-hero-name { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: var(--t-ui); }
+.jar-inspiration-composer .waka-note-hero-x {
+  position: absolute; right: var(--sp-4); top: var(--sp-4); display: grid; place-items: center;
+  width: var(--sp-44); height: var(--sp-44); padding: 0; border: 0; border-radius: 50%;
+  background: color-mix(in srgb, var(--paper) 40%, transparent); color: var(--ink);
+}
+.waka-note-read {
+  display: flex; align-items: flex-start; gap: var(--sp-8); margin-top: var(--sp-12); padding: var(--sp-12) var(--sp-4) 0 var(--sp-14);
+  border-left: 2px solid color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep));
+}
+.waka-note-read-body { flex: 1; min-width: 0; }
+.waka-note-read-label { margin: 0 0 var(--sp-4); color: var(--muted); font-size: var(--t-meta); }
+.waka-note-read-text { margin: 0; font-size: var(--t-input); line-height: 1.45; overflow-wrap: anywhere; }
+.waka-note-read-quiet { margin: 0; color: var(--muted); font-size: var(--t-ui); }
+.waka-note-read-fix { width: 100%; min-height: var(--sp-64); box-sizing: border-box; padding: var(--sp-8); border: 1px solid var(--line); border-radius: var(--sp-12); background: none; color: var(--ink); font: inherit; font-size: var(--t-input); }
+.jar-inspiration-composer .waka-note-read-act { flex: none; min-height: var(--sp-44); padding: 0 var(--sp-10); border: 0; background: none; color: var(--muted); font-size: var(--t-ui); }
+.waka-note-retry { margin: var(--sp-12) 0 0; padding-left: var(--sp-14); color: var(--muted); font-size: var(--t-meta); line-height: 1.5; }
 }

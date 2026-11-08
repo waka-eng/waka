@@ -29,14 +29,15 @@
  * still renders for a draft that was restored carrying one, so nothing a
  * person already typed is stranded by a button going away.
  */
-import { useEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react';
 import { DialogSurface } from './DialogSurface';
+import { Companion } from './Companion';
 import { HomeActionIcon } from './HomeActionIcon';
 import { NotePage } from './NotePage';
 import { AuthoredSaveNotice } from './AuthoredSaveNotice';
 import {inspirationWithPendingLink} from '../lib/inspiration-input';
 import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
-import { fileSizeWords } from '../lib/api/file-accept';
+import { FILE_ACCEPT, fileSizeWords } from '../lib/api/file-accept';
 import { formatMessage, isMessageKey, t, type SupportedLocale } from '../lib/locales';
 import { attachmentLabel } from '../lib/attachment-label';
 import { useDockMenu } from '../lib/use-dock-menu';
@@ -228,6 +229,73 @@ function MediaPreview({ item, recording = false, label }: { item: InspirationDra
   if (item.type === 'audio' && url) return <audio ref={audio} controls={!recording} src={url} preload="metadata" aria-label={label ?? item.name} />;
   return null;
 }
+/**
+ * ═══ SEAM: "THE WORDS I READ" (design E3, E3′) ══════════════════════════════
+ *
+ * The text the server reads off a screenshot, shown quoted under it with a
+ * Fix, so a person can see it understood. The API that reads it is being
+ * built elsewhere; this is the shape the notepad takes it in, and nothing is
+ * drawn while it is absent.
+ *
+ *   reading     — the words are being read; a quiet line says so.
+ *   ready       — `text` is quoted under the picture, with Fix.
+ *   unreadable  — the creature asks which line stuck, the picture softens,
+ *                 and a line says it will try again and the save is safe.
+ *
+ * It belongs to the photo the page is showing large (`hero`); `Home` hands it
+ * in as `readWords` for that attachment's id.
+ */
+export interface ReadWords { status: 'reading' | 'ready' | 'unreadable'; text?: string }
+
+/** The creature, small, beside what it says. ALWAYS THE APP'S OWN
+    CHARACTER (founder: "all characters should be this app's real
+    character") — `Companion`, the grain-textured rest pose the login page
+    draws — never a figure drawn in CSS. */
+function CreatureLine({ children }: { children: ReactNode }) {
+  return <div className="waka-note-line">
+    <span className="waka-note-creature" aria-hidden="true"><Companion size={32} label="" /></span>
+    <p className="waka-note-says">{children}</p>
+  </div>;
+}
+
+/** The picture the note is about, as large as the page allows. */
+function HeroPhoto({ item, name, blurred, removeLabel, disabled, onRemove }: {
+  item: InspirationDraftMedia; name: string; blurred: boolean; removeLabel: string; disabled: boolean; onRemove: () => void;
+}) {
+  const [url, setUrl] = useState('');
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!item.blob) return;
+    const value = URL.createObjectURL(item.blob); setUrl(value); setFailed(false);
+    return () => URL.revokeObjectURL(value);
+  }, [item.blob]);
+  return <figure className="waka-note-hero" data-blurred={blurred ? '1' : undefined}>
+    {url && !failed ? <img src={url} alt={name} onError={() => setFailed(true)} /> : <span className="waka-note-hero-name">{name}</span>}
+    <button type="button" className="waka-note-hero-x" aria-label={removeLabel} disabled={disabled} onClick={onRemove}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" /></svg>
+    </button>
+  </figure>;
+}
+
+/** The quoted words under the picture, with Fix (design E3). */
+function ReadWordsQuote({ words, locale, onFix, disabled }: { words: ReadWords; locale: SupportedLocale; onFix?: (text: string) => void; disabled: boolean }) {
+  const say = (key: Parameters<typeof t>[1]) => t(locale, key);
+  const [fixing, setFixing] = useState<string | null>(null);
+  if (words.status === 'unreadable') return <p className="waka-note-retry">{say('worldReadWordsRetry')}</p>;
+  return <div className="waka-note-read">
+    <div className="waka-note-read-body">
+      <p className="waka-note-read-label">{say('worldReadWordsLabel')}</p>
+      {words.status === 'reading' ? <p className="waka-note-read-quiet" role="status">{say('worldReadWordsReading')}</p>
+        : fixing !== null ? <textarea className="waka-note-read-fix" aria-label={say('worldReadWordsLabel')} value={fixing} autoFocus
+            onChange={event => setFixing(event.target.value)} />
+        : <p className="waka-note-read-text">“{words.text}”</p>}
+    </div>
+    {words.status === 'ready' && onFix ? (fixing === null
+      ? <button type="button" className="waka-note-read-act" disabled={disabled} onClick={() => setFixing(words.text ?? '')}>{say('worldReadWordsFix')}</button>
+      : <button type="button" className="waka-note-read-act" disabled={disabled || !fixing.trim()} onClick={() => { onFix(fixing.trim()); setFixing(null); }}>{say('worldReadWordsFixDone')}</button>) : null}
+  </div>;
+}
+
 export function InspirationComposer(props: {
   owner?: string;
   noticeInDock?: boolean;
@@ -266,6 +334,20 @@ export function InspirationComposer(props: {
       words: those are said in the reader's language, and Korean never
       contained "another tab". */
   draftConflict: boolean;
+  /* ═══ THE NOTE BAR (design E3, Writing, PhotoNote) ═══════════════════════
+     The words get the full width; the mic (left) and Save (right) sit in a
+     slim row under them. `Home` owns the microphone and the save rule, so it
+     hands the three pieces in; this page lays them out. */
+  noteBar?: { mic: ReactNode; save: ReactNode; state: ReactNode };
+  /** A file through the file door (a PDF, a document), beside the photo. */
+  onDocuments?: (files: File[]) => void;
+  /** What the server read off the large photo, when it has said (seam). */
+  readWords?: ReadWords | null;
+  /** Correct those words; absent, Fix is not offered (seam). */
+  onFixReadWords?: (text: string) => void;
+  /** A share that arrived from another app (design F5): the creature asks
+      why, with Add a note / That's all. It still waits for Save. */
+  arrival?: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement>(null), linkInput = useRef<HTMLInputElement>(null);
   const [discarding, setDiscarding] = useState(false), [confirmDiscard, setConfirmDiscard] = useState(false), [discardFailed, setDiscardFailed] = useState(false);
@@ -304,6 +386,16 @@ export function InspirationComposer(props: {
   const actions = useDockMenu(discardUnavailable);
   useEffect(() => { if (!actions.open) { setConfirmDiscard(false); setDiscardFailed(false); } }, [actions.open]);
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
+  const documentInput = useRef<HTMLInputElement>(null), bodyRef = useRef<HTMLDivElement>(null);
+  /* THE HERO: the first picture that can be shown, shown large; anything
+     else (another photo, a recording, a file, one that needs attention)
+     stays on the shelf of tiles under it. */
+  const hero = props.media.find(item => item.type === 'image' && item.blob && !item.validationError && !item.uploadError) ?? null;
+  const shelf = hero ? props.media.filter(item => item !== hero) : props.media;
+  const unreadable = Boolean(hero && props.readWords?.status === 'unreadable');
+  const line = hero
+    ? say(unreadable ? 'worldNoteAskUnreadable' : props.readWords?.status === 'ready' ? 'worldNoteAskLine' : 'worldNoteAskPhoto')
+    : props.arrival ? say('worldShareArrived') : null;
   /* `invalidFiles` AND `empty` WENT WITH THE SAVE BUTTON. Both existed only
      to decide whether that button was there and whether it was pressable;
      the bar asks the same two questions now and asks them of the draft
@@ -400,20 +492,25 @@ export function InspirationComposer(props: {
         </span>
       ) : null
     }>
-    <div className="jar-composer-body">
-    <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={4} value={props.text} readOnly={blocked}
-      aria-label={say('worldCaptureInspiration')} placeholder={say('worldCapturePrompt')}
-      onChange={event => props.onText(event.target.value, event.target.selectionStart ?? event.target.value.length)} onKeyDown={props.onKeyDown}
-      onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.clipboardData.files]); } }} />
-    {/* THE ACCEPTED SET COMES FROM THE RULE, NOT FROM HERE. It was this
-        string, typed out, in the third of four places that had their own
-        copy — and the fourth copy (the memory card's picker in `Home.tsx`)
-        said `image/*`, so one of the product's four pickers offered files
-        the sniffer refuses. See `PHOTO_ACCEPT` for why the list belongs
-        beside `inspectInspirationPhoto` and why the picker is the door
-        rather than the lock. */}
+    <div ref={bodyRef} className="jar-composer-body" data-hero={hero ? '1' : undefined}>
+    {/* ═══ THE PICTURE IS THE POST (design E3) ═══════════════════════════════
+        A screenshot or photo stands large with the creature's question over
+        it; the note under it is optional. A share from another app (F5) is
+        asked about the same way. */}
+    {line ? <CreatureLine>{line}</CreatureLine> : null}
+    {props.arrival && !hero ? <div className="waka-note-arrival">
+      <button type="button" className="waka-note-arrival-act" onClick={() => bodyRef.current?.querySelector<HTMLTextAreaElement>('.jar-composer-text')?.focus()}>{say('worldShareAddNote')}</button>
+      <button type="button" className="waka-note-arrival-act" disabled={blocked} onClick={submit}>{say('worldShareThatsAll')}</button>
+    </div> : null}
+    {hero ? <HeroPhoto item={hero} name={attachmentLabel(props.locale, hero.type, hero.name)} blurred={unreadable} disabled={blocked}
+      removeLabel={formatMessage(props.locale, 'worldComposerRemoveFile', { name: attachmentLabel(props.locale, hero.type, hero.name) })}
+      onRemove={() => props.onRemove(hero.id)} /> : null}
+    {hero && props.readWords ? <ReadWordsQuote words={props.readWords} locale={props.locale} onFix={props.onFixReadWords} disabled={blocked} /> : null}
     <input ref={fileInput} type="file" accept={PHOTO_ACCEPT} multiple hidden onChange={event => {
       const files = [...event.target.files ?? []]; if (files.length) props.onFiles(files); event.target.value = '';
+    }} />
+    <input ref={documentInput} type="file" accept={FILE_ACCEPT} multiple hidden onChange={event => {
+      const files = [...event.target.files ?? []]; if (files.length) props.onDocuments?.(files); event.target.value = '';
     }} />
     {props.ready && !props.fileDraftsAvailable ? <p className="jar-composer-storage-note">{say('worldComposerFilesUnavailable')}</p> : null}
     {addingLink ? <div className="jar-composer-link">
@@ -463,8 +560,8 @@ export function InspirationComposer(props: {
         from a `ul` with `list-style: none`, which this one has, so without
         it the group name above would be announced over three loose items
         rather than over a set of three. */}
-    {props.media.length ? <ul className="jar-shelf" role="list"
-      aria-label={say('worldComposerAttachments')}>{props.media.map(item => {
+    {shelf.length ? <ul className="jar-shelf" role="list"
+      aria-label={say('worldComposerAttachments')}>{shelf.map(item => {
       const name = attachmentLabel(props.locale, item.type, item.name);
       return <MediaTile key={item.id} item={item} name={name} disabled={blocked}
         recording={props.recording.phase !== 'idle'}
@@ -514,6 +611,30 @@ export function InspirationComposer(props: {
         button cannot live in a status line. It renders only with that
         error, so it is absent from every normal note. */}
     {props.draftConflict ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
+    {hero ? <p className="waka-note-hint">{say(unreadable ? 'worldNoteHintSay' : 'worldNoteHint')}</p> : null}
+    {/* ═══ THE NOTE BAR: THE WORDS GET THE WHOLE WIDTH ═══════════════════
+        One raised pill holding the field across its full width, and under
+        it a slim row — the mic and the attach glyphs on the left, the
+        transient state between, Save on the right. Nothing in it fills. */}
+    <div className="waka-note-bar">
+      <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={hero ? 1 : 4} value={props.text} readOnly={blocked}
+        aria-label={say('worldCaptureInspiration')}
+        placeholder={hero ? say(unreadable ? 'worldNotePlaceholderLine' : 'worldNotePlaceholder') : say('worldCapturePrompt')}
+        onChange={event => props.onText(event.target.value, event.target.selectionStart ?? event.target.value.length)} onKeyDown={props.onKeyDown}
+        onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.clipboardData.files]); } }} />
+      {props.noteBar ? <div className="waka-note-bar-row">
+        <span className="waka-note-bar-tools">
+          {props.noteBar.mic}
+          {/* PHOTO AND FILE SIT ON THE BAR, NO ＋ MENU (founder, 2026-11-05). */}
+          <button type="button" className="waka-dock-tool" aria-label={say('worldAddPhoto')} disabled={blocked}
+            onClick={() => fileInput.current?.click()}><HomeActionIcon kind="photo" /></button>
+          {props.onDocuments ? <button type="button" className="waka-dock-tool" aria-label={say('worldAddFile')} disabled={blocked}
+            onClick={() => documentInput.current?.click()}><HomeActionIcon kind="file" /></button> : null}
+        </span>
+        <span className="waka-note-bar-state">{props.noteBar.state}</span>
+        {props.noteBar.save}
+      </div> : null}
+    </div>
     </div>
     </NotePage>
     {/* THE PILL IN THE BOTTOM-LEFT CORNER IS GONE, AND SO IS THE CORNER.

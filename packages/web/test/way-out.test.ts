@@ -477,7 +477,7 @@ describe("every surface has a way out you can see", () => {
     // the home bar stands instead (design E1, `HomeBar`); the lists and
     // Principles leave by the labelled Back, which is visible on all three.
     expect(code(home)).toContain("atNowView && !reviewing && !savedNoteOpen");
-    expect(code(home)).toContain("visible={savedNoteOpen || making === 'talk' || listing || principlesOpen}");
+    expect(code(home)).toContain("visible={savedNoteOpen || making !== null || listing || principlesOpen}");
     expect(code(home)).toContain("making === 'inspiration' ? [{ id: 'inspiration'");
     expect(code(home)).toContain("making === 'talk' ? [{ id: 'talk'");
 

@@ -89,7 +89,7 @@ import { useSettingsWrites } from '../lib/use-settings-writes';
 import { DraftProblem, draftProblem, forkDraftAndClear } from '../lib/draft-problem';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
 import { ArchiveRecorderFallback, useArchiveClips } from '../lib/archive-recorder';
-import { InspirationComposer } from '../components/InspirationComposer';
+import { InspirationComposer, type ReadWords } from '../components/InspirationComposer';
 import { attachmentLabel } from '../lib/attachment-label';
 import { Menu } from '../components/Menu';
 import { usePageMenu } from '../lib/page-menu';
@@ -127,7 +127,6 @@ import { deriveAgentChrome } from "../space-kinds/agent";
 import { buildPalette, type Palette } from "../canvas/palette";
 import { SavesOverlay } from "../components/SavesOverlay";
 import { DOCK_SLOT } from "../components/NoteTools";
-import { AddMenu } from "../components/AddMenu";
 import { inspectAttachmentFile, FileRefused } from "../lib/api/file-accept";
 import { deleteAccount } from "../lib/api/auth";
 import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
@@ -184,7 +183,7 @@ import {
   type Ball,
   type BornSeed,
 } from "../space/inspiration/orb";
-import { showsDebug } from "../lib/dev-build";
+import { inventedDataAllowed, showsDebug } from "../lib/dev-build";
 import type { AgentBundle } from "../lib/agent-contract";
 /* THE ONLY TWO IMPORTS IN THE PRODUCT THAT REACH INVENTED DATA, and they are
    deliberately on their own lines so that a grep for `lib/fixture` over `src/`
@@ -5215,9 +5214,29 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const next = before ? `${before}\n\n${text}` : text;
     draftRef.current = next; setDraft(next);
     closeAfterSave.current = payload.via === 'bookmarklet' && Boolean(window.opener);
+    /* F5: the creature asks why — Add a note / That's all — in the notepad,
+       where it still waits for Save (any page can open /share). */
+    setShareArrived(true);
     startNewInspiration();
   }, [phase, memoryScope, composerDraft.ready, setDraft, startNewInspiration]);
 
+  const [shareArrived, setShareArrived] = useState(false);
+  useEffect(() => { if (!mouthOpen) setShareArrived(false); }, [mouthOpen]);
+  /* SEAM: "THE WORDS I READ" (design E3). Returns what the server read off
+     the photo the notepad shows large, as `{ status: 'reading' | 'ready' |
+     'unreadable', text? }`, or null when nothing has been said — and null
+     draws nothing. The reading API is another branch's work; when it lands,
+     look the hero (`media.find(item => item.type === 'image')`) up by id in
+     whatever it returns and answer here. */
+  const readWordsFor = (media: readonly InspirationDraftMedia[]): ReadWords | null => {
+    void media;
+    /* DEV ONLY, FOR LOOKING AT THE STATES: with no API behind the seam yet,
+       a dev build lets `window.wakaReadWordsPreview` stand in, so the three
+       states can be seen and reviewed. `inventedDataAllowed()` is false in
+       every production build, so a real notepad never reads it. */
+    if (inventedDataAllowed()) return (window as { wakaReadWordsPreview?: ReadWords }).wakaReadWordsPreview ?? null;
+    return null;
+  };
   /** The way out that keeps the words: the page folds, the draft stays. */
   const saveAsDraft = useCallback(() => {
     if (preparingInspirationRef.current) {
@@ -7652,6 +7671,101 @@ const RETRY_READ_LIMIT_MS = 20_000;
     void fetchPrinciples({ profile: memoryProfileId }).then(rows => { if (live) acceptPrinciples(rows); }).catch(() => undefined);
     return () => { live = false; };
   }, [streamShown, principlesRead, offline, memoryProfileId, acceptPrinciples]);
+  /* ═══ THE NOTE BAR'S PARTS (design E3, Writing, PhotoNote) ═══════════════
+     They stood in the dock's middle group; the notepad draws them now, in a
+     slim row UNDER its words so the words get the whole width — mic on the
+     left, Save on the right. TAP the mic to start and TAP "Done" to stop:
+     never held (holding is unusable while walking or retelling a talk). The
+     state line rides between them. */
+  const noteBarMic = (<>
+                {dictationAvailable() ? (
+                  dictation.listening ? (
+                    /* ═══ STOP IS WHERE THE MICROPHONE WAS (audit f2afcbe2) ══
+                       This was a wide word, "Stop", and the bar is centred:
+                       the wider button and the disclosure line beside it
+                       re-laid the whole bar, so Stop landed ~110px left of
+                       where the microphone had been (675 → 561 at 1440) and
+                       a second press on the same spot hit ＋. Now the SAME
+                       button stays in the SAME slot at the SAME size, lit
+                       and breathing while it listens (`--live`), and the
+                       press that started it is the press that ends it. */
+                    <button type="button" className="waka-dock-tool waka-dock-tool--live"
+                      aria-pressed="true"
+                      onClick={() => dictation.stop()}>{say('worldComposerDictateStop')}</button>
+                  ) : (
+                    <button type="button" className="waka-dock-tool"
+                      aria-label={say('worldComposerDictate')}
+                      disabled={!composerDraft.available}
+                      /* THE PRESS CLEARS THE ANSWER TO THE LAST ACT, which
+                         is what every other act on this page does —
+                         typing, opening the notepad and saving all call
+                         `setMouthNote('')`. It matters more here than
+                         anywhere else: the line it clears would otherwise
+                         outrank the cloud disclosure (see `composerState`),
+                         so a stale complaint about a file was enough to
+                         open the microphone with nothing said about where
+                         the audio goes. Nothing true is lost — the marked
+                         file is still marked on screen, and the next press
+                         of Save says so again. */
+                      onClick={() => { setMouthNote(''); dictation.start(); }}><HomeActionIcon kind="record"/></button>
+                  )
+                ) : supportedRecordingType() ? (
+                  recording.phase === 'idle' ? (
+                    <button type="button" className="waka-dock-tool"
+                      aria-label={say(inputMedia.some(m => m.type === 'audio') ? 'worldComposerRecordAgain' : 'worldComposerRecord')}
+                      disabled={!composerDraft.available || notepadRecordBlocked}
+                      onClick={startNotepadRecording}><HomeActionIcon kind="record"/></button>
+                  ) : (
+                    /* STOP KEEPS IT, CANCEL THROWS IT AWAY — both, because a
+                       recording you can start and stop but not discard is
+                       worse than one you cannot start. Stop stands in the
+                       microphone's own slot for the reason dictation's does
+                       (above); the clock — words, because a red dot cannot
+                       say how long you have been talking — rides in the
+                       state line. CANCEL IS ITS OWN ITEM BESIDE STOP, as on
+                       dev (review): inside the state line it was ellipsized
+                       with it and its press clipped to ~17px on a phone. */
+                    <>
+                      <button type="button" className="waka-dock-tool waka-dock-tool--live"
+                        disabled={recording.phase === 'finishing'}
+                        onClick={() => void recording.stop()}>{say('worldComposerDictateStop')}</button>
+                      <button type="button" className="waka-dock-item waka-dock-cancel"
+                        disabled={recording.phase === 'finishing'}
+                        onClick={() => void recording.cancel()}>{say('worldComposerCancelRecording')}</button>
+                    </>
+                  )
+                ) : null}
+  </>);
+  /* SAVE IS A WORD, AND IT NEVER FILLS (founder, 2026-11-05): full ink when
+     there is something to keep, dim when there is not. It says why it cannot
+     be pressed, as the chat's Send does. */
+  const noteBarSave = (
+    <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save"
+      aria-label={say('worldSaveInspiration')}
+      title={whyNotKeeping ? say(whyNotKeeping) : undefined}
+      disabled={!composerCanKeep}
+      onClick={() => { void keepIt(); }}>{say('worldSave')}</button>
+  );
+  const noteBarState = (<>
+                {dictation.listening || recording.phase !== 'idle' ? (
+                  /* THE CLOCK IS NOT A LIVE REGION (review): inside
+                     `role="status"` a screen reader re-announced it every
+                     second. The disclosure and a one-word "Recording" are
+                     the live part; the clock is for eyes and is hidden. */
+                  <span className="waka-dock-state">
+                    {/* Shown for eyes; said by `LiveWord`, which mounts empty
+                        and fills a beat later so the words are announced. */}
+                    {composerState ? <span aria-hidden="true">{composerState}</span> : null}
+                    {/* ONE "Recording" AT A TIME (review): the composer foot says it
+                        while the mouth is closed (`!mouthOpen`), so the bar says it
+                        only while the mouth is open — never both regions at once. */}
+                    <LiveWord text={composerState || (recording.phase !== 'idle' && mouthOpen ? say('worldComposerRecordingNow') : '')} />
+                    {recording.phase !== 'idle' ? <span aria-hidden="true">{clockWords(recording.seconds)}</span> : null}
+                  </span>
+                ) : inspirationSave.phase !== 'idle' ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : composerState ? (
+                  <span className="waka-dock-state" role="status">{composerState}</span>
+                ) : null}
+  </>);
   const backgroundHidden = Boolean(viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose || walkingHome);
   return (
     <div
@@ -10203,6 +10317,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
           save={inspirationSave} recording={recording} inputRef={mouthFieldRef}
           onText={(text, caret) => { mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
           onFiles={files => { void addInspirationFiles(files); }}
+          onDocuments={files => { void addInspirationFiles(files, 'file'); }}
+          noteBar={{ mic: noteBarMic, save: noteBarSave, state: noteBarState }}
+          /* SEAM (design E3): what the server read off the large photo. The
+             reading API is being built separately; until it lands nothing
+             answers, so the quote is not drawn. Wire it here — keyed by the
+             hero attachment's id — and `InspirationComposer` does the rest. */
+          readWords={readWordsFor(inputMedia)}
+          arrival={shareArrived}
           onRetryFile={id => { void retryDraftFile(id); }}
           onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
@@ -11413,9 +11535,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
           Home tab; the tabs are gone (design E1), so the labelled Back in
           the corner is what returns from it, as it does from the lists. */}
       {phase === 'ready' && (listing || making || principlesOpen) && !viewNavigation.view?.sharePrinciple ? <PageBack
-        navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making === 'talk' || listing || principlesOpen}
+        navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making !== null || listing || principlesOpen}
         belowCorners={(listing || principlesOpen) && !savedNoteOpen}
-        label={say(savedNoteOpen ? 'worldBackToAll' : making === 'talk' ? 'worldAllChats' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
+        /* THE NOTEPAD'S WAY OUT IS THE LABELLED CLOSE IN THE CORNER (design
+           E3): its bar is the note bar now — the words, the mic, Save — so
+           leaving (the draft kept) moved up beside the date. */
+        label={say(savedNoteOpen ? 'worldBackToAll' : making === 'talk' ? 'worldAllChats' : making === 'inspiration' ? 'worldClose' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
       {streamShown ? (
         <HomeStream locale={locale} inspirations={inspirations ?? []} signals={streamSignals(signals)} principles={principles}
           onClose={() => setStreamOpen(false)}
@@ -11442,7 +11567,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           saved={barSaved}
           pull={standingAsAgent || streamShown ? undefined : { onOpen: () => setStreamOpen(true) }}
         />
-            ) : phase==='ready'&&(making||reviewing||savedNoteOpen)&&!viewNavigation.view?.sharePrinciple ? (
+            ) : phase==='ready'&&(making==='talk'||reviewing||savedNoteOpen)&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
             ...(reviewing && !making ? [{ id: 'review', label: 'worldReviewExit' as const, here: false,
@@ -11553,223 +11678,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
             {item.id === 'return' && viewNavigation.view?.open === 'saves' && savedNoteOpen ? (
               <span className="waka-dock-making" role="group" id={DOCK_SLOT}
                 aria-label={say('worldCaptureInspiration')} />
-            ) : item.id === 'inspiration' && viewNavigation.view?.compose ? (
-              <span className="waka-dock-making" role="group" aria-label={say('worldCaptureInspiration')}>
-                {/* ═══ THE MICROPHONE SPEAKS INTO THE NOTE WHERE IT CAN ════
-                    Founder: "is it not possible to do speech to text
-                    easily, or is audio the only easy way to record?"
-
-                    Easily, and it is the better default — `use-dictation.ts`
-                    carries the reasoning, which comes down to this: a
-                    spoken thought that lands as TEXT feeds the top of mind,
-                    shows as a lead line in the archive and can be searched;
-                    the same thought as a file does none of those things.
-
-                    RECORDING IS NOT GONE AND IS NOT HIDDEN. Where the
-                    browser cannot transcribe — Firefox — this slot is the
-                    recorder, with no mention anywhere of a feature that
-                    does not exist here. Where it can, the recorder is still
-                    the right tool when the SOUND is the point (a melody,
-                    somebody else talking) and it is one press away behind
-                    the camera's own menu rather than a second glyph in a
-                    slot that holds three things already. That is a trade
-                    and it is the founder's to revisit; what is not a trade
-                    is which one the bare microphone should do. */}
-                {dictationAvailable() ? (
-                  dictation.listening ? (
-                    /* ═══ STOP IS WHERE THE MICROPHONE WAS (audit f2afcbe2) ══
-                       This was a wide word, "Stop", and the bar is centred:
-                       the wider button and the disclosure line beside it
-                       re-laid the whole bar, so Stop landed ~110px left of
-                       where the microphone had been (675 → 561 at 1440) and
-                       a second press on the same spot hit ＋. Now the SAME
-                       button stays in the SAME slot at the SAME size, lit
-                       and breathing while it listens (`--live`), and the
-                       press that started it is the press that ends it. */
-                    <button type="button" className="waka-dock-tool waka-dock-tool--live"
-                      aria-pressed="true" aria-label={say('worldComposerDictateStop')}
-                      onClick={() => dictation.stop()}><HomeActionIcon kind="record"/></button>
-                  ) : (
-                    <button type="button" className="waka-dock-tool"
-                      aria-label={say('worldComposerDictate')}
-                      disabled={!composerDraft.available}
-                      /* THE PRESS CLEARS THE ANSWER TO THE LAST ACT, which
-                         is what every other act on this page does —
-                         typing, opening the notepad and saving all call
-                         `setMouthNote('')`. It matters more here than
-                         anywhere else: the line it clears would otherwise
-                         outrank the cloud disclosure (see `composerState`),
-                         so a stale complaint about a file was enough to
-                         open the microphone with nothing said about where
-                         the audio goes. Nothing true is lost — the marked
-                         file is still marked on screen, and the next press
-                         of Save says so again. */
-                      onClick={() => { setMouthNote(''); dictation.start(); }}><HomeActionIcon kind="record"/></button>
-                  )
-                ) : supportedRecordingType() ? (
-                  recording.phase === 'idle' ? (
-                    <button type="button" className="waka-dock-tool"
-                      aria-label={say(inputMedia.some(m => m.type === 'audio') ? 'worldComposerRecordAgain' : 'worldComposerRecord')}
-                      disabled={!composerDraft.available || notepadRecordBlocked}
-                      onClick={startNotepadRecording}><HomeActionIcon kind="record"/></button>
-                  ) : (
-                    /* STOP KEEPS IT, CANCEL THROWS IT AWAY — both, because a
-                       recording you can start and stop but not discard is
-                       worse than one you cannot start. Stop stands in the
-                       microphone's own slot for the reason dictation's does
-                       (above); the clock — words, because a red dot cannot
-                       say how long you have been talking — rides in the
-                       state line. CANCEL IS ITS OWN ITEM BESIDE STOP, as on
-                       dev (review): inside the state line it was ellipsized
-                       with it and its press clipped to ~17px on a phone. */
-                    <>
-                      <button type="button" className="waka-dock-tool waka-dock-tool--live"
-                        aria-label={say('worldComposerStop')}
-                        disabled={recording.phase === 'finishing'}
-                        onClick={() => void recording.stop()}><HomeActionIcon kind="stop"/></button>
-                      <button type="button" className="waka-dock-item waka-dock-cancel"
-                        disabled={recording.phase === 'finishing'}
-                        onClick={() => void recording.cancel()}>{say('worldComposerCancelRecording')}</button>
-                    </>
-                  )
-                ) : null}
-                {/* ═══ THE PHOTO BECAME ＋ (2026-10-16) ═════════════════════
-                    Founder: "the bar's PHOTO icon becomes ＋. Pressing ＋
-                    opens a small pop-up menu with two rows: 'Add photo' and
-                    'Add file'." So the row reads All inspirations │ dictate ·
-                    ＋ · save │ Close, and a note can carry a PDF as readily
-                    as a picture.
-
-                    THE PHOTO ROW IS THE OLD BUTTON, UNCHANGED BEHIND IT:
-                    `PHOTO_ACCEPT` at the chooser and `addInspirationFiles`
-                    sniffing every file — as do the drop and the paste
-                    handlers on the note, which never pass a chooser and so
-                    never see an `accept` at all. The file row goes through
-                    the same function by the 'file' door, where
-                    `inspectAttachmentFile` is the lock instead. Both pickers
-                    and their `accept` live in `AddMenu`, quoted from the
-                    rules (`one-photo-accept-list.test.ts`). */}
-                <AddMenu buttonClassName="waka-dock-tool" multiple
-                  label={say('worldAddMenu')} photoLabel={say('worldAddPhoto')} fileLabel={say('worldAddFile')}
-                  disabled={!composerDraft.available || recording.phase !== 'idle'}
-                  onPhotos={files => { void addInspirationFiles(files); }}
-                  onFiles={files => { void addInspirationFiles(files, 'file'); }} />
-
-                {/* ═══ KEEPING IT IS A BAR ACTION NOW ═══════════════════════
-                    Founder, with the pale pill in the bottom-right corner of
-                    the note: "the save button is very hard to see. Maybe the
-                    save button should be in the bottom bar as well. And then
-                    it should have save or save as draft."
-
-                    IT WAS HARD TO SEE BECAUSE IT WAS NOWHERE. A lone control
-                    floating in the corner of an otherwise empty page has no
-                    neighbour to be read against and no object to belong to —
-                    and this product now has exactly one object at the bottom
-                    of every screen. Putting it in the bar is not a relocation
-                    for tidiness; it is the control finally having a place.
-
-                    AND THE TWO ENDINGS SIT TOGETHER, which is the half the
-                    founder asked for and the half that was genuinely missing.
-                    Leaving a half-written note already kept it — `saveAsDraft`
-                    is what Now and the chevron both call — but nothing on
-                    screen ever said so, so the only visible way out of a note
-                    you were not finished with was a button that finished it.
-                    Named side by side, the choice is a choice.
-
-                    ONLY ONCE THERE IS SOMETHING TO KEEP, which is the note
-                    the floating button already carried: "an always-present
-                    Save on a blank page is a button for a thing that does not
-                    exist." A blank note still leaves by the chevron or by
-                    Now. */}
-                {/* ═══ OVERRULED: IT IS ALWAYS THERE, AND DIM UNTIL IT IS NOT ═
-                    Founder: "when the user didn't make any change, then make
-                    it lower opacity, like basically disable it. And then once
-                    the user starts having changes, then make it clickable and
-                    then clicking it would save it."
-
-                    THE ARGUMENT ABOVE WAS GOOD AND IS STILL WRONG. "An
-                    always-present Save on a blank page is a button for a
-                    thing that does not exist" is true about the OBJECT and
-                    false about the PERSON, and the person is who has to find
-                    it. A control that appears is a control you have to
-                    discover twice: once to learn it exists, and again to
-                    learn what summons it — and the thing that summons this
-                    one is typing, which is the act you are already doing and
-                    therefore not looking at the bar during. A control that
-                    DIMS is learned once. It is in the same place before and
-                    after, so the only thing left to notice is that it got
-                    brighter, and brightness is the one channel this product
-                    uses for meaning anyway.
-
-                    It also makes the blank page honest about what it is FOR.
-                    The notepad with nothing on it now shows mic, photo and a
-                    dim Save: three things you could do and one of them not
-                    yet. Before, it showed two, and the page gave no sign that
-                    keeping was even among the endings.
-
-                    NOTHING ELSE MOVES. `composerCanKeep` already folds
-                    `composerHasWords` in, so the empty note lands on exactly
-                    the disabled state every other blocked reason produces
-                    rather than a fourth appearance of its own — and
-                    `whyNotKept` deliberately returns `null` for an empty
-                    note, so the tooltip stays silent instead of complaining
-                    that you have not written anything yet. Dim is the whole
-                    message. See `.waka-dock-tool--keep:disabled` for why that
-                    dim is an opacity and never an outline. */}
-                {/* A labeled Save is the primary action; archive navigation stays
-                    on home so it cannot be mistaken for finishing this draft. */}
-                <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save"
-                  aria-label={say('worldSaveInspiration')}
-                  /* AND IT SAYS WHY IT CANNOT BE PRESSED, the same way the
-                     chat's Send does and for the reason written there: the
-                     reason belongs to the control, and is wanted only by
-                     somebody who has just tried. */
-                  title={whyNotKeeping ? say(whyNotKeeping) : undefined}
-                  disabled={!composerCanKeep}
-                  onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep"/><span>{say('worldSave')}</span></button>
-
-                {/* ═══ AND THE TRANSIENT STATE, IN THE BAR AND NOWHERE ELSE ══
-                    Founder, with "Recording canceled." printed across the
-                    middle of an empty note: "states should show and disappear
-                    in the bottom bar only."
-
-                    The rule is sharper than the instance. A sentence that
-                    arrives and leaves on its own is the one kind of text that
-                    must not be in the page's flow: it pushes whatever is
-                    under it, it appears in the part of the screen somebody is
-                    reading or writing in, and when it goes it leaves a hole
-                    the eye has to re-find its place in. The bar is where
-                    transient things belong because the bar is already the
-                    thing that changes — it has a slot that transforms, it is
-                    out of the way of the words, and it is the same place on
-                    every screen.
-
-                    `role="status"` so it is still announced; it is the
-                    position that changed, not whether it is said. */}
-                {/* WHILE THE MICROPHONE IS OPEN the state line stays in the
-                    bar's row, as on dev. A caption lifted off the bar (so the
-                    row never widens and the disclosure is never cut at 14rem)
-                    was tried and set aside for its own change — see
-                    docs/known-issues.md. */}
-                {dictation.listening || recording.phase !== 'idle' ? (
-                  /* THE CLOCK IS NOT A LIVE REGION (review): inside
-                     `role="status"` a screen reader re-announced it every
-                     second. The disclosure and a one-word "Recording" are
-                     the live part; the clock is for eyes and is hidden. */
-                  <span className="waka-dock-state">
-                    {/* Shown for eyes; said by `LiveWord`, which mounts empty
-                        and fills a beat later so the words are announced. */}
-                    {composerState ? <span aria-hidden="true">{composerState}</span> : null}
-                    {/* ONE "Recording" AT A TIME (review): the composer foot says it
-                        while the mouth is closed (`!mouthOpen`), so the bar says it
-                        only while the mouth is open — never both regions at once. */}
-                    <LiveWord text={composerState || (recording.phase !== 'idle' && mouthOpen ? say('worldComposerRecordingNow') : '')} />
-                    {recording.phase !== 'idle' ? <span aria-hidden="true">{clockWords(recording.seconds)}</span> : null}
-                  </span>
-                ) : inspirationSave.phase !== 'idle' ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : composerState ? (
-                  <span className="waka-dock-state" role="status">{composerState}</span>
-                ) : null}
-              </span>
             ) : item.id === 'talk' && making === 'talk' ? (
               /* ═══ AND A CHAT'S TOOLS COME INTO THE BAR TOO (2026-10-16) ═══
                  Founder: "bar becomes All chats │ dictate · ＋ │ Close. The

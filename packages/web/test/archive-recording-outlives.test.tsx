@@ -320,7 +320,7 @@ it("does not let the notepad record while the archive's recording is still finis
   expect(archiveOpen()).toBe(false);
   await pressDockRow(world.container, "New inspiration");
   await settle();
-  const notepadRecord = () => q<HTMLButtonElement>('.waka-dock .waka-dock-tool[aria-label="Record"]');
+  const notepadRecord = () => q<HTMLButtonElement>('.waka-note-bar .waka-dock-tool[aria-label="Record"]');
   expect(notepadRecord(), "the notepad under the archive is not on screen").toBeTruthy();
   expect(notepadRecord()!.disabled, "the notepad's Record was offered over a live microphone").toBe(true);
   /* a press that reaches it anyway starts nothing */

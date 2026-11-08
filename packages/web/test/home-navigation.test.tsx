@@ -857,7 +857,10 @@ it('does not walk to Principles on → while a field has the key', async () => {
 /* CLOSE IS THE MAKING PAGE'S WAY HOME (2026-10-15): "have Close button and
    then clicking close brings the user back to the main screen." Not the lit
    row any more — a new note lights nothing; the lit row is a LIST's. */
-const close = () => world.container.querySelector<HTMLButtonElement>('.waka-dock button.waka-dock-item--close');
+/* A chat's Close is its bar's last row; the notepad's is the labelled Close
+   in the corner, since its bar became the note bar (design E3). */
+const close = () => world.container.querySelector<HTMLButtonElement>('.waka-dock button.waka-dock-item--close')
+  ?? [...world.container.querySelectorAll<HTMLButtonElement>('button.waka-page-back')].find(node => node.textContent?.trim() === 'Close') ?? null;
 
 it('makes a new note from Inspiration, and its Close goes home with the draft kept', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
@@ -1010,11 +1013,20 @@ it('gives a new note a labeled Save and separate Close, without archive navigati
   try {
     world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
     await act(async () => row('Write').click()); await settle();
-    const shape = barShape(world.container);
-    expect(shape).toEqual(['Speak', 'Add photo or file', 'Save', '│', 'Close']);
+    /* THE NOTE BAR (design E3): the words across the full width, and under
+       them the mic, Add photo and Add file on the left and Save on the right.
+       The way out is the labelled Close in the corner, apart from Save. */
+    const bar = world.container.querySelector('.waka-note-bar')!;
+    expect(bar, 'the notepad has no note bar').toBeTruthy();
+    expect(bar.firstElementChild?.matches('textarea.jar-composer-text'), 'the words are not first, across the bar').toBe(true);
+    const presses = [...bar.querySelectorAll<HTMLButtonElement>('.waka-note-bar-row button')].map(node => node.getAttribute('aria-label') ?? node.textContent?.trim());
+    expect(presses).toEqual(['Speak', 'Add photo', 'Add file', 'Save inspiration']);
     expect(row('All inspirations')).toBeUndefined();
+    expect(close()?.textContent?.trim(), 'the notepad has no Close apart from Save').toBe('Close');
+    expect(world.container.querySelector('nav.waka-dock'), 'a dock stands under the note bar').toBeNull();
     const save = world.container.querySelector<HTMLButtonElement>('.waka-dock-save')!;
     expect(save.textContent).toBe('Save');
+    expect(save.querySelector('svg'), 'Save is a word, not a glyph').toBeNull();
     expect(save.disabled).toBe(true);
     const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
     await act(async () => {
@@ -1023,19 +1035,8 @@ it('gives a new note a labeled Save and separate Close, without archive navigati
     });
     await settle();
     expect(save.disabled).toBe(false);
-    const tools = shape.slice(0, 3);
-    /* The tools are the making-slot's, and Save is the disk-drawn keep. */
-    const making = world.container.querySelector('nav.waka-dock .waka-dock-making');
-    expect(making?.querySelector('button.waka-dock-tool--keep [data-home-action-icon="keep"]'), 'Save lost its keep icon').toBeTruthy();
-    /* A disk, not a download ("instead of download have a save icon"): the
-       disk's label is the one closed shape the tray-and-arrow never had. */
-    expect(making?.querySelector('button.waka-dock-tool--keep [data-home-action-icon="keep"] rect'), 'Save is drawn as a download again').toBeTruthy();
-    expect(making?.querySelectorAll('button.waka-dock-tool').length, 'a tool in the middle is not a dock tool').toBe(tools.length);
-    expect(making?.querySelector('button.waka-dock-tool [data-home-action-icon="record"]'), 'the mic is not drawn as one').toBeTruthy();
-    expect(making?.querySelector('button.waka-dock-tool[aria-haspopup="menu"] [data-home-action-icon="plus"]'), 'the ＋ is not drawn as one, or opens no menu').toBeTruthy();
-    expect(making?.querySelector('[data-home-action-icon="photo"]'), 'the photo glyph is back in the bar').toBeNull();
-    expect(shape, 'Chat is still in the bar while a note is being written').not.toContain('New chat');
-    expect(shape, 'the bar still says Inspiration on a new note').not.toContain('New inspiration');
+    expect(bar.querySelector('button.waka-dock-tool [data-home-action-icon="record"]'), 'the mic is not drawn as one').toBeTruthy();
+    expect(bar.querySelector('button[aria-haspopup="menu"]'), 'a ＋ menu is back on the note bar').toBeNull();
   } finally {
     delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
   }

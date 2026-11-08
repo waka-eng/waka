@@ -205,7 +205,7 @@ it('releases the microphone when the notepad closes', async () => {
 
   /* "NOW" IS THE WAY OUT OF THE NOTEPAD — the bar's first row, which keeps
      the words (`saveAsDraft`) and takes the page down. */
-  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock-item')][0]!.click());
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-page-back')!.click());
   await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad is still open').toBeFalsy();
   expect(live.started, 'the engine is still transcribing into a page nobody is looking at').toBe(false);
