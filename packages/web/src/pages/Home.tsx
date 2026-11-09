@@ -5513,7 +5513,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
        the note bar ready to tap. */
   const sayIntoNewNote = () => {
     setMouthNote('');
-    if (!atNow || inField || inSky) { startNewInspiration(); return; }
+    if (!atNow || inField || inSky || !composerDraft.available) { startNewInspiration(); return; }
     simApiRef.current?.toTop();
     if (mouthOpen) mouthFieldRef.current?.focus(); else openMouth();
     if (dictationAvailable()) dictation.start();
@@ -11661,7 +11661,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
             onWrite: startNewInspiration,
             onPhotos: files => { startNewInspiration(); void addInspirationFiles(files); },
             onSay: sayIntoNewNote,
-            canSay: dictationAvailable() || Boolean(supportedRecordingType()),
+            /* The notepad's own mic is dim while its draft store cannot take
+               words (`composerDraft.available`); Say it, which starts that mic,
+               is dim for the same reason (code review, 2026-11-08). */
+            canSay: composerDraft.available && (dictationAvailable() || Boolean(supportedRecordingType())),
             photoDisabled: !composerDraft.available,
           }}
           onChat={() => { listOrigin.current = null; openTalk(null); }}

@@ -340,3 +340,13 @@ it('opens the notepad with the mic ready to tap, and never listens outside the t
   await act(async () => ready!.click());
   expect(engine().started, 'the ready mic did not listen when tapped').toBe(true);
 });
+
+/* Code review, 2026-11-08: the notepad's mic is dim while its draft store
+   cannot take words; the bar's Say it started dictation anyway. */
+it('dims Say it, and starts nothing, where the notepad could not keep the words', async () => {
+  (globalThis as { indexedDB?: IDBFactory }).indexedDB = undefined;
+  world = await mountWorld(FACTS); await settle();
+  expect(sayIt().disabled, 'Say it is offered where the notepad mic is not').toBe(true);
+  await act(async () => sayIt().click());
+  expect(FakeEngine.all, 'the microphone started anyway').toHaveLength(0);
+});
