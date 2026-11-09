@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiError } from './api/http';
-import { correctImageWords, fetchImageWords, type ApiImageWords, type ApiImageWordsSummary } from './api/attachments';
+import { IMAGE_WORDS_STATUSES, correctImageWords, fetchImageWords, type ApiImageWords, type ApiImageWordsSummary } from './api/attachments';
 
 const MAX_POLLS = 30;
 const MAX_POLL_MS = 120_000;
@@ -30,7 +30,7 @@ export type FixOutcome = 'saved' | 'changed' | 'failed';
 
 /** Statuses that will not change by asking: shown as they came. */
 const SETTLED: ReadonlySet<string> = new Set(['ready', 'unknown', 'unreadable']);
-const KNOWN: ReadonlySet<string> = new Set(['reading', 'ready', 'unknown', 'unreadable', 'retrying']);
+const KNOWN: ReadonlySet<string> = new Set(IMAGE_WORDS_STATUSES);
 
 /**
  * WHETHER ASKING AGAIN CAN SHOW ANYTHING NEW (code review, 2026-11-08).

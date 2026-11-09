@@ -17,10 +17,10 @@
 import { useState } from 'react';
 
 import { t, type SupportedLocale } from '../lib/locales';
-import type { ApiImageWordsSummary } from '../lib/api/attachments';
+import type { ApiImageWordsSummary, ImageWordsStatus } from '../lib/api/attachments';
 import { useImageWords, type FixOutcome } from '../lib/use-image-words';
 
-export interface ReadWords { status: 'reading' | 'ready' | 'unreadable' | 'retrying' | 'unknown'; text?: string }
+export interface ReadWords { status: ImageWordsStatus; text?: string }
 
 export function ReadWordsQuote({ words, locale, onFix, disabled, asks = false }: {
   words: ReadWords; locale: SupportedLocale;

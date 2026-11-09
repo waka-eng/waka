@@ -6,7 +6,6 @@ import { attachments, type AttachmentEnrichmentKind, type AttachmentEnrichmentSt
 // correction is the owner's fix of what the machine heard (audio) or read
 // (the words in an image); either way the owner's words replace the machine's.
 export const correctedAttachment = sql<boolean>`(${attachments.type} IN ('audio','image') AND ${attachments.transcriptCorrection} IS NOT NULL)`;
-const corrected = correctedAttachment;
 /* AN IMAGE'S FIX REPLACES ITS WORDS, NOT WHAT IT SHOWS. A stored image
    reading is two parts, "Words: …" and "Image: …" (`describeImage`); the
    owner corrects only the first. So the effective text is their words PLUS
@@ -30,8 +29,8 @@ const imagePart = sql<string>`CASE
     THEN CASE WHEN ${described} = '' THEN '' ELSE chr(10) || 'Image: ' || ${described} END
   ELSE chr(10) || 'Image: ' || trim(${attachments.enrichmentText}) END`;
 export const effectiveAttachmentText = sql<string | null>`CASE
-  WHEN ${corrected} AND ${attachments.type} = 'image' THEN 'Words: ' || ${attachments.transcriptCorrection} || ${imagePart}
-  WHEN ${corrected} THEN ${attachments.transcriptCorrection}
+  WHEN ${correctedAttachment} AND ${attachments.type} = 'image' THEN 'Words: ' || ${attachments.transcriptCorrection} || ${imagePart}
+  WHEN ${correctedAttachment} THEN ${attachments.transcriptCorrection}
   ELSE ${attachments.enrichmentText} END`;
-export const effectiveAttachmentKind = sql<AttachmentEnrichmentKind | null>`CASE WHEN ${corrected} THEN (CASE WHEN ${attachments.type} = 'audio' THEN 'audio_transcription' ELSE 'image_description' END)::attachment_enrichment_kind ELSE ${attachments.enrichmentKind} END`;
-export const effectiveAttachmentStatus = sql<AttachmentEnrichmentStatus | null>`CASE WHEN ${corrected} THEN 'ready'::attachment_enrichment_status ELSE ${attachments.enrichmentStatus} END`;
+export const effectiveAttachmentKind = sql<AttachmentEnrichmentKind | null>`CASE WHEN ${correctedAttachment} THEN (CASE WHEN ${attachments.type} = 'audio' THEN 'audio_transcription' ELSE 'image_description' END)::attachment_enrichment_kind ELSE ${attachments.enrichmentKind} END`;
+export const effectiveAttachmentStatus = sql<AttachmentEnrichmentStatus | null>`CASE WHEN ${correctedAttachment} THEN 'ready'::attachment_enrichment_status ELSE ${attachments.enrichmentStatus} END`;

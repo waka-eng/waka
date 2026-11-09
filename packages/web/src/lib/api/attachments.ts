@@ -62,8 +62,9 @@ export async function retryAttachmentTranscript(id: string, revision: string, si
 /** - unknown:    a reading from before the "Words: / Image:" shape — which
  *               part is words cannot be told, so show nothing (no quote, no
  *               Fix, no "which line stuck?"). */
-export type ImageWordsStatus = 'reading' | 'ready' | 'unreadable' | 'retrying' | 'unknown';
-const IMAGE_WORDS_STATUSES: readonly ImageWordsStatus[] = ['reading', 'ready', 'unreadable', 'retrying', 'unknown'];
+/** Every status, said once; the hook and the quote derive from it. */
+export const IMAGE_WORDS_STATUSES = ['reading', 'ready', 'unreadable', 'retrying', 'unknown'] as const;
+export type ImageWordsStatus = typeof IMAGE_WORDS_STATUSES[number];
 /** Inline on `ApiAttachment.enrichment.words` for an inspiration's image. */
 export interface ApiImageWordsSummary {
   status: ImageWordsStatus;

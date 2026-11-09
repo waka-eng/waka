@@ -2685,10 +2685,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     profileId: viewNavigation.view?.wallId ?? storageScope.profileId,
   } : null, [storageScope, viewNavigation.view?.wallId]);
   const listViews = useProfileListViews(conversationScope);
-  /* Re-pressing the tab you stood on bumped this to scroll its list to the
-     top. The tabs are gone (design E1), so nothing asks; the lists keep the
-     prop for the day something does. */
-  const listTopRequest = 0;
   const conversationAgent = agentRoster?.find(profile => profile.id === conversationScope?.profileId);
   const conversationProfile = conversationScope?.profileId === storageScope?.profileId
     ? { name: auth?.profile?.name ?? say('worldWallMe'), type: 'human' as const }
@@ -6261,14 +6257,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
       setTalking(false);
     }
   }, [navigate, say, memoryScope?.profileId, storageScope?.profileId, talking]);
-  /* ═══ SEAM: THE ONE CONNECTION A SAVE MAKES (design E4) ═════════════════
-     The frame has the bubble answer a save with one line on what it connects
-     to ("That's the third thing you've kept about starting before you feel
-     ready.") — never a summary. Nothing on the server writes that line yet,
-     so this returns null and the bubble says "Kept" alone. When it exists,
-     return it here (from the save's response or a follow-up read keyed by
-     `kept.id`) and the bubble shows "Kept" small above it, as drawn. */
-  const keptConnection = (kept: { id: string; text: string } | null): string | null => { void kept; return null; };
   const inspirationOwner=memoryScope?`${memoryScope.accountId}:${memoryScope.profileId}`:null;
   const visibleInspiration=recentInspiration?.owner===inspirationOwner?recentInspiration:null;
   /* ═══ THE WORDS READ OFF WHAT WAS JUST KEPT (design E4, E3/E3′) ════════
@@ -10032,10 +10020,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     speech bubbles should have an action at the end." This
                     is the bubble that reports what has been happening, and
                     it led into a chat on a press nothing advertised. */}
-                {charSay === say('worldBubbleKept') && keptConnection(visibleInspiration) ? <>
-                  <span className="jar-char-bubble-of">{say('worldBubbleKept')}</span>
-                  <span className="jar-char-bubble-reading" role="status">{keptConnection(visibleInspiration)}</span>
-                </> : charSay === say('worldBubbleKept') && keptWords && keptWords.status !== 'unknown' ? <>
+                {charSay === say('worldBubbleKept') && keptWords && keptWords.status !== 'unknown' ? <>
                   <span className="jar-char-bubble-of">{say('worldBubbleKept')}</span>
                   <span className="jar-char-bubble-reading" role="status">{keptWords.status === 'ready' && keptWords.text ? `“${keptWords.text}”`
                     : keptWords.status === 'reading' ? say('worldReadWordsReading') : say('worldNoteAskUnreadable')}</span>
@@ -11960,7 +11945,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
         newSaveLabel={say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}
         key={`${conversationScope.accountId}:${conversationScope.profileId}:saves:${savesFocus?.ids.join(',') ?? ''}`}
         viewState={savesFocus ? undefined : listViews.inspirations}
-        topRequest={listTopRequest}
         scope={conversationScope} ownerName={conversationProfile.name}
         locale={locale} profileId={conversationScope.profileId}
         title={conversationProfile.type==='agent'?formatMessage(locale,'worldProfileInspirations',{name:conversationProfile.name}):say('worldMenuField')}
@@ -12006,7 +11990,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {conversationScope&&conversationProfile&&viewNavigation.view?.open==='conversations'?<ConversationsOverlay
         key={`${conversationScope.accountId}:${conversationScope.profileId}:talks`}
         viewState={listViews.chats}
-        topRequest={listTopRequest}
         locale={locale} profileId={conversationScope.profileId}
         title={formatMessage(locale, 'worldProfileChats', { name: conversationProfile.name })}
         onClose={closePage}
