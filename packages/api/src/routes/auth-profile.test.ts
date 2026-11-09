@@ -668,3 +668,40 @@ describe("POST /api/auth/logout", () => {
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
 });
+
+/**
+ * A HANDLE RESERVED AFTER SOMEONE ALREADY HELD IT. "share" became a web page
+ * (and so a reserved handle) while profiles may already own it. Reservation
+ * stops new claims; it must not lock the owner out of their own profile —
+ * every PATCH that does not mention the handle carries the current one, and
+ * finishing onboarding is one of them.
+ */
+describe("PATCH /api/auth/me/profile for the owner of a handle reserved since", () => {
+  const owner = { publicHandle: "share", publicProfileEnabled: true, publicTopOfMindEnabled: false };
+
+  it.each([
+    ["a rename and a language change", { name: "Mina Park", preferredLocale: "ko-KR" }],
+    ["finishing onboarding", { name: "Mina Park", preferredLocale: "en-US", completeOnboarding: true }],
+    ["keeping the handle by name", { name: "Mina Park", preferredLocale: "en-US", publicHandle: "@Share" }],
+  ])("still accepts %s", async (_label, body) => {
+    const db = makeDb({
+      selects: [identity({ profile: owner })],
+      updatedProfile: { ...PROFILE_ROW, ...owner, name: "Mina Park" },
+      updatedAccount: { ...ACCOUNT_ROW, onboardingCompletedAt: new Date("2026-11-08T00:00:00Z") },
+    });
+    dbState.db = db;
+    const response = await app().request("/api/auth/me/profile", authorized(body, "PATCH"));
+    expect(response.status).toBe(200);
+    expect(db.setCalls[0]!.values).toMatchObject({ publicHandle: "share" });
+  });
+
+  it("refuses a NEW claim of a reserved handle", async () => {
+    const db = makeDb({ selects: [identity({ profile: { publicHandle: "mina" } })] });
+    dbState.db = db;
+    const response = await app().request("/api/auth/me/profile",
+      authorized({ name: "Mina Park", preferredLocale: "en-US", publicHandle: "share" }, "PATCH"));
+    expect(response.status).toBe(400);
+    expect(db.update).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({ details: { publicHandle: ["That handle is reserved"] } });
+  });
+});

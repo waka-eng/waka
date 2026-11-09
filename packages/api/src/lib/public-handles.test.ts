@@ -18,3 +18,9 @@ it.each(WEB_PAGES)("reserves %s, a page of the web app", (page) => {
 it("still lets an ordinary handle through", () => {
   expect(validatePublicHandle("mina_kim")).toBeNull();
 });
+
+it("lets a profile keep a handle that was reserved after it claimed it", () => {
+  expect(validatePublicHandle("share", { keeping: "share" })).toBeNull();
+  expect(validatePublicHandle("@SHARE", { keeping: "share" })).toBeNull();
+  expect(validatePublicHandle("share", { keeping: "mina" })).toBe("That handle is reserved");
+});

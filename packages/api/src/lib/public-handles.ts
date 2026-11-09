@@ -53,12 +53,27 @@ export function normalizePublicHandle(input: string): string {
   return input.trim().replace(/^@+/, "").toLowerCase();
 }
 
-export function validatePublicHandle(input: string): string | null {
+/** Could this ever be a stored handle? The shape only — reservation aside. */
+export function isWellFormedPublicHandle(input: string): boolean {
+  return HANDLE_PATTERN.test(normalizePublicHandle(input));
+}
+
+/**
+ * Why a handle cannot be CLAIMED, or null.
+ *
+ * `keeping` is the handle the profile already holds. Reservation stops new
+ * claims; it never takes a handle away from a profile that held it before the
+ * word was reserved — every profile write that does not mention the handle
+ * carries the current one, so refusing it there would lock the owner out of
+ * renaming, changing language, or finishing onboarding.
+ */
+export function validatePublicHandle(input: string, options: { keeping?: string | null } = {}): string | null {
   const handle = normalizePublicHandle(input);
   if (!HANDLE_PATTERN.test(handle)) {
     return "Handle must be 3-24 letters, numbers, hyphens, or underscores with no spaces";
   }
-  if (RESERVED_HANDLES.has(handle)) {
+  const kept = options.keeping ? normalizePublicHandle(options.keeping) : null;
+  if (RESERVED_HANDLES.has(handle) && handle !== kept) {
     return "That handle is reserved";
   }
   return null;

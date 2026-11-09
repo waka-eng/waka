@@ -136,6 +136,17 @@ describe("GET /api/public/profiles/:handle", () => {
     });
   });
 
+  it("still serves a profile whose handle was reserved after it claimed it", async () => {
+    /* "share" became a web page and so a reserved handle; a profile that
+       already held it keeps its page here (whether the web's own route lets
+       a visitor reach it there is the web's matter). */
+    const getProfileByHandle = vi.fn(async () => ({ ...owner, publicHandle: "share" }));
+    const response = await appFor({ getProfileByHandle, getTopOfMind: vi.fn(async () => null) })
+      .request("/api/public/profiles/share");
+    expect(response.status).toBe(200);
+    expect(getProfileByHandle).toHaveBeenCalledWith(expect.anything(), "share");
+  });
+
   it("answers a handle that could never exist without touching the database", async () => {
     const getProfileByHandle = vi.fn(async () => owner);
 

@@ -33,7 +33,7 @@ import { personalEntryReadable, projectPersonalEntries } from "../lib/personal-o
 import { normalizeSupportedLocale, type SupportedLocale } from "../lib/locales.js";
 import {
   normalizePublicHandle,
-  validatePublicHandle,
+  isWellFormedPublicHandle,
 } from "../lib/public-handles.js";
 import { validationDetails } from "../lib/validation.js";
 
@@ -214,9 +214,11 @@ export function createPublicProfileRoutes(
     }
 
     // A handle that could never be stored cannot match a row, so it is
-    // answered as a miss without touching the database.
+    // answered as a miss without touching the database. Reservation is NOT
+    // checked here: a profile that held a handle before it was reserved
+    // keeps its page.
     const normalizedHandle = normalizePublicHandle(parsedParams.data.handle);
-    if (validatePublicHandle(normalizedHandle)) {
+    if (!isWellFormedPublicHandle(normalizedHandle)) {
       return c.json({ error: "Public profile not found" }, 404);
     }
 
