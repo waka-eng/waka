@@ -92,9 +92,9 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "A sentence nobody feeds cools — half of its warmth is gone in about a month and a half.",
+      "A sentence nobody feeds cools. Half of its warmth is gone in about a month and a half.",
     sentenceKo:
-      "아무도 먹이지 않는 문장은 식어요 — 한 달 반이면 온기가 절반으로 줄어요.",
+      "아무도 먹이지 않는 문장은 식어요. 한 달 반이면 온기가 절반으로 줄어요.",
     backing: {
       kind: "constant",
       constant: "CONFIDENCE_RECENCY_HALF_LIFE_DAYS",
@@ -131,7 +131,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "Your top of mind shifts at most once a day — a rewrite that arrives early waits its turn, and your own hand never waits.",
+      "Your top of mind shifts at most once a day. A rewrite that arrives early waits its turn, and your own hand never waits.",
     sentenceKo:
       "톱 오브 마인드는 하루에 한 번만 움직여요. 일찍 온 다시 쓰기는 차례를 기다리고, 내 손은 기다리지 않아요.",
     backing: {
@@ -144,7 +144,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "Each rewrite of your top of mind reads from at most twelve of them — the ones with the most life in them.",
+      "Each rewrite of your top of mind reads from at most twelve of them: the ones with the most life in them.",
     sentenceKo:
       "톱 오브 마인드를 다시 쓸 때는 많아야 열두 문장만 읽어요. 가장 생기 있는 것들이에요.",
     backing: {
@@ -157,7 +157,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "A sentence you called untrue steps far back in the choosing — and is never erased.",
+      "A sentence you called untrue steps far back in the choosing, and is never erased.",
     sentenceKo:
       "아니라고 답한 문장은 고르는 자리에서 멀찍이 물러나요. 지워지지는 않아요.",
     backing: {
@@ -211,7 +211,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "A sentence's receipts are verified quotes — your words, or your saved page's, and never invented.",
+      "A sentence's receipts are verified quotes: your words, or your saved page's, and never invented.",
     sentenceKo:
       "문장의 영수증은 검증된 인용이에요. 내 말이거나 내가 저장한 페이지의 말이고, 지어내는 법은 없어요.",
     backing: {
@@ -229,9 +229,9 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "A sentence you let go is refused ground: nothing is deleted, nothing that close grows there again, and every refusal is written down — until you put it back.",
+      "A sentence you let go is refused ground: nothing is deleted, nothing that close grows there again, and every refusal is written down, until you put it back.",
     sentenceKo:
-      "놓아준 문장은 땅을 거절당해요. 아무것도 지워지지 않고, 그만큼 가까운 것은 다시 자라지 않고, 모든 거절이 기록에 남아요 — 내가 되돌리기 전까지는요.",
+      "놓아준 문장은 땅을 거절당해요. 아무것도 지워지지 않고, 그만큼 가까운 것은 다시 자라지 않고, 모든 거절이 기록에 남아요. 내가 되돌리기 전까지는요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/signal-suppression.db.test.ts",
@@ -283,7 +283,7 @@ export function renderTheReading(locale: ProseLocale = "en-US"): string {
   if (locale === "ko-KR") {
     lines.push("# WAKA가 나를 읽는 방식");
     lines.push("");
-    lines.push("> 아래 문장 하나하나가 그것을 지키는 코드에 고정되어 있어요 —");
+    lines.push("> 아래 문장 하나하나가 그것을 지키는 코드에 고정되어 있어요.");
     lines.push("> 하나라도 사실이 아니게 되는 날, 빌드가 멈춰요.");
     lines.push("");
     for (const line of READING_LINES) {
@@ -296,7 +296,7 @@ export function renderTheReading(locale: ProseLocale = "en-US"): string {
   lines.push("# How WAKA reads you");
   lines.push("");
   lines.push(
-    "> Each sentence below is pinned to the code that enforces it — the",
+    "> Each sentence below is pinned to the code that enforces it. The",
   );
   lines.push(
     "> build fails the day any of them stops being true.",

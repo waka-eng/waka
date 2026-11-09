@@ -1262,7 +1262,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     if (result.outcome === "not_found") return c.json({ error: "Signal not found" }, 404);
     if (result.outcome === "nothing_to_revert") {
       return c.json(
-        { error: "No machine statement to return to — the chain holds only your own words" },
+        { error: "No machine statement to return to. The chain holds only your own words" },
         409,
       );
     }

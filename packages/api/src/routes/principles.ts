@@ -553,7 +553,7 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     if (result.outcome === "not_found") return c.json({ error: "Principle not found" }, 404);
     if (result.outcome === "nothing_to_revert") {
       return c.json(
-        { error: "No machine statement to return to — the chain holds only your own words" },
+        { error: "No machine statement to return to. The chain holds only your own words" },
         409,
       );
     }

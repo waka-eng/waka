@@ -233,11 +233,11 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.refusals === 1
-          ? "후보 하나를 거절했어요 — 치워 둔 것과 너무 가까워서요"
-          : `후보 ${exactCount(c.refusals)}개를 거절했어요 — 치워 둔 것과 너무 가까워서요`
+          ? "치워 둔 것과 너무 가까워서 후보 하나를 거절했어요"
+          : `치워 둔 것과 너무 가까워서 후보 ${exactCount(c.refusals)}개를 거절했어요`
         : c.refusals === 1
-          ? "refused a candidate — too close to what you dismissed"
-          : `refused ${exactCount(c.refusals)} candidates — too close to what you dismissed`,
+          ? "refused a candidate because it was too close to what you dismissed"
+          : `refused ${exactCount(c.refusals)} candidates because they were too close to what you dismissed`,
       backing: "suppressions",
     });
   }
@@ -545,7 +545,7 @@ export function renderTheWeather(weather: TheWeather, locale: ProseLocale = "en-
   if (locale === "ko-KR") {
     lines.push("# 날씨");
     lines.push("");
-    lines.push("> 무엇이 있었는지 날들로 들려드려요 — 문장 하나하나가 저장된");
+    lines.push("> 무엇이 있었는지 날들로 들려드려요. 문장 하나하나가 저장된");
     lines.push("> 기록을 비추는 것이지, 누가 쓴 요약이 아니에요.");
     lines.push("");
     if (weather.days.length === 0) {
@@ -554,11 +554,11 @@ export function renderTheWeather(weather: TheWeather, locale: ProseLocale = "en-
   } else {
     lines.push("# The weather");
     lines.push("");
-    lines.push("> What the loop did, told as days — every sentence a view of a");
+    lines.push("> What the loop did, told as days. Every sentence is a view of a");
     lines.push("> stored record, never a summary someone wrote.");
     lines.push("");
     if (weather.days.length === 0) {
-      lines.push("A quiet fortnight — nothing moved.");
+      lines.push("A quiet fortnight. Nothing moved.");
     }
   }
   for (const day of weather.days) {

@@ -97,7 +97,7 @@ describe("the weather is a view of the record", () => {
     expect(lines).toContain("two days ago: a new signal was spoken");
     expect(lines).toContain("two days ago: a signal found another memory behind it");
     expect(lines).toContain(
-      "yesterday: refused a candidate — too close to what you dismissed",
+      "yesterday: refused a candidate because it was too close to what you dismissed",
     );
     expect(lines).toContain("yesterday: everything was read again, and your top of mind held");
     expect(lines).toContain("today: your memory was consulted");
@@ -115,7 +115,7 @@ describe("the weather is a view of the record", () => {
       expect(/\d/.test(label), `a numeral crept into the day label "${label}"`).toBe(false);
     }
     const md = renderTheWeather(weather);
-    expect(md).toContain("- refused a candidate — too close to what you dismissed.");
+    expect(md).toContain("- refused a candidate because it was too close to what you dismissed.");
   });
 
   it("deletes the sentence with the record — the narration cannot outlive its row", async () => {

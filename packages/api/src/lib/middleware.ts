@@ -121,7 +121,7 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
   }
   if (session.keyScoped && !keeperKeyMayPass(c.req.method, c.req.path)) {
     return c.json(
-      { error: "Beyond this key's scope — a keeper key keeps and recalls; the rest needs you at a browser" },
+      { error: "Beyond this key's scope. A keeper key can keep and recall; the rest needs you at a browser" },
       403,
     );
   }
