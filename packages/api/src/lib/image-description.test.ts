@@ -301,6 +301,14 @@ describe("readImageWords", () => {
     expect(readImageWords("Words:\nImage: A diagram.")).toBeNull();
   });
 
+  /* Code review, 2026-11-08: only ONE quoted segment around the whole is the
+     model's quoting; quotes that open and close inside are the image's. */
+  it("keeps quotes that belong to the words, stripping only one pair around the whole", () => {
+    expect(readImageWords('Words: "Stay" — he said — "hungry"\nImage: A poster.')).toBe('"Stay" — he said — "hungry"');
+    expect(readImageWords('Words: “Stay hungry.”\nImage: A poster.')).toBe("Stay hungry.");
+    expect(readImageWords("Words: 'It\'s fine'\nImage: A poster.")).toBe("It's fine");
+  });
+
   it("does not take a label word in the middle of a sentence for a label", () => {
     expect(readImageWords("A note listing the words: buy milk, call mum.")).toBeUndefined();
   });

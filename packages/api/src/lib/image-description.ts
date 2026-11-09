@@ -96,10 +96,19 @@ const LABEL_START = String.raw`(?:^|\n|(?<=[.!?"”'])[ \t]+)[ \t>#*_]*`;
 const WORDS_LABEL = new RegExp(`${LABEL_START}words[ \\t*_]*:[ \\t*_]*`, "i");
 const IMAGE_LABEL = new RegExp(`${LABEL_START}image[ \\t*_]*:`, "i");
 /** One pair of quotes around the whole of the words is the model's, not the
-    image's: the screen quotes them itself. */
+    image's: the screen quotes them itself. Only when the whole is ONE quoted
+    segment — a quote of the same kind opening or closing inside means the
+    quotes belong to the words ('"Stay" — he said — "hungry"' stays as it is;
+    code review, 2026-11-08). An apostrophe inside a word is not a quote. */
 function unquote(words: string): string {
   const pair = /^(["“'])([\s\S]*)(["”'])$/.exec(words);
-  return pair && (pair[1] === pair[3] || (pair[1] === "“" && pair[3] === "”")) ? pair[2]!.trim() : words;
+  if (!pair) return words;
+  const [, open, inner, close] = pair as unknown as [string, string, string, string];
+  const matched = open === close ? open !== "“" : open === "“" && close === "”";
+  if (!matched) return words;
+  const inside = open === "'" ? inner.replace(/(?<=\p{L})'(?=\p{L})/gu, "") : inner;
+  const again = open === "'" ? /'/ : /["“”]/;
+  return again.test(inside) ? words : inner.trim();
 }
 /** What `describeImage` writes when the image carries no meaningful text. */
 const NO_WORDS = /^none\.?$/i;
