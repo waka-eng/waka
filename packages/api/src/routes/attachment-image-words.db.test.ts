@@ -12,6 +12,7 @@ import { ensureInspirationEmbedding } from '../lib/inspiration-embeddings.js';
 import { readConversationMaterial } from '../lib/conversation-material.js';
 import { recoverInspirationProcessing } from '../lib/inspiration-processing-recovery.js';
 import { enrichAttachment } from '../lib/signal-enrichment.js';
+import { readImageScene } from '../lib/image-description.js';
 import { readInspirationProcessingStatus } from '../lib/inspiration-processing-status.js';
 import type { AuthEnv } from '../lib/middleware.js';
 const state = vi.hoisted(() => ({ db: null as unknown }));
@@ -117,6 +118,17 @@ it('refuses a fix made against words a later read replaced', async () => {
   const stale = await f.edit('My own line', seen.revision);
   expect(stale.status, 'a fix against words the read replaced was taken').toBe(409);
   expect(await stale.json()).toMatchObject({ code: 'words_changed' });
+});
+it('keeps under a fix exactly the picture the parser reads, when Image labels stand on both sides of the words', async () => {
+  for (const reading of [
+    'Image: An old caption\nWords: Begin.\nImage: A reel with a caption.',
+    'Words: Save this. Image: credit @nasa\nImage: a screenshot of a post.',
+  ]) {
+    const f = await fixture({ status: 'ready', text: reading });
+    await f.edit('My line.');
+    const material = await loadInspirationMaterial(t.db as never, f.profileId, f.sourceId, 'personal');
+    expect(material?.attachmentRows, reading).toMatchObject([{ text: `Words: My line.\nImage: ${readImageScene(reading)}` }]);
+  }
 });
 it('refuses a stale or empty fix and can return to the words read', async () => {
   const f = await fixture(); await f.edit('First fix');

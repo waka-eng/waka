@@ -95,6 +95,30 @@ export const DESCRIPTION_PROMPT = [
 const LABEL_START = String.raw`(?:^|\n|(?<=[.!?"”'])[ \t]+)[ \t>#*_]*`;
 const WORDS_LABEL = new RegExp(`${LABEL_START}words[ \\t*_]*:[ \\t*_]*`, "i");
 const IMAGE_LABEL = new RegExp(`${LABEL_START}image[ \\t*_]*:`, "i");
+/**
+ * The picture half of a stored description: the part after the Image label
+ * that follows the words, or — when no Image label follows them — the one
+ * before them. `null` when there is no Image part. The SQL composer
+ * (`attachment-material.ts`) reads the same part by the same rule, so a fix
+ * keeps exactly this description.
+ */
+export function readImageScene(description: string | null | undefined): string | null {
+  const text = description?.trim();
+  if (!text) return null;
+  const label = WORDS_LABEL.exec(text);
+  const clean = (part: string) => part.replace(/[\s*_]+$/, "").trim() || null;
+  if (label) {
+    const rest = text.slice(label.index + label[0].length);
+    const after = IMAGE_LABEL.exec(rest);
+    if (after) return clean(rest.slice(after.index + after[0].length).replace(/^[\s*_]+/, ""));
+  }
+  const before = IMAGE_LABEL.exec(text);
+  if (!before) return null;
+  const tail = text.slice(before.index + before[0].length).replace(/^[\s*_]+/, "");
+  const stop = WORDS_LABEL.exec(tail);
+  return clean(stop ? tail.slice(0, stop.index) : tail);
+}
+
 /** One pair of quotes around the whole of the words is the model's, not the
     image's: the screen quotes them itself. Only when the whole is ONE quoted
     segment — a quote of the same kind opening or closing inside means the

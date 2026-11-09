@@ -24,7 +24,12 @@ export const correctedAttachment = sql<boolean>`(${attachments.type} IN ('audio'
    …"), in either order — the same rule as `readImageWords`. */
 const WORDS_MARK = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:'`);
 const IMAGE_PART = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:[[:space:]*_]*((?:(?!(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:).)*)'`);
-const described = sql<string>`trim(regexp_replace(coalesce((regexp_match(${attachments.enrichmentText}, ${IMAGE_PART}, 'i'))[1], ''), '[[:space:]*_]+$', ''))`;
+/* THE IMAGE PART AFTER THE WORDS COMES FIRST — the same rule as
+   `readImageScene`: the words run from their label to the next Image label,
+   and what follows that label is the picture. Only when no Image label
+   follows the words is the one before them used (code review, 2026-11-08). */
+const IMAGE_AFTER_WORDS = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:(?:(?!(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:).)*(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:[[:space:]*_]*(.*)$'`);
+const described = sql<string>`trim(regexp_replace(coalesce((regexp_match(${attachments.enrichmentText}, ${IMAGE_AFTER_WORDS}, 'i'))[1], (regexp_match(${attachments.enrichmentText}, ${IMAGE_PART}, 'i'))[1], ''), '[[:space:]*_]+$', ''))`;
 const imagePart = sql<string>`CASE
   WHEN ${attachments.enrichmentStatus} <> 'ready' OR nullif(trim(coalesce(${attachments.enrichmentText},'')),'') IS NULL THEN ''
   WHEN ${attachments.enrichmentText} ~* ${WORDS_MARK}

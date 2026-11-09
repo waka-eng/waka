@@ -4,6 +4,7 @@ import {
   DESCRIPTION_PROMPT,
   describeImage,
   ImageDescriptionError,
+  readImageScene,
   readImageWords,
   isDescribableImageType,
   MAX_IMAGE_BYTES,
@@ -324,5 +325,19 @@ describe("readImageWords", () => {
   it("reads nothing from nothing", () => {
     expect(readImageWords(null)).toBeNull();
     expect(readImageWords("   ")).toBeNull();
+  });
+});
+
+describe("readImageScene", () => {
+  /* Code review, 2026-11-08: the picture is the Image part AFTER the words
+     when there is one, the one before them otherwise — the rule the SQL
+     composer uses too. */
+  it("takes the Image part that follows the words, else the one before them", () => {
+    expect(readImageScene("Words: Begin.\nImage: A reel.")).toBe("A reel.");
+    expect(readImageScene("Image: An old caption\nWords: Begin.\nImage: A reel.")).toBe("A reel.");
+    expect(readImageScene("Image: A reel. Words: Begin.")).toBe("A reel.");
+    expect(readImageScene("Words: Save this. Image: credit @nasa\nImage: a screenshot of a post.")).toBe("credit @nasa\nImage: a screenshot of a post.");
+    expect(readImageScene("**Words:** Begin.\n\n**Image:** A reel.")).toBe("A reel.");
+    expect(readImageScene("Words: Begin.")).toBeNull();
   });
 });
