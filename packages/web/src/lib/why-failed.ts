@@ -59,6 +59,12 @@ import { formatMessage, t, type SupportedLocale } from "./locales";
  * to add beyond the caller's own words. Speaks the caller's locale; the
  * server's own message stays as the server said it.
  *
+ * A REFUSAL SAYS THE SERVER'S REASON, AND A RETRY ONLY WHEN ONE CAN HELP
+ * (code review, 2026-11-09). A 4xx other than the ones above (too large, not
+ * valid, changed elsewhere) is the reason alone: trying the same thing again
+ * cannot fix it. A 408, a 429 or a 5xx may pass, so it ends in Try again.
+ * Neither prints the status code, which is not a number a person can use.
+ *
  * ONE PART OF THIS STAYS ENGLISH AND HAS TO. `worldWhyServerSaidNo` embeds
  * `{message}`, which is whatever the API client threw — written in English in
  * `lib/api`, and deliberately so: `copy.test.ts` records that those strings
@@ -87,10 +93,11 @@ export function whyOf(err: unknown, locale: SupportedLocale): string {
        is the two facts that are true: reading has stopped for now, and what
        they kept is kept. */
     if (err.status === 402) return t(locale, "worldWhyOutOfCredit");
-    return formatMessage(locale, "worldWhyServerSaidNo", {
-      status: err.status,
-      message: err.message,
-    });
+    const reason = err.message.trim();
+    const sentence = reason && !/[.!?。]$/.test(reason) ? `${reason}.` : reason;
+    const passing = err.status === 408 || err.status === 429 || err.status >= 500;
+    if (!sentence) return passing ? t(locale, "worldWhyServerBusy") : "";
+    return formatMessage(locale, passing ? "worldWhyServerTryAgain" : "worldWhyServerSaidNo", { message: sentence });
   }
   if (err instanceof Error && err.message) return err.message;
   return "";
