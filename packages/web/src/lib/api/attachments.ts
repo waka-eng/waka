@@ -59,8 +59,11 @@ export async function retryAttachmentTranscript(id: string, revision: string, si
  *               out of credit). With `canRetry` true nothing is queued: call
  *               `retryImageWords` once to queue another read.
  */
-export type ImageWordsStatus = 'reading' | 'ready' | 'unreadable' | 'retrying';
-const IMAGE_WORDS_STATUSES: readonly ImageWordsStatus[] = ['reading', 'ready', 'unreadable', 'retrying'];
+/** - unknown:    a reading from before the "Words: / Image:" shape — which
+ *               part is words cannot be told, so show nothing (no quote, no
+ *               Fix, no "which line stuck?"). */
+export type ImageWordsStatus = 'reading' | 'ready' | 'unreadable' | 'retrying' | 'unknown';
+const IMAGE_WORDS_STATUSES: readonly ImageWordsStatus[] = ['reading', 'ready', 'unreadable', 'retrying', 'unknown'];
 /** Inline on `ApiAttachment.enrichment.words` for an inspiration's image. */
 export interface ApiImageWordsSummary {
   status: ImageWordsStatus;

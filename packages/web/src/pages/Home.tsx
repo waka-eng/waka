@@ -9976,7 +9976,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 {charSay === say('worldBubbleKept') && keptConnection(visibleInspiration) ? <>
                   <span className="jar-char-bubble-of">{say('worldBubbleKept')}</span>
                   <span className="jar-char-bubble-reading" role="status">{keptConnection(visibleInspiration)}</span>
-                </> : charSay === say('worldBubbleKept') && keptWords ? <>
+                </> : charSay === say('worldBubbleKept') && keptWords && keptWords.status !== 'unknown' ? <>
                   <span className="jar-char-bubble-of">{say('worldBubbleKept')}</span>
                   <span className="jar-char-bubble-reading" role="status">{keptWords.status === 'ready' && keptWords.text ? `“${keptWords.text}”`
                     : keptWords.status === 'reading' ? say('worldReadWordsReading') : say('worldNoteAskUnreadable')}</span>

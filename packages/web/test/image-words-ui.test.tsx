@@ -61,3 +61,40 @@ it('offers no Fix where the server says the words may not be edited', async () =
   await mount();
   expect([...host.querySelectorAll('button')].map(b => b.textContent)).not.toContain('Fix');
 });
+
+/* CODE REVIEW, 2026-11-08: the asking must end when asking cannot help. */
+it('stops asking on a permanent refusal', async () => {
+  vi.useFakeTimers();
+  vi.mocked(fetchImageWords).mockRejectedValue(new ApiError({ status: 404, code: 'not_found', message: 'Not found' }));
+  await mount();
+  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+  expect(fetchImageWords, 'a 404 was asked about again').toHaveBeenCalledTimes(1);
+});
+
+it('keeps asking through a timeout or a rate limit', async () => {
+  vi.useFakeTimers();
+  vi.mocked(fetchImageWords).mockRejectedValueOnce(new ApiError({ status: 429, code: 'rate_limited', message: 'Slow down' })).mockResolvedValue(row({}));
+  await mount();
+  await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+  expect(vi.mocked(fetchImageWords).mock.calls.length).toBe(2);
+  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
+});
+
+it('waits for the retry budget once, instead of asking every few seconds, when nothing can hurry the read', async () => {
+  vi.useFakeTimers();
+  const reopens = new Date(Date.now() + 60_000).toISOString();
+  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: reopens }));
+  await mount();
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  expect(fetchImageWords, 'it polled a read nothing could hurry').toHaveBeenCalledTimes(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(31_000); });
+  expect(fetchImageWords, 'it did not ask again when the budget reopened').toHaveBeenCalledTimes(2);
+  await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+  expect(fetchImageWords, 'it kept waiting past the one reopening').toHaveBeenCalledTimes(2);
+});
+
+it('shows nothing for words it cannot tell apart from the description (a reading from before the two-part shape)', async () => {
+  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'unknown', text: null, read: null }));
+  await mount();
+  expect(host.textContent).toBe('');
+});

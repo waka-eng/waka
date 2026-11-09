@@ -44,6 +44,7 @@ export function useImageWords(attachmentId: string | null): {
     const control = new AbortController();
     let timer = 0, polls = 0;
     const began = Date.now();
+    let waitedForBudget = false;
     const ask = async () => {
       try {
         let row = await fetchImageWords(attachmentId, control.signal);
@@ -54,8 +55,24 @@ export function useImageWords(attachmentId: string | null): {
         if (control.signal.aborted) return;
         setWords(row);
         if (row.status !== 'reading' && row.status !== 'retrying') return;
-      } catch {
+        /* RETRYING ON A SPENT BUDGET: no read is queued and none may be
+           until `retryAfter`. Asking every few seconds would only read the
+           same answer, so it asks once, then, and stops. (Retrying with no
+           `retryAfter` and no retry allowed means a read IS queued — that one
+           is still asked about on the budget below, because it will land.) */
+        if (row.status === 'retrying' && !row.canRetry && row.retryAfter) {
+          const reopens = Date.parse(row.retryAfter) - Date.now();
+          if (waitedForBudget || !Number.isFinite(reopens)) return;
+          waitedForBudget = true;
+          timer = window.setTimeout(() => void ask(), Math.max(0, Math.min(reopens, 2_147_000_000)));
+          return;
+        }
+      } catch (reason) {
         if (control.signal.aborted) return;
+        /* A PERMANENT REFUSAL ENDS THE ASKING: gone (404), not yours (403),
+           not an image (4xx). Only a timeout or a rate limit is worth asking
+           about again. */
+        if (reason instanceof ApiError && reason.status >= 400 && reason.status < 500 && reason.status !== 408 && reason.status !== 429) return;
       }
       if (++polls >= MAX_POLLS || Date.now() - began >= MAX_POLL_MS) return;
       timer = window.setTimeout(() => void ask(), Math.min(10_000, 1000 * 1.5 ** polls));

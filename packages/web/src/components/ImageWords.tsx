@@ -19,7 +19,7 @@ import { useState } from 'react';
 import { t, type SupportedLocale } from '../lib/locales';
 import { useImageWords, type FixOutcome } from '../lib/use-image-words';
 
-export interface ReadWords { status: 'reading' | 'ready' | 'unreadable' | 'retrying'; text?: string }
+export interface ReadWords { status: 'reading' | 'ready' | 'unreadable' | 'retrying' | 'unknown'; text?: string }
 
 export function ReadWordsQuote({ words, locale, onFix, disabled, asks = false }: {
   words: ReadWords; locale: SupportedLocale;
@@ -34,6 +34,7 @@ export function ReadWordsQuote({ words, locale, onFix, disabled, asks = false }:
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const missed = words.status === 'unreadable' || words.status === 'retrying';
+  if (words.status === 'unknown') return null;
   const send = async () => {
     if (!onFix || fixing === null || !fixing.trim()) return;
     setBusy(true); setNote('');
@@ -70,7 +71,8 @@ export function ReadWordsQuote({ words, locale, onFix, disabled, asks = false }:
 /** A saved image's words, read from the server and kept current. */
 export function SavedImageWords({ attachmentId, locale, readOnly = false }: { attachmentId: string; locale: SupportedLocale; readOnly?: boolean }) {
   const { words, fix } = useImageWords(attachmentId);
-  if (!words) return null;
+  /* Unknown: a reading too old to say which part is words. Nothing to show. */
+  if (!words || words.status === 'unknown') return null;
   return <ReadWordsQuote words={{ status: words.status, text: words.text ?? undefined }} locale={locale} asks
     onFix={!readOnly && words.canEdit ? fix : undefined} disabled={false} />;
 }
