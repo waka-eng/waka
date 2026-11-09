@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { CEILING, FLOOR, MAX_SCALE, dprOf } from "../src/canvas/scale";
+import { CEILING, FLOOR, MAX_SCALE, dprOf, scaleOf, zoomStep } from "../src/canvas/scale";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "../src");
@@ -159,5 +159,50 @@ describe("render scale", () => {
     /* and it never goes below the rule it replaced, which is a stronger
        promise than "never below CSS resolution" and the one that matters */
     expect(dprOf(40000, 30000, 3)).toBe(FLOOR);
+  });
+});
+
+/**
+ * THE ZOOM THE RATIO DOES NOT REPORT. Founder, 2026-10-17: "the 화질 of the
+ * character breaks in mobile setting" — a pinch or iOS's focus-zoom stretches
+ * every canvas while `devicePixelRatio` stays 3. The backing store follows
+ * css x dpr x zoom, under the same ceiling, and never below the rest answer.
+ */
+describe("render scale under a page zoom", () => {
+  const backing = (w: number, h: number, dpr: number, zoom: number) => {
+    const s = scaleOf(w, h, dpr, zoom);
+    return [Math.round(w * s), Math.round(h * s)];
+  };
+
+  it("draws css x dpr x zoom on the phone that reported it", () => {
+    expect(backing(390, 844, 3, 1)).toEqual([1170, 2532]);
+    expect(backing(390, 844, 3, 1.25)).toEqual([1463, 3165]);
+    expect(backing(390, 844, 3, 2)).toEqual([2340, 5064]);
+    /* the zoom multiplies past MAX_SCALE: the cap on a device's claim is
+       not a cap on what a magnified screen shows */
+    expect(scaleOf(390, 844, 3, 2)).toBe(6);
+    expect(backing(412, 915, 2.625, 2)).toEqual([2163, 4804]);
+  });
+
+  it("changes nothing at rest, zoomed out, or for a nonsense zoom", () => {
+    for (const z of [1, 0.5, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(scaleOf(390, 844, 3, z)).toBe(dprOf(390, 844, 3));
+    expect(scaleOf(1440, 900, 2, 1)).toBe(2);
+  });
+
+  it("stops growing at the ceiling, and never below the rest answer", () => {
+    const [w, h] = backing(390, 844, 3, 5);
+    expect(w * h).toBeLessThanOrEqual(CEILING * 1_000_000 * 1.001);
+    expect(scaleOf(390, 844, 3, 5)).toBeGreaterThan(6);
+    /* a surface already past the ceiling at rest keeps its rest answer */
+    expect(scaleOf(6016, 3384, 2, 2)).toBe(dprOf(6016, 3384, 2));
+  });
+
+  it("steps the zoom up to a quarter, so a step is never softer than the zoom", () => {
+    expect(zoomStep(1)).toBe(1);
+    expect(zoomStep(16 / 15)).toBe(1.25);
+    expect(zoomStep(1.25)).toBe(1.25);
+    expect(zoomStep(1.26)).toBe(1.5);
+    expect(zoomStep(0.8)).toBe(1);
   });
 });
