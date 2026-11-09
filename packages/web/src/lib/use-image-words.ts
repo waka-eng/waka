@@ -52,9 +52,13 @@ function readUnderWay(row: ApiImageWords): boolean {
     back. It cannot say whether this session may edit or retry, so until the
     read answers neither is offered (code review, 2026-11-08: a read-only
     session was offered Fix and met a 403). */
-function fromInline(attachmentId: string, inline: ApiImageWordsSummary): ApiImageWords {
-  return { ...inline, attachmentId, inspirationId: '', profileId: '', correctedAt: null, canEdit: false, canRetry: false, retryAfter: null };
+function fromInline(attachmentId: string, inline: ApiImageWordsSummary, known: Abilities | null): ApiImageWords {
+  return { ...inline, attachmentId, inspirationId: '', profileId: '', correctedAt: null,
+    canEdit: known?.canEdit ?? false, canRetry: known?.canRetry ?? false, retryAfter: known?.retryAfter ?? null };
 }
+
+/** What this session may do with these words, as the last full read said. */
+type Abilities = Pick<ApiImageWords, 'canEdit' | 'canRetry' | 'retryAfter'>;
 
 export type RetryOutcome = 'queued' | 'limited' | 'failed';
 
@@ -93,10 +97,19 @@ export function useImageWords(attachmentId: string | null, inline?: ApiImageWord
   /** Bumped by a retry, to start following the read it queued. */
   const [follow, setFollow] = useState(0);
   const followed = useRef(0);
+  /* KEPT ACROSS A NEW INLINE SUMMARY (code review, 2026-11-08): a Fix brings
+     a new summary, and resetting the abilities to "none" made Fix flicker
+     away until the read came back. Unknown only before the first read. */
+  const known = useRef<{ id: string; abilities: Abilities } | null>(null);
+  const remember = (row: ApiImageWords) => {
+    known.current = { id: row.attachmentId, abilities: { canEdit: row.canEdit, canRetry: row.canRetry, retryAfter: row.retryAfter } };
+    setWords(row);
+  };
 
   useEffect(() => {
     const given = seedRef.current;
-    if (followed.current === follow) setWords(attachmentId && given ? fromInline(attachmentId, given) : null);
+    const abilities = known.current?.id === attachmentId ? known.current.abilities : null;
+    if (followed.current === follow) setWords(attachmentId && given ? fromInline(attachmentId, given, abilities) : null);
     followed.current = follow;
     if (!attachmentId) return;
     const control = new AbortController();
@@ -106,9 +119,18 @@ export function useImageWords(attachmentId: string | null, inline?: ApiImageWord
       const sentAt = writes.current;
       try {
         const row = await fetchImageWords(attachmentId, control.signal);
-        if (control.signal.aborted || sentAt !== writes.current) return;
-        setWords(row);
-        if (!readUnderWay(row)) return;
+        if (control.signal.aborted) return;
+        /* AN ANSWER OLDER THAN A WRITE IS DROPPED, BUT THE ASKING GOES ON
+           while what is on screen still needs it (code review, 2026-11-08):
+           returning here stopped the polling for good, even when the write
+           it raced with then failed and the read was still on its way. */
+        if (sentAt !== writes.current) {
+          const shown = wordsRef.current;
+          if (shown && !readUnderWay(shown)) return;
+        } else {
+          remember(row);
+          if (!readUnderWay(row)) return;
+        }
       } catch (reason) {
         if (control.signal.aborted) return;
         /* A PERMANENT REFUSAL ENDS THE ASKING: gone (404), not yours (403),
@@ -130,11 +152,11 @@ export function useImageWords(attachmentId: string | null, inline?: ApiImageWord
     try {
       const fixed = await correctImageWords(attachmentId, { revision: current.revision, correction: text });
       writes.current += 1;
-      setWords(fixed);
+      remember(fixed);
       return 'saved';
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 409) {
-        try { setWords(await fetchImageWords(attachmentId)); } catch { /* the stale words stay on screen */ }
+        try { remember(await fetchImageWords(attachmentId)); } catch { /* the stale words stay on screen */ }
         return 'changed';
       }
       return 'failed';
@@ -149,7 +171,7 @@ export function useImageWords(attachmentId: string | null, inline?: ApiImageWord
     try {
       const queued = await retryImageWords(attachmentId);
       writes.current += 1;
-      setWords(queued);
+      remember(queued);
       setFollow(n => n + 1);
       return 'queued';
     } catch (reason) {

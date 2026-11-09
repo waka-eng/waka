@@ -173,3 +173,34 @@ it('promises a read only for one that is queued, from the inline summary as from
   await mountInline({ status: 'retrying', text: null, read: null, correction: null, revision: '0' });
   expect(host.textContent).toContain("I'll try reading it again in a bit.");
 });
+
+/* Code review, 2026-11-08: a poll dropped as stale (a write began while it
+   was out) stopped the asking for good, even when that write then failed. */
+it('keeps following a queued read when a write it raced with fails', async () => {
+  vi.useFakeTimers();
+  const queued = row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null });
+  let late!: (value: ApiImageWords) => void;
+  vi.mocked(fetchImageWords).mockResolvedValueOnce(queued)
+    .mockImplementationOnce(() => new Promise(resolve => { late = resolve; }))
+    .mockResolvedValue(queued);
+  vi.mocked(correctImageWords).mockRejectedValue(new ApiError({ status: 500, code: 'server', message: 'Down' }));
+  await mount();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_600); });
+  await press('Type the line'); await type('My line.'); await press('Done');
+  await act(async () => { late(queued); });
+  const asked = vi.mocked(fetchImageWords).mock.calls.length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+  expect(vi.mocked(fetchImageWords).mock.calls.length, 'the asking stopped after a stale answer').toBeGreaterThan(asked);
+});
+
+/* Code review, 2026-11-08: a new inline summary (after a Fix) reset what the
+   session may do to "nothing", and Fix flickered away until the read came back. */
+it('keeps what this session may do across a new inline summary', async () => {
+  vi.mocked(fetchImageWords).mockResolvedValueOnce(row({ canEdit: true }))
+    .mockImplementation(() => new Promise(() => {}));
+  await mountInline({ status: 'ready', text: 'Nobody feels ready.', read: 'Nobody feels ready.', correction: null, revision: '1' });
+  expect([...host.querySelectorAll('button')].map(b => b.textContent)).toContain('Fix');
+  await mountInline({ status: 'ready', text: 'My line.', read: 'Nobody feels ready.', correction: 'My line.', revision: '2' });
+  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“My line.”');
+  expect([...host.querySelectorAll('button')].map(b => b.textContent), 'Fix flickered away').toContain('Fix');
+});
