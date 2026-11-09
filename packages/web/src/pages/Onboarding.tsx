@@ -55,6 +55,7 @@ import { createConversation } from "../lib/api/conversations";
 import { ApiError, fetchInspirationPage, fetchInspirationSnapshot, type ApiInspiration } from "../lib/api";
 import { Companion } from "../components/Companion";
 import { CreatureStage } from "../components/onboarding/CreatureStage";
+import { pendingShare, renewShare } from "../components/ShareArrival";
 import { OnboardingIntro } from "../components/onboarding/OnboardingIntro";
 import { OnboardingQuestion } from "../components/onboarding/OnboardingQuestion";
 import { OnboardingReading, OnboardingReveal } from "../components/onboarding/OnboardingRead";
@@ -150,6 +151,10 @@ export default function OnboardingPage(): JSX.Element {
     window.setTimeout(resolve, LEAVE_FADE_MS);
   });
 
+  /* A share that arrived on the way in waits through onboarding (see
+     `pendingShare`): taken up now, put back freshly on the way to home. */
+  const share = useRef(pendingShare());
+
   /* Where onboarding was going is forgotten once onboarding is gone. */
   useEffect(() => () => clearOnboardingExit(), []);
 
@@ -166,6 +171,7 @@ export default function OnboardingPage(): JSX.Element {
     try {
       await updateProfile({ name: profile.name, preferredLocale: normalizeSupportedLocale(profile.preferredLocale), completeOnboarding: true });
       clearOnboardingMarker(accountId);
+      if (share.current) renewShare(share.current);
       navigate(destination, { replace: true });
     } catch (reason) {
       clearOnboardingExit();

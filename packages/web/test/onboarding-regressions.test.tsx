@@ -234,3 +234,21 @@ describe("Talk about this, retried after the finish failed", () => {
     expect(vi.mocked(createConversation)).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("a share that arrived before onboarding", () => {
+  it("is still waiting, freshly, when onboarding hands over to home", async () => {
+    saved = 3;
+    const began = Date.now();
+    const stale = began - 9 * 60 * 1000;
+    sessionStorage.setItem("waka:shared", JSON.stringify({ title: "", text: "Words shared from a page", url: "", via: "share", at: stale }));
+    try {
+      const page = await render();
+      press("Continue");
+      await settle(500);
+      expect(page.textContent).toContain("HOME");
+      const waiting = JSON.parse(sessionStorage.getItem("waka:shared") ?? "null");
+      expect(waiting?.text).toBe("Words shared from a page");
+      expect(waiting?.at).toBeGreaterThanOrEqual(began);
+    } finally { sessionStorage.clear(); }
+  });
+});

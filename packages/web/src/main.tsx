@@ -162,8 +162,10 @@ ReactDOM.createRoot(root).render(
               do not know anything is wrong. `SurfaceBoundary` says what
               broke and offers the way back. */}
           <Route path="/login" element={<SurfaceBoundary surface="the door"><LoginPage /></SurfaceBoundary>} />
-          {/* What the phone's share sheet and the bookmarklet send. */}
-          <Route path="/share" element={<RequireAuth><ShareArrival /></RequireAuth>} />
+          {/* What the phone's share sheet and the bookmarklet send. In front
+              of the sign-in gate: it only hands the share to this tab and
+              steps to `/`, which signs in and onboards as usual. */}
+          <Route path="/share" element={<ShareArrival />} />
           {/* THE ARCHIVE AND THE PRINCIPLES ARE NOT PAGES ANY MORE.
               Founder: "for your inspirations, after I click on it, I feel
               like I'm lost how to go back to the previous screen, and I
