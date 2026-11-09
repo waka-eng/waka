@@ -42,7 +42,10 @@ function backLabel(locale: SupportedLocale, kind: BackKind): string {
 }
 
 function openSheet(): HTMLElement | null {
-  return [...document.querySelectorAll<HTMLElement>('[aria-modal="true"], [role="menu"], .waka-account')]
+  /* `.waka-listening` IS A LAYER TOO (code review, 2026-11-09): the full-screen
+     listening view covers the page, so a native back is its Escape (Done),
+     never the page's "<" opening a question under it. */
+  return [...document.querySelectorAll<HTMLElement>('[aria-modal="true"], [role="menu"], .waka-account, .waka-listening')]
     .filter(node => !node.closest('[hidden], [aria-hidden="true"], [inert]')).at(-1) ?? null;
 }
 

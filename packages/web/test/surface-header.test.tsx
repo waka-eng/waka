@@ -103,6 +103,44 @@ describe('Escape is the "<"', () => {
   });
 });
 
+describe('Escape never hides a page that is not leaving', () => {
+  /* The animated path, forced: jsdom has no `getAnimations`, which made the
+     drop-out run its close at once and hid this bug from every suite. */
+  beforeEach(() => { (HTMLElement.prototype as { getAnimations?: () => Animation[] }).getAnimations = () => []; });
+  afterEach(() => { delete (HTMLElement.prototype as { getAnimations?: () => Animation[] }).getAnimations; });
+
+  it('calls a page\'s "<" handler at once, with no drop-out, when Escape is its "<"', async () => {
+    const stays = vi.fn();
+    await act(async () => root.render(<DialogSurface modal={false} motion="modal" escapeLeavesAsModal={false} onClose={stays} aria-label="Note">
+      <SurfaceHeader locale="en-US" back={{ kind: 'back', onBack: stays }} /><input aria-label="field" />
+    </DialogSurface>));
+    const surface = host.querySelector<HTMLElement>('[data-jar-surface]')!;
+    await act(async () => host.querySelector('input')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(stays, 'Escape waited on a drop-out before asking the page').toHaveBeenCalledOnce();
+    expect(surface.dataset.leaving, 'Escape faded out a page whose "<" kept it').toBeUndefined();
+  });
+
+  it('still drops a sheet that always leaves', async () => {
+    const leaves = vi.fn();
+    await act(async () => root.render(<DialogSurface modal={false} motion="modal" onClose={leaves} aria-label="Kept"><input aria-label="field" /></DialogSurface>));
+    await act(async () => host.querySelector('input')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(host.querySelector<HTMLElement>('[data-jar-surface]')!.dataset.leaving).toBe('1');
+  });
+
+  it('keeps every page whose Escape is its "<" off the drop-out', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const src = (path: string) => readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../src', path), 'utf8');
+    for (const [path, handler] of [['components/InspirationComposer.tsx', 'props.onBack'], ['components/SavesOverlay.tsx', 'onBack'],
+      ['components/ConversationsOverlay.tsx', 'onBack'], ['pages/Home.tsx', 'backPage']] as const) {
+      const text = src(path), at = text.indexOf(`onClose={${handler}}`);
+      expect(at, `${path}: its surface no longer closes by its "<" handler`).toBeGreaterThan(-1);
+      expect(text.slice(Math.max(0, at - 80), at + 80), `${path}: Escape runs "<" through the drop-out`).toContain('escapeLeavesAsModal={false}');
+    }
+  });
+});
+
 describe('a page\'s native back is the "<" too', () => {
   async function touch(type: string, x: number, y: number, target: Element = host, count = 1) {
     await act(async () => {
@@ -153,6 +191,26 @@ describe('a page\'s native back is the "<" too', () => {
     device.native = false; await page('note');
     await touch('touchstart', 8, 200); await touch('touchend', 100, 200);
     expect(back).not.toHaveBeenCalled();
+  });
+
+  it('makes a native back over the listening view its Done, never the page\'s "<"', async () => {
+    device.platform = 'android';
+    const done = vi.fn();
+    await act(async () => root.render(<>
+      <SurfaceHeader locale="en-US" back={{ kind: 'close', onBack: back }} gesture="note" />
+      <ListeningView locale="en-US" words="hello" onDone={done} />
+    </>));
+    for (let turn = 0; turn < 5 && !device.back; turn += 1) await act(async () => { await Promise.resolve(); });
+    await act(async () => device.back!());
+    expect(done, 'Android back over the listening view did not end it').toHaveBeenCalledOnce();
+    expect(back, 'Android back went to the page under the listening view').not.toHaveBeenCalled();
+    device.platform = 'ios';
+    await act(async () => root.render(<>
+      <SurfaceHeader locale="en-US" back={{ kind: 'close', onBack: back }} gesture="note-ios" />
+      <ListeningView locale="en-US" words="hello" onDone={done} />
+    </>));
+    await touch('touchstart', 8, 200); await touch('touchmove', 90, 205); await touch('touchend', 90, 205);
+    expect(back, 'the edge swipe left the page under the listening view').not.toHaveBeenCalled();
   });
 
   it("answers Android's back with the page's handler, or an open sheet's Escape", async () => {

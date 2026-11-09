@@ -5622,15 +5622,24 @@ const RETRY_READ_LIMIT_MS = 20_000;
      set aside in its own row and comes back to Keep a thought once this one
      is done (`startFresh` / `resumeLatest` in `use-inspiration-draft`). Only
      from home: with the notepad already open, the press belongs to that note. */
+  /* A FRESH NOTE UNDER WAY IS NEVER RESUMED OVER (code review, 2026-11-09):
+     the notepad opens a commit after the press, and in that gap the empty
+     fresh draft looked like "nothing on the page", so `resumeLatest` read the
+     set-aside draft back and the screenshot landed in it. Set by the press,
+     cleared when the notepad next closes, and asked again after the read. */
+  const freshUnderway = useRef(false);
   const freshNoteFromHome = () => {
     if (mouthOpen) return;
-    if (composerDraft.startFresh()) draftRef.current = '';
+    if (composerDraft.startFresh()) { draftRef.current = ''; freshUnderway.current = true; }
   };
   const screenshotIntoNewNote = (files: File[]) => {
     freshNoteFromHome(); startNewInspiration(); void addInspirationFiles(files);
   };
+  const mouthWasOpen = useRef(mouthOpen);
   useEffect(() => {
-    if (!mouthOpen && composerDraft.ready) void composerDraft.resumeLatest();
+    if (mouthWasOpen.current && !mouthOpen) freshUnderway.current = false;
+    mouthWasOpen.current = mouthOpen;
+    if (!mouthOpen && composerDraft.ready && !freshUnderway.current) void composerDraft.resumeLatest(() => !freshUnderway.current);
   }, [mouthOpen, composerDraft.ready, composerDraft.draft.id, composerDraft.resumeLatest]);
   const sayIntoNewNote = () => {
     setMouthNote('');
@@ -12040,6 +12049,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             data-way-out="talk"
             modal={false}
             focusFirst={false}
+            escapeLeavesAsModal={false}
             onClose={backPage}>
             {/* THE SHARED HEADER (nav system): "<" Close to home, or Back to
                 Past chats when the chat was opened from there; "Chat" in the

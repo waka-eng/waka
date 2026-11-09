@@ -490,7 +490,7 @@ export function InspirationComposer(props: {
      dragging out of the WINDOW gives a null `relatedTarget`, which
      `contains` reports as outside, so that case still clears. */
   const overheadOff = () => setOverhead(false);
-  return <DialogSurface className="jar-seek jar-inspiration-composer" modal={false} motion="modal" aria-label={say('worldCaptureInspiration')} onClose={props.onBack} data-jar-chrome="1"
+  return <DialogSurface className="jar-seek jar-inspiration-composer" modal={false} motion="modal" aria-label={say('worldCaptureInspiration')} onClose={props.onBack} escapeLeavesAsModal={false} data-jar-chrome="1"
     data-dropping={overhead ? '1' : undefined}
     onDragOver={event => {
       if (!event.dataTransfer.types.includes('Files')) return;

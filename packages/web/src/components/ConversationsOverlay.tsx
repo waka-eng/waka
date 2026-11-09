@@ -235,7 +235,7 @@ export function ConversationsOverlay({ locale, profileId, title, onBack, backKin
           changes — Escape still leaves, and there is no scrim to press
           away on, because `.waka-page` is the ground rather than a film
           over one. */}
-      <DialogSurface {...listScroll} className="waka-over" motion="modal" aria-label={title} modal={false} onClose={onBack}>
+      <DialogSurface {...listScroll} className="waka-over" motion="modal" aria-label={title} modal={false} escapeLeavesAsModal={false} onClose={onBack}>
         <SurfaceHeader locale={locale} gesture={gesture} back={{ kind: backKind, onBack }} title={title}
           right={<button type="button" className="waka-over-new" onClick={() => onOpen(null)}>{say("worldConversationNew")}</button>} />
         <div className="waka-over-find">

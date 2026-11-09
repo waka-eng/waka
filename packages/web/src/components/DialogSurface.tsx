@@ -28,6 +28,15 @@ interface DialogSurfaceProps extends HTMLAttributes<HTMLDivElement> {
    * field takes focus where a keyboard is present (its own `autoFocus`).
    */
   focusFirst?: boolean;
+  /**
+   * `false` — Escape calls `onClose` at once, never through the drop-out.
+   * For a page whose `onClose` is its "<" handler (nav system R3): that
+   * handler often STAYS (the notepad asks before leaving, a saved note steps
+   * back to its list in the same surface), and playing the leave first hid
+   * a page that was not going anywhere for ~1.7s (code review, 2026-11-09).
+   * The "<" press never animated, so now Escape does exactly what it does.
+   */
+  escapeLeavesAsModal?: boolean;
 }
 
 function focusableWithin(root: HTMLElement): HTMLElement[] {
@@ -192,7 +201,7 @@ export function leaveAsModal(then: () => void, from?: Element | null): void {
 }
 
 export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(function DialogSurface(
-  { active = true, modal = true, focusFirst = true, motion, onClose, onKeyDown, children, role, ...props }, forwardedRef,
+  { active = true, modal = true, focusFirst = true, escapeLeavesAsModal = true, motion, onClose, onKeyDown, children, role, ...props }, forwardedRef,
 ) {
   const surface = useRef<HTMLDivElement>(null);
   const opener = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -271,7 +280,7 @@ export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(func
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        if (motion === "modal") leaveAsModal(onClose, event.currentTarget);
+        if (motion === "modal" && escapeLeavesAsModal) leaveAsModal(onClose, event.currentTarget);
         else onClose();
       } else if (event.key === "Tab" && modal) {
         /* ═══ THE TRAP, AND ONLY FOR A SHEET ══════════════════════════════

@@ -1276,6 +1276,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
            kept, and the way out of all of it was a key nobody can see. */
         motion="modal"
         modal={false}
+        escapeLeavesAsModal={false}
         onClose={onBack}
         >
         {open ? null : <SurfaceHeader locale={locale} gesture={gesture}

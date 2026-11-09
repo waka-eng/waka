@@ -189,12 +189,14 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
   }, [pump]);
   /** With the page empty, take up the newest draft still waiting (one set
       aside by `startFresh`, or left by another tab). Never over words. */
-  const resumeLatest = useCallback(async (): Promise<boolean> => {
+  const resumeLatest = useCallback(async (stillWanted: () => boolean = () => true): Promise<boolean> => {
     const scopeAtStart = owner.current, epoch = generation.current, empty = live.current;
     if (!scopeAtStart || !supported.current || empty.text.trim() || empty.linkText?.trim() || empty.media.length || empty.recordingCandidate) return false;
     if (running.current) await running.current.catch(() => undefined);
     const stored = await loadInspirationDraft(scopeAtStart).catch(() => null);
-    if (!stored || stored.id === empty.id || !alive.current || generation.current !== epoch || live.current !== empty) return false;
+    /* `stillWanted` is asked AFTER the read: a fresh note begun while it was
+       in flight (a screenshot or voice from home) must not be swapped out. */
+    if (!stored || stored.id === empty.id || !alive.current || generation.current !== epoch || live.current !== empty || !stillWanted()) return false;
     /* Not written to the text journal: that journal is also what opens the
        notepad by itself on the next load, and a draft set aside is waiting
        to be asked for, not announced. */
