@@ -2186,6 +2186,9 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /* A SAVE OPENED FROM THE SHEET goes back to the sheet by its "<", on the
      query it was found under; it never lands on a list it did not come from. */
   const noteFromSheet = useRef<{ query: string } | null>(null);
+  /* A CHAT OPENED FROM PAST CHATS closes back to Past chats by its "<", as a
+     note opened from the list does; set by the list, cleared by any other open. */
+  const chatFromList = useRef(false);
   const [sheetQuery, setSheetQuery] = useState('');
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
   const [principlesCrossing, setPrinciplesCrossing] = useState<{ going: 'in' | 'out'; home: CreatureSpot | null } | null>(null);
@@ -4870,6 +4873,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
    * not an exit."
    */
   const openTalk = useCallback((id: string | null, principleId: string | null = null) => {
+    chatFromList.current = false;
     const nav = viewNavigationRef.current;
     nav.write(
       { ...EMPTY_VIEW, wallId: atWallRef.current.kind === 'agent' ? atWallRef.current.id : null, conversationId: id ?? 'new', principleId: id ? null : principleId },
@@ -5276,7 +5280,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [recording.stop]);
 
   const closePage = () => {
-    listOrigin.current = null;
+    listOrigin.current = null; chatFromList.current = false;
     if (viewNavigationRef.current.view?.compose) { saveAsDraft(); return; }
     commitOpenNote();
     viewNavigationRef.current.closeToHome();
@@ -5289,10 +5293,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const close = closeSavedNote.current;
     if (close) { close(); return; }
     if (making === 'inspiration') { saveAsDraft(); return; }
-    /* A CHAT'S "<" CLOSES IT (founder, 2026-11-08) — back to where it was
-       opened from (a list it came from, else home), as the notepad's does.
-       Past chats is its own word, top-right. */
-    if (making === 'talk') { closePage(); return; }
+    /* A CHAT'S "<" CLOSES IT (founder, 2026-11-08: "< on top left should be
+       closing this like how it does for the saving"): to home, unless the
+       chat was opened from Past chats, which it closes back to, as the
+       notepad's "<" does for a note opened from the list. Past chats is its
+       own word, top-right. */
+    if (making === 'talk') {
+      if (chatFromList.current) { chatFromList.current = false; listOrigin.current = null; openOverHome('conversations'); return; }
+      closePage(); return;
+    }
     const origin = listOrigin.current;
     listOrigin.current = null;
     if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id, origin.principleId);
@@ -12031,7 +12040,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         locale={locale} profileId={conversationScope.profileId}
         title={formatMessage(locale, 'worldProfileChats', { name: conversationProfile.name })}
         onClose={closePage}
-        onOpen={id=>openTalk(id)}/>:null}
+        onOpen={id=>{ openTalk(id); chatFromList.current = true; }}/>:null}
 
       {/* THE CONVERSATION ITSELF, ALSO OVER THE WORLD.
           Founder: "also dont move talk to waka in a new page. find better
