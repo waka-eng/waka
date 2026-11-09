@@ -340,6 +340,8 @@
 
 .onb-choose { gap: var(--sp-4); padding: var(--sp-6) var(--sp-10); margin-bottom: var(--sp-28); }
 .onb-choose--call { animation: onb-call 2.4s ease-in-out infinite; }
+/* "Keep", the bar's verb said once (as on the home bar): soft, not a door. */
+.onb-keep { flex: none; padding-inline: var(--sp-6) var(--sp-2); color: var(--onb-ink-soft); font-size: var(--t-ui); line-height: 1; white-space: nowrap; }
 .onb-choice {
   width: 80px;
   height: 52px;

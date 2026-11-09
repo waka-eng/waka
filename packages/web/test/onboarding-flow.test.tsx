@@ -112,7 +112,7 @@ async function settle(ms: number): Promise<void> {
 }
 
 async function answer(words: string): Promise<void> {
-  press("Write");
+  press("Keep a thought");
   type(words);
   press("Save");
   await flush();
@@ -230,7 +230,7 @@ describe("three saves, then the first read", () => {
 
   it("does not let Save press with nothing written", async () => {
     const page = await render();
-    press("Write");
+    press("Keep a thought");
     const save = [...page.querySelectorAll("button")].find((node) => node.textContent === "Save")!;
     expect(save.disabled).toBe(true);
   });

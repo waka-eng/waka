@@ -147,7 +147,7 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     await act(async () => back!.click()); await settle();
     expect(location.pathname, 'the "<" left the chat up').not.toContain('/chat/');
     expect(open(), 'the "<" on a chat went somewhere other than home').toBeNull();
-    expect(homeBarShape(world!.container), 'home is not back to the home bar').toEqual(['Write', 'Photo', 'Say it', 'Chat']);
+    expect(homeBarShape(world!.container), 'home is not back to the home bar').toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
     expect(world!.container.querySelector('.chat-composer'), 'the chat\'s composer outlived the chat').toBeNull();
 
     await pressHomeBar(world!.container, 'Chat'); await settle();
@@ -179,10 +179,10 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
      Chat is a glyph with a name, since it has no word beside it. */
   it('draws one hidden glyph over each door\'s word, and names the round Chat', async () => {
     world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-    expect(homeBarShape(world!.container)).toEqual(['Write', 'Photo', 'Say it', 'Chat']);
-    for (const [name, kind] of [['Write', 'write'], ['Photo', 'photo'], ['Say it', 'record'], ['Chat', 'bubble']] as const) {
+    expect(homeBarShape(world!.container)).toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
+    for (const [name, kind] of [['Keep a thought', 'write'], ['Keep a screenshot', 'photo'], ['Keep your voice', 'record'], ['Chat', 'bubble']] as const) {
       const button = [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-row button')]
-        .find(node => (node.textContent?.trim() || node.getAttribute('aria-label')) === name);
+        .find(node => (node.getAttribute('aria-label') || node.textContent?.trim()) === name);
       expect(button, `no home bar button reads ${name}`).toBeTruthy();
       const glyphs = button!.querySelectorAll('svg');
       expect(glyphs.length, `${name} carries no single glyph`).toBe(1);
@@ -190,7 +190,10 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
       expect(glyph.getAttribute('data-home-action-icon')).toBe(kind);
       expect(glyph.getAttribute('aria-hidden')).toBe('true');
       expect(button!.firstElementChild, `the ${kind} glyph is not in front of ${name}`).toBe(glyph);
-      if (name !== 'Chat') expect(button!.hasAttribute('aria-label'), `${name} gained an aria-label over its word`).toBe(false);
+      /* The visible word is what you keep ("a thought"); the name is the
+         whole act ("Keep a thought"), which begins with the word on screen
+         before it, so speech input by the visible words still lands. */
+      if (name !== 'Chat') expect(name.endsWith(button!.textContent!.trim()), `${name} is not named after its word`).toBe(true);
     }
     await pressHomeBar(world!.container, 'Chat'); await settle();
     expect(world!.container.querySelector('button.waka-page-aside')?.textContent).toBe('Past chats');

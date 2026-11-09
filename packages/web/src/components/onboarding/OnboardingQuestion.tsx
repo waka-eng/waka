@@ -387,9 +387,12 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
               </span>
             )}
             <nav className={`onb-pill onb-choose${calling && !locked ? " onb-choose--call" : ""}`} aria-label={say(question.ask)}>
-              <button type="button" className="onb-choice" disabled={locked} onClick={() => choose("write")}><Glyph kind="write" /><span>{say("onboardingWrite")}</span></button>
-              <button type="button" className="onb-choice" disabled={locked} onClick={() => choose("photo")}><Glyph kind="photo" /><span>{say("onboardingPhoto")}</span></button>
-              <button type="button" className="onb-choice" disabled={locked} onClick={() => choose("voice")}><Glyph kind="voice" /><span>{say("onboardingSayIt")}</span></button>
+              {/* THE HOME BAR'S WORDS, so the bar you learn here is the bar
+                  you meet at home: "Keep", then what you keep. */}
+              <span className="onb-keep" aria-hidden="true">{say("worldBarKeep")}</span>
+              <button type="button" className="onb-choice" disabled={locked} aria-label={say("worldBarKeepThought")} onClick={() => choose("write")}><Glyph kind="write" /><span>{say("worldBarThought")}</span></button>
+              <button type="button" className="onb-choice" disabled={locked} aria-label={say("worldBarKeepScreenshot")} onClick={() => choose("photo")}><Glyph kind="photo" /><span>{say("worldBarScreenshot")}</span></button>
+              <button type="button" className="onb-choice" disabled={locked} aria-label={say("worldBarKeepVoice")} onClick={() => choose("voice")}><Glyph kind="voice" /><span>{say("worldBarVoice")}</span></button>
             </nav>
           </>
         ) : mode === "write" ? (

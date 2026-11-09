@@ -195,7 +195,7 @@ it('offers places in the dock, and nothing that is already on the screen',async(
   /* Since 2026-11-08 (design E1) the bar is where you start: Write · Photo ·
      Say it, and Chat beside it. Nothing in it is a place, so nothing is lit. */
   const rows=homeBarShape(world.container);
-  expect(rows).toEqual(['Write', 'Photo', 'Say it', 'Chat']);
+  expect(rows).toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
   expect(world.container.querySelector('[aria-current="page"]'),'on Now, the bar names nowhere you are standing').toBeNull();
   expect(world.container.querySelector('.jar-char-principles')).toBeNull();
   expect(rows,'a claim is answered on home; the dock must not offer a second way in').not.toContain('Claims');
@@ -328,7 +328,7 @@ it('starts a review beside the personal reading and restores home through Back',
      it now lives. */
   /* Since 2026-10-15 Now has no row, so at home nothing on the bar is lit —
      a lit row would claim you were on a new note or a chat. */
-  expect(homeBarShape(world.container)).toEqual(['Write', 'Photo', 'Say it', 'Chat']);
+  expect(homeBarShape(world.container)).toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
   /* Review is not offered any more. It was an activity card beside the
      character, then a menu row, and it is now merged away: Claims is the one
      place that asks a person to rule on their own material, and two surfaces
@@ -807,7 +807,7 @@ it('leaves Principles by Escape, and by its labelled Back in one visible press',
   expect(back?.textContent?.trim(), 'Principles has no visible way home').toBe('Home');
   await act(async () => back!.click()); await settle();
   expect(open(), 'Back on Principles left Principles in place').toBeNull();
-  expect(homeBarShape(world.container)).toEqual(['Write', 'Photo', 'Say it', 'Chat']);
+  expect(homeBarShape(world.container)).toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
 });
 
 it('does not walk to Principles on → while a field has the key', async () => {
@@ -842,7 +842,7 @@ const close = () => world.container.querySelector<HTMLButtonElement>('.waka-dock
 
 it('makes a new note from Inspiration, and its Close goes home with the draft kept', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
-  await act(async () => row('Write').click()); await settle();
+  await act(async () => row('Keep a thought').click()); await settle();
   const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text');
   expect(field, 'Inspiration did not open a new note').toBeTruthy();
   expect(new URLSearchParams(location.search).get('compose')).toBe('1');
@@ -859,9 +859,9 @@ it('makes a new note from Inspiration, and its Close goes home with the draft ke
   expect(open(), 'Close on a note went somewhere other than home').toBeNull();
   expect(world.container.querySelector('textarea.jar-composer-text'), 'the note is still up').toBeNull();
   expect(close(), 'home still offers a Close').toBeNull();
-  expect(homeBarShape(world.container), 'home is not back to the home bar').toEqual(['Write', 'Photo', 'Say it', 'Chat']);
+  expect(homeBarShape(world.container), 'home is not back to the home bar').toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
 
-  await act(async () => row('Write').click()); await settle();
+  await act(async () => row('Keep a thought').click()); await settle();
   expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value,
     'going home threw the draft away').toBe('half a thought');
 });
@@ -870,9 +870,9 @@ it('keeps archive navigation outside the composer, and reaches chat history from
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   /* ON NOW THE BAR IS THE TWO WORDS AND NOTHING ELSE — no list door, no
      Close, no rule. */
-  expect(homeBarShape(world.container), 'Now\'s bar is not the home bar').toEqual(['Write', 'Photo', 'Say it', 'Chat']);
+  expect(homeBarShape(world.container), 'Now\'s bar is not the home bar').toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
 
-  await act(async () => row('Write').click()); await settle();
+  await act(async () => row('Keep a thought').click()); await settle();
   /* NOTHING IN THE CORNER (2026-10-15): the archive's door is the first
      word of the note's own bar, not a word beside its date. */
   expect(world.container.querySelector('.jar-note-see-all, .jar-note-lead'), 'the archive door is back in the note\'s corner').toBeNull();
@@ -922,7 +922,7 @@ it('opens the archive from the Saves sheet with nothing lit, and leaves it by it
     expect(close()).toBeNull();
     await act(async () => returnRow()!.click()); await settle();
     expect(open()).toBeNull();
-    expect(homeBarShape(world.container)).toEqual(['Write', 'Photo', 'Say it', 'Chat']);
+    expect(homeBarShape(world.container)).toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
   }
 });
 
@@ -991,7 +991,7 @@ it('gives a new note a labeled Save and separate Close, without archive navigati
   (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition = StubRecognition;
   try {
     world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
-    await act(async () => row('Write').click()); await settle();
+    await act(async () => row('Keep a thought').click()); await settle();
     /* THE NOTE BAR (design E3): the words across the full width, and under
        them the mic, Add photo and Add file on the left and Save on the right.
        The way out is the labelled Close in the corner, apart from Save. */
@@ -1080,12 +1080,11 @@ it('shows only owned profiles when a signed-in account has no agents', async () 
   expect(world.container.textContent).not.toMatch(/Ouroboros maintainer|Course marketing/);
 });
 
-/* THE NOTEPAD'S DOOR TO EVERYTHING KEPT (founder, design/one-pill-dock): a
-   new note says how many saves there are and opens their list, keeping the
-   draft on the way out. */
+/* NO COUNT ON A NEW NOTE (founder, round 5): the notepad's header is "<",
+   where it saves, and "...". The count of saves and its door are gone. */
 it('keeps the count of saves off a new note (founder: "i also dont like seeing 0 inspirations while im saving sth new")', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
-  await act(async () => row('Write').click()); await settle();
+  await act(async () => row('Keep a thought').click()); await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad did not open').toBeTruthy();
   expect(world.container.querySelector('button.waka-note-to-list'), 'the count door came back').toBeNull();
   expect(world.container.textContent, 'a count of saves is printed on the new note').not.toMatch(/\d+ inspirations?/);

@@ -119,7 +119,7 @@ async function settle(ms: number): Promise<void> {
 }
 
 async function answer(words: string): Promise<void> {
-  press("Write");
+  press("Keep a thought");
   type(words);
   press("Save");
   await flush();
@@ -162,7 +162,7 @@ afterEach(() => {
 });
 
 async function writeAndSave(words: string): Promise<void> {
-  press("Write");
+  press("Keep a thought");
   type(words);
   press("Save");
   await flush();

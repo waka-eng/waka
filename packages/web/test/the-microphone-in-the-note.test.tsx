@@ -141,7 +141,7 @@ const savesStarted = () => vi.mocked(fetchInspirationSaveRequest).mock.calls.len
 async function openNotepad(words = ''): Promise<void> {
   world = await mountWorld(FACTS); await settle();
   const inspiration = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')]
-    .find(row => row.textContent?.trim() === 'Write');
+    .find(row => row.getAttribute('aria-label') === 'Keep a thought');
   expect(inspiration, 'the bar offers no Inspiration row').toBeTruthy();
   await act(async () => inspiration!.click()); await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad did not open').toBeTruthy();
@@ -325,7 +325,7 @@ it('does not splice a finished session\'s last words into the next one', async (
    the tap itself; when the world must wind back first, it never starts the
    microphone later (outside the gesture) — the notepad opens with the mic
    ready to tap. */
-const sayIt = () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')].find(row => row.textContent?.trim() === 'Say it')!;
+const sayIt = () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')].find(row => row.getAttribute('aria-label') === 'Keep your voice')!;
 
 it('starts listening inside the tap when the world is already at now', async () => {
   world = await mountWorld(FACTS); await settle();

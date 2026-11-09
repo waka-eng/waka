@@ -7213,14 +7213,24 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .waka-home-bar-row { display: flex; align-items: center; gap: var(--sp-8); }
 .waka-home-bar-pill {
-  flex: 1 1 auto; min-width: 0; max-width: calc(80px * 3 + var(--sp-4) * 2 + var(--sp-20)); margin-inline: auto; display: flex; align-items: center; justify-content: center; gap: var(--sp-4);
+  flex: 1 1 auto; min-width: 0; margin-inline: auto; display: flex; align-items: center; justify-content: center; gap: var(--sp-4);
   height: var(--sp-64); box-sizing: border-box; padding: var(--sp-6) var(--sp-10);
   border-radius: var(--r-pill); background: var(--waka-raised);
 }
+/* "Keep": the pill's verb, said once, quieter than the doors it governs.
+   Not a button, so it takes no press and no focus. */
+.waka-home-bar-keep {
+  /* On the doors' words' line, not the pill's middle: the doors stack a
+     glyph over a word, and "Keep" reads with the words. */
+  flex: none; align-self: flex-end; margin-bottom: var(--sp-8); padding-inline: var(--sp-6) var(--sp-2);
+  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-ui); line-height: 1; white-space: nowrap;
+}
+/* Each door is as wide as its words ("a screenshot" is longer than "a
+   thought"); equal thirds clipped the longest at 375. */
 .waka-home-bar-door {
   appearance: none; flex: 1 1 auto; min-width: 0; height: calc(var(--sp-48) + var(--sp-4)); padding-inline: var(--sp-4);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-4);
-  padding: 0; border: 0; border-radius: var(--r-pill); background: none;
+  padding-block: 0; border: 0; border-radius: var(--r-pill); background: none;
   color: var(--ink); font-family: var(--waka-face); font-size: var(--t-meta); line-height: 1; white-space: nowrap; cursor: pointer;
 }
 .waka-home-bar-door svg, .waka-home-bar-chat svg { width: var(--sp-20); height: var(--sp-20); stroke-width: 1.6; }

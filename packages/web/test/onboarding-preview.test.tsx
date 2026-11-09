@@ -116,7 +116,7 @@ async function settle(ms: number): Promise<void> {
 }
 
 async function answer(words: string): Promise<void> {
-  press("Write");
+  press("Keep a thought");
   type(words);
   press("Save");
   await flush();
@@ -171,7 +171,7 @@ describe("the preview on a dev server", () => {
     press("Start");
     await settle(400);
     for (const words of ["One", "Two", "Three"]) {
-      press("Write");
+      press("Keep a thought");
       type(words);
       press("Save");
       await wait(2700);
