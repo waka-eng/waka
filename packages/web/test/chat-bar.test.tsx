@@ -121,6 +121,29 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     }
   });
 
+  /* FOCUS FOLLOWS THE LISTENING VIEW, ON A PHONE TOO (review, 2026-11-09):
+     the mic is gone while listening, so Done holds focus; after, the mic has
+     it again (a phone's field does not autofocus, so nothing else will). */
+  it('hands focus to Done while listening and back to the mic after, on a phone', async () => {
+    class StubRecognition { onend: (() => void) | null = null; start(): void {} stop(): void { this.onend?.(); } abort(): void {} }
+    (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition = StubRecognition;
+    const wide = window.matchMedia;
+    const phone = (query: string) => ({ matches: query.includes('max-width'), media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false });
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: phone });
+    try {
+      await aNewChat();
+      const mic = () => world!.container.querySelector<HTMLButtonElement>('button.chat-dictate')!;
+      await act(async () => { mic().focus(); mic().click(); }); await settle();
+      const done = world!.container.querySelector<HTMLButtonElement>('.waka-listening-done');
+      expect(document.activeElement, 'focus fell out of the listening view').toBe(done);
+      await act(async () => done!.click()); await settle();
+      expect(document.activeElement, 'focus did not come back to the mic').toBe(mic());
+    } finally {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: wide });
+      delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+    }
+  });
+
   it('sends what is typed when Send is pressed, and Send is a quiet word', async () => {
     await aNewChat();
     const field = await chatField(world!.container);

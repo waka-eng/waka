@@ -255,7 +255,7 @@ export function NoteTools(props: {
   return createPortal(
     <>
       {props.dictate && props.recording.phase === "idle" ? (
-        <button type="button" className="waka-dock-tool" disabled={busy || props.recordDisabled || props.dictate.listening}
+        <button type="button" className="waka-dock-tool" data-listen-mic="" disabled={busy || props.recordDisabled || props.dictate.listening}
           aria-label={props.recordLabel}
           onClick={props.dictate.start}><HomeActionIcon kind="record" /></button>
       ) : supportedRecordingType() ? (

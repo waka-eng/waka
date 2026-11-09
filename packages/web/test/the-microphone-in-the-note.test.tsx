@@ -291,6 +291,25 @@ it('shows the words arriving softly while listening, and Done drops them into th
 });
 
 
+/* FOCUS FOLLOWS THE VIEW (review, 2026-11-09): pressing the mic unmounts
+   it, so focus fell to the page. It moves to Done, and back to the mic on
+   Done. The words are not a live region: an interim guess re-announced the
+   whole note each time; "Listening…" is the one thing said. */
+it('moves focus to Done while listening and back to the bar after, and does not read the words aloud as they arrive', async () => {
+  await openNotepad();
+  await act(async () => mic().focus());
+  await pressMic();
+  expect(document.activeElement, 'focus fell out of the listening view').toBe(done());
+  const words = world.container.querySelector('.waka-listening-words')!;
+  expect(words.closest('[aria-live], [role="status"], [role="log"]'), 'the transcript is a live region').toBeNull();
+  expect(world.container.querySelector('.waka-listening-label')?.getAttribute('role')).toBe('status');
+  await act(async () => engine().say([{ text: 'a thought', final: true }]));
+  await act(async () => done().click()); await settle();
+  /* The notepad's field takes focus when it returns (it always has: a new
+     note opens ready to type); the mic is where focus goes otherwise. */
+  expect([mic(), field()], 'focus did not come back to the bar').toContain(document.activeElement);
+});
+
 it('does not splice a finished session\'s last words into the next one', async () => {
   await openNotepad();
   await pressMic();

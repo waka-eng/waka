@@ -7802,7 +7802,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       aria-pressed="true"
                       onClick={() => dictation.stop()}>{say('worldComposerDictateStop')}</button>
                   ) : (
-                    <button type="button" className="waka-dock-tool"
+                    <button type="button" className="waka-dock-tool" data-listen-mic=""
                       aria-label={say('worldComposerDictate')}
                       disabled={!composerDraft.available}
                       /* THE PRESS CLEARS THE ANSWER TO THE LAST ACT, which

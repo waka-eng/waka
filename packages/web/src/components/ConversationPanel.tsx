@@ -651,7 +651,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      them: the bar's lent group when there is one, this footer when not. */
   const vacant=MAX_MESSAGE_ATTACHMENTS-attachedCount;
   const tools=()=><>
-    {dictationAvailable()?<button type="button"
+    {dictationAvailable()?<button type="button" data-listen-mic=""
       className={`waka-dock-tool chat-dictate${dictation.listening?' waka-dock-tool--live':''}`}
       aria-pressed={dictation.listening}
       aria-label={say(dictation.listening?'worldComposerDictateStop':'worldComposerDictate')}
