@@ -937,5 +937,6 @@
   "worldReadWordsRetryLimit": "이미 여러 번 시도했어요. 한 시간 뒤에 다시 해 보세요.",
   "worldReadWordsRetryFailed": "다시 읽기를 시작하지 못했어요. 다시 해 보세요.",
   "worldConversationSendWord": "보내기",
-  "worldListening": "듣고 있어요…"
+  "worldListening": "듣고 있어요…",
+  "worldPastChats": "지난 대화"
 }

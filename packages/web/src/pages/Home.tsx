@@ -11672,7 +11672,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           onClick={() => {
             listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new', principleId: viewNavigation.view?.principleId };
             openOverHome('conversations');
-          }}>{say('worldActionsChats')}</button>
+          }}>{say('worldPastChats')}</button>
       ) : null}
       {streamShown ? (
         <HomeStream locale={locale} inspirations={inspirations ?? []} signals={streamSignals(signals)} principles={principles}

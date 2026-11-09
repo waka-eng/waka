@@ -764,9 +764,9 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
 export async function pressChatCorner(container: HTMLElement): Promise<void> {
   if (!container.querySelector(".waka-home-bar")) await closeOverlay(container);
   /* NO DIRECT DOOR FROM HOME SINCE 2026-11-08: the round Chat is the way in,
-     and the chat page carries the way to every past chat. */
+     and the chat page carries Past chats, top right. */
   await pressHomeBar(container, "Chat");
-  await pressWhenItAppears(container, ".waka-page-back", "the chat page's All chats");
+  await pressWhenItAppears(container, ".waka-page-aside", "the chat page's Past chats, top right");
 }
 
 /**

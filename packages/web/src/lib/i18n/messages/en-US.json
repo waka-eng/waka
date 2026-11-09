@@ -937,5 +937,6 @@
   "worldReadWordsRetryLimit": "I've tried a few times already. Try again in an hour.",
   "worldReadWordsRetryFailed": "Couldn't start another read. Try again.",
   "worldConversationSendWord": "Send",
-  "worldListening": "Listening…"
+  "worldListening": "Listening…",
+  "worldPastChats": "Past chats"
 }
