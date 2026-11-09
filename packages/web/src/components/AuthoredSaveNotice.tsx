@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { useAuthoredSave } from '../lib/use-authored-save';
 import { t, type SupportedLocale } from '../lib/i18n';
 
@@ -6,6 +6,10 @@ export function AuthoredSaveNotice({ save, locale }: { save: ReturnType<typeof u
   /* STARTING AGAIN IS ASKED IN PLACE, never in a browser dialog: the
      sentence, then Cancel and Start again. */
   const [asking, setAsking] = useState(false);
+  /* THE QUESTION BELONGS TO THE STATE IT WAS ASKED IN (code review,
+     2026-11-09): when the save moves on, it is put away, so a later failure
+     never opens already asking. */
+  useEffect(() => { setAsking(false); }, [save.phase]);
   if (save.phase === 'idle') return null;
   const message = save.phase === 'checking' ? 'worldSaveChecking' : save.phase === 'saving' ? 'worldKeeping'
     : save.phase === 'removed' ? 'worldSaveRemoved' : save.phase === 'invalid' ? 'worldSaveInvalid'

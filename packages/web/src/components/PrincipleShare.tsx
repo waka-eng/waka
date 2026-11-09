@@ -148,10 +148,15 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const {busy,notice,setNotice,canShare,download,share}=useShareImage(ready?preview?.blob??null:null,filenames);
   /* DISCARDING IS ASKED IN PLACE (the question, Cancel, Discard), never in
      a browser dialog: the one pattern for an act that cannot be undone. */
-  const [askingDiscard,setAskingDiscard]=useState(false);
+  /* THE QUESTION BELONGS TO ONE DRAFT (code review, 2026-11-09): it holds
+     that draft's key, the picker holds still while it is asked, and a draft
+     that changes anyway puts it away, so an answer never lands on another. */
+  const [askingDiscard,setAskingFor]=useState<string|null>(null);
+  const setAskingDiscard=(asking:boolean)=>setAskingFor(asking&&draft?draft.key:null);
+  useEffect(()=>{setAskingFor(null);},[draft?.key]);
   const discard=()=>{
-    setAskingDiscard(false);
-    if(busy||!draft||!source)return;
+    const askedAbout=askingDiscard;setAskingFor(null);
+    if(busy||!draft||!source||askedAbout!==draft.key)return;
     try{clearPrincipleArtifactDraft(draft);useDraft({key:'',raw:'',value:fresh(source)});setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
     catch{setStorageFailed(true);}
   };
@@ -188,7 +193,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
           <details className="jar-share-customize" open={customizing} onToggle={event=>setCustomizing(event.currentTarget.open)}><summary>{say('worldShareCustomize')}</summary>
           {rows.length>1?<label>{say('worldShareChoose')}<select value={source.id} disabled={busy||storageFailed} onChange={event=>onChoose(event.target.value)}>{rows.map(row=><option key={row.id} value={row.id}>{row.statement}</option>)}</select></label>:null}
           <label>{say('worldShareType')}<select value={draft.value.mode??'card'} disabled={busy} onChange={event=>update({...draft.value,mode:event.target.value as 'card'|'change'})}><option value="card">{say('worldShareCard')}</option><option value="change">{say('worldShareChange')}</option></select></label>
-          {drafts.length>1?<label>{say('worldShareDrafts')}<select value={draft.key} disabled={busy||storageFailed} onChange={event=>{const row=drafts.find(item=>item.key===event.target.value);if(row)useDraft(row);}}>{drafts.map((row,index)=><option key={row.key} value={row.key}>{index+1}. {row.value.entries[0].text.slice(0,45)}</option>)}</select></label>:null}
+          {drafts.length>1?<label>{say('worldShareDrafts')}<select value={draft.key} disabled={busy||storageFailed||askingDiscard!==null} onChange={event=>{const row=drafts.find(item=>item.key===event.target.value);if(row)useDraft(row);}}>{drafts.map((row,index)=><option key={row.key} value={row.key}>{index+1}. {row.value.entries[0].text.slice(0,45)}</option>)}</select></label>:null}
           {change?<>
             {historyFailed?<p role="alert">{say('worldShareHistoryFailed')} <button type="button" onClick={()=>setHistoryAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button></p>:
               !statements?<p role="status">{say('worldReviewChecking')}</p>:!after||!earlier.length?<p>{say('worldShareNoHistory')}</p>:<>
@@ -204,7 +209,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
               </>}
           </>:null}
           {!change&&draft.value.entries.length<3&&rows.some(row=>!draft.value.entries.some(entry=>entry.principleId===row.id))?<label>{say('worldShareAdd')}<select value="" disabled={busy} onChange={event=>{const row=rows.find(item=>item.id===event.target.value);if(row)update({...draft.value,entries:[...draft.value.entries,{principleId:row.id,text:row.statement,originalStatement:row.statement}]});}}><option value="">{say('worldShareChoose')}</option>{rows.filter(row=>!draft.value.entries.some(entry=>entry.principleId===row.id)).map(row=><option key={row.id} value={row.id}>{row.statement}</option>)}</select></label>:null}
-          {askingDiscard?<p role="group" aria-label={say('worldShareDiscardConfirm')}>{say('worldShareDiscardConfirm')}{' '}
+          {askingDiscard!==null&&askingDiscard===draft.key?<p role="group" aria-label={say('worldShareDiscardConfirm')}>{say('worldShareDiscardConfirm')}{' '}
             <button type="button" onClick={()=>setAskingDiscard(false)}>{say('worldCancel')}</button>{' '}
             <button type="button" disabled={busy} onClick={discard}>{say('worldReadingDiscard')}</button></p>
             :<button type="button" disabled={busy} onClick={()=>setAskingDiscard(true)}>{say('worldReviewDiscardDraft')}</button>}
