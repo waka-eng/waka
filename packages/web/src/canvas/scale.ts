@@ -171,6 +171,39 @@ const ZOOM_SETTLE_MS = 160;
  * the unsubscribe. Only `visualViewport` reports a pinch — the window does not
  * resize — and every real resize is already the `ResizeObserver`'s.
  */
+/**
+ * Calls `onChange` once the visual viewport has SETTLED on a different zoom
+ * step or a different visible height, and returns the unsubscribe.
+ *
+ * ONE LISTENER, ONE SETTLE. The visible height changes without the root
+ * resizing on iOS (a toolbar collapsing, the keyboard leaving), and a stale
+ * tall height centres the creature under the bar — so height had its own
+ * `resize` listener that called the re-measure directly. That re-measure
+ * also re-reads the zoom and re-bakes the sprites, so a pinch re-baked them
+ * on every frame of the gesture, bypassing the settle below (code review,
+ * 2026-11-08). Both now wait for the same 160ms of stillness.
+ */
+export function onViewportSettle(onChange: () => void): () => void {
+  const vv = typeof window === "undefined" ? null : window.visualViewport;
+  if (!vv) return () => {};
+  let last = { zoom: zoomNow(), height: vv.height };
+  let timer = 0;
+  const settle = () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      const now = { zoom: zoomNow(), height: vv.height };
+      if (now.zoom === last.zoom && now.height === last.height) return;
+      last = now;
+      onChange();
+    }, ZOOM_SETTLE_MS);
+  };
+  vv.addEventListener("resize", settle);
+  return () => {
+    window.clearTimeout(timer);
+    vv.removeEventListener("resize", settle);
+  };
+}
+
 export function onZoomChange(onChange: () => void): () => void {
   const vv = typeof window === "undefined" ? null : window.visualViewport;
   if (!vv) return () => {};

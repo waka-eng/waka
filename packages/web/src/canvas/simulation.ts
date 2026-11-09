@@ -90,7 +90,7 @@
 import type { MutableRefObject, RefObject } from "react";
 
 import { bakeBeing, buildPalette, MACHINE_CELLS, type BeingSprites, type Palette } from "./palette";
-import { onZoomChange, renderScale } from "./scale";
+import { onViewportSettle, renderScale } from "./scale";
 import { VIGNETTE, mix, rgbCss } from "./sprites";
 import type { Measured } from "./measured";
 import { ANTICIPATE_MS, ANTICIPATE_SQ, HOP_MS, hopLift } from "../character/hop";
@@ -5728,12 +5728,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     mq.addEventListener("change", onMq);
     const ro = new ResizeObserver(measure);
     ro.observe(root);
-    /* iOS CAN CHANGE THE VISIBLE HEIGHT WITHOUT RESIZING THE ROOT — a toolbar
-       collapsing, the keyboard leaving — and a stale tall `view.h` centres the
-       creature under the bar (founder's phone, 2026-11-05: body hidden behind
-       the bar, bubble sitting on it). Re-measure when the viewport says so. */
-    const vv = window.visualViewport;
-    vv?.addEventListener("resize", measure);
     /* HQ's content grows when the ambition and the band arrive, which moves
        the companion's slot — so that block's height is observed too */
     if (measured.hqInner.current) ro.observe(measured.hqInner.current);
@@ -5749,7 +5743,12 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        render scale, re-sizes the backing store and re-bakes the sprites when
        the zoom settles on a new step (`canvas/scale.ts`). Layout is unchanged
        by a zoom, so nothing in the world moves. */
-    const offZoom = onZoomChange(measure);
+    /* AND iOS CAN CHANGE THE VISIBLE HEIGHT WITHOUT RESIZING THE ROOT — a
+       toolbar collapsing, the keyboard leaving — and a stale tall `view.h`
+       centres the creature under the bar (founder's phone, 2026-11-05). Both
+       arrive as the visual viewport's `resize`, and both wait for it to
+       settle (`onViewportSettle`), so a pinch does not re-bake mid-gesture. */
+    const offZoom = onViewportSettle(measure);
 
     measure();
     /* `measure` is the first moment `vw` is real, so the horizontal camera can
@@ -6652,7 +6651,6 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       clock.running = false;
       cancelAnimationFrame(clock.raf);
       ro.disconnect();
-      vv?.removeEventListener("resize", measure);
       offZoom();
       root.style.cursor = "";
       root.removeEventListener("pointerdown", onDown, true);
