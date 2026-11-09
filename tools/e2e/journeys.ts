@@ -156,6 +156,27 @@ async function signUp(page: Page, base: string): Promise<{ email: string; name: 
   await page.fill("input[name=name]", name);
   await page.click("button[type=submit]");
   await page.waitForTimeout(6_000);
+  /* ONBOARDING IS MANDATORY since #464, and a brand-new account lands on
+     /onboarding, not the world. Every journey here is about the world, so
+     it finishes onboarding the way the onboarding page itself does — one
+     profile write with `completeOnboarding` — and goes home. Without this
+     every journey after sign-up timed out on a page nobody meant to be on. */
+  if (new URL(page.url()).pathname === "/onboarding") {
+    /* From inside the page, so the request carries exactly what the app's
+       own fetch carries (cookie, same-origin headers). */
+    const res = await page.evaluate(async (who) => {
+      const r = await fetch("/api/auth/me/profile", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: who, preferredLocale: "en-US", completeOnboarding: true }),
+      });
+      return { ok: r.ok, status: r.status, text: r.ok ? "" : await r.text() };
+    }, name);
+    if (!res.ok) throw new Error(`could not finish onboarding: ${res.status} ${res.text}`);
+    await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(4_000);
+  }
   return { email, name };
 }
 
@@ -223,8 +244,9 @@ async function openSettings(page: Page, base: string): Promise<void> {
      and the journey reported a settings group missing that is right there.
      The click did not throw, which is why this needed a browser to find. */
   if ((await page.locator(".waka-over").count()) > 0) {
+    /* The archive leaves by its "‹ Home" in the top-left. */
     await page
-      .getByRole("button", { name: "Close", exact: true })
+      .getByRole("button", { name: "Home", exact: true })
       .first()
       .click({ timeout: 8_000 });
     await page.waitForTimeout(1_200);
@@ -295,13 +317,19 @@ async function countInArchive(page: Page, base: string): Promise<number> {
        The bar is on every wall, so its presence is the real question: if it
        is there, this is a surface the archive opens from and leaving it
        would change which archive is being read. */
-    if ((await page.locator(".waka-dock-item").count()) === 0) {
+    if ((await page.locator(".waka-home-bar").count()) === 0) {
       await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(6_000);
     }
+    /* THE ARCHIVE IS REACHED FROM THE BAR'S "Kept" (2026-11-08): on an
+       agent's wall it opens the archive itself; on your own it pulls up the
+       Kept sheet, whose "Saves ›" heading is the door to the archive. */
     if (!(await page.locator(".waka-over").count())) {
-      await openTheNotepad(page);
-      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await page.locator(".waka-home-bar-pull").click();
+      await page.waitForTimeout(800);
+      if (!(await page.locator(".waka-over").count())) {
+        await page.locator(".waka-stream-door").first().click({ timeout: 8_000 });
+      }
     }
     await page.waitForTimeout(3_000);
     const read = (await page.evaluate(() => {
@@ -324,8 +352,9 @@ async function countInArchive(page: Page, base: string): Promise<number> {
        about a group that was there at the time. Caught by running it.
        (That journey is gone — see its tombstone — and the group with it;
        the overlay-swallows-the-click defect this guards against is not.) */
+    /* The archive leaves by its "‹ Home" in the top-left. */
     await page
-      .getByRole("button", { name: "Close", exact: true })
+      .getByRole("button", { name: "Home", exact: true })
       .first()
       .click({ timeout: 8_000 });
     await page.waitForTimeout(1_200);
@@ -457,10 +486,13 @@ const JOURNEYS: Journey[] = [
         path: window.location.pathname,
         canvases: document.querySelectorAll("canvas").length,
         text: document.body.innerText.trim(),
+        /* The bar's first door reads "a thought" after a quiet "Keep"; its
+           name, read out loud, is the whole act. */
+        door: !!document.querySelector('.waka-home-bar-door[aria-label="Keep a thought"]'),
       }));
       /* An empty world must still SAY something — #262 exists because it used
          to say nothing at all, which reads as broken rather than as new. */
-      const speaks = /Nothing kept to come back to yet/i.test(state.text) && /Save an inspiration/.test(state.text);
+      const speaks = /Nothing kept yet/i.test(state.text) && state.door;
       const ok = state.path === "/" && state.canvases > 0 && speaks;
       return {
         ok,
@@ -882,8 +914,8 @@ const JOURNEYS: Journey[] = [
                                door into the field now */
       await signUp(page, base);
       await openSettings(page, base);
-      if (!(await openSettingsGroup(page, /^Agent profiles$/i))) {
-        return { ok: false, detail: "Settings has no Agent profiles page" };
+      if (!(await openSettingsGroup(page, /^Agents$/i))) {
+        return { ok: false, detail: "Settings has no Agents page" };
       }
       await page.fill(".waka-settings-add input[type=text]", "GroundScout");
       await page.locator(".waka-settings-add button").first().click({ timeout: 8_000 });
@@ -1681,28 +1713,34 @@ const JOURNEYS: Journey[] = [
       // Re-enter the reading after the post-save invitation to chat.
       await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
       const bubble = page.locator(".jar-char-bubble").filter({ has: page.locator(".jar-char-bubble-of") });
-      const share = bubble.getByRole("button", { name: "Share it", exact: true });
+      /* The reading's sentence is its own way in (2026-11-08): it opens the
+         full sheet, whose footer carries Share. Its presence in the bubble
+         is the "a reading is up" signal. */
+      const opener = bubble.locator(".waka-reading-open");
+      const share = page.locator(".waka-reading-full footer").getByRole("button", { name: "Share", exact: true });
       const deadline = Date.now() + 180_000;
       let reviewed = 0;
-      while (!(await share.isVisible()) && Date.now() < deadline) {
+      while (!(await opener.isVisible()) && Date.now() < deadline) {
         const review = page.getByRole("button", { name: "Ask me", exact: true });
         const accept = page.getByRole("button", { name: "Yes", exact: true });
-        const leave = page.getByRole("button", { name: "Exit review mode", exact: true });
+        /* The questions leave by the "<" in the top-left now. */
+        const leave = page.locator("button.waka-page-back");
         if (await review.isVisible()) await review.click();
         else if (await accept.isVisible() && await accept.isEnabled()) {
           await accept.click(); reviewed += 1;
         } else if (await leave.isVisible() && !(await accept.isVisible())) await leave.click();
         await page.waitForTimeout(1_200);
       }
-      if (!(await share.isVisible())) return { ok: false, detail: `no reading after reviewing ${reviewed} generated patterns` };
-      const reading = await bubble.locator(".jar-char-bubble-reading").innerText();
+      if (!(await opener.isVisible())) return { ok: false, detail: `no reading after reviewing ${reviewed} generated patterns` };
+      const reading = await opener.innerText();
       if (!reading.trim()) return { ok: false, detail: "the generated reading is empty" };
+      await opener.click({ timeout: 8_000 });
       await share.click({ timeout: 8_000 });
       await page.locator(".jar-thing-share .jar-share-card img").waitFor({ state: "visible", timeout: 15_000 });
       const shared = await page.locator(".jar-share-inline").inputValue();
       if (shared !== reading) return { ok: false, detail: "the share card changed the selected reading" };
-      await page.locator(".jar-thing-share").getByRole("button", { name: "Close", exact: true }).click();
-      await bubble.getByRole("button", { name: "Let’s chat about it", exact: true }).click({ timeout: 8_000 });
+      await page.locator(".jar-thing-share").getByRole("button", { name: "Back", exact: true }).click();
+      await bubble.getByRole("button", { name: "Chat about this", exact: true }).click({ timeout: 8_000 });
       await page.locator('.chat-message[data-role="user"]').waitFor({ state: "visible", timeout: 15_000 });
       const sent = await page.locator('.chat-message[data-role="user"] .chat-bubble').innerText();
       await page.locator('.chat-message[data-role="assistant"] .chat-bubble').waitFor({ state: "visible", timeout: 120_000 });
