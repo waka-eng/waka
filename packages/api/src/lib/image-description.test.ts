@@ -285,6 +285,8 @@ describe("readImageWords", () => {
       `WORDS: “${words}”\nIMAGE: A reel.`,
       `  words:   '${words}'  \n  image: A reel.`,
       `*Words*: "${words}"\n*Image*: A reel.`,
+      `Image: A reel.\nWords: ${words}`,
+      `**Image:** A reel.\n\n**Words:** "${words}"`,
     ]) expect(readImageWords(description), description).toBe(words);
     expect(readImageWords("**Words:** none\n**Image:** A beach.")).toBeNull();
   });
