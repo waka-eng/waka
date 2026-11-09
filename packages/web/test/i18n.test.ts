@@ -92,6 +92,29 @@ describe("i18n catalog", () => {
     expect(offenders, offenders.join("\n")).toEqual([]);
   });
 
+  /**
+   * ONE WORD PER CONCEPT (language audit, 2026-11-08). The act is Keep, the
+   * list is Kept, one thing is a note, the sentence about you is "On your
+   * mind", a repeated theme is a pattern. These are the words the catalogs
+   * had drifted through for those concepts, retired so they do not drift
+   * back one string at a time. Korean speaks 해요체, with no 당신.
+   */
+  it("speaks one vocabulary, in both languages", () => {
+    const RETIRED = {
+      "en-US": [/top.of.mind/i, /\binspirations?\b/i, /\bsignals?\b/i, /\bclaims?\b/i, /\barchive\b/i, /\bCould not\b/, /\bFailed to\b/, /Please try again/],
+      "ko-KR": [/탑 오브|톱 오브/, /영감/, /시그널|신호/, /보물상자/, /니다[.!?]?$/m, /당신/, /메모리/, /노트(?!북)/, /간직/, /리뷰/],
+    } as const;
+    const offenders: string[] = [];
+    for (const locale of supportedLocaleValues) {
+      for (const [key, value] of Object.entries(messageCatalogs[locale])) {
+        for (const word of RETIRED[locale]) {
+          if (typeof value === "string" && word.test(value)) offenders.push(`${locale} ${key}: "${value.slice(0, 60)}" (${word})`);
+        }
+      }
+    }
+    expect(offenders, offenders.join("\n")).toEqual([]);
+  });
+
   it("does not ship undefined or blank catalog values", () => {
     for (const locale of supportedLocaleValues) {
       for (const [key, value] of Object.entries(messageCatalogs[locale])) {

@@ -175,7 +175,7 @@ it('says a failed upload on its chip, holds Send, and retries on press', async()
   expect(chips()[0]!.className).toContain('chat-chip--failed');
   expect(chips()[0]!.textContent).toContain('Couldn’t add this');
   expect(send().disabled,'Send would drop a photo that never arrived').toBe(true);
-  expect(send().title).toBe('Remove or retry the one that couldn’t be added');
+  expect(send().title).toBe('Remove the one that couldn’t be added, or try it again');
   await act(async()=>chips()[0]!.querySelector<HTMLButtonElement>('button[aria-label="Try uploading sky.png again"]')!.click());await flush();
   expect(uploadMessageAttachment).toHaveBeenCalledTimes(2);
   expect(chips()[0]!.className).toContain('chat-chip--ready');

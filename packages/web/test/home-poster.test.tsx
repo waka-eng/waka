@@ -637,7 +637,7 @@ describe("what the poster is standing on", () => {
     const leads = [...layout.container.querySelectorAll(".jar-prov--poster .jar-prov-lead")].map(
       (n) => (n.textContent ?? "").trim(),
     );
-    expect(leads, "the poster was asked and answered with nothing").toContain("View inspirations");
+    expect(leads, "the poster was asked and answered with nothing").toContain("See all");
 
     /* AND "BUILT FROM" IS A DOOR NOW, NOT A LABEL OVER A LIST. The rows used
        to sit here and to TRAVEL — pressing one left headquarters for the
@@ -645,7 +645,7 @@ describe("what the poster is standing on", () => {
        nothing away from you (founder, 2026-08-25). The memories under the
        ambition are the same memories; this follows them through the door. */
     const door = [...layout.container.querySelectorAll<HTMLElement>(".jar-prov-open")].find(
-      (n) => (n.textContent ?? "").trim() === "View inspirations",
+      (n) => (n.textContent ?? "").trim() === "See all",
     );
     if (!door) throw new Error("`built from` is not pressable — the grounds have no way in");
     await act(async () => door.click());

@@ -210,7 +210,7 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
   keys.push(key('Personal laptop', personal.id), { ...key('Old personal key', personal.id), revokedAt: '2026-10-22T00:00:00Z' });
   await openPersonal();
   expect(host.querySelector('h2')?.textContent).toBe('You');
-  expect(host.textContent).toContain('My profile · You');
+  expect(host.textContent).toContain('You · You');
   expect(calls.some(c => c.path.includes('keys'))).toBe(false);
   await click('API keys');
   expect(host.textContent).toContain('can’t edit or delete notes, or reach your agents');
@@ -242,7 +242,7 @@ it('keeps personal keys in their tab and copies a profile-bound setup prompt wit
   const details = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(prompt)![1]!);
   expect(details).toMatchObject({ profileId: personal.id, profileType: 'human', serverName: `waka-${personal.id}`, scope: 'current project only' });
   expect(details.login).toBeUndefined();
-  expect(prompt).toContain('Settings → My profile · MCP → API keys');
+  expect(prompt).toContain('Settings → You · MCP → API keys');
   expect(prompt).toContain('Do not use browser login or create an agent profile');
   expect(prompt).toContain('Never ask me to paste the key into chat');
   expect(prompt).not.toContain(noah.id); expect(prompt).not.toContain(secret);
@@ -277,7 +277,7 @@ it('retries a failed personal profile load and translates personal setup in Kore
   expect(calls.every(c => c.path === '/api/profiles')).toBe(true);
   fail = null;
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-settings-erase')!.click());
-  expect(host.textContent).toContain('내 프로필 · You');
+  expect(host.textContent).toContain('나 · You');
   await click('설정 프롬프트 복사');
   expect(copied.at(-1)).toContain('브라우저 로그인이나 에이전트 프로필 생성을 사용하지 마세요');
   expect(copied.at(-1)).toContain(personal.id);
