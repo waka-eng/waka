@@ -67,15 +67,26 @@ it('flows a fix into material, conversation, embeddings and a new learning pass'
   expect(saved.status).toBe(200);
   expect(await saved.json()).toMatchObject({ status: 'ready', text: 'You do not need permission to begin.', read: 'Start before you are ready.', revision: '1' });
   const material = await loadInspirationMaterial(t.db as never, f.profileId, f.sourceId, 'personal');
-  expect(material?.attachmentRows).toMatchObject([{ kind: 'image_description', status: 'ready', text: 'You do not need permission to begin.' }]);
+  /* The fix replaces the WORDS; the description of the picture stays. */
+  expect(material?.attachmentRows).toMatchObject([{ kind: 'image_description', status: 'ready',
+    text: 'Words: You do not need permission to begin.\nImage: A screenshot of a video with a burned-in caption.' }]);
   expect(material?.identity.revision).not.toBe(before?.identity.revision);
   expect(await t.sql`SELECT id FROM background_jobs WHERE type='derive_signals'`).toHaveLength(1);
   expect(await t.sql`SELECT id FROM inspiration_embeddings`).toHaveLength(0);
   await ensureInspirationEmbedding({ db: t.db as never, profileId: f.profileId, inspirationId: f.sourceId, client });
   expect(embed.mock.calls[1]?.[0]).toContain('You do not need permission to begin.');
+  expect(embed.mock.calls[1]?.[0]).toContain('burned-in caption');
   expect(embed.mock.calls[1]?.[0]).not.toContain('Start before you are ready.');
   const [conversation] = await readConversationMaterial(t.db as never, f.profileId, ['permission']);
-  expect(conversation?.text).toContain('Words in the image (your correction):\nYou do not need permission to begin.');
+  expect(conversation?.text).toContain('Image (the words are your correction):\nWords: You do not need permission to begin.\nImage: A screenshot of a video with a burned-in caption.');
+});
+it('keeps a reading from before the two-part shape whole as the picture, under a fix, and quotes none of it', async () => {
+  const legacy = 'A photograph of a cat on a sofa.';
+  const f = await fixture({ status: 'ready', text: legacy });
+  expect(await (await f.app.request(f.path)).json()).toMatchObject({ status: 'unknown', text: null, read: null });
+  await f.edit('Cats know.');
+  const material = await loadInspirationMaterial(t.db as never, f.profileId, f.sourceId, 'personal');
+  expect(material?.attachmentRows).toMatchObject([{ text: 'Words: Cats know.\nImage: A photograph of a cat on a sofa.' }]);
 });
 it('refuses a stale or empty fix and can return to the words read', async () => {
   const f = await fixture(); await f.edit('First fix');

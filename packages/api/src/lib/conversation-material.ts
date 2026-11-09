@@ -102,7 +102,7 @@ export async function readConversationMaterial(db:Reader,profileId:string,terms:
   return rows.map(row=>{
     const parts=[...(row.text.trim()?[{label:row.answers.length||row.media.length?'Saved text':'',text:row.text}]:[]),
       ...row.answers.slice(0,3).map(answer=>({label:'Reflection (your words)',text:answer.text})),
-      ...row.media.slice(0,3).map(item=>({label:item.type==='audio'?item.corrected?'Audio transcript (your correction)':'Audio transcript':item.type==='image'?item.corrected?'Words in the image (your correction)':'Image description (generated)':'Link content',text:item.text}))];
+      ...row.media.slice(0,3).map(item=>({label:item.type==='audio'?item.corrected?'Audio transcript (your correction)':'Audio transcript':item.type==='image'?item.corrected?'Image (the words are your correction)':'Image description (generated)':'Link content',text:item.text}))];
     const allowance=Math.floor((1600-Math.max(0,parts.length-1)*2)/Math.max(1,parts.length));
     const formatted=parts.map(part=>part.label?`${part.label}:\n${part.text}`:part.text);
     const text=formatted.map(part=>part.slice(0,allowance)).join('\n\n');
