@@ -359,7 +359,7 @@ export function InspirationComposer(props: {
      stays on the shelf of tiles under it. */
   const hero = props.media.find(item => item.type === 'image' && item.blob && !item.validationError && !item.uploadError) ?? null;
   const shelf = hero ? props.media.filter(item => item !== hero) : props.media;
-  const unreadable = Boolean(hero && (props.readWords?.status === 'unreadable' || props.readWords?.status === 'retrying'));
+  const unreadable = Boolean(hero && (props.readWords?.status === 'unreadable' || props.readWords?.status === 'retrying' || props.readWords?.status === 'failed'));
   const line = hero
     ? say(unreadable ? 'worldNoteAskUnreadable' : props.readWords?.status === 'ready' ? 'worldNoteAskLine' : 'worldNoteAskPhoto')
     : props.arrival ? say('worldShareArrived') : null;

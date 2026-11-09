@@ -81,7 +81,7 @@ it('keeps asking through a timeout or a rate limit', async () => {
 it('stops asking when the retry budget is spent, instead of polling an answer that cannot change', async () => {
   vi.useFakeTimers();
   const reopens = new Date(Date.now() + 60_000).toISOString();
-  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: reopens }));
+  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'failed', text: null, read: null, canRetry: false, retryAfter: reopens }));
   await mount();
   await act(async () => { await vi.advanceTimersByTimeAsync(180_000); });
   expect(fetchImageWords, 'it polled a read nothing could hurry').toHaveBeenCalledTimes(1);
@@ -112,7 +112,7 @@ it('asks only while the inline read is still going', async () => {
 it('offers "Try reading it again" when nothing is queued, promises nothing, and queues a read only on the press', async () => {
   vi.useFakeTimers();
   const queued = row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null });
-  vi.mocked(fetchImageWords).mockResolvedValueOnce(row({ status: 'retrying', text: null, read: null, canRetry: true }))
+  vi.mocked(fetchImageWords).mockResolvedValueOnce(row({ status: 'failed', text: null, read: null, canRetry: true }))
     .mockResolvedValueOnce(queued).mockResolvedValue(row({}));
   vi.mocked(retryImageWords).mockResolvedValue(queued);
   await mount();
@@ -128,7 +128,7 @@ it('offers "Try reading it again" when nothing is queued, promises nothing, and 
 });
 
 it('says when the retry budget is spent instead of failing quietly', async () => {
-  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: true }));
+  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'failed', text: null, read: null, canRetry: true }));
   vi.mocked(retryImageWords).mockRejectedValue(new ApiError({ status: 429, code: 'words_retry_limit', message: 'Too many' }));
   await mount();
   await press('Try reading it again');
@@ -162,3 +162,14 @@ it('keeps a fix when a read that left before it answers after it', async () => {
   expect(host.querySelector('.waka-note-read-text')?.textContent, 'an older read overwrote the fix').toBe('“My line.”');
 });
 
+
+/* Code review, 2026-11-08: 'failed' (nothing queued) never promises a read;
+   'retrying' (a read queued) always does — inline too. */
+it('promises a read only for one that is queued, from the inline summary as from the read', async () => {
+  vi.mocked(fetchImageWords).mockImplementation(() => new Promise(() => {}));
+  await mountInline({ status: 'failed', text: null, read: null, correction: null, revision: '0' });
+  expect(host.textContent).toContain("I couldn't make out the words. Which line stuck?");
+  expect(host.textContent).not.toContain("I'll try reading it again in a bit.");
+  await mountInline({ status: 'retrying', text: null, read: null, correction: null, revision: '0' });
+  expect(host.textContent).toContain("I'll try reading it again in a bit.");
+});

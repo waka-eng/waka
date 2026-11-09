@@ -16,7 +16,7 @@ import { IMAGE_WORDS_STATUSES } from '../src/lib/api/attachments';
 const read = (...path: string[]) => readFileSync(join(...path), 'utf8');
 
 it('says the image-words statuses once, and the hook and the quote derive from it', () => {
-  expect(IMAGE_WORDS_STATUSES).toEqual(['reading', 'ready', 'unreadable', 'retrying', 'unknown']);
+  expect(IMAGE_WORDS_STATUSES).toEqual(['reading', 'ready', 'unreadable', 'retrying', 'failed', 'unknown']);
   expect(read('src', 'lib', 'use-image-words.ts')).not.toMatch(/new Set\(\['reading'/);
   expect(read('src', 'components', 'ImageWords.tsx')).not.toMatch(/status: 'reading' \| 'ready'/);
 });

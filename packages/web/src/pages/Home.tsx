@@ -10063,7 +10063,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                      (E5); See all pulls up the saves. A keep with no words
                      has nothing to talk about yet, so it offers See all. */
                   <span className="jar-char-bubble-acts">
-                    {visibleInspiration && (keptWords?.status === 'unreadable' || keptWords?.status === 'retrying') ? (
+                    {visibleInspiration && (keptWords?.status === 'unreadable' || keptWords?.status === 'retrying' || keptWords?.status === 'failed') ? (
                       /* "Which line stuck?" is answered on the saved note,
                          where the line becomes its words (a Fix). */
                       <button type="button" className="jar-char-bubble-act"

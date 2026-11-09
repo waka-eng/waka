@@ -40,7 +40,7 @@ export function ReadWordsQuote({ words, locale, onFix, onRetry, queued = false, 
   const [fixing, setFixing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
-  const missed = words.status === 'unreadable' || words.status === 'retrying';
+  const missed = words.status === 'unreadable' || words.status === 'retrying' || words.status === 'failed';
   if (words.status === 'unknown') return null;
   const send = async () => {
     if (!onFix || fixing === null || !fixing.trim()) return;
@@ -58,8 +58,8 @@ export function ReadWordsQuote({ words, locale, onFix, onRetry, queued = false, 
   if (missed) return <div className="waka-note-read" data-missed="1">
     <div className="waka-note-read-body">
       {asks ? <p className="waka-note-read-ask">{say('worldNoteAskUnreadable')}</p> : null}
-      {words.status === 'retrying' && queued ? <p className="waka-note-retry">{say('worldReadWordsRetry')}</p> : null}
-      {words.status === 'retrying' && !queued && onRetry && fixing === null ? <button type="button" className="waka-note-read-act waka-note-read-again" disabled={disabled || busy}
+      {queued ? <p className="waka-note-retry">{say('worldReadWordsRetry')}</p> : null}
+      {!queued && onRetry && fixing === null ? <button type="button" className="waka-note-read-act waka-note-read-again" disabled={disabled || busy}
         onClick={async () => { setBusy(true); setNote(''); const outcome = await onRetry(); setBusy(false);
           if (outcome !== 'queued') setNote(say(outcome === 'limited' ? 'worldReadWordsRetryLimit' : 'worldReadWordsRetryFailed')); }}>
         {say('worldReadWordsRetryNow')}</button> : null}
@@ -89,5 +89,5 @@ export function SavedImageWords({ attachmentId, locale, readOnly = false, inline
   const mayWrite = !readOnly && words.canEdit;
   return <ReadWordsQuote words={{ status: words.status, text: words.text ?? undefined }} locale={locale} asks
     onFix={mayWrite ? fix : undefined} queued={readQueued(words)}
-    onRetry={mayWrite && words.status === 'retrying' && words.canRetry ? retry : undefined} disabled={false} />;
+    onRetry={mayWrite && (words.status === 'failed' || words.status === 'retrying') && words.canRetry ? retry : undefined} disabled={false} />;
 }

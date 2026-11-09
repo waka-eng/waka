@@ -61,6 +61,8 @@ export type RetryOutcome = 'queued' | 'limited' | 'failed';
 /** Whether a read is queued and will land: the only state worth promising
     "I'll try reading it again" about. */
 export function readQueued(row: Pick<ApiImageWords, 'status' | 'canRetry' | 'retryAfter'>): boolean {
+  /* 'retrying' means a read is queued (the API says 'failed' when nothing
+     is); `canRetry`/`retryAfter` stay as a guard for an older server. */
   return row.status === 'retrying' && !row.canRetry && !row.retryAfter;
 }
 
