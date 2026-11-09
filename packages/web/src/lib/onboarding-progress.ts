@@ -72,9 +72,13 @@ export function clearOnboardingMarker(accountId: string | null | undefined): voi
  */
 export function onboardingStep(input: { saved: number; marker: OnboardingMarker; hasName: boolean }): OnboardingStep {
   const saved = Math.max(0, Math.floor(input.saved));
+  /* A NAME BEFORE ANYTHING ELSE, whatever has been saved: finishing sends the
+     profile's name, and an empty one is refused — so a nameless profile let
+     past this would be stuck at the end for good. */
+  if (!input.hasName) return { kind: "name" };
   if (saved >= ONBOARDING_QUESTIONS) return { kind: "reading" };
   if (saved > 0) return { kind: "question", index: saved };
-  if (!input.marker.named || !input.hasName) return { kind: "name" };
+  if (!input.marker.named) return { kind: "name" };
   if (!input.marker.introSeen) return { kind: "intro" };
   return { kind: "question", index: 0 };
 }

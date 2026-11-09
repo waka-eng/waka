@@ -252,3 +252,19 @@ describe("a share that arrived before onboarding", () => {
     } finally { sessionStorage.clear(); }
   });
 });
+
+describe("a nameless profile that has already answered", () => {
+  it("is asked its name first, then goes back to the question it was on", async () => {
+    saved = 2;
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(viewer({ name: "" }));
+    vi.mocked(updateAuthProfile).mockResolvedValue(viewer({ name: "Mina" }));
+    const page = await render();
+    const input = page.querySelector<HTMLInputElement>('input[name="name"]');
+    expect(input).not.toBeNull();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    act(() => { setter.call(input!, "Mina"); input!.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => { page.querySelector("form")!.requestSubmit(); });
+    await flush();
+    expect(page.textContent).toContain("Share something you want more of in your life.");
+  });
+});

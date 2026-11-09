@@ -120,6 +120,8 @@ export default function OnboardingPage(): JSX.Element {
   const [leaveError, setLeaveError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const accountId = account?.id ?? null;
+  /** How many answers the server holds, so naming resumes where they were. */
+  const savedCount = useRef(0);
   const profileId = profile?.id ?? null;
   /* DEV ONLY: `?preview=1` walks the flow without saving or stamping anything. */
   const preview = onboardingPreviewRequested(location.search);
@@ -133,6 +135,7 @@ export default function OnboardingPage(): JSX.Element {
     setPhase({ kind: "loading" });
     fetchInspirationSnapshot(profileId, controller.signal).then((snapshot) => {
       if (controller.signal.aborted) return;
+      savedCount.current = snapshot.total;
       setPhase(onboardingStep({ saved: snapshot.total, marker: readOnboardingMarker(accountId), hasName: Boolean(profile?.name.trim()) }));
     }, () => { if (!controller.signal.aborted) setPhase({ kind: "unreachable" }); });
     return () => controller.abort();
@@ -252,7 +255,7 @@ export default function OnboardingPage(): JSX.Element {
        coming back; a browser that keeps nothing (private mode, blocked site
        data) would read "not named" straight back and ask the name forever —
        and onboarding is mandatory, so that is a person stuck at the door. */
-    return <NameStep onNamed={() => setPhase(onboardingStep({ saved: 0, marker: { ...readOnboardingMarker(accountId), named: true }, hasName: true }))} />;
+    return <NameStep onNamed={() => setPhase(onboardingStep({ saved: savedCount.current, marker: { ...readOnboardingMarker(accountId), named: true }, hasName: true }))} />;
   }
   if (phase.kind === "intro") {
     return <OnboardingIntro locale={locale} onDone={() => { if (!preview) writeOnboardingMarker(accountId, { introSeen: true }); setPhase({ kind: "question", index: 0 }); }} />;

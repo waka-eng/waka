@@ -36,6 +36,13 @@ describe("onboardingStep", () => {
     expect(onboardingStep({ saved: 9, marker: {}, hasName: true })).toEqual({ kind: "reading" });
   });
 
+  it("asks the name before anything else when the profile has none, however many answers exist", () => {
+    /* Finishing sends the profile's name, and the server refuses an empty
+       one — so a nameless profile past its answers was stuck for good. */
+    expect(onboardingStep({ saved: 2, marker: { named: true, introSeen: true }, hasName: false })).toEqual({ kind: "name" });
+    expect(onboardingStep({ saved: 3, marker: {}, hasName: false })).toEqual({ kind: "name" });
+  });
+
   it("asks the name again when the profile has none, even if marked", () => {
     expect(onboardingStep({ saved: 0, marker: { named: true, introSeen: true }, hasName: false })).toEqual({ kind: "name" });
   });
