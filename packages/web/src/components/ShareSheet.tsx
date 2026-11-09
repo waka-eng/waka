@@ -25,8 +25,8 @@
  * edit wording thing" — so there is no second box under the card: pressing
  * the words opens them for editing in the bubble itself, set in the card's
  * own face, size and colours, and the picture redraws when you are done.
- * And "I just wanted to say X on the top right corner" — the close is a
- * plain ×, not a labelled button.
+ * Its way out is the shared header's "<" (Close), top-left, as on every
+ * sheet (nav system); Escape and the backdrop call the same handler.
  *
  * ── WHAT IT NEVER DOES ──────────────────────────────────────────────────
  *
@@ -41,7 +41,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { CSSProperties } from "react";
 import { DialogSurface } from "./DialogSurface";
-import { SheetBack } from "./PageBack";
+import { SurfaceHeader } from "./SurfaceHeader";
 import { fetchAttachmentUrl } from "../lib/api";
 import { ArtifactLayoutError, renderShareCard, type PrincipleArtifactContent, type ShareCardLayout } from "../lib/principle-artifact";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
@@ -348,10 +348,7 @@ export function ShareSheet({ target, locale, onClose }: {
     <>
       <button className="jar-review-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={onClose} />
       <DialogSurface className="jar-seek jar-thing-share" aria-label={title} onClose={onClose} data-jar-chrome="1">
-        <header>
-          <SheetBack label={say("worldBack")} onBack={onClose} />
-          <h2>{title}</h2>
-        </header>
+        <SurfaceHeader locale={locale} back={{ kind: "close", onBack: onClose }} title={title} />
         <div className="jar-share-body">
           <div className="jar-share-stage" aria-busy={!ready && !renderError}>
             {preview || inline ? (

@@ -18,7 +18,9 @@
  *   the way back, top-left, where a phone puts it
  *   when this note is, top-middle, because on an empty page that is the only
  *     fact that exists yet
- *   who may read it, top-right, where the reference keeps its "⋯"
+ *   nothing top-right: the "⋯" that held Discard went (founder,
+ *     2026-11-09: "it's weird < is saving draft while ... = discard draft").
+ *     The "<" asks instead, when there is something to lose; see `LeaveAsk`.
  *   attaching, bottom-left, two glyphs in one pill
  *   keeping it, bottom-right, opposite the pill
  *
@@ -43,7 +45,6 @@ import {inspirationWithPendingLink} from '../lib/inspiration-input';
 import { fileSizeWords } from '../lib/api/file-accept';
 import { formatMessage, isMessageKey, t, type SupportedLocale } from '../lib/locales';
 import { attachmentLabel } from '../lib/attachment-label';
-import { useDockMenu } from '../lib/use-dock-menu';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { useAuthoredSave } from '../lib/use-authored-save';
 import type { useAudioRecording } from '../lib/use-audio-recording';
@@ -247,19 +248,68 @@ function CreatureLine({ children, softer }: { children: ReactNode; softer?: Reac
   </div>;
 }
 
+/**
+ * ═══ "<" ASKS, WHEN THERE IS SOMETHING TO LOSE ═══════════════════════════
+ * Founder, 2026-11-09: "it's weird < is saving draft while ... = discard
+ * draft." Two exits for one note, in two corners, each doing something
+ * different and neither saying which. Now there is one way out, the "<", and
+ * on a note with something in it the creature asks in its own bubble: Keep as
+ * draft (what "<" always did) or Discard. The ask IS the confirm, so Discard
+ * asks nothing more. An empty note just leaves; there is nothing to ask about.
+ * Escape, or a tap anywhere else, puts the question away and you stay.
+ */
+function LeaveAsk({ question, keepLabel, discardLabel, failed, failedLabel, busy, busyLabel, cannotDiscard, onKeep, onDiscard, onStay }: {
+  question: string; keepLabel: string; discardLabel: string; failed: boolean; failedLabel: string;
+  busy: boolean; busyLabel: string; cannotDiscard: boolean; onKeep: () => void; onDiscard: () => void; onStay: () => void;
+}) {
+  const box = useRef<HTMLDivElement>(null), first = useRef<HTMLButtonElement>(null);
+  const stay = useRef(onStay); stay.current = onStay;
+  useEffect(() => { first.current?.focus(); }, []);
+  useEffect(() => {
+    /* A TAP ANYWHERE ELSE IS "NO, I'M STAYING". The "<" itself is left to
+       its own press, which puts the question away the same way. */
+    const away = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (!target || box.current?.contains(target) || target.closest?.('.waka-surface-back')) return;
+      stay.current();
+    };
+    document.addEventListener('pointerdown', away, true);
+    return () => document.removeEventListener('pointerdown', away, true);
+  }, []);
+  return <div ref={box} className="waka-note-line waka-note-ask" role="group" aria-labelledby="waka-note-ask-q">
+    <span className="waka-note-creature" aria-hidden="true"><Companion size={32} label="" pressable={false} /></span>
+    <div className="waka-note-says waka-note-says--ask">
+      <p id="waka-note-ask-q" className="waka-note-ask-q">{question}</p>
+      {failed ? <p className="waka-note-says-softer" role="alert">{failedLabel}</p> : null}
+      <div className="jar-char-bubble-acts">
+        <button ref={first} type="button" className="jar-char-bubble-act" disabled={busy} onClick={onKeep}>{keepLabel}</button>
+        <button type="button" className="jar-char-bubble-act jar-char-bubble-act--quiet" disabled={busy || cannotDiscard} onClick={onDiscard}>{busy ? busyLabel : discardLabel}</button>
+      </div>
+    </div>
+  </div>;
+}
+
 /** The picture the note is about, as large as the page allows. */
-function HeroPhoto({ item, name, blurred, removeLabel, disabled, onRemove }: {
+/* ═══ A PICTURE THAT CANNOT BE DRAWN IS NOT DRAWN LARGE (founder, 2026-11-09:
+   a restored draft's photo stood as "a big empty dark preview with an ×") ═══
+   A restored file the browser cannot decode (a HEIC outside Safari, a blob
+   the store gave back unreadable or empty) used to keep the whole 340px frame
+   with nothing in it. Now the frame says so (`onBroken`) and the page puts
+   that file on the shelf instead, as a named tile with its ×, so it is still
+   there to keep or remove and never a blank box. */
+function HeroPhoto({ item, name, blurred, removeLabel, disabled, onRemove, onBroken }: {
   item: InspirationDraftMedia; name: string; blurred: boolean; removeLabel: string; disabled: boolean; onRemove: () => void;
+  onBroken: () => void;
 }) {
   const [url, setUrl] = useState('');
-  const [failed, setFailed] = useState(false);
+  const broken = useRef(onBroken); broken.current = onBroken;
   useEffect(() => {
     if (!item.blob) return;
-    const value = URL.createObjectURL(item.blob); setUrl(value); setFailed(false);
+    const value = URL.createObjectURL(item.blob); setUrl(value);
     return () => URL.revokeObjectURL(value);
   }, [item.blob]);
   return <figure className="waka-note-hero" data-blurred={blurred ? '1' : undefined}>
-    {url && !failed ? <img src={url} alt={name} onError={() => setFailed(true)} /> : <span className="waka-note-hero-name">{name}</span>}
+    {url ? <img src={url} alt={name} onError={() => broken.current()} /> : null}
     <button type="button" className="waka-note-hero-x" aria-label={removeLabel} disabled={disabled} onClick={onRemove}>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" /></svg>
     </button>
@@ -296,8 +346,18 @@ export function InspirationComposer(props: {
      looking for the control that honours it. The way out of this page is
      the dock, which `way-out.test.ts` is the gate for. */
   onClose: () => void; onSubmit: () => void;
+  /** THE "<" AND ESCAPE, ONE HANDLER (nav system R3): it asks before leaving
+      a note with something in it (`asking`), and a second press stays. */
+  onBack: () => void;
+  /** The page's address, for the native back gestures. */
+  gesture?: string | null;
   onDiscard?: () => Promise<boolean>;
   discardDisabled?: boolean;
+  /** The "<" was pressed on a note with something in it: ask Keep as draft
+      or Discard in the creature's bubble. `onClose` keeps the draft and
+      leaves; `onStay` puts the question away. */
+  asking?: boolean;
+  onStay?: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
   /** True when the draft changed in another tab — the one state the "keep as
       a separate draft" button answers. A flag, not a match on the error's
@@ -322,7 +382,7 @@ export function InspirationComposer(props: {
   listening?: { notice?: string; onDone: () => void };
 }) {
   const linkInput = useRef<HTMLInputElement>(null);
-  const [discarding, setDiscarding] = useState(false), [confirmDiscard, setConfirmDiscard] = useState(false), [discardFailed, setDiscardFailed] = useState(false);
+  const [discarding, setDiscarding] = useState(false), [discardFailed, setDiscardFailed] = useState(false);
   const discardLock = useRef(false);
   const [addingLink, setAddingLink] = useState(Boolean(props.linkText));
   /** Whether a file is being held over this page right now. See the drop
@@ -353,16 +413,35 @@ export function InspirationComposer(props: {
      The check was also already redundant for most of what it covered: the
      input is `disabled={blocked}`, and a disabled input has no keydown to
      gate. */
-  const blocked = discarding || confirmDiscard || props.busy || Boolean(props.save.pending) || !props.ready || props.recording.phase !== 'idle';
+  const blocked = discarding || props.busy || Boolean(props.save.pending) || !props.ready || props.recording.phase !== 'idle';
   const discardUnavailable = props.discardDisabled || props.busy || Boolean(props.save.pending) || props.save.busy || !props.ready || props.recording.phase !== 'idle';
-  const actions = useDockMenu(discardUnavailable);
-  useEffect(() => { if (!actions.open) { setConfirmDiscard(false); setDiscardFailed(false); } }, [actions.open]);
+  const asking = Boolean(props.asking);
+  /* FOCUS GOES TO THE QUESTION'S FIRST ACT WHEN IT APPEARS (`LeaveAsk`), AND
+     BACK TO THE "<" THAT ASKED IT WHEN IT IS PUT AWAY. */
+  const wasAsking = useRef(false);
+  useEffect(() => {
+    if (wasAsking.current && !asking) {
+      setDiscardFailed(false);
+      document.querySelector<HTMLButtonElement>('.waka-surface-back')?.focus();
+    }
+    wasAsking.current = asking;
+  }, [asking]);
+  const stay = () => { if (!discarding) props.onStay?.(); };
+  const discardNow = async () => {
+    if (discardLock.current || discardUnavailable || !props.onDiscard) return;
+    discardLock.current = true; setDiscarding(true); setDiscardFailed(false);
+    try { if (!await props.onDiscard()) setDiscardFailed(true); }
+    catch { setDiscardFailed(true); }
+    finally { discardLock.current = false; setDiscarding(false); }
+  };
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const bodyRef = useRef<HTMLDivElement>(null);
   /* THE HERO: the first picture that can be shown, shown large; anything
      else (another photo, a recording, a file, one that needs attention)
      stays on the shelf of tiles under it. */
-  const hero = props.media.find(item => item.type === 'image' && item.blob && !item.validationError && !item.uploadError) ?? null;
+  const [broken, setBroken] = useState<ReadonlySet<string>>(() => new Set());
+  const hero = props.media.find(item => item.type === 'image' && item.blob && item.blob.size > 0 && !broken.has(item.id)
+    && !item.validationError && !item.uploadError) ?? null;
   const shelf = hero ? props.media.filter(item => item !== hero) : props.media;
   const unreadable = Boolean(hero && (props.readWords?.status === 'unreadable' || props.readWords?.status === 'retrying' || props.readWords?.status === 'failed'));
   const line = hero
@@ -411,7 +490,7 @@ export function InspirationComposer(props: {
      dragging out of the WINDOW gives a null `relatedTarget`, which
      `contains` reports as outside, so that case still clears. */
   const overheadOff = () => setOverhead(false);
-  return <DialogSurface className="jar-seek jar-inspiration-composer" modal={false} motion="modal" aria-label={say('worldCaptureInspiration')} onClose={confirmDiscard ? () => setConfirmDiscard(false) : props.onClose} data-jar-chrome="1"
+  return <DialogSurface className="jar-seek jar-inspiration-composer" modal={false} motion="modal" aria-label={say('worldCaptureInspiration')} onClose={props.onBack} escapeLeavesAsModal={false} data-jar-chrome="1"
     data-dropping={overhead ? '1' : undefined}
     onDragOver={event => {
       if (!event.dataTransfer.types.includes('Files')) return;
@@ -432,52 +511,39 @@ export function InspirationComposer(props: {
         page is the one the founder prefers, so it is this page's chrome
         that both now render.
 
-        Draft actions share the header, away from the writing area. */}
-    <NotePage locale={props.locale} whenMs={when.current} owner={props.owner} trailing={
-      props.onDiscard && Boolean(props.text.trim() || props.media.length || link.trim() || props.recordingCandidate) ? (
-        <span ref={actions.wrap} className="jar-note-actions">
-          <button {...actions.buttonProps} type="button" className="jar-note-actions-trigger"
-            aria-label={say('worldMoreActions')} aria-haspopup={confirmDiscard ? 'dialog' : 'menu'}
-            disabled={discardUnavailable || discarding}><HomeActionIcon kind="more" /></button>
-          {actions.open ? confirmDiscard ? (
-            <DialogSurface modal={false} role="dialog" id={actions.menuProps.id} className="waka-add-menu jar-draft-menu"
-              aria-label={say('worldDiscardInspirationDraft')} onClose={() => { if (!discarding) actions.close(); }}>
-              <p>{say('worldDiscardInspirationConfirm')}</p>
-              <button type="button" className="waka-add-row" autoFocus disabled={discarding}
-                onClick={() => actions.close()}>{say('worldNotNow')}</button>
-              <button type="button" className="waka-add-row" disabled={discardUnavailable || discarding} onClick={async () => {
-                if (discardLock.current) return;
-                discardLock.current = true; setDiscarding(true); setDiscardFailed(false);
-                try { if (await props.onDiscard!()) actions.close(); else setDiscardFailed(true); }
-                catch { setDiscardFailed(true); }
-                finally { discardLock.current = false; setDiscarding(false); }
-              }}>{say(discarding ? 'worldDiscardingDraft' : 'worldDiscardInspirationDraft')}</button>
-              {discardFailed ? <p role="alert">{say('worldDiscardInspirationFailed')}</p> : null}
-            </DialogSurface>
-          ) : (
-            <div {...actions.menuProps} className="waka-add-menu jar-draft-menu" aria-label={say('worldMoreActions')}>
-              <button type="button" role="menuitem" className="waka-add-row" onClick={() => setConfirmDiscard(true)}>
-                <HomeActionIcon kind="erase" /><span>{say('worldDiscardInspirationDraft')}</span>
-              </button>
-            </div>
-          ) : null}
-        </span>
-      ) : null
-    }>
+        Nothing trails the moment now: the "⋯" and its one item, Discard,
+        became the "<"'s question (see `LeaveAsk`). */}
+    <NotePage locale={props.locale} whenMs={when.current} owner={props.owner} back={{ kind: 'close', onBack: props.onBack }} gesture={props.gesture}>
     <div ref={bodyRef} className="jar-composer-body" data-hero={hero ? '1' : undefined}>
     {/* ═══ THE PICTURE IS THE POST (design E3) ═══════════════════════════════
         A screenshot or photo stands large with the creature's question over
         it; the note under it is optional. A share from another app (F5) is
         asked about the same way. */}
-    {line ? <CreatureLine softer={hero ? say(unreadable ? 'worldNoteHintSay' : 'worldNoteHint') : undefined}>{line}</CreatureLine> : null}
+    {asking ? <LeaveAsk question={say('worldLeaveNoteAsk')} keepLabel={say('worldLeaveKeepDraft')}
+      discardLabel={say('worldLeaveDiscard')} busy={discarding} busyLabel={say('worldDiscardingDraft')}
+      cannotDiscard={discardUnavailable || !props.onDiscard}
+      failed={discardFailed} failedLabel={say('worldDiscardInspirationFailed')}
+      onKeep={props.onClose} onDiscard={() => { void discardNow(); }} onStay={stay} />
+    : line ? <CreatureLine softer={hero ? say(unreadable ? 'worldNoteHintSay' : 'worldNoteHint') : undefined}>{line}</CreatureLine> : null}
     {props.arrival && !hero ? <div className="waka-note-arrival">
       <button type="button" className="waka-note-arrival-act" onClick={() => bodyRef.current?.querySelector<HTMLTextAreaElement>('.jar-composer-text')?.focus()}>{say('worldShareAddNote')}</button>
       <button type="button" className="waka-note-arrival-act" disabled={blocked} onClick={submit}>{say('worldShareThatsAll')}</button>
     </div> : null}
     {hero ? <HeroPhoto item={hero} name={attachmentLabel(props.locale, hero.type, hero.name)} blurred={unreadable} disabled={blocked}
       removeLabel={formatMessage(props.locale, 'worldComposerRemoveFile', { name: attachmentLabel(props.locale, hero.type, hero.name) })}
-      onRemove={() => props.onRemove(hero.id)} /> : null}
+      onRemove={() => props.onRemove(hero.id)}
+      onBroken={() => setBroken(previous => new Set(previous).add(hero.id))} /> : null}
     {hero && props.readWords ? <ReadWordsQuote words={props.readWords} locale={props.locale} onFix={props.onFixReadWords} disabled={blocked} /> : null}
+    {/* ═══ THE WORDS ARE WRITTEN ON THE PAGE, NOT IN A BOX ════════════════
+        Founder, 2026-11-09: "notepad feels so 답답해." The words sat in a big
+        dark card, a box inside the page, with the tools along its foot. The
+        card went: you write straight on the page, in a readable column with
+        wide margins, and the tools float under it as one small pill. */}
+    {props.listening ? null : <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={hero ? 1 : 4} value={props.text} readOnly={blocked}
+      aria-label={say('worldCaptureInspiration')}
+      placeholder={hero ? say(unreadable ? 'worldNotePlaceholderLine' : 'worldNotePlaceholder') : say('worldCapturePrompt')}
+      onChange={event => props.onText(event.target.value, event.target.selectionStart ?? event.target.value.length)} onKeyDown={props.onKeyDown}
+      onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.clipboardData.files]); } }} />}
     {props.ready && !props.fileDraftsAvailable ? <p className="jar-composer-storage-note">{say('worldComposerFilesUnavailable')}</p> : null}
     {addingLink ? <div className="jar-composer-link">
       <input ref={linkInput} type="url" value={link} disabled={blocked} aria-label={say('worldPasteTheLink')} placeholder="https://" onChange={event => { event.target.setCustomValidity(''); props.onLinkText(event.target.value); }}
@@ -577,10 +643,9 @@ export function InspirationComposer(props: {
         button cannot live in a status line. It renders only with that
         error, so it is absent from every normal note. */}
     {props.draftConflict ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
-    {/* ═══ THE NOTE BAR: THE WORDS GET THE WHOLE WIDTH ═══════════════════
-        One raised pill holding the field across its full width, and under
-        it a slim row — the mic and the attach glyphs on the left, the
-        transient state between, Save on the right. Nothing in it fills. */}
+    {/* ═══ THE NOTE BAR: ONE SMALL PILL, CENTRED UNDER THE WORDS ═════════
+        The mic and the attach glyphs at its start, the transient state
+        between, Keep at its end. Nothing in it fills. */}
     {props.listening ? <ListeningView locale={props.locale} words={props.text} notice={props.listening.notice} onDone={props.listening.onDone} /> : <NoteBar
       tools={props.noteBar ? <>
         {props.noteBar.mic}
@@ -588,13 +653,7 @@ export function InspirationComposer(props: {
           onPhotos={props.onFiles} onFiles={props.onDocuments} />
       </> : null}
       state={props.noteBar?.state}
-      action={props.noteBar?.save}>
-      <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={hero ? 1 : 4} value={props.text} readOnly={blocked}
-        aria-label={say('worldCaptureInspiration')}
-        placeholder={hero ? say(unreadable ? 'worldNotePlaceholderLine' : 'worldNotePlaceholder') : say('worldCapturePrompt')}
-        onChange={event => props.onText(event.target.value, event.target.selectionStart ?? event.target.value.length)} onKeyDown={props.onKeyDown}
-        onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.clipboardData.files]); } }} />
-    </NoteBar>}
+      action={props.noteBar?.save} />}
     </div>
     </NotePage>
     {/* THE PILL IN THE BOTTOM-LEFT CORNER IS GONE, AND SO IS THE CORNER.

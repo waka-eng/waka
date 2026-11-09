@@ -44,6 +44,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DialogSurface } from "./DialogSurface";
+import { SurfaceHeader } from "./SurfaceHeader";
 import { ReadingPausedNotice } from "./ReadingPausedNotice";
 import { useReadingPaused } from "../lib/use-reading-paused";
 import { PrinciplesGround } from "./PrinciplesGround";
@@ -129,7 +130,7 @@ const PULL_HOME = 56;
  */
 const MAX_HELD = 3;
 
-export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own", onClose, onOpen, onShare, onChat, onNewSave, newSaveLabel, crossing = null, onCrossed }: {
+export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own", onClose, onOpen, onShare, onChat, onNewSave, newSaveLabel, crossing = null, onCrossed, gesture = null }: {
   locale: SupportedLocale;
   profileId?: string | null;
   /** Whose name goes on the card. The attribution is half of why a card is
@@ -140,7 +141,10 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
   /** Whose principles these are — the bubble must not call an agent's
       principles yours. Chosen by Home the same way it chooses `title`. */
   whose?: "own" | "agent";
+  /** The "<", Escape and the pull left: one handler, Close to home. */
   onClose: () => void;
+  /** The page's address, for the native back gestures. */
+  gesture?: string | null;
   onOpen: (id: string) => void;
   /** Straight to the artifact. Optional so a surface that cannot share —
       somebody else's principles, read-only — simply does not offer it. */
@@ -295,16 +299,12 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
         }}
         onPointerCancel={() => { pull.current = null; }}
         >
-        {/* NO TITLE ON THE PAGE; THE CREATURE SAYS WHERE YOU ARE. Founder,
-            2026-10-16: "remove your principles text at the top. ensure the
-            character always mention sth principle so its clear this page is
-            principles". The heading stays for screen readers only; what a
-            sighted reader learns it from is the bubble below. The one-visit
-            "what is this" line went with it — the bubble now says it every
-            visit, in the creature's voice. */}
-        <header className="waka-over-head sr-only">
-          <h2 className="waka-over-title">{title}</h2>
-        </header>
+        {/* THE SHARED HEADER (nav system): "<" Close and a small centred
+            "Principles". The large title the founder removed ("remove your
+            principles text at the top") stays gone; this is the quiet
+            meta-size name every page carries, and the creature's bubble is
+            still what says it in words. */}
+        <SurfaceHeader locale={locale} gesture={gesture} back={{ kind: "close", onBack: onClose }} title={title} />
         {/* A PAUSED READING SAYS SO HERE TOO. Principles are written from
             the reading, so when the model stops answering this page waited
             forever in the creature's patient voice — "the ground is being

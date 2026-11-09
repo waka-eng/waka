@@ -68,6 +68,9 @@ it('reads each cited save outside the window once, however the answers land', as
 
 it('offers the rest from the Saves page when the archive holds more than was loaded', async () => {
   world = await mountWorld(FACTS); await settle();
+  /* "{n} kept" counts the whole archive, not the loaded window (founder:
+     "should be x kept"). */
+  expect(world.container.querySelector('.waka-home-bar-pull')?.textContent?.trim(), 'the pull counts only what was loaded').toBe('200 kept');
   await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-home-bar-pull')!.click()); await settle();
   const more = world.container.querySelector<HTMLButtonElement>('.waka-stream-more');
   expect(more, 'the Saves page hides that there are more').toBeTruthy();
@@ -77,7 +80,7 @@ it('offers the rest from the Saves page when the archive holds more than was loa
   /* The archive's own page: its labelled way home is up and the home bar is
      gone. (This mount has no signed-in scope, so the archive draws nothing
      inside; that it is the place is what is asked here.) */
-  expect(world.container.querySelector('.waka-page-back')?.textContent?.trim(), 'it did not open the archive').toBe('Home');
+  expect(world.container.querySelector('.waka-surface-back')?.getAttribute('aria-label'), 'it did not open the archive').toBe('Close');
   expect(world.container.querySelector('.waka-home-bar')).toBeNull();
 });
 

@@ -673,7 +673,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         buttons. The corners are the navigation here as everywhere. */}
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
       {error?<div className="chat-notice" role="alert">{error} {limitReached
-        ? onHistory?<button type="button" onClick={onHistory}>{say('worldAllChats')}</button>:null
+        ? onHistory?<button type="button" onClick={onHistory}>{say('worldPastChats')}</button>:null
         : (unsent&&!draft?.pending&&Boolean(draft?.content.trim()||draft?.attachments?.length))||(draft?.pending&&(!id||conversation))?
         /* RETRY ONLY WHERE IT WORKS (review): `save` stops for every reason
            `whyNoSend` names, so a Retry beside one of them was a button that
@@ -697,7 +697,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       {focusFailed?<p className="chat-notice" role="alert">{say('worldPrincipleUnavailable')} <button type="button" onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button></p>:null}
       <div className="jar-conversation-body chat-scroll" ref={body} onScroll={()=>{const node=body.current;if(!node)return;nearBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80;try{sessionStorage.setItem(scrollKey,JSON.stringify({top:node.scrollTop,nearBottom:nearBottom.current,...(conversationRef.current?.messageWindowStart!==undefined?{messageWindowStart:conversationRef.current.messageWindowStart}:{})}));}catch{/* The transcript remains available. */}}}>
         <div className="chat-transcript">
-          {profile?<p className="chat-profile">{formatMessage(locale,'worldProfileMemory',{name:profile.name})}</p>:null}
+          {/* WHOSE MEMORY THIS CHAT READS is said once, by the creature's line in
+              the empty chat ("This chat only uses what {name} kept"); the
+              "What {name} kept" line over it said the same thing again. */}
           {/* The transcript's own top edge, not a feature beside it: a window
               of thirty messages that cannot reach the thirty before it is a
               transcript with its beginning cut off. */}

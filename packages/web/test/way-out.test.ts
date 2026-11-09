@@ -67,8 +67,6 @@ const WAY_OUT_WORDS = [
   "worldBack",
   "worldCancel",
   "worldCancelEdit",
-  "worldPrinciplesBack",
-  "loginBackToPage",
 ] as const;
 
 /* A class named for leaving. The overlays' corner mark, and the footer rows
@@ -336,12 +334,6 @@ const NO_VISIBLE_WAY_OUT: Record<string, string> = {
      other. The ratchet below caught the stale entries the same day, which is
      the behaviour it exists for — an exemption that outlives its reason
      excuses nothing while reading as if it does. */
-  /* THE SAVES SHEET'S WAY DOWN IS IN THE TOP BAR'S ROW (2026-11-08), drawn by
-     `Home.tsx` into the Menu's left slot while the sheet is up: "⌄ Home",
-     visible and one press. Founder: "the down caret and Home feels awkward
-     position relative to the top right buttons", so it left the sheet for
-     the row the eye already reads. `home-navigation.test.tsx` presses it. */
-  "components/HomeStream.tsx": "its visible ⌄ Home stands in the top bar's row (Home.tsx, .waka-stream-home)",
 };
 
 function sourceFiles(dir: string, found: string[] = []): string[] {
@@ -382,6 +374,10 @@ function surfacesIn(text: string): string[] {
 
 function hasWayOut(span: string): boolean {
   return (
+    /* THE SHARED HEADER IS A VISIBLE WAY OUT BY CONSTRUCTION (nav system):
+       its "<" is always drawn and always calls the surface's `onBack`.
+       `NotePage` is that header on a note. */
+    /<SurfaceHeader\b|<NotePage\b/.test(span) ||
     closedByAVisibleButton(span) ||
     WAY_OUT_CLASSES.test(span) ||
     WAY_OUT_WORDS.some((word) => span.includes(word))
@@ -465,17 +461,17 @@ describe("every surface has a way out you can see", () => {
     /* ONE HEADER GRAMMAR (founder, 2026-11-08): no page's bar ends in a
        Close any more — every page leaves by its unboxed "<" top-left. */
     expect(code(home), "a Close came back to a bar").not.toMatch(/waka-dock-item--close/);
-    expect(code(home), "the page's \"<\" is not drawn as a glyph on a note or a chat").toContain("glyphOnly={making !== null || savedNoteOpen}");
+    /* No floating "<" survives (nav system R1): every page draws the shared
+       header in its own flow. */
+    expect(code(home), "the floating page back came back").not.toMatch(/<PageBack\b|<SheetBack\b|belowCorners|glyphOnly/);
 
-    // The page toolbar is reserved for creating/editing. On the home at rest
-    // the home bar stands instead (design E1, `HomeBar`); the lists and
-    // Principles leave by the labelled Back, which is visible on all three.
+    // On the home at rest the home bar stands (design E1, `HomeBar`); every
+    // page leaves by its header's "<".
     expect(code(home)).toContain("atNowView && !reviewing && !savedNoteOpen");
-    expect(code(home)).toContain("visible={savedNoteOpen || making !== null || listing || principlesOpen}");
 
-    /* AND WHILE REVIEWING, THE WAY OUT IS THE PAGE'S "<" (2026-11-08), and
-       Esc ends the sitting too. */
-    expect(code(home), "the questions lost their \"<\"").toMatch(/reviewing && !making[^\n]*\? <PageBack[\s\S]{0,120}onBack=\{\(\) => setReviewing\(false\)\} glyphOnly/);
+    /* AND WHILE REVIEWING, THE WAY OUT IS THE SHARED HEADER'S "<" (Close),
+       and Esc ends the sitting too. */
+    expect(code(home), "the questions lost their \"<\"").toMatch(/reviewing && !making[^\n]*\? <div className="waka-surface-strip">\s*<SurfaceHeader[\s\S]{0,160}kind: 'close', onBack: \(\) => setReviewing\(false\)/);
     expect(code(home), "Esc no longer ends the review").toMatch(
       /if \(event\.key === 'Escape'\) \{\s*if \(reviewing && atNowView && nothingOpen && !harvestWhy\) \{[^}]*setReviewing\(false\); \}/);
 
@@ -487,17 +483,18 @@ describe("every surface has a way out you can see", () => {
     expect(back, "Back consumes the list origin once").toMatch(
       /const origin = listOrigin\.current;\s*listOrigin\.current = null;/);
     expect(back, "Home on a list or Principles goes home, not one history step").toContain("else closePage();");
-    expect(code(home)).toMatch(/<PageBack\s+navigationKey=\{viewNavigation.href\} onBack=\{backPage\}/);
+    /* THE LISTS AND THE CHAT LEAVE BY THAT ONE HANDLER, "<" AND ESCAPE ALIKE. */
+    expect(code(home)).toMatch(/onBack=\{backPage\} backKind=/);
+    expect(code(home), "the chat's Escape is not its \"<\"").toMatch(/data-way-out="talk"[\s\S]{0,120}onClose=\{backPage\}/);
 
-    /* A SAVED NOTE OPEN IN THE ARCHIVE LENDS ITS TOOLS TO THE DOCK'S ONE
-       SLOT, and only on the saves list. */
-    expect(code(home), "a saved note open in the archive no longer lends its tools to the dock").toMatch(
-      /\{listing && viewNavigation\.view\?\.open === 'saves' \? \(\s*<span className="waka-dock-slot">\s*<span className="waka-dock-making" role="group" id=\{DOCK_SLOT\}/);
+    /* THE DOCK IS GONE (nav system R7): a saved note writes into the same
+       `NoteBar` the notepad and a chat do. */
+    expect(code(home), "the dock came back").not.toMatch(/<nav className="waka-dock"|DOCK_SLOT/);
 
     /* A chat's "<" closes it: to Past chats when it was opened from there,
        else home (2026-11-09). */
     expect(code(home), "a chat's \"<\" no longer closes it").toMatch(/if \(making === 'talk'\) \{[\s\S]{0,200}openOverHome\('conversations'\); return; \}\s*closePage\(\); return;/);
-    expect(code(home), "a chat lost its Past chats, top-right").toContain('className="waka-page-aside"');
+    expect(code(home), "a chat lost its Past chats, top-right").toMatch(/right=\{[^}]*<button type="button" className="waka-surface-act"/);
 
     /* A CHAT LENDS NOTHING TO THE BAR: it writes into the notepad's own
        note bar (`NoteBar`, 2026-11-08), so no slot and no dock under it. */
@@ -513,29 +510,6 @@ describe("every surface has a way out you can see", () => {
     expect(panel, "the chat panel takes a bar slot again").not.toMatch(/dockSlot|CHAT_DOCK_SLOT/);
     expect(panel, "the chat panel no longer draws its own composer").toMatch(/<footer className="chat-composer">/);
     expect(panel, "the chat no longer writes into the shared note bar").toMatch(/<NoteBar\b/);
-
-    /* The condition the dock renders under. A destination may only lean on
-       the bar if the bar is actually up while it is open — which is exactly
-       what was NOT true of a conversation until it was fixed, and exactly
-       what being trapped feels like. */
-    const condition = /: phase==='ready'&&([^?]*)\?[\s\S]{0,40}?<nav className="waka-dock"/.exec(home);
-    expect(condition, "the dock's render condition could not be found").toBeTruthy();
-    expect(
-      condition![1],
-      "the dock is hidden while a destination is open, so the surfaces in " +
-        "LEFT_BY_THE_DOCK have no way out at all",
-    ).not.toMatch(/view\?\.open/);
-    /* AND IT STANDS ON THE NOTEPAD, which is the newest entry in that map
-       and the only one whose own exit was removed on the strength of this
-       being true. A condition that hid the bar while `view.compose` was set
-       would leave a half-written note with no way out at all — the exact
-       trap this file is named for, reintroduced by a change that looks like
-       tidying. */
-    expect(
-      condition![1],
-      "the dock is hidden while a note is being written, and the notepad " +
-        "gave up its chevron on the promise that it would not be",
-    ).not.toMatch(/view\?\.compose/);
 
     /* THE PER-SURFACE CLAIMS, held to the same bar. A surface that says
        `data-way-out="x"` is asserting that the dock has a row called `x`;

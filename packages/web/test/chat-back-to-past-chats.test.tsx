@@ -53,21 +53,21 @@ afterEach(() => { world?.unmount(); world = undefined; vi.clearAllMocks(); vi.us
 async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world!.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
-const back = () => world!.container.querySelector<HTMLButtonElement>('button.waka-page-back');
+const back = () => world!.container.querySelector<HTMLButtonElement>('.waka-surface-back');
 /* Its accessible name: the "<" is drawn alone and says its word to a screen reader. */
 const backName = () => back()?.getAttribute('aria-label') ?? back()?.textContent?.trim();
 
 it('closes a chat opened from Past chats back to Past chats, and one opened from home to home', async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
   await pressHomeBar(world.container, 'Chat'); await settle();
-  await act(async () => world!.container.querySelector<HTMLButtonElement>('button.waka-page-aside')!.click()); await settle();
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-surface-right .waka-surface-act')!.click()); await settle();
   expect(open()).toBe('conversations');
   const earlier = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-list-row')].find(b => b.textContent?.includes('An earlier chat'));
   expect(earlier, 'Past chats lists no earlier chat').toBeTruthy();
   await act(async () => earlier!.click()); await settle();
   expect(location.pathname).toBe(`/chat/${CHAT}`);
 
-  expect(backName()).toBe('Back to past chats');
+  expect(backName()).toBe('Back');
   await act(async () => back()!.click()); await settle();
   expect(location.pathname, 'the "<" left the chat up').not.toContain('/chat/');
   expect(open(), 'a chat opened from Past chats did not close back to it').toBe('conversations');
@@ -85,10 +85,10 @@ it('closes a chat opened from Past chats back to Past chats, and one opened from
 it('forgets the list once the chat is left another way: Back, then a chat from the bubble Chat about this, closes home', async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
   await pressHomeBar(world.container, 'Chat'); await settle();
-  await act(async () => world!.container.querySelector<HTMLButtonElement>('button.waka-page-aside')!.click()); await settle();
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-surface-right .waka-surface-act')!.click()); await settle();
   await act(async () => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-list-row')].find(b => b.textContent?.includes('An earlier chat'))!.click()); await settle();
   expect(location.pathname).toBe(`/chat/${CHAT}`);
-  expect(backName(), 'the "<" of a chat from Past chats is not named for going back to them').toBe('Back to past chats');
+  expect(backName(), 'the "<" of a chat from Past chats is not named for going back to them').toBe('Back');
   /* Browser Back, all the way home. */
   while (location.pathname !== '/' || open()) { await act(async () => go(-1)); await settle(); }
   const talk = [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-act')].find(b => b.textContent?.trim() === 'Chat about this');

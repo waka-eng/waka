@@ -126,7 +126,8 @@ const MUST_TAKE_A_PRESS: ReadonlyArray<readonly [string, string, readonly string
     [
       /* the settings cog, right corner */ "waka-corner-place",
       "waka-corner",
-      /* the identity switch, where one is rendered */ "waka-switch",
+      /* (the centre "‹ On your mind lately" switch went with the corners
+         leaving every page: nav system, 2026-11-09) */
       /* THE FOUR RUNGS. The omission the founder found: "not clickable". */
       "waka-rungs",
     ],

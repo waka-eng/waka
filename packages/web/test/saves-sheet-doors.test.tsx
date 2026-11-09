@@ -44,20 +44,19 @@ beforeAll(() => { installCanvasStub(); setViewport(390, 844); (globalThis as { I
 afterEach(() => { world?.unmount(); world = undefined; vi.clearAllMocks(); });
 async function settle() { for (let turn = 0; turn < 6; turn += 1) { await world!.step(20); await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); }); } }
 
-it('has no Actions menu, and puts ⌄ Home in the top bar row while the sheet is up', async () => {
+it('has no Actions menu, and gives the sheet the shared header: "<" Close, "Kept", no corners', async () => {
   world = await mountWorld(FACTS, { routerTools: <Where /> }); await settle();
   expect(world.container.querySelector('.waka-home-actions'), 'the Actions menu is still on home').toBeNull();
   const sheet = await openSavesSheet(world.container); await settle();
-  const home = world.container.querySelector<HTMLButtonElement>('.waka-corners > .waka-stream-home');
-  expect(home?.textContent?.trim(), 'the way down is not in the top bar row').toBe('Home');
-  expect(world.container.querySelector('.waka-corners')!.firstElementChild, '⌄ Home is not the row\'s left end').toBe(home);
-  expect(sheet.querySelector('.waka-stream-close'), 'the sheet still carries its own centred Home').toBeNull();
-  /* The right end holds only info and settings. */
-  expect([...world.container.querySelectorAll<HTMLButtonElement>('.waka-corner-place > button')].map(b => b.getAttribute('aria-label')))
-    .toEqual(['How WAKA works', 'Settings']);
+  const head = sheet.querySelector<HTMLElement>(':scope > .waka-surface-head');
+  expect(head, 'the sheet has no shared header').not.toBeNull();
+  const home = head!.querySelector<HTMLButtonElement>('.waka-surface-back');
+  expect(home?.getAttribute('aria-label'), 'the sheet\'s "<" is not named for closing').toBe('Close');
+  expect(head!.querySelector('.waka-surface-title')?.textContent).toBe('Kept');
+  /* The corners are home's only (nav system R6): they stand down while the sheet is up. */
+  expect(world.container.querySelector('.waka-corners'), 'the corners stayed over the sheet').toBeNull();
   await act(async () => home!.click()); await settle();
-  expect(world.container.querySelector('.waka-stream'), '⌄ Home left the sheet up').toBeNull();
-  expect(world.container.querySelector('.waka-stream-home')).toBeNull();
+  expect(world.container.querySelector('.waka-stream'), 'the "<" left the sheet up').toBeNull();
   expect(world.container.querySelector('.waka-home-bar-pull'), 'the pull did not come back').toBeTruthy();
 });
 
@@ -91,7 +90,7 @@ it('searches what you kept from the top of the sheet, with the archive\'s own se
 
   /* AND ITS "<" COMES BACK TO THE SHEET, on the same query: a save found on
      the sheet never steps back to a list the person did not come from. */
-  await act(async () => world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click()); await settle();
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click()); await settle();
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 260)); }); await settle();
   expect(query('open'), 'the "<" landed on the list of saves').toBeNull();
   const back = world!.container.querySelector('.waka-stream');
@@ -148,14 +147,14 @@ it('pulls the sheet up fresh after leaving it by a door, even after a result rou
   await typeQuery(sheet, 'quiet');
   await act(async () => [...sheet.querySelectorAll<HTMLButtonElement>('.waka-stream-save')].find(b => b.textContent?.includes('An older quiet morning'))!.click());
   await settle();
-  await act(async () => world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click()); await settle();
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click()); await settle();
   expect(fieldValue(), 'the round trip dropped the query').toBe('quiet');
   /* Cleared on the sheet (the headings come back), off by "Kept ›", home by
      the archive's "<", and up again: unfiltered. */
   await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-over-find-clear')!.click());
   await pressSheetDoor(world.container, 'Kept'); await settle();
   expect(query('open')).toBe('saves');
-  await act(async () => world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click()); await settle();
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click()); await settle();
   expect(query('open')).toBeNull();
   sheet = await openSavesSheet(world.container); await settle();
   expect(fieldValue(), 'a fresh pull came up on the old query').toBe('');
@@ -167,7 +166,7 @@ it('drops the query when the sheet is left for Principles', async () => {
   await typeQuery(sheet, 'quiet');
   await act(async () => [...sheet.querySelectorAll<HTMLButtonElement>('.waka-stream-save')].find(b => b.textContent?.includes('An older quiet morning'))!.click());
   await settle();
-  await act(async () => world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click()); await settle();
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click()); await settle();
   await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-over-find-clear')!.click());
   await pressSheetDoor(world.container, 'Principles'); await settle();
   expect(query('open')).toBe('principles');

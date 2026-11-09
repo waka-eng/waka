@@ -197,7 +197,10 @@ it("holds only the top three, and the creature, not a title, says these are your
   expect(host.querySelector(".waka-held-hero .waka-held-says")?.textContent)
     .toBe("Principles are what stayed true for you over a long time.");
   expect(host.querySelector(".waka-held-hero [data-crossing-target]")).not.toBeNull();
-  expect(host.querySelector(".waka-over-head")?.classList.contains("sr-only"), "the title is for screen readers only").toBe(true);
+  /* NO LARGE TITLE (founder: "remove your principles text at the top"); the
+     shared header's small centred name is every page's (nav system R4). */
+  expect(host.querySelector(".waka-over-title"), "the large title came back").toBeNull();
+  expect(host.querySelector(".waka-surface-title")?.textContent).toBe("Principles");
   expect(host.querySelector(".waka-over-what"), "the one-visit line is gone").toBeNull();
 });
 

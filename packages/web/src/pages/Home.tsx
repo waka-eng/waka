@@ -68,7 +68,7 @@ import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
 import { createConversation } from "../lib/api/conversations";
 import { DialogSurface } from "../components/DialogSurface";
-import { PageBack, SheetBack } from "../components/PageBack";
+import { SurfaceHeader } from "../components/SurfaceHeader";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
@@ -125,7 +125,6 @@ import { useEditing } from "../space/editing";
 import { deriveAgentChrome } from "../space-kinds/agent";
 import { buildPalette, type Palette } from "../canvas/palette";
 import { SavesOverlay } from "../components/SavesOverlay";
-import { DOCK_SLOT } from "../components/NoteTools";
 import { inspectAttachmentFile, FileRefused } from "../lib/api/file-accept";
 import { deleteAccount } from "../lib/api/auth";
 import { canKeep, KEEP_FILE_LIMIT, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
@@ -2744,6 +2743,9 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const conversationProfile = conversationScope?.profileId === storageScope?.profileId
     ? { name: auth?.profile?.name ?? say('worldWallMe'), type: 'human' as const }
     : conversationAgent ? { name: conversationAgent.name, type: 'agent' as const } : null;
+  /** Whether this wall takes a new note: yours, or an agent profile your account owns. */
+  const canWriteHere = atWall.kind === 'self' ? true
+    : Boolean(agentRoster?.some(profile => profile.id === atWall.id) && conversationAgent?.id === atWall.id);
   const wallsRef = useRef<Space[]>([]);
   wallsRef.current = walls;
   const agentsRef = useRef<AgentBundle[]>([]);
@@ -5289,6 +5291,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [offeredShare, setDraft, startNewInspiration, storageScope?.profileId]);
 
   const [shareArrived, setShareArrived] = useState(false);
+  /* THE "<" ASKS BEFORE IT LEAVES A NOTE WITH SOMETHING IN IT (founder,
+     2026-11-09): Keep as draft or Discard, in the creature's bubble on the
+     notepad (`LeaveAsk` in `InspirationComposer`). An empty note just leaves. */
+  const [leaveAsking, setLeaveAsking] = useState(false);
+  useEffect(() => { if (!mouthOpen) setLeaveAsking(false); }, [mouthOpen]);
   /* Forgotten by the two ways a note ends — kept, or folded away as a
      draft — and not by the notepad merely being closed, which it also is
      while it is on its way open (and may blink through while the page's
@@ -5324,13 +5331,34 @@ const RETRY_READ_LIMIT_MS = 20_000;
     viewNavigationRef.current.closeToHome();
   };
 
+  /** A principle's "<" (and its Escape): back to the Principles page. */
+  const backToPrinciples = () => viewNavigationRef.current.write({ ...EMPTY_VIEW, wallId: viewNavigationRef.current.view?.wallId ?? null, open: 'principles' });
+  const backToPrinciplesRef = useRef(backToPrinciples); backToPrinciplesRef.current = backToPrinciples;
+
+  /**
+   * THE ONE "<" HANDLER FOR EVERY PAGE (nav system R3). The header's "<",
+   * Escape (each page's `DialogSurface.onClose`), Android back and the iOS
+   * edge swipe all call this, so they can never disagree about where a page
+   * goes: a saved note to the list or the sheet it came from, a chat to Past
+   * chats when it came from there, a list to the chat it came from, and
+   * everything else home.
+   */
+  const backPageRef = useRef<() => void>(() => undefined);
   const backPage = () => {
     const fromSheet = noteFromSheet.current;
     noteFromSheet.current = null;
     if (fromSheet && savedNoteOpen) { leaveOpen(); setSheetQuery(fromSheet.query); setStreamOpen(true); return; }
     const close = closeSavedNote.current;
     if (close) { close(); return; }
-    if (making === 'inspiration') { saveAsDraft(); return; }
+    if (making === 'inspiration') {
+      /* A second press on "<" while it asks is "no, I'm staying". */
+      if (leaveAsking) { setLeaveAsking(false); return; }
+      const live = composerDraft.current.current;
+      const something = Boolean(live.text.trim() || live.media.length || live.linkText?.trim() || live.recordingCandidate)
+        || recording.phase !== 'idle' || dictation.listening;
+      if (something && mouthOpen) { setLeaveAsking(true); return; }
+      saveAsDraft(); return;
+    }
     /* A CHAT'S "<" CLOSES IT (founder, 2026-11-08: "< on top left should be
        closing this like how it does for the saving"): to home, unless the
        chat was opened from Past chats, which it closes back to, as the
@@ -5349,6 +5377,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
        the earlier archive. */
     else closePage();
   };
+  backPageRef.current = backPage;
 
   /**
    * KEEP IT. The owned draft and immutable pending intent survive until a
@@ -5587,8 +5616,38 @@ const RETRY_READ_LIMIT_MS = 20_000;
        Write uses (`startNewInspiration`), and the microphone is NOT started
        later, outside the gesture, where Safari would refuse it. It stands in
        the note bar ready to tap. */
+  /* A FRESH NOTE FROM HOME'S VOICE AND SCREENSHOT (founder, 2026-11-09:
+     "the photo is here when im trying to record fresh"). Each is a new thing
+     to keep, so it starts on a blank page; the draft it would have reopened is
+     set aside in its own row and comes back to Keep a thought once this one
+     is done (`startFresh` / `resumeLatest` in `use-inspiration-draft`). Only
+     from home: with the notepad already open, the press belongs to that note. */
+  /* A FRESH NOTE UNDER WAY IS NEVER RESUMED OVER (code review, 2026-11-09):
+     the notepad opens a commit after the press, and in that gap the empty
+     fresh draft looked like "nothing on the page", so `resumeLatest` read the
+     set-aside draft back and the screenshot landed in it. Set by the press,
+     cleared when the notepad next closes, and asked again after the read. */
+  const freshUnderway = useRef(false);
+  const freshNoteFromHome = () => {
+    if (mouthOpen) return;
+    /* Set even when the page was already empty and nothing was set aside: a
+       resume that started before the press may still be reading, and it
+       must not land over this note either. */
+    freshUnderway.current = true;
+    if (composerDraft.startFresh()) draftRef.current = '';
+  };
+  const screenshotIntoNewNote = (files: File[]) => {
+    freshNoteFromHome(); startNewInspiration(); void addInspirationFiles(files);
+  };
+  const mouthWasOpen = useRef(mouthOpen);
+  useEffect(() => {
+    if (mouthWasOpen.current && !mouthOpen) freshUnderway.current = false;
+    mouthWasOpen.current = mouthOpen;
+    if (!mouthOpen && composerDraft.ready && !freshUnderway.current) void composerDraft.resumeLatest(() => !freshUnderway.current);
+  }, [mouthOpen, composerDraft.ready, composerDraft.draft.id, composerDraft.resumeLatest]);
   const sayIntoNewNote = () => {
     setMouthNote('');
+    freshNoteFromHome();
     if (!atNow || inField || inSky || !composerDraft.available) { startNewInspiration(); return; }
     simApiRef.current?.toTop();
     if (mouthOpen) mouthFieldRef.current?.focus(); else openMouth();
@@ -5922,9 +5981,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
       e.stopPropagation();
       if (e.key === "Escape") {
         e.preventDefault();
-        // Closing the composer keeps the owned draft, including a newer
-        // short thought written while an earlier save is being reconciled.
-        saveAsDraft();
+        /* ESCAPE IS THE "<" (nav system R3): the same handler, so a note
+           with something in it asks Keep as draft / Discard here too. */
+        backPageRef.current();
         return;
       }
       if (e.key !== "Enter") return;
@@ -7072,6 +7131,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
       /* Esc steps out of review — the cards go, the invitation comes back. */
       if (event.key === 'Escape') {
         if (reviewing && atNowView && nothingOpen && !harvestWhy) { event.preventDefault(); event.stopPropagation(); setReviewing(false); }
+        /* A PRINCIPLE IN THE SKY: Escape is its "<", back to Principles. */
+        else if (inSky && viewNavigationRef.current.view?.principleId && !principlesOpen && nothingOpen) {
+          event.preventDefault(); event.stopPropagation(); backToPrinciplesRef.current();
+        }
         return;
       }
       const target = event.target instanceof Element ? event.target : null;
@@ -7084,7 +7147,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [phase, atNowView, principlesOpen, principlesCrossing, panelOpen, mouthOpen, savedNoteOpen, seek, thingShare, prov, toPrinciples, openOverHome, reviewing, harvestWhy]);
+  }, [phase, atNowView, principlesOpen, principlesCrossing, panelOpen, mouthOpen, savedNoteOpen, seek, thingShare, prov, toPrinciples, openOverHome, reviewing, harvestWhy, inSky]);
   /** read by the loop's key handler, which is built once */
   const openSeekRef = useRef<() => void>(() => undefined);
   openSeekRef.current = () => setSeek((s) => (s === null ? "" : s));
@@ -7814,8 +7877,27 @@ const RETRY_READ_LIMIT_MS = 20_000;
      page makes. */
   const [streamOpen, setStreamOpen] = useState(false);
   /* Left the sheet's save some other way: its "<" is the list's again. */
-  useEffect(() => { if (!savedNoteOpen) noteFromSheet.current = null; }, [savedNoteOpen]);
+  /* AND THE BROWSER'S BACK DOES WHAT ITS "<" DOES (nav system R3): a note
+     opened from the sheet that is left by a history step (browser Back,
+     Android's back through history) and lands on home brings the sheet
+     back up on its query, exactly as the note's "<" does. The "<" itself
+     clears `noteFromSheet` before it leaves, so it never comes through here. */
+  const noteWasOpen = useRef(false);
+  useEffect(() => {
+    const was = noteWasOpen.current; noteWasOpen.current = savedNoteOpen;
+    if (savedNoteOpen || !was) return;
+    const fromSheet = noteFromSheet.current;
+    noteFromSheet.current = null;
+    if (fromSheet && atNowView && !reviewing) { setSheetQuery(fromSheet.query); setStreamOpen(true); }
+  }, [savedNoteOpen, atNowView, reviewing]);
   const streamShown = streamOpen && phase === 'ready' && atNowView && !reviewing && !mouthOpen && atWall.kind === 'self';
+  /* ═══ THE CORNERS ARE HOME'S, AND ONLY HOME'S (nav system R6) ═══════════
+     Me / My agent top-left, i and settings top-right, stand on Now and the
+     agent wall at rest and nowhere else: every page and sheet owns its top
+     row through its header. ONE boolean, read by both corner clusters, so
+     the two can never disagree about where they stand again. */
+  const homeChromeShown = atNowView && !reviewing && !streamShown && !panelOpen && !mouthOpen && !savedNoteOpen &&
+    seek === null && !thingShare && !inSky;
   /* A SHEET PULLED UP IS ALWAYS FRESH, and every way off it drops its query;
      only a result's "<" brings one back (`backPage`, `noteFromSheet`). */
   const openSheet = useCallback(() => { noteFromSheet.current = null; setSheetQuery(''); setStreamOpen(true); }, []);
@@ -8112,7 +8194,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       onRead={acceptPrinciples}
                     /> : null}
                     {here&&pick&&principlesRead&&!principles.some(row=>row.id===pick)?<p role="status" className="jar-values-sub">
-                      {say('worldPrincipleUnavailable')} <button type="button" onClick={()=>{setPick(null);viewNavigation.write({...EMPTY_VIEW,wallId:atWall.kind==='agent'?atWall.id:null,section:'sky'},{replace:true});}}>{say('worldPrinciplesBack')}</button>
+                      {/* The header's "<" is the way out (nav system R2). */}
+                      {say('worldPrincipleUnavailable')}
                     </p>:null}
                     {here && principles.length > 0 ? (
                       <>
@@ -8123,11 +8206,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
                             because the signpost that names the place hides
                             while you are in it. */}
                         <p className="jar-values-eyebrow jar-label">
-                          {say("worldPhilosophiesValues")}
+                          {say("worldPrinciplesShortcut")}
                         </p>
                     {/* Ranked, and the rank is the order — never a number
                         beside a statement. */}
-                    <ul className="jar-principles-list jar-principles-list--personal" role="list" aria-label={say("worldPhilosophiesValues")} data-jar-interactive="1">
+                    <ul className="jar-principles-list jar-principles-list--personal" role="list" aria-label={say("worldPrinciplesShortcut")} data-jar-interactive="1">
                     {[...principles]
                       .sort((a, b) => a.rank - b.rank)
                       .map((pr, i, ranked) => (
@@ -10515,7 +10598,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
               if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); }
             }
           }}
+          asking={leaveAsking} onStay={() => setLeaveAsking(false)}
           onClose={() => saveAsDraft()} onSubmit={() => { void keepIt(); }}
+          onBack={backPage} gesture={viewNavigation.href}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
             sayProblem: sayMouthProblem }); }}
@@ -11040,7 +11125,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           role="dialog"
           aria-label={say("worldWhereThisCameFrom")}
         >
-          <header className="jar-prov-room-top"><SheetBack label={say("worldBack")} onBack={() => setProv(null)} /></header>
+          <SurfaceHeader locale={locale} back={{ kind: 'close', onBack: closeProv }} title={say("worldWhereThisCameFrom")} />
           <p className="jar-prov-room-lead">{prov.lead}</p>
           <div className="jar-prov-room-panes">
             <div className="jar-prov-room-list">
@@ -11451,10 +11536,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
           yet, which is the whole point of the sentence. */}
       {/* Principle detail returns to its list; the list's Home action always
           exits to this profile, including after a direct link. */}
-      {phase === "ready" && inSky && !principlesOpen ? <PageBack navigationKey={viewNavigation.href}
-        label={say('worldPrinciplesBack')} belowCorners onBack={() => viewNavigation.write({ ...EMPTY_VIEW, wallId: viewNavigation.view?.wallId ?? null, open: 'principles' })} /> : null}
-      {phase === 'ready' && principlesOpen && !principlesCrossing ? <PageBack navigationKey={viewNavigation.href}
-        label={say('worldBackHome')} belowCorners onBack={closePage} /> : null}
+      {/* A PRINCIPLE, IN THE SKY: the shared header, "<" Back to Principles.
+          The principle itself is the heading, so the title is empty. The
+          sky has no page of its own in the DOM, so the row stands in a strip
+          at the top of the screen. */}
+      {phase === "ready" && inSky && !principlesOpen ? <div className="waka-surface-strip">
+        <SurfaceHeader locale={locale} gesture={viewNavigation.href} srTitle={say('worldPrinciplesShortcut')}
+          back={{ kind: 'back', onBack: backToPrinciples }} /></div> : null}
 
       {/* THE REACH. See its note above `reachable` — this is the ground made
           addressable without a pointer, and it is deliberately drawn nowhere.
@@ -11621,7 +11709,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           the principles they are evidence for, which is where the collecting
           was pointed all along. */}
       <div className={`jar-personal-shortcuts${atWall.kind==='self'?' jar-personal-shortcuts--self':''}${atWall.kind==='self'&&inSky?' jar-personal-shortcuts--sky':''}${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}
-        hidden={Boolean(panelOpen||mouthOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple||thingShare||viewNavigation.view?.open)}>
+        hidden={!homeChromeShown}>
       {/* THE REVIEW SHORTCUT IS GONE FROM THIS CORNER. It was the one door
           into the folded flow, and `useReviewEntry` existed only to decide
           whether it should read "Review" or "Resume review" — a fetch on
@@ -11692,37 +11780,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
           surface that made this rule: "this should be its own page, so bottom
           navigation always visible." A conversation is a page like the rest
           of them now, so it keeps the bar like the rest of them. */}
-      {/* PRINCIPLES TAKES THE PAGE'S BACK TOO. Its way out was the bar's
-          Home tab; the tabs are gone (design E1), so the labelled Back in
-          the corner is what returns from it, as it does from the lists. */}
-      {phase === 'ready' && (listing || making || principlesOpen) && !viewNavigation.view?.sharePrinciple ? <PageBack
-        navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making !== null || listing || principlesOpen}
-        /* A LIST'S "‹ HOME" STANDS IN THE TOP ROW, as "⌄ Home" does over
-           the sheet — unless the row's left end is the profile switcher,
-           which says whose list this is; then it steps under it. */
-        belowCorners={(principlesOpen || (listing && Boolean(agentWall))) && !savedNoteOpen}
-        /* ONE HEADER GRAMMAR (founder, 2026-11-08): a note being written, a
-           saved note and a chat each leave by an unboxed "<" in the top-left,
-           inline with the page's own row; a list keeps its word ("‹ Home").
-           On a chat the "<" CLOSES it (founder: "< on top left should be
-           closing this like how it does for the saving"); Past chats moved
-           to the top-right. */
-        glyphOnly={making !== null || savedNoteOpen}
-        label={say(savedNoteOpen ? (noteFromSheet.current ? 'worldBackHome' : 'worldBackToAll') : chatBackToList ? 'worldBackToPastChats' : making !== null ? 'worldClose' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
-      {/* THE CREATURE'S QUESTIONS LEAVE BY THE SAME "<". Their way out was
-          "Exit review mode" in the bar, the one page that left by a sentence
-          at the bottom. */}
-      {phase === 'ready' && reviewing && !making && !listing && !principlesOpen && !savedNoteOpen ? <PageBack
-        navigationKey={`${viewNavigation.href}#questions`} onBack={() => setReviewing(false)} glyphOnly label={say('worldBack')} /> : null}
-      {/* PAST CHATS, TOP-RIGHT ON A CHAT — a quiet word at the corners' height,
-          like home's Actions, opening the list of chats. */}
-      {phase === 'ready' && making === 'talk' && !viewNavigation.view?.sharePrinciple ? (
-        <button type="button" className="waka-page-aside" data-jar-chrome="1" data-jar-interactive="1"
-          onClick={() => {
-            listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new', principleId: viewNavigation.view?.principleId };
-            openOverHome('conversations');
-          }}>{say('worldPastChats')}</button>
-      ) : null}
+      {/* THE CREATURE'S QUESTIONS LEAVE BY THE SAME "<" (nav system): the
+          shared header, Close, and no title, because the creature's question
+          is the heading. The corners are hidden while it asks. */}
+      {phase === 'ready' && reviewing && !making && !listing && !principlesOpen && !savedNoteOpen ? <div className="waka-surface-strip">
+        <SurfaceHeader locale={locale} gesture={`${viewNavigation.href}#questions`}
+          back={{ kind: 'close', onBack: () => setReviewing(false) }} /></div> : null}
+      {/* A PAGE WHOSE OWNER IS NOT KNOWN YET still has its way out: the
+          lists, a chat and Principles draw their own header once their scope
+          is here, and until then this one stands in, Close to home. */}
+      {phase === 'ready' && (((listing || making === 'talk') && !(conversationScope && conversationProfile)) || (principlesOpen && !storageScope)) ? <div className="waka-surface-strip">
+        <SurfaceHeader locale={locale} back={{ kind: 'close', onBack: closePage }} /></div> : null}
       {streamShown ? (
         <HomeStream locale={locale} inspirations={inspirations ?? []} signals={streamSignals(signals)} principles={principles}
           profileId={conversationScope?.profileId ?? null}
@@ -11743,17 +11811,22 @@ const RETRY_READ_LIMIT_MS = 20_000;
           reached from home (Kept ⌃, then its "Kept ›" heading), not from a new note. */}
       {/* ═══ THE HOME BAR (design E1) ══════════════════════════════════════
           Write · Photo · Say it in one pill, Chat beside it — see
-          `HomeBar`. It stands on the home at rest and nowhere else: the
-          lists and the principles leave by the labelled Back above, the
-          notepad and a chat have their own bars. Inspirations and Chats
-          are reached from the corner's Actions (Search, Past chats). */}
+          `HomeBar`. It stands on home (and under the Kept sheet, which rises
+          from its "{n} kept") and nowhere else (nav system R7): every page
+          leaves by its header's "<", and the notepad, a saved note and a
+          chat write into the one `NoteBar`. */}
       {phase === 'ready' && atNowView && !reviewing && !savedNoteOpen && !viewNavigation.view?.sharePrinciple ? (
         <HomeBar locale={locale}
-          /* NEVER ON THE AGENT: "you cannot add inspiration for the agent
-             mode" (founder, 2026-10-15). Only Chat stands there. */
-          save={standingAsAgent ? undefined : {
+          /* THE SAME PILL ON AN AGENT'S WALL, saving into the agent (nav
+             system: the Kept list's "Keep a thought" was the web's one way
+             to keep into an agent, and it went for this). Drawn only where
+             you may write: your own wall, or an agent profile you own (the
+             roster is your account's owned agents); a wall whose owner is
+             not one of those gets no pill. The notepad then reads
+             "Saving to {agent} · {date}". */
+          save={!canWriteHere ? undefined : {
             onWrite: startNewInspiration,
-            onPhotos: files => { startNewInspiration(); void addInspirationFiles(files); },
+            onPhotos: screenshotIntoNewNote,
             onSay: sayIntoNewNote,
             /* The notepad's own mic is dim while its draft store cannot take
                words (`composerDraft.available`); Say it, which starts that mic,
@@ -11768,24 +11841,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
              archive's, which leads with the same search. With the Actions
              menu gone this is the agent wall's one door to them. */
           pull={standingAsAgent ? { onOpen: () => { listOrigin.current = null; openOverHome('saves'); } }
-            : streamShown ? undefined : { onOpen: openSheet }}
+            : streamShown ? undefined : {
+              onOpen: openSheet,
+              /* "{n} KEPT ⌃" (founder: "should be x kept"). The same count
+                 the field keeps true through every keep and removal
+                 (`fieldBeyond`); unknown until the field's first page. */
+              kept: inspirations ? inspirations.length + fieldBeyond : undefined,
+            }}
         />
-            ) : phase==='ready'&&savedNoteOpen&&!viewNavigation.view?.sharePrinciple ? (
-        <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
-          {/* ═══ THE ARCHIVE'S OPEN NOTE BORROWS THIS SLOT ═══════════════
-              The dock stands only while a saved note is open (the notepad
-              and a chat write into their own NoteBar, and every page leaves
-              by its "<"), so it holds one thing: the empty group that
-              `NoteTools` portals the note's mic, photo, file and Save into.
-              The rows it used to list (Inspiration, Chat, ↩) and their
-              buttons could no longer render here and went (2026-11-09). */}
-          {listing && viewNavigation.view?.open === 'saves' ? (
-            <span className="waka-dock-slot">
-              <span className="waka-dock-making" role="group" id={DOCK_SLOT}
-                aria-label={say('worldCaptureInspiration')} />
-            </span>
-          ) : null}
-        </nav>
       ) : null}
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         /* NO ACTIONS MENU (2026-11-08). Founder: "i hate this. better
@@ -11815,18 +11878,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            are a history rather than a depth of your own material, which is
            why they never sat among the three and why this corner is where
            they belong. */
-        left={streamShown ? (
-          /* ═══ "⌄ HOME" IS IN THE TOP BAR'S ROW (2026-11-08) ═══
-             Founder: "the down caret and Home feels awkward position
-             relative to the top right buttons." It sat centred under the
-             row; now it is the row's left end, unboxed, on the icons'
-             centre line. The chevron points the way the sheet goes. */
-          <button type="button" className="waka-stream-home" aria-expanded="true" onClick={leaveSheet}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-              strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" /></svg>
-            <span>{say('worldBackHome')}</span>
-          </button>
-        ) : <>{agentWall ? (
+        left={<>{agentWall ? (
               <ProfileSwitcher label={say('worldProfileSwitcher')}
                 options={[{ id: null, name: say('worldWallMe'), selected: atWall.kind !== 'agent' },
                   ...agentWalls.map(wall => ({ id: wall.id, name: wall.name, selected: atWall.kind === 'agent' && atWall.id === wall.id }))]}
@@ -11845,7 +11897,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            writing on; the two corners are the world's furniture and the
            notepad has never shown them. It also returns the 60px the
            archive reserves for them — see `.waka-page--note`. */
-        hidden={Boolean(panelOpen||mouthOpen||savedNoteOpen||seek!==null||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple||thingShare)}/>:null}
+        hidden={!homeChromeShown}/>:null}
       {seek !== null ? (
         <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
           /* the label said "find YOUR inspirations" on a room's wall, where
@@ -11911,8 +11963,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
         onNoteOpen={savedNoteChanged}
         note={viewNavigation.view.note}
         onNoteAddress={noteAddressChanged}
-        onNewSave={startNewInspiration}
-        newSaveLabel={say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}
         key={`${conversationScope.accountId}:${conversationScope.profileId}:saves:${savesFocus?.ids.join(',') ?? ''}`}
         viewState={savesFocus ? undefined : listViews.inspirations}
         scope={conversationScope} ownerName={conversationProfile.name}
@@ -11927,7 +11977,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
            buttons saying the same two words, which stood here while the
            corner's pair stood behind this sheet's own left edge, clipped to
            "MY AGE". The act survives; the duplicate does not. */
-        onClose={closePage}/>:null}
+        /* ONE HANDLER FOR "<" AND ESCAPE: Back on an open note (to the list
+           or the sheet), on a list opened from a chat (to the chat); Close
+           otherwise (home). */
+        onBack={backPage} backKind={listOrigin.current ? 'back' : 'close'} gesture={viewNavigation.href}/>:null}
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
@@ -11936,7 +11989,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         whose={atWall.kind==='agent'?'agent':'own'}
         onNewSave={atWall.kind==='agent'?undefined:startNewInspiration}
         newSaveLabel={say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}
-        onClose={closePage}
+        onClose={closePage} gesture={principlesCrossing ? null : viewNavigation.href}
         /* Opening one REPLACES the overlay rather than stacking on it: the
            principle's own surface is the next thing to read, not a sheet on
            top of a sheet, and `closeOpen` would otherwise have to know which
@@ -11961,8 +12014,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
         key={`${conversationScope.accountId}:${conversationScope.profileId}:talks`}
         viewState={listViews.chats}
         locale={locale} profileId={conversationScope.profileId}
-        title={formatMessage(locale, 'worldProfileChats', { name: conversationProfile.name })}
-        onClose={closePage}
+        title={conversationProfile.type==='agent'?formatMessage(locale, 'worldProfileChats', { name: conversationProfile.name }):say('worldPastChats')}
+        onBack={backPage} backKind={listOrigin.current ? 'back' : 'close'} gesture={viewNavigation.href}
         onOpen={id=>{ openTalk(id); setChatFromList(id ?? 'new'); }}/>:null}
 
       {/* THE CONVERSATION ITSELF, ALSO OVER THE WORLD.
@@ -11992,70 +12045,28 @@ const RETRY_READ_LIMIT_MS = 20_000;
         const owner=`${conversationScope.accountId}:${conversationScope.profileId}`;
         if(committedTalk.current&&(committedTalk.current.owner!==owner||committedTalk.current.row.id!==talkId))committedTalk.current=null;
         return <div className="waka-page">
-          {/* THE BAR IS THIS SURFACE'S WAY OUT, SAID IN THE MARKUP.
-              `way-out.test.ts` reads this attribute: a conversation has no
-              control of its own that leaves, and it does not need one —
-              the dock's "Chats" row goes to the list this came from, in a
-              word rather than a glyph. The attribute is on the surface and
-              not in a list keyed by file, because `Home.tsx` renders five
-              surfaces and four of them must stay answerable to the law. */}
-          {/* AND SO IT IS NOT A DIALOG EITHER — `modal={false}`.
-              `data-way-out="talk"` above is a CLAIM that the bar is this
-              surface's exit, and a Tab trap made the claim false for anybody
-              working from the keyboard: Tab wrapped back into the transcript
-              instead of reaching the "Chats" row the attribute points at, and
-              `aria-modal` told a reader that row was not on the screen. The
-              attribute and the prop are the same statement said twice, once
-              for the gate and once for the browser; they have to agree.
-
-              It is the fifth of the five and the one the founder reported
-              being trapped in — "I find it so annoying that from talk with
-              Waka, there's no one click to go back to top of mind" — so it is
-              the last surface that should have been holding focus.
-
-              IT IS ALSO WHY THE PAGE IS A `<section>` AND NOT A `<main>`:
-              `ConversationPanel` renders its own `<main className="chat-page">`
-              inside this, and a `<main>` in a `<main>` is two primary
-              landmarks. See `DialogSurface`'s header. */}
-          <DialogSurface className="waka-over waka-over--talk" motion="modal" aria-label={say('worldMenuTalk')}
+          {/* A PAGE, NOT A DIALOG (`modal={false}`): its way out is its
+              header's "<", and Escape calls the same handler. `way-out.test.ts`
+              reads `data-way-out`. IT IS A `<section>` AND NOT A `<main>`:
+              `ConversationPanel` renders its own `<main className="chat-page">`. */}
+          <DialogSurface className="waka-over waka-over--talk" motion="modal" aria-label={say('worldConversationTitle')}
             data-way-out="talk"
             modal={false}
-            onClose={closePage}>
-            {/* ═══ THE WAY BACK TO THE LIST, which this surface was the one
-                place in the product not to have ═══════════════════════════
-                Founder: "chat and inspirations should have same look and
-                feel and workflow and experience."
-
-                Measured, an open inspiration had THREE ways out — a chevron
-                reading "All inspirations", a ✕, and a "Close" in its own
-                foot — and an open chat had ONE, which went to the world
-                rather than to the chats it came from. So the only surface in
-                the product you could not step back out of was the one the
-                founder has reported being lost in most. The two are now the
-                same pair: a chevron to the list, and a ✕ to the world.
-
-                AND THE TITLE SAID A FOURTH NAME. The bar says "Chats", the
-                list says "Your chats", and this said "Talk with WAKA" —
-                three names for one place, which is the thing Law 1 is about
-                before it is about verbs. The chevron names the place it
-                returns to, the way the archive's does, and nothing else on
-                the surface claims to name it. */}
-              {/* ═══ AND THE CHAT'S CHEVRON GOES THE SAME WAY ═══════════
-                  Founder, of the notepad's: "I still don't get why you have
-                  this carrot button when I do new inspiration, because I
-                  can just go to all the inspirations using the bottom
-                  panel. So don't do that."
-
-                  LAW 7: a ruling applies to the class. That sentence is
-                  about a glyph pointing at a room the dock already names in
-                  a word, and this is the same glyph pointing at a different
-                  one — the bar's "Chats" row goes exactly where this went.
-                  Fixing it only on the reported screen is what made
-                  `six-laws.md` necessary; this is the second screen.
-
-                  THE HEADER GOES WITH IT, because the chevron was all it
-                  held. An empty header above a conversation would be a
-                  reserved row for nothing. */}
+            focusFirst={false}
+            escapeLeavesAsModal={false}
+            onClose={backPage}>
+            {/* THE SHARED HEADER (nav system): "<" Close to home, or Back to
+                Past chats when the chat was opened from there; "Chat" in the
+                middle; "Past chats" the one word on the right (founder). The
+                "<" and Escape are the same handler, `backPage`. */}
+            <SurfaceHeader locale={locale} gesture={viewNavigation.href}
+              back={{ kind: chatBackToList ? 'back' : 'close', onBack: backPage }}
+              title={say('worldConversationTitle')}
+              right={viewNavigation.view?.sharePrinciple ? undefined : <button type="button" className="waka-surface-act"
+                onClick={() => {
+                  listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new', principleId: viewNavigation.view?.principleId };
+                  openOverHome('conversations');
+                }}>{say('worldPastChats')}</button>} />
             <ConversationPanel key={`${owner}:${talkId??'new'}:${viewNavigation.view.principleId??''}`}
               scope={conversationScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}

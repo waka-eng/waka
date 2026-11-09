@@ -387,12 +387,11 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
               </span>
             )}
             <nav className={`onb-pill onb-choose${calling && !locked ? " onb-choose--call" : ""}`} aria-label={say(question.ask)}>
-              {/* THE HOME BAR'S WORDS, so the bar you learn here is the bar
-                  you meet at home: "Keep", then what you keep. */}
-              <span className="onb-keep" aria-hidden="true">{say("worldBarKeep")}</span>
-              <button type="button" className="onb-choice" disabled={locked} aria-label={say("worldBarKeepThought")} onClick={() => choose("write")}><Glyph kind="write" /><span>{say("worldBarThought")}</span></button>
-              <button type="button" className="onb-choice" disabled={locked} aria-label={say("worldBarKeepScreenshot")} onClick={() => choose("photo")}><Glyph kind="photo" /><span>{say("worldBarScreenshot")}</span></button>
-              <button type="button" className="onb-choice" disabled={locked} aria-label={say("worldBarKeepVoice")} onClick={() => choose("voice")}><Glyph kind="voice" /><span>{say("worldBarVoice")}</span></button>
+              {/* THE HOME BAR'S PILL, so the bar you learn here is the bar
+                  you meet at home: "Keep a thought…", then a picture and a mic. */}
+              <button type="button" className="onb-choice onb-choice--field" disabled={locked} aria-label={say("worldBarKeepThought")} onClick={() => choose("write")}><span>{say("worldBarThoughtPrompt")}</span></button>
+              <button type="button" className="onb-choice onb-choice--glyph" disabled={locked} aria-label={say("worldBarKeepScreenshot")} title={say("worldBarKeepScreenshot")} onClick={() => choose("photo")}><Glyph kind="photo" /></button>
+              <button type="button" className="onb-choice onb-choice--glyph" disabled={locked} aria-label={say("worldBarKeepVoice")} title={say("worldBarKeepVoice")} onClick={() => choose("voice")}><Glyph kind="voice" /></button>
             </nav>
           </>
         ) : mode === "write" ? (

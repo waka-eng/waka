@@ -7,11 +7,16 @@
  * same code so it looks identical." So both render this, and no stylesheet
  * keeps a second copy of it.
  *
- * ITS ANATOMY: one raised, rounded field whose words get the whole width, and
- * under them a slim row — the tools on the left (mic, photo, file), the one
- * transient line between, and the act on the right (Save, Send) as a quiet
- * word: dim when there is nothing to act on, full ink when there is, never
- * filled or boxed.
+ * ITS ANATOMY (founder, 2026-11-09: "notepad feels so 답답해"): ONE PILL,
+ * the home bar's shape. The tools at its start (mic, photo, file), the act at
+ * its end (Keep, Send) as a quiet word: dim when there is nothing to act on,
+ * full ink when there is, never filled or boxed. Between them, either the one
+ * transient state line or, for a caller whose words live IN the bar (a
+ * chat), the field itself, one line at rest and growing as it is typed into.
+ *
+ * The notepad's words are not in it any more: they are written straight on
+ * the page, and this pill floats under them, small and centred. So
+ * `children` (the field) is optional, and a bar without one is tools only.
  *
  * `above` is for what belongs to the words but is not them (a chat's chips).
  * The field is the caller's own element, so each keeps its keys and handlers.
@@ -23,7 +28,8 @@ import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
 import { HomeActionIcon } from './HomeActionIcon';
 
 export function NoteBar(props: {
-  children: ReactNode;
+  /** The field, when the words are typed inside the bar (a chat). */
+  children?: ReactNode;
   tools?: ReactNode;
   state?: ReactNode;
   action?: ReactNode;
@@ -31,13 +37,14 @@ export function NoteBar(props: {
   /** An extra class for a caller's own selectors (never its own look). */
   className?: string;
 }): JSX.Element {
+  const field = props.children !== undefined && props.children !== null && props.children !== false;
   return (
-    <div className={`waka-note-bar${props.className ? ` ${props.className}` : ''}`} data-note-bar="1">
+    <div className={`waka-note-bar${props.className ? ` ${props.className}` : ''}`} data-note-bar="1" data-field={field ? '1' : undefined}>
       {props.above}
-      {props.children}
+      {field && props.state ? <span className="waka-note-bar-state">{props.state}</span> : null}
       <div className="waka-note-bar-row">
         <span className="waka-note-bar-tools">{props.tools}</span>
-        <span className="waka-note-bar-state">{props.state}</span>
+        {field ? <span className="waka-note-bar-field">{props.children}</span> : <span className="waka-note-bar-state">{props.state}</span>}
         {props.action}
       </div>
     </div>

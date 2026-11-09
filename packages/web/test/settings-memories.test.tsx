@@ -26,7 +26,8 @@ vi.mock("../src/lib/api/sessions", () => ({ fetchSessions: vi.fn(async () => [])
 const row = (id: string, type: "human" | "agent", name: string): ApiOwnedProfile =>
   ({ id, accountId: "account-1", type, name, avatarUrl: null, preferredLocale: "en-US", createdAt: "2026-10-01T00:00:00Z" });
 let host: HTMLDivElement, root: Root;
-const button = (name: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent?.trim() === name)!;
+/* By accessible name: the header's "<" is named by its aria-label alone. */
+const button = (name: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(node => (node.getAttribute('aria-label') ?? node.textContent)?.trim() === name)!;
 const nameInput = () => host.querySelector<HTMLInputElement>('.waka-agent-details input')!;
 async function editName(value: string) {
   await act(async () => {
@@ -142,7 +143,7 @@ it('names the agent being deleted and lets Cancel return focus without deleting 
   expect(deleteProfile).toHaveBeenCalledWith('agent-1');
   expect(host.querySelector('.waka-agent-profile')).toBeNull();
   expect(host.querySelector('h2')?.textContent).toBe('Agents');
-  expect(document.activeElement).toBe(host.querySelector('h2'));
+  expect(document.activeElement).toBe(host.querySelector('.waka-surface-title'));
 });
 
 
@@ -158,7 +159,7 @@ it('opens a newly created agent’s settings without creating credentials', asyn
   expect(createProfile).toHaveBeenCalledWith('Research');
   expect(host.querySelector('h2')?.textContent).toBe('Research');
   expect(host.textContent).toContain('Set up MCP');
-  expect(document.activeElement).toBe(host.querySelector('h2'));
+  expect(document.activeElement).toBe(host.querySelector('.waka-surface-title'));
 });
 
 it('waits for a rename on Back, keeps errors and drafts visible, and allows an explicit discard', async () => {
@@ -203,5 +204,8 @@ it.each(['Back', 'Escape', 'Info', 'Scrim', 'Gear'])('keeps a failed rename visi
   await act(async () => button('Back').click());
   expect(nameInput().value).toBe('Pending name');
   await act(async () => resolve(row('agent-1', 'agent', 'Pending name')));
-  expect(host.querySelector('.waka-settings')).toBeNull();
+  /* THE ONE "<" STEPS UP ONE LEVEL (nav system): the agent's page gives way
+     to Agents once its rename has landed; the card stays. */
+  expect(host.querySelector('.waka-agent-details input')).toBeNull();
+  expect(host.querySelector('.waka-settings .waka-surface-title')?.textContent).toBe('Agents');
 });

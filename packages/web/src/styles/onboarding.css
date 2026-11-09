@@ -312,25 +312,35 @@
 .onb-share-here { margin: 0 0 var(--sp-6); font-size: var(--t-body); color: var(--onb-ink); }
 .onb-nudge { margin-bottom: var(--sp-10); animation: onb-nudge 1.8s ease-in-out infinite; }
 
-.onb-choose { gap: var(--sp-4); padding: var(--sp-6) var(--sp-10); margin-bottom: var(--sp-28); }
+/* THE HOME BAR'S PILL (2026-11-09): "Keep a thought…" dim at the left, the
+   whole left the press, then a picture and a mic as glyphs alone. */
+.onb-choose { width: 100%; max-width: 560px; box-sizing: border-box; gap: var(--sp-2); padding: var(--sp-6) var(--sp-8) var(--sp-6) var(--sp-6); margin-bottom: var(--sp-28); }
 .onb-choose--call { animation: onb-call 2.4s ease-in-out infinite; }
-/* "Keep", the bar's verb said once (as on the home bar): soft, not a door. */
-.onb-keep { flex: none; padding-inline: var(--sp-6) var(--sp-2); color: var(--onb-ink-soft); font-size: var(--t-ui); line-height: 1; white-space: nowrap; }
 .onb-choice {
-  width: 80px;
   height: 52px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  padding: 0;
   border: 0;
   background: none;
   color: var(--onb-white);
-  font-size: var(--t-meta);
   line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
 }
+.onb-choice--field {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-start;
+  padding-inline: var(--sp-16) var(--sp-8);
+  color: var(--onb-ink-soft);
+  font-size: 16px;
+  text-align: left;
+}
+.onb-choice--field > span { overflow: hidden; text-overflow: ellipsis; }
+.onb-choice--field:hover, .onb-choice--field:focus-visible { color: var(--onb-white); }
+.onb-choice--glyph { flex: none; width: 48px; }
 
 .onb-hint { margin: 0 0 var(--sp-8); font-size: var(--t-ui); line-height: 1.4; color: var(--onb-ink-soft); text-align: center; }
 .onb-error { margin: 0 0 var(--sp-8); font-size: var(--t-ui); line-height: 1.4; color: var(--onb-ink); text-align: center; }

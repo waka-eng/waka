@@ -5,13 +5,15 @@ export async function openTheNotepad(page: Page, { touch = false }: { touch?: bo
   const press = async (target: ReturnType<Page["locator"]>) => {
     if (touch) await target.tap(); else await target.click();
   };
-  // Lists own the dock until Close returns to the selected profile.
-  if (await page.locator('.waka-over').count()) {
-    await press(page.getByRole('button', { name: 'Close', exact: true }));
+  // A page over home leaves by its header's "<" (the shared SurfaceHeader:
+  // Back on a note, Close on a list); step out until home's bar is back.
+  for (let turn = 0; turn < 3 && await page.locator('.waka-over').count(); turn += 1) {
+    await press(page.locator('.waka-surface-back').last());
+    await page.waitForTimeout(300);
   }
-  // The home bar's first door. "Keep a thought" also names the notepad's
-  // own field and the principles page's add button, so the bar is named too.
-  await press(page.locator('.waka-home-bar-door').filter({ hasText: /^a thought$/ }));
+  // The home bar's pill: its field-like door "Keep a thought…". "Keep a
+  // thought" also names the notepad's own field, so the bar is named too.
+  await press(page.locator('.waka-home-bar-pill .waka-home-bar-field'));
   await page.locator('.jar-composer-text').waitFor({ state: 'visible', timeout: 8_000 });
 }
 

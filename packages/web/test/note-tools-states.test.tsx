@@ -17,19 +17,18 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { DOCK_SLOT, NoteTools } from "../src/components/NoteTools";
+import { NoteTools } from "../src/components/NoteTools";
 
 let host: HTMLDivElement, root: Root, slot: HTMLSpanElement;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  slot = document.createElement("span");
-  slot.id = DOCK_SLOT;
-  document.body.append(slot);
+  /* The note bar renders in place (nav system); its parts are found in the page. */
+  slot = document.body as HTMLElement as HTMLSpanElement;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); slot.remove(); });
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 const idle = { phase: "idle", seconds: 0, error: "", notice: "", start: vi.fn(), stop: vi.fn(), cancel: vi.fn() };
 

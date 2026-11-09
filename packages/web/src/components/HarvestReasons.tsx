@@ -67,13 +67,6 @@ export function HarvestReasons({ text, locale, busy, failed, onReason, onKeepFix
     <div className="jar-pick jar-harvest-why" role="group" aria-label={say("worldHarvestWhyTitle")}>
       <p className="jar-pick-who jar-harvest-head">
         <span>{say("worldHarvestWhyTitle")}</span>
-        {/* SKIP IN THE HEADER, where it costs no row: on a phone the list
-            has to fit beside the creature, not under it. */}
-        {!fixing && own === null ? (
-          <button type="button" className="jar-harvest-skip" disabled={busy} onClick={() => onReason()}>
-            {say("worldHarvestSkip")}
-          </button>
-        ) : null}
       </p>
       <p className="jar-harvest-quote">{text}</p>
       {own !== null ? (
@@ -86,7 +79,7 @@ export function HarvestReasons({ text, locale, busy, failed, onReason, onKeepFix
           </label>
           <p className="jar-harvest-acts">
             <button type="button" className="jar-harvest-act" disabled={busy} onClick={() => setOwn(null)}>
-              {say("worldHarvestOtherBack")}
+              {say("profileConnectionCancel")}
             </button>
             <button type="button" className="jar-harvest-act jar-harvest-act--keep" disabled={busy || !own.trim()} onClick={() => onReason("other", own.trim())}>
               {say("worldHarvestOtherSend")}
@@ -138,6 +131,13 @@ export function HarvestReasons({ text, locale, busy, failed, onReason, onKeepFix
               </button>
             </li>
           </ul>
+          {/* SKIP IS A CARD ACT AT THE FOOT, not a second header (nav system):
+              the page's one header is the "<" above the cards. */}
+          <p className="jar-harvest-acts">
+            <button type="button" className="jar-harvest-act jar-harvest-skip" disabled={busy} onClick={() => onReason()}>
+              {say("worldHarvestSkip")}
+            </button>
+          </p>
           <p className="jar-harvest-foot">{say("worldHarvestWhyHelps")}</p>
         </>
       )}

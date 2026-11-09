@@ -79,9 +79,9 @@ it('names the URL’s agent as the capture destination after a cold load',async(
   S.holdRoster=true;
   world=await mountWorld(FACTS,{initialEntries:[`/w/${S.agent}/noah?compose=1`],routerTools:<RouterProbe/>});
   await settle();
-  expect(world.container.querySelector('.jar-note-owner')?.textContent ?? '').not.toContain('Me');
+  expect(world.container.querySelector('.jar-inspiration-composer .waka-surface-title')?.textContent ?? '').not.toContain('Me');
   S.holdRoster=false;await act(async()=>S.release?.());await settle();
-  expect(world.container.querySelector('.jar-note-owner')?.textContent).toBe('Saving to Noah');
+  expect(world.container.querySelector('.jar-inspiration-composer .waka-surface-title')?.textContent).toMatch(/^Saving to Noah · /);
   expect(new URLSearchParams(location.search).get('compose')).toBe('1');
 });
 it('refuses another tab’s overwrite and preserves newer words when an older save finishes',()=>{

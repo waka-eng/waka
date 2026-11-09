@@ -1,5 +1,5 @@
-import { useId } from "react";
 import { t, type SupportedLocale } from "../lib/locales";
+import { SurfaceHeader } from "./SurfaceHeader";
 
 // Explain the actions in the order a new user encounters them.
 const STEPS = [
@@ -8,12 +8,11 @@ const STEPS = [
   { title: "worldHowRefineTitle", body: "worldHowRefineBody" },
 ] as const;
 
-export function HowItWorksPanel({ locale }: { locale: SupportedLocale }): JSX.Element {
+export function HowItWorksPanel({ locale, onClose }: { locale: SupportedLocale; onClose: () => void }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
-  const titleId = useId();
   return (
-    <div className="waka-about" role="group" aria-labelledby={titleId}>
-      <h2 className="waka-about-title" id={titleId}>{say("worldHowItWorksTitle")}</h2>
+    <div className="waka-about" role="group" aria-label={say("worldHowItWorksTitle")}>
+      <SurfaceHeader locale={locale} back={{ kind: "close", onBack: onClose }} title={say("worldHowItWorksTitle")} />
       <div className="waka-about-content">
       <p className="waka-about-lead">{say("worldHowItWorksLead")}</p>
       <ol className="waka-about-steps">

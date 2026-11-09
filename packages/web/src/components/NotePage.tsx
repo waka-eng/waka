@@ -51,66 +51,31 @@
  */
 import type { ReactNode } from "react";
 
-import { momentStamp } from "../lib/words";
+import { noteStamp } from "../lib/words";
 import type { SupportedLocale } from "../lib/locales";
+import { SurfaceHeader, type SurfaceBack } from "./SurfaceHeader";
 
 export interface NotePageProps {
   locale: SupportedLocale;
   /** When this note is, in milliseconds. */
   whenMs: number;
-  /** One verb ABOUT this note — Delete on a saved one, nothing on a new. */
+  /** The "<": Close on a new note (it goes home), Back on a saved one (to the list or sheet). */
+  back: SurfaceBack;
+  /** A page's address, for the native back gestures. */
+  gesture?: string | null;
+  /** One verb ABOUT this note: the saved note's "⋯"; nothing on a new one. */
   trailing?: ReactNode;
+  /** Whose note: "Saving to {name}" on a new one, the name on a saved one. */
   owner?: string;
   children: ReactNode;
 }
 
-export function NotePage({
-  locale,
-  whenMs,
-  owner,
-  trailing,
-  children,
-}: NotePageProps): JSX.Element {
+/** THE HEADER IS THE SHARED ONE (nav system): "<", the owner and the moment centred, the "⋯". */
+export function NotePage({ locale, whenMs, owner, back, gesture = null, trailing, children }: NotePageProps): JSX.Element {
+  const when = noteStamp(whenMs, Date.now(), locale);
   return (
     <>
-      <div className="jar-note-top">
-        {/* ═══ AND NOTHING IN THE CORNER, EVER ════════════════════════
-            Founder, 2026-10-15: "never put something on any corners." The
-            archive's door on a new note is "N inspirations" in the bar, not
-            a word in this first track — which stays empty, as below. */}
-        {/* ═══ AND THE WAY BACK IS THE BAR ═══════════════════════════
-            Founder: "I still don't get why you have this carrot button
-            when I do new inspiration, because I can just go to all the
-            inspirations using the bottom panel. So don't do that."
-
-            Correct, and the chevron had already been losing arguments on
-            its way to this one. It was a boxed button with a destination
-            printed beside it; the box went ("why is this still here?"),
-            then the words went ("remove the all inspirations thing"), and
-            what was left was a glyph in the corner pointing at a place the
-            dock already names in words and reaches in one press. Three
-            rounds of making a control quieter, when the answer was that it
-            was a second door onto one room.
-
-            LAW 2 IS SATISFIED BY THE BAR, NOT BY NOTHING. "Every surface
-            you can enter has a visible way out and it costs one press" —
-            the dock is on screen on both of these pages, always, and
-            "Inspirations" is the way out, in a word rather than a glyph.
-            It is also the way out that was there the whole time: the
-            founder found it before we removed the chevron.
-
-            THE EMPTY TRACK STAYS. `.jar-note-top` is `1fr auto 1fr` so the
-            date sits in the middle of the PAGE; collapsing the first track
-            now would hang the date off the left margin. Nothing is a
-            perfectly good tenant for a track whose job is to be half the
-            page. */}
-        {/* THE ONE FACT A PAGE LIKE THIS CAN STATE, in the middle, where it
-            was on the page the founder said they preferred. On an empty new
-            note it is the only thing that exists yet; on a saved one it is
-            what tells you which evening this was. Same slot either way. */}
-        <span className="jar-note-when">{owner ? <span className="jar-note-owner">{owner}</span> : null}{momentStamp(whenMs, locale)}</span>
-        {trailing ? <span className="jar-note-verb">{trailing}</span> : null}
-      </div>
+      <SurfaceHeader locale={locale} back={back} gesture={gesture} title={owner ? `${owner} · ${when}` : when} right={trailing} />
       {children}
     </>
   );

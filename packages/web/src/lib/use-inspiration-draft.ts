@@ -161,5 +161,49 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
     forking.current = run;
     return run;
   }, [forkOnce]);
-  return { draft: loadedPointer === pointer ? draft : seed, current: live, ready: ready && loadedPointer === pointer, available, error, setText, setMedia, setLinkText, setRecordingCandidate, chooseRecording, flush, settle, fork, discard };
+  /* ═══ A FRESH PAGE, THE OLD ONE SET ASIDE, NOT LOST (founder, 2026-11-09) ═══
+     "the photo is here when im trying to record fresh": Your voice and a
+     screenshot from home are a NEW thing to keep, so they start on a blank
+     page instead of reopening yesterday's draft (whose words the dictation
+     was being appended to). The draft they would have reopened stays stored
+     exactly as it was, in its own row; `resumeLatest` brings it back the
+     next time the notepad is closed with nothing in it, so Keep a thought
+     opens it again once the fresh note is kept, kept as a draft or discarded.
+
+     Synchronous on purpose: the microphone must start inside the tap. Only
+     where the draft can be stored (`supported`), and never over a write that
+     failed (`blocked`): a draft that is not safely on disk is not set aside. */
+  const startFresh = useCallback((): boolean => {
+    const previous = live.current, scopeNow = owner.current;
+    if (!scopeNow || !supported.current || blocked.current) return false;
+    if (!(previous.text.trim() || previous.linkText?.trim() || previous.media.length || previous.recordingCandidate)) return false;
+    /* A draft seeded from the text journal was never written to the store;
+       write it before stepping off it, so it has a row to come back from. */
+    if (!previous.revision) { queue.current.push({ ...previous, revision: 1, updatedAt: Date.now() }); void pump().catch(() => undefined); }
+    const next = newInspirationDraft();
+    live.current = next; setDraft(next); setError('');
+    writeProfileText(scopeNow, 'draft', '');
+    const key = profileStorageKey(scopeNow, 'activeInspirationDraft');
+    try { if (key) sessionStorage.setItem(key, next.id); } catch { /* owner-index recovery */ }
+    return true;
+  }, [pump]);
+  /** With the page empty, take up the newest draft still waiting (one set
+      aside by `startFresh`, or left by another tab). Never over words. */
+  const resumeLatest = useCallback(async (stillWanted: () => boolean = () => true): Promise<boolean> => {
+    const scopeAtStart = owner.current, epoch = generation.current, empty = live.current;
+    if (!scopeAtStart || !supported.current || empty.text.trim() || empty.linkText?.trim() || empty.media.length || empty.recordingCandidate) return false;
+    if (running.current) await running.current.catch(() => undefined);
+    const stored = await loadInspirationDraft(scopeAtStart).catch(() => null);
+    /* `stillWanted` is asked AFTER the read: a fresh note begun while it was
+       in flight (a screenshot or voice from home) must not be swapped out. */
+    if (!stored || stored.id === empty.id || !alive.current || generation.current !== epoch || live.current !== empty || !stillWanted()) return false;
+    /* Not written to the text journal: that journal is also what opens the
+       notepad by itself on the next load, and a draft set aside is waiting
+       to be asked for, not announced. */
+    live.current = stored; setDraft(stored);
+    const key = profileStorageKey(scopeAtStart, 'activeInspirationDraft');
+    try { if (key) sessionStorage.setItem(key, stored.id); } catch { /* owner-index recovery */ }
+    return true;
+  }, []);
+  return { draft: loadedPointer === pointer ? draft : seed, current: live, ready: ready && loadedPointer === pointer, available, error, setText, setMedia, setLinkText, setRecordingCandidate, chooseRecording, flush, settle, fork, discard, startFresh, resumeLatest };
 }

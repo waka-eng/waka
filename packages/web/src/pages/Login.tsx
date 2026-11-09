@@ -47,7 +47,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { SurfaceHeader } from "../components/SurfaceHeader";
 
 import { Companion } from "../components/Companion";
 import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSignIn";
@@ -694,6 +695,11 @@ export default function LoginPage(): JSX.Element {
 
   return (
     <main className="login-shell">
+      {/* BACK TO WHAT THEY WERE READING, as the shared header's "<" (nav
+          system): see `wayBackFrom` for why this is the only arrival this
+          page can honestly offer a way out of, and why most visitors
+          correctly see nothing here. */}
+      {wayBack ? <SurfaceHeader locale={locale} className="login-head" back={{ kind: "back", onBack: () => navigate(wayBack) }} /> : null}
       <section className="login-card" aria-labelledby="login-title">
         {/* ═══ THE COMPANION IS ON THE DOOR ══════════════════════════════
             Founder, of the home screen: "this is my only favorite screen of
@@ -827,13 +833,7 @@ export default function LoginPage(): JSX.Element {
         {/* BACK TO WHAT THEY WERE READING — see `wayBackFrom` for why this is
             the only arrival this page can honestly offer a way out of, and
             why most visitors correctly see nothing here. */}
-        {wayBack ? (
-          <p className="login-footer">
-            <Link className="login-link" to={wayBack}>
-              {t(locale, "loginBackToPage")}
-            </Link>
-          </p>
-        ) : null}
+
       </section>
     </main>
   );

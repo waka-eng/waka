@@ -44,9 +44,9 @@ function Lists({ account = 'account', profile = 'noah', tab = 'inspirations' }: 
   const views = useProfileListViews(scope);
   return tab === 'home' ? null : tab === 'inspirations'
     ? <Archive key={`${account}:${profile}:saves`} scope={scope} profileId={profile} viewState={views.inspirations}
-        locale="en-US" title="Inspirations" onClose={() => {}} onNoteOpen={closer => { closeNote = closer; }} />
+        locale="en-US" title="Inspirations" onBack={() => {}} onNoteOpen={closer => { closeNote = closer; }} />
     : <ConversationsOverlay key={`${account}:${profile}:chats`} profileId={profile} viewState={views.chats}
-        locale="en-US" title="Chats" onClose={() => {}} onOpen={() => {}} />;
+        locale="en-US" title="Chats" onBack={() => {}} onOpen={() => {}} />;
 }
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

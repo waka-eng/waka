@@ -1440,8 +1440,8 @@ body .login-shell .login-footer {
    `lowercase` went with the primary's, for the same reason. */
 
 .jar-inspiration-search { width: min(560px, calc(100vw - var(--sp-44))); color: var(--w-ink); font-size: var(--t-body); }
-.jar-search-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
-.jar-search-heading p { margin: 0; }
+
+
 .jar-inspiration-search button, .jar-copy-link, .jar-navigation-notice button { min-width: var(--sp-44); min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 0; background: none; color: var(--w-ink); font: inherit; font-size: var(--t-ui); cursor: pointer; }
 .jar-inspiration-search button[aria-disabled="true"] { cursor: progress; }
 .jar-search-results { list-style: none; padding: 0; margin: var(--sp-12) 0; }
@@ -1774,7 +1774,7 @@ button.jar-tile-face,
 .jar-seek.jar-thing-share { width:min(460px,calc(100vw - var(--sp-24))); gap:var(--sp-16); padding:var(--sp-20) var(--sp-20) var(--sp-24); }
 .jar-thing-share header { flex-wrap:nowrap; }
 .jar-thing-share h2 { font-size:var(--t-body); font-weight:400; color:var(--w-muted); letter-spacing:.01em; }
-/* No hover on a close (founder, 2026-10-16, "when the user is trying to close it, don't add like a hover effect"): the sheet's "<" is `.waka-sheet-back` in claims.css. */
+/* No hover on a close (founder, 2026-10-16, "when the user is trying to close it, don't add like a hover effect"): the sheet's "<" is `.waka-surface-back` in claims.css. */
 .jar-thing-share .jar-share-stage { min-height:0; }
 .jar-share-card { position:relative; container-type:inline-size; width:min(100%, min(56dvh,520px)); aspect-ratio:1; margin-inline:auto; border-radius:var(--sp-16); overflow:hidden; box-shadow:0 0 0 1px color-mix(in srgb, var(--w-ink) 6%, transparent); }
 .jar-share-card img { display:block; width:100%; height:100%; max-height:none; object-fit:cover; border-radius:0; }

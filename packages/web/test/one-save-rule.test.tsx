@@ -83,7 +83,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DOCK_SLOT } from "../src/components/NoteTools";
 import { Archive } from "./helpers/archive";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -177,9 +176,8 @@ beforeEach(() => {
   /* THE SLOT `Home` RENDERS IN THE DOCK. Without it `NoteTools` portals
      nowhere — the right behaviour on a surface with no bar, and the reason
      this file has to supply one. */
-  slot = document.createElement("span");
-  slot.id = DOCK_SLOT;
-  document.body.append(slot);
+  /* The note bar renders in place (nav system); its parts are found in the page. */
+  slot = document.body as HTMLElement as HTMLSpanElement;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -188,14 +186,14 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
-  slot.remove();
+ 
   vi.unstubAllGlobals();
 });
 
 /** The archive, with its one row opened. */
 async function openTheSavedNote(): Promise<void> {
   await act(async () => root.render(
-    <Archive locale="en-US" title="Kept" onClose={vi.fn()} onNoteOpen={vi.fn()} />,
+    <Archive locale="en-US" title="Kept" onBack={vi.fn()} onNoteOpen={vi.fn()} />,
   ));
   for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {
     await act(async () => { await Promise.resolve(); });
@@ -356,7 +354,7 @@ it("cancels a running recording when the note is deleted", async () => {
 it("stops a recording when its note is left, and attaches the clip to that note", async () => {
   const onNoteOpen = vi.fn();
   await act(async () => root.render(
-    <Archive locale="en-US" title="Kept" onClose={vi.fn()} onNoteOpen={onNoteOpen} />,
+    <Archive locale="en-US" title="Kept" onBack={vi.fn()} onNoteOpen={onNoteOpen} />,
   ));
   for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {
     await act(async () => { await Promise.resolve(); });

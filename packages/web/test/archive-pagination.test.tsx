@@ -22,7 +22,7 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
 async function show(profile = 'noah', note?: string) {
   await act(async () => root.render(<Archive key={profile} profileId={profile} scope={{ accountId: 'account', profileId: profile }}
-    locale="en-US" title="Inspirations" note={note} onClose={() => {}} onNoteAddress={() => {}} />));
+    locale="en-US" title="Inspirations" note={note} onBack={() => {}} onNoteAddress={() => {}} />));
 }
 async function click(name: string) {
   const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent?.trim() === name)!;

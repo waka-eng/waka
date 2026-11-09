@@ -39,6 +39,7 @@ import { formatMessage, t, type SupportedLocale } from '../lib/locales';
 import { useArchiveSearch } from '../lib/use-archive-search';
 import { dateWords } from '../lib/words';
 import { DialogSurface } from './DialogSurface';
+import { SurfaceHeader } from './SurfaceHeader';
 
 /** A signal the stream may show: still standing, and not thrown out. */
 export function streamSignals(signals: readonly Signal[] | null): Signal[] {
@@ -113,6 +114,10 @@ export function HomeStream(props: {
   return (
     <DialogSurface className="waka-stream" modal={false} motion="modal" aria-label={say('worldBarSaves')} onClose={props.onClose}
       data-jar-chrome="1" data-jar-interactive="1">
+      {/* A SHEET'S HEADER (nav system): "<" Close, "Kept" in the middle. It
+          replaced "⌄ Home" in the corner row, and the corners stand down
+          while the sheet is up; the home bar stays under it. */}
+      <SurfaceHeader locale={props.locale} back={{ kind: 'close', onBack: props.onClose }} title={say('worldBarSaves')} />
       {/* THE ARCHIVE'S FIELD, SAME ANATOMY: the drawn glyph, the input, and a
           clear that exists only while there is something to clear. */}
       <div className="waka-stream-find">

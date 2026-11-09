@@ -75,7 +75,7 @@ afterEach(() => { world?.unmount(); world = undefined; vi.clearAllMocks(); vi.us
 async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world!.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
-const row = (name: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-page-back, .waka-home-bar button, .waka-over-new')]
+const row = (name: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-surface-back, .waka-home-bar button, .waka-over-new')]
   .find((node) => node.textContent?.trim() === name);
 
 /** A new chat, opened the way a person opens one: the bar's Chat on Now. */
@@ -101,7 +101,11 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     await aNewChat();
     const bar = world!.container.querySelector('footer.chat-composer [data-note-bar="1"]');
     expect(bar, 'the chat does not write into the note bar').toBeTruthy();
-    expect(bar!.querySelector(':scope > .chat-input-label textarea'), 'the words are not across the bar').toBeTruthy();
+    /* ONE PILL (founder, 2026-11-09: "so much wasted space at bottom"): the
+       field sits in the row between the tools and Send, one line at rest. */
+    expect(bar!.querySelector(':scope > .waka-note-bar-row > .waka-note-bar-field > .chat-input-label textarea'), 'the words are not in the pill between the tools and Send').toBeTruthy();
+    const row = [...bar!.querySelector('.waka-note-bar-row')!.children].map(node => node.className);
+    expect(row, 'the pill is not tools, then the words, then Send').toEqual(['waka-note-bar-tools', 'waka-note-bar-field', expect.stringContaining('waka-note-bar-action')]);
     expect(noteBarShape()).toEqual(['Add photo', 'Add file', 'Send']);
     expect(world!.container.querySelectorAll('.chat-page textarea'), 'more than one message field').toHaveLength(1);
     expect(world!.container.querySelector('nav.waka-dock'), 'a dock stands under the chat').toBeNull();
@@ -165,7 +169,7 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
 
   it('closes the chat by its "<" and opens the chats list by Past chats, top-right', async () => {
     await aNewChat();
-    const back = world!.container.querySelector<HTMLButtonElement>('button.waka-page-back');
+    const back = world!.container.querySelector<HTMLButtonElement>('.waka-surface-back');
     expect(back?.textContent?.trim(), 'the chat\'s "<" is not named for closing').toBe('Close');
     await act(async () => back!.click()); await settle();
     expect(location.pathname, 'the "<" left the chat up').not.toContain('/chat/');
@@ -174,7 +178,7 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     expect(world!.container.querySelector('.chat-composer'), 'the chat\'s composer outlived the chat').toBeNull();
 
     await pressHomeBar(world!.container, 'Chat'); await settle();
-    const past = world!.container.querySelector<HTMLButtonElement>('button.waka-page-aside');
+    const past = world!.container.querySelector<HTMLButtonElement>('.waka-surface-right .waka-surface-act');
     expect(past?.textContent?.trim(), 'a chat offers no Past chats').toBe('Past chats');
     await act(async () => past!.click()); await settle();
     expect(location.pathname, 'Past chats left the chat up').not.toContain('/chat/');
@@ -189,36 +193,40 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(field,'Keep this question with its starting point.');
       field.dispatchEvent(new Event('input',{bubbles:true}));
     });
-    await act(async()=>world!.container.querySelector<HTMLButtonElement>('button.waka-page-aside')!.click());await settle();
+    await act(async()=>world!.container.querySelector<HTMLButtonElement>('.waka-surface-right .waka-surface-act')!.click());await settle();
     expect(open()).toBe('conversations');
-    await act(async()=>world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click());await settle();
+    await act(async()=>world!.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click());await settle();
     expect(new URLSearchParams(location.search).get('principle')).toBe(principleId);
     expect((await chatField(world.container)).value).toBe('Keep this question with its starting point.');
   });
 
-  /* THE HOME BAR'S GLYPHS (design E1): each door carries one glyph over its
-     word — lines for Write, a picture for Photo, a microphone for Say it —
-     decorative and hidden, so each name is still the word alone. The round
-     Chat is a glyph with a name, since it has no word beside it. */
-  it('draws one hidden glyph over each door\'s word, and names the round Chat', async () => {
+  /* THE HOME BAR'S PILL (2026-11-09): "Keep a thought…" is words alone,
+     the picture and the mic are glyphs alone, decorative and hidden, so each
+     is named by its whole act (and titled with it, for a pointer). The round
+     Chat is a glyph with a name. */
+  it('reads "Keep a thought…" then a hidden picture and mic glyph, and names the round Chat', async () => {
     world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
     expect(homeBarShape(world!.container)).toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
-    for (const [name, kind] of [['Keep a thought', 'write'], ['Keep a screenshot', 'photo'], ['Keep your voice', 'record'], ['Chat', 'bubble']] as const) {
-      const button = [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-row button')]
-        .find(node => (node.getAttribute('aria-label') || node.textContent?.trim()) === name);
+    const named = (name: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-row button')]
+      .find(node => (node.getAttribute('aria-label') || node.textContent?.trim()) === name);
+    /* The visible words begin with the name, so speech input by the
+       visible words still lands. */
+    const thought = named('Keep a thought');
+    expect(thought, 'no home bar button reads Keep a thought').toBeTruthy();
+    expect(thought!.textContent!.trim()).toBe('Keep a thought…');
+    expect(thought!.querySelector('svg'), 'Keep a thought carries a glyph').toBeNull();
+    for (const [name, kind] of [['Keep a screenshot', 'photo'], ['Keep your voice', 'record'], ['Chat', 'bubble']] as const) {
+      const button = named(name);
       expect(button, `no home bar button reads ${name}`).toBeTruthy();
       const glyphs = button!.querySelectorAll('svg');
       expect(glyphs.length, `${name} carries no single glyph`).toBe(1);
       const glyph = glyphs[0]!;
       expect(glyph.getAttribute('data-home-action-icon')).toBe(kind);
       expect(glyph.getAttribute('aria-hidden')).toBe('true');
-      expect(button!.firstElementChild, `the ${kind} glyph is not in front of ${name}`).toBe(glyph);
-      /* The visible word is what you keep ("a thought"); the name is the
-         whole act ("Keep a thought"), which begins with the word on screen
-         before it, so speech input by the visible words still lands. */
-      if (name !== 'Chat') expect(name.endsWith(button!.textContent!.trim()), `${name} is not named after its word`).toBe(true);
+      expect(button!.textContent!.trim(), `${name} shows words beside its glyph`).toBe('');
+      if (name !== 'Chat') expect(button!.getAttribute('title'), `${name} has no tooltip`).toBe(name);
     }
     await pressHomeBar(world!.container, 'Chat'); await settle();
-    expect(world!.container.querySelector('button.waka-page-aside')?.textContent).toBe('Past chats');
+    expect(world!.container.querySelector('.waka-surface-right .waka-surface-act')?.textContent).toBe('Past chats');
   });
 });

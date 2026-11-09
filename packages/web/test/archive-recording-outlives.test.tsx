@@ -181,7 +181,7 @@ async function recordOn(id: string) {
   expect(row, `no row for ${id}`).toBeTruthy();
   await act(async () => row!.click());
   await settle();
-  const record = q<HTMLButtonElement>('#waka-note-tools .waka-dock-tool[aria-label="Your voice"]');
+  const record = q<HTMLButtonElement>('.waka-note-bar--saved .waka-dock-tool[aria-label="Your voice"]');
   expect(record, "the open note offers no Record").toBeTruthy();
   await act(async () => record!.click());
   await settle(2);
@@ -194,7 +194,7 @@ it("attaches the clip to its note when the archive is closed with Close mid-reco
   await recordOn("own-1");
   /* Leaving by the visible "<" (2026-11-08: the note steps back to its
      list, the list goes home), mid-recording. */
-  expect(q(".waka-page-back"), "the note has no visible way out").toBeTruthy();
+  expect(q(".waka-surface-back"), "the note has no visible way out").toBeTruthy();
   await closeOverlay(world.container);
   await settle();
   expect(archiveOpen(), "the \"<\" did not close the archive").toBe(false);
@@ -385,7 +385,7 @@ it("re-points the open note only when the clip landed on it", async () => {
   await openArchive();
   await recordOn("own-1");
   /* back to the list (the recording stops there), and into another note */
-  await act(async () => q<HTMLButtonElement>('button.waka-page-back')!.click());
+  await act(async () => q<HTMLButtonElement>('.waka-surface-back')!.click());
   await settle(2);
   const other = [...document.querySelectorAll<HTMLButtonElement>(".waka-list-row")]
     .find((item) => item.textContent?.includes("something I kept, 0"));
@@ -557,7 +557,7 @@ it("does not throw away another note's finishing clip when a note is deleted", a
   await openArchive();
   await recordOn("own-1");
   /* back to the list stops A's recording; the browser has not handed it over */
-  await act(async () => q<HTMLButtonElement>('button.waka-page-back')!.click());
+  await act(async () => q<HTMLButtonElement>('.waka-surface-back')!.click());
   await settle(2);
   const other = [...document.querySelectorAll<HTMLButtonElement>(".waka-list-row")]
     .find((item) => item.textContent?.includes("something I kept, 0"))!;
@@ -598,7 +598,7 @@ it("keeps the archive recording's clock from re-rendering Home every second", as
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
   await openArchive();
   await recordOn("own-1");
-  const clock = () => q('#waka-note-tools .waka-dock-state span[aria-hidden="true"]')?.textContent;
+  const clock = () => q('.waka-note-bar--saved .waka-dock-state span[aria-hidden="true"]')?.textContent;
   const before = renders.home, startedAt = clock();
   for (let second = 0; second < 5; second += 1) {
     await world.step(60);
@@ -620,14 +620,14 @@ it("re-points the open note when its clip lands in the same render as another no
   await recordOn("own-1");
   await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Done"]')!.click());
   await deliverStops();
-  await act(async () => q<HTMLButtonElement>('button.waka-page-back')!.click());
+  await act(async () => q<HTMLButtonElement>('.waka-surface-back')!.click());
   await settle(2);
   await recordOn("own-0");
   await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Done"]')!.click());
   await deliverStops();
   expect(S.heldFinalizes, "both uploads should be waiting").toHaveLength(2);
   /* back on note A, which does not yet know about its clip */
-  await act(async () => q<HTMLButtonElement>('button.waka-page-back')!.click());
+  await act(async () => q<HTMLButtonElement>('.waka-surface-back')!.click());
   await settle(2);
   const rowA = [...document.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((item) => item.textContent?.includes("something I kept, 1"))!;
   await act(async () => rowA.click());

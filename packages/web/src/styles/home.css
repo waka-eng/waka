@@ -3936,30 +3936,7 @@
    * label changes from "Only me" to "Share with rooms" is the kind of
    * wrongness a reader feels without being able to name.
    */
-  .jar-note-top {
-    display: grid;
-    /* THREE TRACKS, AND THE THIRD HAS A TENANT AGAIN. It held the audience
-       pair, which went with the concept behind it (founder: "we got rid of
-       the concept for room"), and was then kept EMPTY on purpose —
-       collapsing to two tracks would hang the stamp off the chevron instead
-       of centring it on the page.
 
-       It now holds `.jar-note-verb`: the one verb ABOUT the note, which is
-       Delete on a saved one and nothing on a new one. That is the slot's
-       original shape rather than a new idea — a thing that acts on the whole
-       note, as far from the way back as the row has room for. The track is
-       still declared `1fr` either way, so an empty one and a full one centre
-       the date identically; nothing moves when you open a saved note after a
-       new one. */
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    gap: var(--sp-12);
-    /* AIR ABOVE THE WORDS. Founder: "not enough margin on top." The page's
-       own padding put the first line 24px from the chrome, which on a screen
-       with nothing else on it reads as the text being pinned to the ceiling.
-       The reference leaves roughly a thumb. */
-    margin-block: var(--sp-16) var(--sp-32);
-  }
 
   /* ═══ AND NOW BOTH HALVES OF THE WAY BACK ARE GONE ════════════════════
      What stood here was the tombstone of a MERGE: `.jar-note-back`'s layout
@@ -3984,15 +3961,7 @@
   /* WHEN THIS NOTE IS, and it is the only thing on the page until somebody
      writes. Muted rather than faint: a placeholder is text you are meant to
      look past, and this is a fact you are meant to be able to read. */
-  .jar-note-when {
-    justify-self: center;
-    font-family: var(--waka-face);
-    font-size: var(--t-meta);
-    letter-spacing: normal;
-    text-transform: none;
-    white-space: nowrap;
-    color: var(--jar-muted);
-  }
+
 
   /**
    * ═══ THE PILL, BOTTOM-LEFT, IS GONE ═══════════════════════════════════
@@ -4117,12 +4086,12 @@
      is a node in the document whose entire job is to be nothing. Saying
      which column each child belongs in is the same outcome with nothing to
      explain, and it survives the next change to what is in this row. */
-  .jar-note-when { grid-column: 2; }
+
   /* ONE LINE WITH THE DATE. Founder: "saving to Yun Ji Chung is making the
      top part take up too much space." The name gives way first (ellipsis);
      the date never wraps. */
-  .jar-note-owner { display: inline-block; vertical-align: bottom; max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .jar-note-owner::after { content: '\00a0·\00a0'; }
+
+
 
   /* ═══ THE ROW IS THE SAME HEIGHT WITH OR WITHOUT THE VERB ═════════════
      Measured in a browser: a new note's row was the date's own 18px and a
@@ -4135,7 +4104,7 @@
      THE FLOOR IS THE VERB'S OWN HEIGHT, so the row never grows past what
      it already was; what changes is that a row with nothing in the third
      track no longer collapses. */
-  .jar-note-top { min-height: 32px; }
+
 
   /* THE VERB SITS AT THE FAR END OF ITS TRACK. `1fr` would otherwise let a
      two-button confirmation ("Delete it anyway · Not now") start at the
@@ -4149,10 +4118,6 @@
     justify-self: end;
   }
 
-  .jar-inspiration-composer > .jar-note-top {
-    width: 100%;
-    max-width: none;
-  }
 
   /* AND THE CHILD COMBINATOR ABOVE STILL HOLDS, which is worth one line
      because it looks like it should not: `NotePage` wraps this row and the
@@ -4169,9 +4134,12 @@
      at 1200x900: the composer has exactly two direct children, the note's
      top row and the textarea, and the textarea comes out 544px wide with
      `max-width: 544px` both before and after this cut. */
-  .jar-inspiration-composer > :not(.jar-note-top) {
+  .jar-inspiration-composer > :not(.waka-surface-head) {
     width: 100%;
-    max-width: 34rem;
+    /* A READABLE MEASURE, NOT A NARROW ONE (founder, 2026-11-09: the
+       notepad felt "답답해"): 640px of page on a desktop, the phone's own
+       16px gutter on a phone. */
+    max-width: 40rem;
     margin-inline: auto;
   }
 
@@ -4485,7 +4453,10 @@
      many different buttons that I have no idea what its supposed to do". */
   width: min(650px, 100%);
   height: auto;
-  max-height: 88dvh;
+  /* THE PAGE'S HEIGHT IS THE CAP (founder, 2026-11-09: "so much wasted space
+     at bottom"). 88dvh was a sheet's cap, from before a chat was a page, and
+     it left a band under the bar with nothing in it. */
+  max-height: 100%;
   /* The composer is the bottom edge of this surface, so the shell stops
      reserving air under it. */
   padding-bottom: 0;
@@ -4504,11 +4475,7 @@
    from something — eighty characters — and the header is derived from
    nothing. So the head takes the same measure and the same centring, and
    the surface has one edge. */
-.waka-over--talk .waka-over-head {
-  width: 100%;
-  max-width: var(--chat-measure);
-  margin-inline: auto;
-}
+
 
 .waka-over--talk .chat-page {
   position: static;

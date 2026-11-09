@@ -249,31 +249,28 @@ export function dialMonth(ms: number, T: number, locale: WordsLocale = "en-US"):
  * reference: a page with nothing on it needs to say WHEN it is, because that
  * is the only fact about a note that exists before anybody writes in it.
  *
- * THE MONTH IS SPELLED IN FULL HERE, unlike `dateWords` one rung below. That
- * function shortens because its output sits in lists beside dozens of others
- * and has to stay scannable; this one is alone on a page and is being read
- * rather than scanned, so it can be the sentence a person would say.
+ * IT WAS SPELLED IN FULL ("November 9, 2026 at 10:26 AM") while it stood
+ * alone on the page. It shares the header row with the "<" and the owner's
+ * name now, so it is the short form below.
  *
  * NO SECONDS AND NO TIMEZONE. A note is not an event log.
  */
-export function momentStamp(ms: number, locale: WordsLocale = "en-US"): string {
-  const d = new Date(ms);
-  if (locale === "ko-KR") {
-    const hour = d.getHours();
-    const half = hour < 12 ? "오전" : "오후";
-    const twelve = hour % 12 === 0 ? 12 : hour % 12;
-    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${half} ${twelve}:${String(d.getMinutes()).padStart(2, "0")}`;
-  }
-  const month = d.toLocaleDateString("en-US", { month: "long" });
-  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  return `${month} ${d.getDate()}, ${d.getFullYear()} at ${time}`;
+export function noteStamp(ms: number, T: number, locale: WordsLocale = "en-US"): string {
+  /* SHORT, SO IT FITS IN A PHONE'S HEADER (nav system, 2026-11-09): at 390px
+     "Saving to Yunji · November 9, 2026 at 10:26 AM" was cut to "10:2…".
+     The note's header is one line beside a "<", so the month is short and
+     the year shows only when it is not this one: "Nov 9, 10:26 AM",
+     "11월 9일 오전 10:26". Built from `dateWords` and `timeOf`, so it says
+     exactly what the archive's rows and a transcript's clock say. */
+  const day = dateWords(ms, T, locale), clock = timeOf(ms, locale);
+  return locale === "ko-KR" ? `${day} ${clock}` : `${day}, ${clock}`;
 }
 
 /**
  * THE DAY AND THE MINUTE, COMPACT — a moment named inside a sentence.
  *
- * `momentStamp` is the line standing alone at the top of a note, and it
- * spells its month in full because it is being read rather than scanned.
+ * `noteStamp` is the line at the top of a note, and it
+ * heads a page beside the "<" and the owner.
  * This is the same fact when it has to fit INSIDE a sentence somebody reads
  * once and moves on from: "Saved. The next reading is scheduled for Oct 11
  * at 7:05 AM." Exactly the relationship `dateWords` has to `dateStamp` one
@@ -313,7 +310,7 @@ export function momentTag(ms: number, T: number, locale: WordsLocale = "en-US"):
  * that is all it carries, because a transcript you are reading top to
  * bottom already tells you the day.
  *
- * NOT `momentStamp`, WHICH IS THE WHOLE DATE. That one is alone on a page
+ * NOT `noteStamp`, WHICH CARRIES THE DAY. That one heads a page
  * and is the only fact there; this one appears a dozen times down a column
  * and has to disappear when you are not looking for it. Same reasoning as
  * `dateWords` beside an archive row, one scale smaller.

@@ -30,7 +30,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { DOCK_SLOT } from "../src/components/NoteTools";
 import { Archive } from "./helpers/archive";
 
 const LONG = Array.from({ length: 40 }, (_, i) => `line ${String(i).padStart(2, "0")} of a long thought.`).join(" ").slice(0, 1000);
@@ -102,9 +101,8 @@ beforeEach(() => {
     static createObjectURL(): string { return "blob:x"; }
     static revokeObjectURL(): void {}
   });
-  slot = document.createElement("span");
-  slot.id = DOCK_SLOT;
-  document.body.append(slot);
+  /* The note bar renders in place (nav system); its parts are found in the page. */
+  slot = document.body as HTMLElement as HTMLSpanElement;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -112,7 +110,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
-  slot.remove();
+ 
   vi.unstubAllGlobals();
 });
 
@@ -121,7 +119,7 @@ type World = { profileId?: string };
     every render, exactly as Home passes them. */
 async function renderArchive(whose: World = {}): Promise<void> {
   await act(async () => root.render(
-    <Archive locale="en-US" title="Kept" onClose={vi.fn()}
+    <Archive locale="en-US" title="Kept" onBack={vi.fn()}
       profileId={whose.profileId}
       onNoteOpen={(close) => { closer = close; }} />,
   ));

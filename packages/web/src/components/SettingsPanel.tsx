@@ -93,7 +93,7 @@ import {
 import { fetchSessions, revokeSession, type ApiSession } from "../lib/api/sessions";
 import { supportedLocales } from "../lib/i18n";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
-import { SheetBack } from "./PageBack";
+import { SurfaceHeader } from "./SurfaceHeader";
 
 export interface SettingsPanelProps {
   locale: SupportedLocale;
@@ -112,6 +112,9 @@ export interface SettingsPanelProps {
   onSignOut: () => void;
   onDeleteAccount: () => Promise<void>;
   onBeforeLeave?: (guard: (() => Promise<boolean>) | null) => void;
+  /** Receives this panel's "<" handler (one level up, or close at the root),
+      so the card's Escape does exactly what the "<" does. */
+  onBackHandler?: (handler: (() => void) | null) => void;
   activeProfileId?: string;
   initialAgentId?: string;
   onAgentProfilesChange?: (profiles: ApiOwnedProfile[]) => void;
@@ -230,6 +233,22 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
     props.onBeforeLeave?.(beforeLeave);
     return () => props.onBeforeLeave?.(null);
   });
+  /* THE ONE "<" (nav system): on a sub-page it steps up one level (an
+     agent's page to Agents, any other to Settings), at the root it closes
+     the card. The card's Escape calls this same function. */
+  const stepUp = async () => {
+    if (open === null) { props.onClose(); return; }
+    if (!await beforeLeave() || !alive.current) return;
+    setConfirmDelete(false);
+    setEraseAgent(null);
+    setOpen(connectionProfile ? 'agents' : null);
+    setConnectionProfile(null);
+  };
+  const stepUpRef = useRef(stepUp); stepUpRef.current = stepUp;
+  useEffect(() => {
+    props.onBackHandler?.(() => { void stepUpRef.current(); });
+    return () => props.onBackHandler?.(null);
+  }, []);
 
   const cancelAgentDelete = (id: string) => {
     setEraseAgent(null);
@@ -262,18 +281,11 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 
   return (
     <div ref={panel} className="waka-settings" role="group" aria-label={say("worldSettingsOpen")}>
-      <header className="waka-settings-heading">
-        {open !== null ? <SheetBack label={say(connectionProfile ? 'profileAgentAccessBack' : "profileSettingsBack")}
-          onBack={async () => {
-            if (!await beforeLeave() || !alive.current) return;
-            setConfirmDelete(false);
-            setEraseAgent(null);
-            setOpen(connectionProfile ? 'agents' : null);
-            setConnectionProfile(null);
-          }} /> : null}
-        <h2 ref={heading} tabIndex={-1}>{connectionProfile?.name ?? say(open === "agents" ? "profileAgentProfilesTitle"
-          : open === "personal" ? "profilePersonalTitle" : open === "sessions" ? "profileSessionsTitle" : open === "danger" ? "profileDelete" : "worldSettingsOpen")}</h2>
-      </header>
+      <SurfaceHeader locale={props.locale}
+        back={{ kind: open === null ? "close" : "back", onBack: stepUp }}
+        titleRef={heading}
+        title={connectionProfile?.name ?? say(open === "agents" ? "profileAgentProfilesTitle"
+          : open === "personal" ? "profilePersonalTitle" : open === "sessions" ? "profileSessionsTitle" : open === "danger" ? "profileDelete" : "worldSettingsOpen")} />
       <div className="waka-settings-content" key={open ?? "overview"}>
       {open === null ? <>
       {/* WHO THIS IS. Not editable, and not a field: the address identifies
@@ -432,14 +444,20 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           right. */}
       <Group id="danger" open={open} setOpen={setOpen} label={say("profileDelete")}>
         <p className="waka-settings-note">{say("profileDeleteHint")}</p>
-        <button type="button" className="waka-settings-erase" disabled={deleting}
-          onClick={() => {
-            if (!confirmDelete) { setConfirmDelete(true); return; }
-            setDeleting(true);
-            void props.onDeleteAccount().finally(() => { if (alive.current) setDeleting(false); });
-          }}>
-          {say(deleting ? "profileRemoving" : confirmDelete ? "worldDeleteItAnyway" : "profileDelete")}
-        </button>
+        {/* A DESTRUCTIVE CONFIRM ALWAYS OFFERS CANCEL (nav system R8), as
+            every other confirm in the product does. */}
+        <div className="waka-session-actions">
+          {confirmDelete && !deleting ? <button type="button" className="waka-settings-erase"
+            onClick={() => setConfirmDelete(false)}>{say("profileConnectionCancel")}</button> : null}
+          <button type="button" className="waka-settings-erase" disabled={deleting}
+            onClick={() => {
+              if (!confirmDelete) { setConfirmDelete(true); return; }
+              setDeleting(true);
+              void props.onDeleteAccount().finally(() => { if (alive.current) setDeleting(false); });
+            }}>
+            {say(deleting ? "profileRemoving" : confirmDelete ? "worldDeleteItAnyway" : "profileDelete")}
+          </button>
+        </div>
       </Group>
       </div>
     </div>

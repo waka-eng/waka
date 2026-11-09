@@ -26,14 +26,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { Menu } from "../components/Menu";
-import { ChatCorner } from "../components/ChatCorner";
+import { SurfaceHeader } from "../components/SurfaceHeader";
 import { listKeptDays, type ApiKeptDay } from "../lib/api";
 import { canonicalZone } from "../lib/api/inspiration-days";
 import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
-import { usePageMenu } from "../lib/page-menu";
-import { useAgent } from "../lib/use-agent";
 import { dateStamp, numWords, readerTimeZone } from "../lib/words";
 
 type Phase = "loading" | "ready" | "failed";
@@ -125,8 +122,6 @@ export function Days(): JSX.Element {
   const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const navigate = useNavigate();
-  const agent = useAgent();
-  const menu = usePageMenu(locale, auth?.account?.id, agent);
 
   const [rows, setRows] = useState<ApiKeptDay[]>([]);
   const [utc, setUtc] = useState(false);
@@ -166,32 +161,10 @@ export function Days(): JSX.Element {
 
   return (
     <main className="waka-page">
-      {/* THE PAGE DOES NOT NAME ITSELF, AND THE WAY OUT IS IN THE CHROME.
-          The switcher at the top of the screen names the view, and printing
-          the same words again as a heading made the name appear twice on two
-          of the three pages and once on the third — which is exactly the
-          inconsistency the founder saw between them. One namer, one style,
-          everywhere.
-          What stood here was an EMPTY `<header>` holding two comments, one of
-          which argued against a back button on the grounds that "the browser
-          already has a back". Law 2 of `docs/six-laws.md` refuses that
-          argument in as many words — "Browser Back is not an exit" — and the
-          control the comment was declining to duplicate HAD STOPPED WORKING:
-          `Menu`'s one-press exit looked the row up by a string suffix no row
-          carried any more, so it rendered, read "Your top of mind", and
-          no-opped. It presses `items[0]` now — your own world, by a property
-          of the list rather than by a name match — and
-          `test/page-exit.test.tsx` presses it for real from this page.
-          So the header is gone, because an element whose only contents are
-          two comments is 40px of margin pretending to be a heading, and the
-          exit is where every other page keeps it. */}
-      <Menu locale={locale} items={menu.items} current={menu.current} left={<ChatCorner locale={locale} onOpen={() => navigate("/?open=conversations")} />} label="worldDaysTitle"
-        account={auth?.account ? { name: auth?.profile?.name, email: auth?.account.email } : null}
-        /* Leaving is offered here too: the cog is where a person reaches to
-           sign out, and on this page it used to answer only "who am I". */
-        onSignOut={auth?.isAuthenticated ? () => {
-          void auth.logout().then(() => navigate("/login", { replace: true })).catch(() => undefined);
-        } : undefined} />
+      {/* THE SHARED HEADER (nav system): "<" Close goes home, "Your days" in
+          the middle. It replaced the centre switch ("‹ On your mind lately")
+          and the corners, which stand on home only. */}
+      <SurfaceHeader locale={locale} back={{ kind: "close", onBack: () => navigate("/") }} title={say("worldDaysTitle")} />
 
       {phase === "loading" ? (
         <p className="waka-page-status" role="status">

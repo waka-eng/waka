@@ -15,10 +15,13 @@ import { expect, it } from "vitest";
 const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../src/styles/claims.css"), "utf8");
 const HIDE = /body:has\(\[aria-modal="true"\], \.waka-account, \[role="menu"\]\)\s*([^{]+)\{\s*visibility:\s*hidden;?\s*\}/;
 
-it("hides both corner words while a modal, the account card or a menu is open", () => {
+/* EVERY PAGE'S HEADER IS IN ITS OWN FLOW NOW (nav system), so a modal covers
+   it like the rest of the page. The one header that is not, the strip over
+   the sky and the creature's questions, still steps aside. */
+it("hides the one fixed header while a modal, the account card or a menu is open", () => {
   const rule = css.match(HIDE);
-  expect(rule, "the corner-hiding rule is gone").toBeTruthy();
+  expect(rule, "the strip-hiding rule is gone").toBeTruthy();
   const selectors = rule![1]!.trim().replace(/^:is\((.*)\)$/s, "$1").split(",").map((part) => part.trim());
-  expect(selectors).toContain(".waka-page-back");
-  expect(selectors, "Past chats stands over an open modal").toContain(".waka-page-aside");
+  expect(selectors).toContain(".waka-surface-strip");
+  expect(css, "a floating page back came back").not.toMatch(/\.waka-page-back|\.waka-page-aside/);
 });
