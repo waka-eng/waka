@@ -70,8 +70,10 @@ export function HomeStream(props: {
   principles: readonly ApiPrinciple[];
   /** A save's own page; the query on at the press, so "<" can come back to it. */
   onOpenSave: (id: string, query: string) => void;
-  /** The query to stand on when the sheet comes back from a save it opened. */
-  initialQuery?: string;
+  /** The field's words, owned by the page: kept only across "open a result →
+      its <", dropped by every other way off the sheet (code review, 2026-11-09). */
+  query: string;
+  onQueryChange: (query: string) => void;
   onClose: () => void;
   /** Whose archive the field searches; null searches the signed-in default. */
   profileId: string | null;
@@ -85,7 +87,7 @@ export function HomeStream(props: {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const saves = [...props.inspirations].sort((a, b) => b.capturedMs - a.capturedMs);
   const principles = [...props.principles].sort((a, b) => a.rank - b.rank);
-  const [query, setQuery] = useState(props.initialQuery ?? '');
+  const query = props.query, setQuery = props.onQueryChange;
   const [memory] = useState(createListViewState);
   const needle = query.trim();
   const search = useArchiveSearch(props.profileId, needle ? needle : null, null, memory);

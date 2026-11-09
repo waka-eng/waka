@@ -21,7 +21,7 @@ import { act } from 'react';
 import { useLocation } from 'react-router-dom';
 import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { apiMockFrom, dataMockFrom, mountWorld, openSavesSheet, pressSheetDoor, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { apiMockFrom, chooseFromMenu, dataMockFrom, mountWorld, openSavesSheet, pressSheetDoor, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { fetchInspirationPage } from '../src/lib/api';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [{ id: 'near', text: 'A save in the window', daysAgo: 1 }] }));
@@ -127,4 +127,52 @@ it('keeps the door to the archive on the sheet with nothing kept, so the Deleted
     await pressSheetDoor(world.container, 'Kept'); await settle();
     expect(query('open'), 'an empty sheet has no way to the archive').toBe('saves');
   } finally { FACTS.inspirations.push(...kept); }
+});
+
+/* THE SHEET'S QUERY LIVES ONE ROUND TRIP, NO LONGER (code review, 2026-11-09).
+   It is kept only across "open a result → its <"; every other way off the
+   sheet drops it, so the sheet pulled up fresh is always unfiltered. */
+async function typeQuery(sheet: HTMLElement, words: string) {
+  const field = sheet.querySelector<HTMLInputElement>('.waka-stream-find input[type="search"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, words);
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 260)); }); await settle();
+}
+const fieldValue = () => world!.container.querySelector<HTMLInputElement>('.waka-stream .waka-stream-find input[type="search"]')?.value;
+
+it('pulls the sheet up fresh after leaving it by a door, even after a result round trip', async () => {
+  world = await mountWorld(FACTS, { routerTools: <Where /> }); await settle();
+  let sheet = await openSavesSheet(world.container); await settle();
+  await typeQuery(sheet, 'quiet');
+  await act(async () => [...sheet.querySelectorAll<HTMLButtonElement>('.waka-stream-save')].find(b => b.textContent?.includes('An older quiet morning'))!.click());
+  await settle();
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click()); await settle();
+  expect(fieldValue(), 'the round trip dropped the query').toBe('quiet');
+  /* Cleared on the sheet (the headings come back), off by "Kept ›", home by
+     the archive's "<", and up again: unfiltered. */
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-over-find-clear')!.click());
+  await pressSheetDoor(world.container, 'Kept'); await settle();
+  expect(query('open')).toBe('saves');
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click()); await settle();
+  expect(query('open')).toBeNull();
+  sheet = await openSavesSheet(world.container); await settle();
+  expect(fieldValue(), 'a fresh pull came up on the old query').toBe('');
+});
+
+it('drops the query when the sheet is left for Principles', async () => {
+  world = await mountWorld(FACTS, { routerTools: <Where /> }); await settle();
+  const sheet = await openSavesSheet(world.container); await settle();
+  await typeQuery(sheet, 'quiet');
+  await act(async () => [...sheet.querySelectorAll<HTMLButtonElement>('.waka-stream-save')].find(b => b.textContent?.includes('An older quiet morning'))!.click());
+  await settle();
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click()); await settle();
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-over-find-clear')!.click());
+  await pressSheetDoor(world.container, 'Principles'); await settle();
+  expect(query('open')).toBe('principles');
+  await chooseFromMenu(world.container, 'Now'); await settle();
+  expect(query('open')).toBeNull();
+  await openSavesSheet(world.container); await settle();
+  expect(fieldValue(), 'a fresh pull came up on an old query').toBe('');
 });

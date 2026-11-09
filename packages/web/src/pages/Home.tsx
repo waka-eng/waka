@@ -7769,7 +7769,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
   /* Left the sheet's save some other way: its "<" is the list's again. */
   useEffect(() => { if (!savedNoteOpen) noteFromSheet.current = null; }, [savedNoteOpen]);
   const streamShown = streamOpen && phase === 'ready' && atNowView && !reviewing && !mouthOpen && atWall.kind === 'self';
-  useEffect(() => { if (!atNowView || reviewing) setStreamOpen(false); }, [atNowView, reviewing]);
+  /* A SHEET PULLED UP IS ALWAYS FRESH, and every way off it drops its query;
+     only a result's "<" brings one back (`backPage`, `noteFromSheet`). */
+  const openSheet = useCallback(() => { noteFromSheet.current = null; setSheetQuery(''); setStreamOpen(true); }, []);
+  const leaveSheet = useCallback(() => { setSheetQuery(''); setStreamOpen(false); }, []);
+  useEffect(() => { if (!atNowView || reviewing) leaveSheet(); }, [atNowView, reviewing, leaveSheet]);
   useEffect(() => {
     if (!streamShown || principlesRead || offline || !memoryProfileId) return;
     let live = true;
@@ -9883,7 +9887,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         <>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
                             label={say('worldBubbleOnYourMind')}
-                            why={whyFor(lead)} onSeeAll={() => setStreamOpen(true)}
+                            why={whyFor(lead)} onSeeAll={openSheet}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true),
                               onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
@@ -10083,7 +10087,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
                     </button> : null}
                     <button type="button" className="jar-char-bubble-act"
-                      onClick={() => { setCharSay(''); setStreamOpen(true); }}>{say('worldBubbleSeeAll')}</button>
+                      onClick={() => { setCharSay(''); openSheet(); }}>{say('worldBubbleSeeAll')}</button>
                   </span>
                 ) : sayIsAboutNothing(charSay) ? (
                   standingAsAgent ? null : (
@@ -11684,15 +11688,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {streamShown ? (
         <HomeStream locale={locale} inspirations={inspirations ?? []} signals={streamSignals(signals)} principles={principles}
           profileId={conversationScope?.profileId ?? null}
-          onOpenArchive={() => { setStreamOpen(false); listOrigin.current = null; openOverHome('saves'); }}
+          onOpenArchive={() => { leaveSheet(); listOrigin.current = null; openOverHome('saves'); }}
           /* THE SAME CALL "View principles" MADE: the walk from Now. The
              sheet is not an address, so the page still stands on Now and
              the creature crosses as it does from the bubble. */
-          onOpenPrinciples={() => { setStreamOpen(false); toPrinciples(); }}
-          onClose={() => { setSheetQuery(''); setStreamOpen(false); }}
-          initialQuery={sheetQuery}
-          onOpenSave={(id, query) => { noteFromSheet.current = { query }; setStreamOpen(false); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }}
-          more={fieldBeyond > 0 ? { onSeeAll: () => { setStreamOpen(false); listOrigin.current = null; openOverHome('saves'); } } : undefined} />
+          onOpenPrinciples={() => { leaveSheet(); toPrinciples(); }}
+          onClose={leaveSheet}
+          query={sheetQuery} onQueryChange={setSheetQuery}
+          /* THE ONE ROUND TRIP THE QUERY OUTLIVES: it rides on the note's
+             "<" (`noteFromSheet`), not on the sheet's own state. */
+          onOpenSave={(id, query) => { leaveSheet(); noteFromSheet.current = { query }; viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }}
+          more={fieldBeyond > 0 ? { onSeeAll: () => { leaveSheet(); listOrigin.current = null; openOverHome('saves'); } } : undefined} />
       ) : null}
       {/* "{n} INSPIRATIONS" LEFT THE NOTEPAD (founder, 2026-11-08: "i also dont
           like seeing 0 inspirations while im saving sth new"). Saves are
@@ -11724,7 +11730,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
              archive's, which leads with the same search. With the Actions
              menu gone this is the agent wall's one door to them. */
           pull={standingAsAgent ? { onOpen: () => { listOrigin.current = null; openOverHome('saves'); } }
-            : streamShown ? undefined : { onOpen: () => setStreamOpen(true) }}
+            : streamShown ? undefined : { onOpen: openSheet }}
         />
             ) : phase==='ready'&&savedNoteOpen&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
@@ -11883,7 +11889,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
              relative to the top right buttons." It sat centred under the
              row; now it is the row's left end, unboxed, on the icons'
              centre line. The chevron points the way the sheet goes. */
-          <button type="button" className="waka-stream-home" aria-expanded="true" onClick={() => { setSheetQuery(''); setStreamOpen(false); }}>
+          <button type="button" className="waka-stream-home" aria-expanded="true" onClick={leaveSheet}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
               strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" /></svg>
             <span>{say('worldBackHome')}</span>
