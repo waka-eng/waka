@@ -11,7 +11,7 @@ import { act } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressChatCorner, closeOverlay, keepBox, barShape, homeBarShape, pressDockRow, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { mountWorld, dataMockFrom, apiMockFrom, openSavesSheet, chooseFromMenu, pressChatCorner, closeOverlay, keepBox, barShape, homeBarShape, pressDockRow, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { pressesInTopRow } from './helpers/note-top-row';
 import { loadInspirations, loadInspiration, type InspirationDetail } from '../src/lib/data';
 import {fetchProfiles,fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
@@ -48,10 +48,14 @@ async function settle() {
 }
 async function navigate(to: string | number) { await act(async () => { if (typeof to === 'number') go(to); else go(to); }); await settle(); }
 
-it('opens both histories directly from home and returns home without creating a draft or chat', async () => {
+it('opens the archive directly from home and returns home without creating a draft', async () => {
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  for (const [label, destination] of [['Inspirations', 'saves'], ['Chats', 'conversations']]) {
-    /* The corner's Actions → Search / Past chats since the tabs went (design E1). */
+  /* The Saves sheet's "Saves ›" since the Actions menu went (2026-11-08).
+     Past chats have no door from home any more: the round Chat is the way
+     in, and the chat page carries All chats (see "returns home from chat
+     history" below). */
+  expect(world.container.querySelector('.waka-home-actions'), 'the Actions menu is still on home').toBeNull();
+  for (const [label, destination] of [['Inspirations', 'saves']]) {
     await pressDockRow(world.container, label);await settle();
     expect(new URLSearchParams(location.search).get('open')).toBe(destination);
     expect(new URLSearchParams(location.search).get('compose')).toBeNull();
@@ -755,7 +759,7 @@ it('renders no engineering comment as text on screen', async () => {
 const open = () => new URLSearchParams(location.search).get('open');
 const lit = () => world.container.querySelector<HTMLButtonElement>('.waka-dock .waka-dock-item[aria-current="page"]');
 const row = (name: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-page-back, .waka-home-bar button, .waka-over-new')]
-  .find(node => node.textContent?.trim() === name)!;
+  .find(node => node.textContent?.trim() === name || node.getAttribute('aria-label') === name)!;
 const key = async (target: EventTarget, name: string) => {
   await act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); });
   await settle();
@@ -907,9 +911,9 @@ it('keeps archive navigation outside the composer, and reaches chat history from
  */
 const returnRow = () => world.container.querySelector<HTMLButtonElement>('button.waka-page-back');
 
-it('opens both lists from Actions with nothing lit, and leaves each by its labelled Back', async () => {
+it('opens the archive from the Saves sheet with nothing lit, and leaves it by its labelled Back', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
-  for (const [list, entry] of [['saves', 'Inspirations'], ['conversations', 'Chats']] as const) {
+  for (const [list, entry] of [['saves', 'Inspirations']] as const) {
     await pressDockRow(world.container, entry); await settle();
     expect(open()).toBe(list);
     expect(world.container.querySelector('.waka-home-bar'), 'the home bar stands over a list').toBeNull();
@@ -1042,10 +1046,10 @@ it.each(['/?compose=1', '/?open=saves', '/?open=conversations', '/chat/new'])(
   },
 );
 
-it('keeps background inspiration processing out of Actions', async () => {
+it('keeps background inspiration processing out of the Saves sheet', async () => {
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
-  await act(async()=>world.container.querySelector<HTMLButtonElement>('.waka-home-actions > button')!.click());
-  expect(world.container.querySelector('.waka-home-actions')?.textContent).not.toContain('Saved inspiration progress');
+  const sheet=await openSavesSheet(world.container);await settle();
+  expect(sheet.textContent).not.toContain('Saved inspiration progress');
   expect(document.querySelector('[role="dialog"][aria-label="Saved inspiration progress"]')).toBeNull();
   expect(world.container.querySelector('.jar-source-status')).toBeNull();
 });

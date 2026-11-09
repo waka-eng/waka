@@ -336,6 +336,12 @@ const NO_VISIBLE_WAY_OUT: Record<string, string> = {
      other. The ratchet below caught the stale entries the same day, which is
      the behaviour it exists for — an exemption that outlives its reason
      excuses nothing while reading as if it does. */
+  /* THE SAVES SHEET'S WAY DOWN IS IN THE TOP BAR'S ROW (2026-11-08), drawn by
+     `Home.tsx` into the Menu's left slot while the sheet is up: "⌄ Home",
+     visible and one press. Founder: "the down caret and Home feels awkward
+     position relative to the top right buttons", so it left the sheet for
+     the row the eye already reads. `home-navigation.test.tsx` presses it. */
+  "components/HomeStream.tsx": "its visible ⌄ Home stands in the top bar's row (Home.tsx, .waka-stream-home)",
 };
 
 function sourceFiles(dir: string, found: string[] = []): string[] {

@@ -1,5 +1,4 @@
 import { startJourney } from '../lib/journey-performance';
-import { HomeActions } from '../components/HomeActions';
 import { ProfileSwitcher } from '../components/ProfileSwitcher';
 import { ReadingBubbleText } from '../components/ReadingBubbleText';
 /**
@@ -1800,6 +1799,11 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const [queueLoaded, setQueueLoaded] = useState(false);
   const queueLoadRef = useRef(0);
   const canOfferReview = queueLoaded && !offline && toReview > 0;
+  /* A QUEUE THAT DID NOT LOAD SHOWS NOTHING, as an empty one does: the
+     Actions menu's "Couldn't load reviews · Retry" row went with the menu.
+     The next tap on the creature asks for it again, quietly (see
+     `creatureSpeaks`), so a queue that comes back is asked about then. */
+  const reviewRetry = reviewLoadFailed && !offline && atWall.kind === 'self';
   const companionPrompt = promptChoice.scope !== promptScope || (promptChoice.kind === 'review' && !canOfferReview)
     ? 'reading' : promptChoice.kind;
   promptChoiceRef.current = { scope: promptScope, kind: companionPrompt };
@@ -1835,9 +1839,16 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /* GLASSES ON FOR THE SITTING. The creature reads with you while you review
      — see `think` — and takes them off when the cards run out or you step
      out of it. */
+  /* AND ON AT REST WHILE SOMETHING WAITS (2026-11-08). The Actions menu's
+     "Review suggestions" row is gone; founder: when something is reviewable
+     the creature asks, wearing its review glasses, and when nothing is, nothing
+     is shown. So the glasses say "I have something to ask" before a word is
+     said, and a tap brings the bubble that asks (`companionPrompt` 'review').
+     The reading still comes first: pending work never takes its place. */
+  const glassesAtRest = canOfferReview && atWall.kind === 'self';
   useEffect(() => {
-    simApiRef.current?.think(reviewing && !mouthOpen);
-  }, [reviewing, mouthOpen]);
+    simApiRef.current?.think((reviewing || glassesAtRest) && !mouthOpen);
+  }, [reviewing, glassesAtRest, mouthOpen]);
   /* A candidate whose card is mid-trip, and those whose keep failed while it
      was: a failure that lands before the card has gone is held until it
      has, so the queue is never rewritten from under a card in flight. */
@@ -2142,6 +2153,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   // cursor synchronous so rapid taps cannot replay the same choice.
   const creatureSpeaks = useCallback(() => {
     if (!atNowView || reviewing) return;
+    if (reviewRetry) loadClaims();
     const choices: CompanionPrompt[] = ['reading', ...(canOfferReview ? ['review' as const] : []), 'activity', 'principles'];
     const current = promptChoiceRef.current.scope === promptScope ? promptChoiceRef.current.kind : 'reading';
     const next = choices[(choices.indexOf(current) + 1) % choices.length]!;
@@ -2155,7 +2167,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     if (litTimer.current !== null) window.clearTimeout(litTimer.current);
     litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
     if (next === 'activity' && sayLineRef.current) sayTheWeatherRef.current(sayLineRef.current);
-  }, [atNowView, reviewing, canOfferReview, promptScope, setCharSay]);
+  }, [atNowView, reviewing, canOfferReview, reviewRetry, loadClaims, promptScope, setCharSay]);
   useEffect(() => {
     if (atNowView && !reviewing && promptChoice.scope === promptScope) return;
     speechEpoch += 1;
@@ -11664,6 +11676,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
       ) : null}
       {streamShown ? (
         <HomeStream locale={locale} inspirations={inspirations ?? []} signals={streamSignals(signals)} principles={principles}
+          profileId={conversationScope?.profileId ?? null}
+          onOpenArchive={() => { setStreamOpen(false); listOrigin.current = null; openOverHome('saves'); }}
+          /* THE SAME CALL "View principles" MADE: the walk from Now. The
+             sheet is not an address, so the page still stands on Now and
+             the creature crosses as it does from the bubble. */
+          onOpenPrinciples={() => { setStreamOpen(false); toPrinciples(); }}
           onClose={() => setStreamOpen(false)}
           onOpenSave={id => { setStreamOpen(false); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }}
           more={fieldBeyond > 0 ? { onSeeAll: () => { setStreamOpen(false); listOrigin.current = null; openOverHome('saves'); } } : undefined} />
@@ -11693,7 +11711,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
           }}
           onChat={() => { listOrigin.current = null; openTalk(null); }}
           saved={barSaved}
-          pull={standingAsAgent || streamShown ? undefined : { onOpen: () => setStreamOpen(true) }}
+          /* ON AN AGENT'S WALL THE PULL OPENS ITS ARCHIVE. The sheet reads
+             your own field, so it is yours alone; the agent's saves are its
+             archive's, which leads with the same search. With the Actions
+             menu gone this is the agent wall's one door to them. */
+          pull={standingAsAgent ? { onOpen: () => { listOrigin.current = null; openOverHome('saves'); } }
+            : streamShown ? undefined : { onOpen: () => setStreamOpen(true) }}
         />
             ) : phase==='ready'&&(reviewing||savedNoteOpen)&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
@@ -11821,15 +11844,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
         </nav>
       ) : null}
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
-        actions={!viewNavigation.view?.open && !viewNavigation.view?.conversationId && !mouthOpen ? <HomeActions key={memoryScope?.profileId ?? 'preview'} locale={locale}
-          onPrinciples={toPrinciples} onReview={atWall.kind === 'self' && canOfferReview ? startReview : undefined}
-          onRetryReview={atWall.kind==='self'&&reviewLoadFailed?loadClaims:undefined}
-          /* "Search" opens the archive, which leads with its own search
-             field and keeps what a save's own page holds (editing, the
-             deleted shelf). It was the bar's Inspirations tab; Past chats
-             was its Chats tab. */
-          onSearch={() => { listOrigin.current = null; openOverHome('saves'); }}
-          onChats={() => { listOrigin.current = null; openOverHome('conversations'); }} /> : undefined}
+        /* NO ACTIONS MENU (2026-11-08). Founder: "i hate this. better
+           position these 4 actions in current experience." Search is the
+           field at the top of the Saves sheet; past chats are the chat
+           page's own; View principles is the sheet's "Principles ›"; and
+           review is asked by the creature, glasses on, when there is any. */
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
            Founder: "I kind of want to give the feeling of, rather than my
            agent moving rooms, it kind of switches itself up to its agent
@@ -11852,7 +11871,18 @@ const RETRY_READ_LIMIT_MS = 20_000;
            are a history rather than a depth of your own material, which is
            why they never sat among the three and why this corner is where
            they belong. */
-        left={<>{agentWall ? (
+        left={streamShown ? (
+          /* ═══ "⌄ HOME" IS IN THE TOP BAR'S ROW (2026-11-08) ═══
+             Founder: "the down caret and Home feels awkward position
+             relative to the top right buttons." It sat centred under the
+             row; now it is the row's left end, unboxed, on the icons'
+             centre line. The chevron points the way the sheet goes. */
+          <button type="button" className="waka-stream-home" aria-expanded="true" onClick={() => setStreamOpen(false)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+              strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" /></svg>
+            <span>{say('worldBackHome')}</span>
+          </button>
+        ) : <>{agentWall ? (
               <ProfileSwitcher label={say('worldProfileSwitcher')}
                 options={[{ id: null, name: say('worldWallMe'), selected: atWall.kind !== 'agent' },
                   ...agentWalls.map(wall => ({ id: wall.id, name: wall.name, selected: atWall.kind === 'agent' && atWall.id === wall.id }))]}

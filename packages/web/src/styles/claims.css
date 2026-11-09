@@ -7164,14 +7164,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 
 @layer chrome {
-/* One compact, stable home menu; reading evidence stays inside its sheet. */
-.waka-home-actions { position: relative; }
-.waka-home-actions > button { min-height: var(--sp-44); padding-inline: var(--sp-10); font-size: var(--t-ui); }
-.waka-home-actions-list { position: absolute; right: 0; top: 100%; width: min(18rem, calc(100vw - var(--sp-32))); padding: var(--sp-8); border: 1px solid var(--line); border-radius: var(--sp-16); background: var(--paper); color: var(--ink);  }
-.waka-home-actions-list:not([hidden]) { display: grid; }
-.waka-home-actions-list > button, .waka-home-actions-list > span { display: block; min-height: var(--sp-44); padding: var(--sp-10) var(--sp-12); text-align: start; font: inherit; background: none; border: 0; color: inherit; }
-.waka-home-actions-list > button { cursor: pointer; }
-.waka-home-actions-list > span { font-size: var(--t-ui); color: var(--muted); }
+/* Reading evidence stays inside its sheet. */
 .waka-reading-details { margin-top: var(--sp-16); }
 .waka-reading-details summary { min-height: var(--sp-44); padding-block: var(--sp-12); cursor: pointer; overflow-wrap: anywhere; }
 .waka-reading-details details details { margin-inline-start: var(--sp-12); }
@@ -7225,7 +7218,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   border-radius: var(--r-pill); background: var(--waka-raised);
 }
 .waka-home-bar-door {
-  appearance: none; flex: 1 1 0; min-width: 0; height: calc(var(--sp-48) + var(--sp-4));
+  appearance: none; flex: 1 1 auto; min-width: 0; height: calc(var(--sp-48) + var(--sp-4)); padding-inline: var(--sp-4);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-4);
   padding: 0; border: 0; border-radius: var(--r-pill); background: none;
   color: var(--ink); font-family: var(--waka-face); font-size: var(--t-meta); line-height: 1; white-space: nowrap; cursor: pointer;
@@ -7288,12 +7281,24 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   display: flex; flex-direction: column; align-items: center;
   background: var(--paper); color: var(--ink); font-family: var(--waka-face);
 }
-.waka-stream-close {
-  flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-2);
-  min-height: var(--sp-44); padding: 0 var(--sp-16); border: 0; background: none;
-  color: var(--muted); font: inherit; font-size: var(--t-ui); cursor: pointer;
+/* THE FIELD STANDS ON THE SHEET'S OWN COLUMN, above the scroll, so a long
+   list never carries it away. The field's anatomy is the archive's. */
+.waka-stream-find { flex: none; width: min(36rem, 100%); box-sizing: border-box; padding: var(--sp-12) var(--sp-16) var(--sp-4); }
+/* A HEADING THAT IS A DOOR is lit (light is the meaning channel); the one
+   that goes nowhere, Patterns, stays muted. 44px to press, no box. */
+.waka-stream-label:has(> .waka-stream-door) { margin: var(--sp-4) 0 var(--sp-2); }
+.waka-stream-door {
+  display: inline-flex; align-items: center; gap: var(--sp-4); min-height: var(--sp-44); padding: 0; border: 0; background: none;
+  color: var(--ink); font: inherit; cursor: pointer;
 }
-.waka-stream-close:hover, .waka-stream-close:focus-visible { color: var(--ink); }
+/* "⌄ HOME" IN THE TOP BAR'S ROW while the sheet is up: left, unboxed, the
+   corner icons' 44px height so the word and the glyphs share a centre line. */
+.waka-stream-home {
+  pointer-events: auto; flex: none; display: inline-flex; align-items: center; gap: var(--sp-4);
+  height: var(--waka-corner); padding: 0 var(--sp-4) 0 0; border: 0; background: none;
+  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-meta); cursor: pointer;
+}
+.waka-stream-home:hover, .waka-stream-home:focus-visible { color: var(--ink); }
 .waka-stream-scroll {
   flex: 1; min-height: 0; width: min(36rem, 100%); box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
   padding: 0 var(--sp-16) var(--sp-32);

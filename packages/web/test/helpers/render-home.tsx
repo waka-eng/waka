@@ -544,12 +544,14 @@ function dockRows(container: HTMLElement): HTMLButtonElement[] {
 }
 
 /**
- * THE NAMES THE OLD BAR USED, AND WHERE THEIR DOORS ARE NOW (design E1,
- * 2026-11-08). "New inspiration" is the home bar's Write; "Inspirations" and
- * "Chats" were tabs and are the corner's Actions → Search and Past chats.
- * Suites keep saying what they mean; this is the one place the route moved.
+ * THE NAMES THE OLD BAR USED, AND WHERE THEIR DOORS ARE NOW. "New
+ * inspiration" is the home bar's "Keep a thought". "Inspirations" was a tab,
+ * then Actions → Search, and since the Actions menu went (2026-11-08) it is
+ * the Saves sheet's "Saves ›" heading. "Chats" is the bar's Chat, then the
+ * chat page's All chats. Suites keep saying what they mean; this is the one
+ * place the route moved.
  */
-const MOVED_TO_ACTIONS: Record<string, string> = { Inspirations: "Search", Chats: "Past chats" };
+const MOVED: Record<string, "archive" | "chats"> = { Inspirations: "archive", Chats: "chats" };
 /** A chat's list door is its top-right "Past chats" (2026-11-08), not a bar row. */
 async function pressPastChatsAside(container: HTMLElement): Promise<boolean> {
   const aside = container.querySelector<HTMLButtonElement>(".waka-page-aside");
@@ -557,28 +559,53 @@ async function pressPastChatsAside(container: HTMLElement): Promise<boolean> {
   await act(async () => aside.click());
   return true;
 }
-const RENAMED: Record<string, string> = { "New inspiration": "Write" };
+const RENAMED: Record<string, string> = { "New inspiration": "Keep a thought" };
 
-/** Open the corner's Actions menu and press its row named `label`. */
-export async function chooseFromActions(container: HTMLElement, label: string): Promise<void> {
+/** Pull the Saves sheet up from home ("Saves ⌃" above the bar). */
+export async function openSavesSheet(container: HTMLElement): Promise<HTMLElement> {
+  if (!container.querySelector(".waka-home-bar") && !container.querySelector(".waka-stream")) await closeOverlay(container);
   for (let turn = 0; turn < 40; turn += 1) {
-    const trigger = container.querySelector<HTMLButtonElement>(".waka-home-actions > button");
-    if (trigger) {
-      if (trigger.getAttribute("aria-expanded") !== "true") await act(async () => trigger.click());
-      const row = [...container.querySelectorAll<HTMLButtonElement>(".waka-home-actions-list > button")]
-        .find((node) => node.textContent?.trim() === label);
-      if (!row) throw new Error(`Actions has no row named ${label}`);
-      await act(async () => row.click());
-      return;
-    }
+    const sheet = container.querySelector<HTMLElement>(".waka-stream");
+    if (sheet) return sheet;
+    const pull = container.querySelector<HTMLButtonElement>(".waka-home-bar-pull");
+    if (pull) await act(async () => pull.click());
+    else await act(async () => { await Promise.resolve(); });
+  }
+  throw new Error("the Saves sheet never came up (is there a Saves ⌃ above the home bar?)");
+}
+
+/** Press a heading door in the Saves sheet: "Saves" or "Principles". */
+export async function pressSheetDoor(container: HTMLElement, label: string): Promise<void> {
+  const sheet = await openSavesSheet(container);
+  for (let turn = 0; turn < 40; turn += 1) {
+    const door = [...sheet.querySelectorAll<HTMLButtonElement>(".waka-stream-door")]
+      .find((node) => node.textContent?.replace("›", "").trim() === label);
+    if (door) { await act(async () => door.click()); return; }
     await act(async () => { await Promise.resolve(); });
   }
-  throw new Error("the corner's Actions menu never appeared");
+  throw new Error(`the Saves sheet has no ${label} › heading`);
+}
+
+/** The whole archive, the way a person reaches it from home now: the
+    sheet's "Saves ›" on your own wall; on an agent's, the pull itself. */
+async function openArchive(container: HTMLElement): Promise<void> {
+  if (!container.querySelector(".waka-home-bar") && !container.querySelector(".waka-stream")) await closeOverlay(container);
+  if (!container.querySelector(".waka-home-bar-pill")) {
+    for (let turn = 0; turn < 40; turn += 1) {
+      const pull = container.querySelector<HTMLButtonElement>(".waka-home-bar-pull");
+      if (pull) { await act(async () => pull.click()); return; }
+      await act(async () => { await Promise.resolve(); });
+    }
+    throw new Error("an agent's wall offers no Saves ⌃ to its archive");
+  }
+  await pressSheetDoor(container, "Saves");
 }
 /* BY ACCESSIBLE NAME, which is what a person navigating by voice or by
    screen reader would say out loud. */
+/* AN aria-label IS the accessible name when there is one: the home bar's
+   doors read "a thought" and are named "Keep a thought". */
 const accessibleName = (node: HTMLElement) =>
-  (node.textContent?.trim() || node.getAttribute("aria-label")?.trim()) ?? "";
+  (node.getAttribute("aria-label")?.trim() || node.textContent?.trim()) ?? "";
 
 /**
  * THE WHOLE BAR, IN THE ORDER A PERSON MEETS IT: every press by accessible
@@ -602,9 +629,9 @@ function isReturnRow(node: HTMLElement): boolean {
 
 /** Press the bar row named exactly `label`, or say what the bar offers. */
 export async function pressDockRow(container: HTMLElement, label: string): Promise<void> {
-  if (MOVED_TO_ACTIONS[label] && !dockRows(container).some(node => accessibleName(node) === label)) {
-    if (!container.querySelector(".waka-home-bar")) await closeOverlay(container);
-    await chooseFromActions(container, MOVED_TO_ACTIONS[label]!);
+  if (MOVED[label] && !dockRows(container).some(node => accessibleName(node) === label)) {
+    if (MOVED[label] === "archive") await openArchive(container);
+    else await pressChatCorner(container);
     return;
   }
   if (RENAMED[label]) label = RENAMED[label]!;
@@ -706,8 +733,7 @@ async function pressKey(container: HTMLElement, key: string): Promise<void> {
  */
 export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
   if (label === "Inspirations" || label === "Your inspirations") {
-    if (!container.querySelector(".waka-home-bar")) await closeOverlay(container);
-    await chooseFromActions(container, "Search");
+    await openArchive(container);
     return;
   }
   if (label === "Chats") {
@@ -737,7 +763,10 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
  */
 export async function pressChatCorner(container: HTMLElement): Promise<void> {
   if (!container.querySelector(".waka-home-bar")) await closeOverlay(container);
-  await chooseFromActions(container, "Past chats");
+  /* NO DIRECT DOOR FROM HOME SINCE 2026-11-08: the round Chat is the way in,
+     and the chat page carries the way to every past chat. */
+  await pressHomeBar(container, "Chat");
+  await pressWhenItAppears(container, ".waka-page-back", "the chat page's All chats");
 }
 
 /**

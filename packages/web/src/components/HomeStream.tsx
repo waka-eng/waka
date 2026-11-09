@@ -15,10 +15,27 @@
  * edge and "Still forming", so it reads the same with the colour taken away.
  *
  * EMPTY IS EMPTY. A section with nothing in it is not drawn.
+ *
+ * ═══ SEARCH AND THE PRINCIPLES DOOR LIVE HERE NOW (2026-11-08) ═══════════
+ * Founder, on the home's Actions menu: "i hate this. better position these
+ * 4 actions in current experience." Search is a field at the top of this
+ * sheet (it finds what you kept, which is what this sheet is), and it runs
+ * the archive's own server search (`useArchiveSearch`) rather than a second
+ * matcher. "View principles" became the Principles heading itself, and the
+ * Saves heading is the same kind of door to the full archive: a heading
+ * that names a place you can go goes there (Law 7, the class, not the one).
+ *
+ * THE WAY DOWN IS NOT IN HERE. "⌄ Home" stands in the top bar's row while
+ * this is up (founder: "the down caret and Home feels awkward position
+ * relative to the top right buttons"), so it is drawn by the page.
  */
+import { useState } from 'react';
+
 import type { ApiPrinciple } from '../lib/api/principles';
 import type { Inspiration, Signal } from '../lib/data';
+import { createListViewState } from '../lib/list-view-state';
 import { formatMessage, t, type SupportedLocale } from '../lib/locales';
+import { useArchiveSearch } from '../lib/use-archive-search';
 import { dateWords } from '../lib/words';
 import { DialogSurface } from './DialogSurface';
 
@@ -52,37 +69,76 @@ export function HomeStream(props: {
   principles: readonly ApiPrinciple[];
   onOpenSave: (id: string) => void;
   onClose: () => void;
+  /** Whose archive the field searches; null searches the signed-in default. */
+  profileId: string | null;
+  /** The Saves heading's door: the whole archive, where editing lives. */
+  onOpenArchive: () => void;
+  /** The Principles heading's door: the same walk the creature takes. */
+  onOpenPrinciples: () => void;
   /** Older saves past the loaded window: the full archive pages them in. */
   more?: { onSeeAll: () => void };
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const saves = [...props.inspirations].sort((a, b) => b.capturedMs - a.capturedMs);
   const principles = [...props.principles].sort((a, b) => a.rank - b.rank);
+  const [query, setQuery] = useState('');
+  const [memory] = useState(createListViewState);
+  const needle = query.trim();
+  const search = useArchiveSearch(props.profileId, needle ? needle : null, null, memory);
+  const saveRow = (row: Inspiration) => {
+    const source = sourceKey(row);
+    return <li key={row.id}>
+      <button type="button" className="waka-stream-save" onClick={() => props.onOpenSave(row.id)}>
+        <time className="waka-stream-meta" dateTime={new Date(row.capturedMs).toISOString()}>
+          {source ? formatMessage(props.locale, source, { date: dayWords(row.capturedMs, props.locale) }) : dayWords(row.capturedMs, props.locale)}
+        </time>
+        <span className="waka-stream-words">{row.preview || say('worldSavedWord')}</span>
+      </button>
+    </li>;
+  };
+  /* A HEADING THAT NAMES A PLACE IS THE DOOR TO IT: the word, then ›. */
+  const door = (id: string, label: string, onOpen: () => void) => (
+    <h2 id={id} className="waka-stream-label">
+      <button type="button" className="waka-stream-door" onClick={onOpen}>
+        {label}<span aria-hidden="true">›</span>
+      </button>
+    </h2>
+  );
   return (
     <DialogSurface className="waka-stream" modal={false} motion="modal" aria-label={say('worldBarSaves')} onClose={props.onClose}
       data-jar-chrome="1" data-jar-interactive="1">
-      {/* THE SAME CONTROL THAT PULLED IT UP PUTS IT DOWN — the chevron
-          turned over, in the place the eye already is. */}
-      <button type="button" className="waka-stream-close" aria-expanded="true" onClick={props.onClose}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
-          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" /></svg>
-        <span>{say('worldBackHome')}</span>
-      </button>
+      {/* THE ARCHIVE'S FIELD, SAME ANATOMY: the drawn glyph, the input, and a
+          clear that exists only while there is something to clear. */}
+      <div className="waka-stream-find">
+        <div className="waka-over-find">
+          <span className="waka-over-find-glyph" aria-hidden="true" />
+          <input type="search" className="waka-over-search" value={query}
+            placeholder={say('worldInspirationsSearch')} aria-label={say('worldInspirationsSearch')}
+            onChange={(event) => setQuery(event.target.value)} />
+          {query ? <button type="button" className="waka-over-find-clear" aria-label={say('worldInspirationsSearchClear')}
+            onClick={(event) => { setQuery(''); (event.currentTarget.previousElementSibling as HTMLInputElement | null)?.focus(); }} /> : null}
+        </div>
+      </div>
       <div className="waka-stream-scroll" tabIndex={0}>
+        {needle ? (
+          /* WHILE A SEARCH IS ON, ITS RESULTS ARE THE PAGE. Patterns and
+             principles are not matched; they come back when the field is
+             cleared. */
+          <section aria-labelledby="waka-stream-found" aria-busy={search.phase === 'loading'}>
+            <h2 id="waka-stream-found" className="sr-only">{say('worldInspirationsSearch')}</h2>
+            {search.phase === 'loading' ? <p className="waka-stream-meta" role="status">{say('worldSearchingInspirations')}</p>
+              : search.phase === 'failed' ? <p className="waka-stream-meta" role="alert">{say('worldSearchFailed')}{' '}
+                <button type="button" className="waka-stream-more" onClick={search.refresh}>{say('worldRetry')}</button></p>
+              : search.rows.length === 0 ? <p className="waka-stream-meta" role="status">{say('worldInspirationsNoHits')}</p>
+              : <ul className="waka-stream-list">{search.rows.map(saveRow)}</ul>}
+            {search.phase === 'ready' && search.cursor ? <button type="button" className="waka-stream-more" disabled={search.moreBusy || search.refreshing}
+              onClick={() => void search.more()}>{say(search.moreBusy ? 'worldSearchingInspirations' : search.moreFailed ? 'worldRetry' : 'worldMoreResults')}</button> : null}
+          </section>
+        ) : <>
         {saves.length ? <section aria-labelledby="waka-stream-saves">
-          <h2 id="waka-stream-saves" className="waka-stream-label">{say('worldBarSaves')}</h2>
+          {door('waka-stream-saves', say('worldBarSaves'), props.onOpenArchive)}
           <ul className="waka-stream-list">
-            {saves.map((row) => {
-              const source = sourceKey(row);
-              return <li key={row.id}>
-                <button type="button" className="waka-stream-save" onClick={() => props.onOpenSave(row.id)}>
-                  <time className="waka-stream-meta" dateTime={new Date(row.capturedMs).toISOString()}>
-                    {source ? formatMessage(props.locale, source, { date: dayWords(row.capturedMs, props.locale) }) : dayWords(row.capturedMs, props.locale)}
-                  </time>
-                  <span className="waka-stream-words">{row.preview || say('worldSavedWord')}</span>
-                </button>
-              </li>;
-            })}
+            {saves.map(saveRow)}
           </ul>
           {/* THE REST ARE NOT DROPPED (code review, 2026-11-08): this page
               shows the saves already loaded, and the archive pages in every
@@ -101,13 +157,14 @@ export function HomeStream(props: {
           </ul>
         </section> : null}
         {principles.length ? <section aria-labelledby="waka-stream-principles">
-          <h2 id="waka-stream-principles" className="waka-stream-label">{say('worldStreamPrinciples')}</h2>
+          {door('waka-stream-principles', say('worldStreamPrinciples'), props.onOpenPrinciples)}
           <ul className="waka-stream-list">
             {principles.map((row) => (
               <li key={row.id} className="waka-stream-statement"><span className="waka-stream-words">{row.statement}</span></li>
             ))}
           </ul>
         </section> : null}
+        </>}
       </div>
     </DialogSurface>
   );
