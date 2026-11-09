@@ -391,23 +391,26 @@ it('makes a photo the page\'s picture, and draws the words it read only when the
   props.noteBar = { mic: <button type="button" aria-label="Speak" />, save: <button type="button" className="waka-dock-save">Save</button>, state: null };
   await mount();
   expect(host.querySelector('.waka-note-hero img')?.getAttribute('alt')).toBe('Screenshot.png');
-  expect(host.querySelector('.waka-note-says')?.textContent).toBe('What about it stuck with you?');
+  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('What about it stuck with you?');
   expect(host.textContent).not.toContain('The words I read');
-  expect(host.querySelector('.waka-note-hint')?.textContent).toBe('A few words is plenty. Or none — just Save.');
+  /* The hint is the bubble's softer second line (founder, 2026-11-08), not a
+     line floating over the bar. */
+  expect(host.querySelector('.waka-note-says .waka-note-says-softer')?.textContent).toBe('A few words is plenty. Or just Save.');
+  expect(host.querySelector('.waka-note-hint'), 'the hint still floats over the bar').toBeNull();
   expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Add a note…');
   /* The words get the whole bar; the row is under them. */
   expect(host.querySelector('.waka-note-bar')!.firstElementChild?.tagName).toBe('TEXTAREA');
 
   const fix = vi.fn(async () => 'saved' as const);
   props.readWords = { status: 'ready', text: 'Nobody feels ready.' }; props.onFixReadWords = fix; await mount();
-  expect(host.querySelector('.waka-note-says')?.textContent).toBe('What made this line stick with you?');
+  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('What made this line stick with you?');
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-read-act')!.click());
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-read-act')!.click());
   expect(fix).toHaveBeenCalledWith('Nobody feels ready.');
 
   props.readWords = { status: 'unreadable' }; await mount();
-  expect(host.querySelector('.waka-note-says')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
+  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
   expect(host.querySelector('.waka-note-hero')?.hasAttribute('data-blurred')).toBe(true);
   /* Unreadable promises nothing; only a read queued again says it will retry. */
   expect(host.textContent).not.toContain('Your screenshot is saved either way.');
@@ -415,14 +418,14 @@ it('makes a photo the page\'s picture, and draws the words it read only when the
   /* Retrying asks the same; "I'll try reading it again" is promised only
      where a read is known to be queued (the saved note), never on a guess. */
   props.readWords = { status: 'retrying' }; await mount();
-  expect(host.querySelector('.waka-note-says')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
+  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
   expect(host.textContent).not.toContain('Your screenshot is saved either way.');
 });
 
 /* F5: a share from another app is asked about, and still waits for Save. */
 it('asks why about a shared link, with Add a note and That\'s all, and That\'s all saves', async () => {
   props.media = []; props.text = 'https://example.com/a'; props.arrival = true; await mount();
-  expect(host.querySelector('.waka-note-says')?.textContent).toBe('Got the link you shared. Want to say why?');
+  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('Got the link you shared. Want to say why?');
   const acts = [...host.querySelectorAll<HTMLButtonElement>('.waka-note-arrival-act')];
   expect(acts.map(act => act.textContent)).toEqual(['Add a note', 'That\'s all']);
   expect(props.onSubmit).not.toHaveBeenCalled();

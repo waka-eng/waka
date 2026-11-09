@@ -323,7 +323,7 @@ export function NoteTools(props: {
           `saving`", which was a statement about a contract that did not
           exist: the prop was a hand-written dirty check and the claim was
           true of it only by luck. It is a contract now. */}
-      <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save"
+      <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save waka-note-bar-action"
         aria-label={props.keepLabel} disabled={!props.canKeep}
         onClick={props.onKeep}>{props.saveLabel ?? props.keepLabel}</button>
       {/* ═══ AND THE WAY TO UNDO KEEPING IT, IN THE SAME BAR ══════════════

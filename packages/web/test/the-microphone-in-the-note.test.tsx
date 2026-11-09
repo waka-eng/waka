@@ -130,6 +130,9 @@ const field = () => world.container.querySelector<HTMLTextAreaElement>('textarea
 /** The notepad's own slot in the dock: the microphone, then Stop. */
 const mic = () => world.container.querySelector<HTMLButtonElement>('.waka-dock-tool')!;
 const engine = () => FakeEngine.all[FakeEngine.all.length - 1]!;
+/** The listening view (founder, 2026-11-08): what stands while the microphone is open. */
+const listening = () => world.container.querySelector<HTMLElement>('.waka-listening');
+const done = () => world.container.querySelector<HTMLButtonElement>('.waka-listening-done')!;
 /** Whether an authored save began — one network act, before any decision. */
 const savesStarted = () => vi.mocked(fetchInspirationSaveRequest).mock.calls.length;
 
@@ -164,18 +167,22 @@ const cmdEnter = async () => {
  * the fix: speak, press `Cmd+Enter`, and a save begins — the words the engine
  * has not yet marked final are simply not in it.
  */
-it('refuses Cmd+Enter while the microphone is still listening, and says why', async () => {
+it('offers nothing to save mid-utterance: the bar gives way to the listening view until Done', async () => {
   await openNotepad('dusk on the hill');
   await pressMic();
   expect(engine().started, 'the microphone never opened').toBe(true);
-
-  await cmdEnter();
-  expect(savesStarted(), 'a save began mid-utterance and dropped the unfinished words').toBe(0);
-  /* AND IT IS NOT SILENT ABOUT IT. A refused press that does nothing visible
-     is the "looks pressable, does nothing" failure `keep-ready.ts` was
-     written for; the reason the rule returns is the reason the bar prints. */
-  expect(bar()).toBe('Stop the recording first.');
+  /* Founder, 2026-11-08: "i want the UI to feel very clearly it's
+     listening". The field, the tools and Save step aside; nothing can save
+     the words the engine has not yet marked final. */
+  expect(listening(), 'the listening view did not take the bar\'s place').toBeTruthy();
+  expect(world.container.querySelector('.jar-inspiration-composer [data-note-bar="1"]'), 'the note bar stayed up while listening').toBeNull();
+  expect(world.container.querySelector('.waka-dock-save'), 'Save is offered mid-utterance').toBeNull();
+  expect(savesStarted()).toBe(0);
+  await act(async () => done().click()); await settle();
+  expect(engine().started).toBe(false);
+  expect(field().value, 'Done lost the words').toBe('dusk on the hill');
 });
+
 
 /**
  * AND THE COUNTERWEIGHT, which is what stops the fix above from being "the
@@ -226,7 +233,7 @@ it('releases the microphone when the notepad closes', async () => {
  * files marked below." That is a true sentence about a thing still on screen,
  * which is why the fix does not clear it — it re-ranks.
  */
-it('says the cloud disclosure even when the bar was already holding a line', async () => {
+it('says the cloud disclosure in full under the words, even when the bar was already holding a line', async () => {
   await openNotepad('dusk on the hill');
 
   const unreadable = new File(['bytes'], 'notes.txt', { type: 'text/plain' });
@@ -242,8 +249,10 @@ it('says the cloud disclosure even when the bar was already holding a line', asy
 
   await pressMic();
   expect(engine().started, 'the microphone never opened, so nothing was disclosed either way').toBe(true);
-  expect(bar()).toBe('Your browser sends speech to its own service to turn it into text.');
+  /* One full line under the words now, never cut short in the bar. */
+  expect(world.container.querySelector('.waka-listening-notice')?.textContent).toBe('Your browser sends speech to its own service to turn it into text.');
 });
+
 
 /**
  * ═══ AND A SESSION'S WORDS BELONG TO THAT SESSION ═════════════════════════
@@ -266,50 +275,50 @@ it('says the cloud disclosure even when the bar was already holding a line', asy
    here is the cause: the row keeps the same controls in the same order and
    the live control is the microphone's own element. (Where the disclosure
    sits is a known issue: docs/known-issues.md.) */
-it('keeps Stop in the microphone\'s own seat, and announces the disclosure', async () => {
+it('shows the words arriving softly while listening, and Done drops them into the note', async () => {
   await openNotepad();
-  const row = () => [...world.container.querySelectorAll<HTMLElement>('.waka-dock-making > *')].map(node => node.className.replace(/ waka-dock-tool--live/, ''));
-  const before = row(), first = mic();
   await pressMic();
-  expect(row().filter(name => !name.includes('waka-dock-state'))).toEqual(before.filter(name => !name.includes('waka-dock-state')));
-  expect(mic()).toBe(first);
-  expect(mic().classList.contains('waka-dock-tool--live')).toBe(true);
-  const caption = world.container.querySelector('.waka-dock-state');
-  expect(caption?.querySelector('[aria-hidden="true"]')?.textContent).toBe('Your browser sends speech to its own service to turn it into text.');
+  expect(world.container.querySelector('.waka-listening-label')?.textContent).toBe('Listening…');
+  await act(async () => engine().say([{ text: 'the guy at the coffee shop', final: false }]));
   await settle();
-  expect(caption?.querySelector('[role="status"]')?.textContent, 'the disclosure is not announced').toBe('Your browser sends speech to its own service to turn it into text.');
-  await act(async () => mic().click()); await settle();
-  expect(engine().started).toBe(false); expect(mic().classList.contains('waka-dock-tool--live')).toBe(false);
+  expect(world.container.querySelector('.waka-listening-words')?.textContent, 'the words are not shown as they arrive').toBe('the guy at the coffee shop');
+  expect(world.container.querySelector('.waka-listening textarea'), 'the words are in a text box while listening').toBeNull();
+  expect(done().textContent).toBe('Done');
+  await act(async () => done().click()); await settle();
+  expect(engine().started).toBe(false);
+  expect(listening(), 'the listening view outlived Done').toBeNull();
+  expect(field().value, 'the words did not drop into the note').toBe('the guy at the coffee shop');
 });
+
 
 it('does not splice a finished session\'s last words into the next one', async () => {
   await openNotepad();
   await pressMic();
   await act(async () => engine().say([{ text: 'first thought', final: true }]));
   await settle();
-  expect(field().value).toBe('first thought');
-
-  /* Stop, which is the control the person presses. */
-  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-dock-tool--live')!.click());
+  /* Done, which is the control the person presses. */
+  await act(async () => done().click());
   await settle();
+  expect(field().value).toBe('first thought');
   const finished = engine();
 
   await pressMic();
   expect(FakeEngine.all).toHaveLength(2);
   await act(async () => engine().say([{ text: 'second thought', final: true }]));
   await settle();
-  expect(field().value).toBe('first thought second thought');
+  expect(world.container.querySelector('.waka-listening-words')?.textContent).toBe('first thought second thought');
 
   /* THE LATE FINAL FROM THE SESSION THAT IS OVER. */
   await act(async () => finished.say([{ text: ' tail', final: true }]));
   await settle();
-  expect(field().value, 'a finished session wrote into the live one').toBe('first thought second thought');
+  expect(world.container.querySelector('.waka-listening-words')?.textContent, 'a finished session wrote into the live one').toBe('first thought second thought');
 
   /* AND ITS ERROR CANNOT TAKE THE LIVE SESSION DOWN WITH IT. */
   await act(async () => finished.onerror?.({ error: 'network' }));
   await settle();
-  expect(world.container.querySelector('.waka-dock-tool--live'), 'the Stop control went while the engine ran').toBeTruthy();
+  expect(world.container.querySelector('.waka-listening-done'), 'Done went while the engine ran').toBeTruthy();
 });
+
 
 /* CODE REVIEW, 2026-11-08: WebKit lets speech recognition start only inside
    a person's tap. At now, Say it opens the notepad and starts listening in
