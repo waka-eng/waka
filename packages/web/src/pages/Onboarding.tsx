@@ -47,7 +47,7 @@
  * page's own subtitle has been promising this field the whole time — "Choose
  * the name and language WAKA should use with you."
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
@@ -213,17 +213,25 @@ export default function OnboardingPage(): JSX.Element {
     setPhase(index + 1 >= ONBOARDING_QUESTIONS ? { kind: "reading" } : { kind: "question", index: index + 1 });
   };
 
+  /* ONE CONVERSATION, HOWEVER MANY PRESSES. The conversation is opened before
+     onboarding is stamped done; if the stamp fails and the person presses
+     again, the same conversation (same ids) is reused rather than a second
+     one opened with a second generated reply. */
+  const talking = useRef<{ id: string; messageId: string; opened: boolean } | null>(null);
   const talk = async (reading: string) => {
     if (!profileId) return;
     if (preview) { await fadeOut(); navigate("/", { replace: true }); return; }
     setLeaving(true); setLeaveError("");
-    const conversationId = crypto.randomUUID();
-    try {
-      await createConversation(profileId, conversationId, undefined, undefined, { id: crypto.randomUUID(), content: reading, requestReply: true });
-    } catch {
-      setLeaveError(say("worldTalkFailed")); setLeaving(false); return;
+    const conversation = talking.current ?? (talking.current = { id: crypto.randomUUID(), messageId: crypto.randomUUID(), opened: false });
+    if (!conversation.opened) {
+      try {
+        await createConversation(profileId, conversation.id, undefined, undefined, { id: conversation.messageId, content: reading, requestReply: true });
+        conversation.opened = true;
+      } catch {
+        setLeaveError(say("worldTalkFailed")); setLeaving(false); return;
+      }
     }
-    await finish(`/chat/${encodeURIComponent(conversationId)}`);
+    await finish(`/chat/${encodeURIComponent(conversation.id)}`);
   };
 
   const marker = preview ? <p className="onb-preview-mark" aria-label={say("onboardingPreviewMarkLabel")}>{say("onboardingPreviewMark")}</p> : null;

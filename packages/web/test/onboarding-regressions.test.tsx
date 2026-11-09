@@ -219,3 +219,18 @@ describe("naming, when this browser keeps nothing", () => {
     } finally { blocked.mockRestore(); }
   });
 });
+
+describe("Talk about this, retried after the finish failed", () => {
+  it("opens one conversation, not two", async () => {
+    saved = 3;
+    const page = await render();
+    vi.mocked(updateAuthProfile).mockRejectedValueOnce(new Error("offline"));
+    press("Talk about this");
+    await settle(500);
+    expect(page.textContent).not.toContain("CHAT");
+    press("Talk about this");
+    await settle(500);
+    expect(page.textContent).toContain("CHAT");
+    expect(vi.mocked(createConversation)).toHaveBeenCalledTimes(1);
+  });
+});
