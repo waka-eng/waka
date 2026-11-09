@@ -14,7 +14,8 @@
  * A PATTERN STILL FORMING IS SAID IN WORDS, NOT ONLY IN LIGHT: a dashed
  * edge and "Still forming", so it reads the same with the colour taken away.
  *
- * EMPTY IS EMPTY. A section with nothing in it is not drawn.
+ * EMPTY IS EMPTY. A section with nothing in it is not drawn, except Saves,
+ * whose heading is the door to the archive and its Deleted shelf.
  *
  * ═══ SEARCH AND THE PRINCIPLES DOOR LIVE HERE NOW (2026-11-08) ═══════════
  * Founder, on the home's Actions menu: "i hate this. better position these
@@ -138,16 +139,21 @@ export function HomeStream(props: {
               onClick={() => void search.more()}>{say(search.moreBusy ? 'worldSearchingInspirations' : search.moreFailed ? 'worldRetry' : 'worldMoreResults')}</button> : null}
           </section>
         ) : <>
-        {saves.length ? <section aria-labelledby="waka-stream-saves">
+        {/* THE SAVES DOOR STANDS EVEN WITH NOTHING KEPT. It is the only way
+            to the archive from home since the Actions menu went, and the
+            archive holds the Deleted shelf: someone who deleted their last
+            save must still be able to bring it back. Empty, it is the door
+            and one line, never a list. */}
+        <section aria-labelledby="waka-stream-saves">
           {door('waka-stream-saves', say('worldBarSaves'), props.onOpenArchive)}
-          <ul className="waka-stream-list">
+          {saves.length ? <ul className="waka-stream-list">
             {saves.map(saveRow)}
-          </ul>
+          </ul> : <p className="waka-stream-meta">{say('worldPersonalReadingEmpty')}</p>}
           {/* THE REST ARE NOT DROPPED (code review, 2026-11-08): this page
               shows the saves already loaded, and the archive pages in every
               one, so when there are more it says so and goes there. */}
           {props.more ? <button type="button" className="waka-stream-more" onClick={props.more.onSeeAll}>{say('worldBubbleSeeAll')}</button> : null}
-        </section> : null}
+        </section>
         {props.signals.length ? <section aria-labelledby="waka-stream-patterns">
           <h2 id="waka-stream-patterns" className="waka-stream-label">{say('worldStreamPatterns')}</h2>
           <ul className="waka-stream-list">

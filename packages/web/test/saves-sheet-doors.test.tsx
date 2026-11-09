@@ -114,3 +114,17 @@ it('opens the whole archive from the sheet\'s "Saves ›"', async () => {
   expect(query('open')).toBe('saves');
   expect(query('note')).toBeNull();
 });
+
+it('keeps the door to the archive on the sheet with nothing kept, so the Deleted shelf is reachable', async () => {
+  /* The Actions menu's Search was home's other way to the archive. Without
+     it, an empty sheet with no "Kept ›" left someone who deleted their last
+     save no way to bring it back. */
+  const kept = FACTS.inspirations.splice(0);
+  try {
+    world = await mountWorld(FACTS, { routerTools: <Where /> }); await settle();
+    const sheet = await openSavesSheet(world.container); await settle();
+    expect(sheet.textContent).toContain('Nothing kept yet.');
+    await pressSheetDoor(world.container, 'Kept'); await settle();
+    expect(query('open'), 'an empty sheet has no way to the archive').toBe('saves');
+  } finally { FACTS.inspirations.push(...kept); }
+});

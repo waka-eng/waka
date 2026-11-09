@@ -11696,7 +11696,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
       ) : null}
       {/* "{n} INSPIRATIONS" LEFT THE NOTEPAD (founder, 2026-11-08: "i also dont
           like seeing 0 inspirations while im saving sth new"). Saves are
-          reached from home (Saves ⌃, Actions › Search), not from a new note. */}
+          reached from home (Kept ⌃, then its "Kept ›" heading), not from a new note. */}
       {/* ═══ THE HOME BAR (design E1) ══════════════════════════════════════
           Write · Photo · Say it in one pill, Chat beside it — see
           `HomeBar`. It stands on the home at rest and nowhere else: the
