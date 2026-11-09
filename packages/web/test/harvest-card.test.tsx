@@ -166,7 +166,11 @@ it("lets the person say why in their own words, and files it with the decline", 
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, "Someone else said it in the meeting");
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await act(async () => button("Not this").click());
+  /* THE TYPED REASON IS SENT, NOT DISMISSED (code review, 2026-11-09): its
+     press said "Not this", the card's dismissal, a second time. */
+  const acts = [...world.container.querySelectorAll(".jar-harvest-acts button")].map((node) => node.textContent);
+  expect(acts, "the reason's send borrows the card's dismissal").not.toContain("Not this");
+  await act(async () => button("Send").click());
   expect(declineHarvest).toHaveBeenCalledWith(CANDIDATE.id, "other", "Someone else said it in the meeting");
 });
 

@@ -415,6 +415,7 @@
   "worldHarvestOtherLabel": "직접 적어 주세요",
   "worldHarvestOtherPlaceholder": "예: 다른 사람이 한 말이에요",
   "worldHarvestOtherBack": "뒤로",
+  "worldHarvestOtherSend": "보내기",
   "worldHarvestInferred": "{tool} 작업 중에 찾았어요",
   "worldHarvestInferredPlain": "AI 도구 작업 중에 찾았어요",
   "worldHarvestNotIt": "이건 아니에요",

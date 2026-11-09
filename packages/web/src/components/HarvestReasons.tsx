@@ -89,7 +89,7 @@ export function HarvestReasons({ text, locale, busy, failed, onReason, onKeepFix
               {say("worldHarvestOtherBack")}
             </button>
             <button type="button" className="jar-harvest-act jar-harvest-act--keep" disabled={busy || !own.trim()} onClick={() => onReason("other", own.trim())}>
-              {say("worldHarvestLetGo")}
+              {say("worldHarvestOtherSend")}
             </button>
           </p>
         </>

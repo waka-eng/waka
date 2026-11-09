@@ -415,6 +415,7 @@
   "worldHarvestOtherLabel": "In your own words",
   "worldHarvestOtherPlaceholder": "For example: someone else said it",
   "worldHarvestOtherBack": "Back",
+  "worldHarvestOtherSend": "Send",
   "worldHarvestInferred": "Noticed while you worked with {tool}",
   "worldHarvestInferredPlain": "Noticed while you worked with an AI tool",
   "worldHarvestNotIt": "Not this",
