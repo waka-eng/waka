@@ -1325,7 +1325,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                 about to scroll, which is navigation. */}
             {focus && onClearFocus ? (
               <button type="button" className="waka-over-count waka-over-unfocus" onClick={onClearFocus}>
-                {say("worldBackToAll")}
+                {say("worldBubbleSeeAll")}
               </button>
             /* ═══ AND THE COUNT COUNTS WHAT IS ACTUALLY ON SCREEN ═════
                 The reference library's power-search component says it as a rule: "Provide a result
