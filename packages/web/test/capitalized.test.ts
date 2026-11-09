@@ -121,15 +121,23 @@ function startsLower(value: string): boolean {
  * answered — the catalogue cannot tell you where its words land.
  *
  * WHAT IS NOT A REASON TO BE HERE. "It is short." "It is a verb." "It sits
- * after a dash." A clause after an em dash IS capitalised in this product
- * already, everywhere, because `whyFailed` appends the API's own sentences
- * that way ("That was not saved — That room could not be made."), so the
+ * after a dash." A reason clause IS capitalised in this product already,
+ * everywhere, because `whyFailed` appends the API's own sentences as a
+ * second sentence ("That was not saved. That room could not be made."), so the
  * reason-clause strings were capitalised rather than exempted. A segment
  * after a `·` is the start of its own segment and was capitalised too. Only a
  * fragment with no boundary in front of it — a verb between two names, an
  * object after one — belongs on this list.
  */
 const EXEMPT: Record<string, string> = {
+  /* THE HOME BAR'S DOORS (2026-11-08) are the objects of the word "Keep"
+     printed before them in the same pill (`HomeBar.tsx`, and the onboarding
+     question bar): "Keep · a thought · a screenshot · your voice". A capital
+     would break the phrase the founder asked for; each door's accessible
+     name is the whole capitalised phrase ("Keep a thought"). */
+  worldBarThought: "HomeBar.tsx / OnboardingQuestion.tsx, after the word Keep",
+  worldBarScreenshot: "HomeBar.tsx / OnboardingQuestion.tsx, after the word Keep",
+  worldBarVoice: "HomeBar.tsx / OnboardingQuestion.tsx, after the word Keep",
   /* THREE EXEMPTIONS WENT WITH `Profile.tsx` (2026-10-11), and the gate
      found them the same run — which is what the companion case below it
      exists for. They excused the mid-sentence verbs on the grants row and

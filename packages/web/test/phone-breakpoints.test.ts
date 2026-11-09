@@ -237,7 +237,7 @@ describe("the four breaks that a browser found and reading did not", () => {
   it("keeps every control in the bottom bar from shrinking, and tightens the bar on a phone", () => {
     const css = rules("claims.css");
     expect(
-      /\.waka-dock-item,\s*\.waka-dock-tool,\s*\.waka-dock-sep\s*\{\s*flex:\s*none;/.test(css),
+      /\.waka-dock-item,\s*\.waka-dock-tool\s*\{\s*flex:\s*none;/.test(css),
       "the dock's controls lost `flex: none`. Without it a crowded bar shrinks " +
         "Close and the tools below their 44px target — or, with nothing able " +
         "to shrink, runs off the right edge: Close at x 342-403 on a 320px phone.",
@@ -550,8 +550,16 @@ describe("the acts are reachable by a thumb", () => {
     ["claims.css", ".waka-list-row", "opening a conversation, a save or a principle"],
     ["claims.css", ".waka-account-out", "signing out"],
     ["claims.css", ".jar-char-bubble-act", "the way into a conversation"],
-    ["chat.css", ".chat-page .chat-send", "the one act on the chat surface"],
+    /* `.chat-page .chat-send` LEFT THIS LIST on 2026-11-09: Send is the
+       shared note bar's action now, 44px (`--waka-corner`) at every pointer
+       (checked below), so there is no coarse-only growth left to ask for. */
   ];
+
+  it("gives the chat's Send the bar's 44px target at every pointer", () => {
+    const claims = readFileSync(resolve(STYLES, "claims.css"), "utf8");
+    expect(claims).toMatch(/--waka-corner:\s*44px/);
+    expect(claims).toMatch(/\.waka-note-bar \.waka-note-bar-row \.waka-note-bar-action \{[^}]*min-height: var\(--waka-corner\)/);
+  });
 
   for (const [file, selector, what] of ACTS) {
     it(`grows ${selector} to a thumb's target on a coarse pointer`, () => {

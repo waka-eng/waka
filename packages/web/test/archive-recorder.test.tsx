@@ -179,7 +179,7 @@ it("stops a recording whose Record and the archive's leaving land in one commit"
   function Toggle() {
     const [shown, setShown] = useState(true);
     hide = () => setShown(false);
-    return shown ? <SavesOverlay locale="en-US" title="Your Inspirations" onClose={() => undefined} /> : null;
+    return shown ? <SavesOverlay locale="en-US" title="Kept" onClose={() => undefined} /> : null;
   }
   const Host = () => <ArchiveRecorderProvider><Toggle /></ArchiveRecorderProvider>;
   const slot = document.createElement("span");
@@ -189,8 +189,8 @@ it("stops a recording whose Record and the archive's leaving land in one commit"
     await act(async () => root.render(<Host />));
     for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) await act(async () => { await Promise.resolve(); });
     await act(async () => host.querySelector<HTMLButtonElement>(".waka-list-row")!.click());
-    for (let turn = 0; turn < 12 && !slot.querySelector('[aria-label="Record"]'); turn += 1) await act(async () => { await Promise.resolve(); });
-    const record = slot.querySelector<HTMLButtonElement>('[aria-label="Record"]');
+    for (let turn = 0; turn < 12 && !slot.querySelector('[aria-label="Your voice"]'); turn += 1) await act(async () => { await Promise.resolve(); });
+    const record = slot.querySelector<HTMLButtonElement>('[aria-label="Your voice"]');
     expect(record, "the open note offers no Record").toBeTruthy();
     await act(async () => { record!.click(); hide(); });
     for (let turn = 0; turn < 6; turn += 1) await act(async () => { await Promise.resolve(); });

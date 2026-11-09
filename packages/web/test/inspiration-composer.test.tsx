@@ -66,7 +66,7 @@ it('commits nothing itself, because keeping it is the bar\'s job',async()=>{
      below. A Save growing back on this PAGE would wear one or the other,
      because those are the two ways this product spells that control. */
   expect(host.querySelectorAll('.waka-dock-tool--keep'), 'a Save grew back on the page').toHaveLength(0);
-  expect(host.querySelector('[aria-label="Save inspiration"]')).toBeNull();
+  expect(host.querySelector('.waka-dock-save')).toBeNull();
   expect(props.onSubmit).not.toHaveBeenCalled();
 });
 /* ═══ THE HEADING ROW IS GONE, AND SO IS ITS SPARK ═══════════════════════
@@ -114,7 +114,7 @@ it('opens straight into the words, under the moment and the way back',async()=>{
      and clicking on it leads to new inspiration and new chat, and user can
      go to inspiration list and chat list ONLY from that new page." The bar's
      word now makes a new note, so this page is the archive's only way in.
-     So the row held EXACTLY that one press — "All inspirations", in words.
+     So the row held EXACTLY that one press — "Back", in words.
 
      ═══ AND THEN NOTHING, BECAUSE NOTHING SITS IN A CORNER ════════════════
      Founder, the same day: "never put something on any corners. So at the
@@ -130,7 +130,7 @@ it('opens straight into the words, under the moment and the way back',async()=>{
      it is the clock — but it must be a real stamp rather than an empty node,
      which is what a missing `momentStamp` would leave behind. */
   expect(host.querySelector('.jar-note-when')?.textContent).toMatch(/\d{4}/);
-  expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('Capture inspiration');
+  expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('Keep a thought');
   expect(document.activeElement).toBe(host.querySelector('textarea'));
   expect(props.onSubmit).not.toHaveBeenCalled();
 });
@@ -277,7 +277,7 @@ it('says a stored file problem and a failed upload in the reader’s language', 
 it('restores the separate link draft and includes it through the single Save action',async()=>{
   props.text='My note';props.linkText='https://example.test/unfinished';await mount();
   expect(host.querySelector<HTMLInputElement>('input[type=url]')?.value).toBe(props.linkText);
-  expect(host.textContent).toContain('This link will be included when you save.');
+  expect(host.textContent).toContain('This link will be kept with the note.');
   /* THROUGH ENTER IN THE FIELD, which is the composer's one remaining way to
      commit now that Save is in the bar — and the only one that was ever
      reachable without lifting your hands off the keyboard. It is the same
@@ -291,7 +291,7 @@ it('refuses unsafe link schemes without submitting or discarding the draft',asyn
   props.linkText='javascript:alert(1)';await mount();
   await act(async()=>enterLink());
   expect(props.onSubmit).not.toHaveBeenCalled();expect(props.onLinkText).not.toHaveBeenCalled();
-  expect(host.querySelector<HTMLInputElement>('input[type=url]')!.validationMessage).toContain('HTTP or HTTPS');
+  expect(host.querySelector<HTMLInputElement>('input[type=url]')!.validationMessage).toContain('Paste a web address');
 });
 
 /**
@@ -344,7 +344,7 @@ it('renders exactly one of each corner, never two', async () => {
 
 it('requires confirmation to discard a draft, allows cancel, and blocks discard during a pending save', async () => {
   props.onDiscard=vi.fn().mockResolvedValue(true);
-  props.text='Keep these words'; await mount();
+  props.text='Save'; await mount();
   const button=(label:string)=>[...host.querySelectorAll('button')].find(node=>node.textContent===label)!;
   const more=()=>host.querySelector<HTMLButtonElement>('button[aria-label="More"]')!;
   expect(host.textContent).not.toContain('Discard draft');
@@ -388,43 +388,46 @@ it('keeps a failed discard available to retry and lets Escape return to editing'
    creature asks which line stuck and says the save is safe either way. */
 it('makes a photo the page\'s picture, and draws the words it read only when they are given', async () => {
   props.media = [{ id: 'shot', type: 'image', name: 'Screenshot.png', blob: new Blob(['p'], { type: 'image/png' }) }];
-  props.noteBar = { mic: <button type="button" aria-label="Speak" />, save: <button type="button" className="waka-dock-save">Save</button>, state: null };
+  props.noteBar = { mic: <button type="button" aria-label="Your voice" />, save: <button type="button" className="waka-dock-save">Save</button>, state: null };
   await mount();
   expect(host.querySelector('.waka-note-hero img')?.getAttribute('alt')).toBe('Screenshot.png');
-  expect(host.querySelector('.waka-note-says')?.textContent).toBe('What about it stuck with you?');
+  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('What about it stuck with you?');
   expect(host.textContent).not.toContain('The words I read');
-  expect(host.querySelector('.waka-note-hint')?.textContent).toBe('A few words is plenty. Or none — just Save.');
+  /* The hint is the bubble's softer second line (founder, 2026-11-08), not a
+     line floating over the bar. */
+  expect(host.querySelector('.waka-note-says .waka-note-says-softer')?.textContent).toBe('A few words is plenty. Or just Keep.');
+  expect(host.querySelector('.waka-note-hint'), 'the hint still floats over the bar').toBeNull();
   expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Add a note…');
   /* The words get the whole bar; the row is under them. */
   expect(host.querySelector('.waka-note-bar')!.firstElementChild?.tagName).toBe('TEXTAREA');
 
   const fix = vi.fn(async () => 'saved' as const);
   props.readWords = { status: 'ready', text: 'Nobody feels ready.' }; props.onFixReadWords = fix; await mount();
-  expect(host.querySelector('.waka-note-says')?.textContent).toBe('What made this line stick with you?');
+  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('What made this line stick with you?');
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-read-act')!.click());
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-read-act')!.click());
   expect(fix).toHaveBeenCalledWith('Nobody feels ready.');
 
   props.readWords = { status: 'unreadable' }; await mount();
-  expect(host.querySelector('.waka-note-says')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
+  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
   expect(host.querySelector('.waka-note-hero')?.hasAttribute('data-blurred')).toBe(true);
   /* Unreadable promises nothing; only a read queued again says it will retry. */
   expect(host.textContent).not.toContain('Your screenshot is saved either way.');
-  expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Type the line, or just Save');
+  expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Type the line, or just Keep');
   /* Retrying asks the same; "I'll try reading it again" is promised only
      where a read is known to be queued (the saved note), never on a guess. */
   props.readWords = { status: 'retrying' }; await mount();
-  expect(host.querySelector('.waka-note-says')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
+  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
   expect(host.textContent).not.toContain('Your screenshot is saved either way.');
 });
 
 /* F5: a share from another app is asked about, and still waits for Save. */
 it('asks why about a shared link, with Add a note and That\'s all, and That\'s all saves', async () => {
   props.media = []; props.text = 'https://example.com/a'; props.arrival = true; await mount();
-  expect(host.querySelector('.waka-note-says')?.textContent).toBe('Got the link you shared. Want to say why?');
+  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('Got the link you shared. Want to say why?');
   const acts = [...host.querySelectorAll<HTMLButtonElement>('.waka-note-arrival-act')];
-  expect(acts.map(act => act.textContent)).toEqual(['Add a note', 'That\'s all']);
+  expect(acts.map(act => act.textContent)).toEqual(['Add a note', 'Just keep it']);
   expect(props.onSubmit).not.toHaveBeenCalled();
   await act(async () => acts[1]!.click());
   expect(props.onSubmit).toHaveBeenCalledOnce();

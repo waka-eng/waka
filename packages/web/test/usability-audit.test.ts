@@ -85,7 +85,9 @@ describe("the recording clock is never read out every second (review of #11)", (
       if (file === "pages/Home.tsx") {
         // One "Recording" region at a time (round 6): the foot only while the
         // mouth is closed, the bar's fallback only while it is open.
-        expect(source).toMatch(/recording\.phase !== 'idle' && mouthOpen \? say\('worldComposerRecordingNow'\)/);
+        // (The bar's line is drawn only while recording, so its guard is the
+        // branch around it rather than repeated inside the LiveWord.)
+        expect(source).toMatch(/\{recording\.phase !== 'idle' \? \([\s\S]{0,900}composerState \|\| \(mouthOpen \? say\('worldComposerRecordingNow'\)/);
         const foot = source.indexOf('<div className="waka-composer-foot"');
         expect(source.slice(foot - 60, foot)).toContain("!mouthOpen ?");
       }

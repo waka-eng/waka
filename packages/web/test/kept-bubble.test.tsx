@@ -65,7 +65,7 @@ describe('how long the bubble stays', () => {
 
 it('keeps "Kept" up past the four seconds a whisper gets, and lets it go after its own stay', async () => {
   world = await mountWorld(FACTS); await settle();
-  await pressHomeBar(world.container, 'Write'); await settle();
+  await pressHomeBar(world.container, 'Keep a thought'); await settle();
   const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'Glued the chair myself.');
@@ -94,7 +94,7 @@ it('gives a second save its own stay, though it says the same word', async () =>
   const advance = vi.advanceTimersByTimeAsync.bind(vi);
   vi.spyOn(vi, 'advanceTimersByTimeAsync').mockImplementation(async (ms: number) => { moved += ms; return advance(ms); });
   const saveOne = async (words: string) => {
-    await pressHomeBar(world!.container, 'Write'); await settle();
+    await pressHomeBar(world!.container, 'Keep a thought'); await settle();
     const field = world!.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, words);

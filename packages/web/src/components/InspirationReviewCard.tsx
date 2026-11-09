@@ -33,7 +33,6 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
     <p className="jar-pick-source">{say('worldInspirationReviewOriginal')} · {dateStamp(new Date(item.createdAt).getTime(),locale)}</p>
     <blockquote className="jar-pick-statement waka-inspiration-review-text">{item.text || item.attachmentLabel || say('worldSavedWord')}</blockquote>
     {item.text&&item.attachmentLabel?<p className="jar-pick-source">{item.attachmentLabel}</p>:null}
-    <p className="jar-pick-source">{say('worldInspirationReviewExplain')}</p>
     <button type="button" className="waka-inspiration-review-action" disabled={busy} onClick={onOpen}>{say('worldInspirationReviewOpen')}</button>{' '}
     {changed?<button type="button" className="waka-inspiration-review-action" disabled={busy} onClick={()=>{
       setBusy(true);void readInspirationRelevance(item.id,profileId).then(fresh=>{if(!alive.current)return;setItem(fresh);setChanged(false);setFailed(false);intent.current=null;}).catch(()=>{if(alive.current)setFailed(true);}).finally(()=>{if(alive.current)setBusy(false);});

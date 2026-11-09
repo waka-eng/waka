@@ -59,7 +59,7 @@ it('keeps the agent note URL while its roster loads, then recovers edited words 
   expect(page()?.value).toBe('Edited words survive refresh.');
   expect(new URLSearchParams(location.search).get('note')).toBe('agent-note');
   expect(vi.mocked(updateInspiration)).not.toHaveBeenCalled();
-  const save=world.container.querySelector<HTMLButtonElement>('button[aria-label="Save inspiration"]');
+  const save=world.container.querySelector<HTMLButtonElement>('button.waka-dock-save');
   await act(async()=>save!.click());await settle();
   expect(S.text).toBe('Edited words survive refresh.');
   expect(readNoteEdit(scope,'agent-note')).toBeNull();

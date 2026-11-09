@@ -79,11 +79,11 @@ it("explains permanent deletion and requires a separate confirmation in both lan
     await act(async () => danger.click());
     const hint = host.querySelector(".waka-settings-note")?.textContent ?? "";
     expect(hint, `${locale} still asks for a typed word`).not.toMatch(/DELETE|입력/);
-    expect(hint).toMatch(locale === "en-US" ? /cannot be undone/ : /되돌릴 수 없어요/);
+    expect(hint).toMatch(locale === "en-US" ? /can’t be undone/ : /되돌릴 수 없어요/);
     const erase = host.querySelector<HTMLButtonElement>('.waka-settings-body button')!;
     await act(async () => erase.click());
     expect(deletes).toBe(0);
-    expect(erase.textContent).toMatch(locale === 'en-US' ? /Delete it anyway/ : /그래도 지우기/);
+    expect(erase.textContent).toMatch(locale === 'en-US' ? /^Delete$/ : /^삭제$/);
     await act(async () => erase.click());
     expect(deletes).toBe(1);
     /* a fresh panel per language: the disclosure is a toggle, and pressing

@@ -155,7 +155,7 @@ describe("one accepted set of photos, stated once", () => {
      *   trusted.
      *
      *   `ConversationPanel`'s `checkPick` — THE FOURTH, 2026-10-16: a
-     *   chat's ＋ → "Add photos", and a photo that arrives by "Add file",
+     *   chat's ＋ → "Add photo", and a photo that arrives by "Add file",
      *   both sniffed before `uploadMessageAttachment` stages them. The
      *   notepad's and the archive note's "Add file" rows reach the sniffer
      *   through the two calls already counted, by their 'file' door.

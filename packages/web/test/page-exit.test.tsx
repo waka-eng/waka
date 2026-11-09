@@ -15,7 +15,7 @@
  * back control for exactly these complaints, and it looked up the row to press
  * by string suffix — `id.endsWith("top-of-mind")`. The switcher later became a
  * list of OWNERS, whose rows are named `me` and `agent:<id>`, so `find`
- * returned `undefined` and the control rendered, read "Your top of mind",
+ * returned `undefined` and the control rendered, read "On your mind lately",
  * carried a left chevron, and DID NOTHING. On `/days` and on the settings page
  * the cog navigates to, that is the founder's sentence live, with a button
  * sitting right there claiming otherwise. A press that no-ops is worse than a
@@ -124,7 +124,7 @@ let root: Root;
 let here = "";
 
 /* PATH AND QUERY, because the bug that lived here for a while was entirely
-   in the query: the exit read "Your top of mind" and landed on
+   in the query: the exit read "On your mind lately" and landed on
    `/?open=saves`, and a test reading the pathname alone saw `/` and passed. */
 function Address(): null {
   const at = useLocation();

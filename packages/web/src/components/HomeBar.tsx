@@ -1,7 +1,7 @@
 /**
  * ═══ THE HOME BAR — WHERE YOU START (design E1, F1, F3) ═══════════════════
  *
- * One 64px pill with three labelled doors — Write · Photo · Say it — and a
+ * One 64px pill with three labelled doors after the word Keep, and a
  * round Chat beside it. It replaces "Inspiration · Chat" and the capture pill
  * that used to stand over it: saving was a door to a door, and the pill IS
  * the start now. Write opens the notepad (founder, on #463: "i want save to
@@ -19,8 +19,16 @@
  * "Saved" in its place (F3). The confirmation takes the pull's spot so the
  * screen never stacks two lines over the bar.
  *
- * Past chats and Search are not here: they are doors you take sometimes, so
- * they live in the corner's Actions menu.
+ * "KEEP" · A THOUGHT · A SCREENSHOT · YOUR VOICE (2026-11-08). Founder:
+ * "better text than Write, Photo, Say it. it's also not clear this is to
+ * save inspiration." So the pill says its verb once, as a quiet word that is
+ * not a button, and each door names WHAT you keep — the same three the
+ * onboarding intro names (B: a thought, a screenshot, your voice). Each door's
+ * accessible name is the whole phrase ("Keep a thought"), because a door is
+ * pressed alone and "a thought" is not an act.
+ *
+ * Past chats and Search are not here. Search is the field at the top of the
+ * Saves sheet; past chats are reached from the chat page, through Chat.
  */
 import { useRef } from 'react';
 
@@ -53,7 +61,7 @@ export function HomeBar(props: {
   return (
     <div className="waka-home-bar" data-jar-chrome="1" data-jar-interactive="1">
       {props.saved ? (
-        <p className="waka-home-bar-saved" role="status">{say('worldSavedWord')}</p>
+        <p className="waka-home-bar-saved" role="status">{say('worldBubbleKept')}</p>
       ) : props.pull ? (
         <button type="button" className="waka-home-bar-pull" aria-haspopup="dialog" onClick={props.pull.onOpen}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
@@ -64,16 +72,17 @@ export function HomeBar(props: {
       <div className="waka-home-bar-row">
         {save ? (
           <nav className="waka-home-bar-pill" aria-label={say('worldBarLabel')}>
-            <button type="button" className="waka-home-bar-door" onClick={save.onWrite}>
-              <HomeActionIcon kind="write" /><span>{say('worldBarWrite')}</span>
+            <span className="waka-home-bar-keep" aria-hidden="true">{say('worldBarKeep')}</span>
+            <button type="button" className="waka-home-bar-door" aria-label={say('worldBarKeepThought')} onClick={save.onWrite}>
+              <HomeActionIcon kind="write" /><span>{say('worldBarThought')}</span>
             </button>
             {/* THE PICKER OPENS INSIDE THE PRESS: a file input may only be
                 clicked from a person's own gesture. */}
-            <button type="button" className="waka-home-bar-door" disabled={save.photoDisabled} onClick={() => photos.current?.click()}>
-              <HomeActionIcon kind="photo" /><span>{say('worldBarPhoto')}</span>
+            <button type="button" className="waka-home-bar-door" aria-label={say('worldBarKeepScreenshot')} disabled={save.photoDisabled} onClick={() => photos.current?.click()}>
+              <HomeActionIcon kind="photo" /><span>{say('worldBarScreenshot')}</span>
             </button>
-            <button type="button" className="waka-home-bar-door" disabled={!save.canSay} onClick={save.onSay}>
-              <HomeActionIcon kind="record" /><span>{say('worldBarSay')}</span>
+            <button type="button" className="waka-home-bar-door" aria-label={say('worldBarKeepVoice')} disabled={!save.canSay} onClick={save.onSay}>
+              <HomeActionIcon kind="record" /><span>{say('worldBarVoice')}</span>
             </button>
             <input ref={photos} type="file" hidden multiple accept={PHOTO_ACCEPT}
               onChange={(event) => { const picked = [...event.target.files ?? []]; event.target.value = '';

@@ -127,7 +127,7 @@ const PROBE = `(() => {
   for (const e of document.querySelectorAll("button, a[href], [role=button]")) {
     if (skip(e) || !visible(e)) continue;
     /* ── innerText IS A LAYOUT QUESTION AND AN ACCESSIBLE NAME IS NOT ────
-       THIS REPORTED A BUTTON WITH THE WORDS "Check progress" ON IT AS HAVING
+       THIS REPORTED A BUTTON WITH THE WORDS "Check again" ON IT AS HAVING
        NO NAME, four times over, once per state of the account card. The
        control sits inside a collapsed details element, and innerText is
        defined in terms of RENDERED text — so it answers the empty string for

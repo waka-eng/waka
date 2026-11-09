@@ -29,7 +29,7 @@
  * WHAT IS ASSERTED, AND WHY IT IS A LEDGER AND NOT AN EQUALITY. The two
  * rows are NOT identical today, and one difference is a known, reported
  * defect in a file this suite deliberately does not reach into:
- * `Home.tsx`'s notepad offers dictation where the browser has it ("Speak",
+ * `Home.tsx`'s notepad offers dictation where the browser has it ("Your voice",
  * which lands as TEXT), and the saved note's row offers the audio recorder
  * instead. So `KNOWN_DIFFERENCES` names each surviving difference, with the
  * argument for it, and the test asserts the difference set is EXACTLY that
@@ -191,7 +191,7 @@ async function notepad(words: string): Promise<ReturnType<typeof dockPresses>> {
   expect(world.container.querySelector(".jar-inspiration-composer"), "the notepad did not open").toBeTruthy();
   const bar = world.container.querySelector(".waka-note-bar-row");
   expect(bar, "the notepad has no note bar").toBeTruthy();
-  expect(bar?.querySelector(".waka-dock-save")?.textContent).toBe("Save");
+  expect(bar?.querySelector(".waka-dock-save")?.textContent).toBe("Keep");
   expect(world.container.querySelector(".waka-page-back")?.textContent?.trim(), "the notepad has no Close").toBe("Close");
   return dockPresses();
 }
@@ -255,7 +255,9 @@ async function bothDoors(words: string): Promise<{ fresh: ReturnType<typeof dock
  * edits, and is the owner of those files' call.
  */
 const KNOWN_DIFFERENCES = [
-  { at: 0, notepad: "Speak", savedNote: "Record" },
+  /* KEEP MAKES A NOTE, SAVE CHANGES ONE (2026-11-08 vocabulary): the same
+     seat and the same rule, named for what each press does. */
+  { at: 3, notepad: "Keep", savedNote: "Save" },
 ];
 
 /**
@@ -292,7 +294,7 @@ const KNOWN_DIFFERENCES = [
    one overflow so every act keeps its 44px target. It is the same two verbs
    in another shape — rendered always, chosen by the stylesheet — so it is
    one-sided for exactly their reason. */
-const ONLY_ON_THE_SAVED_NOTE = ["Delete", "Share this inspiration", "More"];
+const ONLY_ON_THE_SAVED_NOTE = ["Delete", "Share this note", "More"];
 
 /** Both rows, with the one-sided presses taken out so the rest can be compared. */
 function comparable(row: ReturnType<typeof dockPresses>) {
@@ -301,7 +303,7 @@ function comparable(row: ReturnType<typeof dockPresses>) {
 
 /** The press a page calls Save, wherever it sits in the row. */
 function saveIn(row: ReturnType<typeof dockPresses>) {
-  return row.find((press) => press.label === "Save inspiration");
+  return row.find((press) => press.label === "Keep" || press.label === "Save");
 }
 
 /** Where the two rows disagree on what a press is called, in order. */
@@ -354,8 +356,8 @@ it("gives a new note and a saved one the same row of presses, bar what is writte
      started asserting about the trash instead, and said "Save" while doing
      it. Order is already covered — `differences()` compares the rows
      index by index — so position is not what these two lines are for. */
-  expect(saveIn(fresh), "the notepad's Save is not where it was").toMatchObject({ label: "Save inspiration", disabled: false });
-  expect(saveIn(kept), "the saved note's Save is not lit by a change").toMatchObject({ label: "Save inspiration", disabled: false });
+  expect(saveIn(fresh), "the notepad's Save is not where it was").toMatchObject({ label: "Keep", disabled: false });
+  expect(saveIn(kept), "the saved note's Save is not lit by a change").toMatchObject({ label: "Save", disabled: false });
 
   /* ONLY THE NAMES MAY DIFFER, AND ONLY WHERE THE LEDGER SAYS SO. */
   expect(differences(fresh, kept)).toEqual(KNOWN_DIFFERENCES);
@@ -378,8 +380,8 @@ it("dims Save on both pages when there is nothing to keep", async () => {
 
   /* BY NAME, for the reason given at `saveIn`: Delete now sits after Save
      on the saved note, so `at(-1)` reads the trash and asserts "Save". */
-  expect(saveIn(fresh), "the blank notepad offers a pressable Save").toMatchObject({ label: "Save inspiration", disabled: true });
-  expect(saveIn(kept), "an unedited saved note offers a pressable Save").toMatchObject({ label: "Save inspiration", disabled: true });
+  expect(saveIn(fresh), "the blank notepad offers a pressable Save").toMatchObject({ label: "Keep", disabled: true });
+  expect(saveIn(kept), "an unedited saved note offers a pressable Save").toMatchObject({ label: "Save", disabled: true });
   /* AND DELETE IS NOT DIMMED BY THE SAME STATE. Nothing to keep is not
      nothing to delete — a saved note nobody has typed into is exactly the
      one you might want gone, and a trash that greys out with Save would be

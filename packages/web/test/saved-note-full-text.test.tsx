@@ -121,7 +121,7 @@ type World = { profileId?: string };
     every render, exactly as Home passes them. */
 async function renderArchive(whose: World = {}): Promise<void> {
   await act(async () => root.render(
-    <Archive locale="en-US" title="Your Inspirations" onClose={vi.fn()}
+    <Archive locale="en-US" title="Kept" onClose={vi.fn()}
       profileId={whose.profileId}
       onNoteOpen={(close) => { closer = close; }} />,
   ));
@@ -163,7 +163,7 @@ it("keeps all 1,000 characters through open → edit → Save", async () => {
   /* Before the text arrives: the preview stands in, read-only, nothing can be saved. */
   expect(page().readOnly).toBe(true);
   expect(save()).toBeNull(); // no making tool is offered until there is a note to act on
-  expect(bar()).toBe("Opening…");
+  expect(bar()).toBe("Loading…");
   await openNoteActions();
   expect(document.querySelector('[aria-label="Delete"]'), "Delete needs only the id").not.toBeNull();
 
@@ -201,7 +201,7 @@ it("stays read-only and never saves when the read fails, and Try again recovers"
   await answer(false);
   expect(page().readOnly).toBe(true);
   expect(save()).toBeNull();
-  expect(bar()).toBe("Didn’t open.");
+  expect(bar()).toBe("Couldn’t open this note.");
   /* The alert holds the sentence only; Try again is its own control beside
      it, and Delete is still offered — it needs nothing but the id. */
   const alert = slot.querySelector('[role="alert"]')!;
@@ -217,7 +217,7 @@ it("stays read-only and never saves when the read fails, and Try again recovers"
   await answer(false);
   const retry = [...slot.querySelectorAll("button")].find((item) => item.textContent === "Try again")!;
   await act(async () => retry.click());
-  expect(bar()).toBe("Opening…");
+  expect(bar()).toBe("Loading…");
   await answer(true);
   expect(page().value).toBe(LONG);
   expect(page().readOnly).toBe(false);
@@ -298,7 +298,7 @@ it("folds Share and Delete into a More menu with the bar's menu keys", async () 
   expect(more.getAttribute("aria-haspopup")).toBe("menu");
   await act(async () => more.click());
   const rows = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-  expect(rows().map((row) => row.textContent)).toEqual(["Share this inspiration", "Delete"]);
+  expect(rows().map((row) => row.textContent)).toEqual(["Share this note", "Delete"]);
   expect(document.activeElement, "focus moves into the menu").toBe(rows()[0]);
   const key = async (name: string) => act(async () => {
     (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true }));
@@ -390,14 +390,14 @@ it("keeps one note's upload off another note's bar", async () => {
 });
 
 /* A READ THAT NEVER ANSWERS ENDS (review, 2026-10-18): after the limit the
-   note is a failed read with Try again, never an editor stuck "Opening…". */
+   note is a failed read with Try again, never an editor stuck "Loading…". */
 it("ends a full-text read that never answers as a failed read with Try again", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
     await openSave(longRow, LONG); // the read is held and never answered
-    expect(bar()).toBe("Opening…");
+    expect(bar()).toBe("Loading…");
     await act(async () => { vi.advanceTimersByTime(20_001); });
-    expect(bar()).toBe("Didn’t open.");
+    expect(bar()).toBe("Couldn’t open this note.");
     expect(page().readOnly).toBe(true);
     expect([...slot.querySelectorAll("button")].some((b) => b.textContent === "Try again")).toBe(true);
   } finally {
@@ -421,4 +421,74 @@ it('reopens every saved photo, recording and file through an owned read URL', as
   expect(file?.href).toBe('https://bucket.test/document');
   expect(host.querySelector('img[src*="preview-image"]')).toBeNull();
   expect(state.written).toEqual([]);
+});
+
+/* THE MIC ON A SAVED NOTE WRITES WHAT YOU SAY (2026-11-08), in the listening
+   view the notepad and a chat use: it used to record an audio clip here and
+   write words on the notepad, one glyph meaning two acts. */
+it("opens the listening view from a saved note's mic, and Done drops the words into the note", async () => {
+  class Engine {
+    static live: Engine | null = null;
+    lang = ""; continuous = false; interimResults = false;
+    onresult: ((event: unknown) => void) | null = null;
+    onerror: ((event: unknown) => void) | null = null;
+    onend: (() => void) | null = null;
+    constructor() { Engine.live = this; }
+    start() {}
+    stop() { this.onend?.(); }
+    abort() {}
+  }
+  (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition = Engine;
+  try {
+    await openSave(longRow, "an older line");
+    await answer(true);
+    const mic = slot.querySelector<HTMLButtonElement>('.waka-dock-tool[aria-label="Your voice"]')!;
+    expect(mic, "the saved note has no mic").toBeTruthy();
+    await act(async () => mic.click());
+    expect(host.querySelector(".waka-listening"), "the mic did not open the listening view").toBeTruthy();
+    expect(page(), "the typing field stays up while listening").toBeNull();
+    await act(async () => Engine.live!.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: "and a new one" }], { isFinal: true })] }));
+    await act(async () => host.querySelector<HTMLButtonElement>(".waka-listening-done")!.click());
+    expect(host.querySelector(".waka-listening")).toBeNull();
+    expect(page().value).toBe("an older line and a new one");
+    expect(save().disabled, "spoken words are an edit like typed ones").toBe(false);
+  } finally {
+    delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+  }
+});
+
+/* A NOTE THAT CLOSES ABORTS ITS MICROPHONE (review, 2026-11-09). It used to
+   `stop`, which asks the engine for one more final; that late final then
+   landed in whatever note was open next. Leaving keeps the words already
+   heard, and nothing the session sends afterwards is written anywhere. */
+it("aborts the mic when the note closes: the words heard are kept, a late result is dropped", async () => {
+  class Engine {
+    static live: Engine | null = null;
+    lang = ""; continuous = false; interimResults = false; aborted = false; stopped = false;
+    onresult: ((event: unknown) => void) | null = null;
+    onerror: ((event: unknown) => void) | null = null;
+    onend: (() => void) | null = null;
+    constructor() { Engine.live = this; }
+    start() {}
+    stop() { this.stopped = true; }
+    abort() { this.aborted = true; }
+    say(text: string) { this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: text }], { isFinal: true })] }); }
+  }
+  (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition = Engine;
+  try {
+    await openSave(longRow, "an older line");
+    await answer(true);
+    await act(async () => slot.querySelector<HTMLButtonElement>('.waka-dock-tool[aria-label="Your voice"]')!.click());
+    const session = Engine.live!;
+    await act(async () => session.say("and a new one"));
+    await act(async () => { closer?.(); await Promise.resolve(); });
+    expect(session.aborted, "the closing note stopped its mic instead of aborting it").toBe(true);
+    expect(session.stopped, "stop asks for a late final").toBe(false);
+    const kept = JSON.stringify(state.written);
+    expect(kept, "leaving dropped the words that were heard").toContain("an older line and a new one");
+    await act(async () => session.say("and a new one and a late tail"));
+    expect(JSON.stringify(state.written), "a late result was written after the note closed").toBe(kept);
+  } finally {
+    delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+  }
 });

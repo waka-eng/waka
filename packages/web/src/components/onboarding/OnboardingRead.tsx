@@ -67,9 +67,9 @@ export function OnboardingReveal({ locale, reading, behind, busy, error, onTalk,
       <div className="onb-stage onb-reveal">
         <div className="onb-center">
           <div className="onb-group">
-        <SayBubble say="read" className="onb-read" label={say("onboardingEarlyRead")}>
+        <SayBubble say="read" label={say("onboardingEarlyRead")}>
           <span className="jar-char-bubble-of">{say("onboardingEarlyRead")}</span>
-          <p className="onb-say-line">{reading}</p>
+          <p>{reading}</p>
           {why && behind.length ? (
             <ul className="onb-read-why" aria-label={say("onboardingWhyFrom")}>
               {behind.map((line, at) => <li key={at}>{line}</li>)}

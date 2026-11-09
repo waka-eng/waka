@@ -41,7 +41,7 @@ const mount=async()=>{await act(async()=>root.render(<PrincipleShare scope={scop
 const remount=async()=>{await act(async()=>root.unmount());root=createRoot(host);await mount();};
 const button=(text:string)=>[...host.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent===text)!;
 const type=(text:string)=>act(async()=>{const area=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,text);area.dispatchEvent(new Event('input',{bubbles:true}));});
-const discard=async()=>{await act(async()=>button('Discard draft').click());await settle();};
+const discard=async()=>{await act(async()=>button('Discard draft').click());await act(async()=>button('Discard').click());await settle();};
 const texts=()=>readPrincipleArtifactDrafts(scope,id).map(row=>row.value.entries[0].text);
 const picker=()=>[...host.querySelectorAll('select')].find(row=>[...row.options].some(option=>/^\d+\. /.test(option.textContent??'')));
 
@@ -54,4 +54,21 @@ it('keeps the restored card in the picker when its fork is discarded',async()=>{
   await type('A fresh card');
   expect([...picker()!.options].map(option=>option.textContent?.replace(/^\d+\. /,'')).sort()).toEqual(['A fresh card','The card I kept']);
   expect(sessionStorage.getItem('waka:draftLineage:own'),'a card fork was recorded for clearing').toBeNull();
+});
+
+/* CODE REVIEW, 2026-11-09: the in-place "Discard this card?" outlived a
+   change of draft, so answering it discarded whichever draft was showing by
+   then, not the one it asked about. While it is asked the picker holds
+   still; a draft that changes anyway puts the question away. */
+it('asks to discard only the draft it is about: the picker holds still, and a new draft puts the question away',async()=>{
+  await mount();await type('The card I kept');await remount();
+  await type('A version I will throw away');
+  await act(async()=>button('Discard draft').click());
+  expect(host.textContent).toContain('Discard this card?');
+  expect(picker()!.disabled,'the draft picker can change the draft under the question').toBe(true);
+  /* a draft change from anywhere else still clears it */
+  await act(async()=>{const select=picker()!;select.disabled=false;const kept=[...select.options].find(option=>/The card I kept/.test(option.textContent??''))!;select.value=kept.value;select.dispatchEvent(new Event('change',{bubbles:true}));});
+  await settle();
+  expect(host.textContent,'the question stayed up over another draft').not.toContain('Discard this card?');
+  expect(texts().sort()).toEqual(['A version I will throw away','The card I kept']);
 });

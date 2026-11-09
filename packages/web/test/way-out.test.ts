@@ -336,6 +336,12 @@ const NO_VISIBLE_WAY_OUT: Record<string, string> = {
      other. The ratchet below caught the stale entries the same day, which is
      the behaviour it exists for — an exemption that outlives its reason
      excuses nothing while reading as if it does. */
+  /* THE SAVES SHEET'S WAY DOWN IS IN THE TOP BAR'S ROW (2026-11-08), drawn by
+     `Home.tsx` into the Menu's left slot while the sheet is up: "⌄ Home",
+     visible and one press. Founder: "the down caret and Home feels awkward
+     position relative to the top right buttons", so it left the sheet for
+     the row the eye already reads. `home-navigation.test.tsx` presses it. */
+  "components/HomeStream.tsx": "its visible ⌄ Home stands in the top bar's row (Home.tsx, .waka-stream-home)",
 };
 
 function sourceFiles(dir: string, found: string[] = []): string[] {
@@ -428,40 +434,26 @@ describe("every surface has a way out you can see", () => {
 
   it("keeps the dock standing over every destination that leans on it", () => {
     const home = readFileSync(join("src", "pages", "Home.tsx"), "utf8");
-    /* THE BAR'S OWN LIST, read out of the source rather than restated here —
-       a second copy of it would agree with this file and not with the
-       product. */
-    const dock = /className=\{`waka-dock-item/.test(home)
-      ? [...home.matchAll(/\{ id: '([a-z]+)', label: (?:composerHasWords \? 'worldContinueDraft' as const : )?'worldDock/g)].map((hit) => hit[1]!)
-      : [];
-    /* TWO ROWS SINCE 2026-10-15. Founder: "at the bottom bar just keep
-       inspiration and chat and clicking on it leads to new inspiration and
-       new chat" — Now, the plus and Principles left the bar. Exact, not a
-       floor: a third row coming back is a design change, not drift. */
-    expect(dock, "the dock's item list could not be read out of Home.tsx, or it is not the two rows").toEqual(["inspiration", "talk"]);
-    /* AND THE TWO ROWS THAT STAND IN FOR THEM, each on one kind of page
-       (2026-10-15): ↩ on a list, Exit review mode while reviewing. Exact,
-       for the same reason. */
-    const standIns = [...home.matchAll(/\[\{ id: '([a-z]+)', label: 'world(?!Dock)[A-Za-z]+' as const, here: false,/g)].map((hit) => hit[1]!);
-    expect(standIns, "the bar's stand-in rows could not be read out of Home.tsx, or they are not ↩ and Exit review mode").toEqual(["review", "return"]);
-    const rows = [...dock, ...standIns];
-
+    /* THE DOCK HOLDS NO ROWS ANY MORE (2026-11-09). Its rows (Inspiration,
+       Chat, ↩) went from the bar one ruling at a time: the home bar replaced
+       the first two, every page leaves by its "<", and the notepad and a chat
+       write into their own NoteBar. What stands is the one group a saved
+       note's tools portal into; a row coming back is a design change. */
+    expect(code(home), "a row came back to the dock").not.toMatch(/\{ id: '[a-z]+', label: 'world/);
+    expect(code(home), "a dock row's button came back").not.toMatch(/className=\{`waka-dock-item/);
+    /* THE WAY OUT EACH OLD ROW NAMED IS NOW THE PAGE'S "<": 'inspiration' is
+       the notepad and 'talk' a chat (both `making`), 'return' a list
+       (`listing`). The PageBack below is visible on all three (asserted by
+       its `visible=` condition), so these names still say where a surface
+       leaves to, and the per-surface checks further down keep reading them. */
+    const rows = ["inspiration", "talk", "return"];
+    const dock = rows;
     /* WHAT IS BEING MADE, read where the bar reads it. Since 2026-10-15
        ("never put something on any corners") the bar is the making page's
        own while a note is being written or a chat is open, so the whole map
        below hangs on this one derivation being the notepad and the chat. */
     expect(code(home), "the bar no longer knows a note or a chat is being made").toMatch(
       /const making[^=]*= viewNavigation\.view\?\.compose \? 'inspiration'\s*: viewNavigation\.view\?\.conversationId \? 'talk' : null/);
-
-    /* EACH ROW'S OWN ENTRY, read out of the source, so moving a step out of
-       a row fails here rather than in a person's hand. */
-    const rowSource = (id: string): string => {
-      const start = home.indexOf(`{ id: '${id}', label: 'worldDock`);
-      const rest = home.slice(start + 1);
-      const next = rest.search(/\{ id: '[a-z]+', label: 'worldDock|\]\)\.map\(item/);
-      return code(rest.slice(0, next));
-    };
-    const inspiration = rowSource("inspiration"), talk = rowSource("talk");
 
     /* ON A LIST, read where the bar reads it (2026-10-15: "from all
        inspirations, the bottom bar should just be a return icon | close").
@@ -470,22 +462,20 @@ describe("every surface has a way out you can see", () => {
        a list. */
     expect(code(home), "the bar no longer knows it is on one of the two lists").toMatch(
       /const listing = !making && \(viewNavigation\.view\?\.open === 'saves' \|\| viewNavigation\.view\?\.open === 'conversations'\);/);
-    expect(code(home), "the bar's groups no longer hang off the making row, or the return row on a list").toMatch(
-      /const barOwner: 'inspiration' \| 'talk' \| 'return' \| null = making \?\? \(listing \? 'return' : null\);/);
+    /* ONE HEADER GRAMMAR (founder, 2026-11-08): no page's bar ends in a
+       Close any more — every page leaves by its unboxed "<" top-left. */
+    expect(code(home), "a Close came back to a bar").not.toMatch(/waka-dock-item--close/);
+    expect(code(home), "the page's \"<\" is not drawn as a glyph on a note or a chat").toContain("glyphOnly={making !== null || savedNoteOpen}");
 
     // The page toolbar is reserved for creating/editing. On the home at rest
     // the home bar stands instead (design E1, `HomeBar`); the lists and
     // Principles leave by the labelled Back, which is visible on all three.
     expect(code(home)).toContain("atNowView && !reviewing && !savedNoteOpen");
     expect(code(home)).toContain("visible={savedNoteOpen || making !== null || listing || principlesOpen}");
-    expect(code(home)).toContain("making === 'inspiration' ? [{ id: 'inspiration'");
-    expect(code(home)).toContain("making === 'talk' ? [{ id: 'talk'");
 
-    /* AND WHILE REVIEWING, THE BAR IS ONLY ITS OWN WAY OUT. Founder,
-       2026-10-15: "in the review mode, bottom bar should say exit review
-       mode." Both doors to other rooms step out, and the one row left ends
-       the sitting — and Esc ends it too. */
-    expect(home, "the review bar has no Exit review mode row").toMatch(/\.\.\.\(reviewing && !making \? \[\{ id: 'review', label: 'worldReviewExit' as const, here: false,\s*go: \(\) => \{ setReviewing\(false\); \} \}\] : \[\]\)/);
+    /* AND WHILE REVIEWING, THE WAY OUT IS THE PAGE'S "<" (2026-11-08), and
+       Esc ends the sitting too. */
+    expect(code(home), "the questions lost their \"<\"").toMatch(/reviewing && !making[^\n]*\? <PageBack[\s\S]{0,120}onBack=\{\(\) => setReviewing\(false\)\} glyphOnly/);
     expect(code(home), "Esc no longer ends the review").toMatch(
       /if \(event\.key === 'Escape'\) \{\s*if \(reviewing && atNowView && nothingOpen && !harvestWhy\) \{[^}]*setReviewing\(false\); \}/);
 
@@ -499,35 +489,19 @@ describe("every surface has a way out you can see", () => {
     expect(back, "Home on a list or Principles goes home, not one history step").toContain("else closePage();");
     expect(code(home)).toMatch(/<PageBack\s+navigationKey=\{viewNavigation.href\} onBack=\{backPage\}/);
 
-    /* EVERY ROW IS THE SAME SLOT (2026-10-16): Chat's row was a bare inline
-       span and its two rules collapsed — "the bottom bar should be identical
-       for inspiration and chat". So the return row, Inspiration and Chat all
-       stand in `.waka-dock-slot`, and tools and rules can ride beside any. */
-    expect(code(home), "a bar row is not the bar's slot, so its tools and rules cannot ride beside it").toMatch(
-      /<span key=\{item\.id\} className="waka-dock-slot">/);
-    expect(code(home), "a saved note open in the archive no longer lends its tools to the return row's slot").toMatch(
-      /\{item\.id === 'return' && viewNavigation\.view\?\.open === 'saves' && savedNoteOpen \? \(\s*<span className="waka-dock-making" role="group" id=\{DOCK_SLOT\}/);
+    /* A SAVED NOTE OPEN IN THE ARCHIVE LENDS ITS TOOLS TO THE DOCK'S ONE
+       SLOT, and only on the saves list. */
+    expect(code(home), "a saved note open in the archive no longer lends its tools to the dock").toMatch(
+      /\{listing && viewNavigation\.view\?\.open === 'saves' \? \(\s*<span className="waka-dock-slot">\s*<span className="waka-dock-making" role="group" id=\{DOCK_SLOT\}/);
 
-    expect(inspiration).toContain('go: startNewInspiration');
-    expect(talk).toContain("openOverHome('conversations')");
-    expect(inspiration).not.toMatch(/here:[^\n]*compose/);
-    expect(talk).not.toMatch(/here:[^\n]*conversationId/);
+    /* A chat's "<" closes it: to Past chats when it was opened from there,
+       else home (2026-11-09). */
+    expect(code(home), "a chat's \"<\" no longer closes it").toMatch(/if \(making === 'talk'\) \{[\s\S]{0,200}openOverHome\('conversations'\); return; \}\s*closePage\(\); return;/);
+    expect(code(home), "a chat lost its Past chats, top-right").toContain('className="waka-page-aside"');
 
-    expect(code(home), "archive navigation must stay outside the composer").toContain("{making === null && item.id !== 'return' ? <button");
-    expect(code(home), "the chat's row no longer says All chats").toMatch(/making === 'talk' \? 'worldAllChats'/);
-
-    /* Only tools and Close need a separator; a list has Close alone. */
-    expect(code(home), "the second rule is drawn where there is no middle group (a bare list)").toMatch(
-      /\{barOwner && item\.id === barOwner && \(making !== null \|\| \(viewNavigation\.view\?\.open === 'saves' && savedNoteOpen\)\) \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
-    expect(code(home), "a chat no longer lends its middle group to the panel's mic and ＋").toMatch(
-      /item\.id === 'talk' && making === 'talk' \? \(\s*<span className="waka-dock-making" role="group" id=\{CHAT_TOOLS_SLOT\}/);
-
-    /* AND CLOSE, LAST, THE ONE-PRESS WAY HOME on a making page and on a
-       list: the note goes down as a draft; a chat, a list, or a saved note
-       in the archive (committed first) simply goes home. Rendered beside
-       the bar owner's row and nowhere else. */
-    const close = /onClick=\{\(\) => leaveAsModal\(closePage\)\}>\s*\{say\('worldClose'\)\}/;
-    expect(code(home), "a making page's or a list's bar no longer ends in a Close that goes home (with the note kept)").toMatch(close);
+    /* A CHAT LENDS NOTHING TO THE BAR: it writes into the notepad's own
+       note bar (`NoteBar`, 2026-11-08), so no slot and no dock under it. */
+    expect(code(home), "a chat lends its tools to the bar again").not.toMatch(/CHAT_TOOLS_SLOT/);
 
     /* THE CHAT WRITES ON ITS OWN PAGE AGAIN. The chat-in-the-bar composer
        was reverted the same day ("lets just make the bottom be All chats |
@@ -538,6 +512,7 @@ describe("every surface has a way out you can see", () => {
     const panel = code(readFileSync(join("src", "components", "ConversationPanel.tsx"), "utf8"));
     expect(panel, "the chat panel takes a bar slot again").not.toMatch(/dockSlot|CHAT_DOCK_SLOT/);
     expect(panel, "the chat panel no longer draws its own composer").toMatch(/<footer className="chat-composer">/);
+    expect(panel, "the chat no longer writes into the shared note bar").toMatch(/<NoteBar\b/);
 
     /* The condition the dock renders under. A destination may only lean on
        the bar if the bar is actually up while it is open — which is exactly

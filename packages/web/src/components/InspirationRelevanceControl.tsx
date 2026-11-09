@@ -17,7 +17,7 @@ export function InspirationRelevanceControl({id,profileId,locale,onChanged}: {id
         if(committing.current)return;committing.current=true;setBusy(true);setFailed(false);intent.current??=crypto.randomUUID();const run=epoch.current;
         void reviewInspiration(item,profileId,item.memoryExcludedAt?'relevant':'not_relevant',intent.current).then(()=>{if(run===epoch.current){onChanged?.();setAttempt(v=>v+1);}})
           .catch(()=>{if(run===epoch.current){setFailed(true);setItem(null);}}).finally(()=>{committing.current=false;if(run===epoch.current)setBusy(false);});
-      }}>{say(busy?'worldReviewAnswerSaving':item.memoryExcludedAt?'worldInspirationMakeRelevant':'worldInspirationNotRelevant')}</button></>:null}
+      }}>{say(busy?'worldReviewAnswerSaving':item.memoryExcludedAt?'worldInspirationMakeRelevant':'worldInspirationStopUsing')}</button></>:null}
     {failed?<p role="alert">{say('worldReviewAnswerFailed')} <button type="button" className="waka-inspiration-review-action" onClick={()=>setAttempt(v=>v+1)}>{say('worldRetry')}</button></p>:null}
   </div>;
 }

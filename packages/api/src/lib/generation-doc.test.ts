@@ -140,10 +140,21 @@ describe("docs/generation.md stays true to the code", () => {
   const exported = tuningExports();
   const documented = documentedRows();
 
-  it('keeps the review interval in both help translations aligned with the server',()=>{
-    for(const [locale,suffix] of [['en-US',' days'],['ko-KR','일']] as const){
-      const catalog=JSON.parse(readFileSync(resolve(REPO_ROOT,`packages/web/src/lib/i18n/messages/${locale}.json`),'utf8'));
-      expect(catalog['worldHowReviewBody']).toContain(`${signalRoutes.CLAIM_REASK_DAYS}${suffix}`);
+  /* NO COPY STATES THE RE-ASK INTERVAL TODAY (2026-11-09): the help card's
+     review section, which printed it, left the product with review mode.
+     This scans every message in both catalogs, not only the help card, so a
+     sentence that states an interval again ("90 days", "a 90-day wait",
+     "90일") has to state the server's. The matcher is checked on a sample
+     first, so the scan cannot pass by matching nothing. */
+  it('keeps any interval the copy states aligned with the server',()=>{
+    const stated=(text:string):number[]=>[...text.matchAll(/(\d+)(?:\s|-)?(?:days?\b|일(?!요일))/gi)].map(hit=>Number(hit[1]));
+    expect(stated('asked again after 90 days, a 90-day wait, 90일 뒤')).toEqual([90,90,90]);
+    expect(stated('{month}의 모습, 일요일, a month')).toEqual([]);
+    for(const locale of ['en-US','ko-KR'] as const){
+      const catalog=JSON.parse(readFileSync(resolve(REPO_ROOT,`packages/web/src/lib/i18n/messages/${locale}.json`),'utf8')) as Record<string,string>;
+      for(const [key,value] of Object.entries(catalog)){
+        for(const days of stated(value)){expect(days,`${locale} ${key} states an interval the server does not keep`).toBe(signalRoutes.CLAIM_REASK_DAYS);}
+      }
     }
   });
 

@@ -32,14 +32,15 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react';
 import { DialogSurface } from './DialogSurface';
 import { Companion } from './Companion';
+import { NoteBar, NoteBarAttach } from './NoteBar';
+import { ListeningView } from './ListeningView';
 import { ReadWordsQuote, type ReadWords } from './ImageWords';
 import type { FixOutcome } from '../lib/use-image-words';
 import { HomeActionIcon } from './HomeActionIcon';
 import { NotePage } from './NotePage';
 import { AuthoredSaveNotice } from './AuthoredSaveNotice';
 import {inspirationWithPendingLink} from '../lib/inspiration-input';
-import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
-import { FILE_ACCEPT, fileSizeWords } from '../lib/api/file-accept';
+import { fileSizeWords } from '../lib/api/file-accept';
 import { formatMessage, isMessageKey, t, type SupportedLocale } from '../lib/locales';
 import { attachmentLabel } from '../lib/attachment-label';
 import { useDockMenu } from '../lib/use-dock-menu';
@@ -214,7 +215,7 @@ function MediaTile({
   );
 }
 
-function MediaPreview({ item, recording = false, label }: { item: InspirationDraftMedia; recording?: boolean; label?: string }) {
+function MediaPreview({ item, recording = false, label, previewFailed }: { item: InspirationDraftMedia; recording?: boolean; label?: string; previewFailed: string }) {
   const [url, setUrl] = useState('');
   const [imageFailed, setImageFailed] = useState(false);
   const audio = useRef<HTMLAudioElement>(null);
@@ -226,7 +227,7 @@ function MediaPreview({ item, recording = false, label }: { item: InspirationDra
   }, [item.blob, item.validationError]);
   if (item.validationError) return null;
   if (item.type === 'image' && url) return imageFailed
-    ? <p className="jar-composer-storage-note">This browser can’t preview this photo. The original can still be saved.</p>
+    ? <p className="jar-composer-storage-note">{previewFailed}</p>
     : <img src={url} alt={item.name} onError={() => setImageFailed(true)} />;
   if (item.type === 'audio' && url) return <audio ref={audio} controls={!recording} src={url} preload="metadata" aria-label={label ?? item.name} />;
   return null;
@@ -237,10 +238,12 @@ export type { ReadWords } from './ImageWords';
     CHARACTER (founder: "all characters should be this app's real
     character") — `Companion`, the grain-textured rest pose the login page
     draws — never a figure drawn in CSS. */
-function CreatureLine({ children }: { children: ReactNode }) {
+function CreatureLine({ children, softer }: { children: ReactNode; softer?: ReactNode }) {
   return <div className="waka-note-line">
     <span className="waka-note-creature" aria-hidden="true"><Companion size={32} label="" pressable={false} /></span>
-    <p className="waka-note-says">{children}</p>
+    {/* THE HINT IS PART OF WHAT IT SAYS (founder, 2026-11-08): a second,
+        softer line inside the same bubble, not a line floating over the bar. */}
+    <p className="waka-note-says">{children}{softer ? <span className="waka-note-says-softer">{softer}</span> : null}</p>
   </div>;
 }
 
@@ -315,8 +318,10 @@ export function InspirationComposer(props: {
   /** A share that arrived from another app (design F5): the creature asks
       why, with Add a note / That's all. It still waits for Save. */
   arrival?: boolean;
+  /** The microphone is open: the bar gives way to the listening view. */
+  listening?: { notice?: string; onDone: () => void };
 }) {
-  const fileInput = useRef<HTMLInputElement>(null), linkInput = useRef<HTMLInputElement>(null);
+  const linkInput = useRef<HTMLInputElement>(null);
   const [discarding, setDiscarding] = useState(false), [confirmDiscard, setConfirmDiscard] = useState(false), [discardFailed, setDiscardFailed] = useState(false);
   const discardLock = useRef(false);
   const [addingLink, setAddingLink] = useState(Boolean(props.linkText));
@@ -353,7 +358,7 @@ export function InspirationComposer(props: {
   const actions = useDockMenu(discardUnavailable);
   useEffect(() => { if (!actions.open) { setConfirmDiscard(false); setDiscardFailed(false); } }, [actions.open]);
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
-  const documentInput = useRef<HTMLInputElement>(null), bodyRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   /* THE HERO: the first picture that can be shown, shown large; anything
      else (another photo, a recording, a file, one that needs attention)
      stays on the shelf of tiles under it. */
@@ -464,7 +469,7 @@ export function InspirationComposer(props: {
         A screenshot or photo stands large with the creature's question over
         it; the note under it is optional. A share from another app (F5) is
         asked about the same way. */}
-    {line ? <CreatureLine>{line}</CreatureLine> : null}
+    {line ? <CreatureLine softer={hero ? say(unreadable ? 'worldNoteHintSay' : 'worldNoteHint') : undefined}>{line}</CreatureLine> : null}
     {props.arrival && !hero ? <div className="waka-note-arrival">
       <button type="button" className="waka-note-arrival-act" onClick={() => bodyRef.current?.querySelector<HTMLTextAreaElement>('.jar-composer-text')?.focus()}>{say('worldShareAddNote')}</button>
       <button type="button" className="waka-note-arrival-act" disabled={blocked} onClick={submit}>{say('worldShareThatsAll')}</button>
@@ -473,12 +478,6 @@ export function InspirationComposer(props: {
       removeLabel={formatMessage(props.locale, 'worldComposerRemoveFile', { name: attachmentLabel(props.locale, hero.type, hero.name) })}
       onRemove={() => props.onRemove(hero.id)} /> : null}
     {hero && props.readWords ? <ReadWordsQuote words={props.readWords} locale={props.locale} onFix={props.onFixReadWords} disabled={blocked} /> : null}
-    <input ref={fileInput} type="file" accept={PHOTO_ACCEPT} multiple hidden onChange={event => {
-      const files = [...event.target.files ?? []]; if (files.length) props.onFiles(files); event.target.value = '';
-    }} />
-    <input ref={documentInput} type="file" accept={FILE_ACCEPT} multiple hidden onChange={event => {
-      const files = [...event.target.files ?? []]; if (files.length) props.onDocuments?.(files); event.target.value = '';
-    }} />
     {props.ready && !props.fileDraftsAvailable ? <p className="jar-composer-storage-note">{say('worldComposerFilesUnavailable')}</p> : null}
     {addingLink ? <div className="jar-composer-link">
       <input ref={linkInput} type="url" value={link} disabled={blocked} aria-label={say('worldPasteTheLink')} placeholder="https://" onChange={event => { event.target.setCustomValidity(''); props.onLinkText(event.target.value); }}
@@ -557,11 +556,11 @@ export function InspirationComposer(props: {
         doing, and the bar says `worldComposerUploading` while any of them
         is moving. The tile that is actually uploading dims, which is the
         same fact where it belongs. */}
-    {props.recording.phase !== 'idle' && props.media.some(item => item.type === 'audio') ? <p className="jar-composer-storage-note">Your earlier recording stays until you choose.</p> : null}
-    {props.recordingCandidate ? <section className="jar-recording-choice" aria-label="Choose a recording">
-      <p>New recording</p><MediaPreview item={props.recordingCandidate} label="New recording" />
-      <div className="jar-composer-actions"><button type="button" disabled={blocked} onClick={() => props.onChooseRecording(true)}>Use new recording</button>
-        <button type="button" disabled={blocked} onClick={() => props.onChooseRecording(false)}>{props.media.some(item => item.type === 'audio') ? 'Keep previous recording' : 'Discard recording'}</button></div>
+    {props.recording.phase !== 'idle' && props.media.some(item => item.type === 'audio') ? <p className="jar-composer-storage-note">{say('worldComposerEarlierRecordingStays')}</p> : null}
+    {props.recordingCandidate ? <section className="jar-recording-choice" aria-label={say('worldComposerChooseRecording')}>
+      <p>{say('worldComposerNewRecording')}</p><MediaPreview item={props.recordingCandidate} label={say('worldComposerNewRecording')} previewFailed={say('worldComposerPhotoPreviewFailed')} />
+      <div className="jar-composer-actions"><button type="button" disabled={blocked} onClick={() => props.onChooseRecording(true)}>{say('worldComposerUseNewRecording')}</button>
+        <button type="button" disabled={blocked} onClick={() => props.onChooseRecording(false)}>{say(props.media.some(item => item.type === 'audio') ? 'worldComposerUsePreviousRecording' : 'worldComposerDiscardRecording')}</button></div>
     </section> : null}
     {/* ═══ THE STATE LINES ARE IN THE BAR NOW ═══════════════════════════
         Founder, with "Recording canceled." printed across an empty note:
@@ -578,30 +577,24 @@ export function InspirationComposer(props: {
         button cannot live in a status line. It renders only with that
         error, so it is absent from every normal note. */}
     {props.draftConflict ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
-    {hero ? <p className="waka-note-hint">{say(unreadable ? 'worldNoteHintSay' : 'worldNoteHint')}</p> : null}
     {/* ═══ THE NOTE BAR: THE WORDS GET THE WHOLE WIDTH ═══════════════════
         One raised pill holding the field across its full width, and under
         it a slim row — the mic and the attach glyphs on the left, the
         transient state between, Save on the right. Nothing in it fills. */}
-    <div className="waka-note-bar">
+    {props.listening ? <ListeningView locale={props.locale} words={props.text} notice={props.listening.notice} onDone={props.listening.onDone} /> : <NoteBar
+      tools={props.noteBar ? <>
+        {props.noteBar.mic}
+        <NoteBarAttach photoLabel={say('worldAddPhoto')} fileLabel={say('worldAddFile')} disabled={blocked} multiple
+          onPhotos={props.onFiles} onFiles={props.onDocuments} />
+      </> : null}
+      state={props.noteBar?.state}
+      action={props.noteBar?.save}>
       <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={hero ? 1 : 4} value={props.text} readOnly={blocked}
         aria-label={say('worldCaptureInspiration')}
         placeholder={hero ? say(unreadable ? 'worldNotePlaceholderLine' : 'worldNotePlaceholder') : say('worldCapturePrompt')}
         onChange={event => props.onText(event.target.value, event.target.selectionStart ?? event.target.value.length)} onKeyDown={props.onKeyDown}
         onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.clipboardData.files]); } }} />
-      {props.noteBar ? <div className="waka-note-bar-row">
-        <span className="waka-note-bar-tools">
-          {props.noteBar.mic}
-          {/* PHOTO AND FILE SIT ON THE BAR, NO ＋ MENU (founder, 2026-11-05). */}
-          <button type="button" className="waka-dock-tool" aria-label={say('worldAddPhoto')} disabled={blocked}
-            onClick={() => fileInput.current?.click()}><HomeActionIcon kind="photo" /></button>
-          {props.onDocuments ? <button type="button" className="waka-dock-tool" aria-label={say('worldAddFile')} disabled={blocked}
-            onClick={() => documentInput.current?.click()}><HomeActionIcon kind="file" /></button> : null}
-        </span>
-        <span className="waka-note-bar-state">{props.noteBar.state}</span>
-        {props.noteBar.save}
-      </div> : null}
-    </div>
+    </NoteBar>}
     </div>
     </NotePage>
     {/* THE PILL IN THE BOTTOM-LEFT CORNER IS GONE, AND SO IS THE CORNER.

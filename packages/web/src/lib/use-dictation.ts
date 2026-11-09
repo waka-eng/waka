@@ -156,6 +156,8 @@ export interface Dictation {
   error: string;
   start: () => void;
   stop: () => void;
+  /** Ends the session and drops whatever it still sends (a note closing). */
+  abort: () => void;
 }
 
 /**
@@ -175,8 +177,8 @@ export function useDictation(
   const base = useRef("");
   /** Everything the engine has marked final this session. */
   const settled = useRef("");
-  /** Which session is the current one. Only `start()` bumps it; see the
-      header for why `stop()` deliberately does not. */
+  /** Which session is the current one. `start()` and `abort()` bump it;
+      see the header for why `stop()` deliberately does not. */
   const run = useRef(0);
   const told = useRef(false);
   const write = useRef(onText);
@@ -191,6 +193,17 @@ export function useDictation(
 
   const stop = useCallback(() => {
     session.current?.stop();
+    session.current = null;
+    setListening(false);
+  }, []);
+
+  /* A NOTE THAT CLOSES ABORTS (review, 2026-11-09). `stop` asks for one
+     more final, which would land in the next note opened. Bumping `run`
+     makes this session stale, so anything it still sends is dropped; the
+     words it already wrote are in the note and stay there. */
+  const abort = useCallback(() => {
+    run.current += 1;
+    session.current?.abort();
     session.current = null;
     setListening(false);
   }, []);
@@ -291,5 +304,5 @@ export function useDictation(
     }
   }, [locale]);
 
-  return { listening, firstTime, error, start, stop };
+  return { listening, firstTime, error, start, stop, abort };
 }

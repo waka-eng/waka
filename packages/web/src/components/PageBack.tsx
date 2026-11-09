@@ -7,8 +7,12 @@ function openSheet(): HTMLElement | null {
 }
 
 /** The visible control and native gestures share the page's owned exit. */
-export function PageBack({ label, onBack, navigationKey, belowCorners = false, visible = true }: {
+export function PageBack({ label, onBack, navigationKey, belowCorners = false, visible = true, glyphOnly = false }: {
   label: string; onBack: () => void; navigationKey: string; belowCorners?: boolean; visible?: boolean;
+  /** Draw the "<" alone, the label said only to a screen reader — the page
+      header grammar for a note being written, a saved note and a chat
+      (founder, 2026-11-08). A list keeps its word ("‹ Home"). */
+  glyphOnly?: boolean;
 }) {
   const action = useRef(onBack); action.current = onBack;
   const [distance, setDistance] = useState(0);
@@ -69,11 +73,30 @@ export function PageBack({ label, onBack, navigationKey, belowCorners = false, v
     return () => { disposed = true; remove?.(); setDistance(0); };
   }, [navigationKey]);
   return <>
-    {visible ? <button type="button" className="waka-page-back" data-below-corners={belowCorners || undefined}
+    {visible ? <button type="button" className="waka-page-back" data-below-corners={belowCorners || undefined} data-glyph={glyphOnly || undefined}
       data-jar-chrome="1" data-jar-interactive="1" onClick={onBack}>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg>
-      <span>{label}</span>
+      <span className={glyphOnly ? 'sr-only' : undefined}>{label}</span>
     </button> : null}
     {distance > 0 ? <span className="waka-back-swipe" aria-hidden="true" style={{ opacity: distance / 100, transform: `translateX(${distance / 3}px)` }}>‹</span> : null}
   </>;
+}
+
+/**
+ * THE SAME "<" INSIDE A SHEET (founder, 2026-11-08: one header grammar). A
+ * sheet's way out used to be a text Close top-right, an "×", an "←" or a
+ * word at the foot ("Enough"); every one is this unboxed "<" now, first in
+ * the sheet's own top row, its name said to a screen reader. Escape still
+ * closes the sheet through `DialogSurface`.
+ */
+export function SheetBack({ label, onBack, disabled = false }: {
+  label: string;
+  /** May be async (a settings page that asks before it leaves); its result is not awaited here. */
+  onBack: () => void | Promise<unknown>;
+  disabled?: boolean;
+}) {
+  return <button type="button" className="waka-sheet-back" aria-label={label} disabled={disabled} onClick={() => { void onBack(); }}>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg>
+    <span className="sr-only">{label}</span>
+  </button>;
 }

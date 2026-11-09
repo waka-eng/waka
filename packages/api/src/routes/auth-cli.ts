@@ -573,7 +573,7 @@ cliAuthRoutes.post("/consent", requireAuth, humanSessionsOnly, async (c) => {
     requestedProfileId: readField("requestedProfileId"),
   });
   if (!consentOk) {
-    return c.json({ error: "Consent expired — start the login again" }, 400);
+    return c.json({ error: "Consent expired. Start the login again" }, 400);
   }
 
   const candidates = await bindableProfiles(session);

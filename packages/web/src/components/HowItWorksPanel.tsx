@@ -23,7 +23,6 @@ export function HowItWorksPanel({ locale }: { locale: SupportedLocale }): JSX.El
         </li>)}
       </ol>
       <dl className="waka-about-details">
-        <div><dt>{say("worldHowReviewTitle")}</dt><dd>{say("worldHowReviewBody")}</dd></div>
         <div><dt>{say("worldHowPrinciplesTitle")}</dt><dd>{say("worldHowPrinciplesBody")}</dd></div>
         <div><dt>{say("worldHowProfilesTitle")}</dt><dd>{say("worldHowProfilesBody")}</dd></div>
       </dl>

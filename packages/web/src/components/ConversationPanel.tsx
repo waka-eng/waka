@@ -81,7 +81,6 @@ import { startJourney, startReplyTiming, observeReplyTiming, cancelReplyTiming }
  * saying which. A quiet surface is not the same as a quiet failure.
  */
 import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
-import {createPortal} from 'react-dom';
 import {createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
 import {useConversationReply} from '../lib/use-conversation-reply';
@@ -95,7 +94,8 @@ import {ApiError,fetchPrinciples,type ApiPrinciple} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
 import {readConversationDrafts,storeConversationDraft,clearConversationDraft,type ConversationDraft as Draft,type ConversationDraftAttachment,type StoredConversationDraft} from '../lib/conversation-drafts';
 import {clearDraftLineage,recordDraftStored} from '../lib/draft-lineage';
-import {AddMenu} from './AddMenu';
+import {NoteBar,NoteBarAttach} from './NoteBar';
+import {ListeningView} from './ListeningView';
 import {MessageAttachments} from './MessageAttachments';
 import {discardMessageAttachment,fetchAttachmentUrl,uploadMessageAttachment} from '../lib/api/attachments';
 import {FileRefused,MAX_MESSAGE_ATTACHMENTS,fileSizeWords,inspectAttachmentFile} from '../lib/api/file-accept';
@@ -103,8 +103,6 @@ import {attachmentLabel} from '../lib/attachment-label';
 import {inspectInspirationPhoto,PhotoRefused} from '../lib/inspiration-photo';
 import {formatMessage,type MessageKey} from '../lib/locales';
 
-/** The id `Home` gives the bar's middle group on a chat; see `toolsSlot`. */
-export const CHAT_TOOLS_SLOT='waka-chat-tools';
 
 /* ═══ ONE PHOTO OR FILE ON ITS WAY INTO A MESSAGE ═════════════════════════
    A chip above the field. `file` is set while this tab holds the bytes (an
@@ -150,13 +148,12 @@ const offlineNow=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
 const refusalOf=(reason:unknown):MessageKey=>reason instanceof PhotoRefused?reason.reason
   :reason instanceof FileRefused?(reason.reason==='too_large'?'worldAttachTooLarge':reason.reason==='empty'?'worldPhotoEmpty':'worldAttachUnsupported'):'worldAttachFailed';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory,agent=null,profile=null,toolsSlot}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory,agent=null,profile=null}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
   profile?:{name:string;type:'human'|'agent'}|null;
   /** The account's agent, when it has one: a new chat may talk with it, or with both. */
-  agent?:{id:string;name:string}|null;
-  /** The id of an element the page's bar lends for the mic and the ＋ (`CHAT_TOOLS_SLOT`).
-      Absent, both stay in this panel's own footer, as a panel standing alone has them. */
-  toolsSlot?:string}){
+  agent?:{id:string;name:string}|null}){
+  /* THE MIC AND THE ATTACH TOOLS LIVE IN THIS PANEL'S OWN NOTE BAR (`NoteBar`,
+     2026-11-08): the page's bar no longer lends them a slot. */
   /* ═══ WHO YOU ARE TALKING WITH ═══════════════════════════════════════
      Founder, 2026-10-15: "new chat should also let you select if you want
      to chat with me vs my agent or both perspectives." Chosen before the
@@ -203,11 +200,6 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const uploadStops=useRef(new Map<string,AbortController>());
   const [attachNote,setAttachNote]=useState<MessageKey|null>(null);
   const track=(next:(rows:Upload[])=>Upload[])=>{uploadsRef.current=next(uploadsRef.current);setUploads(uploadsRef.current);};
-  /* THE BAR'S SLOT IS FOUND AFTER PAINT, as `NoteTools` finds its own: `Home`
-     mounts it in the same commit this first renders in, and two siblings'
-     effects are not an order to rely on. */
-  const [toolsHost,setToolsHost]=useState<HTMLElement|null>(null);
-  useEffect(()=>{if(toolsSlot)setToolsHost(document.getElementById(toolsSlot));});
   useEffect(()=>{const media=window.matchMedia?.('(max-width:760px)');if(!media)return;const change=()=>setMobile(media.matches);media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
   /* ═══ THE PAGE FOLLOWS THE KEYBOARD ON iOS (audit f2afcbe2, mob) ══════════
      The two variables below place a STANDALONE `.chat-page` in the visual
@@ -658,24 +650,23 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   /* THE MIC AND THE ＋, rendered once and placed by whoever has room for
      them: the bar's lent group when there is one, this footer when not. */
   const vacant=MAX_MESSAGE_ATTACHMENTS-attachedCount;
-  const tools=(dictateClass:string,addClass:string)=><>
-    {dictationAvailable()?<button type="button"
-      className={`${dictateClass}${dictation.listening?' chat-dictate--on':''}`}
-      aria-pressed={dictation.listening}
-      aria-label={say(dictation.listening?'worldComposerDictateStop':'worldComposerDictate')}
+  const tools=()=><>
+    {dictationAvailable()?<button type="button" data-listen-mic=""
+      /* Only ever drawn while not listening: the bar gives way to
+         ListeningView, whose Done ends it. */
+      className="waka-dock-tool chat-dictate"
+      aria-label={say('worldComposerDictate')}
       disabled={busy||draft?.pending}
-      onClick={()=>dictation.listening?dictation.stop():dictation.start()}>
+      onClick={()=>dictation.start()}>
       <HomeActionIcon kind="record"/></button>:null}
-    {/* SIX, AND IT SAYS SO. At the server's cap the ＋ dims and its title
-        is the reason, rather than offering a menu whose every row fails. */}
-    <AddMenu buttonClassName={addClass} multiple label={say('worldAddMenu')}
-      photoLabel={say('worldAddPhotos')} fileLabel={say('worldAddFile')}
+    {/* PHOTO AND FILE STRAIGHT ON THE BAR, the notepad's own pair. At the
+        server's cap they dim and their title is the reason. */}
+    <NoteBarAttach photoLabel={say('worldAddPhotos')} fileLabel={say('worldAddFile')} multiple
       disabled={!canCompose||busy||Boolean(draft?.pending)||vacant<=0||storageFailed}
       title={vacant<=0?say('worldAttachLimit'):undefined}
       onPhotos={files=>{void pick(files,'photo');}} onFiles={files=>{void pick(files,'file');}}/>
   </>;
   return <main ref={root} className="chat-page">
-    {toolsSlot&&toolsHost&&canCompose?createPortal(tools('waka-dock-tool chat-dictate','waka-dock-tool'),toolsHost):null}
     {/* NO ROW ACROSS THE TOP AT ALL. `.chat-top` held "Your memory" and a
         `···` menu, and a comment arguing it was "not a second header" — which
         it was, on a product whose other screens have one bar and two corner
@@ -745,7 +736,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               going blank on the first keystroke: "till user sends first
               message, keep [it] on." Typing is not a turn yet; the opening
               leaves when the first message is actually on its way. */}
-          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error?
+          {/* While the microphone is open the creature stands in the listening
+              view below, so the opening steps aside: one creature, not two. */}
+          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening?
             <div className="chat-opening">
               {/* The one you are about to talk with is the one on screen:
                   yours, your agent in its own pixel form, or the two of
@@ -942,71 +935,38 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             a photo that is not one, a file over the cap or off the list, a
             seventh. Cleared by the next pick. */}
         {attachNote?<p className="chat-reply-status" role="status">{say(attachNote)}</p>:null}
-        <div className="chat-composer-body">
-          {/* ═══ THE CHIPS, ABOVE THE FIELD ════════════════════════════════
-              What this message will carry, before it is sent: a photo as a
-              small picture, a file as its glyph, name and size, each with an
-              ×. Uploading and "Couldn’t add this" are said on the chip they
-              are about, and a failed one offers its retry beside its ×. */}
-          {!draft?.pending&&(draft?.attachments?.length||uploads.length)?<ul className="chat-chips" aria-label={say('worldAttachList')}>
+        {/* ═══ THE NOTEPAD'S BAR, NOT A LOOKALIKE (founder, 2026-11-08) ══════
+            "make this bottom for chatting feel EXACTLY like [the notepad's
+            note bar]. use the same code so it looks identical." So the chat
+            writes into `NoteBar`: the words across the full width, the mic,
+            photo and file on the left, and Send as a quiet word on the
+            right — dim until there is something to send, never filled.
+            Enter still sends; the send path, the chips and the retry are
+            this panel's own, unchanged. */}
+        {dictation.listening?<ListeningView locale={locale} words={draft?.content??''}
+          notice={dictation.firstTime?say('worldComposerDictateCloud'):undefined} onDone={()=>dictation.stop()}/>:<NoteBar
+          above={!draft?.pending&&(draft?.attachments?.length||uploads.length)?<ul className="chat-chips" aria-label={say('worldAttachList')}>
             {(draft?.attachments??[]).map(item=><Chip key={item.id} type={item.type} name={attachmentLabel(locale,item.type,item.name)} size={item.size}
               file={localFiles.current.get(item.id)} attachmentId={item.id} state="ready" locale={locale} onRemove={()=>unattach(item.id)}/>)}
             {uploads.map(item=><Chip key={item.key} type={item.type} name={attachmentLabel(locale,item.type,item.name)} size={item.file.size} file={item.file} state={item.failed?'failed':'uploading'} locale={locale}
               onRemove={()=>dropUpload(item.key)} onRetry={()=>void upload(item)}/>)}
           </ul>:null}
-          {/* A pending send lives in the transcript and durable journal, not
-              in the editor as well. Failed sends keep that same id for retry. */}
+          tools={tools()}
+          action={replyPending
+            ?<button type="button" className="chat-send chat-send--stop waka-note-bar-action"
+               disabled={reply.busy} onClick={()=>void reply.stop()}>{say('worldConversationStop')}</button>
+            :<button type="button" className="chat-send waka-note-bar-action"
+               /* THE SAME CONTROL RETRIES AN UNCERTAIN SAVE: a message whose
+                  response was lost is sent again by the press that sends. */
+               /* ITS WORD IS ITS NAME (WCAG 2.5.3): "Send again" shows on
+                  the bar when that is what the press does, and the name
+                  is the same word. */
+               aria-label={say(draft?.pending?'worldConversationRetry':'worldConversationSendWord')}
+               title={say(whyNoSend??(draft?.pending?'worldConversationRetry':'worldConversationSend'))}
+               disabled={Boolean(whyNoSend)}
+               onClick={()=>void save()}>{say(draft?.pending?'worldConversationRetry':'worldConversationSendWord')}</button>}>
           <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.pending?'':draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
-          <div className="chat-composer-footer">
-            {/* ═══ THE SEND ACTIONS, AND DICTATION IS ONE OF THEM ═══════
-                The reference is explicit about where a microphone goes:
-                "place the dictation button in the sendActions slot of
-                ChatComposer so it sits next to the send button where users
-                expect voice input controls." That is a correction to what
-                this product did an hour ago — the notepad's mic went into
-                the dock, which is right THERE because the dock is that
-                page's footer, and wrong here because this page has a
-                footer of its own.
-
-                "The button hides itself by default when the browser lacks
-                SpeechRecognition, but you should still design the composer
-                to work without it." Both halves are obeyed: absent where
-                it cannot work, and the field is typed into either way. */}
-            {/* ═══ AND SINCE 2026-10-16 THEY MAY STAND IN THE BAR INSTEAD ════
-                Founder: "The dictate button and ＋ move OUT of the chat box
-                INTO the bar's middle group (the box keeps the text field and
-                Send)." The reference's advice above is about a composer that
-                is the page's only footer; on the home page the bar is that
-                footer, as it is on a note, and a note's mic is in the bar. So
-                when `Home` lends a slot the two go there, and a panel
-                standing alone keeps them here. */}
-            {toolsSlot?null:tools('chat-dictate','chat-add')}
-            {/* ONE CONTROL FOR THE TRANSPORT. Stop used to sit beside the
-                "thinking" line halfway up the page, which is the reference's
-                own anti-pattern — the thing you press to interrupt a reply
-                should be where the thing you press to ask for one is. And
-                `isDisabled` deliberately does not apply to the stop state:
-                a stop you cannot press is a conversation you cannot leave. */}
-            {replyPending
-              ?<button type="button" className="chat-send chat-send--stop" aria-label={say('worldConversationStop')}
-                 disabled={reply.busy} onClick={()=>void reply.stop()}><HomeActionIcon kind="stop"/></button>
-              :<button type="button" className="chat-send"
-                 /* ═══ THE SAME CONTROL RETRIES AN UNCERTAIN SAVE ═══════
-                    A message whose response was lost is still in the box
-                    and still unsent as far as anybody can tell, so the
-                    thing you press to send it is the thing you press to
-                    try again — this is one act in two states, not two
-                    acts. It was carrying this name before the button
-                    became a glyph and the name went with the words; a
-                    screen reader hearing "Send" for a message already on
-                    screen would be told the wrong thing about what is
-                    about to happen. */
-                 aria-label={say(draft?.pending?'worldConversationRetry':'worldConversationSend')}
-                 title={say(whyNoSend??(draft?.pending?'worldConversationRetry':'worldConversationSend'))}
-                 disabled={Boolean(whyNoSend)}
-                 onClick={()=>void save()}><HomeActionIcon kind="send"/></button>}
-          </div>
-        </div>
+        </NoteBar>}
         {/* A SAVE THAT WAS NOT CONFIRMED KEEPS ITS ONE WAY OUT. This reads
             the conversation back rather than writing again, which is why it
             survived the sweep of retry-shaped controls: it is the only way to

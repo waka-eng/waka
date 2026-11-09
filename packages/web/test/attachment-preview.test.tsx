@@ -32,11 +32,11 @@ it('keeps the original usable during loading and metadata failure', async () => 
   let reject!: (reason: Error) => void;
   vi.mocked(fetchAttachmentDetails).mockImplementationOnce(() => new Promise((_done, fail) => { reject = fail; }));
   await mount();
-  expect(host.textContent).toContain('Loading preview');
+  expect(host.textContent).toContain('Loading…');
   expect(host.querySelector('a')?.href).toBe(current.attachment.url);
   await act(async () => reject(new Error('private provider text')));
   expect(host.querySelector('a')?.href).toBe(current.attachment.url);
-  expect(host.textContent).toContain('Your original is kept');
+  expect(host.textContent).toContain('Your original is still here');
   expect(host.textContent).not.toContain('private provider text');
   expect(retryAttachmentAnalysis).not.toHaveBeenCalled();
 });
@@ -60,7 +60,7 @@ it('never automatically retries analysis, and retries only the selected attachme
   });
   await mount(); expect(retryAttachmentAnalysis).not.toHaveBeenCalled();
   expect(host.textContent).not.toContain('SECRET_PROVIDER_DETAIL');
-  await act(async () => button('Retry preview').click());
+  await act(async () => button('Try again').click());
   expect(retryAttachmentAnalysis).toHaveBeenCalledWith('link', expect.any(AbortSignal));
   expect(host.textContent).toContain('Reading this link');
 });
@@ -74,7 +74,7 @@ it('explains access-required pages without exposing error details', async () => 
 it('shows original access without analysis mutation controls in read-only review mode',async()=>{
   current.analysis={status:'failed',canRetry:true,retryAfter:null};
   await act(async()=>root.render(<AttachmentPreview item={{id:'link',type:'link',label:'https://example.test/article'}} locale="en-US" readOnly/>));
-  expect(host.querySelector('a')?.href).toBe(current.attachment.url);expect(button('Retry preview')).toBeUndefined();expect(retryAttachmentAnalysis).not.toHaveBeenCalled();
+  expect(host.querySelector('a')?.href).toBe(current.attachment.url);expect(button('Try again')).toBeUndefined();expect(retryAttachmentAnalysis).not.toHaveBeenCalled();
 });
 it.each(['javascript:alert(1)', 'https://user:password@example.test/'])('does not navigate unsafe original %s', async url => {
   current.attachment.url = url;

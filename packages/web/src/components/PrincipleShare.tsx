@@ -6,44 +6,28 @@ import {readPrincipleArtifactDrafts,storePrincipleArtifactDraft,clearPrincipleAr
 import {formatMessage,t,type SupportedLocale} from '../lib/locales';
 import {dateStamp} from '../lib/words';
 import {DialogSurface} from './DialogSurface';
+import {SheetBack} from './PageBack';
 import {ShareLooks} from './ShareLooks';
 import {SHARE_NOTICE_KEY,useShareImage} from '../lib/use-share-image';
 
 /**
- * THE PROOF, COMPUTED FROM WHAT IS ACTUALLY ON THE CARD.
+ * THE PROOF, ONLY WHEN SOMETHING STANDS BEHIND IT.
  *
  * The postable fact is not the sentiment, it is that the sentiment was
- * EARNED — so this counts the real saves behind the chosen principles and
- * the span they were kept across. Distinct saves, never the sum of the
- * per-principle counts: two principles standing on the same evidence must
- * not let it be counted twice, because the one number a stranger cannot
- * check is the one the card must not inflate.
- *
- * AND THE SPAN IS TOLD HONESTLY (audit f2afcbe2). It was `max(1,
- * round(months))` from the principle's `heldSince`, so a principle held since
- * this morning printed "6 things I kept over 1 month". It still runs from
- * `heldSince` (the examples the API sends are only the two newest per signal,
- * so their dates cannot say how long anything was kept), but in weeks under
- * two months and months after; under a week there is no span to speak of,
- * and the line says the count alone rather than inventing one.
+ * EARNED. The card used to say so with a count of the real saves behind the
+ * chosen principles and the span they were held across; both left the card on
+ * 2026-11-08 ("states render, numerals never"). What stays is the honesty:
+ * the line appears only when cited saves and a held date are really there.
  */
-export function principleShareProof(locale:SupportedLocale,chosen:ApiPrinciple[],now:number):string|undefined{
-  const saves=new Set<string>();
-  let earliest=Number.POSITIVE_INFINITY;
-  for(const row of chosen){
-    for(const signal of row.citedSignals)for(const example of signal.examples??[])saves.add(example.createdAt+example.text);
-    /* THE SPAN IS THE PRINCIPLE'S `heldSince`, as on dev (review): the API
-       sends only the two newest examples per signal, so their dates said
-       nothing about how long anything was kept. */
-    const held=row.heldSince?Date.parse(row.heldSince):Number.NaN;
-    if(Number.isFinite(held))earliest=Math.min(earliest,held);
-  }
-  if(!saves.size||!Number.isFinite(earliest))return undefined;
-  const values={count:saves.size,principles:chosen.length};
-  const days=(now-earliest)/86_400_000;
-  if(!Number.isFinite(days)||days<7)return formatMessage(locale,'worldShareProofRecent',values);
-  const span=days<60?formatMessage(locale,'worldShareSpanWeeks',{n:Math.floor(days/7)}):formatMessage(locale,'worldShareSpanMonths',{n:Math.floor(days/30)});
-  return formatMessage(locale,'worldShareProof',{...values,span});
+export function principleShareProof(locale:SupportedLocale,chosen:ApiPrinciple[]):string|undefined{
+  /* NO COUNT AND NO SPAN ON THE CARD ("states render, numerals never",
+     2026-11-08). What survives is the guard: the proof appears only when real
+     saves and a held date stand behind the chosen principles, and it says
+     what stayed in words. */
+  const backed=chosen.some(row=>row.citedSignals.some(signal=>(signal.examples??[]).length>0));
+  const held=chosen.some(row=>Boolean(row.heldSince)&&Number.isFinite(Date.parse(row.heldSince!)));
+  if(!backed||!held)return undefined;
+  return formatMessage(locale,'worldShareProof',{principles:chosen.length});
 }
 
 export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:ProfileStorageScope;id:string;name:string;locale:SupportedLocale;onClose:()=>void;onChoose:(id:string)=>void}){
@@ -71,7 +55,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const fresh=(row:ApiPrinciple):PrincipleArtifactDraft=>({id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),appearance:'dark',format:'square',showName:false,mode:'card',beforeStatementId:null,
     entries:[{principleId:row.id,text:row.statement,originalStatement:row.statement}]});
 
-  const proofFor=(chosen:ApiPrinciple[]):string|undefined=>principleShareProof(locale,chosen,Date.now());
+  const proofFor=(chosen:ApiPrinciple[]):string|undefined=>principleShareProof(locale,chosen);
   useEffect(()=>{
     const controller=new AbortController();setLoadFailed(false);
     const timer=window.setTimeout(()=>{controller.abort();setLoadFailed(true);},15000);
@@ -143,15 +127,24 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const ready=Boolean(contentKey&&preview?.key===contentKey&&!renderError);
   const filenames=useMemo(()=>({download:`waka-principles-${draft?.value.format??'square'}.png`,share:'waka-principles.png'}),[draft?.value.format]);
   const {busy,notice,setNotice,canShare,download,share}=useShareImage(ready?preview?.blob??null:null,filenames);
+  /* DISCARDING IS ASKED IN PLACE (the question, Cancel, Discard), never in
+     a browser dialog: the one pattern for an act that cannot be undone. */
+  /* THE QUESTION BELONGS TO ONE DRAFT (code review, 2026-11-09): it holds
+     that draft's key, the picker holds still while it is asked, and a draft
+     that changes anyway puts it away, so an answer never lands on another. */
+  const [askingDiscard,setAskingFor]=useState<string|null>(null);
+  const setAskingDiscard=(asking:boolean)=>setAskingFor(asking&&draft?draft.key:null);
+  useEffect(()=>{setAskingFor(null);},[draft?.key]);
   const discard=()=>{
-    if(busy||!draft||!source||!window.confirm(say('worldShareDiscardConfirm')))return;
+    const askedAbout=askingDiscard;setAskingFor(null);
+    if(busy||!draft||!source||askedAbout!==draft.key)return;
     try{clearPrincipleArtifactDraft(draft);useDraft({key:'',raw:'',value:fresh(source)});setDrafts(readPrincipleArtifactDrafts(scope,id));setStorageFailed(false);}
     catch{setStorageFailed(true);}
   };
   return <>
     <button className="jar-review-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={onClose}/>
     <DialogSurface className="jar-seek jar-principle-share" aria-label={say('worldSharePrinciple')} onClose={onClose} data-jar-chrome="1">
-      <header><h2>{say('worldSharePrinciple')}</h2><button type="button" onClick={onClose}>{say('worldClose')}</button></header>
+      <header><SheetBack label={say('worldBack')} onBack={onClose}/><h2>{say('worldSharePrinciple')}</h2></header>
       <div className="jar-share-body">
       {loadFailed?<p role="alert">{say('worldShareLoadFailed')} <button type="button" onClick={()=>setAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button></p>:
         !rows?<p role="status">{say('worldShareLoading')}</p>:!source?<p role="status">{say('worldShareMissing')}</p>:null}
@@ -181,7 +174,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
           <details className="jar-share-customize" open={customizing} onToggle={event=>setCustomizing(event.currentTarget.open)}><summary>{say('worldShareCustomize')}</summary>
           {rows.length>1?<label>{say('worldShareChoose')}<select value={source.id} disabled={busy||storageFailed} onChange={event=>onChoose(event.target.value)}>{rows.map(row=><option key={row.id} value={row.id}>{row.statement}</option>)}</select></label>:null}
           <label>{say('worldShareType')}<select value={draft.value.mode??'card'} disabled={busy} onChange={event=>update({...draft.value,mode:event.target.value as 'card'|'change'})}><option value="card">{say('worldShareCard')}</option><option value="change">{say('worldShareChange')}</option></select></label>
-          {drafts.length>1?<label>{say('worldShareDrafts')}<select value={draft.key} disabled={busy||storageFailed} onChange={event=>{const row=drafts.find(item=>item.key===event.target.value);if(row)useDraft(row);}}>{drafts.map((row,index)=><option key={row.key} value={row.key}>{index+1}. {row.value.entries[0].text.slice(0,45)}</option>)}</select></label>:null}
+          {drafts.length>1?<label>{say('worldShareDrafts')}<select value={draft.key} disabled={busy||storageFailed||askingDiscard!==null} onChange={event=>{const row=drafts.find(item=>item.key===event.target.value);if(row)useDraft(row);}}>{drafts.map((row,index)=><option key={row.key} value={row.key}>{index+1}. {row.value.entries[0].text.slice(0,45)}</option>)}</select></label>:null}
           {change?<>
             {historyFailed?<p role="alert">{say('worldShareHistoryFailed')} <button type="button" onClick={()=>setHistoryAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button></p>:
               !statements?<p role="status">{say('worldReviewChecking')}</p>:!after||!earlier.length?<p>{say('worldShareNoHistory')}</p>:<>
@@ -197,7 +190,10 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
               </>}
           </>:null}
           {!change&&draft.value.entries.length<3&&rows.some(row=>!draft.value.entries.some(entry=>entry.principleId===row.id))?<label>{say('worldShareAdd')}<select value="" disabled={busy} onChange={event=>{const row=rows.find(item=>item.id===event.target.value);if(row)update({...draft.value,entries:[...draft.value.entries,{principleId:row.id,text:row.statement,originalStatement:row.statement}]});}}><option value="">{say('worldShareChoose')}</option>{rows.filter(row=>!draft.value.entries.some(entry=>entry.principleId===row.id)).map(row=><option key={row.id} value={row.id}>{row.statement}</option>)}</select></label>:null}
-          <button type="button" disabled={busy} onClick={discard}>{say('worldReviewDiscardDraft')}</button>
+          {askingDiscard!==null&&askingDiscard===draft.key?<p role="group" aria-label={say('worldShareDiscardConfirm')}>{say('worldShareDiscardConfirm')}{' '}
+            <button type="button" onClick={()=>setAskingDiscard(false)}>{say('worldCancel')}</button>{' '}
+            <button type="button" disabled={busy} onClick={discard}>{say('worldReadingDiscard')}</button></p>
+            :<button type="button" disabled={busy} onClick={()=>setAskingDiscard(true)}>{say('worldReviewDiscardDraft')}</button>}
           </details>
           {storageFailed?<p role="alert">{say('worldShareStorageFailed')} <button type="button" onClick={()=>{try{recoverPrincipleArtifactDrafts(scope,id);update(draft.value);}catch{setStorageFailed(true);}}}>{say('worldShareKeepDraft')}</button></p>:null}
         </div><div className="jar-share-preview" aria-busy={!ready&&!renderError}>

@@ -3,6 +3,7 @@ import {createPortal} from 'react-dom';
 import {fetchTopOfMindVersions,fetchTopOfMindVersion,type ApiTopOfMind} from '../lib/api';
 import {t,type SupportedLocale} from '../lib/locales';
 import {DialogSurface} from './DialogSurface';
+import {SheetBack} from './PageBack';
 import {driftWords} from '../lib/drift';
 
 /** Read the two actual stored artifacts around the displayed reading. */
@@ -54,7 +55,7 @@ export function ReadingChanges({profileId,readingId,locale,compact=false}:{profi
     {open?createPortal(<>
       <button type="button" className="jar-review-backdrop" tabIndex={-1} aria-hidden="true" onClick={()=>setOpen(false)}/>
       <DialogSurface className="jar-seek jar-reading-comparison" aria-label={say('worldReadingChanges')} onClose={()=>setOpen(false)} data-jar-chrome="1">
-        <header><h2>{say('worldReadingChanges')}</h2><button type="button" onClick={()=>setOpen(false)}>{say('worldClose')}</button></header>
+        <header><SheetBack label={say('worldBack')} onBack={()=>setOpen(false)}/><h2>{say('worldReadingChanges')}</h2></header>
         {failed?<p role="alert">{say('worldReadingChangesFailed')} <button type="button" onClick={()=>setAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button></p>:
           !shown||!drift?<p role="status">{say('worldReviewResultChecking')}</p>:<>
             {!shown.before?<p className="jar-drift-note">{say(shown.after.version===1?'worldReadingFirst':'worldReadingEarlierUnavailable')}</p>:

@@ -255,7 +255,7 @@ export function Days(): JSX.Element {
                 <span className="sr-only">
                   {/* The reader's own date words, in their language —
                       `toUTCString` read "17 Oct 2026" to a Korean reader. */}
-                  {dateStamp(cell.at, locale)} —{" "}
+                  {dateStamp(cell.at, locale)},{" "}
                   {cell.kept
                     ? formatMessage(locale, "worldDaysKept", { count: cell.kept, countWords: numWords(cell.kept, locale) })
                     : say("worldDaysNone")}

@@ -83,7 +83,7 @@ it("shows the screen the second time, so it cannot spin", async () => {
      header forbids a boundary that retries itself because it spins; this is
      the assertion that it does not. A reload that did not fix the problem
      hands the person the screen and the button. */
-  sessionStorage.setItem("waka:surface-reloaded", "1");
+  sessionStorage.setItem("waka:surface-reloaded", String(Date.now()));
   await mount(
     <SurfaceBoundary surface="the world">
       <Boom message="Failed to fetch dynamically imported module: /src/pages/Home.tsx" />
@@ -107,16 +107,38 @@ it("does not reload for a bug in the screen's own code", async () => {
   expect(host.textContent).toContain("didn’t load");
 });
 
-it("clears the guard once a screen mounts, so the next stale chunk gets its own attempt", async () => {
-  /* ONE RELOAD PER FAILURE, NOT ONE PER SESSION. Tying the reset to a
-     successful mount rather than to a timer is what keeps those different. */
-  sessionStorage.setItem("waka:surface-reloaded", "1");
+it("keeps a fresh guard through a mount that is only the Suspense fallback", async () => {
+  /* THE SPIN first-paint caught. Every lazy page suspends INSIDE this
+     boundary, so the boundary mounts before the chunk is even requested. A
+     mount that cleared the guard here let the rejection that follows reload
+     again, forever, and the screen with its button never appeared. */
+  sessionStorage.setItem("waka:surface-reloaded", String(Date.now()));
+  await mount(
+    <SurfaceBoundary surface="the world">
+      <p>loading</p>
+    </SurfaceBoundary>,
+  );
+  expect(sessionStorage.getItem("waka:surface-reloaded")).not.toBeNull();
+});
+
+it("clears a guard older than one reload, so the next stale chunk gets its own attempt", async () => {
+  sessionStorage.setItem("waka:surface-reloaded", String(Date.now() - 5 * 60_000));
   await mount(
     <SurfaceBoundary surface="the world">
       <p>the world</p>
     </SurfaceBoundary>,
   );
   expect(sessionStorage.getItem("waka:surface-reloaded")).toBeNull();
+});
+
+it("reloads again for a stale chunk long after the last reload", async () => {
+  sessionStorage.setItem("waka:surface-reloaded", String(Date.now() - 5 * 60_000));
+  await mount(
+    <SurfaceBoundary surface="the world">
+      <Boom message="Failed to fetch dynamically imported module: /assets/Home-x.js" />
+    </SurfaceBoundary>,
+  );
+  expect(reload).toHaveBeenCalledOnce();
 });
 
 it("offers a way home as well as a reload, on any page but home", async () => {
@@ -134,7 +156,7 @@ it("offers a way home as well as a reload, on any page but home", async () => {
       <Boom message="Cannot read properties of undefined (reading 'length')" />
     </SurfaceBoundary>,
   );
-  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Go to your WAKA");
+  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Home");
   expect(home, "the crash screen offers only a reload").toBeDefined();
   await act(async () => home!.click());
   expect(assign).toHaveBeenCalledWith("/");
@@ -151,7 +173,7 @@ it("does not offer home on home, where it would be the reload again", async () =
       <Boom message="Cannot read properties of undefined (reading 'length')" />
     </SurfaceBoundary>,
   );
-  expect(host.textContent).not.toContain("Go to your WAKA");
+  expect(host.textContent).not.toContain("Home");
 });
 
 it("offers home on '/' with a query, since the query may be what breaks it, and goes to a clean '/'", async () => {
@@ -166,7 +188,7 @@ it("offers home on '/' with a query, since the query may be what breaks it, and 
       <Boom message="Cannot read properties of undefined (reading 'length')" />
     </SurfaceBoundary>,
   );
-  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Go to your WAKA");
+  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Home");
   expect(home, "a home with a query got no way to a clean home").toBeDefined();
   await act(async () => home!.click());
   expect(assign).toHaveBeenCalledWith("/");

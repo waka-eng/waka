@@ -103,10 +103,15 @@ it("keeps a Deleted tab while anything is on the shelf, and brings a thing back 
   await mount();
   await press(byText(".waka-tab", "Deleted"));
   expect(host!.querySelector(".waka-shelf .waka-list-lead")?.textContent).toBe("Something I threw away");
-  expect(host!.textContent).toContain("Attachments not kept");
+  expect(host!.textContent).toContain("Attachments can’t be restored");
   await press(byText(".waka-shelf-forget", "Delete for good"));
   expect(calls.forgotten, "one press deleted for good").toEqual([]);
-  await press(byText(".waka-shelf-back", "Bring back"));
+  /* AN UNRECOVERABLE ACT ASKS IN PLACE: the question, Cancel and Delete. */
+  expect(host!.querySelector(".waka-shelf-ask")?.textContent).toBe("Delete for good?");
+  await press(byText(".waka-shelf-back", "Cancel"));
+  expect(host!.querySelector(".waka-shelf-ask"), "Cancel left the question up").toBeNull();
+  expect(calls.forgotten, "Cancel deleted for good").toEqual([]);
+  await press(byText(".waka-shelf-back", "Restore"));
   expect(calls.restored).toEqual(["z"]);
 });
 
@@ -114,7 +119,7 @@ it("offers to share the open note", async () => {
   await mount();
   await press(host!.querySelector(".waka-list-row"));
   await openNoteActions();
-  expect(document.querySelector('[aria-label="Share this inspiration"]')).toBeTruthy();
+  expect(document.querySelector('[aria-label="Share this note"]')).toBeTruthy();
 });
 
 
@@ -135,8 +140,8 @@ it('lists and restores an agent’s media-only inspiration in that same profile'
   await press(byText('.waka-tab','Deleted'));
   expect(host!.textContent).toContain('Sunset.jpg');
   expect(host!.querySelector('.jar-saved-count')?.textContent).toBe('(1)');
-  expect(host!.textContent).not.toContain('Attachments not kept');
-  await press(byText('.waka-shelf-back','Bring back'));
+  expect(host!.textContent).not.toContain('Attachments can’t be restored');
+  await press(byText('.waka-shelf-back','Restore'));
   expect(calls.restored).toEqual(['agent-photo']);
   expect(calls.scopes.at(-1)).toEqual({profile:'noah'});
 });
@@ -145,8 +150,8 @@ it('confirms restoration and opens that exact old note even outside the loaded a
   shelf.rows = [{ id: 'old-note', text: 'An older restored thought.', kind: null, hadPhoto: false, keptAt: '2026-01-01T00:00:00Z', deletedAt: new Date().toISOString(), goneAt: new Date().toISOString() }];
   await mount('noah');
   await press(byText('.waka-tab', 'Deleted'));
-  await press(byText('.waka-shelf-back', 'Bring back'));
-  expect(host!.textContent).toContain('Inspiration restored.');
-  await press(byText('.waka-restore-notice button', 'Open inspiration'));
+  await press(byText('.waka-shelf-back', 'Restore'));
+  expect(host!.textContent).toContain('Restored.');
+  await press(byText('.waka-restore-notice button', 'Open'));
   expect(host!.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('An older restored thought.');
 });

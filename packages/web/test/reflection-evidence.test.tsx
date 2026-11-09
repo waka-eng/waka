@@ -46,10 +46,10 @@ afterEach(() => world?.unmount());
 it("labels a reflected citation and opens that answer, not the parent capture", async () => {
   world = await mountWorld(FACTS);
   await act(async () => world.container.querySelector<HTMLElement>('.jar-wallcol[data-kind="self"] .jar-poster')!.click());
-  const open = [...world.container.querySelectorAll<HTMLElement>(".jar-prov-open")].find((node) => node.textContent === "View inspirations")!;
+  const open = [...world.container.querySelectorAll<HTMLElement>(".jar-prov-open")].find((node) => node.textContent === "See all")!;
   await act(async () => open.click());
   const row = world.container.querySelector<HTMLButtonElement>(".jar-prov-row")!;
-  expect(row.textContent).toContain("From your reflection");
+  expect(row.textContent).toContain("From your note");
   await act(async () => row.click());
   expect(world.container.querySelector(".jar-prov-room-full")?.textContent)
     .toContain("I can change course without losing the work already done.");

@@ -123,7 +123,7 @@ try{
   try{const context=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});
     await context.addCookies([{name:'waka_session',value:session.token,url:origin,httpOnly:true,secure:true,sameSite:'Lax'}]);
     const page=await context.newPage();await page.goto(origin+'/?view=sky');const words=page.getByRole('button',{name:edited,exact:true});await words.waitFor({state:'visible',timeout:20000});
-    await words.click();await page.getByRole('button',{name:'Edit wording',exact:true}).waitFor({state:'visible'});await page.screenshot({path:`${output}/principle-390.png`});report.deployedPrincipleVisible=true;
+    await words.click();await page.getByRole('button',{name:'Edit',exact:true}).waitFor({state:'visible'});await page.screenshot({path:`${output}/principle-390.png`});report.deployedPrincipleVisible=true;
   }finally{await browser.close();}
 }catch(error){report.failure=redact(error instanceof Error?error.message:String(error));process.exitCode=1;}
 finally{

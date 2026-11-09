@@ -34,6 +34,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { HowItWorksPanel } from "./HowItWorksPanel";
 import { SettingsPanel, type SettingsPanelProps } from "./SettingsPanel";
 import { t, type MessageKey, type SupportedLocale } from "../lib/locales";
+import { SheetBack } from "./PageBack";
 
 export interface MenuItem {
   /** Stable key; also what a test names a row by. */
@@ -509,12 +510,12 @@ export function Menu({ locale, items, current, label, left, actions, account, se
               name-and-address check really IS a note, and keeps it. */}
           {corner === "info" ? (
             <span className="waka-account waka-account--about">
-              <button type="button" className="waka-account-close" onClick={close}>{t(locale, "worldClose")}</button>
+              <SheetBack label={t(locale, "worldBack")} onBack={close} />
               <HowItWorksPanel locale={locale} />
             </span>
           ) : settings ? (
             <span className="waka-account waka-account--settings">
-              <button type="button" className="waka-account-close" onClick={close}>{t(locale, "worldClose")}</button>
+              <SheetBack label={t(locale, "worldBack")} onBack={close} />
               <SettingsPanel {...settings} locale={locale} initialAgentId={setupId}
                 onBeforeLeave={guard => { settingsLeave.current = guard; }}
                 email={account?.email ?? null}

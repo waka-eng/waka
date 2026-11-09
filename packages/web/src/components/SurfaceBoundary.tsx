@@ -66,7 +66,7 @@
  *
  * So a module-load failure reloads the document ONCE, and the guard is what
  * keeps it honest: a `sessionStorage` key written before the reload and
- * cleared only on a successful mount, so the second failure in a row shows
+ * holding the time of the reload, so the second failure in a row shows
  * the screen and the button. It cannot spin, because it cannot happen twice.
  * Anything that is not a module-load failure — a render error in the world's
  * own code — shows the screen immediately, since reloading would be a guess
@@ -109,37 +109,48 @@ function looksLikeAStaleModule(message: string): boolean {
   );
 }
 
+/** Long enough for a reload, its document and the failing chunk to come
+    back; short enough that the next stale deploy gets its own attempt. */
+const RELOAD_WINDOW_MS = 30_000;
+
+/** Whether this tab reloaded for a missing chunk within the window. Throws
+    when storage is refused, which callers read as "yes": no reload. */
+function reloadedRecently(): boolean {
+  const at = Number(sessionStorage.getItem(RELOADED));
+  return Number.isFinite(at) && at > 0 && Date.now() - at < RELOAD_WINDOW_MS;
+}
+
 export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundaryState> {
   state: SurfaceBoundaryState = { failed: false, message: "" };
 
   componentDidMount(): void {
     /**
-     * ONLY WHEN SOMETHING ACTUALLY RENDERED.
+     * ONLY A GUARD THAT HAS OUTLIVED ITS RELOAD.
      *
-     * `this.state.failed` is load-bearing and was missing for one commit,
-     * which a test caught. React runs the lifecycle in this order:
+     * `this.state.failed` is load-bearing: React runs
      *
      *   render (throws) -> getDerivedStateFromError -> render the error
      *   screen -> componentDidMount -> componentDidCatch
      *
-     * So the boundary DOES mount while showing the failure, before it is
-     * told what the failure was — and clearing unconditionally wiped the
-     * guard a moment before the next reload would read it. The protection
-     * against spinning would have been removed by the very failure it exists
-     * to bound.
+     * so the boundary mounts while showing the failure, before it is told
+     * what the failure was.
      *
-     * Reaching here with `failed` false means a screen is on the page, which
-     * is the only honest evidence that a reload worked. That keeps this one
-     * automatic reload per FAILURE rather than one per session.
+     * And `failed` false is NOT evidence that a screen rendered. Every lazy
+     * page sits in a `Suspense` INSIDE this boundary (main.tsx), so the
+     * boundary mounts the moment the fallback is up, before the chunk has
+     * even been asked for. Clearing here unconditionally wiped the guard on
+     * every reload, ahead of the rejection it exists to bound, and a chunk
+     * that truly could not load reloaded forever (first-paint case 2 caught
+     * it: an endless "reloading once", never the screen). So the guard is a
+     * time, and a mount clears it only once it is older than one reload can
+     * take. A stale chunk an hour later still gets its own attempt.
      */
     if (this.state.failed) return;
     try {
-      sessionStorage.removeItem(RELOADED);
+      if (!reloadedRecently()) sessionStorage.removeItem(RELOADED);
     } catch {
       /* Private browsing refuses storage. Then the guard cannot be written
-         either, so the branch below never fires and the button still works —
-         the degradation is "no automatic reload", which is where this file
-         started. */
+         either, so the branch below never fires and the button still works. */
     }
   }
 
@@ -157,8 +168,8 @@ export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoun
     if (looksLikeAStaleModule(error instanceof Error ? error.message : String(error))) {
       let already = true;
       try {
-        already = sessionStorage.getItem(RELOADED) !== null;
-        if (!already) sessionStorage.setItem(RELOADED, "1");
+        already = reloadedRecently();
+        if (!already) sessionStorage.setItem(RELOADED, String(Date.now()));
       } catch {
         already = true;
       }

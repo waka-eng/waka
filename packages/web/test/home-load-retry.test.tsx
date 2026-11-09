@@ -52,7 +52,7 @@ it("re-reads the field, the sky and the agent roster on one Try again", async ()
   try {
     await act(async () => root.render(createElement(MemoryRouter, null, createElement(HomePage))));
     for (let i = 0; i < 5; i += 1) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
-    expect(host.textContent).toContain("Your home didn’t load.");
+    expect(host.textContent).toContain("Couldn’t load your home.");
     const sky = vi.mocked(loadSignals).mock.calls.length;
     const roster = vi.mocked(fetchProfiles).mock.calls.length;
     const reading = vi.mocked(loadTopOfMind).mock.calls.length;

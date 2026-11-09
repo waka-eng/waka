@@ -28,7 +28,7 @@ it('quotes the words read off a saved screenshot, and Fix sends the line with it
   await mount();
   expect(host.querySelector('.waka-note-read-label')?.textContent).toBe('The words I read');
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
-  await press('Fix'); await type('Nobody feels ready, ever.'); await press('Done');
+  await press('Edit'); await type('Nobody feels ready, ever.'); await press('Save');
   expect(correctImageWords).toHaveBeenCalledWith('a', { revision: 'r1', correction: 'Nobody feels ready, ever.' });
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready, ever.”');
 });
@@ -37,9 +37,9 @@ it('on a stale revision, reads the words again, keeps the line, and says so plai
   vi.mocked(fetchImageWords).mockResolvedValueOnce(row({})).mockResolvedValueOnce(row({ text: 'Changed elsewhere.', revision: 'r9' }));
   vi.mocked(correctImageWords).mockRejectedValue(new ApiError({ status: 409, code: 'words_changed', message: 'changed' }));
   await mount();
-  await press('Fix'); await type('My line'); await press('Done');
+  await press('Edit'); await type('My line'); await press('Save');
   expect(fetchImageWords).toHaveBeenCalledTimes(2);
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('These words changed while you were fixing them.');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('These words changed while you were editing.');
   expect(host.querySelector('textarea')?.value, 'the typed line was lost').toBe('My line');
 });
 
@@ -57,7 +57,7 @@ it('follows a queued read until it lands', async () => {
 it('offers no Fix where the server says the words may not be edited', async () => {
   vi.mocked(fetchImageWords).mockResolvedValue(row({ canEdit: false }));
   await mount();
-  expect([...host.querySelectorAll('button')].map(b => b.textContent)).not.toContain('Fix');
+  expect([...host.querySelectorAll('button')].map(b => b.textContent)).not.toContain('Edit');
 });
 
 /* CODE REVIEW, 2026-11-08: the asking must end when asking cannot help. */
@@ -140,9 +140,9 @@ it('shows the detail\'s words at once, and offers Fix only once the read says th
   vi.mocked(fetchImageWords).mockImplementationOnce(() => new Promise(resolve => { answer = resolve; }));
   await mountInline({ status: 'ready', text: 'Nobody feels ready.', read: 'Nobody feels ready.', correction: null, revision: '3' });
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
-  expect([...host.querySelectorAll('button')].map(b => b.textContent), 'Fix offered before editability was known').not.toContain('Fix');
+  expect([...host.querySelectorAll('button')].map(b => b.textContent), 'Fix offered before editability was known').not.toContain('Edit');
   await act(async () => answer(row({ revision: '3', canEdit: false })));
-  expect([...host.querySelectorAll('button')].map(b => b.textContent), 'a read-only session was offered Fix').not.toContain('Fix');
+  expect([...host.querySelectorAll('button')].map(b => b.textContent), 'a read-only session was offered Fix').not.toContain('Edit');
   expect(fetchImageWords, 'a settled reading was polled').toHaveBeenCalledTimes(1);
 });
 
@@ -156,7 +156,7 @@ it('keeps a fix when a read that left before it answers after it', async () => {
   await mount();
   await act(async () => { await vi.advanceTimersByTimeAsync(1_600); }); // the second read has left
   expect(late, 'the second read never left').toBeTypeOf('function');
-  await press('Type the line'); await type('My line.'); await press('Done');
+  await press('Type the line'); await type('My line.'); await press('Save');
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“My line.”');
   await act(async () => { late(queued); });
   expect(host.querySelector('.waka-note-read-text')?.textContent, 'an older read overwrote the fix').toBe('“My line.”');
@@ -186,7 +186,7 @@ it('keeps following a queued read when a write it raced with fails', async () =>
   vi.mocked(correctImageWords).mockRejectedValue(new ApiError({ status: 500, code: 'server', message: 'Down' }));
   await mount();
   await act(async () => { await vi.advanceTimersByTimeAsync(1_600); });
-  await press('Type the line'); await type('My line.'); await press('Done');
+  await press('Type the line'); await type('My line.'); await press('Save');
   await act(async () => { late(queued); });
   const asked = vi.mocked(fetchImageWords).mock.calls.length;
   await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
@@ -199,8 +199,8 @@ it('keeps what this session may do across a new inline summary', async () => {
   vi.mocked(fetchImageWords).mockResolvedValueOnce(row({ canEdit: true }))
     .mockImplementation(() => new Promise(() => {}));
   await mountInline({ status: 'ready', text: 'Nobody feels ready.', read: 'Nobody feels ready.', correction: null, revision: '1' });
-  expect([...host.querySelectorAll('button')].map(b => b.textContent)).toContain('Fix');
+  expect([...host.querySelectorAll('button')].map(b => b.textContent)).toContain('Edit');
   await mountInline({ status: 'ready', text: 'My line.', read: 'Nobody feels ready.', correction: 'My line.', revision: '2' });
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“My line.”');
-  expect([...host.querySelectorAll('button')].map(b => b.textContent), 'Fix flickered away').toContain('Fix');
+  expect([...host.querySelectorAll('button')].map(b => b.textContent), 'Fix flickered away').toContain('Edit');
 });

@@ -8,7 +8,7 @@
  * be wrong:
  *
  *   - the full read is still in flight after the card's two-second wait
- *     (the card shows "Opening…" and refuses an edit; when the read lands the
+ *     (the card shows "Loading…" and refuses an edit; when the read lands the
  *     card takes it and the edit opens on the whole text);
  *   - the full read failed (the card refuses an edit, says so, and Try again
  *     reads again);
@@ -166,7 +166,7 @@ async function openByAddress(id: string): Promise<void> {
 /** Step to the next memory with the card's own caret — the panel effect's path. */
 async function stepOn(): Promise<void> {
   const next = [...world.container.querySelectorAll<HTMLElement>(".jar-panel-foot-c button")]
-    .find((b) => /after this one/.test(b.getAttribute("aria-label") ?? ""));
+    .find((b) => /^Next note$/.test(b.getAttribute("aria-label") ?? ""));
   if (!next) throw new Error("the card offers no way on");
   await act(async () => next.click());
   await world.step(10);
@@ -181,7 +181,7 @@ async function pressWords(): Promise<void> {
   await act(async () => p.click());
   /* every edit reads the note fresh before it opens: give that read its turn */
   for (let turn = 0; turn < 10 && !editBox() && !note(); turn += 1) { await world.step(2); await wait(10); }
-  for (let turn = 0; turn < 20 && !editBox() && note() === "Opening…" && S.hold !== "hold"; turn += 1) { await world.step(2); await wait(10); }
+  for (let turn = 0; turn < 20 && !editBox() && note() === "Loading…" && S.hold !== "hold"; turn += 1) { await world.step(2); await wait(10); }
 }
 async function typeAndKeep(text: string): Promise<void> {
   const box = editBox()!;
@@ -278,7 +278,7 @@ it("tells an emptied memory card to write something, and offers nothing it canno
   const box = editBox()!;
   const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
   await act(async () => { set.call(box, ""); box.dispatchEvent(new Event("input", { bubbles: true })); });
-  expect(box.placeholder).toBe("Write something to keep this memory.");
+  expect(box.placeholder).toBe("Write something, or add a photo or file, to keep this note.");
   expect(card()!.querySelector<HTMLButtonElement>(".jar-panel-save")!.disabled, "and Save stays dim").toBe(true);
 });
 

@@ -116,7 +116,7 @@ describe("a reason clause speaks the reader's language", () => {
        package. What is asserted here is that every word the WEB chooses is
        Korean. */
     for (const status of [0, 401]) {
-      const sentence = whyFailed(new ApiError({ status, message: 'network unreachable' }), '저장되지 않았어요.', 'ko-KR');
+      const sentence = whyFailed(new ApiError({ status, message: 'network unreachable' }), '저장하지 못했어요.', 'ko-KR');
       expect(englishIn(sentence), `ko-KR, status ${status}: ${sentence}`).toEqual([]);
       expect(/[가-힣]/.test(sentence), sentence).toBe(true);
     }
@@ -124,8 +124,8 @@ describe("a reason clause speaks the reader's language", () => {
        fallback in front of it. */
     expect(englishIn(whyOf(new ApiError({ status: 0, message: 'x' }), 'ko-KR'))).toEqual([]);
     /* English is unchanged — this is a localisation fix, not a rewrite. */
-    expect(whyFailed(new ApiError({ status: 401, message: 'x' }), 'That was not saved.', 'en-US'))
-      .toBe('That was not saved — You are signed out. Sign in and it is still here.');
+    expect(whyFailed(new ApiError({ status: 401, message: 'x' }), 'Couldn’t save that.', 'en-US'))
+      .toBe('Couldn’t save that. You’re signed out. Sign in again; your words are still here.');
   });
 });
 
@@ -164,7 +164,7 @@ describe('an attachment speaks the reader’s language', () => {
     expect(englishIn(host.textContent ?? ''), host.textContent ?? '').toEqual([]);
   });
 
-  it('says in Korean that a preview could not be loaded at all', async () => {
+  it('says in Korean that a preview Couldn’t load your agents at all', async () => {
     vi.mocked(fetchAttachmentDetails).mockImplementation(async () => { throw new ApiError({ status: 0, message: 'network unreachable' }); });
     await act(async () => root.render(<AttachmentPreview item={{ id: 'photo', type: 'image', label: '사진' }} locale="ko-KR" />));
     const said = host.textContent ?? '';
@@ -187,7 +187,7 @@ describe('an attachment speaks the reader’s language', () => {
     ['no speech', transcript({ status: 'unavailable', reason: 'audio_no_speech', effectiveText: null, canRetry: true })],
     ['too long', transcript({ status: 'unavailable', reason: 'audio_too_long', effectiveText: null })],
     ['too large', transcript({ status: 'unavailable', reason: 'audio_too_large_to_transcribe', effectiveText: null })],
-    ['corrected', transcript({ correction: '내가 고친 문구', effectiveText: '내가 고친 문구' })],
+    ['corrected', transcript({ correction: '내가 고친 문장', effectiveText: '내가 고친 문장' })],
   ])('renders a recording in Korean while %s', async (_name, row) => {
     vi.mocked(fetchAttachmentTranscript).mockImplementation(async () => ({ ...row }));
     await act(async () => root.render(<AttachmentTranscript id="audio" locale="ko-KR" />));
@@ -217,9 +217,9 @@ describe('an attachment speaks the reader’s language', () => {
       status: 'unavailable', reason: 'audio_too_long', canRetry: true,
     }));
     await act(async () => root.render(<AttachmentTranscript id="audio" locale="en-US" />));
-    expect(host.textContent).toContain('Transcript');
-    expect(host.textContent).toContain('too long to transcribe');
-    expect(host.textContent).toContain('Retry transcription');
+    expect(host.textContent).toContain('What you said');
+    expect(host.textContent).toContain('too long to write out');
+    expect(host.textContent).toContain('Try again');
     expect(/[가-힣]/.test(host.textContent ?? ''), host.textContent ?? '').toBe(false);
   });
 });

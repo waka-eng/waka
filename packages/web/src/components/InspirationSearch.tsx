@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { fetchInspirationPage, type ApiInspirationSummary } from '../lib/api';
 import { t, type SupportedLocale } from '../lib/locales';
 import { DialogSurface } from './DialogSurface';
+import { SheetBack } from './PageBack';
 import { inspirationPreview } from '../lib/inspiration-preview';
 import { dateStamp } from '../lib/words';
 
@@ -57,7 +58,7 @@ export function InspirationSearch(props: InspirationSearchProps) {
     finally { if (sequence.current === serial) { morePending.current = false; setPageBusy(false); } }
   };
   return <DialogSurface className="jar-seek jar-inspiration-search" aria-label={label} onClose={props.onClose}>
-    <div className="jar-search-heading"><p>{label}</p><button type="button" onClick={props.onClose}>{t(props.locale, 'worldClose')}</button></div>
+    <div className="jar-search-heading"><SheetBack label={t(props.locale, 'worldBack')} onBack={props.onClose} /><p>{label}</p></div>
     <input autoFocus className="jar-roomform-box" aria-label={label} value={props.query}
       placeholder={t(props.locale, 'worldSeekPlaceholder')} onChange={(event) => props.onQuery(event.target.value)} />
     {query.length >= 2 && (!current || current.phase === 'loading') ? <p role="status">{t(props.locale, 'worldSearchingInspirations')}</p> : null}

@@ -174,7 +174,7 @@ describe("the page a stranger sees", () => {
   it("says a reading needs another look in the words the rest of the product uses", async () => {
     await visit();
     expect(host.querySelector(".waka-public-aside")?.textContent).toBe(
-      "This reading needs another look.",
+      "What this came from has changed.",
     );
   });
 
@@ -239,13 +239,13 @@ describe("the page a stranger sees", () => {
   it("says the page did not open, rather than that it is missing, and tries again", async () => {
     vi.mocked(fetchPublicProfile).mockRejectedValueOnce(new ApiError({ status: 500, message: "boom" }));
     await visit();
-    expect(host.textContent).toContain("This page didn’t open");
+    expect(host.textContent).toContain("Couldn’t open this page");
     expect(host.textContent).not.toContain("This page is not here");
     const retry = [...host.querySelectorAll<HTMLButtonElement>(".waka-public-enter")]
       .find((button) => button.textContent === "Try again")!;
     await act(async () => retry.click());
     await act(async () => undefined);
-    expect(host.querySelector(".waka-public-title")?.textContent).toBe("River’s top of mind");
+    expect(host.querySelector(".waka-public-title")?.textContent).toBe("On River’s mind");
   });
 
   /* A 400 or a response that did not parse as a page is the server's answer,
@@ -257,14 +257,14 @@ describe("the page a stranger sees", () => {
     vi.mocked(fetchPublicProfile).mockRejectedValueOnce(error);
     await visit();
     expect(host.textContent).toContain("This page is not here");
-    expect(host.textContent).not.toContain("This page didn’t open");
+    expect(host.textContent).not.toContain("Couldn’t open this page");
   });
 
   /** The way in does not depend on the read, so it is there while it runs. */
   it("offers the way in while the page is still opening", async () => {
     vi.mocked(fetchPublicProfile).mockReturnValue(new Promise(() => undefined));
     await visit();
-    expect(host.textContent).toContain("Opening this page…");
+    expect(host.textContent).toContain("Loading…");
     expect(host.querySelector(".waka-public-enter")?.textContent).toBe("Create your WAKA");
   });
 
@@ -276,9 +276,9 @@ describe("the page a stranger sees", () => {
         signal?.addEventListener("abort", () => reject(new ApiError({ status: 0, message: "aborted" })));
       }));
       await visit();
-      expect(host.textContent).toContain("Opening this page…");
+      expect(host.textContent).toContain("Loading…");
       await act(async () => vi.advanceTimersByTimeAsync(15_000));
-      expect(host.textContent).toContain("This page didn’t open");
+      expect(host.textContent).toContain("Couldn’t open this page");
     } finally {
       vi.useRealTimers();
     }

@@ -69,7 +69,7 @@ afterEach(async () => {
 });
 async function openAgent(profile = noah) {
   await act(async () => root.render(<SettingsPanel {...props} />));
-  await click('Agent profiles');
+  await click('Agents');
   await act(async () => host.querySelector<HTMLButtonElement>(`button[aria-label="Settings for ${profile.name}"]`)!.click());
 }
 
@@ -105,9 +105,9 @@ it('creates a named key for the selected agent, copies it, and never displays it
 });
 
 it('revokes only after confirmation and preserves the agent and other credentials', async () => {
-  await openAgent(); await click('API keys'); await click('Revoke key');
+  await openAgent(); await click('API keys'); await click('Delete key');
   expect(calls.some(call => call.method === 'DELETE')).toBe(false);
-  await click('Revoke this key');
+  await click('Delete');
   expect(calls.filter(call => call.method === 'DELETE').map(call => call.path)).toEqual(['/api/agent-keys/Noah%20laptop']);
   expect(host.textContent).not.toContain('Noah laptop');
   expect(keys.some(k => k.profileId === another.id)).toBe(true);
@@ -115,16 +115,16 @@ it('revokes only after confirmation and preserves the agent and other credential
 });
 
 it('keeps a key visible when revocation fails and allows retry', async () => {
-  await openAgent(); await click('API keys'); await click('Revoke key');
-  fail = 'DELETE'; await click('Revoke this key');
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not revoke');
+  await openAgent(); await click('API keys'); await click('Delete key');
+  fail = 'DELETE'; await click('Delete');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t delete the key');
   expect(host.textContent).toContain('Noah laptop');
-  fail = null; await click('Revoke this key'); expect(host.textContent).not.toContain('Noah laptop');
+  fail = null; await click('Delete'); expect(host.textContent).not.toContain('Noah laptop');
 });
 
 it('retries failed loads and binds configuration to the selected agent', async () => {
   fail = 'GET'; await openAgent(another); await click('API keys');
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not load API keys');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t load API keys');
   expect(button('Create key')).toBeUndefined();
   fail = null; await click('Refresh');
   expect(host.textContent).toContain('Another laptop');
@@ -145,7 +145,7 @@ it('never reveals a late key response after navigating to another agent', async 
     return original(...args);
   });
   await input('Key name, e.g. Work laptop', 'Pending key'); await click('Create key');
-  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Back to agent profiles"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Back"]')!.click());
   await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Settings for anotherone"]')!.click());
   await click('API keys');
   await act(async () => { release(); await pending; });
@@ -157,8 +157,8 @@ it('never reveals a late key response after navigating to another agent', async 
 
 it('shows ordered setup and copies the chosen client config and profile-specific test prompt', async () => {
   await openAgent(another); await click('API keys');
-  expect(host.textContent).toContain('An API key lets an app or script read and write only this agent’s memory until revoked.');
-  expect(host.textContent).toContain('browser sign-in is also available');
+  expect(host.textContent).toContain('An API key lets an app or script read and write only this agent’s notes until you delete it.');
+  expect(host.textContent).toContain('you can also sign in with a browser');
   await act(async () => host.querySelector('summary')!.click());
   const steps = [...host.querySelectorAll('.waka-mcp-key-steps > li > h4')].map(node => node.textContent);
   expect(steps).toEqual(['Prepare WAKA MCP in Terminal', 'Add the configuration to your client', 'Test it in your AI client']);
@@ -200,7 +200,7 @@ it('offers the setup prompt before manual key instructions without putting the s
 
 async function openPersonal(locale: SettingsPanelProps['locale'] = 'en-US') {
   await act(async () => root.render(<SettingsPanel {...props} locale={locale} />));
-  await click(locale === 'en-US' ? 'My profile · MCP' : '내 프로필 · MCP');
+  await click(locale === 'en-US' ? 'You · MCP' : '나 · MCP');
 }
 
 it('offers personal MCP without an agent and lists only live personal keys', async () => {
@@ -209,16 +209,16 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
     ? Promise.resolve(Response.json({ profiles: [personal] })) : original(...args));
   keys.push(key('Personal laptop', personal.id), { ...key('Old personal key', personal.id), revokedAt: '2026-10-22T00:00:00Z' });
   await openPersonal();
-  expect(host.querySelector('h2')?.textContent).toBe('My profile');
-  expect(host.textContent).toContain('My profile · You');
+  expect(host.querySelector('h2')?.textContent).toBe('You');
+  expect(host.textContent).toContain('You · You');
   expect(calls.some(c => c.path.includes('keys'))).toBe(false);
   await click('API keys');
-  expect(host.textContent).toContain('cannot edit or delete memories, or access agent profiles');
+  expect(host.textContent).toContain('can’t edit or delete notes, or reach your agents');
   expect(host.textContent).toContain('Personal laptop');
-  for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent profile name']) expect(host.textContent).not.toContain(hidden);
+  for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent name']) expect(host.textContent).not.toContain(hidden);
   expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys']);
   expect(calls.every(c => c.method === 'GET')).toBe(true);
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back to Settings"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
   expect(document.activeElement).toBe(host.querySelector('[data-settings-target="personal"]'));
 });
 
@@ -242,7 +242,7 @@ it('keeps personal keys in their tab and copies a profile-bound setup prompt wit
   const details = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(prompt)![1]!);
   expect(details).toMatchObject({ profileId: personal.id, profileType: 'human', serverName: `waka-${personal.id}`, scope: 'current project only' });
   expect(details.login).toBeUndefined();
-  expect(prompt).toContain('Settings → My profile · MCP → API keys');
+  expect(prompt).toContain('Settings → You · MCP → API keys');
   expect(prompt).toContain('Do not use browser login or create an agent profile');
   expect(prompt).toContain('Never ask me to paste the key into chat');
   expect(prompt).not.toContain(noah.id); expect(prompt).not.toContain(secret);
@@ -261,10 +261,10 @@ it('keeps personal keys in their tab and copies a profile-bound setup prompt wit
 it('revokes a personal key without touching an agent key, session or memory', async () => {
   keys.push(key('Personal laptop', personal.id));
   await openPersonal(); await click('API keys');
-  await click('Revoke key');
+  await click('Delete key');
   expect(calls.some(c => c.method === 'DELETE')).toBe(false);
-  expect(host.textContent).toContain('The profile and its memory stay saved');
-  await click('Revoke this key');
+  expect(host.textContent).toContain('Everything kept stays');
+  await click('Delete');
   expect(calls.filter(c => c.method === 'DELETE').map(c => c.path)).toEqual(['/api/keeper-keys/Personal%20laptop']);
   expect(host.textContent).not.toContain('Personal laptop');
   expect(keys.filter(k => k.profileId === noah.id)).toHaveLength(2);
@@ -277,7 +277,7 @@ it('retries a failed personal profile load and translates personal setup in Kore
   expect(calls.every(c => c.path === '/api/profiles')).toBe(true);
   fail = null;
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-settings-erase')!.click());
-  expect(host.textContent).toContain('내 프로필 · You');
+  expect(host.textContent).toContain('나 · You');
   await click('설정 프롬프트 복사');
   expect(copied.at(-1)).toContain('브라우저 로그인이나 에이전트 프로필 생성을 사용하지 마세요');
   expect(copied.at(-1)).toContain(personal.id);
@@ -293,8 +293,8 @@ it('never reveals a late personal key in agent settings', async () => {
     return original(...args);
   });
   await input('Key name, e.g. Work laptop', 'Pending personal key'); await click('Create key');
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back to Settings"]')!.click());
-  await click('Agent profiles');
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
+  await click('Agents');
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Settings for anotherone"]')!.click());
   await click('API keys');
   await act(async () => { release(); await pending; });
@@ -307,7 +307,7 @@ it('never reveals a late personal key in agent settings', async () => {
 it('does not fall back to an agent when the personal profile is unavailable', async () => {
   vi.mocked(fetch).mockImplementation(async () => Response.json({ profiles: [noah, another] }));
   await openPersonal();
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not load your personal profile');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t load your profile');
   expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   expect(host.querySelector('input')).toBeNull();
   expect(host.querySelector('blockquote')).toBeNull();
@@ -319,7 +319,7 @@ it('does not display a returned key bound to a different profile', async () => {
   vi.mocked(fetch).mockImplementation((...args) => args[1]?.method === 'POST'
     ? Promise.resolve(Response.json({ key: { ...key('wrong-profile'), secret } })) : original(...args));
   await input('Key name, e.g. Work laptop', 'My Codex'); await click('Create key');
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not create the key');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t create the key');
   expect(host.querySelector('input[readonly]')).toBeNull();
   expect(host.innerHTML).not.toContain(secret);
 });
@@ -337,7 +337,7 @@ it('offers personal setup even when keys cannot load or five keys are active', a
   expect(copied.at(-1)).toContain(personal.id);
   expect(calls.map(c=>c.path)).toEqual(['/api/profiles']);
   await click('API keys');
-  expect(host.textContent).toContain('Could not load API keys');
+  expect(host.textContent).toContain('Couldn’t load API keys');
   fail = null; await click('Refresh');
   expect(host.textContent).toContain('Five keys are active');
   expect(button('Create key').disabled).toBe(true);
@@ -351,7 +351,7 @@ it('keeps personal setup manually copyable if clipboard access fails', async () 
   await openPersonal();
   Object.defineProperty(navigator,'clipboard',{configurable:true,value:undefined});
   await click('Copy setup prompt');
-  expect(host.textContent).toContain('Select the text and copy it manually');
+  expect(host.textContent).toContain('Select the text and copy it yourself');
   expect(host.textContent).toContain(personal.id);
   expect(host.textContent).toContain('waka_verify_connection');
   expect(calls.map(c=>c.path)).toEqual(['/api/profiles']);

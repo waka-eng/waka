@@ -281,9 +281,9 @@
 }
 .onb-group { display: flex; flex-direction: column; align-items: center; width: 100%; }
 /* ─── what the creature says: HOME'S bubble (`SayBubble`) ───────────────
-   Fill, grain, halo, radius and tail are `.jar-char-bubble-body`'s. This
-   sheet only places it and sets its words: Jost 400 at body size, a touch of
-   negative tracking, balanced so no word is left alone on a line. */
+   Fill, grain, halo, radius and tail are `.jar-char-bubble-body`'s, and so
+   are its size, words and measure — the shared bubble spec (`claims.css`,
+   "ONE BUBBLE"). This sheet only places it. */
 .onb-ask-room {
   position: relative;
   align-self: stretch;
@@ -298,7 +298,6 @@
   left: 50%;
   translate: -50% 0;
   width: max-content;
-  max-width: min(300px, 100%);
 }
 .onb-say-words {
   align-self: stretch;
@@ -308,31 +307,6 @@
   gap: var(--sp-4);
   animation: onb-swap 250ms ease 150ms both;
 }
-.onb .jar-char-bubble-body .onb-say-line {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-size: 17px;
-  font-weight: 400;
-  line-height: 1.35;
-  letter-spacing: -0.01em;
-  /* PRETTY, NOT BALANCE. Balance evens the lines but leaves the bubble at
-     its full width around them, so a two-line question sat in a box wider
-     than either line. Pretty fills the lines to the bubble's width and still
-     never strands one word on the last line. */
-  text-wrap: pretty;
-}
-/* The bubble's own quieter voice, not form help: the same ink, softened
-   toward the bubble's fill. */
-.onb .jar-char-bubble-body .onb-say-soft {
-  margin: 0;
-  font-family: var(--waka-face);
-  font-size: 15px;
-  font-weight: 400;
-  line-height: 1.35;
-  letter-spacing: -0.005em;
-  color: color-mix(in srgb, var(--waka-on-light) 66%, var(--bubble-fill));
-  text-wrap: pretty;
-}
 .onb-tail-gap { height: 22px; flex-shrink: 0; }
 .onb-grow { flex: 1 1 auto; min-height: var(--sp-16); }
 .onb-share-here { margin: 0 0 var(--sp-6); font-size: var(--t-body); color: var(--onb-ink); }
@@ -340,6 +314,8 @@
 
 .onb-choose { gap: var(--sp-4); padding: var(--sp-6) var(--sp-10); margin-bottom: var(--sp-28); }
 .onb-choose--call { animation: onb-call 2.4s ease-in-out infinite; }
+/* "Keep", the bar's verb said once (as on the home bar): soft, not a door. */
+.onb-keep { flex: none; padding-inline: var(--sp-6) var(--sp-2); color: var(--onb-ink-soft); font-size: var(--t-ui); line-height: 1; white-space: nowrap; }
 .onb-choice {
   width: 80px;
   height: 52px;
@@ -419,7 +395,7 @@
 
 /* PHOTO: the image is the hero. */
 .onb-photo-head { display: flex; align-items: center; gap: var(--sp-10); width: 100%; }
-.onb .onb-chip { flex: 0 1 auto; max-width: calc(100% - 50px); }
+.onb .onb-chip { flex: 0 1 auto; }
 /* Its tail points left, at the small creature beside it. */
 .onb .onb-chip::after { left: -4px; bottom: auto; top: 50%; transform: translateY(-50%) rotate(45deg); border-radius: 0 0 0 4px; }
 .onb-photo {
@@ -515,9 +491,8 @@
 }
 
 .onb-reveal { align-items: center; padding: 0 var(--sp-16); }
-.onb .onb-read { max-width: min(320px, 100%); }
 .onb-read-why { margin: var(--sp-4) 0 0; padding: 0; list-style: none; text-align: left; display: flex; flex-direction: column; gap: var(--sp-6); }
-.onb-read-why li { font-family: var(--waka-face); font-size: 14px; line-height: 1.4; padding-left: var(--sp-10); border-left: 2px solid color-mix(in srgb, var(--waka-on-light) 18%, var(--bubble-fill)); text-wrap: pretty; }
+.onb-read-why li { font-family: var(--waka-face); font-size: var(--t-body); line-height: 1.4; padding-left: var(--sp-10); border-left: 2px solid color-mix(in srgb, var(--waka-on-light) 18%, var(--bubble-fill)); text-wrap: pretty; }
 .onb-reveal > .onb-go { margin-bottom: var(--sp-36); }
 
 .onb-wait { align-items: center; justify-content: center; gap: var(--sp-16); }

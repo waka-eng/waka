@@ -112,9 +112,9 @@ async function settle(ms: number): Promise<void> {
 }
 
 async function answer(words: string): Promise<void> {
-  press("Write");
+  press("Keep a thought");
   type(words);
-  press("Save");
+  press("Keep");
   await flush();
   await settle(2200);
 }
@@ -171,7 +171,7 @@ describe("the onboarding gate", () => {
     for (let i = 0; i < 3; i += 1) press("Next");
     press("Start");
     await settle(400);
-    expect(page.textContent).toContain("Share one thing that’s stuck with you lately.");
+    expect(page.textContent).toContain("Tell me one thing that’s stuck with you lately.");
     expect(completions()).toHaveLength(0);
   });
 });
@@ -180,14 +180,14 @@ describe("resuming", () => {
   it("opens on the third question when two answers are already saved", async () => {
     saved = 2;
     const page = await render();
-    expect(page.textContent).toContain("Share something you want more of in your life.");
+    expect(page.textContent).toContain("Tell me something you want more of in your life.");
     expect(page.textContent).not.toContain("How many notes");
   });
 
   it("skips the name and intro this browser already passed", async () => {
     window.localStorage.setItem("waka.onboarding:acc-1", JSON.stringify({ named: true, introSeen: true }));
     const page = await render();
-    expect(page.textContent).toContain("Share one thing that’s stuck with you lately.");
+    expect(page.textContent).toContain("Tell me one thing that’s stuck with you lately.");
   });
 });
 
@@ -199,9 +199,9 @@ describe("three saves, then the first read", () => {
   it("saves each answer as an inspiration, reads across them, and finishes only on leaving", async () => {
     const page = await render();
     await answer("The guy who quit to make furniture");
-    expect(page.textContent).toContain("Share a conversation you keep thinking about.");
+    expect(page.textContent).toContain("Tell me about a conversation you keep thinking about.");
     await answer("My sister saying she finally sleeps");
-    expect(page.textContent).toContain("Share something you want more of in your life.");
+    expect(page.textContent).toContain("Tell me something you want more of in your life.");
     expect(completions()).toHaveLength(0);
     await answer("Slow mornings with no plan");
 
@@ -213,7 +213,7 @@ describe("three saves, then the first read", () => {
     expect(new Set(inputs.map(([, options]) => options?.requestId)).size).toBe(3);
     expect(vi.mocked(requestFirstRead)).toHaveBeenCalledWith("prof-1", ["insp-1", "insp-2", "insp-3"]);
 
-    expect(page.textContent).toContain("An early read");
+    expect(page.textContent).toContain("On your mind, so far");
     expect(page.textContent).toContain("You keep choosing slow mornings over the right rooms.");
     expect(page.textContent).not.toMatch(/\d/);
     expect(completions()).toHaveLength(0);
@@ -230,15 +230,15 @@ describe("three saves, then the first read", () => {
 
   it("does not let Save press with nothing written", async () => {
     const page = await render();
-    press("Write");
-    const save = [...page.querySelectorAll("button")].find((node) => node.textContent === "Save")!;
+    press("Keep a thought");
+    const save = [...page.querySelectorAll("button")].find((node) => node.textContent === "Keep")!;
     expect(save.disabled).toBe(true);
   });
 
   it("opens a conversation about the read from Talk about this", async () => {
     saved = 3;
     const page = await render();
-    press("Talk about this");
+    press("Chat about this");
     await settle(400);
     expect(completions()).toHaveLength(1);
     expect(page.textContent).toContain("CHAT");
@@ -249,7 +249,7 @@ describe("three saves, then the first read", () => {
     vi.mocked(requestFirstRead).mockReturnValue(new Promise(() => {}));
     vi.useFakeTimers({ shouldAdvanceTime: false });
     const page = await render();
-    expect(page.textContent).toContain("Reading your three…");
+    expect(page.textContent).toContain("Thinking…");
     expect(completions()).toHaveLength(0);
     await act(async () => { vi.advanceTimersByTime(FIRST_READ_PATIENCE_MS); });
     await flush();

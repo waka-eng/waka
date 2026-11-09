@@ -26,7 +26,7 @@
  * to say no ... drag on laptop, swipe on mobile."*
  *
  * Three words (yes · partly · not true) became two directions — first up
- * and down, then sideways on a slip, with "Not anymore" and "Still true"
+ * and down, then sideways on a slip, with "Not really" and "Yes"
  * named on either side under it and "Chat about it" between them. What the earlier
  * cases guarded is kept where it still applies: the verdict reaches the
  * server IMMEDIATELY, and yes stays on this screen so the sitting can go on.
@@ -145,11 +145,11 @@ const openedChat = () => vi.mocked(createConversation).mock.calls[0];
 it('keeps a failed verdict available to retry instead of silently completing the review',async()=>{
   vi.mocked(createFeedback).mockRejectedValueOnce(new Error('Synthetic save failure')).mockResolvedValueOnce({} as never);
   await withClaims(CLAIM);
-  await act(async()=>direction('True').click());
+  await act(async()=>direction('Yes').click());
   await cardLeaves();
   expect(statement()).toContain(CLAIM.statement);
   expect(world.container.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t save your answer');
-  await act(async()=>direction('True').click());
+  await act(async()=>direction('Yes').click());
   await cardLeaves();
   expect(createFeedback).toHaveBeenCalledTimes(2);
   expect(card()).toBeNull();
@@ -159,11 +159,11 @@ it('holds a slow verdict once and advances only when its save succeeds',async()=
   let resolve!:(value:Awaited<ReturnType<typeof createFeedback>>)=>void;
   vi.mocked(createFeedback).mockReturnValue(new Promise(done=>{resolve=done;}));
   await withClaims(CLAIM,SECOND);
-  await act(async()=>direction('True').click());
+  await act(async()=>direction('Yes').click());
   await cardLeaves();
   expect(statement()).toContain(CLAIM.statement);
-  expect(world.container.querySelector('[role="status"]')?.textContent).toContain('Saving answer');
-  expect(direction('True').disabled).toBe(true);
+  expect(world.container.querySelector('[role="status"]')?.textContent).toContain('Saving…');
+  expect(direction('Yes').disabled).toBe(true);
   await act(async()=>resolve({} as never));
   expect(statement()).toContain(SECOND.statement);
   expect(createFeedback).toHaveBeenCalledTimes(1);
@@ -174,10 +174,10 @@ it('reloads changed wording before retrying and never transfers the rejected ver
   await withClaims(CLAIM);
   const current={...CLAIM,statement:'A revised reading to consider.',statementRevision:'8'};
   vi.mocked(listClaims).mockResolvedValue({claims:[current],more:false});
-  await act(async()=>direction('True').click());await cardLeaves();
+  await act(async()=>direction('Yes').click());await cardLeaves();
   expect(statement()).toContain(current.statement);
   expect(createFeedback).toHaveBeenCalledTimes(1);
-  await act(async()=>direction('Not true').click());await cardLeaves();
+  await act(async()=>direction('Not really').click());await cardLeaves();
   expect(vi.mocked(createFeedback).mock.calls.map(([input])=>({value:input.value,revision:input.targetRevision})))
     .toEqual([{value:'true',revision:'7'},{value:'not_true',revision:'8'}]);
   expect(card()).toBeNull();
@@ -245,12 +245,12 @@ it("files not true on Not true, opens nothing, and leaves no receipt", async () 
   vi.mocked(createConversation).mockResolvedValue({} as Awaited<ReturnType<typeof createConversation>>);
   await withClaims(CLAIM, SECOND);
 
-  await act(async () => direction("Not true").click());
+  await act(async () => direction("Not really").click());
 
   expect(createFeedback).toHaveBeenCalledTimes(1);
   expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "not_true", targetRevision: "7" });
   expect(openedChat(), "Not true opened a conversation").toBeUndefined();
-  expectNoReceipt("Not true");
+  expectNoReceipt("Not really");
   await cardLeaves();
   expectNoReceipt("Not true, once the card has gone");
   expect(statement(), "the next claim did not come up").toContain(SECOND.statement);
@@ -271,12 +271,12 @@ it("answers the same way from the two named directions, for anyone who does not 
   vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
   await withClaims(CLAIM, SECOND);
 
-  await act(async () => direction("True").click());
+  await act(async () => direction("Yes").click());
   expect(vi.mocked(createFeedback).mock.calls[0]?.[0]).toMatchObject({ targetId: "claim-1", value: "true" });
   await cardLeaves();
   expect(statement()).toContain(SECOND.statement);
 
-  await act(async () => direction("Not true").click());
+  await act(async () => direction("Not really").click());
   expect(vi.mocked(createFeedback).mock.calls[1]?.[0]).toMatchObject({ targetId: "claim-2", value: "not_true" });
 });
 
@@ -299,7 +299,7 @@ it("does not offer partly from this slot at all", async () => {
   /* The two answers and nothing else: "partly" is nowhere in the row, and
      neither is a chat (founder, 2026-10-15: "remove chat about it under the
      claim"). */
-  expect(words).toEqual(["Not true", "True"]);
+  expect(words).toEqual(["Not really", "Yes"]);
 });
 
 /* Audit f2afcbe2 (mob): a swipe that began on the creature while reviewing
@@ -313,13 +313,13 @@ it("does not walk to Principles when the creature is pulled while reviewing", as
   expect(statement()).toContain(CLAIM.statement);
 });
 
-/* Audit f2afcbe2: "Not anymore" presumed an earlier yes on a reading asked
+/* Audit f2afcbe2: "Not really" presumed an earlier yes on a reading asked
    for the first time. "Still" and "anymore" belong to the re-ask alone. */
 it("says Still true / Not anymore only when it is asking again", async () => {
   vi.mocked(createFeedback).mockResolvedValue({} as Awaited<ReturnType<typeof createFeedback>>);
   await withClaims({ ...CLAIM, askedAgain: { lastAnsweredAt: "2026-07-01T12:00:00Z" } });
   const words = [...world.container.querySelectorAll(".jar-pick-act")].map((n) => n.textContent?.trim());
-  expect(words).toEqual(["Not anymore", "Still true"]);
+  expect(words).toEqual(["Not really", "Yes"]);
 });
 
 it("offers no chat on the card, by button or by key", async () => {
@@ -342,7 +342,7 @@ it("says when the last yes was, when a reading is being asked again", async () =
 
 it("explains an unanswered wording without implying an earlier yes", async () => {
   await withClaims(CLAIM);
-  expect(world.container.querySelector(".jar-pick-source")?.textContent).toBe('You haven’t reviewed this wording yet.');
+  expect(world.container.querySelector(".jar-pick-source")?.textContent).toBe('You haven’t answered this yet.');
 });
 
 it("hints at the next claim with a bare edge, and no back card when it is the last", async () => {
@@ -402,17 +402,17 @@ async function press(target: EventTarget, key: string) {
   await world.step(4);
 }
 
-it("counts what waits in the invitation, in the singular and the plural", async () => {
+it("asks in the invitation without counting what waits", async () => {
   await mountQueue(CLAIM);
   expect(invite()).toBeNull();
   await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
-  expect(inviteSays()).toBe("There is 1 thing to review!");
-  expect(invite()?.querySelector("button.jar-char-bubble-act")?.textContent?.trim()).toBe("Dive into review");
+  expect(inviteSays()).toBe("I have a question for you.");
+  expect(invite()?.querySelector("button.jar-char-bubble-act")?.textContent?.trim()).toBe("Ask me");
   world.unmount();
 
   await mountQueue(CLAIM, SECOND, { ...CLAIM, id: "claim-3", statement: "You finish what you start." });
   await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
-  expect(inviteSays()).toBe("There are 3 things to review!");
+  expect(inviteSays(), "states render, numerals never").toBe("I have a question for you.");
 });
 
 it("shows no card until the dive, and the first card has the keys once in", async () => {
@@ -439,20 +439,21 @@ it("steps back out to Top of Mind on Escape", async () => {
   expect(invite(), "Escape should return to the reading, not another review invitation").toBeNull();
 });
 
-it("makes the bar one way out while reviewing: Exit review mode", async () => {
-  /* Founder, 2026-10-15: "in the review mode, bottom bar should say exit
-     review mode." */
+it("leaves the questions by the page's \"<\", with no bar while they are up", async () => {
+  /* The bar's "Exit review mode" was the one way out that was a sentence at
+     the bottom; the questions leave by the same "<" as every other page. */
   const bar = () => [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item, .waka-home-bar-row button")]
-    .map((n) => n.textContent?.trim() || n.getAttribute("aria-label"));
+    .map((n) => n.getAttribute("aria-label") || n.textContent?.trim());
   await mountQueue(CLAIM, SECOND);
-  expect(bar(), "the bar before review").toEqual(["Write", "Photo", "Say it", "Chat"]);
+  expect(bar(), "the bar before review").toEqual(["Keep a thought", "Keep a screenshot", "Keep your voice", "Chat"]);
   await diveIntoReview(world.container, world.step);
-  expect(bar(), "the bar while reviewing").toEqual(["Exit review mode"]);
-  const exit = [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")].find((n) => n.textContent?.trim() === "Exit review mode")!;
-  await act(async () => { exit.click(); });
-  expect(card(), "Exit review mode left the cards up").toBeNull();
-  expect(invite(), "Exit review mode should return to the reading").toBeNull();
-  expect(bar(), "the bar after review").toEqual(["Write", "Photo", "Say it", "Chat"]);
+  expect(bar(), "the bar while reviewing").toEqual([]);
+  const back = world.container.querySelector<HTMLButtonElement>(".waka-page-back")!;
+  expect(back.textContent?.trim()).toBe("Back");
+  await act(async () => { back.click(); });
+  expect(card(), "the \"<\" left the cards up").toBeNull();
+  expect(invite(), "the \"<\" should return to the reading").toBeNull();
+  expect(bar(), "the bar after review").toEqual(["Keep a thought", "Keep a screenshot", "Keep your voice", "Chat"]);
 });
 
 it("keeps → for the card while reviewing, and gives it back to Principles when the last card is answered", async () => {
@@ -540,7 +541,7 @@ it('shows Top of Mind before pending reviews and cycles only on avatar presses',
   const tap = () => act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
   expect(bubbleText()).toContain(body);
   expect(invite()).toBeNull();
-  await tap(); expect(inviteSays()).toBe('There are 2 things to review!');
+  await tap(); expect(inviteSays()).toBe('I have a question for you.');
   await tap(); expect(invite()).toBeNull(); expect(bubbleText()).not.toContain(body);
   await tap(); expect(bubbleText()).toContain('Which principles are guiding you lately?');
   await tap(); expect(bubbleText()).toContain(body);

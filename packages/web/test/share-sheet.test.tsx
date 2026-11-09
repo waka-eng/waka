@@ -22,7 +22,7 @@
  *
  * Founder, 2026-10-16: one design (the first, dark and square), unsigned,
  * no looks row and no name switch; the words edited in the bubble itself
- * rather than in a box under the card; a plain × to close; two plain icons.
+ * rather than in a box under the card; a quiet "<" to close; two plain icons.
  */
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -84,7 +84,7 @@ it("opens on the one design, unsigned, with the kept words and two icon actions"
   expect(renderShareCard).toHaveBeenLastCalledWith({ items: [{ text: SAVE.text }], name: "", appearance: "dark", format: "square", kind: "inspiration", proof: SAVE.proof, photo: null });
   expect(host.querySelector("img")?.alt).toContain(SAVE.text);
   /* Save and share are two plain icons, named for screen readers, no text. */
-  const save = button("Save image")!, share = button("Share image")!;
+  const save = button("Download image")!, share = button("Share image")!;
   expect(save.disabled).toBe(false);
   expect(save.className).toBe("jar-share-icon");
   expect(share.className).toBe("jar-share-icon");
@@ -92,16 +92,16 @@ it("opens on the one design, unsigned, with the kept words and two icon actions"
   /* No looks, no name switch, no separate wording box. */
   expect(host.querySelector(".jar-share-look"), "one design: no looks row").toBeNull();
   expect(host.querySelector(".jar-share-name"), "always signed: no name switch").toBeNull();
-  expect(button("Edit wording"), "the words are edited in the bubble").toBeUndefined();
-  expect(host.querySelector("h2")?.textContent).toBe("Share this inspiration, edit as needed");
+  expect(button("Edit"), "the words are edited in the bubble").toBeUndefined();
+  expect(host.querySelector("h2")?.textContent).toBe("Share this note");
 });
 
-it("closes with a plain × in the corner", async () => {
+it("closes with the quiet \"<\" first in its row, like every page", async () => {
   await mount();
   await settle();
-  const x = host.querySelector<HTMLButtonElement>(".jar-share-x")!;
-  expect(x.getAttribute("aria-label")).toBe("Close");
-  expect(x.textContent).toBe("");
+  const x = host.querySelector<HTMLButtonElement>("header .waka-sheet-back")!;
+  expect(x.textContent, "the \"<\" has no screen reader name").toBe("Back");
+  expect(host.querySelector(".jar-share-x"), "the × came back").toBeNull();
   await act(async () => x.click());
   expect(close).toHaveBeenCalledOnce();
 });
@@ -168,14 +168,14 @@ it("makes a words-only card and says so when the photo cannot be read", async ()
   await settle();
   expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ items: [{ text: SAVE.text }], photo: null }));
   expect(host.textContent).toContain("The photo couldn’t go on this card");
-  expect(button("Save image")!.disabled).toBe(false);
+  expect(button("Download image")!.disabled).toBe(false);
 });
 
 it("says the top of mind the way the home bubble does, under the top-of-mind date line", async () => {
   await mount({ kind: "topOfMind", text: "Build the place.", proof: "My top of mind · Oct 16, 2026" });
   await settle();
-  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "topOfMind", frame: "This is what’s on your mind right now.", name: "", proof: "My top of mind · Oct 16, 2026" }));
-  expect(host.querySelector("h2")?.textContent).toBe("Share what’s on your mind, edit as needed");
+  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "topOfMind", frame: "On your mind lately", name: "", proof: "My top of mind · Oct 16, 2026" }));
+  expect(host.querySelector("h2")?.textContent).toBe("Share what’s on your mind");
 });
 
 it("without a device share sheet, sharing puts the image on the clipboard", async () => {
@@ -196,7 +196,7 @@ it("without a share sheet or a clipboard, sharing saves the image", async () => 
   await settle();
   await act(async () => button("Share image")!.click());
   expect(URL.createObjectURL).toHaveBeenCalled();
-  expect(host.textContent).toContain("Image download started.");
+  expect(host.textContent).toContain("Downloading.");
 });
 
 /* NO FOCUS-ZOOM IN THE BUBBLE. iOS zooms the page when a field under 16px
@@ -285,14 +285,14 @@ it("keeps the field over the last good card when the words stop fitting, and say
   expect(still!.classList.contains("jar-share-inline--live"), "shown solid over the stale card").toBe(true);
   expect(host.querySelector(".jar-share-card img"), "the last good card stays").not.toBeNull();
   expect(host.querySelector("[role=alert]")?.textContent).toContain("Shorten the words so they fit on the card.");
-  expect(button("Save image")!.disabled).toBe(true);
+  expect(button("Download image")!.disabled).toBe(true);
   /* Shortened in place, the card draws again and the field goes back to clear. */
   vi.mocked(renderShareCard).mockImplementation(async (content) => ({ blob: new Blob([content.items[0]!.text], { type: "image/png" }), width: 1080, height: 1080, fallbackFont: false, layout: LAYOUT }));
   await typeInto(area, "Short again.");
   await settle();
   expect(host.querySelector("[role=alert]")).toBeNull();
   expect(area.classList.contains("jar-share-inline--live")).toBe(false);
-  expect(button("Save image")!.disabled).toBe(false);
+  expect(button("Download image")!.disabled).toBe(false);
 });
 
 it("opens on a blank bubble with the field when the kept words cannot be drawn at all", async () => {
@@ -332,7 +332,7 @@ it("when the clipboard refuses the image, sharing saves it instead", async () =>
     await act(async () => button("Share image")!.click());
     expect(write).toHaveBeenCalledOnce();
     expect(URL.createObjectURL).toHaveBeenCalled();
-    expect(host.textContent).toContain("Image download started.");
+    expect(host.textContent).toContain("Downloading.");
     expect(host.textContent).not.toContain("Sharing isn’t available here.");
   } finally {
     Reflect.deleteProperty(navigator, "clipboard");

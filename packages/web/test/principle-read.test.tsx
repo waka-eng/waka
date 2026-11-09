@@ -69,7 +69,7 @@ describe("principle read", () => {
       ...ready, phase: 'pending', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true,
     } });
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    expect(host.textContent).toContain('A support check is queued.');
+    expect(host.textContent).toContain('Thinking…');
     expect(requestPrincipleRead).not.toHaveBeenCalled();
   });
 
@@ -79,12 +79,12 @@ describe("principle read", () => {
     } });
     vi.mocked(requestPrincipleRead).mockResolvedValue();
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    expect(host.textContent).toContain("Couldn't confirm current support. Your words are kept.");
+    expect(host.textContent).toContain("Couldn’t check where this came from. Your words are still here.");
     await act(async () => host.querySelector('button')!.click());
     /* THE RETRY FLAG IS THE WHOLE ARGUMENT, and it used to be the SECOND
        argument because the first was the room id. One parameter now. */
     expect(requestPrincipleRead).toHaveBeenCalledWith(true);
-    expect(host.textContent).toContain('A support check is queued.');
+    expect(host.textContent).toContain('Thinking…');
   });
 
   it("hands the rows it read to its owner rather than listing them itself", async () => {
@@ -111,7 +111,7 @@ describe("principle read", () => {
       .mockResolvedValue({ principles: [principle], status: ready });
     const read = vi.fn();
     await act(async () => root.render(<PrincipleRead active locale="en-US" onRead={read} />));
-    expect(host.textContent).toContain("Loading principles…");
+    expect(host.textContent).toContain("Loading…");
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(host.querySelector("button")).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
@@ -134,7 +134,7 @@ describe("principle read", () => {
     expect(host.querySelector('[role="alert"]')).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(2_000));
     expect(host.querySelector('[role="alert"]')?.textContent)
-      .toContain("Principles could not be updated. Your saved words are still here.");
+      .toContain("Couldn’t update your principles. Your words are still here.");
     await act(async () => host.querySelector("button")!.click());
     expect(read).toHaveBeenCalledWith([principle]);
     expect(host.querySelector('[role="alert"]')).toBeNull();
@@ -148,7 +148,7 @@ describe("principle read", () => {
     const read = vi.fn();
     await act(async () => root.render(<PrincipleRead active locale="en-US" onRead={read} />));
     expect(requestPrincipleRead).not.toHaveBeenCalled();
-    expect(host.textContent).toContain("Reading the patterns for principles…");
+    expect(host.textContent).toContain("Thinking…");
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(read).toHaveBeenCalledWith([principle]);
     expect(requestPrincipleRead).not.toHaveBeenCalled();
@@ -157,7 +157,7 @@ describe("principle read", () => {
   it("shows an ongoing read without queueing the same work again", async () => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "processing" } });
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    expect(host.textContent).toContain("Reading the patterns for principles…");
+    expect(host.textContent).toContain("Thinking…");
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(fetchPrincipleRead).toHaveBeenCalledTimes(2);
     expect(requestPrincipleRead).not.toHaveBeenCalled();

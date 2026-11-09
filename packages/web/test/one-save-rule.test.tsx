@@ -195,7 +195,7 @@ afterEach(async () => {
 /** The archive, with its one row opened. */
 async function openTheSavedNote(): Promise<void> {
   await act(async () => root.render(
-    <Archive locale="en-US" title="Your Inspirations" onClose={vi.fn()} onNoteOpen={vi.fn()} />,
+    <Archive locale="en-US" title="Kept" onClose={vi.fn()} onNoteOpen={vi.fn()} />,
   ));
   for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {
     await act(async () => { await Promise.resolve(); });
@@ -204,9 +204,9 @@ async function openTheSavedNote(): Promise<void> {
 }
 
 const save = (): HTMLButtonElement => slot.querySelector<HTMLButtonElement>(".waka-dock-tool--keep")!;
-const record = (): HTMLButtonElement | null => slot.querySelector<HTMLButtonElement>('[aria-label="Record"]');
+const record = (): HTMLButtonElement | null => slot.querySelector<HTMLButtonElement>('[aria-label="Your voice"]');
 const stopRecording = (): HTMLButtonElement | null =>
-  slot.querySelector<HTMLButtonElement>('[aria-label="Stop recording"]');
+  slot.querySelector<HTMLButtonElement>('[aria-label="Done"]');
 
 /** Type into the open note the way a person does. */
 async function type(text: string): Promise<void> {
@@ -356,7 +356,7 @@ it("cancels a running recording when the note is deleted", async () => {
 it("stops a recording when its note is left, and attaches the clip to that note", async () => {
   const onNoteOpen = vi.fn();
   await act(async () => root.render(
-    <Archive locale="en-US" title="Your Inspirations" onClose={vi.fn()} onNoteOpen={onNoteOpen} />,
+    <Archive locale="en-US" title="Kept" onClose={vi.fn()} onNoteOpen={onNoteOpen} />,
   ));
   for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {
     await act(async () => { await Promise.resolve(); });

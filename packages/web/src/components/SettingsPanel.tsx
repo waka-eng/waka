@@ -93,6 +93,7 @@ import {
 import { fetchSessions, revokeSession, type ApiSession } from "../lib/api/sessions";
 import { supportedLocales } from "../lib/i18n";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
+import { SheetBack } from "./PageBack";
 
 export interface SettingsPanelProps {
   locale: SupportedLocale;
@@ -262,14 +263,14 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   return (
     <div ref={panel} className="waka-settings" role="group" aria-label={say("worldSettingsOpen")}>
       <header className="waka-settings-heading">
-        {open !== null ? <button type="button" aria-label={say(connectionProfile ? 'profileAgentAccessBack' : "profileSettingsBack")}
-          onClick={async () => {
+        {open !== null ? <SheetBack label={say(connectionProfile ? 'profileAgentAccessBack' : "profileSettingsBack")}
+          onBack={async () => {
             if (!await beforeLeave() || !alive.current) return;
             setConfirmDelete(false);
             setEraseAgent(null);
             setOpen(connectionProfile ? 'agents' : null);
             setConnectionProfile(null);
-          }}><span aria-hidden="true">←</span></button> : null}
+          }} /> : null}
         <h2 ref={heading} tabIndex={-1}>{connectionProfile?.name ?? say(open === "agents" ? "profileAgentProfilesTitle"
           : open === "personal" ? "profilePersonalTitle" : open === "sessions" ? "profileSessionsTitle" : open === "danger" ? "profileDelete" : "worldSettingsOpen")}</h2>
       </header>

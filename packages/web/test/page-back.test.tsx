@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 async function mount(key = 'note', onBack = back, visible = true) {
-  await act(async () => root.render(<PageBack label="All inspirations" onBack={onBack} navigationKey={key} visible={visible}/>));
+  await act(async () => root.render(<PageBack label="Back" onBack={onBack} navigationKey={key} visible={visible}/>));
 }
 async function touch(type: string, x: number, y: number, target: Element = host, count = 1) {
   await act(async () => {
@@ -39,7 +39,7 @@ async function touch(type: string, x: number, y: number, target: Element = host,
 }
 it('uses the same exit for the labeled button and a completed left-edge swipe', async () => {
   await mount();
-  expect(host.querySelector('button')!.textContent).toBe('All inspirations');
+  expect(host.querySelector('button')!.textContent).toBe('Back');
   await act(async () => host.querySelector('button')!.click());
   await touch('touchstart', 8, 200); await touch('touchmove', 90, 205);
   expect(host.querySelector('.waka-back-swipe')).not.toBeNull();

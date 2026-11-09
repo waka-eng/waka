@@ -88,13 +88,13 @@ const tick=(ms=2000)=>act(async()=>vi.advanceTimersByTimeAsync(ms));
 it('keeps a limit-refused draft editable and opens history instead of offering a futile retry',async()=>{
   vi.mocked(createConversation).mockRejectedValueOnce(new ApiError({status:429,code:'conversation_limit_reached',message:'Conversation limit reached.'}));
   await mount(null);await type('Keep my question');await click('Send');
-  expect(host.querySelector('[role="alert"]')!.textContent).toContain('100-chat limit');
+  expect(host.querySelector('[role="alert"]')!.textContent).toContain('reached the chat limit');
   expect(host.querySelector('textarea')!.disabled).toBe(false);
-  expect(named()).not.toContain('Retry this message');
-  expect(named()).not.toContain('Check saved messages');
+  expect(named()).not.toContain('Send again');
+  expect(named()).not.toContain('Check if it was sent');
   expect((host.querySelector('[aria-label="Send"]') as HTMLButtonElement).disabled).toBe(true);
   expect(readConversationDrafts(scope,'new:general')[0]?.value).toMatchObject({content:'Keep my question',pending:false});
-  await type('My edited question');await click('All chats');expect(history).toHaveBeenCalledOnce();
+  await type('My edited question');await click('Past chats');expect(history).toHaveBeenCalledOnce();
   // Returning from history remounts the composer, retaining the draft. After
   // making room, the same first-send identity is safe to submit again.
   await mount(id);await mount(null);
@@ -108,8 +108,13 @@ it('keeps a limit-refused draft editable and opens history instead of offering a
 it('does not mistake a transient 429 for a definite chat-limit refusal',async()=>{
   vi.mocked(createConversation).mockRejectedValueOnce(new ApiError({status:429,message:'Try later'}));
   await mount(null);await type('An uncertain send');await click('Send');
-  expect(named()).toContain('Retry this message');
-  expect(named()).not.toContain('All chats');
+  expect(named()).toContain('Send again');
+  /* WHAT IT SAYS IS WHAT IT IS CALLED (WCAG 2.5.3, review 2026-11-09): the
+     word on the bar reads "Send again" too, not "Send" over a hidden name. */
+  const send=host.querySelector<HTMLButtonElement>('button.chat-send')!;
+  expect(send.textContent,'the bar shows Send while its name is Send again').toBe('Send again');
+  expect(send.getAttribute('aria-label')??send.textContent).toBe(send.textContent);
+  expect(named()).not.toContain('Past chats');
   expect(readConversationDrafts(scope,'new:general')[0]?.value.pending).toBe(true);
 });
 function completeReply(){stored={...stored,revision:stored.revision+1,messages:[...stored.messages,{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:stored.revision+1,role:'assistant',content:'Consider the conditions of the choice.',followUpQuestion:'Which condition matters most today?',replyRequestId:replyId,memoryChanged:false,citations:[{index:0,kind:'principle',id:'principle',available:true}],createdAt:'2026-10-03T01:00:01Z'}]};replyState={...replyState,phase:'ready',revision:stored.revision};}
@@ -166,17 +171,17 @@ it('says words typed offline were not sent, keeps them editable, and sends them 
   expect(host.textContent).not.toContain('couldn’t be opened');
   expect(host.textContent).not.toContain('still saved');
   await type('Words from the train');await click('Send');
-  expect(host.textContent).toContain('Not sent');
+  expect(host.textContent).toContain('Couldn’t send');
   expect(host.querySelector('textarea')!.value).toBe('Words from the train');
   expect(host.querySelector('textarea')!.disabled).toBe(false);
   expect(createConversation).not.toHaveBeenCalled();
   vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:false});
   vi.mocked(createConversation).mockImplementation(async(_profile,conversationId,_signal,_principle,first)=>({...stored,id:conversationId,revision:1,
     messages:[{...first!,attachments:[],profileId:scope.profileId,conversationId,position:1,role:'user',createdAt:'2026-10-03T01:00:00Z'}]}) as ApiConversation);
-  await click('Retry this message');
+  await click('Send again');
   expect(createConversation).toHaveBeenCalledOnce();
   expect(vi.mocked(createConversation).mock.calls[0]![4]).toMatchObject({content:'Words from the train'});
-  expect(host.textContent).not.toContain('Not sent');
+  expect(host.textContent).not.toContain('Couldn’t send');
 });
 
 it('offers a new-chat exit when a conversation is unavailable, without showing old words',async()=>{
@@ -192,8 +197,8 @@ it('reconciles a lost save response with a read, without resending',async()=>{
   await mount();await type('Keep my exact thought');await click('Send');
   expect(host.querySelector('textarea')!.value).toBe('');
   expect(host.querySelector('.chat-sending')?.textContent).toContain('Keep my exact thought');
-  expect(host.textContent).toContain('Couldn’t confirm this message.');
-  await click('Check saved messages');expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(stored.messages).toHaveLength(1);expect(host.querySelector('textarea')!.value).toBe('');
+  expect(host.textContent).toContain('Couldn’t confirm it was sent. Your message is still here.');
+  await click('Check if it was sent');expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(stored.messages).toHaveLength(1);expect(host.querySelector('textarea')!.value).toBe('');
 });
 /* Review round 6: a failed list read on an open conversation used to be
    swallowed, leaving "are replies on?" unknown and Send "loading" for good. */
@@ -235,15 +240,15 @@ it('keeps "Not sent" and Retry when the re-checked guards stop the send',async()
   vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
   await mount(null);
   await type('First words');await click('Send');
-  expect(host.textContent).toContain('Not sent');
+  expect(host.textContent).toContain('Couldn’t send');
   let answer!:(value:Awaited<ReturnType<typeof listConversations>>)=>void;
   vi.mocked(listConversations).mockImplementation(()=>new Promise(resolve=>{answer=resolve;}));
-  await click('Retry this message');                          // pre-flight in flight
+  await click('Send again');                          // pre-flight in flight
   await type('Other words');                                  // changed meanwhile: the send bails
   await act(async()=>{answer({profileId:scope.profileId,conversations:[],generationEnabled:false});});
   expect(createConversation).not.toHaveBeenCalled();
-  expect(host.textContent).toContain('Not sent');
-  expect([...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent)).toContain('Retry this message');
+  expect(host.textContent).toContain('Couldn’t send');
+  expect([...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent)).toContain('Send again');
 });
 /* Round 7: the list read's failure never replaces a more specific sentence. */
 it('keeps the conversation\'s own failure when the list read fails after it',async()=>{
@@ -251,9 +256,9 @@ it('keeps the conversation\'s own failure when the list read fails after it',asy
   vi.mocked(listConversations).mockImplementation(()=>new Promise((_,reject)=>{failList=reject;}));
   vi.mocked(fetchConversation).mockRejectedValue(new Error('Unavailable'));
   await mount();
-  expect(host.textContent).toContain('This conversation couldn’t be opened.');
+  expect(host.textContent).toContain('Couldn’t open this chat.');
   await act(async()=>{failList(new Error('Offline'));});
-  expect(host.textContent).toContain('This conversation couldn’t be opened.');
+  expect(host.textContent).toContain('Couldn’t open this chat.');
   expect(host.textContent).not.toContain('WAKA can’t be reached right now.');
 });
 /* Review round 3: a journalled message is never "Not sent" because a
@@ -265,22 +270,22 @@ it('calls a pending message "not confirmed", never "not sent", when the pre-flig
   vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
   vi.mocked(fetchConversation).mockRejectedValue(new Error('Offline'));
   await mount(null);
-  await click('Retry this message');
-  expect(host.textContent).toContain('Not confirmed yet');
-  expect(host.textContent).not.toContain('Not sent');
+  await click('Send again');
+  expect(host.textContent).toContain('Couldn’t confirm it was sent');
+  expect(host.textContent).not.toContain('Couldn’t send');
 });
 /* And "Not sent" with nothing left in the box offers the re-read, not a
    Retry that has no words to send. */
 it('offers the re-read once the unsent words are cleared from the box',async()=>{
   vi.mocked(listConversations).mockRejectedValue(new Error('Offline'));
   await mount(null);await type('Words from the train');await click('Send');
-  expect(host.textContent).toContain('Not sent');
+  expect(host.textContent).toContain('Couldn’t send');
   await type('');
   const acts=[...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent);
-  expect(acts).not.toContain('Retry this message');expect(acts).toContain('Try again');
+  expect(acts).not.toContain('Send again');expect(acts).toContain('Try again');
 });
 /* Review: with a pending message and a conversation that could not be read,
-   "Retry" was offered and did nothing (sending needs the conversation). */
+   "Try again" was offered and did nothing (sending needs the conversation). */
 it('offers the re-read, not a dead Retry, when a pending message sits on an unread conversation',async()=>{
   vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Response lost'));
   await mount();await type('A thought in flight');await click('Send');
@@ -288,7 +293,7 @@ it('offers the re-read, not a dead Retry, when a pending message sits on an unre
   vi.mocked(fetchConversation).mockRejectedValue(new Error('Unavailable'));
   await mount();
   const acts=[...host.querySelectorAll('.chat-notice button')].map(b=>b.textContent);
-  expect(acts).not.toContain('Retry this message');
+  expect(acts).not.toContain('Send again');
   expect(acts).toContain('Try again');
   vi.mocked(fetchConversation).mockImplementation(async()=>structuredClone(stored));
   await click('Try again');
@@ -305,11 +310,11 @@ it('offers a new chat, not a dead Retry, beside a failed send once the conversat
   vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Response lost'));
   await type('Still there?');await click('Send');
   const acts=()=>[...host.querySelectorAll('.chat-notice[role="alert"] button')].map(b=>b.textContent);
-  expect(acts()).toContain('Retry this message');
+  expect(acts()).toContain('Send again');
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:404,message:'Gone'}));
   await act(async()=>{window.dispatchEvent(new Event('focus'));});await tick(1000);   // the next re-read finds it gone
   expect(host.textContent).toContain('This reply can’t be found anymore.');
-  expect(acts()).not.toContain('Retry this message');
+  expect(acts()).not.toContain('Send again');
   expect(acts()).toContain('New chat');
 });
 /* …and any other hold (here the draft can no longer be written down) offers
@@ -319,10 +324,10 @@ it('offers no Retry beside a failed send while the draft cannot be saved',async(
   vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Response lost'));
   await type('A thought');await click('Send');
   const acts=()=>[...host.querySelectorAll('.chat-notice[role="alert"] button')].map(b=>b.textContent);
-  expect(acts()).toContain('Retry this message');
+  expect(acts()).toContain('Send again');
   vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('Quota');});
-  await click('Retry this message');
-  expect(acts()).not.toContain('Retry this message');
+  await click('Send again');
+  expect(acts()).not.toContain('Send again');
 });
 it('restores unsent words after reopening and forks edits instead of overwriting the previous writer',async()=>{
   /* THE DRAFT PICKER WENT; THE FORKING DID NOT. Two tabs still keep two
@@ -344,7 +349,7 @@ it('blocks sending on storage failure while keeping the visible words',async()=>
 it('reuses the exact conversation id when creation response is lost',async()=>{
   vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:true});
   vi.mocked(createConversation).mockRejectedValueOnce(new Error('Lost')).mockImplementationOnce(async(_profile,conversationId,_signal,_principle,first)=>({...stored,id:conversationId,revision:1,generationEnabled:true,messages:[{id:first!.id,content:first!.content,profileId:scope.profileId,conversationId,position:1,role:'user',createdAt:stored.createdAt}]}));
-  await mount(null);expect(createConversation).not.toHaveBeenCalled();await type('My first message');await click('Send');await click('Retry this message');
+  await mount(null);expect(createConversation).not.toHaveBeenCalled();await type('My first message');await click('Send');await click('Send again');
   expect(vi.mocked(createConversation).mock.calls[0][1]).toBe(vi.mocked(createConversation).mock.calls[1][1]);
   expect(vi.mocked(createConversation).mock.calls[0][4]).toEqual(vi.mocked(createConversation).mock.calls[1][4]);
   expect(choose).toHaveBeenCalledTimes(1);expect(readConversationDrafts(scope,'new:general')).toEqual([]);
@@ -433,7 +438,7 @@ it('keeps the surface to a transcript, a box and nothing at rest',async()=>{
      at home (`Companion`). It is the opening's own face rather than a new
      control, and it does nothing else — named for the creature, not for the
      press (code review, 2026-11-08). */
-  expect(named()).toEqual(['WAKA','Add photo or file','Send']);
+  expect(named()).toEqual(['WAKA','Add photo','Add file','Send']);
   expect(host.querySelector('textarea')!.value).toBe('A sentence in the box');
 });
 it('keeps the full-page composer within the visible keyboard viewport',async()=>{
@@ -472,12 +477,12 @@ it('calls a pending message lost offline not confirmed, and retries it under the
   vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Network'));
   const online=vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
   await type('Words on the train');await click('Send');
-  expect(host.textContent).toContain('Not confirmed yet');expect(host.textContent).not.toContain('Not sent');
+  expect(host.textContent).toContain('Couldn’t confirm it was sent');expect(host.textContent).not.toContain('Couldn’t send');
   const first=vi.mocked(saveConversationMessage).mock.calls[0]![2].id;
   expect(host.querySelector('textarea')!.value).toBe('');
   expect(host.querySelector('.chat-sending')?.textContent).toContain('Words on the train');
   online.mockReturnValue(true);
-  const retry=[...host.querySelectorAll('.chat-notice button')].find(b=>b.textContent==='Retry this message') as HTMLButtonElement;
+  const retry=[...host.querySelectorAll('.chat-notice button')].find(b=>b.textContent==='Send again') as HTMLButtonElement;
   expect(retry).toBeTruthy();
   await act(async()=>retry.click());
   expect(vi.mocked(saveConversationMessage).mock.calls[1]![2].id).toBe(first);
@@ -501,19 +506,19 @@ it('calls a pending message lost offline not confirmed, and retries it under the
 it('sends one durable reply intent and displays the follow-up',async()=>{
   stored.generationEnabled=true;await mount();await type('What could I try?');await click('Send');
   expect(saveConversationMessage).toHaveBeenCalledWith(scope.profileId,id,expect.objectContaining({content:'What could I try?',requestReply:true}),expect.any(AbortSignal));
-  expect(host.textContent).toContain('Thinking about that…');completeReply();await tick();expect(host.textContent).toContain('Which condition matters most today?');
+  expect(host.textContent).toContain('Thinking…');completeReply();await tick();expect(host.textContent).toContain('Which condition matters most today?');
   /* The reply arrived, so nothing is being waited for and the one other
      control on the surface goes away with the sentence it interrupted. */
-  expect(host.textContent).not.toContain('Thinking about that…');expect(named()).toEqual(['Add photo or file','Send']);
+  expect(host.textContent).not.toContain('Thinking…');expect(named()).toEqual(['Add photo','Add file','Send']);
 });
 it('stops a pending reply and still shows that the message was saved',async()=>{
   stored.generationEnabled=true;await mount();await type('Keep this question');await click('Send');
   vi.mocked(stopConversationReply).mockImplementation(async()=>{replyState={...replyState,phase:'stopped',canRetry:true};return structuredClone(replyState);});
-  await click('Stop reply');expect(host.textContent).toContain('Stopped. Your message is saved.');expect(stored.messages).toHaveLength(1);
-  /* AND NO WAY TO RE-RUN THE GENERATOR. "Retry reply" was the other half of
+  await click('Stop');expect(host.textContent).toContain('Stopped. Your message is still here.');expect(stored.messages).toHaveLength(1);
+  /* AND NO WAY TO RE-RUN THE GENERATOR. "Try again" was the other half of
      this test; a stopped reply now ends in a sentence, and asking again means
      saying something again through the box. */
-  expect(named()).toEqual(['Add photo or file','Send']);
+  expect(named()).toEqual(['Add photo','Add file','Send']);
   expect(host.querySelector('textarea')!.disabled).toBe(false);
 });
 it('does not jump away from older messages when a new reply arrives',async()=>{
@@ -544,7 +549,7 @@ it('an earlier-read failure preserves current messages and the unfinished draft'
   windowedThread();await mount();await type('Keep my unfinished thought');
   vi.mocked(fetchConversation).mockRejectedValueOnce(new Error('Read failed'));await click('Load earlier messages');
   expect(host.querySelectorAll('.chat-message')).toHaveLength(30);expect(host.querySelector('textarea')!.value).toBe('Keep my unfinished thought');
-  expect(host.textContent).toContain('Earlier messages couldn’t be loaded.');expect(saveConversationMessage).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('Couldn’t load earlier messages.');expect(saveConversationMessage).not.toHaveBeenCalled();
 });
 it('reopens the same scoped loaded window before restoring an older scroll position',async()=>{
   windowedThread();await mount();const scroll=host.querySelector<HTMLElement>('.chat-scroll')!;
@@ -556,7 +561,7 @@ it('reopens the same scoped loaded window before restoring an older scroll posit
 });
 it('treats the first reply-read failure as transient rather than flashing an error',async()=>{
   stored.generationEnabled=true;vi.mocked(fetchConversationReply).mockRejectedValueOnce(new Error('Transient'));await mount();
-  expect(host.textContent).not.toContain('Couldn’t check reply progress.');await tick(1000);expect(host.textContent).not.toContain('Couldn’t check reply progress.');
+  expect(host.textContent).not.toContain('Couldn’t get a reply');await tick(1000);expect(host.textContent).not.toContain('Couldn’t get a reply');
 });
 /* A CHECK THAT FAILED IS NOT AN ANSWER. The reply under your own last message
    may still be running, so Send stays off while progress cannot be read — but
@@ -568,14 +573,14 @@ it('stops after two failed progress reads, as dev, keeping the reply in flight u
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'the first failure was not retried once').toBe(2);
   await tick(15000);await tick(15000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'failed reads were polled past two').toBe(2);
-  expect(host.textContent).toContain('Couldn’t check reply progress.');
+  expect(host.textContent).toContain('Couldn’t get a reply');
   expect(host.textContent,'it claims to retry after stopping').not.toContain('Trying again');
   await type('Still there?');
   const send=()=>[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
   expect(send().disabled,'a failed progress read let a second message cross a reply that may be running').toBe(true);
   vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:1}));
-  await click('Check again');await tick(0);
-  expect(host.textContent).not.toContain('Couldn’t check reply progress.');
+  await click('Try again');await tick(0);
+  expect(host.textContent).not.toContain('Couldn’t get a reply');
   expect(send().disabled,'Send stayed off after the server answered').toBe(false);
 });
 /* Only a 404 is terminal: the watch stops, says so, offers a reload, and Send
@@ -586,12 +591,12 @@ it('treats a 429 reply read as "try later", not gone: retried once, then Check a
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:429,message:'Slow down'}));await mount();await tick(1000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length).toBe(2);
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
-  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
 });
 it.each([400,403])('treats a %i reply read as an error, not gone, and stops after two in a row: Check again, Send off',async(status)=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status,message:'Bad'}));await mount();await tick(0);
-  expect(host.textContent).toContain('Couldn’t check reply progress.');
+  expect(host.textContent).toContain('Couldn’t get a reply');
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
   await tick(2000);
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
@@ -599,7 +604,7 @@ it.each([400,403])('treats a %i reply read as an error, not gone, and stops afte
   await tick(15000);await tick(15000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'a repeated 4xx kept being polled').toBe(calls);
   expect(host.textContent).not.toContain('Trying again');
-  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
   await type('Still there?');
   expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
 });
@@ -610,9 +615,9 @@ it('on a 401 reply read stops asking but says it could not check, with Check aga
   await tick(15000);await tick(15000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'a 401 kept being polled').toBe(calls);
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
-  expect(host.textContent,'a 401 left the reply silently unconfirmed').toContain('Couldn’t check reply progress.');
+  expect(host.textContent,'a 401 left the reply silently unconfirmed').toContain('Couldn’t get a reply');
   expect(host.textContent,'it claims to be retrying while it has stopped').not.toContain('Trying again');
-  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
   await type('Still there?');
   expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
 });
@@ -653,15 +658,15 @@ it('keeps Send off and keeps asking while answers are older than the screen, the
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
   await tick(15000);await tick(15000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'an older state ended the watch').toBeGreaterThan(calls);
-  expect(host.textContent).toContain('Still waiting for the latest reply.');
-  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  expect(host.textContent).toContain('Thinking…');
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
   expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Reload conversation'),'an older state was treated as terminal').toBe(false);
   await type('Still there?');
   const send=()=>[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
   expect(send().disabled,'Send came back while the reply was unconfirmed').toBe(true);
   vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:3}));
-  await click('Check again');await tick(0);
-  expect(host.textContent).not.toContain('Still waiting for the latest reply.');
+  await click('Try again');await tick(0);
+  expect(host.textContent).not.toContain('Thinking…');
   expect(send().disabled).toBe(false);
 });
 it('stops asking after the old window of older-than-shown answers, says it could not check, and keeps Send off',async()=>{
@@ -678,8 +683,8 @@ it('stops asking after the old window of older-than-shown answers, says it could
   await later(30000);
   clockSpy.mockRestore();
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'the older-state wait outlived about a minute (focus reset it)').toBe(calls);
-  expect(host.textContent).toContain('Couldn’t check reply progress.');
-  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  expect(host.textContent).toContain('Couldn’t get a reply');
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
   await type('Still there?');
   expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
 });
@@ -724,7 +729,7 @@ it('checks quick replies after one second rather than waiting two',async()=>{
 it('shows waiting immediately while reply status is still being read and preserves the next draft',async()=>{
   stored.generationEnabled=true;await mount();let finish!:(row:ConversationReplyState)=>void;
   vi.mocked(fetchConversationReply).mockImplementationOnce(()=>new Promise<ConversationReplyState>(resolve=>{finish=resolve;}));
-  await type('A question');await click('Send');expect(host.textContent).toContain('Thinking about that…');await type('My next thought');
+  await type('A question');await click('Send');expect(host.textContent).toContain('Thinking…');await type('My next thought');
   const send=host.querySelector<HTMLButtonElement>('.chat-send')!;expect(send.disabled).toBe(true);
   await act(async()=>finish(structuredClone(replyState)));expect(host.querySelector('textarea')!.value).toBe('My next thought');
 });
@@ -732,7 +737,7 @@ it('uses an immediately committed first-message response without another convers
   stored.generationEnabled=true;stored.revision=1;stored.messages=[{id:replyId,profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'The committed first question',createdAt:stored.createdAt}];
   replyState={...replyState,revision:1,messageId:replyId,requestId:replyId,phase:'pending'};
   await act(async()=>root.render(<ConversationPanel scope={scope} id={id} initialConversation={structuredClone(stored)} locale="en-US" onChoose={choose}/>));
-  expect(host.textContent).toContain('The committed first question');expect(fetchConversation).not.toHaveBeenCalled();expect(host.textContent).toContain('Thinking about that…');
+  expect(host.textContent).toContain('The committed first question');expect(fetchConversation).not.toHaveBeenCalled();expect(host.textContent).toContain('Thinking…');
 });
 it('bounds automatic progress reads and then says to come back later',async()=>{
   /* The explicit "Check reply" button this used to end on was regeneration's
@@ -806,10 +811,10 @@ it('retries a failed reply against the saved message without sending another use
   const messageId=stored.messages[0]!.id;
   let finish!:(state:ConversationReplyState)=>void;
   vi.mocked(requestConversationReply).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
-  await click('Retry reply');
+  await click('Try again');
   expect(vi.mocked(requestConversationReply).mock.calls[0]?.slice(0,4)).toEqual([scope.profileId,id,messageId,replyId]);
-  expect(host.textContent).toContain('Retrying reply…');
-  await click('Retrying reply…');
+  expect(host.textContent).toContain('Thinking…');
+  await click('Thinking…');
   expect(requestConversationReply).toHaveBeenCalledTimes(1);
   replyState={...replyState,phase:'pending',requestId:crypto.randomUUID(),canRetry:false};
   await act(async()=>finish(structuredClone(replyState)));

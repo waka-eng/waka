@@ -71,7 +71,7 @@ it("presses back to your own top of mind from a surface you did not travel to", 
   expect(back, "a conversation offers no way back to the top of mind at all").toBeTruthy();
   /* IT SAYS WHERE IT GOES. A back arrow alone would be the unlabelled door
      the switcher was replaced for being. */
-  expect(back.textContent).toContain("Your top of mind");
+  expect(back.textContent).toContain("On your mind lately");
   await act(async () => back.click());
   expect(mine, "the one press the founder asked for by name did nothing").toHaveBeenCalledOnce();
   expect(theirs, "it went to the agent's top of mind instead of your own").not.toHaveBeenCalled();
@@ -103,7 +103,7 @@ it("offers the owners instead, on a surface that is one of them", async () => {
      `label` says you did not travel here on purpose. */
   expect(host.querySelector(".waka-switch-trigger")).toBeNull();
   const rungs = [...host.querySelectorAll<HTMLButtonElement>(".waka-rungs .waka-rung")];
-  expect(rungs.map((node) => node.textContent?.trim())).toEqual(["Your top of mind", "Your agent's top of mind"]);
+  expect(rungs.map((node) => node.textContent?.trim())).toEqual(["On your mind lately", "On your agent’s mind"]);
   await act(async () => rungs[1]!.click());
   expect(theirs, "a rung is one press, with nothing to open first").toHaveBeenCalledOnce();
   expect(mine).not.toHaveBeenCalled();

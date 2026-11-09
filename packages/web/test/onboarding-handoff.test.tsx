@@ -119,9 +119,9 @@ async function settle(ms: number): Promise<void> {
 }
 
 async function answer(words: string): Promise<void> {
-  press("Write");
+  press("Keep a thought");
   type(words);
-  press("Save");
+  press("Keep");
   await flush();
   await settle(1700);
 }
@@ -162,9 +162,9 @@ afterEach(() => {
 });
 
 async function writeAndSave(words: string): Promise<void> {
-  press("Write");
+  press("Keep a thought");
   type(words);
-  press("Save");
+  press("Keep");
   await flush();
 }
 
@@ -172,13 +172,13 @@ describe("the handoff after a save", () => {
   it("receives, says Saved as the next dot fills, then asks the next — locked throughout", async () => {
     await render();
     vi.useFakeTimers();
-    expect(bubble()).toContain("Share one thing");
+    expect(bubble()).toContain("Tell me one thing");
     expect(dots()).toBe(1);
     await writeAndSave("The guy who quit to make furniture");
 
     /* receive: still the first question, nothing pressable */
     expect(createInspiration).toHaveBeenCalledTimes(1);
-    expect(bubble()).toContain("Share one thing");
+    expect(bubble()).toContain("Tell me one thing");
     expect(ways().every((way) => way.disabled)).toBe(true);
     expect(container!.querySelector("textarea")).toBeNull();
 
@@ -193,7 +193,7 @@ describe("the handoff after a save", () => {
     expect(container!.querySelector(".onb-ask-bubble")!.classList.contains("jar-char-bubble-body")).toBe(true);
     expect(container!.querySelector(".onb-ask-bubble .onb-say-soft")).toBeNull();
     await tick(900);
-    expect(bubble()).toContain("Share a conversation you keep thinking about.");
+    expect(bubble()).toContain("Tell me about a conversation you keep thinking about.");
     expect(dots()).toBe(2);
     expect(ways().every((way) => way.disabled)).toBe(true);
     await tick(300);
@@ -208,10 +208,10 @@ describe("the handoff after a save", () => {
     await writeAndSave("Kept words");
     await tick(1500);
     expect(bubble()).not.toContain("Kept");
-    expect(bubble()).toContain("Share one thing");
+    expect(bubble()).toContain("Tell me one thing");
     expect(container!.querySelector("[role=alert]")?.textContent).toBeTruthy();
     expect(container!.querySelector("textarea")!.value).toBe("Kept words");
-    press("Save");
+    press("Keep");
     await flush();
     const ids = vi.mocked(createInspiration).mock.calls.map(([, options]) => options?.requestId);
     expect(ids).toHaveLength(2);
@@ -226,7 +226,7 @@ describe("the handoff after a save", () => {
     await tick(0);
     expect(bubble()).toBe("Kept");
     await tick(700);
-    expect(bubble()).toContain("Share a conversation");
+    expect(bubble()).toContain("Tell me about a conversation");
   });
 });
 
@@ -249,7 +249,7 @@ describe("one creature", () => {
     }
     press("Start");
     await settle(400);
-    expect(page.textContent).toContain("Share one thing");
+    expect(page.textContent).toContain("Tell me one thing");
     expect(creatures()).toHaveLength(1);
     expect(creatures()[0]).toBe(first);
     /* the walker in D is somebody else's and gone now; yours is the only body */

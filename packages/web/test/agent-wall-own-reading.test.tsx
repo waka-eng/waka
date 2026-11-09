@@ -286,7 +286,7 @@ it("holds up the agent's own reading on its wall, never the owner's", async () =
      these checks hold the observable half: no settled step mislabels. */
   const mislabelled = () => {
     const b = bubble();
-    return b?.querySelector('.jar-char-bubble-of')?.textContent?.trim() === 'This is what’s on my mind right now.'
+    return b?.querySelector('.jar-char-bubble-of')?.textContent?.trim() === 'On my mind lately'
       && (b.textContent ?? '').includes(OWNER_SAYS);
   };
   await act(async () => { toAgent!.click(); });
@@ -305,7 +305,7 @@ it("holds up the agent's own reading on its wall, never the owner's", async () =
   expect(said?.textContent ?? '', 'the owner\'s sentence leaked onto the agent\'s wall').not.toContain(OWNER_SAYS);
   expect(said?.querySelector('.jar-char-bubble-reading')?.textContent?.trim(),
     'the agent wall fell through to the resting line over a reading it holds').toBe(AGENT_SAYS);
-  expect(said?.querySelector('.jar-char-bubble-of')?.textContent?.trim()).toBe('This is what’s on my mind right now.');
+  expect(said?.querySelector('.jar-char-bubble-of')?.textContent?.trim()).toBe('On my mind lately');
   expect(said?.textContent ?? '', 'the bubble held the newest entry rather than the pinned lead').not.toContain(AGENT_NEWER);
 });
 
@@ -602,7 +602,7 @@ it('shows every named agent, keeps their memory separate, and syncs Settings cha
   expect(world.audit().wallId).toBe('agent-another');
 
   expect(world.container.querySelector('.waka-settings-heading h2')?.textContent).toBe('third');
-  await act(async () => world.container.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-settings-heading [aria-label="Back"]')!.click());
   await act(async () => world.container.querySelector<HTMLButtonElement>('[data-agent-id="agent-another"]')!.click());
   const another = world.container.querySelector<HTMLInputElement>('.waka-agent-details input')!;
   await act(async () => { another.focus(); type(another, 'renamed'); another.blur(); });
@@ -611,12 +611,12 @@ it('shows every named agent, keeps their memory separate, and syncs Settings cha
   expect(face('renamed')?.getAttribute('aria-pressed')).toBe('true');
   expect(world.audit().wallId).toBe('agent-another');
 
-  await act(async () => world.container.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-settings-heading [aria-label="Back"]')!.click());
   const erase = async (name: string) => {
     await act(async () => world.container.querySelector<HTMLButtonElement>(`[aria-label="Settings for ${name}"]`)!.click());
     const button = world.container.querySelector<HTMLButtonElement>('[data-agent-delete]')!;
     await act(async () => { button.click(); });
-    const confirm = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-settings-danger button')].find(node => node.textContent === 'Delete profile and memory')!;
+    const confirm = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-settings-danger button')].find(node => node.textContent === 'Delete')!;
     await act(async () => { confirm.click(); });
     await settle();
   };
@@ -660,7 +660,7 @@ it('isolates each agent’s inspirations, chat list, transcript, and chat URL', 
     expect(vi.mocked(createConversation).mock.calls.at(-1)?.[0]).toBe(`agent-${name}`);
     expect(world.container.querySelector('.chat-transcript')?.textContent).toContain('Only '+name+' chat');
     expect(new URLSearchParams(location!.search).get('profile')).toBe(`agent-${name}`);
-    await pressDockRow(world.container, 'All chats'); await settle();
+    await pressDockRow(world.container, 'Past chats'); await settle();
     expect(listConversations).toHaveBeenLastCalledWith(`agent-${name}`,expect.any(AbortSignal));
     const list=world.container.querySelector('.waka-over[data-jar-surface]')!;
     expect(list.textContent).toContain('Only '+name+' chat');
@@ -685,14 +685,14 @@ it('saves a capture into the selected agent without adding it to the human or an
   await act(async()=>face('noah')!.click()); await settle();
   await pressDockRow(world.container,'Inspirations'); await settle();
   const newNote=world.container.querySelector<HTMLButtonElement>('.waka-over-head .waka-over-new')!;
-  expect(newNote.textContent).toBe('New inspiration');
+  expect(newNote.textContent).toBe('Keep a thought');
   await act(async()=>newNote.click()); await settle();
   const area=world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
   await act(async()=>{
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,'A new Noah observation');
     area.dispatchEvent(new Event('input',{bubbles:true}));
   });
-  await act(async()=>world.container.querySelector<HTMLButtonElement>('button[aria-label="Save inspiration"]')!.click()); await settle();
+  await act(async()=>world.container.querySelector<HTMLButtonElement>('button.waka-dock-save')!.click()); await settle();
   expect(createInspiration).toHaveBeenCalledWith(expect.objectContaining({text:'A new Noah observation'}),expect.objectContaining({profile:'agent-noah'}));
   expect(CAPTURES.rows.map(row=>row.profileId)).toEqual(['agent-noah']);
   await chooseFromMenu(world.container,'Inspirations'); await settle();
@@ -719,7 +719,7 @@ it('keeps agent principle detail, curation, and share cards bound to their profi
   expect(location!.pathname).toBe('/principles/first');
   expect(new URLSearchParams(location!.search).get('profile')).toBe('agent-noah');
   expect(world.container.querySelector('.jar-principles-list')?.textContent).toContain('Noah principle first');
-  const edit=world.container.querySelector<HTMLButtonElement>('button[aria-label="Edit wording"]')!;
+  const edit=world.container.querySelector<HTMLButtonElement>('button[aria-label="Edit"]')!;
   await act(async()=>edit.click());
   await act(async()=>{
     const area=world.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="This principle in your own words"]')!;
@@ -728,7 +728,7 @@ it('keeps agent principle detail, curation, and share cards bound to their profi
   });
   await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-ask button')].find(button=>button.textContent==='Save')!.click());await settle();
   expect(updatePrinciple).toHaveBeenLastCalledWith('first','Noah corrected words',expect.objectContaining({profile:'agent-noah',expectedStatementRevision:'1'}));
-  await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principle-actions button')].find(button=>button.textContent==='Make a share card')!.click());await settle();
+  await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principle-actions button')].find(button=>button.textContent==='Share')!.click());await settle();
   expect(location!.pathname).toBe('/principles/first/share');
   expect(world.container.querySelector('.jar-share-name')?.textContent).toContain('noah');
   expect(world.container.querySelector('.jar-share-name')?.textContent).not.toContain('You');
