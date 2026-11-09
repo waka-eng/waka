@@ -926,6 +926,8 @@
   "worldShareArrived": "Got the link you shared. Want to say why?",
   "worldShareAddNote": "Add a note",
   "worldShareThatsAll": "That's all",
+  "worldShareArrivedText": "Got what you shared.",
+  "worldShareNotThis": "Not this",
   "worldConversationAboutSave": "You kept this",
   "profileSaveAnywhereShareTitle": "Android and desktop",
   "profileSaveAnywhereShareHint": "Install WAKA from your browser and it shows up in the share menu.",

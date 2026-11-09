@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 /**
- * A SHARE FROM OUTSIDE LANDS IN THE NOTEPAD, AND WAITS FOR SAVE.
+ * A SHARE FROM OUTSIDE IS OFFERED, NOT TAKEN.
  *
  * `/share` can be opened by any page on the web with words of its choosing,
- * so what it hands the home must never be kept on arrival: it goes into the
- * notepad, after anything already written there, and only Save keeps it.
+ * so what it hands the home must never touch the person's notepad — whose
+ * draft is kept on this device — without a press. It arrives in the
+ * creature's bubble with a short preview: "Add a note" puts it in the notepad
+ * (after anything already written there), "Not this" drops it, and only Save
+ * keeps it.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): `lib/data` and `lib/api` via
  * `dataMockFrom` / `apiMockFrom` — the seams Home reads through — and
@@ -43,33 +46,56 @@ function share(text: string, url = '') {
   sessionStorage.setItem(SHARED_KEY, JSON.stringify({ title: '', text, url, via: 'share', at: Date.now() }));
 }
 
-it('opens the notepad with what was shared, and keeps nothing until Save', async () => {
+const bubbleText = () => world.container.querySelector('.jar-char-bubble')?.textContent ?? '';
+const field = () => world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text');
+async function press(label: string) {
+  const button = [...world.container.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent?.trim() === label);
+  expect(button, `no control named ${label}`).toBeTruthy();
+  await act(async () => { button!.click(); });
+  await settle();
+}
+
+it('offers the share in the bubble and leaves the notepad alone until asked', async () => {
   share('a line someone sent me', 'https://example.com/post');
   world = await mountWorld(FACTS); await settle();
-  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text');
-  expect(field, 'the notepad did not open for the share').toBeTruthy();
-  expect(field!.value).toBe('a line someone sent me\nhttps://example.com/post');
+  expect(bubbleText()).toContain('Got the link you shared. Want to say why?');
+  expect(bubbleText()).toContain('a line someone sent me');
+  expect(field(), 'the notepad opened with the share before any press').toBeNull();
   expect(sessionStorage.getItem(SHARED_KEY), 'the share was left to be taken twice').toBeNull();
+  expect(created.calls).toEqual([]);
+  await press('Add a note');
+  expect(field()!.value).toBe('a line someone sent me\nhttps://example.com/post');
   expect(created.calls, 'the share was saved without a press').toEqual([]);
+});
+
+it('drops the share on Not this, and the draft never sees it', async () => {
+  share('words from a page I did not choose');
+  world = await mountWorld(FACTS); await settle();
+  expect(bubbleText()).toContain('Got what you shared.');
+  await press('Not this');
+  expect(bubbleText()).not.toContain('words from a page');
+  expect(field()).toBeNull();
+  expect(JSON.stringify({ ...localStorage })).not.toContain('words from a page');
 });
 
 it('puts the share after what is already in the notepad, not over it', async () => {
   world = await mountWorld(FACTS, { initialEntries: ['/?compose=1'] }); await settle();
-  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
+  const typed = field()!;
   await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'half a thought');
-    field.dispatchEvent(new Event('input', { bubbles: true }));
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(typed, 'half a thought');
+    typed.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await settle();
   world.unmount();
   share('https://example.com/later');
   world = await mountWorld(FACTS); await settle();
-  expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value)
-    .toBe('half a thought\n\nhttps://example.com/later');
+  await press('Add a note');
+  expect(field()?.value).toBe('half a thought\n\nhttps://example.com/later');
 });
 
 it('ignores a share left behind long ago', async () => {
   sessionStorage.setItem(SHARED_KEY, JSON.stringify({ title: '', text: 'stale', url: '', via: 'share', at: Date.now() - 60 * 60 * 1000 }));
   world = await mountWorld(FACTS); await settle();
-  expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value ?? '').not.toContain('stale');
+  expect(bubbleText()).not.toContain('stale');
+  expect(field()?.value ?? '').not.toContain('stale');
 });

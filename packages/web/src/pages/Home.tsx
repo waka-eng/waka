@@ -5195,12 +5195,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth, leaveOpen]);
   /* ═══ A SHARE ARRIVING FROM OUTSIDE ═════════════════════════════════
      `/share` (the phone's share menu, the bookmarklet) left what was shared
-     in this tab's session. It lands in the notepad, after anything already
-     written there, and waits for Save. It is never saved on arrival: any
-     page on the web can open `/share` with words of its choosing, and a
-     signed-in visitor's memory must not take them in without a press. The
-     bookmarklet's small window closes itself once that save lands. */
+     in this tab's session. ANY PAGE ON THE WEB can open `/share` with words
+     of its choosing, so it is OFFERED, never taken: the creature says it got
+     it, with a short preview, and asks — "Add a note" puts it in the notepad
+     (after anything already written there, so into the draft this device
+     keeps), "Not this" drops it. Nothing touches the draft before that
+     press, and only Save keeps it. The bookmarklet's small window closes
+     itself once that save lands. */
   const closeAfterSave = useRef(false);
+  const [offeredShare, setOfferedShare] = useState<{ text: string; link: boolean; preview: string; fromBookmarklet: boolean } | null>(null);
   useEffect(() => {
     if (phase !== 'ready' || !memoryScope || !composerDraft.ready) return;
     let payload: SharedPayload | null = null;
@@ -5211,17 +5214,25 @@ const RETRY_READ_LIMIT_MS = 20_000;
       payload = JSON.parse(raw) as SharedPayload;
     } catch { return; }
     if (!payload || Date.now() - payload.at > SHARED_MAX_AGE_MS) return;
-    const { text } = sharedText(payload);
+    const { text, url } = sharedText(payload);
     if (!text) return;
+    const words = text.split('\n')[0]!.trim();
+    setOfferedShare({ text, link: Boolean(url), preview: words.length > 120 ? `${words.slice(0, 119)}…` : words,
+      fromBookmarklet: payload.via === 'bookmarklet' && Boolean(window.opener) });
+  }, [phase, memoryScope, composerDraft.ready]);
+  /** "Add a note": only now does the share reach the notepad and its draft. */
+  const takeOfferedShare = useCallback(() => {
+    const offer = offeredShare;
+    if (!offer) return;
+    setOfferedShare(null);
     const before = draftRef.current.trim();
-    const next = before ? `${before}\n\n${text}` : text;
+    const next = before ? `${before}\n\n${offer.text}` : offer.text;
     draftRef.current = next; setDraft(next);
-    closeAfterSave.current = payload.via === 'bookmarklet' && Boolean(window.opener);
-    /* F5: the creature asks why — Add a note / That's all — in the notepad,
-       where it still waits for Save (any page can open /share). */
+    closeAfterSave.current = offer.fromBookmarklet;
+    /* and in the notepad the creature's ask carries on — a note, or That's all */
     setShareArrived(true);
     startNewInspiration();
-  }, [phase, memoryScope, composerDraft.ready, setDraft, startNewInspiration]);
+  }, [offeredShare, setDraft, startNewInspiration]);
 
   const [shareArrived, setShareArrived] = useState(false);
   /* Forgotten by the two ways a note ends — kept, or folded away as a
@@ -9597,7 +9608,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               about itself. */}
           {/* Review is offered only when selected by an avatar tap. Pending
               work never takes the reading's place on arrival. */}
-          {!mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'review' ? (
+          {!offeredShare && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'review' ? (
             <div className="jar-char-bubble jar-char-bubble--review" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">
@@ -9654,7 +9665,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               }}
             />
           ) : null}
-          {!mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
+          {!offeredShare && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
             <>
               {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over
                   there and being offered "Feeling inspired? Save one.":
@@ -9971,7 +9982,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               ) : null}
             </>
           ) : null}
-          {!mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'principles' ? (
+          {!offeredShare && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'principles' ? (
             <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">{say('worldCompanionPrinciplesPrompt')}</span>
@@ -9981,7 +9992,19 @@ const RETRY_READ_LIMIT_MS = 20_000;
               </span>
             </div>
           ) : null}
-          {!mouthOpen && !turning && companionLine ? (
+          {offeredShare && !mouthOpen && !turning ? (
+            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
+              <span className="jar-char-bubble-body">
+                <span className="jar-char-bubble-reading" role="status">{say(offeredShare.link ? 'worldShareArrived' : 'worldShareArrivedText')}</span>
+                <span className="jar-char-bubble-of">“{offeredShare.preview}”</span>
+                <span className="jar-char-bubble-acts">
+                  <button type="button" className="jar-char-bubble-act" onClick={takeOfferedShare}>{say('worldShareAddNote')}</button>
+                  <button type="button" className="jar-char-bubble-act" onClick={() => setOfferedShare(null)}>{say('worldShareNotThis')}</button>
+                </span>
+              </span>
+            </div>
+          ) : null}
+          {!offeredShare && !mouthOpen && !turning && companionLine ? (
             /* THE SAME WHITE AS THE TOP OF MIND. This bubble wore a lighter
                fill (`--aside`) to step back from the reading; founder,
                2026-10-15: "make all ... the speech bubbles be the same color
