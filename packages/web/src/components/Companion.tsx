@@ -32,7 +32,7 @@
  * nobody asked for. The founder's law stands: nothing moves unless the user
  * moved it.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { OWNER_BEING, type Being } from "../character/body";
 import { FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, GLASS_EASE_MS, REST_BLEED, coolRamp, restPose } from "../character/raster";
@@ -227,12 +227,18 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
       {...(pressable ? { "aria-hidden": true } : { role: "img", "aria-label": label })}
     />
   );
+  /* THE BUTTON IS NAMED FOR THE CREATURE, AND THE PRESS IS ITS HINT (code
+     review, 2026-11-08). Named "Light up X", every portrait read as a verb
+     and the chat's companions lost the agent's name they used to carry. The
+     name is the creature's own; what a press does is said as a description. */
+  const hint = useId();
   return (
     <span className="waka-companion" style={lightStyle} data-lit={flare > 0 ? "" : undefined}>
       {pressable ? (
         <button type="button" className="waka-companion-press" onClick={shine}
-          aria-label={formatMessage(locale, "companionLightUp", { name: label || "WAKA" })}>
+          aria-label={label || "WAKA"} aria-describedby={hint}>
           {body}
+          <span id={hint} className="sr-only">{formatMessage(locale, "companionLightUp", { name: label || "WAKA" })}</span>
         </button>
       ) : body}
     </span>

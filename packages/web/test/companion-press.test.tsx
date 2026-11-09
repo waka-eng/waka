@@ -55,13 +55,27 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("Companion, named", () => {
+  it("keeps an agent's name as its accessible name, pressable or not", () => {
+    const page = mount(<Companion size={64} label="Noah" />);
+    expect(page.querySelector("button")?.getAttribute("aria-label")).toBe("Noah");
+    act(() => root!.render(<Companion size={64} label="Noah" pressable={false} />));
+    expect(page.querySelector("button")).toBeNull();
+    expect(page.querySelector('[role="img"]')?.getAttribute("aria-label")).toBe("Noah");
+  });
+});
+
 describe("Companion, pressed", () => {
   it("is a named button whose press lights the aura by the world's own flare, then lets it go", () => {
     reducedMotion(true);
     vi.useFakeTimers();
     const page = mount(<Companion size={88} />);
     const button = page.querySelector("button")!;
-    expect(button.getAttribute("aria-label")).toBe("Light up WAKA");
+    /* Named for the creature; what a press does is its description (code
+       review, 2026-11-08: "Light up X" as the name read every portrait as
+       a verb). */
+    expect(button.getAttribute("aria-label")).toBe("WAKA");
+    expect(document.getElementById(button.getAttribute("aria-describedby")!)?.textContent).toBe("Light up WAKA");
     expect(button.getAttribute("type")).toBe("button");
     expect(light(page)).toEqual({ reach: 1, spread: 1 });
 

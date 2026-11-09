@@ -431,8 +431,9 @@ it('keeps the surface to a transcript, a box and nothing at rest',async()=>{
 
      AND THE CREATURE ABOVE THEM (2026-11): pressed, it lights, as it does
      at home (`Companion`). It is the opening's own face rather than a new
-     control, and it does nothing else. */
-  expect(named()).toEqual(['Light up WAKA','Add photo or file','Send']);
+     control, and it does nothing else — named for the creature, not for the
+     press (code review, 2026-11-08). */
+  expect(named()).toEqual(['WAKA','Add photo or file','Send']);
   expect(host.querySelector('textarea')!.value).toBe('A sentence in the box');
 });
 it('keeps the full-page composer within the visible keyboard viewport',async()=>{

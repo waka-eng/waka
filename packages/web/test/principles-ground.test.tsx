@@ -274,3 +274,13 @@ it("explains an agent’s empty memory in Korean without offering to write into 
   expect(fetchSignals).toHaveBeenCalledWith({ profile: PROFILE, status: "active", limit: 20 });
   expect(add).not.toHaveBeenCalled();
 });
+
+/* Code review, 2026-11-08: the creature over the ground is named for itself,
+   with lighting it up as the description, not the name. */
+it('names the creature over the ground for the creature', async () => {
+  vi.mocked(fetchSignals).mockResolvedValue([]);
+  await ground();
+  const being = document.querySelector<HTMLButtonElement>('.waka-ground-being button');
+  expect(being?.getAttribute('aria-label')).toBe('WAKA');
+  expect(document.getElementById(being!.getAttribute('aria-describedby')!)?.textContent).toBe('Light up WAKA');
+});
