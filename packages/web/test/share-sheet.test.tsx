@@ -99,8 +99,8 @@ it("opens on the one design, unsigned, with the kept words and two icon actions"
 it("closes with the quiet \"<\" first in its row, like every page", async () => {
   await mount();
   await settle();
-  const x = host.querySelector<HTMLButtonElement>("header .waka-sheet-back")!;
-  expect(x.textContent, "the \"<\" has no screen reader name").toBe("Back");
+  const x = host.querySelector<HTMLButtonElement>("header .waka-surface-back")!;
+  expect(x.getAttribute("aria-label"), "the \"<\" has no screen reader name").toBe("Close");
   expect(host.querySelector(".jar-share-x"), "the × came back").toBeNull();
   await act(async () => x.click());
   expect(close).toHaveBeenCalledOnce();

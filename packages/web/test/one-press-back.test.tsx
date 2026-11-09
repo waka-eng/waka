@@ -50,44 +50,12 @@ const owners = (mine: () => void, theirs: () => void): MenuItem[] => [
   { id: "agent:agent-1", label: "worldAgentTopOfMind", onSelect: theirs },
 ];
 
-async function mount(items: MenuItem[], current: string | null) {
-  await act(async () => {
-    root.render(
-      /* `label` is what puts the bar in its one-press-back shape: it marks a
-         surface you did not travel to on purpose — a conversation, settings,
-         your days — where the question is never "which owner" but "how do I
-         get back". */
-      <Menu locale="en-US" items={items} current={current} label="worldMenuTalk" onSettings={() => undefined} />,
-    );
-  });
-}
-
-const trigger = () => host.querySelector<HTMLButtonElement>(".waka-switch-trigger")!;
-
-it("presses back to your own top of mind from a surface you did not travel to", async () => {
-  const mine = vi.fn(), theirs = vi.fn();
-  await mount(owners(mine, theirs), null);
-  const back = trigger();
-  expect(back, "a conversation offers no way back to the top of mind at all").toBeTruthy();
-  /* IT SAYS WHERE IT GOES. A back arrow alone would be the unlabelled door
-     the switcher was replaced for being. */
-  expect(back.textContent).toContain("On your mind lately");
-  await act(async () => back.click());
-  expect(mine, "the one press the founder asked for by name did nothing").toHaveBeenCalledOnce();
-  expect(theirs, "it went to the agent's top of mind instead of your own").not.toHaveBeenCalled();
-});
-
-it("goes to your own top of mind even while standing as the agent", async () => {
-  /* THE COMPLAINT'S OTHER HALF: "I go to my agent and then now I have no way
-     to get back to my top of mind without going to my agent's top of mind."
-     So the destination is not "wherever you were" — it is YOURS. */
-  const mine = vi.fn(), theirs = vi.fn();
-  await mount(owners(mine, theirs), "agent:agent-1");
-  await act(async () => trigger().click());
-  expect(mine).toHaveBeenCalledOnce();
-  expect(theirs).not.toHaveBeenCalled();
-});
-
+/* THE ONE-PRESS WAY BACK IS THE SHARED HEADER'S "<" NOW (nav system): the
+   centre switch ("‹ On your mind lately") that used to carry it went with
+   the corners leaving every page. `page-exit.test.tsx` presses the "<" on
+   your days; `nav-system.test.tsx` holds every page to it. What stays here
+   is the rungs' half: on a surface that is one of the owners, each is one
+   press. */
 it("offers the owners instead, on a surface that is one of them", async () => {
   /* The branch boundary, so the back control cannot start appearing on the
      world — where it would be a second control answering a question the

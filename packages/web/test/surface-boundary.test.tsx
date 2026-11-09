@@ -156,7 +156,8 @@ it("offers a way home as well as a reload, on any page but home", async () => {
       <Boom message="Cannot read properties of undefined (reading 'length')" />
     </SurfaceBoundary>,
   );
-  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Home");
+  /* THE SHARED HEADER'S "<" (nav system), named Close: it goes to a clean home. */
+  const home = host.querySelector<HTMLButtonElement>(".waka-surface-back[aria-label='Close']") ?? undefined;
   expect(home, "the crash screen offers only a reload").toBeDefined();
   await act(async () => home!.click());
   expect(assign).toHaveBeenCalledWith("/");
@@ -173,7 +174,7 @@ it("does not offer home on home, where it would be the reload again", async () =
       <Boom message="Cannot read properties of undefined (reading 'length')" />
     </SurfaceBoundary>,
   );
-  expect(host.textContent).not.toContain("Home");
+  expect(host.querySelector(".waka-surface-back")).toBeNull();
 });
 
 it("offers home on '/' with a query, since the query may be what breaks it, and goes to a clean '/'", async () => {
@@ -188,7 +189,8 @@ it("offers home on '/' with a query, since the query may be what breaks it, and 
       <Boom message="Cannot read properties of undefined (reading 'length')" />
     </SurfaceBoundary>,
   );
-  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Home");
+  /* THE SHARED HEADER'S "<" (nav system), named Close: it goes to a clean home. */
+  const home = host.querySelector<HTMLButtonElement>(".waka-surface-back[aria-label='Close']") ?? undefined;
   expect(home, "a home with a query got no way to a clean home").toBeDefined();
   await act(async () => home!.click());
   expect(assign).toHaveBeenCalledWith("/");

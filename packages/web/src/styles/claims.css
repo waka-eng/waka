@@ -302,40 +302,6 @@
   pointer-events: auto;
 }
 
-/* Back names the destination above the page; Close stays with its tools. */
-.waka-page-back {
-  position: fixed;
-  z-index: 60;
-  top: calc(var(--sp-12) + env(safe-area-inset-top));
-  left: max(var(--sp-16), env(safe-area-inset-left));
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-4);
-  min-height: var(--waka-corner);
-  max-width: calc(100vw - var(--sp-32));
-  padding: var(--sp-8);
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--waka-raised);
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--t-meta);
-  cursor: pointer;
-  pointer-events: auto;
-}
-.waka-page-back:hover, .waka-page-back:focus-visible { color: var(--ink); }
-.waka-page-back[data-below-corners] {
-  top: calc(var(--waka-corner) + var(--sp-16) + env(safe-area-inset-top));
-}
-body:has(.waka-page-back[data-below-corners]) .waka-page {
-  padding-top: calc(var(--waka-corner) * 2 + var(--sp-16) + env(safe-area-inset-top));
-}
-body:has(.waka-page-back) .waka-over--note {
-  padding-top: calc(var(--waka-corner) + var(--sp-24) + env(safe-area-inset-top));
-}
-/* Both fixed corner words ("<" and a chat's "Past chats") step aside for a
-   modal, the account card or a menu: z-60 would stand them over it. */
-body:has([aria-modal="true"], .waka-account, [role="menu"]) :is(.waka-page-back, .waka-page-aside) { visibility: hidden; }
 .waka-back-swipe {
   position: fixed;
   z-index: 61;
@@ -947,48 +913,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   width: calc(var(--waka-corner) * 2);
 }
 
-.waka-switch {
-  pointer-events: auto;
-  position: relative;
-  /* Centred on the viewport: equal growth from the middle, whatever the two
-     corner glyphs do. */
-  flex: 1 1 auto;
-  display: flex;
-  justify-content: center;
-  min-width: 0;
-}
 
-.waka-switch-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-6);
-  max-width: 100%;
-  min-height: var(--waka-corner);
-  padding: 0 var(--sp-8);
-  border: 0;
-  border-radius: var(--waka-r-control);
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--waka-face);
-  font-size: var(--t-meta);
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
 
-.waka-switch-trigger:hover,
-.waka-switch-trigger[aria-expanded="true"] {
-  color: var(--ink);
-}
 
-.waka-switch-trigger:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
 
 /* THE HOVER CARD THAT STOOD HERE IS GONE. Each row of the list carries its
    own explanation now, which is both reachable by a finger and readable
@@ -1658,10 +1585,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    notepad makes: the chevron belongs on the screen's left margin where a
    thumb finds it, and a 34rem box centred in the page would drag it
    inwards. */
-.waka-over--note .jar-note-top {
-  width: 100%;
-  max-width: none;
-}
+
 
 .waka-over--note .waka-note-page,
 .waka-over--note .waka-sheet-picture,
@@ -1716,13 +1640,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
  * unrelated statement with nothing saying which of the two you were reading.
  * One namer per surface, and for an overlay the surface is the namer.
  */
-.waka-over-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-16);
-  flex-wrap: wrap;
-}
+
 
 /**
  * THE NAME, AND THE COUNT UNDER IT.
@@ -1756,12 +1674,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    NO WRAP. If the pair ever outgrows the column the right failure is the
    title truncating, not the count dropping to a second line and
    recreating exactly what this fixes. */
-.waka-over-name {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-8);
-  min-width: 0;
-}
+
 
 /* THE TITLE'S TAIL, NOT A LABEL BESIDE IT. One step down and in the muted
    tier, so the phrase has a stress on the name and a fact after it — the
@@ -1933,17 +1846,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    presses it, nothing counts it. A fourth mention is somebody bringing the
    control back without reading any of them. */
 
-.waka-over-title {
-  margin: 0;
-  font-family: var(--waka-face);
-  /* A STEP UP, AND A WEIGHT. The reference's list heading is the largest
-     thing on its screen by a distance, which is what makes a page of rows
-     feel like a place rather than a result set. */
-  font-size: var(--t-reading);
-  font-weight: 500;
-  line-height: 1.15;
-  color: var(--ink);
-}
 
 /* `.waka-over-close` IS GONE FROM EVERY SURFACE THAT WORE IT.
    Founder: "how do we even need the close button for inspiration and chat?
@@ -7043,9 +6945,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-dock--tabs .waka-dock-item[aria-current="page"]::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: var(--sp-16); height: 2px; border-radius: var(--r-pill); background: currentColor; }
 
 .waka-over--archive { gap: var(--sp-12); }
-.waka-over--archive .waka-over-head { flex-wrap: nowrap; align-items: center; gap: var(--sp-8); }
-.waka-over--archive .waka-over-name { flex-wrap: wrap; }
-.waka-over--archive .waka-over-title { font-size: var(--t-lead); }
+
+
+
 .waka-over--archive .waka-over-new { padding-inline: var(--sp-12); }
 .waka-over--archive .waka-over-what { margin: 0; }
 .waka-restore-notice { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-8); font-size: var(--t-body); }
@@ -7227,14 +7129,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   display: inline-flex; align-items: center; gap: var(--sp-4); min-height: var(--sp-44); padding: 0; border: 0; background: none;
   color: var(--ink); font: inherit; cursor: pointer;
 }
-/* "⌄ HOME" IN THE TOP BAR'S ROW while the sheet is up: left, unboxed, the
-   corner icons' 44px height so the word and the glyphs share a centre line. */
-.waka-stream-home {
-  pointer-events: auto; flex: none; display: inline-flex; align-items: center; gap: var(--sp-4);
-  height: var(--waka-corner); padding: 0 var(--sp-6); border: 0; background: none;
-  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-meta); cursor: pointer;
-}
-.waka-stream-home:hover, .waka-stream-home:focus-visible { color: var(--ink); }
 .waka-stream-scroll {
   flex: 1; min-height: 0; width: min(36rem, 100%); box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
   padding: 0 var(--sp-16) var(--sp-32);
@@ -7420,35 +7314,17 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    alone (its name said to a screen reader), on a list "‹ Home". The page's
    own row sits beside it at the same height: the note's "Saving to … ·
    date" and its unboxed "⋯", a chat's "Past chats". */
-.waka-page-back, .waka-page-back[data-below-corners] {
-  min-width: var(--waka-corner); min-height: var(--waka-corner); padding: 0 var(--sp-6);
-  background: none; color: var(--muted); gap: var(--sp-4);
-}
-.waka-page-back:hover, .waka-page-back:focus-visible { background: none; color: var(--ink); }
-.waka-page-back[data-glyph] { justify-content: center; padding: 0; }
-.waka-page-aside {
-  position: fixed; z-index: 60; top: calc(var(--sp-12) + env(safe-area-inset-top)); right: max(var(--sp-16), env(safe-area-inset-right));
-  min-height: var(--waka-corner); padding: 0 var(--sp-6); border: 0; background: none;
-  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-ui); cursor: pointer; pointer-events: auto;
-}
-.waka-page-aside:hover, .waka-page-aside:focus-visible { color: var(--ink); }
 
 /* THE NOTE'S ROW: level with the "<", the stamp in the middle; a saved note's "⋯" at the end. */
 body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer[data-visual-viewport] {
   padding-top: calc(var(--sp-12) + env(safe-area-inset-top));
 }
-body .jar-seek.jar-inspiration-composer > .jar-note-top { margin-top: 0; padding-top: 0; }
-body:has(.waka-page-back) .waka-over.waka-over--note { padding-top: calc(var(--sp-12) + env(safe-area-inset-top)); }
+
 /* "SAVING TO … · DATE" IN THE MIDDLE (founder, 2026-11-09). Equal tracks
    either side, the "<" over the first and the saved note's "⋯" in the last,
    so the line is centred on the page and not on what is left of it. */
-.jar-seek.jar-inspiration-composer .jar-note-top, .waka-over.waka-over--note .jar-note-top {
-  grid-template-columns: var(--waka-corner) minmax(0, 1fr) var(--waka-corner);
-  min-height: var(--waka-corner); margin: 0 0 var(--sp-12); padding: 0; gap: var(--sp-6);
-}
-.jar-seek.jar-inspiration-composer .jar-note-when, .waka-over.waka-over--note .jar-note-when {
-  grid-column: 2; justify-self: center; text-align: center; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+
+
 .jar-seek.jar-inspiration-composer .jar-note-verb, .waka-over.waka-over--note .jar-note-verb { grid-column: 3; justify-self: end; }
 .jar-inspiration-composer .jar-note-actions-trigger, .waka-over--note .jar-note-actions-trigger,
 .jar-inspiration-composer .jar-note-actions-trigger:hover, .jar-inspiration-composer .jar-note-actions-trigger:focus-visible {
@@ -7597,38 +7473,9 @@ body:has(.waka-page-back) .waka-over.waka-over--note { padding-top: calc(var(--s
 }
 
 @layer chrome {
-/* A sheet's "<": the page back's glyph, unboxed, first in the sheet's row.
-   THE SAME IN EVERY SHEET, WHICHEVER SHEET IT IS IN (code review,
-   2026-11-09). Most sheets dress their buttons with a blanket
-   `.<sheet> button` rule, and two of them out-ranked this one, so their "<"
-   came out boxed and padded. `:is(…, #waka-sheet-back)` takes the
-   specificity of an id (no element carries that id; it exists only to
-   weigh), so this one rule outranks every container's button rule without
-   naming each container or reaching for !important. */
-.waka-sheet-back:is(.waka-sheet-back, #waka-sheet-back) {
-  display: inline-flex; align-items: center; justify-content: center; flex: none;
-  width: auto; min-width: var(--waka-corner); min-height: var(--waka-corner); padding: 0; margin: 0;
-  border: 0; border-radius: var(--r-pill); background: none; box-shadow: none; color: var(--muted);
-  font: inherit; text-decoration: none; cursor: pointer;
-}
-.waka-sheet-back:is(.waka-sheet-back, #waka-sheet-back):hover { border: 0; background: none; color: var(--muted); }
-.waka-sheet-back:is(.waka-sheet-back, #waka-sheet-back):focus-visible { background: none; color: var(--ink); outline: 2px solid var(--ink); outline-offset: 2px; }
-.waka-sheet-back:is(.waka-sheet-back, #waka-sheet-back):disabled { opacity: 0.4; cursor: default; }
-header:has(> .waka-sheet-back), .jar-search-heading:has(> .waka-sheet-back) {
-  display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-6);
-}
 }
 
 @layer chrome {
-/* THE ACCOUNT CARD'S "<" (info and settings) stands top-left in the card,
-   where its title begins; a settings sub-page's own "<" (back to Settings)
-   takes that seat while it is open, so there is only ever one. */
-.waka-account > .waka-sheet-back { position: absolute; top: var(--sp-12); left: var(--sp-12); z-index: 1; }
-.waka-account:has(> .waka-sheet-back) .waka-about-title,
-.waka-account:has(> .waka-sheet-back) .waka-settings-heading { padding-inline-start: calc(var(--waka-corner) + var(--sp-4)); }
-.waka-account:has(.waka-settings-heading > .waka-sheet-back) > .waka-sheet-back:is(.waka-sheet-back, #waka-sheet-back) { display: none; }
-.waka-account:has(.waka-settings-heading > .waka-sheet-back) .waka-settings-heading { padding-inline-start: 0; }
-.jar-prov-room-top { display: flex; align-items: center; }
 }
 
 @layer chrome {
@@ -7639,4 +7486,131 @@ header:has(> .waka-sheet-back), .jar-search-heading:has(> .waka-sheet-back) {
 .waka-note-bar .waka-note-bar-row .waka-note-bar-action.chat-send--stop { color: var(--muted); }
 .waka-note-bar .waka-note-bar-row .waka-note-bar-action.chat-send--stop:hover,
 .waka-note-bar .waka-note-bar-row .waka-note-bar-action.chat-send--stop:focus-visible { color: var(--ink); }
+}
+
+@layer chrome {
+/* ═══ THE SURFACE HEADER (nav system, 2026-11-09) ═══════════════════════════
+   Every surface that is not home starts with this one row: a 44px "<" on the
+   left, a short title centred on the SCREEN (both side tracks are equal, so
+   a right-hand word does not pull the title off centre), and at most one
+   right-hand word or "⋯". It is in the surface's own flow, never fixed or
+   floating, and it never wears a box or a fill. See `SurfaceHeader.tsx`.
+
+   `:is(…, #waka-surface-head)` weighs as an id, so a sheet's blanket
+   `.<sheet> button` rule cannot box the "<" or the right word (the trick the
+   sheet "<" used before this; no element carries that id). */
+.waka-surface-head {
+  position: relative; flex: none; box-sizing: border-box;
+  display: grid; grid-template-columns: minmax(var(--waka-corner), 1fr) minmax(0, max-content) minmax(var(--waka-corner), 1fr);
+  align-items: center; column-gap: var(--sp-8);
+  width: 100%; height: var(--waka-corner); min-height: var(--waka-corner); margin: 0; padding: 0;
+  color: var(--ink); font-family: var(--waka-face); pointer-events: auto;
+}
+.waka-surface-back:is(.waka-surface-back, #waka-surface-head) {
+  grid-column: 1; justify-self: start;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: var(--waka-corner); height: var(--waka-corner); min-width: var(--waka-corner); min-height: var(--waka-corner);
+  margin: 0; padding: 0; border: 0; border-radius: var(--r-pill); background: none; box-shadow: none;
+  color: var(--muted); font: inherit; cursor: pointer;
+}
+.waka-surface-back:is(.waka-surface-back, #waka-surface-head):hover { background: none; color: var(--ink); }
+.waka-surface-back:is(.waka-surface-back, #waka-surface-head):disabled { opacity: 0.4; cursor: default; }
+.waka-surface-title:is(.waka-surface-title, #waka-surface-head) {
+  grid-column: 2; min-width: 0; margin: 0; padding: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
+  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-ui); font-weight: 400; line-height: 1.3; letter-spacing: 0;
+}
+.waka-surface-right { grid-column: 3; justify-self: end; display: inline-flex; align-items: center; min-width: 0; }
+.waka-surface-right:empty { display: none; }
+/* THE RIGHT-HAND WORD: plain, dim until pointed at, never filled or boxed. */
+.waka-surface-right > button:is(button, #waka-surface-head), .waka-surface-act:is(.waka-surface-act, #waka-surface-head) {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: var(--waka-corner); min-height: var(--waka-corner); margin: 0; padding: 0 var(--sp-6);
+  border: 0; border-radius: var(--r-pill); background: none; box-shadow: none;
+  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-ui); font-weight: 400; white-space: nowrap; cursor: pointer;
+}
+.waka-surface-right > button:is(button, #waka-surface-head):hover { background: none; color: var(--ink); }
+/* KEYBOARD FOCUS IN THE HEADER IS A THIN RING, never a fill. */
+.waka-surface-head button:focus-visible { background: none; color: var(--ink); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 45%, transparent); }
+
+/* ═══ PAGES START AT THE HEADER, NOT UNDER THE CORNERS ═══════════════════════
+   The corners (Me / My agent, i, settings) stand on home only now, so a page
+   no longer reserves their row: its header is its first row, 12px under the
+   safe area, on the 16px gutter. */
+.waka-page, .waka-page.waka-page--note {
+  padding-top: calc(var(--sp-12) + env(safe-area-inset-top));
+}
+.waka-over > .waka-surface-head, .waka-over--talk > .waka-surface-head { width: 100%; }
+/* A SAVED NOTE ON A PHONE takes the page's 16px gutter, as the lists do.
+   MEASURED, the same 700px the lists' gutter rule above was measured at
+   (where the 650px column stops filling the page). */
+@media (max-width: 700px) {
+  .waka-page.waka-page--note { padding-inline: max(var(--sp-16), env(safe-area-inset-left)) max(var(--sp-16), env(safe-area-inset-right)); }
+  .waka-over.waka-over--note { padding-inline: 0; }
+}
+.waka-over.waka-over--note { padding-top: 0; }
+.jar-seek.jar-inspiration-composer > .waka-surface-head, .waka-over--note .waka-surface-head { margin-bottom: var(--sp-12); }
+
+/* A SURFACE WITH NO DOM PAGE OF ITS OWN (a principle in the sky, the
+   creature's questions) gets the same row in a strip at the top. */
+.waka-surface-strip {
+  position: fixed; z-index: 60; top: 0; left: 0; right: 0;
+  padding: calc(var(--sp-12) + env(safe-area-inset-top)) max(var(--sp-16), env(safe-area-inset-right)) 0 max(var(--sp-16), env(safe-area-inset-left));
+  pointer-events: none;
+}
+.waka-surface-strip > * { pointer-events: auto; }
+/* The row itself lets the world take presses beside its controls. */
+.waka-surface-strip > .waka-surface-head { pointer-events: none; }
+.waka-surface-strip > .waka-surface-head > * { pointer-events: auto; }
+
+/* The strip is the one header not inside its own surface, so it steps aside
+   for a modal, the account card or a menu laid over the sky or the cards. */
+body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip { visibility: hidden; }
+
+/* THE KEPT SHEET'S HEADER sits above its field, on the sheet's own column. */
+.waka-stream > .waka-surface-head { width: min(36rem, 100%); padding-inline: var(--sp-16); }
+
+/* A SHEET'S HEADER is its first row on the sheet's own padding. */
+.waka-account > .waka-surface-head, .waka-settings > .waka-surface-head { margin: 0 0 var(--sp-8); }
+
+/* ═══ NOTHING IN A BAR EVER LOOKS FILLED, FOCUSED OR NOT ═════════════════════
+   Keyboard focus on a bar's control is a thin ring of ink at 45%; a press or
+   a programmatic focus shows nothing. (It was a radial pool of light, which
+   on the mic of a new chat read as a filled button.) */
+.waka-home-bar button:focus-visible, .waka-note-bar button:focus-visible,
+.waka-note-bar .waka-dock-tool:focus-visible, .waka-listening button:focus-visible {
+  background: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 45%, transparent); filter: none;
+}
+}
+
+@layer chrome {
+/* ═══ EVERY PRESS IS AT LEAST 44px (nav system, J51) ═══════════════════════
+   The visual may be smaller; the target is not. A chip's × and ↻ keep their
+   28px circle and grow a 44px hit box around it (the pattern `chat-send`
+   uses); the rest simply take the floor. */
+.chat-page .chat-chip-act { position: relative; }
+.chat-page .chat-chip-act::after { content: ""; position: absolute; inset: -8px; }
+.waka-over-unfocus { min-height: var(--sp-44); }
+.jar-share-hint-line .jar-share-link { min-height: var(--sp-44); }
+.login-link { min-height: var(--sp-44); }
+.waka-account-out:is(.waka-account-out, #waka-surface-head) { min-height: var(--sp-44); }
+.waka-reading-full-body button { min-height: var(--sp-44); }
+/* A LOGIN-SHELL'S HEADER (sign in, the error screen) stands at the top of
+   the screen on the 16px gutter, above the centred card. */
+.login-shell > .login-head {
+  position: absolute; top: calc(var(--sp-12) + env(safe-area-inset-top));
+  left: max(var(--sp-16), env(safe-area-inset-left)); right: max(var(--sp-16), env(safe-area-inset-right)); width: auto;
+}
+.login-shell { position: relative; }
+}
+
+@layer chrome {
+/* ═══ THE SAVED NOTE'S BAR IS THE NOTEPAD'S PILL (nav system R7) ════════════
+   The third bar (the old dock slot a saved note's tools were lent) is gone:
+   a saved note writes into the same `NoteBar`, small and centred at the foot
+   of the page, on the page's own ground. */
+.waka-over--note .waka-over-one > .waka-note-bar--saved {
+  margin-top: auto; margin-bottom: calc(var(--sp-16) + env(safe-area-inset-bottom)); align-self: center;
+}
+.waka-page.waka-page--note { padding-bottom: 0; }
 }

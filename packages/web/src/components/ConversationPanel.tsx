@@ -673,7 +673,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         buttons. The corners are the navigation here as everywhere. */}
     <section className="chat-main" aria-label={say('worldConversationTitle')}>
       {error?<div className="chat-notice" role="alert">{error} {limitReached
-        ? onHistory?<button type="button" onClick={onHistory}>{say('worldAllChats')}</button>:null
+        ? onHistory?<button type="button" onClick={onHistory}>{say('worldPastChats')}</button>:null
         : (unsent&&!draft?.pending&&Boolean(draft?.content.trim()||draft?.attachments?.length))||(draft?.pending&&(!id||conversation))?
         /* RETRY ONLY WHERE IT WORKS (review): `save` stops for every reason
            `whyNoSend` names, so a Retry beside one of them was a button that

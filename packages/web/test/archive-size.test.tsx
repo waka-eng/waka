@@ -188,7 +188,7 @@ async function doorText(): Promise<string> {
                agent's archive and your own cannot be confused. */
             profileId: undefined,
             title: "Your inspirations",
-            onClose: () => undefined,
+            onBack: () => undefined,
           }),
         ),
       ),

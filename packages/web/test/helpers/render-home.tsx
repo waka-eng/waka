@@ -540,7 +540,7 @@ export async function pressHomeBar(container: HTMLElement, label: string): Promi
 
 /** The bar's rows. */
 function dockRows(container: HTMLElement): HTMLButtonElement[] {
-  return [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item, .waka-page-back, .waka-home-bar button, .waka-over-new")];
+  return [...container.querySelectorAll<HTMLButtonElement>(".waka-surface-back, .waka-surface-right button, .waka-home-bar button")];
 }
 
 /**
@@ -554,7 +554,7 @@ function dockRows(container: HTMLElement): HTMLButtonElement[] {
 const MOVED: Record<string, "archive" | "chats"> = { Inspirations: "archive", Chats: "chats" };
 /** A chat's list door is its top-right "Past chats" (2026-11-08), not a bar row. */
 async function pressPastChatsAside(container: HTMLElement): Promise<boolean> {
-  const aside = container.querySelector<HTMLButtonElement>(".waka-page-aside");
+  const aside = container.querySelector<HTMLButtonElement>(".waka-surface-right .waka-surface-act");
   if (!aside) return false;
   await act(async () => aside.click());
   return true;
@@ -615,7 +615,8 @@ const accessibleName = (node: HTMLElement) =>
  * on either list ↩ │ Close (founder, 2026-10-15).
  */
 export function barShape(container: HTMLElement): string[] {
-  const bar = container.querySelector("nav.waka-dock");
+  /* The bar under a page you write on is the one `NoteBar` (nav system R7). */
+  const bar = container.querySelector("nav.waka-dock") ?? [...container.querySelectorAll(".waka-note-bar")].at(-1) ?? null;
   if (!bar) throw new Error("the bar is not on screen");
   return [...bar.querySelectorAll<HTMLElement>("button, textarea, span.waka-dock-sep")].map((node) =>
     node.matches("span.waka-dock-sep") ? "│" : node.matches("textarea") ? "field" : isReturnRow(node) ? "↩" : accessibleName(node));
@@ -766,7 +767,7 @@ export async function pressChatCorner(container: HTMLElement): Promise<void> {
   /* NO DIRECT DOOR FROM HOME SINCE 2026-11-08: the round Chat is the way in,
      and the chat page carries Past chats, top right. */
   await pressHomeBar(container, "Chat");
-  await pressWhenItAppears(container, ".waka-page-aside", "the chat page's Past chats, top right");
+  await pressWhenItAppears(container, ".waka-surface-right .waka-surface-act", "the chat page's Past chats, top right");
 }
 
 /**
@@ -789,8 +790,9 @@ export async function closeOverlay(container: HTMLElement): Promise<void> {
      back to its list, a list goes home. So this presses the "<" until home's
      bar is back, never more than a few times; Escape for Principles. */
   for (let turn = 0; turn < 4; turn += 1) {
-    if (container.querySelector(".waka-home-bar") && !container.querySelector(".waka-page-back")) return;
-    const back = container.querySelector<HTMLButtonElement>(".waka-page-back");
+    /* THE SHARED HEADER'S "<" (nav system): the topmost one on screen. */
+    const back = [...container.querySelectorAll<HTMLButtonElement>(".waka-surface-back")].at(-1) ?? null;
+    if (container.querySelector(".waka-home-bar") && !back) return;
     if (back) await act(async () => back.click());
     else if (container.querySelector(".waka-over[data-jar-surface]")) await pressKey(container, "Escape");
     else throw new Error("no visible way out: no \"<\" on screen");

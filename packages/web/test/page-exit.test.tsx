@@ -108,7 +108,6 @@ vi.mock("../src/lib/auth-context", () => ({
   useOptionalAuth: () => session.value,
 }));
 
-vi.mock("../src/lib/use-agent", () => ({ useAgent: () => agent.value }));
 
 vi.mock("../src/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/lib/api")>()),
@@ -164,7 +163,8 @@ async function open(at: string, page: JSX.Element): Promise<void> {
  * is how this went unnoticed for as long as it did.
  */
 function exit(): HTMLButtonElement {
-  const control = host.querySelector<HTMLButtonElement>(".waka-switch-trigger");
+  /* THE SHARED HEADER'S "<" (nav system): Close, which goes to your own world. */
+  const control = host.querySelector<HTMLButtonElement>(".waka-surface-head .waka-surface-back");
   if (!control) throw new Error("no way out in the chrome at all");
   return control;
 }
@@ -227,21 +227,13 @@ describe("a surface you can enter has a visible way out, and it costs one press"
    * which is what this control used to be and what Law 2 refuses in as many
    * words: "A list is not an exit." One press, and the address has changed.
    */
-  /**
-   * THE COG ON THIS PAGE CAN SIGN YOU OUT. It used to open a card saying
-   * who you are and nothing else, so the corner a person reaches to leave
-   * could not leave from here.
-   */
-  it("offers sign out from the settings corner", async () => {
-    session.value.logout.mockClear();
+  /* THE CORNERS ARE HOME'S ONLY (nav system R6): this page's top row is its
+     header, "<" Close and "Your days", and nothing else stands up there. */
+  it("has one header and no corners", async () => {
     await open("/days", <Days />);
-    await act(async () => host.querySelector<HTMLButtonElement>(".waka-corner--settings")!.click());
-    const out = host.querySelector<HTMLButtonElement>(".waka-account-out");
-    expect(out?.textContent).toBe("Sign out");
-    await act(async () => out!.click());
-    await act(async () => undefined);
-    expect(session.value.logout).toHaveBeenCalledTimes(1);
-    expect(here).toBe("/login");
+    expect(host.querySelector(".waka-corners")).toBeNull();
+    expect(exit().getAttribute("aria-label")).toBe("Close");
+    expect(host.querySelector(".waka-surface-title")?.textContent).toBe("Your days");
   });
 
   it("needs no list in between", async () => {

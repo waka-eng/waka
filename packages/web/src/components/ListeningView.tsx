@@ -103,6 +103,23 @@ export function ListeningView(props: {
   const words = props.words, recent = recentStart(words, settled);
 
   useEffect(() => { done.current?.focus({ preventScroll: true }); }, []);
+  /* ═══ A FULL-SCREEN LAYER: EVERYTHING BEHIND IT IS INERT (nav system) ═══
+     The view covers the page that opened it, so nothing behind it may be
+     reached by Tab or a screen reader while it is open: every sibling on
+     the way up to <body> is made `inert` (and restored on close; one that
+     was already inert is left as it was). */
+  useLayoutEffect(() => {
+    const made: HTMLElement[] = [];
+    for (let at: HTMLElement | null = root.current; at && at !== document.body; at = at.parentElement) {
+      const parent: HTMLElement | null = at.parentElement;
+      if (!parent) break;
+      for (const sibling of Array.from(parent.children)) {
+        if (sibling === at || !(sibling instanceof HTMLElement) || sibling.hasAttribute('inert') || sibling.tagName === 'SCRIPT') continue;
+        sibling.setAttribute('inert', ''); made.push(sibling);
+      }
+    }
+    return () => { for (const node of made) node.removeAttribute('inert'); };
+  }, []);
   useLayoutEffect(() => {
     const here = root.current, near = here?.parentElement ?? null;
     return () => {
@@ -130,7 +147,13 @@ export function ListeningView(props: {
   };
 
   return (
-    <div ref={root} className="waka-listening" role="group" aria-label={say('worldListening')}>
+    <div ref={root} className="waka-listening" role="group" aria-label={say('worldListening')}
+      /* ESCAPE IS DONE (nav system R3), and it stops here: it must not reach
+         the page under the view and close the note mid-dictation. */
+      onKeyDown={event => {
+        if (event.key !== 'Escape' || event.nativeEvent.isComposing) return;
+        event.preventDefault(); event.stopPropagation(); props.onDone();
+      }}>
       <div className="waka-listening-head">
         <span className="waka-listening-being" aria-hidden="true">
           <span className="waka-listening-light" />

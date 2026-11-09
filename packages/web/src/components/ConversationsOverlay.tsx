@@ -35,6 +35,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { deleteConversation, listConversations, type ConversationSummary } from "../lib/api/conversations";
 import { DialogSurface } from "./DialogSurface";
+import { SurfaceHeader, type BackKind } from "./SurfaceHeader";
 import { t, type SupportedLocale } from "../lib/locales";
 import { dateWords, timeOf } from "../lib/words";
 import { useListFilters, useListScroll, type ListViewState } from '../lib/list-view-state';
@@ -91,14 +92,18 @@ function clock(row: ConversationSummary, locale: SupportedLocale): string {
   return Number.isNaN(when.getTime()) ? "" : timeOf(when.getTime(), locale);
 }
 
-export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen, viewState, topRequest }: {
+export function ConversationsOverlay({ locale, profileId, title, onBack, backKind = "close", gesture = null, onOpen, viewState, topRequest }: {
   topRequest?: number;
   viewState?: ListViewState;
   locale: SupportedLocale;
   /** Whose conversations — so an agent's talks are its own. */
   profileId: string | null | undefined;
   title: string;
-  onClose: () => void;
+  /** The "<" and Escape, one handler: Close to home, or Back to the chat this list was opened from. */
+  onBack: () => void;
+  backKind?: BackKind;
+  /** The page's address, for the native back gestures. */
+  gesture?: string | null;
   onOpen: (conversationId: string | null) => void;
 }): JSX.Element {
   const searchField = useRef<HTMLInputElement>(null);
@@ -230,13 +235,9 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
           changes — Escape still leaves, and there is no scrim to press
           away on, because `.waka-page` is the ground rather than a film
           over one. */}
-      <DialogSurface {...listScroll} className="waka-over" motion="modal" aria-label={title} modal={false} onClose={onClose}>
-        <header className="waka-over-head">
-          <h2 className="waka-over-title">{title}</h2>
-          <button type="button" className="waka-over-new" onClick={() => onOpen(null)}>
-            {say("worldConversationNew")}
-          </button>
-        </header>
+      <DialogSurface {...listScroll} className="waka-over" motion="modal" aria-label={title} modal={false} onClose={onBack}>
+        <SurfaceHeader locale={locale} gesture={gesture} back={{ kind: backKind, onBack }} title={title}
+          right={<button type="button" className="waka-over-new" onClick={() => onOpen(null)}>{say("worldConversationNew")}</button>} />
         <div className="waka-over-find">
           <span className="waka-over-find-glyph" aria-hidden="true" />
           <input ref={searchField} className="waka-over-search" type="search" maxLength={200}

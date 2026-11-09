@@ -38,13 +38,13 @@ import { createPortal } from "react-dom";
 import { PHOTO_ACCEPT } from "../lib/inspiration-photo";
 import { FILE_ACCEPT } from "../lib/api/file-accept";
 import { HomeActionIcon } from "./HomeActionIcon";
+import { NoteBar } from "./NoteBar";
 import { LiveWord } from "./LiveWord";
 import { clockWords } from "../lib/words";
 import { supportedRecordingType, type useAudioRecording } from "../lib/use-audio-recording";
 import { useDockMenu } from "../lib/use-dock-menu";
 
-/** The id `Home` gives the dock slot this renders into. */
-export const DOCK_SLOT = "waka-note-tools";
+/** The id of the saved note's header slot the "⋯" renders into. */
 export const NOTE_ACTIONS_SLOT = "waka-note-actions";
 
 export function NoteTools(props: {
@@ -144,9 +144,8 @@ export function NoteTools(props: {
      with it. A `querySelector` during render would be a one-frame miss on
      the first open and a correct result on every subsequent one, which is
      the worst kind of bug to find. */
-  const [slot, setSlot] = useState<HTMLElement | null>(null);
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
-  useEffect(() => { setSlot(document.getElementById(DOCK_SLOT)); setActionsSlot(document.getElementById(NOTE_ACTIONS_SLOT)); });
+  useEffect(() => { setActionsSlot(document.getElementById(NOTE_ACTIONS_SLOT)); });
   /* AN ARMED DELETE TAKES FOCUS TO ITS CONFIRMATION. The press that armed
      it is gone from the bar (the group becomes the question), so focus
      would otherwise fall to the page; "Delete it anyway" is what a keyboard
@@ -154,8 +153,7 @@ export function NoteTools(props: {
   const confirm = useRef<HTMLButtonElement>(null);
   const photoInput = useRef<HTMLInputElement>(null), fileInput = useRef<HTMLInputElement>(null);
   const armed = Boolean(props.erasePending && props.eraseQuestion);
-  useEffect(() => { if (armed) confirm.current?.focus(); }, [armed, slot]);
-  if (!slot) return null;
+  useEffect(() => { if (armed) confirm.current?.focus(); }, [armed]);
 
   /* THE WAY OUT OF A NOTE IS ALWAYS IN THE BAR. Delete needs only the
      note's id, so it is offered in every state below — loading and failed
@@ -196,19 +194,19 @@ export function NoteTools(props: {
     </>
   ) : null;
   if (props.erasePending && props.eraseQuestion) {
-    return createPortal(
-      <>
-        <span className="waka-dock-state" role="status">{props.eraseQuestion}</span>
-        {stopClock}
-        <button ref={confirm} type="button" className="waka-dock-tool waka-dock-tool--erase"
-          aria-label={props.eraseConfirmLabel ?? props.eraseLabel}
-          disabled={props.saving || props.eraseDisabled}
-          onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
-        <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onCancelErase}>
+    return (
+      <NoteBar className="waka-note-bar--saved"
+        tools={<>
+          {stopClock}
+          <button ref={confirm} type="button" className="waka-dock-tool waka-dock-tool--erase"
+            aria-label={props.eraseConfirmLabel ?? props.eraseLabel}
+            disabled={props.saving || props.eraseDisabled}
+            onClick={props.onErase}><HomeActionIcon kind="erase" /></button>
+        </>}
+        state={<span className="waka-dock-state" role="status">{props.eraseQuestion}</span>}
+        action={<button type="button" className="waka-dock-item waka-dock-retry waka-note-bar-action" onClick={props.onCancelErase}>
           {props.cancelEraseLabel}
-        </button>
-      </>,
-      slot,
+        </button>} />
     );
   }
 
@@ -225,8 +223,10 @@ export function NoteTools(props: {
      alert holds the sentence only; the press is a dock item with the 44px
      floor beside it. */
   if (props.reading || props.readFailed) {
-    return createPortal(
-      <>
+    return (
+      <NoteBar className="waka-note-bar--saved"
+        tools={stopClock}
+        state={<>
         {props.readFailed ? (
           <span className="waka-dock-state" role="alert">{props.readFailed}</span>
         ) : (
@@ -238,22 +238,23 @@ export function NoteTools(props: {
         {props.failed ? (
           <span className="waka-dock-state" role="alert">{props.failed}</span>
         ) : null}
-        {/* a recording started on another note can still be running into
-            this one's loading: its Stop never leaves the bar */}
-        {stopClock}
+        </>}
+        /* a recording started on another note can still be running into
+           this one's loading: its Stop never leaves the bar (in `tools`) */
+        action={<>
         {props.readFailed && props.onRetry && props.retryLabel ? (
-          <button type="button" className="waka-dock-item waka-dock-retry" onClick={props.onRetry}>
+          <button type="button" className="waka-dock-item waka-dock-retry waka-note-bar-action" onClick={props.onRetry}>
             {props.retryLabel}
           </button>
         ) : null}
         {actions}
-      </>,
-      slot,
+        </>} />
     );
   }
   const busy = props.attaching || props.saving;
-  return createPortal(
-    <>
+  return (
+    <NoteBar className="waka-note-bar--saved"
+      tools={<>
       {props.dictate && props.recording.phase === "idle" ? (
         <button type="button" className="waka-dock-tool" data-listen-mic="" disabled={busy || props.recordDisabled || props.dictate.listening}
           aria-label={props.recordLabel}
@@ -291,7 +292,8 @@ export function NoteTools(props: {
         onChange={(event) => { const picked = event.target.files?.[0]; event.target.value = ""; if (picked) props.onFile(picked, "photo"); }} />
       <input ref={fileInput} type="file" hidden accept={FILE_ACCEPT}
         onChange={(event) => { const picked = event.target.files?.[0]; event.target.value = ""; if (picked) props.onFile(picked, "file"); }} />
-      {/* ═══ AND THE SAVE, IN THE SAME SEAT IT HAS ON THE NOTEPAD ═════════
+      </>}
+      /* ═══ AND THE SAVE, IN THE SAME SEAT IT HAS ON THE NOTEPAD ═════════
           Founder: "this button should appear when I'm editing old
           inspirations as well. So when I'm looking at past saved
           inspirations, as soon as I start typing, then that save button
@@ -330,11 +332,11 @@ export function NoteTools(props: {
           sentence used to read "the caller's own `canKeep` already folds in
           `saving`", which was a statement about a contract that did not
           exist: the prop was a hand-written dirty check and the claim was
-          true of it only by luck. It is a contract now. */}
-      <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save waka-note-bar-action"
+          true of it only by luck. It is a contract now. */
+      action={<button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save waka-note-bar-action"
         aria-label={props.keepLabel} disabled={!props.canKeep}
-        onClick={props.onKeep}>{props.saveLabel ?? props.keepLabel}</button>
-      {/* ═══ AND THE WAY TO UNDO KEEPING IT, IN THE SAME BAR ══════════════
+        onClick={props.onKeep}>{props.saveLabel ?? props.keepLabel}</button>}
+      /* ═══ AND THE WAY TO UNDO KEEPING IT, IN THE SAME BAR ══════════════
           Founder: "let's just add delete icon next to the save icon."
 
           IT CAME FROM THE NOTE'S TRAILING SLOT, which is where it had been
@@ -353,13 +355,13 @@ export function NoteTools(props: {
           is; nothing is final until that moment passes, and even then the
           deleted shelf holds it for a month. A question before every delete
           was the cost of an act that could not be taken back, and it can
-          now. */}
-      {/* ═══ SHARE SITS BETWEEN KEEPING AND ERASING ══════════════════════
+          now. */
+      /* ═══ SHARE SITS BETWEEN KEEPING AND ERASING ══════════════════════
           Founder: "i also dont see option to share a specfici inspiration."
           The note is the one place a single inspiration is fully on screen,
           so it is where showing it to somebody starts — the same image the
-          top of mind makes, from the same sheet. */}
-      {/* ═══ ON A NARROW PHONE, SHARE AND DELETE FOLD INTO ONE ⋯ ═══════════
+          top of mind makes, from the same sheet. */
+      /* ═══ ON A NARROW PHONE, SHARE AND DELETE FOLD INTO ONE ⋯ ═══════════
           Measured 2026-10-17: Back, five 44px tools, Close and two rules are
           319px, and a 320px phone's dock holds 296. Narrowing the tools to
           fit put every act under the 44px floor — beside a one-press
@@ -367,22 +369,20 @@ export function NoteTools(props: {
           the three that make it) move into an overflow, and every control
           left in the row keeps the full target. Both copies are rendered and
           the stylesheet chooses (`.waka-dock-roomy` / `.waka-dock-more`), so
-          the switch is a width, not a script. */}
-      {actions}
-      {/* ONE LINE, THE SAME SLOT THE NOTEPAD'S STATE USES. Founder: "states
-          should show and disappear in the bottom bar only." */}
-      {/* the recorder's own problem arrives inside `failed`, already said:
+          the switch is a width, not a script. */
+      /* ONE LINE, THE SAME SLOT THE NOTEPAD'S STATE USES. Founder: "states
+          should show and disappear in the bottom bar only." */
+      /* the recorder's own problem arrives inside `failed`, already said:
           `recording.error` is a catalogue key and this has no locale (dev,
-          #443). An armed delete is its own branch above. */}
-      {props.failed ? (
+          #443). An armed delete is its own branch above. */
+      state={<>{actions}{props.failed ? (
         <span className="waka-dock-state" role="alert">{props.failed}</span>
       ) : props.attaching ? (
         <span className="waka-dock-state" role="status">{props.uploading}</span>
       ) : props.status ? (
         <span className="waka-dock-state" role="status">{props.status}</span>
-      ) : null}
-    </>,
-    slot,
+      ) : null}</>}
+    />
   );
 }
 

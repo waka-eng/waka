@@ -68,26 +68,26 @@ describe("a quiet control's own rule wins over its container's", () => {
      button` and `.waka-reading-full button`, so two of the "<"s were boxed
      and padded unlike the rest. Every container that holds one is listed;
      its blanket button rules must lose to the "<"'s own. */
-  it("draws every sheet's \"<\" the same, whatever sheet it sits in", () => {
-    const CONTAINERS = ["jar-inspiration-search", "jar-search-heading", "waka-reading-full", "jar-reading-comparison",
-      "jar-principle-share", "jar-thing-share", "jar-seek", "jar-prov-room", "waka-account", "waka-settings-heading", "waka-settings"];
+  it("draws every surface's \"<\" the same, whatever surface it sits in", () => {
+    const CONTAINERS = ["jar-inspiration-search", "waka-reading-full", "jar-reading-comparison", "waka-stream", "waka-over",
+      "jar-principle-share", "jar-thing-share", "jar-seek", "jar-prov-room", "waka-account", "waka-settings-heading", "waka-settings", "login-shell"];
     const rules = selectors();
-    const own = rules.filter(({ selector }) => /^[^ ]*\.waka-sheet-back(?![\w-])[^ ]*$/.test(selector) && !/:hover|:focus|:disabled/.test(selector));
+    const own = rules.filter(({ selector }) => /^[^ ]*\.waka-surface-back(?![\w-])[^ ]*$/.test(selector) && !/:hover|:focus|:disabled/.test(selector));
     expect(own.length, "no rule draws the sheet's \"<\"").toBeGreaterThan(0);
     const mine = own.map(({ selector }) => specificity(selector)).sort((a, b) => (beats(a, b) ? -1 : 1))[0]!;
     const losers = rules.filter(({ selector }) =>
       CONTAINERS.some((name) => new RegExp(`\\.${name}(?![\\w-])`).test(selector))
       && /(^|[\s>])button(?![\w-])[^\s>]*$/.test(selector)
-      && !/:not\(\.waka-sheet-back\)/.test(selector)
+      && !/:not\(\.waka-surface-back\)/.test(selector)
       && !beats(mine, specificity(selector)));
     expect(losers.map(({ selector }) => selector), "a sheet's button rule out-ranks the \"<\"").toEqual([]);
   });
 
-  /* AND ONE COMPONENT DRAWS IT (code review, 2026-11-09): the settings card's
-     sub-page "<" was a hand copy of SheetBack's markup. */
-  it("draws the settings sub-page's \"<\" with SheetBack, not a copy of it", () => {
+  /* AND ONE COMPONENT DRAWS IT (nav system): the settings card's header is
+     the shared `SurfaceHeader`, never a hand copy of its markup. */
+  it("draws the settings card's \"<\" with SurfaceHeader, not a copy of it", () => {
     const settings = readFileSync(resolve(STYLES, "../components/SettingsPanel.tsx"), "utf8");
-    expect(settings).toMatch(/<SheetBack\b/);
+    expect(settings).toMatch(/<SurfaceHeader\b/);
     expect(settings, "a hand-drawn chevron came back").not.toMatch(/m14 5-7 7 7 7/);
   });
 });

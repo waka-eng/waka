@@ -157,7 +157,7 @@ async function settle(): Promise<void> {
  * THE BAR'S ONE TRANSFORMING SLOT, AS A LIST OF PRESSES.
  *
  * `.waka-dock-making` is the class both rows wear — `Home.tsx` renders it
- * directly for the notepad and lends it to `NoteTools` as `#waka-note-tools`
+ * directly for the notepad and lends it to `NoteTools` as `.waka-note-bar--saved`
  * for a saved note — so one selector reads both without either page having
  * to be named here.
  *
@@ -192,7 +192,7 @@ async function notepad(words: string): Promise<ReturnType<typeof dockPresses>> {
   const bar = world.container.querySelector(".waka-note-bar-row");
   expect(bar, "the notepad has no note bar").toBeTruthy();
   expect(bar?.querySelector(".waka-dock-save")?.textContent).toBe("Keep");
-  expect(world.container.querySelector(".waka-page-back")?.textContent?.trim(), "the notepad has no Close").toBe("Close");
+  expect(world.container.querySelector(".waka-surface-back")?.textContent?.trim(), "the notepad has no Close").toBe("Close");
   return dockPresses();
 }
 

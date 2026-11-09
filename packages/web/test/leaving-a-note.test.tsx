@@ -124,7 +124,9 @@ it('commits an edited note when Escape takes you out of it', async () => {
   });
   await settle();
   expect(stored()).toEqual([{ id: 'kept', text: RETYPED }]);
-  expect(new URLSearchParams(location.search).get('open'), 'Escape did not leave the archive').toBeNull();
+  /* Escape is the note's "<" (nav system R3): back to the list it was opened from. */
+  expect(new URLSearchParams(location.search).get('note'), 'Escape did not leave the note').toBeNull();
+  expect(new URLSearchParams(location.search).get('open'), 'Escape walked past the list, unlike the "<"').toBe('saves');
 });
 
 /**

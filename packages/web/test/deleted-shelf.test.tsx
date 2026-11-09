@@ -58,14 +58,12 @@ afterEach(() => {
 
 async function mount(profileId?: string) {
   const { Archive } = await import("./helpers/archive");
-  const { DOCK_SLOT } = await import("../src/components/NoteTools");
   dock = document.createElement("span");
-  dock.id = DOCK_SLOT;
   document.body.appendChild(dock);
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
-  await act(async () => { root!.render(createElement(Archive, { profileId, locale: "en-US", title: "Your inspirations", onClose: () => undefined })); });
+  await act(async () => { root!.render(createElement(Archive, { profileId, locale: "en-US", title: "Your inspirations", onBack: () => undefined })); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 }
 const leads = () => [...host!.querySelectorAll(".waka-list-lead")].map((node) => node.textContent);

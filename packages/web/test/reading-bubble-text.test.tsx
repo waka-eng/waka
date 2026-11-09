@@ -72,7 +72,7 @@ it('offers a full reading only when clipped, closes by Escape, and returns focus
     await act(async () => { more.focus(); more.click(); });
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Every word remains available.');
-    expect(dialog.querySelector('button')?.textContent).toBe('Back');
+    expect(dialog.querySelector('button')?.getAttribute('aria-label')).toBe('Close');
     await act(async () => dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(more);
@@ -97,7 +97,8 @@ it('answers Why? in place with the saves behind the read, and Back returns to th
     expect(host.textContent).toContain('Because you kept these');
     expect([...host.querySelectorAll('.waka-says-why-row')].map(row => row.textContent)).toEqual(['“Small rituals hold a day together.”', '“Walked the long way home.”']);
     expect(host.textContent).not.toContain('You keep returning');
-    expect(acts().map(button => button.textContent)).toEqual(['Back', 'See all']);
+    /* It folds the bubble rather than navigating, so it is Hide, not a second "Back" (nav system). */
+    expect(acts().map(button => button.textContent)).toEqual(['Hide', 'See all']);
     await act(async () => acts()[0]!.click());
     expect(host.textContent).toContain('You keep returning to small rituals.');
     await act(async () => acts()[0]!.click());

@@ -44,6 +44,7 @@ import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
+import { SurfaceHeader, type BackKind } from "./SurfaceHeader";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { InspirationAttachments } from "./InspirationAttachments";
 import { SavedImageWords } from "./ImageWords";
@@ -90,7 +91,7 @@ const NOTE_READ_LIMIT_MS = 20_000;
    it is the moment just after the press and not a pending state. */
 const UNDO_MS = 6000;
 
-export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onClose, onNewSave, newSaveLabel, note: noteAddress, onNoteAddress, viewState, topRequest }: {
+export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest }: {
   canReview?:boolean; onRelevanceChanged?:()=>void;
   topRequest?: number;
   viewState?: ListViewState;
@@ -177,10 +178,14 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
    */
   focus?: { label: string; ids: readonly string[] } | null;
   onClearFocus?: () => void;
-  onClose: () => void;
-  /** Open the current profile's composer, preserving any unfinished draft. */
-  onNewSave?: () => void;
-  newSaveLabel?: string;
+  /** THE "<" AND ESCAPE, ONE HANDLER (nav system R3): on the list it closes
+      to home, or goes back to the chat it was opened from; on an open note
+      it goes back to the list or the sheet. */
+  onBack: () => void;
+  /** What the list's "<" does; an open note's is always Back. */
+  backKind?: BackKind;
+  /** The page's address, for the native back gestures. */
+  gesture?: string | null;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   /* THE ARCHIVE'S RECORDER, OWNED BY THE CALLER (L12), read from the
@@ -1271,112 +1276,26 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
            kept, and the way out of all of it was a key nobody can see. */
         motion="modal"
         modal={false}
-        onClose={onClose}
+        onClose={onBack}
         >
-        {open ? null : <header className="waka-over-head">
-          {/* THE NAME, THEN WHAT IS BEHIND IT. Founder: "Just write the
-              number 36 next to your inspirations so that the search bar is
-              taking up the full space." The count was sharing a row with the
-              search, which left the field a stub on a surface whose only
-              other control is that field. It is a fact ABOUT the archive, so
-              it belongs with the archive's name.
-
-              The owner switch sits beside the title rather than replacing
-              it, which is a correction: replacing it read as "Me / My agent"
-              with nothing saying what of theirs you were looking at. The
-              overlay has to name itself — there is no switcher above it and
-              the world behind is showing somebody's top of mind. */}
-          {/* THE NAME BECOMES THE WAY BACK. Founder: "with a button to go
-              back to all." It replaces the title rather than sitting beside
-              it, because at this depth the title would be naming a place you
-              are not in — and two controls that both lead out is the stack
-              this change exists to remove. */}
-          {/* ═══ THE HEADER IS ABSENT ON AN OPEN NOTE ════════════════
-              Founder: "make sure that when I'm entering from create new
-              inspiration or my past inspiration, it's using the exact same
-              component."
-
-              This used to render the archive's own header with the way back
-              inside it, which is why an opened note looked like a page of
-              the archive rather than like a note. `NotePage` carries the
-              chevron and the moment now, in the positions the notepad puts
-              them in — so there is nothing left for a header to hold at this
-              depth, and it is gone rather than emptied. */}
-          {open ? null : (
-          <span className="waka-over-name">
-            <h2 className="waka-over-title">{focus ? focus.label : title}</h2>
-            {/* THE WAY OUT OF THE FILTER, WHICH IS NOT THE WAY OUT OF THE
-                PAGE. A filtered archive with no visible way back to all of
-                it is the trap Law 2 is about, and the dock cannot do this
-                one — pressing Inspirations from here is where you already
-                are. It takes the count's place rather than sitting beside
-                it, because while a subset is showing, how many the whole
-                archive holds is not the fact this line is for. */}
-            {/* ═══ THE COUNT IS PART OF THE NAME, NOT A LINE UNDER IT ══
-                Founder, with "Your inspirations" over a second line reading
-                "36 inspirations": "just say Your Inspirations (36)."
-
-                The second line said the noun twice and spent a whole row of
-                the page doing it. In parentheses after the title it is what
-                it always was — a fact about the thing just named — and the
-                archive starts one line higher.
-
-                A NUMERAL SURVIVES "STATES RENDER, NUMERALS NEVER" HERE for
-                the same reason the ordinal beside a row does: that ruling is
-                against METRICS, things a person can do better or worse at.
-                How many inspirations exist is the size of a list you are
-                about to scroll, which is navigation. */}
-            {focus && onClearFocus ? (
-              <button type="button" className="waka-over-count waka-over-unfocus" onClick={onClearFocus}>
-                {say("worldBubbleSeeAll")}
-              </button>
-            /* ═══ AND THE COUNT COUNTS WHAT IS ACTUALLY ON SCREEN ═════
-                The reference library's power-search component says it as a rule: "Provide a result
-                count to give users feedback on how their filters affect the
-                data set." We do not need its tokenised filter bar — that page
-                itself sends simple keyword search away ("Use PowerSearch for
-                simple keyword searches" is listed under Don't) — but the
-                feedback rule applies to any filter, and this line was failing
-                it in the worst available way: it kept printing the UNFILTERED
-                number. Search for something three of thirty-six saves match
-                and the title said `(36)` over three rows. Not merely unhelpful
-                — WRONG, and wrong in a product whose whole claim is that its
-                account of you is checkable.
-
-                SO IT IS `shown`, WHICH IS EVERY FILTER AND NOT JUST THE
-                SEARCH. Law 7: a ruling lands on the class, not the instance
-                it was pointed at. `shown` is already the one place the needle,
-                the category tab and a claim's focus are reconciled, so reading
-                it here means the count follows a category press for free
-                instead of waiting to be reported as its own bug.
-
-                NO NEW ELEMENT AND NO NEW WORD. The `(n/total)` shape was
-                already here for a half-loaded page, and "how many of the whole
-                are showing" is the same sentence whether the rest is unloaded
-                or filtered out. A separate "3 results" line under the field
-                would have been a second numeral saying one fact.
-
-                A NUMERAL STILL SURVIVES "STATES RENDER, NUMERALS NEVER" for
-                the reason the note above gives: that ruling is against
-                METRICS. This is the length of the list you are about to
-                scroll, which is navigation — and under a filter it is the only
-                way to learn the filter did something without scrolling to the
-                bottom to find out. */
-            ) : shelfOn ? (
+        {open ? null : <SurfaceHeader locale={locale} gesture={gesture}
+          back={{ kind: backKind, onBack }}
+          /* THE NAME, THEN HOW MANY (nav system R4): "Kept (36)" centred in the
+             one header, the count counting what is on screen (`shown`), and
+             under a claim's filter the claim's own words. */
+          title={<>{focus ? focus.label : title}{focus ? null : <>{" "}{shelfOn ? (
               <span className="waka-over-count jar-saved-count">{shelfShown.length < shelf.length ? `(${shelfShown.length}/${shelf.length})` : `(${shelf.length})`}</span>
             ) : resultTotal != null && (!searching || search.phase === 'ready') ? (
               <span className="waka-over-count jar-saved-count">
                 {shown.length < resultTotal ? `(${shown.length}/${resultTotal})` : `(${resultTotal})`}
               </span>
-            ) : null}
-          </span>
-          )}
-          {!shelfOn && onNewSave ? (
-            <button type="button" className="waka-over-new" onClick={onNewSave}>
-              {newSaveLabel ?? say("worldDockSaves")}
-            </button>
-          ) : null}
-        </header>}
+            ) : null}</>}</>}
+          /* THE WAY OUT OF THE FILTER, WHICH IS NOT THE WAY OUT OF THE PAGE:
+             "See all" is the header's one right-hand word while a claim's
+             filter is on. Writing a new note is the home bar's pill. */
+          right={focus && onClearFocus ? (
+            <button type="button" className="waka-over-unfocus" onClick={onClearFocus}>{say("worldBubbleSeeAll")}</button>
+          ) : undefined} />}
         {/* THE TWO FACTS A GRID NEEDS BEFORE IT CAN BE SEARCHED: how much is
             behind it, and a way to narrow it. Both were in the page's header
             and both still belong together — the count tells you whether
@@ -1569,62 +1488,6 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
           </div>
         ) : null}
 
-        {open ? <NoteTools
-          attaching={attaching}
-          saving={saving}
-          recording={recording}
-          /* the notepad's recorder is running under this page: one
-             microphone at a time */
-          recordDisabled={recorder.blocked}
-          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : dictation.error === 'dictation-denied' ? say("worldComposerDictateDenied") : dictation.error === 'dictation-failed' ? say("worldComposerDictateFailed") : editUnavailable ? say("worldNoteDraftUnavailable") : editConflict ? say("worldNoteDraftConflict") : ""}
-          status={saving ? say("worldSaving") : loaded ? say(draft.trim() !== stored?.text?.trim() ? "worldDraftWord" : "worldSavedWord") : ""}
-          /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
-             state (founder: "states should show and disappear in the bottom
-             bar only"). See `stored`. */
-          reading={!loaded && !stored?.failed ? say("worldNoteOpening") : ""}
-          readFailed={stored?.failed ? say("worldNoteOpenFailed") : ""}
-          retryLabel={say("surfaceUnavailableRetry")}
-          onRetry={() => readNote(open.id)}
-          moreLabel={say("worldMoreActions")}
-          uploading={say("worldComposerUploading")}
-          recordLabel={say("worldComposerRecord")}
-          dictate={dictationAvailable() && loaded ? { start: () => dictation.start(), listening: dictation.listening } : undefined}
-          stopLabel={say("worldComposerStop")}
-          recordingLabel={say("worldComposerRecordingNow")}
-          addLabel={say("worldAddMenu")}
-          photoLabel={say("worldAddPhoto")}
-          fileLabel={say("worldAddFile")}
-          /* THE NOTEPAD'S OWN WORDS, not a second string meaning the same
-             thing. One act, one name — and `worldSaveInspiration` is already
-             what a screen reader hears for this on the other note page. A
-             separate "Save changes" here would be the product admitting the
-             two pages are two pages. */
-          keepLabel={say("worldSave")}
-          canKeep={canKeepOpenNote}
-          onKeep={() => { void keepOpenNote(); }}
-          eraseLabel={say("worldDelete")}
-          /* Every owned profile gets Undo, then thirty-day recovery. */
-          /* NOT WHILE ITS CLIP IS ON ITS WAY (review, 2026-10-22): deleting
-             the note mid-upload leaves the clip nowhere to land */
-          eraseDisabled={recorder.isSending(open.id, profileId ?? null)}
-          onErase={() => {
-            /* NEVER A LIVE MICROPHONE WITH NO STOP: the recording belongs to
-               the note being deleted, so it is cancelled with it (review,
-               2026-10-17). Every owned profile uses the same Undo and recovery. */
-            /* ONLY A RECORDING MADE ON THIS NOTE (review, 2026-10-22): the
-               recorder is shared, and another note's clip still being handed
-               over is that note's, not this delete's. */
-            const recordingHere = recorder.forNote?.noteId === open.id && (recorder.forNote?.profileId ?? null) === (profileId ?? null);
-            const silence = () => { if (recording.phase !== "idle" && recordingHere) void recording.cancel(); };
-            silence(); eraseOpen(open);
-          }}
-          /* Only a note with words has a card to make. */
-          /* Only a note with words has a card to make — its own words, read
-             in full, never the list's cut of them. */
-          shareLabel={loaded && draft.trim() ? say("worldShareInspirationTitle") : undefined}
-          onShare={() => setShareOf(inspirationShareTarget(locale, { text: draft.trim(), capturedMs: open.capturedMs, attachments: open.attachments }))}
-          onFile={(file, door) => void attach(file, door)}
-        /> : null}
         {open ? (
           /* ═══ IT IS A NOTE, NOT A RECORD WITH AN EDIT MODE ═══════════════
              Founder: "when looking at an inspiration, don't have a separate
@@ -1693,8 +1556,11 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
             <NotePage
               locale={locale}
               whenMs={open.capturedMs}
-              trailing={<span id={NOTE_ACTIONS_SLOT} />}
-              owner={ownerName ? formatMessage(locale, "worldSavingToProfile", { name: ownerName }) : undefined}
+              back={{ kind: "back", onBack }}
+              gesture={gesture}
+              trailing={<span id={NOTE_ACTIONS_SLOT} className="jar-note-verb" />}
+              /* ALREADY KEPT, SO NOT "SAVING TO": the owner and the moment. */
+              owner={ownerName}
             >
               {canReview&&profileId&&loaded?<InspirationRelevanceControl key={open.id} id={open.id} profileId={profileId} locale={locale} onChanged={onRelevanceChanged}/>:null}
               <InspirationAttachments items={open.attachments.filter(item => item.type !== "link")} locale={locale} quiet />
@@ -1747,6 +1613,64 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                   bar only." They are in the bar below, beside the tools
                   they belong to, rather than in the middle of the words. */}
             </NotePage>
+            {/* THE NOTE BAR, THE SAME PILL THE NOTEPAD AND A CHAT WRITE INTO
+                (nav system R7): `NoteTools` renders `NoteBar`. */}
+            <NoteTools
+          attaching={attaching}
+          saving={saving}
+          recording={recording}
+          /* the notepad's recorder is running under this page: one
+             microphone at a time */
+          recordDisabled={recorder.blocked}
+          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : dictation.error === 'dictation-denied' ? say("worldComposerDictateDenied") : dictation.error === 'dictation-failed' ? say("worldComposerDictateFailed") : editUnavailable ? say("worldNoteDraftUnavailable") : editConflict ? say("worldNoteDraftConflict") : ""}
+          status={saving ? say("worldSaving") : loaded ? say(draft.trim() !== stored?.text?.trim() ? "worldDraftWord" : "worldSavedWord") : ""}
+          /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
+             state (founder: "states should show and disappear in the bottom
+             bar only"). See `stored`. */
+          reading={!loaded && !stored?.failed ? say("worldNoteOpening") : ""}
+          readFailed={stored?.failed ? say("worldNoteOpenFailed") : ""}
+          retryLabel={say("surfaceUnavailableRetry")}
+          onRetry={() => readNote(open.id)}
+          moreLabel={say("worldMoreActions")}
+          uploading={say("worldComposerUploading")}
+          recordLabel={say("worldComposerRecord")}
+          dictate={dictationAvailable() && loaded ? { start: () => dictation.start(), listening: dictation.listening } : undefined}
+          stopLabel={say("worldComposerStop")}
+          recordingLabel={say("worldComposerRecordingNow")}
+          addLabel={say("worldAddMenu")}
+          photoLabel={say("worldAddPhoto")}
+          fileLabel={say("worldAddFile")}
+          /* THE NOTEPAD'S OWN WORDS, not a second string meaning the same
+             thing. One act, one name — and `worldSaveInspiration` is already
+             what a screen reader hears for this on the other note page. A
+             separate "Save changes" here would be the product admitting the
+             two pages are two pages. */
+          keepLabel={say("worldSave")}
+          canKeep={canKeepOpenNote}
+          onKeep={() => { void keepOpenNote(); }}
+          eraseLabel={say("worldDelete")}
+          /* Every owned profile gets Undo, then thirty-day recovery. */
+          /* NOT WHILE ITS CLIP IS ON ITS WAY (review, 2026-10-22): deleting
+             the note mid-upload leaves the clip nowhere to land */
+          eraseDisabled={recorder.isSending(open.id, profileId ?? null)}
+          onErase={() => {
+            /* NEVER A LIVE MICROPHONE WITH NO STOP: the recording belongs to
+               the note being deleted, so it is cancelled with it (review,
+               2026-10-17). Every owned profile uses the same Undo and recovery. */
+            /* ONLY A RECORDING MADE ON THIS NOTE (review, 2026-10-22): the
+               recorder is shared, and another note's clip still being handed
+               over is that note's, not this delete's. */
+            const recordingHere = recorder.forNote?.noteId === open.id && (recorder.forNote?.profileId ?? null) === (profileId ?? null);
+            const silence = () => { if (recording.phase !== "idle" && recordingHere) void recording.cancel(); };
+            silence(); eraseOpen(open);
+          }}
+          /* Only a note with words has a card to make. */
+          /* Only a note with words has a card to make — its own words, read
+             in full, never the list's cut of them. */
+          shareLabel={loaded && draft.trim() ? say("worldShareInspirationTitle") : undefined}
+          onShare={() => setShareOf(inspirationShareTarget(locale, { text: draft.trim(), capturedMs: open.capturedMs, attachments: open.attachments }))}
+          onFile={(file, door) => void attach(file, door)}
+            />
           </article>
         ) : shelfOn ? (
           <div className="waka-list waka-shelf">

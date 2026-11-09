@@ -121,18 +121,22 @@ it('a Back the browser delivers (popstate before the router lands) is one step, 
   expect(listRow()).toBeTruthy();
 });
 
-/* Escape from a note closes the archive: the note commits on the way, and
-   its letting go must not add a step of its own to the archive's. */
-it('Escape from a note closes the archive in one step and leaves no note entry in Forward', async () => {
+/* ESCAPE IS THE NOTE'S "<" (nav system R3): it steps back to the list, the
+   note committing on the way, and a second Escape closes the archive. Its
+   letting go must not add a step of its own to the archive's. */
+it('Escape from a note steps back to the list, and Escape again closes the archive in one step', async () => {
   world = await mountWorld(FACTS, { initialEntries: ['/?view=field', '/'], routerTools: <RouterTools/> }); await settle();
   await chooseFromMenu(world.container, 'Inspirations'); await settle();
   await act(async () => listRow()!.click()); await settle();
   await act(async () => { page()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
   await settle();
+  expect(params().get('open'), 'Escape from a note left the archive, unlike its "<"').toBe('saves');
+  expect(params().get('note'), 'Escape did not let the note go').toBeNull();
+  expect(listRow()).toBeTruthy();
+  await act(async () => { listRow()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  await settle();
   expect(params().get('open'), 'Escape did not close the archive').toBeNull();
   expect(params().get('view'), 'Escape walked past where the archive was opened from').toBeNull();
-  await forward();
-  expect(params().get('open'), 'a note entry was left in Forward history').toBeNull();
 });
 
 /* A SAVE STILL RUNNING WHEN THE PERSON WALKS FORWARD BACK INTO THE NOTE.

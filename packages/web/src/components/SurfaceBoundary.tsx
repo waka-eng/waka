@@ -77,6 +77,7 @@ import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 
 import { readStoredLocale, t } from "../lib/locales";
+import { SurfaceHeader } from "./SurfaceHeader";
 
 export interface SurfaceBoundaryProps {
   children: ReactNode;
@@ -214,6 +215,14 @@ export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoun
     const locale = readStoredLocale();
     return (
       <main className="login-shell">
+        {/* THE WAY OUT IS THE SHARED HEADER'S "<" (nav system): Close, to a
+            clean home. Not offered on a clean home itself, where it would be
+            the reload again under a second name. `/?open=…` or `/#…` is NOT
+            home: the query may be what breaks the page, and a clean `/`
+            drops it. */}
+        {window.location.pathname !== "/" || window.location.search !== "" || window.location.hash !== "" ? (
+          <SurfaceHeader locale={locale} className="login-head" back={{ kind: "close", onBack: this.goHome }} />
+        ) : null}
         <section className="login-card" aria-labelledby="surface-error-title">
           <h1 id="surface-error-title" className="login-title">
             {t(locale, "surfaceUnavailableTitle")}
@@ -224,19 +233,12 @@ export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoun
           <p className="login-subtitle" role="alert">
             {t(locale, "surfaceUnavailableBody")}
           </p>
-          <button className="btn-primary" type="button" onClick={this.retry}>
-            {t(locale, "surfaceUnavailableRetry")}
-          </button>
-          {/* Not offered on a clean home itself, where it would be the reload
-              again under a second name. `/?open=…` or `/#…` is NOT home: the
-              query may be what breaks the page, and a clean `/` drops it. */}
-          {window.location.pathname !== "/" || window.location.search !== "" || window.location.hash !== "" ? (
-            <p className="login-footer">
-              <button className="login-link" type="button" onClick={this.goHome}>
-                {t(locale, "surfaceUnavailableHome")}
-              </button>
-            </p>
-          ) : null}
+          {/* A PLAIN WORD, NEVER FILLED (nav system): the one act here. */}
+          <p className="login-footer">
+            <button className="login-link" type="button" onClick={this.retry}>
+              {t(locale, "surfaceUnavailableRetry")}
+            </button>
+          </p>
           {/* THE ERROR'S OWN WORDS, small and untranslated. This screen's
               copy guesses at a cause ("usually a dropped connection...") and
               the guess was all a person could report — a founder hit a

@@ -42,15 +42,16 @@
  * run against a tree they rendered themselves.
  */
 export function pressesInTopRow(root: ParentNode): string[] {
-  const top = root.querySelector(".jar-note-top");
+  const top = root.querySelector(".waka-surface-head");
   /* NO ROW AT ALL IS A FAILURE, NOT AN EMPTY LIST. A page that lost the
      shared chrome entirely would otherwise read as "nothing to press up
      there" — the vacuous pass this helper exists to replace, committed by
      the helper itself. */
-  if (!top) return ["there is no .jar-note-top on this page at all"];
+  if (!top) return ["there is no .waka-surface-head on this page at all"];
   return [...top.querySelectorAll<HTMLElement>(
     'a[href], button, input, select, textarea, [role="button"], [tabindex]',
   )]
-    .filter((node) => !node.closest(".jar-note-verb"))
+    /* the shared "<" and the one right-hand verb are the row's by rule */
+    .filter((node) => !node.closest(".jar-note-verb, .waka-surface-right") && !node.classList.contains("waka-surface-back"))
     .map((node) => node.className || node.tagName.toLowerCase());
 }

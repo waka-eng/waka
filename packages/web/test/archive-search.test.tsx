@@ -9,7 +9,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Archive } from './helpers/archive';
 import { openNoteActions } from './helpers/note-actions';
-import { DOCK_SLOT } from '../src/components/NoteTools';
 import { fetchInspirationPage, updateInspiration, type ApiInspirationPage, type ApiInspirationSummary } from '../src/lib/api';
 import { invalidateSourceRequest } from '../src/lib/inspiration-snapshots';
 import type { ListViewState } from '../src/lib/list-view-state';
@@ -39,9 +38,9 @@ afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi
 async function show(nextProfile = profile, visible = true) {
   profile = nextProfile;
   if (!memories.has(profile)) memories.set(profile, { query: '', category: null, onShelf: false, scrollTop: 0 });
-  await act(async () => root.render(<><span id={DOCK_SLOT}/>{visible ? <Archive key={profile} profileId={profile}
+  await act(async () => root.render(<>{visible ? <Archive key={profile} profileId={profile}
     scope={{ accountId: 'account', profileId: profile }} viewState={memories.get(profile)} locale="en-US" title="Inspirations"
-    onClose={() => {}} onNoteOpen={closer => { closeNote = closer; }} /> : null}</>));
+    onBack={() => {}} onNoteOpen={closer => { closeNote = closer; }} /> : null}</>));
 }
 async function settle() { await act(async () => { await vi.advanceTimersByTimeAsync(201); }); }
 async function search(value: string) {

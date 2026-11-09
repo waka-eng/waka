@@ -159,7 +159,7 @@ it('gives a saved note open in the archive the same direct presses, and attaches
   world = await mountWorld(FACTS); await settle();
   await chooseFromMenu(world.container, 'Inspirations'); await settle();
   await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-list-row')!.click()); await settle();
-  const lent = () => world.container.querySelector<HTMLElement>('nav.waka-dock #waka-note-tools');
+  const lent = () => world.container.querySelector<HTMLElement>('.waka-note-bar--saved');
   expect(lent()?.querySelector('button[aria-haspopup="menu"]'), 'the saved note still has a ＋ menu').toBeNull();
   expect(lent()?.querySelector('button[aria-label="Add photo"] [data-home-action-icon="photo"]'), 'the saved note has no Add photo').toBeTruthy();
   expect(lent()?.querySelector('button[aria-label="Add file"] [data-home-action-icon="file"]'), 'the saved note has no Add file').toBeTruthy();

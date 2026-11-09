@@ -448,8 +448,8 @@ it("leaves the questions by the page's \"<\", with no bar while they are up", as
   expect(bar(), "the bar before review").toEqual(["Keep a thought", "Keep a screenshot", "Keep your voice", "Chat"]);
   await diveIntoReview(world.container, world.step);
   expect(bar(), "the bar while reviewing").toEqual([]);
-  const back = world.container.querySelector<HTMLButtonElement>(".waka-page-back")!;
-  expect(back.textContent?.trim()).toBe("Back");
+  const back = world.container.querySelector<HTMLButtonElement>(".waka-surface-back")!;
+  expect(back.getAttribute("aria-label"), "the questions close to home").toBe("Close");
   await act(async () => { back.click(); });
   expect(card(), "the \"<\" left the cards up").toBeNull();
   expect(invite(), "the \"<\" should return to the reading").toBeNull();

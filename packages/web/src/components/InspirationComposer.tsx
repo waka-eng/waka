@@ -270,7 +270,7 @@ function LeaveAsk({ question, keepLabel, discardLabel, failed, failedLabel, busy
        its own press, which puts the question away the same way. */
     const away = (event: PointerEvent) => {
       const target = event.target as Element | null;
-      if (!target || box.current?.contains(target) || target.closest?.('.waka-page-back')) return;
+      if (!target || box.current?.contains(target) || target.closest?.('.waka-surface-back')) return;
       stay.current();
     };
     document.addEventListener('pointerdown', away, true);
@@ -346,6 +346,11 @@ export function InspirationComposer(props: {
      looking for the control that honours it. The way out of this page is
      the dock, which `way-out.test.ts` is the gate for. */
   onClose: () => void; onSubmit: () => void;
+  /** THE "<" AND ESCAPE, ONE HANDLER (nav system R3): it asks before leaving
+      a note with something in it (`asking`), and a second press stays. */
+  onBack: () => void;
+  /** The page's address, for the native back gestures. */
+  gesture?: string | null;
   onDiscard?: () => Promise<boolean>;
   discardDisabled?: boolean;
   /** The "<" was pressed on a note with something in it: ask Keep as draft
@@ -417,7 +422,7 @@ export function InspirationComposer(props: {
   useEffect(() => {
     if (wasAsking.current && !asking) {
       setDiscardFailed(false);
-      document.querySelector<HTMLButtonElement>('.waka-page-back')?.focus();
+      document.querySelector<HTMLButtonElement>('.waka-surface-back')?.focus();
     }
     wasAsking.current = asking;
   }, [asking]);
@@ -485,7 +490,7 @@ export function InspirationComposer(props: {
      dragging out of the WINDOW gives a null `relatedTarget`, which
      `contains` reports as outside, so that case still clears. */
   const overheadOff = () => setOverhead(false);
-  return <DialogSurface className="jar-seek jar-inspiration-composer" modal={false} motion="modal" aria-label={say('worldCaptureInspiration')} onClose={asking ? stay : props.onClose} data-jar-chrome="1"
+  return <DialogSurface className="jar-seek jar-inspiration-composer" modal={false} motion="modal" aria-label={say('worldCaptureInspiration')} onClose={props.onBack} data-jar-chrome="1"
     data-dropping={overhead ? '1' : undefined}
     onDragOver={event => {
       if (!event.dataTransfer.types.includes('Files')) return;
@@ -508,7 +513,7 @@ export function InspirationComposer(props: {
 
         Nothing trails the moment now: the "⋯" and its one item, Discard,
         became the "<"'s question (see `LeaveAsk`). */}
-    <NotePage locale={props.locale} whenMs={when.current} owner={props.owner}>
+    <NotePage locale={props.locale} whenMs={when.current} owner={props.owner} back={{ kind: 'close', onBack: props.onBack }} gesture={props.gesture}>
     <div ref={bodyRef} className="jar-composer-body" data-hero={hero ? '1' : undefined}>
     {/* ═══ THE PICTURE IS THE POST (design E3) ═══════════════════════════════
         A screenshot or photo stands large with the creature's question over

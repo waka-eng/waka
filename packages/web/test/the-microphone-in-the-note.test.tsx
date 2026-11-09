@@ -212,7 +212,7 @@ it('releases the microphone when the notepad closes', async () => {
 
   /* "NOW" IS THE WAY OUT OF THE NOTEPAD — the bar's first row, which keeps
      the words (`saveAsDraft`) and takes the page down. */
-  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-page-back')!.click());
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click());
   await settle();
   /* A note with words asks first (founder, 2026-11-09); Keep as draft is
      what "<" used to do on its own. */
@@ -390,7 +390,7 @@ it('dims Say it, and starts nothing, where the notepad could not keep the words'
    `inspiration-draft-hook.test.tsx` for it coming back). */
 it('starts Your voice from home on a blank page, not inside the kept draft', async () => {
   await openNotepad('xdfsdf');
-  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-page-back')!.click()); await settle();
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click()); await settle();
   await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-note-ask .jar-char-bubble-act')].find(node => node.textContent === 'Keep as draft')!.click());
   await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad is still open').toBeFalsy();

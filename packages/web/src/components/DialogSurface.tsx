@@ -21,6 +21,13 @@ interface DialogSurfaceProps extends HTMLAttributes<HTMLDivElement> {
    * header above for the whole argument.
    */
   modal?: boolean;
+  /**
+   * `false` — on arrival focus the surface itself, never its first control.
+   * A chat on a phone: its first control in the bar is the mic, and a mic
+   * focused on arrival lit up like a filled button (nav system). The text
+   * field takes focus where a keyboard is present (its own `autoFocus`).
+   */
+  focusFirst?: boolean;
 }
 
 function focusableWithin(root: HTMLElement): HTMLElement[] {
@@ -185,7 +192,7 @@ export function leaveAsModal(then: () => void, from?: Element | null): void {
 }
 
 export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(function DialogSurface(
-  { active = true, modal = true, motion, onClose, onKeyDown, children, role, ...props }, forwardedRef,
+  { active = true, modal = true, focusFirst = true, motion, onClose, onKeyDown, children, role, ...props }, forwardedRef,
 ) {
   const surface = useRef<HTMLDivElement>(null);
   const opener = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -212,7 +219,7 @@ export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(func
     const node = surface.current;
     if (!active || !node) return;
     if (!node.contains(document.activeElement)) {
-      (focusableWithin(node)[0] ?? node).focus({ preventScroll: true });
+      ((focusFirst ? focusableWithin(node)[0] : undefined) ?? node).focus({ preventScroll: true });
     }
     return () => {
       if (opener.current?.isConnected &&

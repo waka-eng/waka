@@ -75,7 +75,7 @@ afterEach(() => { world?.unmount(); world = undefined; vi.clearAllMocks(); vi.us
 async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world!.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
-const row = (name: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-page-back, .waka-home-bar button, .waka-over-new')]
+const row = (name: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-surface-back, .waka-home-bar button, .waka-over-new')]
   .find((node) => node.textContent?.trim() === name);
 
 /** A new chat, opened the way a person opens one: the bar's Chat on Now. */
@@ -169,7 +169,7 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
 
   it('closes the chat by its "<" and opens the chats list by Past chats, top-right', async () => {
     await aNewChat();
-    const back = world!.container.querySelector<HTMLButtonElement>('button.waka-page-back');
+    const back = world!.container.querySelector<HTMLButtonElement>('.waka-surface-back');
     expect(back?.textContent?.trim(), 'the chat\'s "<" is not named for closing').toBe('Close');
     await act(async () => back!.click()); await settle();
     expect(location.pathname, 'the "<" left the chat up').not.toContain('/chat/');
@@ -178,7 +178,7 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     expect(world!.container.querySelector('.chat-composer'), 'the chat\'s composer outlived the chat').toBeNull();
 
     await pressHomeBar(world!.container, 'Chat'); await settle();
-    const past = world!.container.querySelector<HTMLButtonElement>('button.waka-page-aside');
+    const past = world!.container.querySelector<HTMLButtonElement>('.waka-surface-right .waka-surface-act');
     expect(past?.textContent?.trim(), 'a chat offers no Past chats').toBe('Past chats');
     await act(async () => past!.click()); await settle();
     expect(location.pathname, 'Past chats left the chat up').not.toContain('/chat/');
@@ -193,9 +193,9 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(field,'Keep this question with its starting point.');
       field.dispatchEvent(new Event('input',{bubbles:true}));
     });
-    await act(async()=>world!.container.querySelector<HTMLButtonElement>('button.waka-page-aside')!.click());await settle();
+    await act(async()=>world!.container.querySelector<HTMLButtonElement>('.waka-surface-right .waka-surface-act')!.click());await settle();
     expect(open()).toBe('conversations');
-    await act(async()=>world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click());await settle();
+    await act(async()=>world!.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click());await settle();
     expect(new URLSearchParams(location.search).get('principle')).toBe(principleId);
     expect((await chatField(world.container)).value).toBe('Keep this question with its starting point.');
   });
@@ -227,6 +227,6 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
       if (name !== 'Chat') expect(button!.getAttribute('title'), `${name} has no tooltip`).toBe(name);
     }
     await pressHomeBar(world!.container, 'Chat'); await settle();
-    expect(world!.container.querySelector('button.waka-page-aside')?.textContent).toBe('Past chats');
+    expect(world!.container.querySelector('.waka-surface-right .waka-surface-act')?.textContent).toBe('Past chats');
   });
 });

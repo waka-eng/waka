@@ -66,7 +66,6 @@ vi.mock("../src/lib/api", async (original) => ({
 }));
 
 import { useState } from "react";
-import { DOCK_SLOT } from "../src/components/NoteTools";
 import { SavesOverlay } from "../src/components/SavesOverlay";
 import { ArchiveRecorderProvider, useArchiveRecorder, useArchiveRecorderContext, type ArchiveRecorder } from "../src/lib/archive-recorder";
 
@@ -179,12 +178,10 @@ it("stops a recording whose Record and the archive's leaving land in one commit"
   function Toggle() {
     const [shown, setShown] = useState(true);
     hide = () => setShown(false);
-    return shown ? <SavesOverlay locale="en-US" title="Kept" onClose={() => undefined} /> : null;
+    return shown ? <SavesOverlay locale="en-US" title="Kept" onBack={() => undefined} /> : null;
   }
   const Host = () => <ArchiveRecorderProvider><Toggle /></ArchiveRecorderProvider>;
-  const slot = document.createElement("span");
-  slot.id = DOCK_SLOT;
-  document.body.append(slot);
+  const /* The note bar renders in place (nav system); its parts are found in the page. */ slot = document.body as HTMLElement as HTMLSpanElement;
   try {
     await act(async () => root.render(<Host />));
     for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) await act(async () => { await Promise.resolve(); });
@@ -197,7 +194,7 @@ it("stops a recording whose Record and the archive's leaving land in one commit"
     expect(host.querySelector(".waka-over"), "the archive did not go").toBeNull();
     expect(S.live.size, "a recorder is running with no archive, and so no Stop, on screen").toBe(0);
   } finally {
-    slot.remove();
+   
   }
 });
 

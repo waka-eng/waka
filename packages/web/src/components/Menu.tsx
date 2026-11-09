@@ -34,7 +34,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { HowItWorksPanel } from "./HowItWorksPanel";
 import { SettingsPanel, type SettingsPanelProps } from "./SettingsPanel";
 import { t, type MessageKey, type SupportedLocale } from "../lib/locales";
-import { SheetBack } from "./PageBack";
+import { SurfaceHeader } from "./SurfaceHeader";
 
 export interface MenuItem {
   /** Stable key; also what a test names a row by. */
@@ -100,16 +100,6 @@ export interface MenuProps {
   items: readonly MenuItem[];
   /** Which one is being looked at; `null` on a page that is none of them. */
   current?: string | null;
-  /**
-   * What to call a page that is none of the three.
-   *
-   * The switcher's job is to say where you are, and falling back to the first
-   * rung would have it say "Your inspirations" while you are in a
-   * conversation — a control that misnames your location is worse than one
-   * that says nothing. A page outside the three names itself here and the
-   * list still opens, so the way back is unchanged.
-   */
-  label?: MenuItem["label"];
   /** Everything about this account and its agents. */
   /* `onSettings` IS GONE WITH THE PAGE IT NAVIGATED TO. It was added when
      the founder asked for "more of a hover card ... so that it's not
@@ -165,7 +155,7 @@ export interface MenuProps {
   hidden?: boolean;
 }
 
-export function Menu({ locale, items, current, label, left, actions, account, settings, onSignOut, hidden, agentSetup }: MenuProps): JSX.Element | null {
+export function Menu({ locale, items, current, left, actions, account, settings, onSignOut, hidden, agentSetup }: MenuProps): JSX.Element | null {
   /* THE SWITCHER'S OWN OPEN STATE IS GONE WITH THE SHEET IT OPENED. The
      three rungs are laid out rather than listed (see `.waka-rungs`), so there
      is nothing to expand, nothing to focus into, nothing to close on Escape
@@ -224,26 +214,16 @@ export function Menu({ locale, items, current, label, left, actions, account, se
    * picker and three Collapsibles, and Collapsible takes Tab. Adding arrows
    * would teach a menu model to something that is not a menu.
    *
-   * AN EXPLICIT CLOSE BUTTON. The reference, on popovers: "Provide a clear way to close:
-   * EITHER by clicking outside OR with an explicit close button." The scrim
-   * is the first of those, and it is full-screen, so the clearer of the two
-   * is already there. A visible "×" in a corner card would be the one piece
-   * of chrome the founder's standing rule rules out: "only the most
-   * absolutely necessary things should be shown."
-   *
-   * ── EXCEPT ON TOUCH, WHERE THE SCRIM IS NOT FINDABLE (2026-10-17) ──────
-   * The scrim is invisible by design, and on a phone the card covers most of
-   * the screen, so "tap outside" means tapping a sliver nobody can see is a
-   * target. The mobile audit watched people swipe Back instead — which left
-   * the app. So on a coarse pointer the card carries a plain "Close" inside
-   * itself (the corner stays the corner's: no new control lands there). A
-   * fine pointer keeps the card as it was. (Back closing the card instead of
-   * the page is a follow-up: docs/known-issues.md, "Layer history under
-   * replace/reload".)
+   * ITS WAY OUT IS THE SHARED HEADER'S "<" (nav system): Close on the info
+   * card and at the settings root, Back on a settings sub-page. Escape calls
+   * the same handler, and the full-screen scrim closes it too.
    */
   const settingsTrigger = useRef<HTMLButtonElement>(null);
   const infoTrigger = useRef<HTMLButtonElement>(null);
   const settingsLeave = useRef<(() => Promise<boolean>) | null>(null);
+  /* The settings panel's own "<" handler (up one level, or close at its
+     root), so Escape does exactly what its "<" does (nav system R3). */
+  const settingsBack = useRef<(() => void) | null>(null);
   const leaving = useRef(false);
   const changeCorner = async (next: typeof corner) => {
     if (leaving.current) return;
@@ -286,7 +266,8 @@ export function Menu({ locale, items, current, label, left, actions, account, se
     if (!corner) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      close();
+      if (corner === "settings" && settingsBack.current) settingsBack.current();
+      else close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -316,45 +297,7 @@ export function Menu({ locale, items, current, label, left, actions, account, se
             control that answers a different question than the one being
             asked is the whole reason this felt annoying rather than merely
             slow. One press, and it says where it goes. */}
-        {label ? (
-          <div className="waka-switch">
-            <button
-              type="button"
-              className="waka-switch-trigger"
-              /* THE FIRST ROW IS YOUR OWN TOP OF MIND, and that is a
-                 property of the list rather than a string to match on.
-
-                 This matched `id.endsWith("top-of-mind")` and silently
-                 stopped working the moment the switcher became a list of
-                 OWNERS — the ids are "me" and "agent:<id>" now, nothing ends
-                 in "top-of-mind", `find` returned undefined, and the one
-                 control the founder asked for by name ("I find it so annoying
-                 that from talk with Waka, there's no one click to go back to
-                 top of mind") became a button that did nothing at all. A
-                 press that no-ops is worse than a missing control: it reads
-                 as the product being broken rather than as a thing not
-                 offered.
-
-                 `items[0]` is the honest expression of the intent. The list
-                 is ordered you-first by construction in `lib/page-menu`, and
-                 the fallback below means this cannot become a dead press
-                 again even if the shape changes under it. */
-              onClick={() => (items.find((item) => item.home) ?? items[0] ?? items.find((item) => item.id === current))?.onSelect()}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false">
-                <path
-                  d="M6 2L3 5l3 3"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-              </svg>
-              <span>{t(locale, "worldMenuTopOfMind")}</span>
-            </button>
-          </div>
-        ) : items.length ? (
+        {items.length ? (
           /**
            * THE THREE WORDS THEMSELVES, NOT A DOOR TO THEM.
            *
@@ -510,14 +453,15 @@ export function Menu({ locale, items, current, label, left, actions, account, se
               name-and-address check really IS a note, and keeps it. */}
           {corner === "info" ? (
             <span className="waka-account waka-account--about">
-              <SheetBack label={t(locale, "worldBack")} onBack={close} />
-              <HowItWorksPanel locale={locale} />
+              <HowItWorksPanel locale={locale} onClose={close} />
             </span>
           ) : settings ? (
             <span className="waka-account waka-account--settings">
-              <SheetBack label={t(locale, "worldBack")} onBack={close} />
+              {/* THE PANEL OWNS ITS ONE HEADER: Close at its root, Back on a
+                  sub-page (one level up). Escape calls the same handler. */}
               <SettingsPanel {...settings} locale={locale} initialAgentId={setupId}
                 onBeforeLeave={guard => { settingsLeave.current = guard; }}
+                onBackHandler={handler => { settingsBack.current = handler; }}
                 email={account?.email ?? null}
                 onSignOut={onSignOut ?? (() => undefined)}
                 onClose={close} />
@@ -530,6 +474,7 @@ export function Menu({ locale, items, current, label, left, actions, account, se
                holds a control — a note is static commentary. */
             <span className="waka-account" role={onSignOut ? "group" : "note"}
               aria-label={onSignOut ? t(locale, "worldSettingsOpen") : undefined}>
+              <SurfaceHeader locale={locale} back={{ kind: "close", onBack: close }} />
               {account?.name ? <span className="waka-account-name">{account.name}</span> : null}
               {account?.email ? <span className="waka-account-email">{account.email}</span> : null}
               {onSignOut ? (

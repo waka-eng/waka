@@ -66,7 +66,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { pressesInTopRow } from "./helpers/note-top-row";
 import { InspirationComposer } from "../src/components/InspirationComposer";
-import { DOCK_SLOT } from "../src/components/NoteTools";
 import { Archive } from "./helpers/archive";
 
 /** Every write the explicit Save has made, newest last. */
@@ -147,7 +146,7 @@ function composerProps(): ComponentProps<typeof InspirationComposer> {
     recording: { phase: "idle", seconds: 0, error: "", notice: "",
       start: vi.fn(), stop: vi.fn(), cancel: vi.fn() },
     onText: vi.fn(), onFiles: vi.fn(), onRetryFile: vi.fn(), onChooseRecording: vi.fn(),
-    onRemove: vi.fn(), onVisibility: vi.fn(), onClose: vi.fn(),
+    onRemove: vi.fn(), onVisibility: vi.fn(), onClose: vi.fn(), onBack: vi.fn(),
     onSubmit: vi.fn(), onKeyDown: vi.fn(), onForkDraft: vi.fn(), draftConflict: false,
   };
 }
@@ -161,7 +160,7 @@ async function newNote(): Promise<void> {
 async function savedNote(onNoteOpen = vi.fn()): Promise<void> {
   await act(async () =>
     root.render(
-      <Archive locale="en-US" title="Kept" onClose={vi.fn()} onNoteOpen={onNoteOpen} />,
+      <Archive locale="en-US" title="Kept" onBack={vi.fn()} onNoteOpen={onNoteOpen} />,
     ),
   );
   for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {
@@ -172,7 +171,7 @@ async function savedNote(onNoteOpen = vi.fn()): Promise<void> {
 
 /** What the page puts where, read through the shared chrome's classes. */
 function shape() {
-  const top = host.querySelector(".jar-note-top");
+  const top = host.querySelector(".waka-surface-head");
   return {
     /* WHAT IS PRESSABLE BESIDE THE DATE. Read on both so that one page
        growing a control the other does not have fails here — which is the
@@ -188,10 +187,11 @@ function shape() {
        in `grid-column: 1`). The browser walk in `tools/e2e` is what
        measured the centring. The lead is still filtered and counted, so
        its coming back is caught by `leads` rather than shifting the index. */
-    whens: host.querySelectorAll(".jar-note-when").length,
+    /* THE SHARED HEADER (nav system): the "<" first, the moment second. */
+    whens: host.querySelectorAll(".waka-surface-title").length,
     whenIndex: top
-      ? [...top.children].filter((n) => !n.classList.contains("jar-note-lead"))
-        .findIndex((n) => n.classList.contains("jar-note-when"))
+      ? [...top.children].filter((n) => !n.classList.contains("waka-surface-back"))
+        .findIndex((n) => n.classList.contains("waka-surface-title"))
       : -1,
     leads: top ? top.querySelectorAll(":scope > .jar-note-lead").length : -1,
   };
@@ -214,7 +214,10 @@ it("gives a new note and a saved one the same chrome in the same order", async (
   expect(fresh.leads, "the archive door came back into the new note's corner").toBe(0);
   expect(kept.topPresses, "something pressable appeared beside a saved note's date").toEqual([]);
   expect(kept.leads, "a saved note, already in the archive, grew a door to it").toBe(0);
-  expect(host.textContent, "a saved note says All inspirations").not.toContain("Back");
+  /* What a sighted reader sees: the "<"'s name is said to a screen reader only. */
+  const seen = host.cloneNode(true) as HTMLElement;
+  seen.querySelectorAll(".sr-only").forEach((node) => node.remove());
+  expect(seen.textContent, "a saved note says All inspirations").not.toContain("Back");
   expect(fresh.whens).toBe(1);
   expect(fresh.whenIndex).toBe(0);
 });
@@ -255,7 +258,7 @@ it("leaves no press in the top row of either note page", async () => {
   await savedNote();
   /* The slot renders only when something is passed to it, and nothing is
      any more — so its absence is the assertion, not an empty element. */
-  expect(host.querySelector(".jar-note-verb #waka-note-actions")).not.toBeNull();
+  expect(host.querySelector(".waka-surface-right #waka-note-actions")).not.toBeNull();
   expect(host.textContent).not.toContain("Delete");
 });
 
@@ -319,9 +322,7 @@ it("lends the bar a Save that lights only on an unsaved change, and goes out onc
   /* The slot `Home` renders in the dock. Without it `NoteTools` portals
      nowhere, which is the right behaviour on a surface with no bar and the
      reason this test has to supply one. */
-  const slot = document.createElement("span");
-  slot.id = DOCK_SLOT;
-  document.body.append(slot);
+  const /* The note bar renders in place (nav system); its parts are found in the page. */ slot = document.body as HTMLElement as HTMLSpanElement;
   written.length = 0;
   try {
     await savedNote();
@@ -360,7 +361,7 @@ it("lends the bar a Save that lights only on an unsaved change, and goes out onc
     await act(async () => save()!.click());
     expect(written).toHaveLength(1);
   } finally {
-    slot.remove();
+   
   }
 });
 
