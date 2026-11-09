@@ -20,15 +20,16 @@ describe('imageWordsState', () => {
     expect(imageWordsState(row({ enrichmentStatus: null })).status).toBe('unreadable');
   });
 
-  it('is retrying after a transient failure, including an out-of-credit 402', () => {
+  it('is retrying only while a read is queued again, and failed when nothing is', () => {
     const failed = row({ enrichmentStatus: 'failed', enrichmentErrorReason: 'Image description failed (HTTP 402)' });
-    expect(imageWordsState(failed).status).toBe('retrying');
+    /* Nothing queued: 'failed' (the screen offers "Try reading it again"),
+       not 'retrying', which promises a read on its way. */
+    expect(imageWordsState(failed).status).toBe('failed');
+    expect(imageWordsState(row(), 'failed').status).toBe('failed');
     // The job is backing off: the row still says failed, the job is pending.
     expect(imageWordsState(failed, 'pending').status).toBe('retrying');
     // Recovery re-queued it: reason cleared, budget spent.
     expect(imageWordsState(row({ enrichmentRetryCount: 1 })).status).toBe('retrying');
-    // The queue gave up and nothing is pending: still retryable, not unreadable.
-    expect(imageWordsState(row(), 'failed').status).toBe('retrying');
   });
 
   it('is unknown, with nothing to quote, for a reading from before the two-part shape', () => {

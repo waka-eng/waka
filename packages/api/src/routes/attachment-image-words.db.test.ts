@@ -146,7 +146,9 @@ it('reads an image that failed on an out-of-credit 402 again through inspiration
   // The queue spent its attempts while the account had no credit.
   await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,attempts,max_attempts,idempotency_key)
     VALUES (${f.profileId},'enrich_attachment',${JSON.stringify({ attachmentId: f.id, inspirationId: f.sourceId })}::jsonb,'failed',5,5,${`enrich_attachment:${f.id}`})`;
-  expect(await (await f.app.request(f.path)).json()).toMatchObject({ status: 'retrying', canRetry: true });
+  /* Failed with nothing queued: 'failed', never 'retrying' — which promises
+     a read is on its way (code review, 2026-11-08). */
+  expect(await (await f.app.request(f.path)).json()).toMatchObject({ status: 'failed', canRetry: true });
   const input = { profileId: f.profileId, inspirationId: f.sourceId };
   expect(await readInspirationProcessingStatus(t.db as never, input)).toMatchObject({ stage: 'enrichment', phase: 'failed', canRetry: true });
   await recoverInspirationProcessing(t.db as never, input);
@@ -179,4 +181,8 @@ it('retries a failed read directly and bounds it by the shared budget', async ()
   await t.sql`UPDATE attachments SET enrichment_retry_count=3,enrichment_retry_window_at=now(),enrichment_status='failed' WHERE id=${f.id}`;
   await t.sql`UPDATE background_jobs SET status='failed' WHERE type='enrich_attachment'`;
   expect((await retry()).status).toBe(429);
+  /* Budget spent, nothing queued: the words say 'failed', inline and job-aware alike. */
+  expect(await (await f.app.request(f.path)).json()).toMatchObject({ status: 'failed', canRetry: false });
+  const details = await (await f.app.request(`/api/attachments/${f.id}/details`)).json() as { attachment: { enrichment: { words: { status: string } } } };
+  expect(details.attachment.enrichment.words.status).toBe('failed');
 });

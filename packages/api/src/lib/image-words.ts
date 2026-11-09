@@ -15,13 +15,16 @@ import { readImageWords } from './image-description.js';
  * - ready:      there are words to show (the machine's, or the owner's fix).
  * - unreadable: the model looked and found no words, or the image can never
  *               be read (unsupported, too large, refused). Nothing retries.
- * - retrying:   a read failed for a reason that can pass (network, rate
- *               limit, out of credit) and another attempt is due or allowed.
+ * - retrying:   a read failed for a reason that can pass, and another one is
+ *               QUEUED — the only state that may promise "I'll try again".
+ * - failed:     a read failed and nothing is queued (the queue gave up, or
+ *               the retry budget is spent). The person may ask for another
+ *               (`canRetry`), or give the line themselves.
  * - unknown:    the reading predates the "Words: / Image:" shape, so which
  *               part is words cannot be told. Show nothing: no quote, no Fix,
  *               no "which line stuck?".
  */
-export type ImageWordsStatus = 'reading' | 'ready' | 'unreadable' | 'retrying' | 'unknown';
+export type ImageWordsStatus = 'reading' | 'ready' | 'unreadable' | 'retrying' | 'failed' | 'unknown';
 
 export type ImageWordsRow = Pick<Attachment, 'enrichmentStatus' | 'enrichmentText' | 'enrichmentErrorReason' |
   'enrichmentRetryCount' | 'transcriptCorrection' | 'transcriptRevision'>;
@@ -34,7 +37,7 @@ export function imageWordsState(row: ImageWordsRow, analysis?: 'pending' | 'read
   const machine = analysis ?? row.enrichmentStatus;
   const status: ImageWordsStatus = row.transcriptCorrection !== null ? 'ready'
     : machine === 'ready' ? (words === undefined ? 'unknown' : read ? 'ready' : 'unreadable')
-    : machine === 'failed' ? 'retrying'
+    : machine === 'failed' ? 'failed'
     : machine === 'pending' ? (row.enrichmentErrorReason !== null || row.enrichmentRetryCount > 0 ? 'retrying' : 'reading')
     : 'unreadable';
   return { status, text: row.transcriptCorrection ?? read, read, correction: row.transcriptCorrection,
