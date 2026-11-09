@@ -162,17 +162,21 @@ async function signUp(page: Page, base: string): Promise<{ email: string; name: 
      profile write with `completeOnboarding` — and goes home. Without this
      every journey after sign-up timed out on a page nobody meant to be on. */
   if (new URL(page.url()).pathname === "/onboarding") {
-    /* From inside the page, so the request carries exactly what the app's
-       own fetch carries (cookie, same-origin headers). */
-    const res = await page.evaluate(async (who) => {
-      const r = await fetch("/api/auth/me/profile", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: who, preferredLocale: "en-US", completeOnboarding: true }),
-      });
-      return { ok: r.ok, status: r.status, text: r.ok ? "" : await r.text() };
-    }, name);
+    /* NOT THROUGH THE PAGE: `account`'s sabotage breaks this very PATCH in
+       the browser context, and a sign-up that fails there makes that
+       negative pass for the wrong reason. A request from Playwright's own
+       client is outside the context's routes; it carries the session
+       cookie by hand. */
+    /* `cookies(base)` would drop them: the session cookie is Secure and
+       the base is http, so they are read whole and matched by host. */
+    const host = new URL(base).hostname;
+    const cookie = (await page.context().cookies()).filter((c) => c.domain.replace(/^\./, "") === host)
+      .map((c) => `${c.name}=${c.value}`).join("; ");
+    const answer = await page.context().request.patch(`${base}/api/auth/me/profile`, {
+      data: { name, preferredLocale: "en-US", completeOnboarding: true },
+      headers: { Cookie: cookie, Origin: base },
+    });
+    const res = { ok: answer.ok(), status: answer.status(), text: answer.ok() ? "" : await answer.text() };
     if (!res.ok) throw new Error(`could not finish onboarding: ${res.status} ${res.text}`);
     await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(4_000);
