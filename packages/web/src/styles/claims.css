@@ -7361,12 +7361,12 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
    The page reserved the home dock's height under a chat (88px), and the
    composer added its own 20px under that, so the pill floated 108px up with
    nothing beneath it. A chat has no dock, so the page reserves nothing and
-   the pill stands 16px off the bottom (plus the phone's own inset); the
-   conversation gets the rest. */
+   the pill stands 28px off the bottom (plus the phone's own inset), as every
+   other bar does (home, notepad, saved note); the conversation gets the rest. */
 .waka-page:has(> .waka-over--talk) { padding-bottom: 0; }
 .chat-page .chat-composer {
   max-width: none; padding-inline: 0; margin-inline: calc(-1 * clamp(20px, 6vw, 28px)); width: auto;
-  padding-top: var(--sp-12); padding-bottom: calc(var(--sp-16) + env(safe-area-inset-bottom));
+  padding-top: var(--sp-12); padding-bottom: calc(var(--sp-28) + env(safe-area-inset-bottom));
 }
 }
 
