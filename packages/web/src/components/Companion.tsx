@@ -35,10 +35,42 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { OWNER_BEING, type Being } from "../character/body";
-import { FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, REST_BLEED, coolRamp, restPose } from "../character/raster";
+import { FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, GLASS_EASE_MS, REST_BLEED, coolRamp, restPose } from "../character/raster";
 import { formatMessage, normalizeSupportedLocale, readStoredLocale } from "../lib/locales";
 import { onZoomChange, renderScale } from "../canvas/scale";
 import { MACHINE_CELLS, pixelate, rampFromCss, rasterGrain } from "../canvas/palette";
+
+const stillMotion = () =>
+  typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * 0..1, eased toward `on` over `GLASS_EASE_MS` (easeOutCubic) — the glasses
+ * and the thinking face going on and off. Not motion of its own: it answers
+ * the page changing what the creature is doing. Under reduced motion, or
+ * with no frames to draw on, it is simply there.
+ */
+function useEased(on: boolean): number {
+  const [value, setValue] = useState(on ? 1 : 0);
+  const now = useRef(value);
+  useEffect(() => {
+    const target = on ? 1 : 0;
+    const from = now.current;
+    if (from === target) return undefined;
+    const set = (v: number) => { now.current = v; setValue(v); };
+    if (stillMotion() || typeof requestAnimationFrame !== "function") { set(target); return undefined; }
+    const began = performance.now();
+    const span = GLASS_EASE_MS * Math.abs(target - from);
+    let frame = 0;
+    const step = (at: number) => {
+      const t = Math.min(1, (at - began) / span);
+      set(from + (target - from) * (1 - Math.pow(1 - t, 3)));
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [on]);
+  return value;
+}
 
 /**
  * ═══ AND A PRESS LIGHTS IT, AS IT DOES AT HOME ══════════════════════════
@@ -58,7 +90,7 @@ import { MACHINE_CELLS, pixelate, rampFromCss, rasterGrain } from "../canvas/pal
  * already a press target (a switcher row, a portrait in a list), so it never
  * steals the press the row is for.
  */
-export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel = false, label = "WAKA", eyes = "open", pressable = true, flareKey = 0 }: {
+export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel = false, label = "WAKA", eyes = "open", pressable = true, flareKey = 0, glasses = false, thinking = false }: {
   size?: number;
   /** Change it to light the creature as a press would — for a page that
       answers something the person did elsewhere (an answer landing in it).
@@ -69,6 +101,13 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
   /** "shut" while it reads (onboarding's intro and reading screens). The same
       body with its eyes at the loop's blink floor — see `EYE_SHUT`. */
   eyes?: "open" | "shut";
+  /** The reading glasses the world's creature puts on while it reviews your
+      saves with you (`think` in the loop) — the same pair, from the same
+      `drawGlasses`. They ease on and off over `GLASS_EASE_MS`. */
+  glasses?: boolean;
+  /** The face it wears with them at home: eyes up and to one side, a little
+      narrowed. Eases with the same timing. */
+  thinking?: boolean;
   /** Whose body. Your own by default; an agent's is `agentBeing(agentId)`. */
   being?: Being;
   /** An agent is the same creature in colder light (`coolRamp`). */
@@ -98,7 +137,7 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
     cancelAnimationFrame(timer.current.frame); window.clearTimeout(timer.current.hold);
     setFlare(1);
     const span = FLARE_SECONDS * 1000;
-    const still = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still = stillMotion();
     if (still || typeof requestAnimationFrame !== "function") {
       timer.current.hold = window.setTimeout(() => setFlare(0), span);
       return;
@@ -112,6 +151,8 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
     timer.current.frame = requestAnimationFrame(step);
   }, []);
   useEffect(() => { if (flareKey) shine(); }, [flareKey, shine]);
+  const wear = useEased(glasses);
+  const ponder = useEased(thinking);
 
   useEffect(() => {
     const node = canvas.current;
@@ -148,7 +189,7 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
     const tile = rasterGrain(ramp.dorm);
     const grain = tile ? g.createPattern(tile, "repeat") : null;
     if (!pixel) {
-      restPose(g, size, ramp, being, 1, dpr, grain, eyes);
+      restPose(g, size, ramp, being, 1, dpr, grain, eyes, wear, ponder);
       return;
     }
     /* Drawn whole, then stepped: the world quantises the BODY sprite, so the
@@ -160,10 +201,10 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
     if (!sg) return;
     sg.scale(dpr, dpr);
     sg.translate(pad, pad);
-    restPose(sg, size, ramp, being, 1, dpr, grain, eyes);
+    restPose(sg, size, ramp, being, 1, dpr, grain, eyes, wear, ponder);
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.drawImage(pixelate(sharp, MACHINE_CELLS * (box / size)), 0, 0);
-  }, [size, being, cool, pixel, eyes, zoomed]);
+  }, [size, being, cool, pixel, eyes, wear, ponder, zoomed]);
 
   /* The element is the padded box too, so the drawing is not squashed back
      into `size` by CSS — which would reintroduce the crop as a scale. */

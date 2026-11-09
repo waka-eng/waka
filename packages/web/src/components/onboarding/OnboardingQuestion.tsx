@@ -307,7 +307,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
         <div className="onb-stage onb-ask">
           <div className="onb-ask-dots onb-ask-dots--tight"><Dots count={ONBOARDING_QUESTIONS} on={index + 1} className="onb-dots--center" /></div>
           <div className="onb-photo-head">
-            <CreatureSlot size="tiny" />
+            <CreatureSlot size="tiny" glasses />
             <SayBubble say="photo" className="onb-chip"><p className="onb-say-line">{say("onboardingPhotoAsk")}</p></SayBubble>
           </div>
           <div ref={photoRef} className="onb-photo">
@@ -374,7 +374,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
               </SayBubble>
             </div>
             <div className="onb-tail-gap" />
-            <CreatureSlot size="large" />
+            <CreatureSlot size="large" glasses={handoff !== "kept"} />
           </div>
         </div>
         {mode === "voice" ? said : null}

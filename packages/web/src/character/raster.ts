@@ -68,6 +68,21 @@ export const GLASS_TINT = "rgba(196, 208, 245, 0.24)";
 export const GLASS_GLINT = "rgba(255, 255, 255, 0.75)";
 /** Behind a lens the eye reads this much larger, as through glass. */
 export const GLASS_MAGNIFY = 1.12;
+/** Off the world, where there is no loop to land them, the glasses come on
+    and off over this many ms — a fade with a small settle in scale, from
+    `GLASS_FROM` of their size to all of it. Instant under reduced motion. */
+export const GLASS_EASE_MS = 200;
+const GLASS_FROM = 0.9;
+/* THE THINKING FACE that goes with the glasses (`think` in the loop). The
+   gaze in px, in the same units as the hover's ±2 — up and to one side,
+   held — and the share of their height the eyes narrow to: weighing, not
+   dozing. Moved here from the loop (2026-11) so a page's creature can make
+   the same face; `rest-pose.test.ts` holds both to these. */
+export const THINK_EYE_X = 1.5;
+export const THINK_EYE_Y = -1.9;
+export const THINK_SQUINT = 0.74;
+/** How far a px of vertical gaze turns the eyes' latitude on the form. */
+export const GAZE_LAT = 0.06;
 /** A nub's seat: a quarter turn either side, at this height on the body. */
 export const NUB_LON = Math.PI / 2;
 export const NUB_X = 0.42;
@@ -250,6 +265,133 @@ export function rasterBody(
 }
 
 
+/**
+ * ═══ THE GLASSES, DRAWN ONCE, FOR THE WORLD AND THE PAGE ═══════════════
+ *
+ * Founder, 2026-10-15, choosing from six drawn pairs: "lets do big soft
+ * rounds". Oversized round lenses with a faint blue tint (painted UNDER the
+ * eyes, so the eyes are read through the lens), a thick rim in the eyes' ink
+ * softened to `GLASS_RIM_ALPHA`, a small glint at each lens's upper left, and
+ * a heavier bridge. On the same turning surface the eyes sit on: each lens
+ * foreshortens with its eye and fades with it at the edge, and the bridge is
+ * drawn only while both are in view. A machine's glasses are made of cells,
+ * like everything else it is.
+ *
+ * This lived inside the frame loop until onboarding asked for the same pair
+ * ("it should wear the glasses we designed for when we want user to review
+ * inspirations they saved"). The loop and `turnedPose` both call these two,
+ * so there is one pair of glasses in the product, not a world pair and a
+ * page pair. How they ARRIVE is each caller's own: the world lands them from
+ * above on its `thinkNow`; a page fades them in over `GLASS_EASE_MS`.
+ */
+export interface Lens { x: number; rx: number; ry: number; alpha: number }
+
+/** Where the two lenses sit: where the eyes REST, not where they look —
+    glasses stay on the face while the eyes move behind them. */
+export function glassLenses(
+  size: number,
+  /** The face's width (the body's, after any squash). */
+  faceW: number,
+  /** The form's turn, 0 facing you. */
+  turn: number,
+  /** cos of the eyes' latitude. */
+  cosLat: number,
+  /** 0..1, how far on they are: multiplies the alpha. */
+  fade: number,
+  /** Their size against the drawn pair. */
+  scale = 1,
+): Lens[] {
+  const lenses: Lens[] = [];
+  for (const lon of [-EYE_LON, EYE_LON]) {
+    const a = turn + lon;
+    const ca = Math.cos(a);
+    if (ca <= 0) continue;
+    lenses.push({
+      x: Math.sin(a) * faceW * FACE_R * cosLat,
+      rx: size * GLASS_R * scale * Math.max(ca * cosLat, 0.2),
+      ry: size * GLASS_R * scale * Math.max(cosLat, 0.35),
+      alpha: Math.min(1, ca / Math.sin(0.25)) * fade,
+    });
+  }
+  return lenses;
+}
+
+/** Draw one layer of the pair at height `y`: "tint" before the eyes, "rims"
+    after them. `cells` is a machine's grid; then there is no tint and the
+    rims are stepped. Leaves the context as it found it. */
+export function drawGlasses(
+  g: CanvasRenderingContext2D,
+  lenses: Lens[],
+  y: number,
+  size: number,
+  layer: "tint" | "rims",
+  cells: { x: number; y: number } | null = null,
+): void {
+  if (!lenses.length) return;
+  g.save();
+  if (layer === "tint") {
+    if (!cells) {
+      g.fillStyle = GLASS_TINT;
+      for (const lens of lenses) {
+        g.globalAlpha = lens.alpha;
+        g.beginPath();
+        g.ellipse(lens.x, y, lens.rx, lens.ry, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    g.restore();
+    return;
+  }
+  g.strokeStyle = EYE_INK;
+  g.fillStyle = EYE_INK;
+  if (cells) {
+    const cx = cells.x;
+    const cy = cells.y;
+    for (const lens of lenses) {
+      g.globalAlpha = lens.alpha;
+      const wC = Math.max(3, Math.round((2 * lens.rx) / cx));
+      const hC = Math.max(3, Math.round((2 * lens.ry) / cy));
+      const left = Math.round((lens.x - (wC * cx) / 2) / cx) * cx;
+      const top = Math.round((y - (hC * cy) / 2) / cy) * cy;
+      const t = Math.max(1, Math.min(cx, cy) * 0.5);
+      g.fillRect(left, top, wC * cx, t);
+      g.fillRect(left, top + hC * cy - t, wC * cx, t);
+      g.fillRect(left, top, t, hC * cy);
+      g.fillRect(left + wC * cx - t, top, t, hC * cy);
+    }
+    g.restore();
+    return;
+  }
+  const w = size * GLASS_W;
+  g.lineCap = "round";
+  for (const lens of lenses) {
+    /* the rim, softened */
+    g.globalAlpha = lens.alpha * GLASS_RIM_ALPHA;
+    g.lineWidth = w;
+    g.beginPath();
+    g.ellipse(lens.x, y, lens.rx, lens.ry, 0, 0, Math.PI * 2);
+    g.stroke();
+    /* the glint: a short arc inside the upper left of the lens */
+    g.strokeStyle = GLASS_GLINT;
+    g.globalAlpha = lens.alpha;
+    g.lineWidth = w * 0.62;
+    g.beginPath();
+    g.ellipse(lens.x, y, lens.rx * 0.66, lens.ry * 0.66, 0, Math.PI * 1.08, Math.PI * 1.42);
+    g.stroke();
+    g.strokeStyle = EYE_INK;
+  }
+  if (lenses.length === 2) {
+    const [l, r] = lenses[0]!.x < lenses[1]!.x ? [lenses[0]!, lenses[1]!] : [lenses[1]!, lenses[0]!];
+    g.globalAlpha = Math.min(l.alpha, r.alpha) * GLASS_RIM_ALPHA;
+    g.lineWidth = w * 0.85;
+    g.beginPath();
+    g.moveTo(l.x + l.rx, y - l.ry * 0.12);
+    g.quadraticCurveTo((l.x + r.x) / 2, y - Math.min(l.ry, r.ry) * 0.5, r.x - r.rx, y - r.ry * 0.12);
+    g.stroke();
+  }
+  g.restore();
+}
+
 /* The last body baked by `turnedPose`, keyed by the identity of what it was
    baked from. One entry: a page draws one creature at a time, and the walk
    asks for the same one ~130 times in a row. */
@@ -292,6 +434,11 @@ export function turnedPose(
   grain: CanvasPattern | null = null,
   /** Eyes closed: each eye squashed to `EYE_SHUT` of its height. */
   shut = false,
+  /** 0..1, how far the reading glasses are on (see `drawGlasses`). */
+  glasses = 0,
+  /** 0..1, how far into the thinking face: the loop's gaze up and aside
+      (`THINK_EYE_X`, `THINK_EYE_Y`) and its narrowing (`THINK_SQUINT`). */
+  thinking = 0,
 ): void {
   /* ═══ BAKE AT LEAST AS LARGE AS WE PAINT ═══════════════════════════════
      The factor was `round(size / BODY_PX * 4)` with no `dpr` in it, while
@@ -364,18 +511,39 @@ export function turnedPose(
   g.translate(half, half);
   bodyPath(g, size, size, be);
   g.clip();
-  g.fillStyle = EYE_INK;
   const er = size * EYE_R;
+  /* THE THINKING GAZE IS THE LOOP'S, at its own numbers: a px offset on the
+     face, whose vertical part also turns the eyes' latitude (`GAZE_LAT`). At
+     `thinking` 0 every term below is the plain rest pose. */
+  const gazeX = THINK_EYE_X * thinking;
+  const gazeY = THINK_EYE_Y * thinking;
+  const lat = gazeY * GAZE_LAT;
+  const cosLat = Math.cos(lat);
   /* `-size * 0.06` is the loop's `eyY` at latitude 0: the eyes sit a little
      above the equator, which is what makes the dome read as a forehead. */
-  const eyY = -size * 0.06 + look * size * 0.08;
+  const restY = -size * 0.06 + Math.sin(lat) * size * FACE_R + look * size * 0.08;
+  const eyY = restY + gazeY;
+  /* the tint first, so the eyes are read THROUGH the lens */
+  const lenses = glasses > 0.01 ? glassLenses(size, size, yaw, cosLat, glasses, GLASS_FROM + (1 - GLASS_FROM) * glasses) : [];
+  drawGlasses(g, lenses, restY, size, "tint");
+  g.fillStyle = EYE_INK;
+  /* behind a lens the eye reads a touch larger, as through glass */
+  const mag = 1 + (GLASS_MAGNIFY - 1) * glasses;
+  const squint = 1 + (THINK_SQUINT - 1) * thinking;
   for (const lon of [-EYE_LON, EYE_LON]) {
     const ca = Math.cos(lon + yaw);
     if (ca <= 0) continue;
     g.beginPath();
-    g.ellipse(Math.sin(lon + yaw) * size * FACE_R, eyY, er * Math.max(ca, 0.2), er * (1 - 0.22 * Math.abs(look)) * (shut ? EYE_SHUT : 1), 0, 0, Math.PI * 2);
+    g.ellipse(
+      Math.sin(lon + yaw) * size * FACE_R * cosLat + gazeX * ca,
+      eyY,
+      er * mag * Math.max(ca * cosLat, 0.2),
+      er * mag * Math.max(cosLat, 0.35) * squint * (1 - 0.22 * Math.abs(look)) * (shut ? EYE_SHUT : 1),
+      0, 0, Math.PI * 2,
+    );
     g.fill();
   }
+  drawGlasses(g, lenses, restY, size, "rims");
   g.restore();
 }
 
@@ -428,6 +596,11 @@ export function restPose(
   /** "shut" for a page whose creature is reading with its eyes closed — a
       pose, not a behaviour: it never changes while the page is up. */
   eyes: "open" | "shut" = "open",
+  /** 0..1, the reading glasses — on while it asks you something, as they are
+      at home while it reviews with you. A caller eases it (`Companion`). */
+  glasses = 0,
+  /** 0..1, the thinking face the world wears with them. */
+  thinking = 0,
 ): void {
-  turnedPose(g, size, ramp, be, lit, dpr, 0, 0, 0, grain, eyes === "shut");
+  turnedPose(g, size, ramp, be, lit, dpr, 0, 0, 0, grain, eyes === "shut", glasses, thinking);
 }
