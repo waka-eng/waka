@@ -20,7 +20,7 @@ export async function saveAnInspiration(
 ): Promise<void> {
   await openTheNotepad(page, options);
   await page.fill('.jar-composer-text', text);
-  const save = page.getByRole('button', { name: 'Save inspiration', exact: true });
+  const save = page.getByRole('button', { name: 'Keep', exact: true });
   if (options.touch) await save.tap(); else await save.click();
   await page.waitForTimeout(4_500);
 }

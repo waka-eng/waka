@@ -101,7 +101,7 @@ it('stops and keeps the clip at the configured duration limit', async () => {
   await act(async () => hook.start()); now = MAX_RECORDING_SECONDS * 1000;
   await act(async () => { await vi.advanceTimersByTimeAsync(250); });
   expect(saved).toHaveBeenCalledOnce(); expect(hook.phase).toBe('idle'); expect(stopTrack).toHaveBeenCalledOnce();
-  expect(said(hook.notice)).toContain('Five-minute limit');
+  expect(said(hook.notice)).toContain('Stopped at 5 minutes');
 });
 it('cancels an active replacement without delivering bytes to the draft', async () => {
   await act(async () => hook.start()); await act(async () => hook.cancel());

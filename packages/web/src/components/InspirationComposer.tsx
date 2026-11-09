@@ -215,7 +215,7 @@ function MediaTile({
   );
 }
 
-function MediaPreview({ item, recording = false, label }: { item: InspirationDraftMedia; recording?: boolean; label?: string }) {
+function MediaPreview({ item, recording = false, label, previewFailed }: { item: InspirationDraftMedia; recording?: boolean; label?: string; previewFailed: string }) {
   const [url, setUrl] = useState('');
   const [imageFailed, setImageFailed] = useState(false);
   const audio = useRef<HTMLAudioElement>(null);
@@ -227,7 +227,7 @@ function MediaPreview({ item, recording = false, label }: { item: InspirationDra
   }, [item.blob, item.validationError]);
   if (item.validationError) return null;
   if (item.type === 'image' && url) return imageFailed
-    ? <p className="jar-composer-storage-note">This browser can’t preview this photo. The original can still be saved.</p>
+    ? <p className="jar-composer-storage-note">{previewFailed}</p>
     : <img src={url} alt={item.name} onError={() => setImageFailed(true)} />;
   if (item.type === 'audio' && url) return <audio ref={audio} controls={!recording} src={url} preload="metadata" aria-label={label ?? item.name} />;
   return null;
@@ -556,11 +556,11 @@ export function InspirationComposer(props: {
         doing, and the bar says `worldComposerUploading` while any of them
         is moving. The tile that is actually uploading dims, which is the
         same fact where it belongs. */}
-    {props.recording.phase !== 'idle' && props.media.some(item => item.type === 'audio') ? <p className="jar-composer-storage-note">Your earlier recording stays until you choose.</p> : null}
-    {props.recordingCandidate ? <section className="jar-recording-choice" aria-label="Choose a recording">
-      <p>New recording</p><MediaPreview item={props.recordingCandidate} label="New recording" />
-      <div className="jar-composer-actions"><button type="button" disabled={blocked} onClick={() => props.onChooseRecording(true)}>Use new recording</button>
-        <button type="button" disabled={blocked} onClick={() => props.onChooseRecording(false)}>{props.media.some(item => item.type === 'audio') ? 'Keep previous recording' : 'Discard recording'}</button></div>
+    {props.recording.phase !== 'idle' && props.media.some(item => item.type === 'audio') ? <p className="jar-composer-storage-note">{say('worldComposerEarlierRecordingStays')}</p> : null}
+    {props.recordingCandidate ? <section className="jar-recording-choice" aria-label={say('worldComposerChooseRecording')}>
+      <p>{say('worldComposerNewRecording')}</p><MediaPreview item={props.recordingCandidate} label={say('worldComposerNewRecording')} previewFailed={say('worldComposerPhotoPreviewFailed')} />
+      <div className="jar-composer-actions"><button type="button" disabled={blocked} onClick={() => props.onChooseRecording(true)}>{say('worldComposerUseNewRecording')}</button>
+        <button type="button" disabled={blocked} onClick={() => props.onChooseRecording(false)}>{say(props.media.some(item => item.type === 'audio') ? 'worldComposerUsePreviousRecording' : 'worldComposerDiscardRecording')}</button></div>
     </section> : null}
     {/* ═══ THE STATE LINES ARE IN THE BAR NOW ═══════════════════════════
         Founder, with "Recording canceled." printed across an empty note:

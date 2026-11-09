@@ -70,6 +70,8 @@ import { ShareSheet, inspirationShareTarget, type ShareTarget } from "./ShareShe
    with its own pagination and its own idea of what the archive holds. */
 import { loadInspiration, loadInspirations, type Inspiration } from "../lib/data";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
+import { dictationAvailable, useDictation } from "../lib/use-dictation";
+import { ListeningView } from "./ListeningView";
 import { inspectInspirationPhoto } from "../lib/inspiration-photo";
 import { inspectAttachmentFile } from "../lib/api/file-accept";
 import { inspirationPreview } from "../lib/inspiration-preview";
@@ -267,6 +269,26 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
      the note read-only with Try again in the bar — never a save from what
      the list happened to show. */
   const [stored, setStored] = useState<{ id: string; text: string | null; failed: boolean } | null>(null);
+  /* ONE PATH FOR NEW WORDS ON AN OPEN NOTE, typed or spoken: the draft, the
+     failure line cleared, and the device copy that survives a reload. */
+  const editOpenNote = (text: string) => {
+    setDraft(text); setSaveFailed(false);
+    if (!open) return;
+    try {
+      const saved = text.trim() === stored?.text?.trim()
+        ? (clearNoteEdit(scope, open.id, editRevision.current), null)
+        : writeNoteEdit(scope, open.id, stored?.text ?? '', text, editRevision.current);
+      editRevision.current = saved?.revision ?? null;
+      setEditUnavailable(false);
+    } catch { setEditUnavailable(true); }
+  };
+  const draftNow = useRef(draft); draftNow.current = draft;
+  const editNow = useRef(editOpenNote); editNow.current = editOpenNote;
+  /* THE MIC WRITES INTO THE NOTE, as it does on the notepad and in a chat. */
+  const dictation = useDictation(() => draftNow.current, (text) => editNow.current(text), locale);
+  const stopDictation = dictation.stop;
+  /* A NOTE THAT CLOSES TAKES ITS MICROPHONE WITH IT. */
+  useEffect(() => () => stopDictation(), [open?.id, stopDictation]);
   const reading = useRef<AbortController | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   /* ═══ DELETE AT ONCE, UNDO FOR A MOMENT, THE SHELF FOR A MONTH ═══════════
@@ -1554,7 +1576,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
           /* the notepad's recorder is running under this page: one
              microphone at a time */
           recordDisabled={recorder.blocked}
-          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : editUnavailable ? say("worldNoteDraftUnavailable") : editConflict ? say("worldNoteDraftConflict") : ""}
+          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : dictation.error === 'dictation-denied' ? say("worldComposerDictateDenied") : dictation.error === 'dictation-failed' ? say("worldComposerDictateFailed") : editUnavailable ? say("worldNoteDraftUnavailable") : editConflict ? say("worldNoteDraftConflict") : ""}
           status={saving ? say("worldSaving") : loaded ? say(draft.trim() !== stored?.text?.trim() ? "worldDraftWord" : "worldSavedWord") : ""}
           /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
              state (founder: "states should show and disappear in the bottom
@@ -1566,6 +1588,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
           moreLabel={say("worldMoreActions")}
           uploading={say("worldComposerUploading")}
           recordLabel={say("worldComposerRecord")}
+          dictate={dictationAvailable() && loaded ? { start: () => dictation.start(), listening: dictation.listening } : undefined}
           stopLabel={say("worldComposerStop")}
           recordingLabel={say("worldComposerRecordingNow")}
           addLabel={say("worldAddMenu")}
@@ -1576,8 +1599,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
              what a screen reader hears for this on the other note page. A
              separate "Save changes" here would be the product admitting the
              two pages are two pages. */
-          keepLabel={say("worldSaveInspiration")}
-          saveLabel={say("worldSave")}
+          keepLabel={say("worldSave")}
           canKeep={canKeepOpenNote}
           onKeep={() => { void keepOpenNote(); }}
           eraseLabel={say("worldDelete")}
@@ -1688,7 +1710,12 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                   same blank-page treatment the notepad gives a new one, so a
                   thing you wrote reads the same whether it is ten seconds or
                   ten months old. */}
-              <textarea
+              {/* SPEECH HAS ITS OWN VIEW HERE TOO (founder, 2026-11-08): the
+                  mic on a saved note writes what you say into its words,
+                  in the listening view the notepad and a chat use, and Done
+                  drops them into the page as text. */}
+              {dictation.listening ? <ListeningView locale={locale} words={draft}
+                notice={dictation.firstTime ? say("worldComposerDictateCloud") : undefined} onDone={() => dictation.stop()} /> : <textarea
                 className="jar-panel-text waka-note-page"
                 /* UNTIL THE FULL TEXT ARRIVES the list's preview stands in,
                    read-only, so the page does not open blank — and nothing
@@ -1702,18 +1729,8 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                 placeholder={loaded && open.attachments.length === 0 ? say("worldNoteNeedsSomething") : undefined}
                 aria-busy={!loaded && !stored?.failed}
                 aria-label={say("worldCaptureInspiration")}
-                onChange={(event) => {
-                  const text = event.target.value;
-                  setDraft(text); setSaveFailed(false);
-                  try {
-                    const saved = text.trim() === stored?.text?.trim()
-                      ? (clearNoteEdit(scope, open.id, editRevision.current), null)
-                      : writeNoteEdit(scope, open.id, stored?.text ?? '', text, editRevision.current);
-                    editRevision.current = saved?.revision ?? null;
-                    setEditUnavailable(false);
-                  } catch { setEditUnavailable(true); }
-                }}
-              />
+                onChange={(event) => editOpenNote(event.target.value)}
+              />}
 
               {/* WHAT YOU KEPT IT FROM. A saved link reached this page as a
                   note with the link nowhere on it — the row carried the

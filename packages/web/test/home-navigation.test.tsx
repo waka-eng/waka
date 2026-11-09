@@ -999,12 +999,12 @@ it('gives a new note a labeled Save and separate Close, without archive navigati
     expect(bar, 'the notepad has no note bar').toBeTruthy();
     expect(bar.firstElementChild?.matches('textarea.jar-composer-text'), 'the words are not first, across the bar').toBe(true);
     const presses = [...bar.querySelectorAll<HTMLButtonElement>('.waka-note-bar-row button')].map(node => node.getAttribute('aria-label') ?? node.textContent?.trim());
-    expect(presses).toEqual(['Speak', 'Add photo', 'Add file', 'Save inspiration']);
+    expect(presses).toEqual(['Your voice', 'Add photo', 'Add file', 'Keep']);
     expect(row('All inspirations')).toBeUndefined();
     expect(close()?.textContent?.trim(), 'the notepad has no Close apart from Save').toBe('Close');
     expect(world.container.querySelector('nav.waka-dock'), 'a dock stands under the note bar').toBeNull();
     const save = world.container.querySelector<HTMLButtonElement>('.waka-dock-save')!;
-    expect(save.textContent).toBe('Save');
+    expect(save.textContent).toBe('Keep');
     expect(save.querySelector('svg'), 'Save is a word, not a glyph').toBeNull();
     expect(save.disabled).toBe(true);
     const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;

@@ -278,7 +278,7 @@ it("tells an emptied memory card to write something, and offers nothing it canno
   const box = editBox()!;
   const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
   await act(async () => { set.call(box, ""); box.dispatchEvent(new Event("input", { bubbles: true })); });
-  expect(box.placeholder).toBe("Write something to keep this memory.");
+  expect(box.placeholder).toBe("Write something, or add a photo or file, to keep this note.");
   expect(card()!.querySelector<HTMLButtonElement>(".jar-panel-save")!.disabled, "and Save stays dim").toBe(true);
 });
 

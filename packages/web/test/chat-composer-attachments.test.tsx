@@ -2,7 +2,7 @@
 /**
  * ═══ A CHAT'S ＋: PHOTOS AND FILES ON THE WAY INTO A MESSAGE (2026-10-16) ═══
  *
- * Founder: "＋ menu rows: 'Add photos' and 'Add file'. On pick: validate …
+ * Founder: "＋ menu rows: 'Add photo' and 'Add file'. On pick: validate …
  * then upload immediately … show them as CHIPS above the text field in the
  * box … each with an × … Send is enabled when there is text OR ≥1 uploaded
  * attachment (photo-only messages allowed); max 6."
@@ -65,7 +65,7 @@ afterEach(async()=>{await act(async()=>root.unmount());host.remove();document.ge
 const mount=(id:string|null=chat)=>act(async()=>root.render(<ConversationPanel key={String(id)} scope={scope} id={id} locale="en-US" onChoose={choose}/>));
 const flush=()=>act(async()=>{for(let turn=0;turn<6;turn+=1)await Promise.resolve();});
 /** The note bar's photo press (2026-11-08: photo and file straight on the bar, no ＋ menu). */
-const plus=(within:ParentNode=host)=>within.querySelector<HTMLButtonElement>('[data-note-bar="1"] button[aria-label="Add photos"]');
+const plus=(within:ParentNode=host)=>within.querySelector<HTMLButtonElement>('[data-note-bar="1"] button[aria-label="Add photo"]');
 const send=()=>host.querySelector<HTMLButtonElement>('button.chat-send')!;
 const chips=()=>[...host.querySelectorAll<HTMLElement>('.chat-composer .chat-chip')];
 const type=(content:string)=>act(async()=>{const area=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,content);area.dispatchEvent(new Event('input',{bubbles:true}));});
@@ -86,7 +86,7 @@ it('offers Add photos and Add file straight on the note bar, beside Send, with n
   const bar=host.querySelector('footer.chat-composer [data-note-bar="1"]')!;
   expect(bar,'the chat does not write into the note bar').toBeTruthy();
   expect(bar.querySelector('[aria-haspopup="menu"]'),'a ＋ menu came back').toBeNull();
-  const photos=bar.querySelector<HTMLButtonElement>('button[aria-label="Add photos"]'),file=bar.querySelector<HTMLButtonElement>('button[aria-label="Add file"]');
+  const photos=bar.querySelector<HTMLButtonElement>('button[aria-label="Add photo"]'),file=bar.querySelector<HTMLButtonElement>('button[aria-label="Add file"]');
   expect(photos?.querySelector('[data-home-action-icon="photo"]'),'no Add photos on the bar').toBeTruthy();
   expect(file?.querySelector('[data-home-action-icon="file"]'),'no Add file on the bar').toBeTruthy();
   const opened:string[]=[];
@@ -198,9 +198,9 @@ it('takes six at most, says so, and dims the ＋ with the reason', async()=>{
   await pick('photos',Array.from({length:7},(_,at)=>png(`sky-${at}.png`)));
   expect(uploadMessageAttachment,'more than six were uploaded for one message').toHaveBeenCalledTimes(6);
   expect(chips()).toHaveLength(6);
-  expect(host.textContent).toContain('Up to 6 at a time');
+  expect(host.textContent).toContain('Up to 6 at a time.');
   expect(plus()!.disabled,'the ＋ still offers a seventh').toBe(true);
-  expect(plus()!.title).toBe('Up to 6 at a time');
+  expect(plus()!.title).toBe('Up to 6 at a time.');
 });
 
 it('keeps the mic, photo and file in the panel\'s own note bar, with the field and Send', async()=>{
@@ -291,7 +291,7 @@ it('× on a chip mid-upload takes it off at once, lets the upload finish, and di
      is not refused by an upload nobody wants. */
   expect(plus()!.disabled,'a removed upload still holds its place').toBe(false);
   await pick('photos',[png('instead.png')]);
-  expect(host.textContent,'the new pick was refused by the cap').not.toContain('Up to 6 at a time');
+  expect(host.textContent,'the new pick was refused by the cap').not.toContain('Up to 6 at a time.');
   expect(chips().map(chip=>chip.title)).toContain('instead.png');
   expect(uploadMessageAttachment).toHaveBeenCalledTimes(7);
   // The finalize commits after all.
@@ -339,7 +339,7 @@ it('two quick picks together still stop at six', async()=>{
   await flush();await flush();
   expect(uploadMessageAttachment,'two picks together went past six').toHaveBeenCalledTimes(6);
   expect(chips()).toHaveLength(6);
-  expect(host.textContent).toContain('Up to 6 at a time');
+  expect(host.textContent).toContain('Up to 6 at a time.');
 });
 
 it('an unnamed photo is called a photo on its chip, and sent with no name', async()=>{

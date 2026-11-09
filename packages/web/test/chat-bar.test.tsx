@@ -102,7 +102,7 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     const bar = world!.container.querySelector('footer.chat-composer [data-note-bar="1"]');
     expect(bar, 'the chat does not write into the note bar').toBeTruthy();
     expect(bar!.querySelector(':scope > .chat-input-label textarea'), 'the words are not across the bar').toBeTruthy();
-    expect(noteBarShape()).toEqual(['Add photos', 'Add file', 'Send']);
+    expect(noteBarShape()).toEqual(['Add photo', 'Add file', 'Send']);
     expect(world!.container.querySelectorAll('.chat-page textarea'), 'more than one message field').toHaveLength(1);
     expect(world!.container.querySelector('nav.waka-dock'), 'a dock stands under the chat').toBeNull();
     expect(bar!.querySelector('[aria-haspopup="menu"]'), 'a ＋ menu came back').toBeNull();
@@ -115,7 +115,7 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     try {
       await aNewChat();
       expect(world!.container.querySelector('footer.chat-composer [data-note-bar="1"] button.waka-dock-tool.chat-dictate'), 'the bar has no mic').toBeTruthy();
-      expect(noteBarShape()).toEqual(['Speak', 'Add photos', 'Add file', 'Send']);
+      expect(noteBarShape()).toEqual(['Your voice', 'Add photo', 'Add file', 'Send']);
     } finally {
       delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
     }

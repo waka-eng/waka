@@ -204,9 +204,9 @@ async function openTheSavedNote(): Promise<void> {
 }
 
 const save = (): HTMLButtonElement => slot.querySelector<HTMLButtonElement>(".waka-dock-tool--keep")!;
-const record = (): HTMLButtonElement | null => slot.querySelector<HTMLButtonElement>('[aria-label="Record"]');
+const record = (): HTMLButtonElement | null => slot.querySelector<HTMLButtonElement>('[aria-label="Your voice"]');
 const stopRecording = (): HTMLButtonElement | null =>
-  slot.querySelector<HTMLButtonElement>('[aria-label="Stop recording"]');
+  slot.querySelector<HTMLButtonElement>('[aria-label="Done"]');
 
 /** Type into the open note the way a person does. */
 async function type(text: string): Promise<void> {

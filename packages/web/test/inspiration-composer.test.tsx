@@ -66,7 +66,7 @@ it('commits nothing itself, because keeping it is the bar\'s job',async()=>{
      below. A Save growing back on this PAGE would wear one or the other,
      because those are the two ways this product spells that control. */
   expect(host.querySelectorAll('.waka-dock-tool--keep'), 'a Save grew back on the page').toHaveLength(0);
-  expect(host.querySelector('[aria-label="Save inspiration"]')).toBeNull();
+  expect(host.querySelector('.waka-dock-save')).toBeNull();
   expect(props.onSubmit).not.toHaveBeenCalled();
 });
 /* ═══ THE HEADING ROW IS GONE, AND SO IS ITS SPARK ═══════════════════════
@@ -277,7 +277,7 @@ it('says a stored file problem and a failed upload in the reader’s language', 
 it('restores the separate link draft and includes it through the single Save action',async()=>{
   props.text='My note';props.linkText='https://example.test/unfinished';await mount();
   expect(host.querySelector<HTMLInputElement>('input[type=url]')?.value).toBe(props.linkText);
-  expect(host.textContent).toContain('This link will be included when you save.');
+  expect(host.textContent).toContain('This link will be kept with the note.');
   /* THROUGH ENTER IN THE FIELD, which is the composer's one remaining way to
      commit now that Save is in the bar — and the only one that was ever
      reachable without lifting your hands off the keyboard. It is the same
@@ -291,7 +291,7 @@ it('refuses unsafe link schemes without submitting or discarding the draft',asyn
   props.linkText='javascript:alert(1)';await mount();
   await act(async()=>enterLink());
   expect(props.onSubmit).not.toHaveBeenCalled();expect(props.onLinkText).not.toHaveBeenCalled();
-  expect(host.querySelector<HTMLInputElement>('input[type=url]')!.validationMessage).toContain('HTTP or HTTPS');
+  expect(host.querySelector<HTMLInputElement>('input[type=url]')!.validationMessage).toContain('Paste a web address');
 });
 
 /**
@@ -388,14 +388,14 @@ it('keeps a failed discard available to retry and lets Escape return to editing'
    creature asks which line stuck and says the save is safe either way. */
 it('makes a photo the page\'s picture, and draws the words it read only when they are given', async () => {
   props.media = [{ id: 'shot', type: 'image', name: 'Screenshot.png', blob: new Blob(['p'], { type: 'image/png' }) }];
-  props.noteBar = { mic: <button type="button" aria-label="Speak" />, save: <button type="button" className="waka-dock-save">Save</button>, state: null };
+  props.noteBar = { mic: <button type="button" aria-label="Your voice" />, save: <button type="button" className="waka-dock-save">Save</button>, state: null };
   await mount();
   expect(host.querySelector('.waka-note-hero img')?.getAttribute('alt')).toBe('Screenshot.png');
   expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('What about it stuck with you?');
   expect(host.textContent).not.toContain('The words I read');
   /* The hint is the bubble's softer second line (founder, 2026-11-08), not a
      line floating over the bar. */
-  expect(host.querySelector('.waka-note-says .waka-note-says-softer')?.textContent).toBe('A few words is plenty. Or just Save.');
+  expect(host.querySelector('.waka-note-says .waka-note-says-softer')?.textContent).toBe('A few words is plenty. Or just Keep.');
   expect(host.querySelector('.waka-note-hint'), 'the hint still floats over the bar').toBeNull();
   expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Add a note…');
   /* The words get the whole bar; the row is under them. */
@@ -414,7 +414,7 @@ it('makes a photo the page\'s picture, and draws the words it read only when the
   expect(host.querySelector('.waka-note-hero')?.hasAttribute('data-blurred')).toBe(true);
   /* Unreadable promises nothing; only a read queued again says it will retry. */
   expect(host.textContent).not.toContain('Your screenshot is saved either way.');
-  expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Type the line, or just Save');
+  expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Type the line, or just Keep');
   /* Retrying asks the same; "I'll try reading it again" is promised only
      where a read is known to be queued (the saved note), never on a guess. */
   props.readWords = { status: 'retrying' }; await mount();
@@ -427,7 +427,7 @@ it('asks why about a shared link, with Add a note and That\'s all, and That\'s a
   props.media = []; props.text = 'https://example.com/a'; props.arrival = true; await mount();
   expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('Got the link you shared. Want to say why?');
   const acts = [...host.querySelectorAll<HTMLButtonElement>('.waka-note-arrival-act')];
-  expect(acts.map(act => act.textContent)).toEqual(['Add a note', 'That\'s all']);
+  expect(acts.map(act => act.textContent)).toEqual(['Add a note', 'Just keep it']);
   expect(props.onSubmit).not.toHaveBeenCalled();
   await act(async () => acts[1]!.click());
   expect(props.onSubmit).toHaveBeenCalledOnce();

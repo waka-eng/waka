@@ -128,7 +128,7 @@ import { SavesOverlay } from "../components/SavesOverlay";
 import { DOCK_SLOT } from "../components/NoteTools";
 import { inspectAttachmentFile, FileRefused } from "../lib/api/file-accept";
 import { deleteAccount } from "../lib/api/auth";
-import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
+import { canKeep, KEEP_FILE_LIMIT, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { useImageWords } from "../lib/use-image-words";
 import { bubbleStayMs } from "../lib/kept-bubble";
@@ -5754,7 +5754,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         if (!url) continue;
         if (!attachments.some(item => item.type === 'link' && item.url === url)) attachments.push({ type: 'link', url });
       }
-      if (attachments.length > 5) throw new DraftProblem('worldComposerTooManyFiles');
+      if (attachments.length > KEEP_FILE_LIMIT) throw new DraftProblem('worldComposerTooManyFiles');
       await composerDraft.flush(); current();
       /* A FILE DOES NOT NAME A KIND. There is no 'file' kind on the server, and
          a PDF kept with words is still a note — so files are left out of the
@@ -7846,10 +7846,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
      be pressed, as the chat's Send does. */
   const noteBarSave = (
     <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save waka-note-bar-action"
-      aria-label={say('worldSaveInspiration')}
       title={whyNotKeeping ? say(whyNotKeeping) : undefined}
       disabled={!composerCanKeep}
-      onClick={() => { void keepIt(); }}>{say('worldSave')}</button>
+      onClick={() => { void keepIt(); }}>{say('worldKeep')}</button>
   );
   const noteBarState = (<>
                 {dictation.listening || recording.phase !== 'idle' ? (
@@ -7888,7 +7887,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
          together. They were two different conditions and the chat sat in
          the gap between them. */
       className={`jar${backgroundHidden ? " jar--aside" : ""}${harvestWhy && !mouthOpen ? " jar--agent-asking" : ""}`}
-      aria-label="Waka"
+      aria-label="WAKA"
     >
       {/* the world's early face, until the first real frame: the same ground,
           the companion already home, one honest word. Shared with the auth

@@ -344,7 +344,7 @@ it('opens the notepad with the mic ready to tap, and never listens outside the t
   await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'Say it never opened the notepad').toBeTruthy();
   expect(FakeEngine.all, 'the microphone started outside the tap').toHaveLength(0);
-  const ready = world.container.querySelector<HTMLButtonElement>('.waka-note-bar .waka-dock-tool[aria-label="Speak"]');
+  const ready = world.container.querySelector<HTMLButtonElement>('.waka-note-bar .waka-dock-tool[aria-label="Your voice"]');
   expect(ready?.disabled, 'the mic is not ready to tap').toBe(false);
   await act(async () => ready!.click());
   expect(engine().started, 'the ready mic did not listen when tapped').toBe(true);

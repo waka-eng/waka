@@ -422,3 +422,37 @@ it('reopens every saved photo, recording and file through an owned read URL', as
   expect(host.querySelector('img[src*="preview-image"]')).toBeNull();
   expect(state.written).toEqual([]);
 });
+
+/* THE MIC ON A SAVED NOTE WRITES WHAT YOU SAY (2026-11-08), in the listening
+   view the notepad and a chat use: it used to record an audio clip here and
+   write words on the notepad, one glyph meaning two acts. */
+it("opens the listening view from a saved note's mic, and Done drops the words into the note", async () => {
+  class Engine {
+    static live: Engine | null = null;
+    lang = ""; continuous = false; interimResults = false;
+    onresult: ((event: unknown) => void) | null = null;
+    onerror: ((event: unknown) => void) | null = null;
+    onend: (() => void) | null = null;
+    constructor() { Engine.live = this; }
+    start() {}
+    stop() { this.onend?.(); }
+    abort() {}
+  }
+  (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition = Engine;
+  try {
+    await openSave(longRow, "an older line");
+    await answer(true);
+    const mic = slot.querySelector<HTMLButtonElement>('.waka-dock-tool[aria-label="Your voice"]')!;
+    expect(mic, "the saved note has no mic").toBeTruthy();
+    await act(async () => mic.click());
+    expect(host.querySelector(".waka-listening"), "the mic did not open the listening view").toBeTruthy();
+    expect(page(), "the typing field stays up while listening").toBeNull();
+    await act(async () => Engine.live!.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: "and a new one" }], { isFinal: true })] }));
+    await act(async () => host.querySelector<HTMLButtonElement>(".waka-listening-done")!.click());
+    expect(host.querySelector(".waka-listening")).toBeNull();
+    expect(page().value).toBe("an older line and a new one");
+    expect(save().disabled, "spoken words are an edit like typed ones").toBe(false);
+  } finally {
+    delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+  }
+});

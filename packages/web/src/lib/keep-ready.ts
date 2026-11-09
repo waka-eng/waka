@@ -55,7 +55,7 @@ export interface KeepReadiness {
 }
 
 /** Up to this many attachments in one inspiration. */
-export const KEEP_FILE_LIMIT = 5;
+export const KEEP_FILE_LIMIT = 6;
 
 /**
  * The first reason this note cannot be kept, or `null` when it can.

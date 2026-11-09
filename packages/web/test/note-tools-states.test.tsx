@@ -36,7 +36,7 @@ const idle = { phase: "idle", seconds: 0, error: "", notice: "", start: vi.fn(),
 async function bar(extra: Partial<Parameters<typeof NoteTools>[0]>): Promise<string[]> {
   await act(async () => root.render(
     <NoteTools attaching={false} saving={false} recording={idle as never} failed="" uploading="Uploading…"
-      recordLabel="Record" stopLabel="Stop" addLabel="Add" photoLabel="Add photo" fileLabel="Add file"
+      recordLabel="Your voice" stopLabel="Stop" addLabel="Add" photoLabel="Add photo" fileLabel="Add file"
       keepLabel="Save" canKeep={false} onKeep={vi.fn()} eraseLabel="Delete" onErase={vi.fn()} onFile={vi.fn()}
       retryLabel="Try again" onRetry={vi.fn()} {...extra} />,
   ));
@@ -49,10 +49,10 @@ it("keeps an earlier save failure beside the loading line", async () => {
 });
 
 it("keeps Stop in the bar while another note is still loading", async () => {
-  await bar({ reading: "Opening…", recording: { ...idle, phase: "recording", seconds: 12 } as never, stopLabel: "Stop recording" });
+  await bar({ reading: "Opening…", recording: { ...idle, phase: "recording", seconds: 12 } as never, stopLabel: "Done" });
   /* Since the merge with claude/fix-usability, Stop keeps the microphone's 44px seat and the
      clock rides in the state line beside it (audit f2afcbe2: the wide clock-button re-laid the bar). */
-  const stop = slot.querySelector('[aria-label="Stop recording"]');
+  const stop = slot.querySelector('[aria-label="Done"]');
   expect(stop, "a recording running into the next note's loading can still be stopped").not.toBeNull();
   expect(stop!.nextElementSibling?.textContent).toContain("0:12");
 });
@@ -61,9 +61,9 @@ it("keeps Stop in the bar while a delete is armed during a recording", async () 
   await bar({
     recording: { ...idle, phase: "recording", seconds: 7 } as never,
     erasePending: true, eraseQuestion: "Delete this for good?", eraseConfirmLabel: "Delete it anyway",
-    cancelEraseLabel: "Not now", onCancelErase: vi.fn(), stopLabel: "Stop recording",
+    cancelEraseLabel: "Not now", onCancelErase: vi.fn(), stopLabel: "Done",
   });
-  const stop = slot.querySelector('[aria-label="Stop recording"]');
+  const stop = slot.querySelector('[aria-label="Done"]');
   expect(stop, "the way to stop the microphone stayed").not.toBeNull();
   expect(stop!.nextElementSibling?.textContent).toContain("0:07");
   expect(slot.querySelector('[aria-label="Delete it anyway"]')).not.toBeNull();

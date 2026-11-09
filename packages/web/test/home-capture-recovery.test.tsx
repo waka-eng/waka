@@ -39,7 +39,7 @@ vi.mock('../src/lib/inspiration-draft-store',async original=>{
 const scope={accountId:'capture-owner',profileId:VIEWER_ID};
 let world:MountedWorld|undefined;
 const field=()=>world!.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
-const save=()=>document.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!;
+const save=()=>document.querySelector<HTMLButtonElement>('.waka-dock-save')!;
 const journals=()=>Object.keys(localStorage).filter(key=>key.includes(':pendingSave:'));
 async function type(text:string){await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(field(),text);field().dispatchEvent(new Event('input',{bubbles:true}));});}
 beforeAll(()=>{installCanvasStub();setViewport(1280,900);(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;});

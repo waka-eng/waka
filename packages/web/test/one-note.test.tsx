@@ -325,7 +325,7 @@ it("lends the bar a Save that lights only on an unsaved change, and goes out onc
   written.length = 0;
   try {
     await savedNote();
-    const save = () => slot.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]');
+    const save = () => slot.querySelector<HTMLButtonElement>('.waka-dock-save');
     /* PRESENT BEFORE IT IS PRESSABLE. Founder, of the notepad's: "when the
        user didn't make any change, then make it lower opacity, like
        basically disable it." A control that is absent until it is usable

@@ -181,11 +181,11 @@ async function recordOn(id: string) {
   expect(row, `no row for ${id}`).toBeTruthy();
   await act(async () => row!.click());
   await settle();
-  const record = q<HTMLButtonElement>('#waka-note-tools .waka-dock-tool[aria-label="Record"]');
+  const record = q<HTMLButtonElement>('#waka-note-tools .waka-dock-tool[aria-label="Your voice"]');
   expect(record, "the open note offers no Record").toBeTruthy();
   await act(async () => record!.click());
   await settle(2);
-  expect(q('.waka-dock-tool--live[aria-label="Stop recording"]'), "the recording did not start").toBeTruthy();
+  expect(q('.waka-dock-tool--live[aria-label="Done"]'), "the recording did not start").toBeTruthy();
 }
 
 it("attaches the clip to its note when the archive is closed with Close mid-recording", async () => {
@@ -243,7 +243,7 @@ it("attaches the clip to its note when the browser's Back leaves only the note",
   await settle(2);
   expect(archiveOpen(), "Back from a note should leave the note, not the archive").toBe(true);
   expect(q(".waka-over--note"), "the note is still open after Back").toBeNull();
-  expect(q('.waka-dock-tool--live[aria-label="Stop recording"]'), "the recording is still live with its note gone").toBeNull();
+  expect(q('.waka-dock-tool--live[aria-label="Done"]'), "the recording is still live with its note gone").toBeNull();
   await deliverStops();
   expect(S.finalized, "the clip did not reach its note").toEqual(["own-1"]);
   expect(S.presigned).toEqual([VIEWER_ID]);
@@ -321,7 +321,7 @@ it("does not let the notepad record while the archive's recording is still finis
   expect(archiveOpen()).toBe(false);
   await pressDockRow(world.container, "Keep a thought");
   await settle();
-  const notepadRecord = () => q<HTMLButtonElement>('.waka-note-bar .waka-dock-tool[aria-label="Record"]');
+  const notepadRecord = () => q<HTMLButtonElement>('.waka-note-bar .waka-dock-tool[aria-label="Your voice"]');
   expect(notepadRecord(), "the notepad under the archive is not on screen").toBeTruthy();
   expect(notepadRecord()!.disabled, "the notepad's Record was offered over a live microphone").toBe(true);
   /* a press that reaches it anyway starts nothing */
@@ -419,7 +419,7 @@ it("says on Home that a recording failed after the archive closed, and keeps say
   const line = () => q(".waka-clip-failed");
   expect(line(), "the recording's failure was said nowhere once the archive had gone").toBeTruthy();
   expect(line()!.textContent).toContain("something I kept, 2");
-  expect(line()!.textContent).toContain("Nothing was recorded. Please try again.");
+  expect(line()!.textContent).toContain("Nothing was recorded. Try again.");
   expect([...line()!.querySelectorAll("button")].some((button) => button.textContent === "Try again"),
     "there is no clip to try again with").toBe(false);
   await openArchive();
@@ -477,7 +477,7 @@ it("says a clip's note was deleted here, and keeps the clip for its restore", as
   await openArchive();
   await recordOn("own-1");
   S.failFinalize = 1;
-  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Done"]')!.click());
   await deliverStops();
   expect(tryAgainOn(q(".waka-clip-failed")), "the failed clip offered no Try again").toBe(true);
   await openNoteActions();
@@ -504,7 +504,7 @@ it("keeps the clip recoverable when its note is deleted on an agent's archive", 
   expect(archiveOpen(), "the agent's archive is not open").toBe(true);
   await recordOn("own-1");
   S.failFinalize = 1;
-  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Done"]')!.click());
   await deliverStops();
   expect(S.presigned, "the clip was not sent under the agent").toEqual([AGENT_ID]);
   expect(tryAgainOn(q(".waka-clip-failed")), "the failed clip offered no Try again").toBe(true);
@@ -524,7 +524,7 @@ it("does not send a clip to a note whose delete is pending, and lets Undo bring 
   await openArchive();
   await recordOn("own-1");
   S.failFinalize = 1;
-  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Done"]')!.click());
   await deliverStops();
   const presignedBefore = S.presigned.length;
   await openNoteActions();
@@ -575,7 +575,7 @@ it("does not let a note be deleted while its clip is on its way", async () => {
   await openArchive();
   await recordOn("own-1");
   S.holding = true;
-  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Done"]')!.click());
   await deliverStops();
   await openNoteActions();
   const erase = () => q<HTMLButtonElement>('[aria-label="Delete"]');
@@ -618,12 +618,12 @@ it("re-points the open note when its clip lands in the same render as another no
   S.holding = true;
   /* a clip for note A, then one for note B, both still uploading */
   await recordOn("own-1");
-  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Done"]')!.click());
   await deliverStops();
   await act(async () => q<HTMLButtonElement>('button.waka-page-back')!.click());
   await settle(2);
   await recordOn("own-0");
-  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Stop recording"]')!.click());
+  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Done"]')!.click());
   await deliverStops();
   expect(S.heldFinalizes, "both uploads should be waiting").toHaveLength(2);
   /* back on note A, which does not yet know about its clip */

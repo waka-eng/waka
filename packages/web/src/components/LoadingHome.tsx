@@ -151,7 +151,7 @@ export function LoadingHome({ problem }: { problem?: LoadingProblem | null } = {
     <div
       role="status"
       aria-live="polite"
-      aria-label="Loading"
+      aria-label={t(readStoredLocale(), "loading")}
       style={{
         position: "fixed",
         inset: 0,

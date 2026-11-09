@@ -692,7 +692,7 @@ it('saves a capture into the selected agent without adding it to the human or an
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,'A new Noah observation');
     area.dispatchEvent(new Event('input',{bubbles:true}));
   });
-  await act(async()=>world.container.querySelector<HTMLButtonElement>('button[aria-label="Save inspiration"]')!.click()); await settle();
+  await act(async()=>world.container.querySelector<HTMLButtonElement>('button.waka-dock-save')!.click()); await settle();
   expect(createInspiration).toHaveBeenCalledWith(expect.objectContaining({text:'A new Noah observation'}),expect.objectContaining({profile:'agent-noah'}));
   expect(CAPTURES.rows.map(row=>row.profileId)).toEqual(['agent-noah']);
   await chooseFromMenu(world.container,'Inspirations'); await settle();

@@ -73,6 +73,10 @@ export function NoteTools(props: {
   /** The header menu keeps secondary actions away from Save on every screen. */
   moreLabel?: string;
   recordLabel: string;
+  /** THE MIC WRITES WORDS when this browser can turn speech into text: the
+      same press as the notepad's and a chat's, opening the listening view
+      (its Done is in that view, not here). Absent, the mic records a clip. */
+  dictate?: { start: () => void; listening: boolean };
   stopLabel: string;
   /** Announced once when a recording starts; the clock itself is not read out. */
   recordingLabel: string;
@@ -250,7 +254,11 @@ export function NoteTools(props: {
   const busy = props.attaching || props.saving;
   return createPortal(
     <>
-      {supportedRecordingType() ? (
+      {props.dictate && props.recording.phase === "idle" ? (
+        <button type="button" className="waka-dock-tool" disabled={busy || props.recordDisabled || props.dictate.listening}
+          aria-label={props.recordLabel}
+          onClick={props.dictate.start}><HomeActionIcon kind="record" /></button>
+      ) : supportedRecordingType() ? (
         props.recording.phase === "idle" ? (
           <button type="button" className="waka-dock-tool" disabled={busy || props.recordDisabled}
             aria-label={props.recordLabel}

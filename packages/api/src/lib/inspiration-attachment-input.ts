@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const MAX_INSPIRATION_ATTACHMENTS = 5;
+export const MAX_INSPIRATION_ATTACHMENTS = 6;
 export const MAX_ATTACHMENT_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 /**

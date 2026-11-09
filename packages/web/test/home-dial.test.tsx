@@ -664,7 +664,7 @@ describe("the mouth while the dial is away from now", () => {
     await layout.step(40);
 
     const field = one(".jar-mouth-field");
-    expect(field.getAttribute("placeholder")).toBe("A thought, link, photo or recording…");
+    expect(field.getAttribute("placeholder")).toBe("Add a note…");
     expect(document.activeElement).toBe(field);
   });
 
