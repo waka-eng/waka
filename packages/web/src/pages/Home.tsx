@@ -5630,7 +5630,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const freshUnderway = useRef(false);
   const freshNoteFromHome = () => {
     if (mouthOpen) return;
-    if (composerDraft.startFresh()) { draftRef.current = ''; freshUnderway.current = true; }
+    /* Set even when the page was already empty and nothing was set aside: a
+       resume that started before the press may still be reading, and it
+       must not land over this note either. */
+    freshUnderway.current = true;
+    if (composerDraft.startFresh()) draftRef.current = '';
   };
   const screenshotIntoNewNote = (files: File[]) => {
     freshNoteFromHome(); startNewInspiration(); void addInspirationFiles(files);
