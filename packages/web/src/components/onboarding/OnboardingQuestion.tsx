@@ -366,7 +366,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
               <div ref={bubbleWords} key={handoff === "kept" ? "kept" : `ask-${index}`}
                 className={`onb-bubble-words${handoff === "kept" ? " onb-bubble-words--kept" : ""}`}>
                 {handoff === "kept" ? (
-                  <p className="onb-bubble-ask" role="status">{say("worldSavedWord")}</p>
+                  <p className="onb-bubble-ask" role="status">{say("worldBubbleKept")}</p>
                 ) : (
                   <>
                     <h1 className="onb-bubble-ask">{say(question.ask)}</h1>

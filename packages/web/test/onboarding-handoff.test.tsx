@@ -3,7 +3,7 @@
  * THE HANDOFF AFTER A SAVE, AND THE ONE CREATURE ACROSS EVERY STEP.
  *
  * After each Save: the answer is received (inputs locked), the bubble says
- * "Saved" as the next dot fills, then the next question is asked. A failed
+ * "Kept" as the next dot fills, then the next question is asked. A failed
  * save says why and keeps the answer. And however many screens onboarding
  * passes through, there is one creature, the same element, never two.
  *
@@ -184,7 +184,7 @@ describe("the handoff after a save", () => {
 
     /* kept */
     await tick(500);
-    expect(bubble()).toBe("Saved");
+    expect(bubble()).toBe("Kept");
     expect(dots()).toBe(2);
     expect(ways().every((way) => way.disabled)).toBe(true);
 
@@ -204,7 +204,7 @@ describe("the handoff after a save", () => {
     vi.useFakeTimers();
     await writeAndSave("Kept words");
     await tick(1500);
-    expect(bubble()).not.toContain("Saved");
+    expect(bubble()).not.toContain("Kept");
     expect(bubble()).toContain("Share one thing");
     expect(container!.querySelector("[role=alert]")?.textContent).toBeTruthy();
     expect(container!.querySelector("textarea")!.value).toBe("Kept words");
@@ -221,7 +221,7 @@ describe("the handoff after a save", () => {
     vi.useFakeTimers();
     await writeAndSave("One");
     await tick(0);
-    expect(bubble()).toBe("Saved");
+    expect(bubble()).toBe("Kept");
     await tick(700);
     expect(bubble()).toContain("Share a conversation");
   });
