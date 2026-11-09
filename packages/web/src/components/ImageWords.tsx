@@ -18,14 +18,20 @@ import { useState } from 'react';
 
 import { t, type SupportedLocale } from '../lib/locales';
 import type { ApiImageWordsSummary, ImageWordsStatus } from '../lib/api/attachments';
-import { useImageWords, type FixOutcome } from '../lib/use-image-words';
+import { readQueued, useImageWords, type FixOutcome, type RetryOutcome } from '../lib/use-image-words';
 
 export interface ReadWords { status: ImageWordsStatus; text?: string }
 
-export function ReadWordsQuote({ words, locale, onFix, disabled, asks = false }: {
+export function ReadWordsQuote({ words, locale, onFix, onRetry, queued = false, disabled, asks = false }: {
   words: ReadWords; locale: SupportedLocale;
   /** Absent: Fix is not offered (another account's view, a read-only session). */
   onFix?: (text: string) => Promise<FixOutcome>;
+  /** A read again, on the person's press — offered only when nothing is
+      queued and a retry is allowed. */
+  onRetry?: () => Promise<RetryOutcome>;
+  /** A read IS queued: the one state in which "I'll try reading it again"
+      is a promise that will be kept. */
+  queued?: boolean;
   disabled: boolean;
   /** Say "Which line stuck?" here, because no creature above is asking it. */
   asks?: boolean;
@@ -52,7 +58,11 @@ export function ReadWordsQuote({ words, locale, onFix, disabled, asks = false }:
   if (missed) return <div className="waka-note-read" data-missed="1">
     <div className="waka-note-read-body">
       {asks ? <p className="waka-note-read-ask">{say('worldNoteAskUnreadable')}</p> : null}
-      {words.status === 'retrying' ? <p className="waka-note-retry">{say('worldReadWordsRetry')}</p> : null}
+      {words.status === 'retrying' && queued ? <p className="waka-note-retry">{say('worldReadWordsRetry')}</p> : null}
+      {words.status === 'retrying' && !queued && onRetry && fixing === null ? <button type="button" className="waka-note-read-act waka-note-read-again" disabled={disabled || busy}
+        onClick={async () => { setBusy(true); setNote(''); const outcome = await onRetry(); setBusy(false);
+          if (outcome !== 'queued') setNote(say(outcome === 'limited' ? 'worldReadWordsRetryLimit' : 'worldReadWordsRetryFailed')); }}>
+        {say('worldReadWordsRetryNow')}</button> : null}
       {field}
       {note ? <p className="waka-note-read-quiet" role="alert">{note}</p> : null}
     </div>
@@ -73,9 +83,11 @@ export function ReadWordsQuote({ words, locale, onFix, disabled, asks = false }:
 export function SavedImageWords({ attachmentId, locale, readOnly = false, inline }: { attachmentId: string; locale: SupportedLocale; readOnly?: boolean;
   /** The words the inspiration's detail already carried, when it did. */
   inline?: ApiImageWordsSummary | null }) {
-  const { words, fix } = useImageWords(attachmentId, inline);
+  const { words, fix, retry } = useImageWords(attachmentId, inline);
   /* Unknown: a reading too old to say which part is words. Nothing to show. */
   if (!words || words.status === 'unknown') return null;
+  const mayWrite = !readOnly && words.canEdit;
   return <ReadWordsQuote words={{ status: words.status, text: words.text ?? undefined }} locale={locale} asks
-    onFix={!readOnly && words.canEdit ? fix : undefined} disabled={false} />;
+    onFix={mayWrite ? fix : undefined} queued={readQueued(words)}
+    onRetry={mayWrite && words.status === 'retrying' && words.canRetry ? retry : undefined} disabled={false} />;
 }

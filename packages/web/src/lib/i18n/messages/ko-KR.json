@@ -937,5 +937,8 @@
   "worldReadWordsTypeLine": "문장 적기",
   "worldReadWordsLine": "남은 문장",
   "worldInspirationCount": "영감 {count}개",
-  "worldStreamSeeEvery": "저장한 것 전부 보기"
+  "worldStreamSeeEvery": "저장한 것 전부 보기",
+  "worldReadWordsRetryNow": "다시 읽어 보기",
+  "worldReadWordsRetryLimit": "이미 여러 번 시도했어요. 한 시간 뒤에 다시 해 보세요.",
+  "worldReadWordsRetryFailed": "다시 읽기를 시작하지 못했어요. 다시 해 보세요."
 }

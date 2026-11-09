@@ -43,20 +43,6 @@ it('on a stale revision, reads the words again, keeps the line, and says so plai
   expect(host.querySelector('textarea')?.value, 'the typed line was lost').toBe('My line');
 });
 
-it('asks which line stuck when it could not read them, says it will try again, and queues no read of its own', async () => {
-  vi.useFakeTimers();
-  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: true }));
-  await mount();
-  expect(host.textContent).toContain("I couldn't make out the words. Which line stuck?");
-  expect(host.textContent).toContain("I'll try reading it again in a bit.");
-  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
-  /* Code review, 2026-11-08: a paid re-read was queued on every mount,
-     spending the shared budget so the person's own retry met a 429. */
-  expect(retryImageWords, 'the screen queued a paid read by itself').not.toHaveBeenCalled();
-  expect(fetchImageWords, 'it kept asking though nothing is queued').toHaveBeenCalledTimes(1);
-  await act(async () => root.render(<></>)); await mount();
-  expect(retryImageWords, 'a second opening queued a read').not.toHaveBeenCalled();
-});
 
 it('follows a queued read until it lands', async () => {
   vi.useFakeTimers();
@@ -113,20 +99,66 @@ it('shows nothing for words it cannot tell apart from the description (a reading
 const mountInline = (inline: Parameters<typeof SavedImageWords>[0]['inline']) =>
   act(async () => root.render(<SavedImageWords attachmentId="a" locale="en-US" inline={inline} />));
 
-it('shows settled words from the detail without asking for them again', async () => {
-  await mountInline({ status: 'ready', text: 'Nobody feels ready.', read: 'Nobody feels ready.', correction: null, revision: '3' });
-  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
-  expect(fetchImageWords, 'it asked for words the detail already carried').not.toHaveBeenCalled();
-  for (const status of ['unknown', 'unreadable'] as const) {
-    await mountInline({ status, text: null, read: null, correction: null, revision: '3' });
-    expect(fetchImageWords).not.toHaveBeenCalled();
-  }
-});
 
 it('asks only while the inline read is still going', async () => {
   vi.mocked(fetchImageWords).mockResolvedValue(row({}));
   await mountInline({ status: 'reading', text: null, read: null, correction: null, revision: '0' });
   expect(fetchImageWords).toHaveBeenCalledTimes(1);
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
+});
+
+
+/* CODE REVIEW, 2026-11-08 (fourth round). */
+it('offers "Try reading it again" when nothing is queued, promises nothing, and queues a read only on the press', async () => {
+  vi.useFakeTimers();
+  const queued = row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null });
+  vi.mocked(fetchImageWords).mockResolvedValueOnce(row({ status: 'retrying', text: null, read: null, canRetry: true }))
+    .mockResolvedValueOnce(queued).mockResolvedValue(row({}));
+  vi.mocked(retryImageWords).mockResolvedValue(queued);
+  await mount();
+  expect(host.textContent).toContain("I couldn't make out the words. Which line stuck?");
+  expect(host.textContent, 'it promised a retry nothing will make').not.toContain("I'll try reading it again in a bit.");
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  expect(retryImageWords, 'the screen queued a paid read by itself').not.toHaveBeenCalled();
+  await press('Try reading it again');
+  expect(retryImageWords).toHaveBeenCalledTimes(1);
+  expect(host.textContent, 'a queued read is not said').toContain("I'll try reading it again in a bit.");
+  await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+  expect(host.querySelector('.waka-note-read-text')?.textContent, 'the queued read was not followed').toBe('“Nobody feels ready.”');
+});
+
+it('says when the retry budget is spent instead of failing quietly', async () => {
+  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: true }));
+  vi.mocked(retryImageWords).mockRejectedValue(new ApiError({ status: 429, code: 'words_retry_limit', message: 'Too many' }));
+  await mount();
+  await press('Try reading it again');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Try again in an hour.');
+});
+
+it('shows the detail\'s words at once, and offers Fix only once the read says this session may edit', async () => {
+  let answer!: (value: ApiImageWords) => void;
+  vi.mocked(fetchImageWords).mockImplementationOnce(() => new Promise(resolve => { answer = resolve; }));
+  await mountInline({ status: 'ready', text: 'Nobody feels ready.', read: 'Nobody feels ready.', correction: null, revision: '3' });
+  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
+  expect([...host.querySelectorAll('button')].map(b => b.textContent), 'Fix offered before editability was known').not.toContain('Fix');
+  await act(async () => answer(row({ revision: '3', canEdit: false })));
+  expect([...host.querySelectorAll('button')].map(b => b.textContent), 'a read-only session was offered Fix').not.toContain('Fix');
+  expect(fetchImageWords, 'a settled reading was polled').toHaveBeenCalledTimes(1);
+});
+
+it('keeps a fix when a read that left before it answers after it', async () => {
+  vi.useFakeTimers();
+  const queued = row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null });
+  let late!: (value: ApiImageWords) => void;
+  vi.mocked(fetchImageWords).mockResolvedValueOnce(queued)
+    .mockImplementationOnce(() => new Promise(resolve => { late = resolve; }));
+  vi.mocked(correctImageWords).mockResolvedValue(row({ text: 'My line.', correction: 'My line.', revision: '2' }));
+  await mount();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_600); }); // the second read has left
+  expect(late, 'the second read never left').toBeTypeOf('function');
+  await press('Type the line'); await type('My line.'); await press('Done');
+  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“My line.”');
+  await act(async () => { late(queued); });
+  expect(host.querySelector('.waka-note-read-text')?.textContent, 'an older read overwrote the fix').toBe('“My line.”');
 });
 
