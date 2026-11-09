@@ -25,15 +25,15 @@ export const correctedAttachment = sql<boolean>`(${attachments.type} IN ('audio'
 const WORDS_MARK = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:'`);
 const IMAGE_PART = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:[[:space:]*_]*((?:(?!(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:).)*)'`);
 /* THE IMAGE PART AFTER THE WORDS COMES FIRST — the same rule as
-   `readImageScene`: the words run from their label to the next Image label,
-   and what follows that label is the picture. Only when no Image label
-   follows the words is the one before them used (code review, 2026-11-08). */
-const IMAGE_AFTER_WORDS = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:(?:(?!(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:).)*(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:[[:space:]*_]*(.*)$'`);
-/* AND AN IMAGE LABEL RIGHT AFTER AN EMPTY WORDS LABEL, on the same line with
-   only blanks or markdown between ("**Words:** **Image:** A diagram.") —
-   the parser reads that as no words and this picture (code review, PR #464). */
-const IMAGE_RIGHT_AFTER_WORDS = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:[[:blank:]>#*_]*image[[:blank:]*_]*:[[:space:]*_]*(.*)$'`);
-const described = sql<string>`trim(regexp_replace(coalesce((regexp_match(${attachments.enrichmentText}, ${IMAGE_RIGHT_AFTER_WORDS}, 'i'))[1], (regexp_match(${attachments.enrichmentText}, ${IMAGE_AFTER_WORDS}, 'i'))[1], (regexp_match(${attachments.enrichmentText}, ${IMAGE_PART}, 'i'))[1], ''), '[[:space:]*_]+$', ''))`;
+   `readImageScene`: from the FIRST Words label, the words run to the next
+   Image label (straight after it when the words are empty, "Words: Image: …",
+   or at a line or sentence start), and what follows that label is the
+   picture. Anchored at the first Words label, as the parser is, so a second
+   "Words:" further down can never be read instead. Only when no Image label
+   follows the words is the one before them used (code review, PR #464). */
+const SEP = String.raw`(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*`;
+const IMAGE_AFTER_WORDS = sql.raw(String.raw`'^(?:(?!${SEP}words[[:blank:]*_]*:).)*${SEP}words[[:blank:]*_]*:(?:[[:blank:]>#*_]*|(?:(?!${SEP}image[[:blank:]*_]*:).)*(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*)image[[:blank:]*_]*:[[:space:]*_]*(.*)$'`);
+const described = sql<string>`trim(regexp_replace(coalesce((regexp_match(${attachments.enrichmentText}, ${IMAGE_AFTER_WORDS}, 'i'))[1], (regexp_match(${attachments.enrichmentText}, ${IMAGE_PART}, 'i'))[1], ''), '[[:space:]*_]+$', ''))`;
 const imagePart = sql<string>`CASE
   WHEN ${attachments.enrichmentStatus} <> 'ready' OR nullif(trim(coalesce(${attachments.enrichmentText},'')),'') IS NULL THEN ''
   WHEN ${attachments.enrichmentText} ~* ${WORDS_MARK}
