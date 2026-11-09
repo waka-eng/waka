@@ -36,6 +36,7 @@ import { ONBOARDING_QUESTIONS } from "../../lib/onboarding-progress";
 import { Dots, Glyph } from "./Creature";
 import { CreatureSlot, useCreatureStage } from "./CreatureStage";
 import { SayBubble } from "./SayBubble";
+import { prefersStillness } from "../../lib/motion";
 
 const QUESTIONS: Array<{ ask: MessageKey; hint: MessageKey }> = [
   { ask: "onboardingAskStuck", hint: "onboardingAskStuckHint" },
@@ -56,8 +57,6 @@ const ASK_MS = 300;
 /** How long a screen's staged arrival takes, end to end (see `.onb-arrive`). */
 const ARRIVE_MS = 1200;
 
-const reducedMotion = () =>
-  typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** The answer, as it looks on screen, shrinks into the creature and is gone. */
 function flyInto(from: HTMLElement | null, to: { x: number; y: number }): void {
@@ -202,7 +201,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
 
   /** The answer has landed: hand it to the creature, then ask the next. */
   const receive = (saved: ApiInspiration) => {
-    const still = reducedMotion();
+    const still = prefersStillness();
     const target = stage?.center() ?? null;
     if (!still && target) flyInto(photoRef.current ?? bar.current, target);
     setHandoff("receive");

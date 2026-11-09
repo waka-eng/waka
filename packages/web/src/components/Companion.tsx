@@ -39,9 +39,8 @@ import { FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, GLASS_EASE_MS, REST_BLEED, co
 import { formatMessage, normalizeSupportedLocale, readStoredLocale } from "../lib/locales";
 import { onZoomChange, renderScale } from "../canvas/scale";
 import { MACHINE_CELLS, pixelate, rampFromCss, rasterGrain } from "../canvas/palette";
+import { prefersStillness } from "../lib/motion";
 
-const stillMotion = () =>
-  typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * 0..1, eased toward `on` over `GLASS_EASE_MS` (easeOutCubic) — the glasses
@@ -57,7 +56,7 @@ function useEased(on: boolean): number {
     const from = now.current;
     if (from === target) return undefined;
     const set = (v: number) => { now.current = v; setValue(v); };
-    if (stillMotion() || typeof requestAnimationFrame !== "function") { set(target); return undefined; }
+    if (prefersStillness() || typeof requestAnimationFrame !== "function") { set(target); return undefined; }
     const began = performance.now();
     const span = GLASS_EASE_MS * Math.abs(target - from);
     let frame = 0;
@@ -137,7 +136,7 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
     cancelAnimationFrame(timer.current.frame); window.clearTimeout(timer.current.hold);
     setFlare(1);
     const span = FLARE_SECONDS * 1000;
-    const still = stillMotion();
+    const still = prefersStillness();
     if (still || typeof requestAnimationFrame !== "function") {
       timer.current.hold = window.setTimeout(() => setFlare(0), span);
       return;

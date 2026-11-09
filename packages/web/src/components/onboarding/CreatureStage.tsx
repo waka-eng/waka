@@ -28,6 +28,7 @@ import { easeInOut } from "../../lib/num";
 import { Companion } from "../Companion";
 import { rampFromCss, rasterGrain } from "../../canvas/palette";
 import { GRAIN_PX, GRAIN_TILE } from "../../canvas/sprites";
+import { prefersStillness } from "../../lib/motion";
 
 export type CreatureSize = "tiny" | "small" | "medium" | "large";
 
@@ -70,8 +71,6 @@ interface Stage {
 const StageContext = createContext<Stage | null>(null);
 let nextId = 1;
 
-const reducedMotion = () =>
-  typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** Where the creature should stand, and how — rendered by each screen. */
 export function CreatureSlot({ size, eyes = "open", motion, glasses = false, place, className = "", style }: SlotLook & {
@@ -128,7 +127,7 @@ export function CreatureStage({ children, fading = false }: { children: ReactNod
   const travel = useCallback((to: Spot) => {
     stop();
     const from = at.current;
-    if (!from || reducedMotion() || typeof requestAnimationFrame !== "function") { setLift(0); place(to); return; }
+    if (!from || prefersStillness() || typeof requestAnimationFrame !== "function") { setLift(0); place(to); return; }
     const began = performance.now();
     const step = (now: number) => {
       const t = Math.min(1, (now - began) / TRAVEL_MS);
@@ -166,7 +165,7 @@ export function CreatureStage({ children, fading = false }: { children: ReactNod
     center: () => at.current ? { x: at.current.x, y: at.current.y } : null,
     acknowledge: () => {
       setFlareKey((key) => key + 1);
-      if (reducedMotion() || typeof requestAnimationFrame !== "function") return;
+      if (prefersStillness() || typeof requestAnimationFrame !== "function") return;
       stop();
       const began = performance.now();
       const size = DRAWN * (at.current?.scale ?? 1);

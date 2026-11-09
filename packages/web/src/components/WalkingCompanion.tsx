@@ -22,6 +22,7 @@ import { REST_BLEED, coolRamp, turnedPose } from "../character/raster";
 import { WALK_HEADROOM, WALK_MS, placeStep, walkBeat } from "../character/walk";
 import { renderScale } from "../canvas/scale";
 import { rampFromCss, rasterGrain } from "../canvas/palette";
+import { prefersStillness } from "../lib/motion";
 
 export function WalkingCompanion({ size, being, cool = false, distance, delayMs = 0, onArrived }: {
   size: number;
@@ -62,7 +63,7 @@ export function WalkingCompanion({ size, being, cool = false, distance, delayMs 
       placeStep(g, size, box, beat, beat.land);
       turnedPose(g, size, ramp, being, 1, dpr, beat.yaw, beat.stride, 0, grain);
     };
-    const still = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still = prefersStillness();
     if (still || typeof requestAnimationFrame !== "function") {
       draw(WALK_MS);
       arrived.current?.();

@@ -19,12 +19,11 @@
  * simply is the new size.
  */
 import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { prefersStillness } from "../../lib/motion";
 
 /** How long the bubble takes to change size. */
 const RESIZE_MS = 300;
 
-const reducedMotion = () =>
-  typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function SayBubble({ say, children, className = "", label }: {
   /** What it is saying: a change of this is a change of words, and of size. */
@@ -41,7 +40,7 @@ export function SayBubble({ say, children, className = "", label }: {
     const now = node.getBoundingClientRect();
     const before = was.current;
     was.current = { width: now.width, height: now.height, say };
-    if (!before || before.say === say || !before.width || !now.width || reducedMotion() || typeof node.animate !== "function") return;
+    if (!before || before.say === say || !before.width || !now.width || prefersStillness() || typeof node.animate !== "function") return;
     node.animate(
       [{ width: `${before.width}px`, height: `${before.height}px` }, { width: `${now.width}px`, height: `${now.height}px` }],
       { duration: RESIZE_MS, easing: "cubic-bezier(0.3, 0, 0.2, 1)" },
