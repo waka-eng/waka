@@ -652,11 +652,12 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const vacant=MAX_MESSAGE_ATTACHMENTS-attachedCount;
   const tools=()=><>
     {dictationAvailable()?<button type="button" data-listen-mic=""
-      className={`waka-dock-tool chat-dictate${dictation.listening?' waka-dock-tool--live':''}`}
-      aria-pressed={dictation.listening}
-      aria-label={say(dictation.listening?'worldComposerDictateStop':'worldComposerDictate')}
+      /* Only ever drawn while not listening: the bar gives way to
+         ListeningView, whose Done ends it. */
+      className="waka-dock-tool chat-dictate"
+      aria-label={say('worldComposerDictate')}
       disabled={busy||draft?.pending}
-      onClick={()=>dictation.listening?dictation.stop():dictation.start()}>
+      onClick={()=>dictation.start()}>
       <HomeActionIcon kind="record"/></button>:null}
     {/* PHOTO AND FILE STRAIGHT ON THE BAR, the notepad's own pair. At the
         server's cap they dim and their title is the reason. */}

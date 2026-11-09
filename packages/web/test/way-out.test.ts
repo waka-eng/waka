@@ -434,41 +434,26 @@ describe("every surface has a way out you can see", () => {
 
   it("keeps the dock standing over every destination that leans on it", () => {
     const home = readFileSync(join("src", "pages", "Home.tsx"), "utf8");
-    /* THE BAR'S OWN LIST, read out of the source rather than restated here —
-       a second copy of it would agree with this file and not with the
-       product. */
-    const dock = /className=\{`waka-dock-item/.test(home)
-      ? [...home.matchAll(/\{ id: '([a-z]+)', label: (?:composerHasWords \? 'worldContinueDraft' as const : )?'worldDock/g)].map((hit) => hit[1]!)
-      : [];
-    /* TWO ROWS SINCE 2026-10-15. Founder: "at the bottom bar just keep
-       inspiration and chat and clicking on it leads to new inspiration and
-       new chat" — Now, the plus and Principles left the bar. Exact, not a
-       floor: a third row coming back is a design change, not drift. */
-    expect(dock, "the dock's item list could not be read out of Home.tsx, or it is not the two rows").toEqual(["inspiration", "talk"]);
-    /* AND THE TWO ROWS THAT STAND IN FOR THEM, each on one kind of page
-       (2026-10-15): ↩ on a list. Exact, for the same reason. The questions'
-       "Exit review mode" row left the bar on 2026-11-08: they leave by the
-       page's "<" like every other page. */
-    const standIns = [...home.matchAll(/\[\{ id: '([a-z]+)', label: 'world(?!Dock)[A-Za-z]+' as const, here: false,/g)].map((hit) => hit[1]!);
-    expect(standIns, "the bar's stand-in rows could not be read out of Home.tsx, or it is not ↩").toEqual(["return"]);
-    const rows = [...dock, ...standIns];
-
+    /* THE DOCK HOLDS NO ROWS ANY MORE (2026-11-09). Its rows (Inspiration,
+       Chat, ↩) went from the bar one ruling at a time: the home bar replaced
+       the first two, every page leaves by its "<", and the notepad and a chat
+       write into their own NoteBar. What stands is the one group a saved
+       note's tools portal into; a row coming back is a design change. */
+    expect(code(home), "a row came back to the dock").not.toMatch(/\{ id: '[a-z]+', label: 'world/);
+    expect(code(home), "a dock row's button came back").not.toMatch(/className=\{`waka-dock-item/);
+    /* THE WAY OUT EACH OLD ROW NAMED IS NOW THE PAGE'S "<": 'inspiration' is
+       the notepad and 'talk' a chat (both `making`), 'return' a list
+       (`listing`). The PageBack below is visible on all three (asserted by
+       its `visible=` condition), so these names still say where a surface
+       leaves to, and the per-surface checks further down keep reading them. */
+    const rows = ["inspiration", "talk", "return"];
+    const dock = rows;
     /* WHAT IS BEING MADE, read where the bar reads it. Since 2026-10-15
        ("never put something on any corners") the bar is the making page's
        own while a note is being written or a chat is open, so the whole map
        below hangs on this one derivation being the notepad and the chat. */
     expect(code(home), "the bar no longer knows a note or a chat is being made").toMatch(
       /const making[^=]*= viewNavigation\.view\?\.compose \? 'inspiration'\s*: viewNavigation\.view\?\.conversationId \? 'talk' : null/);
-
-    /* EACH ROW'S OWN ENTRY, read out of the source, so moving a step out of
-       a row fails here rather than in a person's hand. */
-    const rowSource = (id: string): string => {
-      const start = home.indexOf(`{ id: '${id}', label: 'worldDock`);
-      const rest = home.slice(start + 1);
-      const next = rest.search(/\{ id: '[a-z]+', label: 'worldDock|\]\)\.map\(item/);
-      return code(rest.slice(0, next));
-    };
-    const inspiration = rowSource("inspiration"), talk = rowSource("talk");
 
     /* ON A LIST, read where the bar reads it (2026-10-15: "from all
        inspirations, the bottom bar should just be a return icon | close").
@@ -487,8 +472,6 @@ describe("every surface has a way out you can see", () => {
     // Principles leave by the labelled Back, which is visible on all three.
     expect(code(home)).toContain("atNowView && !reviewing && !savedNoteOpen");
     expect(code(home)).toContain("visible={savedNoteOpen || making !== null || listing || principlesOpen}");
-    expect(code(home)).toContain("making === 'inspiration' ? [{ id: 'inspiration'");
-    expect(code(home)).toContain("making === 'talk' ? [{ id: 'talk'");
 
     /* AND WHILE REVIEWING, THE WAY OUT IS THE PAGE'S "<" (2026-11-08), and
        Esc ends the sitting too. */
@@ -506,22 +489,14 @@ describe("every surface has a way out you can see", () => {
     expect(back, "Home on a list or Principles goes home, not one history step").toContain("else closePage();");
     expect(code(home)).toMatch(/<PageBack\s+navigationKey=\{viewNavigation.href\} onBack=\{backPage\}/);
 
-    /* EVERY ROW IS THE SAME SLOT (2026-10-16): Chat's row was a bare inline
-       span and its two rules collapsed — "the bottom bar should be identical
-       for inspiration and chat". So the return row, Inspiration and Chat all
-       stand in `.waka-dock-slot`, and tools and rules can ride beside any. */
-    expect(code(home), "a bar row is not the bar's slot, so its tools and rules cannot ride beside it").toMatch(
-      /<span key=\{item\.id\} className="waka-dock-slot">/);
-    expect(code(home), "a saved note open in the archive no longer lends its tools to the return row's slot").toMatch(
-      /\{item\.id === 'return' && viewNavigation\.view\?\.open === 'saves' && savedNoteOpen \? \(\s*<span className="waka-dock-making" role="group" id=\{DOCK_SLOT\}/);
+    /* A SAVED NOTE OPEN IN THE ARCHIVE LENDS ITS TOOLS TO THE DOCK'S ONE
+       SLOT, and only on the saves list. */
+    expect(code(home), "a saved note open in the archive no longer lends its tools to the dock").toMatch(
+      /\{listing && viewNavigation\.view\?\.open === 'saves' \? \(\s*<span className="waka-dock-slot">\s*<span className="waka-dock-making" role="group" id=\{DOCK_SLOT\}/);
 
-    expect(inspiration).toContain('go: startNewInspiration');
-    expect(talk).toContain("openOverHome('conversations')");
-    expect(inspiration).not.toMatch(/here:[^\n]*compose/);
-    expect(talk).not.toMatch(/here:[^\n]*conversationId/);
-
-    expect(code(home), "archive navigation must stay outside the composer").toContain("{making === null && item.id !== 'return' ? <button");
-    expect(code(home), "a chat's \"<\" no longer closes it").toContain("if (making === 'talk') { closePage(); return; }");
+    /* A chat's "<" closes it: to Past chats when it was opened from there,
+       else home (2026-11-09). */
+    expect(code(home), "a chat's \"<\" no longer closes it").toMatch(/if \(making === 'talk'\) \{[\s\S]{0,200}openOverHome\('conversations'\); return; \}\s*closePage\(\); return;/);
     expect(code(home), "a chat lost its Past chats, top-right").toContain('className="waka-page-aside"');
 
     /* A CHAT LENDS NOTHING TO THE BAR: it writes into the notepad's own

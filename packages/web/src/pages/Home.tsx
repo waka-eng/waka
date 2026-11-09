@@ -7797,20 +7797,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
      state line rides between them. */
   const noteBarMic = (<>
                 {dictationAvailable() ? (
-                  dictation.listening ? (
-                    /* ═══ STOP IS WHERE THE MICROPHONE WAS (audit f2afcbe2) ══
-                       This was a wide word, "Stop", and the bar is centred:
-                       the wider button and the disclosure line beside it
-                       re-laid the whole bar, so Stop landed ~110px left of
-                       where the microphone had been (675 → 561 at 1440) and
-                       a second press on the same spot hit ＋. Now the SAME
-                       button stays in the SAME slot at the SAME size, lit
-                       and breathing while it listens (`--live`), and the
-                       press that started it is the press that ends it. */
-                    <button type="button" className="waka-dock-tool waka-dock-tool--live"
-                      aria-pressed="true"
-                      onClick={() => dictation.stop()}>{say('worldComposerDictateStop')}</button>
-                  ) : (
+                  /* NO STOP HERE: while the microphone listens the bar gives
+                     way to `ListeningView`, whose Done ends it. */
+                  (
                     <button type="button" className="waka-dock-tool" data-listen-mic=""
                       aria-label={say('worldComposerDictate')}
                       disabled={!composerDraft.available}
@@ -7864,7 +7853,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
       onClick={() => { void keepIt(); }}>{say('worldKeep')}</button>
   );
   const noteBarState = (<>
-                {dictation.listening || recording.phase !== 'idle' ? (
+                {/* (Dictation has no line here: while it listens the bar is
+                    `ListeningView`, which says where the audio goes.) */}
+                {recording.phase !== 'idle' ? (
                   /* THE CLOCK IS NOT A LIVE REGION (review): inside
                      `role="status"` a screen reader re-announced it every
                      second. The disclosure and a one-word "Recording" are
@@ -7876,8 +7867,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     {/* ONE "Recording" AT A TIME (review): the composer foot says it
                         while the mouth is closed (`!mouthOpen`), so the bar says it
                         only while the mouth is open — never both regions at once. */}
-                    <LiveWord text={composerState || (recording.phase !== 'idle' && mouthOpen ? say('worldComposerRecordingNow') : '')} />
-                    {recording.phase !== 'idle' ? <span aria-hidden="true">{clockWords(recording.seconds)}</span> : null}
+                    <LiveWord text={composerState || (mouthOpen ? say('worldComposerRecordingNow') : '')} />
+                    <span aria-hidden="true">{clockWords(recording.seconds)}</span>
                   </span>
                 ) : inspirationSave.phase !== 'idle' ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : composerState ? (
                   <span className="waka-dock-state" role="status">{composerState}</span>
@@ -11743,125 +11734,19 @@ const RETRY_READ_LIMIT_MS = 20_000;
         />
             ) : phase==='ready'&&savedNoteOpen&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
-          {([
-            ...(listing ? [{ id: 'return', label: 'worldBack' as const, here: false, go: backPage }] : []),
-            ...(making === 'inspiration' ? [{ id: 'inspiration', label: 'worldDockSaves' as const, here: false, go: startNewInspiration }] : []),
-            ...(making === 'talk' ? [{ id: 'talk', label: 'worldDockTalk' as const, here: false,
-              go: () => openOverHome('conversations') }] : []),
-          ]).map(item => (
-            /* THE SHEET HANGS OFF THE PLUS, not off the middle of the screen.
-               Founder, with a screenshot: "this not being aligned with the +
-               button — these little details are all missing rn."
-
-               Measured: the plus sits at 642 and the sheet at 640, because
-               the sheet was `position: fixed; left: 50%` — centred on the
-               VIEWPORT while the plus is centred in a row of four words of
-               unequal length. Two pixels at this window width, and the gap is
-               whatever the labels happen to weigh: a longer word on either
-               side moves the plus and the sheet does not follow. The founder
-               saw two pixels; what is wrong is that the two were never
-               related.
-
-               NOT A MEASUREMENT — A PARENT. The fix that suggests itself is
-               to observe the plus and write its centre to a custom property,
-               and this product has a law about exactly that road ("every
-               measurement feeding layout is observed, not sampled"). The
-               cheaper answer obeys it by not measuring at all: the sheet
-               becomes a child of the plus's own slot and is centred on it by
-               the box model, which cannot drift and has nothing to resample.
-
-               IT ALSO PUTS THE SHEET WHERE THE KEYBOARD EXPECTS IT. Rendered
-               after the whole nav, its two rows were the LAST things in the
-               tab order — so opening the menu and pressing Tab went to
-               "Chats", then "Principles", then a full-screen invisible
-               dismiss target, and only then to "New inspiration". Beside the
-               plus in source order, Tab goes straight into it. */
-            <span key={item.id} className="waka-dock-slot">
-            {/* EVERY ROW'S SLOT IS THE SAME BOX. Only Inspiration's and ↩'s were
-                flex; Chat's was a bare inline span, so its two rules (1px wide,
-                a fixed height) collapsed to nothing — founder, 2026-10-16:
-                "for chats, you're missing the | | — the bottom bar should be
-                identical for inspiration and chat." */}
-            {/* THE WORD STAYS WHILE THE TOOLS ARRIVE. The tools used to take
-                the plus's place; with the plus gone they ride beside the
-                word — which on a new note says how many you have kept and
-                opens them — and Close comes last. */}
-            {making === null && item.id !== 'return' ? <button
-              type="button"
-              className={`waka-dock-item${item.here ? ' waka-dock-item--here' : ''}`}
-              aria-current={item.here ? 'page' : undefined}
-              onClick={item.go}
-            >
-              {item.id === 'inspiration' || item.id === 'talk'
-                      ? <><HomeActionIcon kind={item.id === 'inspiration' ? 'plus' : 'chat'} className="waka-dock-item-icon"/>{say(item.label)}</>
-                      : say(item.label)}
-            </button> : null}
-            {/* ═══ THREE GROUPS, AND A RULE BETWEEN EACH ═══════════════════
-                Founder, 2026-10-15: "the first item is always either ... all
-                inspiration or all chat And then after that, let's have | And
-                then for inspirations it would be the dictate button, the photo
-                button, the save button and after that have another | and say
-                close." So on a page you are making something on, the row reads
-                where-you-came-from │ the making │ Close. The rules are drawn,
-                not typed: a `|` character would be read aloud. */}
-            {/* ═══ THE BAR TRANSFORMS, IN THE ONE SLOT THAT SHOULD ═══════
-                Founder: "when the user is in inspirations, maybe this
-                bottom bar should transform so that the icons turn into the
-                speech or the image or a file — but then still a quick way
-                to access the navigation."
-
-                BOTH HALVES, WHICH IS THE WHOLE DIFFICULTY. A bar that
-                replaces itself wholesale costs a press to get the
-                navigation back, and the loudest complaint of the same day
-                was "I have to click now like four times to actually get
-                there". So the four PLACES never move. What changes is the
-                one slot that is not a place: the plus means "make
-                something", and while you are already making something that
-                slot is where the making happens.
-
-                It also empties the bottom-left corner, which is where the
-                tools used to float as a second object above the bar — the
-                "double layer" in its last remaining form, and the corner
-                the founder asked about twice.
-
-                A CHAT DOES NOT GET THIS, and the reason is arithmetic
-                rather than taste: a message field cannot fold into a 56px
-                slot beside four labels, and giving the bar over to it
-                entirely would put the navigation a press further away on
-                the surface people have most often reported being stuck in.
-                Its field already sits on the ground as a rule rather than
-                a second pill, so there is no layer to remove there. */}
-            {/* ═══ AND THE ARCHIVE'S OPEN NOTE BORROWS THE SAME SLOT ═══
-                Founder: "the bottom bar should also change."
-
-                EMPTY HERE, FILLED FROM THERE. The dock lends an element and
-                `NoteTools` portals the recorder, the photo button and their
-                one state line into it. The alternative — lifting the
-                overlay's upload queue and open row into the world so this
-                file could render them — would put a second copy of "which
-                note is open" in the world, which is the duplicate-state
-                problem this whole pass is removing.
-
-                IT CANNOT COLLIDE WITH THE NOTEPAD'S. The composer is a
-                full-page surface and the archive is another; `view.compose`
-                and `view.open === 'saves'` are different addresses, so the
-                two are never on screen together. The order of the branches
-                says which wins if that ever stops being true. */}
-            {item.id === 'return' && viewNavigation.view?.open === 'saves' && savedNoteOpen ? (
+          {/* ═══ THE ARCHIVE'S OPEN NOTE BORROWS THIS SLOT ═══════════════
+              The dock stands only while a saved note is open (the notepad
+              and a chat write into their own NoteBar, and every page leaves
+              by its "<"), so it holds one thing: the empty group that
+              `NoteTools` portals the note's mic, photo, file and Save into.
+              The rows it used to list (Inspiration, Chat, ↩) and their
+              buttons could no longer render here and went (2026-11-09). */}
+          {listing && viewNavigation.view?.open === 'saves' ? (
+            <span className="waka-dock-slot">
               <span className="waka-dock-making" role="group" id={DOCK_SLOT}
                 aria-label={say('worldCaptureInspiration')} />
-            ) : null}
-            {/* CLOSE, LAST IN THE ROW, on the page you are making something
-                on: back to the main screen, the note kept as a draft. A chat
-                has its middle group again since 2026-10-16 — the mic and the
-                ＋, lent to the panel (above) — so it reads All chats │ tools
-                │ Close like a note does. */}
-
-            {/* NO CLOSE IN THE BAR (founder, 2026-11-08): every page leaves by
-                the one unboxed "<" in its top-left corner — a chat, a saved
-                note, a list — so the bar holds only what the page makes with. */}
             </span>
-          ))}
+          ) : null}
         </nav>
       ) : null}
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
