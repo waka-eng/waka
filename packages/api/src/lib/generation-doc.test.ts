@@ -140,10 +140,16 @@ describe("docs/generation.md stays true to the code", () => {
   const exported = tuningExports();
   const documented = documentedRows();
 
-  it('keeps the review interval in both help translations aligned with the server',()=>{
-    for(const [locale,suffix] of [['en-US',' days'],['ko-KR','일']] as const){
-      const catalog=JSON.parse(readFileSync(resolve(REPO_ROOT,`packages/web/src/lib/i18n/messages/${locale}.json`),'utf8'));
-      expect(catalog['worldHowReviewBody']).toContain(`${signalRoutes.CLAIM_REASK_DAYS}${suffix}`);
+  /* The help card's review section (which printed this interval) left the
+     product on 2026-11-08 with review mode. Any copy that names a number of
+     days still has to be the server's re-ask interval, so it cannot drift. */
+  it('keeps any interval the help copy names aligned with the server',()=>{
+    for(const [locale,days] of [['en-US',/(\d+) days\b/g],['ko-KR',/(\d+)일/g]] as const){
+      const catalog=JSON.parse(readFileSync(resolve(REPO_ROOT,`packages/web/src/lib/i18n/messages/${locale}.json`),'utf8')) as Record<string,string>;
+      for(const [key,value] of Object.entries(catalog)){
+        if(!/^worldHow/.test(key))continue;
+        for(const hit of value.matchAll(days))expect(Number(hit[1]),`${locale} ${key}`).toBe(signalRoutes.CLAIM_REASK_DAYS);
+      }
     }
   });
 
