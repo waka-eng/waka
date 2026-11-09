@@ -93,6 +93,7 @@ import {
 import { fetchSessions, revokeSession, type ApiSession } from "../lib/api/sessions";
 import { supportedLocales } from "../lib/i18n";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
+import { SheetBack } from "./PageBack";
 
 export interface SettingsPanelProps {
   locale: SupportedLocale;
@@ -262,14 +263,14 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   return (
     <div ref={panel} className="waka-settings" role="group" aria-label={say("worldSettingsOpen")}>
       <header className="waka-settings-heading">
-        {open !== null ? <button type="button" className="waka-sheet-back" aria-label={say(connectionProfile ? 'profileAgentAccessBack' : "profileSettingsBack")}
-          onClick={async () => {
+        {open !== null ? <SheetBack label={say(connectionProfile ? 'profileAgentAccessBack' : "profileSettingsBack")}
+          onBack={async () => {
             if (!await beforeLeave() || !alive.current) return;
             setConfirmDelete(false);
             setEraseAgent(null);
             setOpen(connectionProfile ? 'agents' : null);
             setConnectionProfile(null);
-          }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg></button> : null}
+          }} /> : null}
         <h2 ref={heading} tabIndex={-1}>{connectionProfile?.name ?? say(open === "agents" ? "profileAgentProfilesTitle"
           : open === "personal" ? "profilePersonalTitle" : open === "sessions" ? "profileSessionsTitle" : open === "danger" ? "profileDelete" : "worldSettingsOpen")}</h2>
       </header>

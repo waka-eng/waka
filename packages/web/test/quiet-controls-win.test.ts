@@ -83,5 +83,13 @@ describe("a quiet control's own rule wins over its container's", () => {
       && !beats(mine, specificity(selector)));
     expect(losers.map(({ selector }) => selector), "a sheet's button rule out-ranks the \"<\"").toEqual([]);
   });
+
+  /* AND ONE COMPONENT DRAWS IT (code review, 2026-11-09): the settings card's
+     sub-page "<" was a hand copy of SheetBack's markup. */
+  it("draws the settings sub-page's \"<\" with SheetBack, not a copy of it", () => {
+    const settings = readFileSync(resolve(STYLES, "../components/SettingsPanel.tsx"), "utf8");
+    expect(settings).toMatch(/<SheetBack\b/);
+    expect(settings, "a hand-drawn chevron came back").not.toMatch(/m14 5-7 7 7 7/);
+  });
 });
 

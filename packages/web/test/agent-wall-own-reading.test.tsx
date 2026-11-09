@@ -602,7 +602,7 @@ it('shows every named agent, keeps their memory separate, and syncs Settings cha
   expect(world.audit().wallId).toBe('agent-another');
 
   expect(world.container.querySelector('.waka-settings-heading h2')?.textContent).toBe('third');
-  await act(async () => world.container.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-settings-heading [aria-label="Back"]')!.click());
   await act(async () => world.container.querySelector<HTMLButtonElement>('[data-agent-id="agent-another"]')!.click());
   const another = world.container.querySelector<HTMLInputElement>('.waka-agent-details input')!;
   await act(async () => { another.focus(); type(another, 'renamed'); another.blur(); });
@@ -611,7 +611,7 @@ it('shows every named agent, keeps their memory separate, and syncs Settings cha
   expect(face('renamed')?.getAttribute('aria-pressed')).toBe('true');
   expect(world.audit().wallId).toBe('agent-another');
 
-  await act(async () => world.container.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-settings-heading [aria-label="Back"]')!.click());
   const erase = async (name: string) => {
     await act(async () => world.container.querySelector<HTMLButtonElement>(`[aria-label="Settings for ${name}"]`)!.click());
     const button = world.container.querySelector<HTMLButtonElement>('[data-agent-delete]')!;

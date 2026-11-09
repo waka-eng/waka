@@ -89,8 +89,13 @@ export function PageBack({ label, onBack, navigationKey, belowCorners = false, v
  * the sheet's own top row, its name said to a screen reader. Escape still
  * closes the sheet through `DialogSurface`.
  */
-export function SheetBack({ label, onBack, disabled = false }: { label: string; onBack: () => void; disabled?: boolean }) {
-  return <button type="button" className="waka-sheet-back" disabled={disabled} onClick={onBack}>
+export function SheetBack({ label, onBack, disabled = false }: {
+  label: string;
+  /** May be async (a settings page that asks before it leaves); its result is not awaited here. */
+  onBack: () => void | Promise<unknown>;
+  disabled?: boolean;
+}) {
+  return <button type="button" className="waka-sheet-back" aria-label={label} disabled={disabled} onClick={() => { void onBack(); }}>
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg>
     <span className="sr-only">{label}</span>
   </button>;
