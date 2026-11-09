@@ -7364,12 +7364,13 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   background: color-mix(in srgb, var(--paper) 40%, transparent); color: var(--ink);
 }
 .waka-note-read {
-  display: flex; align-items: flex-start; gap: var(--sp-8); margin-top: var(--sp-12); padding: var(--sp-12) var(--sp-4) 0 var(--sp-14);
+  display: flex; align-items: flex-start; gap: var(--sp-8); margin: var(--sp-12) 0 var(--sp-16); padding: var(--sp-12) var(--sp-4) 0 var(--sp-14);
   border-left: 2px solid color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep));
 }
 .waka-note-read-body { flex: 1; min-width: 0; }
 .waka-note-read-label { margin: 0 0 var(--sp-4); color: var(--muted); font-size: var(--t-meta); }
 .waka-note-read-text { margin: 0; font-size: var(--t-input); line-height: 1.45; overflow-wrap: anywhere; }
+.waka-note-read .waka-note-retry { margin-top: var(--sp-4); padding-left: 0; }
 .waka-note-read-ask { margin: 0 0 var(--sp-4); font-size: var(--t-input); line-height: 1.45; }
 .waka-note-read-quiet { margin: 0; color: var(--muted); font-size: var(--t-ui); }
 .waka-note-read-fix { width: 100%; min-height: var(--sp-64); box-sizing: border-box; padding: var(--sp-8); border: 1px solid var(--line); border-radius: var(--sp-12); background: none; color: var(--ink); font: inherit; font-size: var(--t-input); }
@@ -7404,4 +7405,16 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
     padding-inline: max(var(--sp-16), env(safe-area-inset-left)) max(var(--sp-16), env(safe-area-inset-right));
   }
 }
+}
+
+@layer chrome {
+/* "{n} INSPIRATIONS" on the notepad: top-right, level with Close, a word in
+   the muted ink of the corners — never a filled button. */
+.waka-note-to-list {
+  position: fixed; z-index: 60; top: calc(var(--sp-12) + env(safe-area-inset-top)); right: max(var(--sp-16), env(safe-area-inset-right));
+  min-height: var(--waka-corner); padding: 0 var(--sp-8); border: 0; background: none;
+  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-meta); cursor: pointer;
+}
+.waka-note-to-list:hover, .waka-note-to-list:focus-visible { color: var(--ink); }
+body:has([aria-modal="true"], [role="menu"]) .waka-note-to-list { visibility: hidden; }
 }

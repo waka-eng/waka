@@ -879,5 +879,6 @@
   "worldReadWordsChanged": "These words changed while you were fixing them. Here they are now — check them and try again.",
   "worldReadWordsFixFailed": "Couldn't save that. Your line is still here — try again.",
   "worldReadWordsTypeLine": "Type the line",
-  "worldReadWordsLine": "The line that stuck"
+  "worldReadWordsLine": "The line that stuck",
+  "worldInspirationCount": "{count} {count, plural, one {inspiration} other {inspirations}}"
 }

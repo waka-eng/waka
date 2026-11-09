@@ -1098,3 +1098,23 @@ it('shows only owned profiles when a signed-in account has no agents', async () 
   expect([...world.container.querySelectorAll('.jar-char-face')].map(node => node.textContent?.trim())).toEqual([]);
   expect(world.container.textContent).not.toMatch(/Ouroboros maintainer|Course marketing/);
 });
+
+/* THE NOTEPAD'S DOOR TO EVERYTHING KEPT (founder, design/one-pill-dock): a
+   new note says how many saves there are and opens their list, keeping the
+   draft on the way out. */
+it('leads a new note to the list of saves by their count, and keeps the draft', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await act(async () => row('Write').click()); await settle();
+  const door = world.container.querySelector<HTMLButtonElement>('button.waka-note-to-list');
+  expect(door?.textContent, 'the notepad does not say how many saves there are').toMatch(/^\d+ inspirations?$/);
+  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'kept on the way out');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle();
+  await act(async () => door!.click()); await settle();
+  expect(open(), 'the door did not open the list of saves').toBe('saves');
+  expect(new URLSearchParams(location.search).get('compose'), 'the notepad is still up').toBeNull();
+  expect(world.container.querySelector('.waka-over-head .waka-over-new')?.textContent?.trim(), 'the draft was not kept').toBe('Continue draft');
+});

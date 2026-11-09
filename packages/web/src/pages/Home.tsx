@@ -3983,6 +3983,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
   /* AND THE RESTING LINE IS THE AGENT'S AT NOW, from `wallChromeNow`, for the
      same reason `agentSays` is not `chrome`: `chrome.formingAlt` is written
      an effect late and at the dial's T. */
+  /** How many saves this wall holds, for the notepad's door to them; null
+      while that is not known yet. */
+  const inspirationCount: number | null = standingAsAgent
+    ? standingBundle?.inspirationTotal ?? null
+    : inspirations ? inspirations.length + fieldBeyond : null;
   const agentIsEmpty = standingAsAgent && !agentBundleMissing && !agentSays && !standingBundle?.topOfMind.notes.length &&
     (standingBundle?.inspirationTotal === 0 || (standingBundle?.inspirationTotal === undefined && agentRoster?.find(profile => profile.id === atWall.id)?.hasInspirations === false));
   const restingWord = standingAsAgent
@@ -5241,13 +5246,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
     return null;
   };
   /** The way out that keeps the words: the page folds, the draft stays. */
-  const saveAsDraft = useCallback(() => {
+  const saveAsDraft = useCallback((then: () => void = () => viewNavigationRef.current.closeToHome()) => {
     if (preparingInspirationRef.current) {
       composerEpoch.current += 1; uploadController.current?.abort(); preparingInspirationRef.current = false;
       setPreparingInspiration(false); setUploadingMediaId(null);
     }
     setShareArrived(false);
-    void recording.stop().then(() => { setMouthOpen(false); setMouthNote(''); viewNavigationRef.current.closeToHome(); });
+    void recording.stop().then(() => { setMouthOpen(false); setMouthNote(''); then(); });
   }, [recording.stop]);
 
   const closePage = () => {
@@ -10388,7 +10393,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); }
             }
           }}
-          onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
+          onClose={() => saveAsDraft()} onSubmit={() => { void keepIt(); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
             sayProblem: sayMouthProblem }); }}
@@ -11583,6 +11588,18 @@ const RETRY_READ_LIMIT_MS = 20_000;
         <HomeStream locale={locale} inspirations={inspirations ?? []} signals={streamSignals(signals)} principles={principles}
           onClose={() => setStreamOpen(false)}
           onOpenSave={id => { setStreamOpen(false); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }} />
+      ) : null}
+      {/* ═══ "{n} INSPIRATIONS" — THE NOTEPAD'S DOOR TO EVERYTHING KEPT ═══
+          Founder (design/one-pill-dock, 845f3cec): a new note leads to the
+          full list of saves, and says how many there are — the count was
+          asked for by name, so it is printed. The draft is kept first, as
+          Close keeps it. Top-right, where nothing else stands while the
+          notepad is up; a word, never a filled button. */}
+      {phase === 'ready' && making === 'inspiration' && !viewNavigation.view?.sharePrinciple ? (
+        <button type="button" className="waka-note-to-list"
+          onClick={() => leaveAsModal(() => { listOrigin.current = null; saveAsDraft(() => openOverHome('saves')); })}>
+          {inspirationCount === null ? say('worldBackToAll') : formatMessage(locale, 'worldInspirationCount', { count: inspirationCount })}
+        </button>
       ) : null}
       {/* ═══ THE HOME BAR (design E1) ══════════════════════════════════════
           Write · Photo · Say it in one pill, Chat beside it — see
