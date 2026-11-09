@@ -23,7 +23,7 @@ export const correctedAttachment = sql<boolean>`(${attachments.type} IN ('audio'
 /* A label starts a line, or a sentence on the same line ("Words: … . Image:
    …"), in either order — the same rule as `readImageWords`. */
 const WORDS_MARK = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:'`);
-const IMAGE_PART = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:[[:space:]*_]*((?:(?!(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:).)*)'`);
+const IMAGE_PART = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:[[:blank:]*_]*((?:(?!(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:).)*)'`);
 /* THE IMAGE PART AFTER THE WORDS COMES FIRST — the same rule as
    `readImageScene`: from the FIRST Words label, the words run to the next
    Image label (straight after it when the words are empty, "Words: Image: …",
@@ -32,8 +32,12 @@ const IMAGE_PART = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:b
    "Words:" further down can never be read instead. Only when no Image label
    follows the words is the one before them used (code review, PR #464). */
 const SEP = String.raw`(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*`;
-const IMAGE_AFTER_WORDS = sql.raw(String.raw`'^(?:(?!${SEP}words[[:blank:]*_]*:).)*${SEP}words[[:blank:]*_]*:(?:[[:blank:]>#*_]*|(?:(?!${SEP}image[[:blank:]*_]*:).)*(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*)image[[:blank:]*_]*:[[:space:]*_]*(.*)$'`);
-const described = sql<string>`trim(regexp_replace(coalesce((regexp_match(${attachments.enrichmentText}, ${IMAGE_AFTER_WORDS}, 'i'))[1], (regexp_match(${attachments.enrichmentText}, ${IMAGE_PART}, 'i'))[1], ''), '[[:space:]*_]+$', ''))`;
+const IMAGE_AFTER_WORDS = sql.raw(String.raw`'^(?:(?!${SEP}words[[:blank:]*_]*:).)*${SEP}words[[:blank:]*_]*:(?:[[:blank:]>#*_]*|(?:(?!${SEP}image[[:blank:]*_]*:).)*(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*)image[[:blank:]*_]*:[[:blank:]*_]*(.*)$'`);
+/* The label's own line ends where the description starts: the patterns
+   above stop at blanks, not newlines, so an empty "Image:" right before a
+   "Words:" line still sees that label and ends there (code review, PR #464).
+   Whitespace and markdown around the description are trimmed here. */
+const described = sql<string>`trim(regexp_replace(coalesce((regexp_match(${attachments.enrichmentText}, ${IMAGE_AFTER_WORDS}, 'i'))[1], (regexp_match(${attachments.enrichmentText}, ${IMAGE_PART}, 'i'))[1], ''), '^[[:space:]*_]+|[[:space:]*_]+$', '', 'g'))`;
 const imagePart = sql<string>`CASE
   WHEN ${attachments.enrichmentStatus} <> 'ready' OR nullif(trim(coalesce(${attachments.enrichmentText},'')),'') IS NULL THEN ''
   WHEN ${attachments.enrichmentText} ~* ${WORDS_MARK}
