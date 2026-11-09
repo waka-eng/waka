@@ -23,7 +23,10 @@ export async function attachmentAnalysisState(db: Reader, row: Attachment, canEd
   const window = budget(row);
   const retryAfter = status !== 'ready' && status !== 'pending' && window.count >= MAX_ENRICHMENT_RETRIES
     ? new Date(window.windowAt.getTime() + ENRICHMENT_RETRY_WINDOW_MS).toISOString() : null;
-  return { status, retryAfter, canRetry: canEdit && row.type !== 'file' && !retryAfter && status !== 'pending' && status !== 'ready' };
+  /* An image whose words the owner gave is effectively ready: nothing a read
+     could add is shown, so no paid read is offered (code review, 2026-11-08). */
+  const given = row.type === 'image' && row.transcriptCorrection !== null;
+  return { status, retryAfter, canRetry: canEdit && row.type !== 'file' && !given && !retryAfter && status !== 'pending' && status !== 'ready' };
 }
 
 /** All recovery doors share the same atomic budget and job identity. */
@@ -43,7 +46,10 @@ export async function recoverAttachmentAnalysis(tx: Tx, input: {
   if (!current || current.type === 'file' || current.inspirationId !== snapshot.inspirationId || (input.expectedType && current.type !== input.expectedType)) return null;
   const [job] = await tx.select().from(backgroundJobs)
     .where(and(eq(backgroundJobs.profileId, current.profileId), eq(backgroundJobs.idempotencyKey, `enrich_attachment:${current.id}`))).for('update', { noWait: true });
-  if (current.enrichmentStatus === 'ready' || job?.status === 'pending') return current;
+  /* EFFECTIVELY READY: an image whose words the owner gave needs no read —
+     every reader uses their words — so no recovery door spends one on it. */
+  if (current.enrichmentStatus === 'ready' || job?.status === 'pending'
+    || (current.type === 'image' && current.transcriptCorrection !== null)) return current;
   if (job?.status === 'running') {
     const stale = !job.lockedAt || job.lockedAt.getTime() < Date.now() - STALE_LOCK_SECONDS * 1000;
     if (!stale || job.attempts < job.maxAttempts) return current;

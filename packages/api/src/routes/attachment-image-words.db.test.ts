@@ -137,6 +137,16 @@ it('does not spend a model read on an image whose words the owner already gave',
   await recoverInspirationProcessing(t.db as never, { profileId: f.profileId, inspirationId: f.sourceId });
   expect(await t.sql`SELECT id FROM background_jobs WHERE type='enrich_attachment'`).toHaveLength(0);
 });
+it('refuses a paid re-read, and offers none, once the owner has given the words', async () => {
+  const f = await fixture({ status: 'failed', text: null, reason: 'Image description transport failed' });
+  await f.edit('The line I remember');
+  expect(await (await f.app.request(f.path)).json()).toMatchObject({ status: 'ready', canRetry: false });
+  const response = await f.app.request(f.path + '/retry', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ code: 'words_given' });
+  expect(await t.sql`SELECT id FROM background_jobs WHERE type='enrich_attachment'`).toHaveLength(0);
+  expect((await t.sql`SELECT enrichment_retry_count FROM attachments WHERE id=${f.id}`)[0]?.enrichment_retry_count).toBe(0);
+});
 it('retries a failed read directly and bounds it by the shared budget', async () => {
   const f = await fixture({ status: 'failed', text: null, reason: 'Image description transport failed' });
   const retry = () => f.app.request(f.path + '/retry', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });

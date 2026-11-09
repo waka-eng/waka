@@ -129,6 +129,9 @@ export function createAttachmentTranscriptRoutes(getDatabase: typeof getDb) {
     const allowed = await access(c, 'write', 'image');
     if (allowed instanceof Response) return allowed;
     if (!z.object({}).strict().safeParse(await c.req.json().catch(() => null)).success) return c.json({ error: 'Invalid retry request' }, 400);
+    /* The owner already gave the words: a read could change nothing shown,
+       so it is refused rather than paid for (code review, 2026-11-08). */
+    if (allowed.row.transcriptCorrection !== null) return c.json({ error: 'You already gave the words for this image.', code: 'words_given' }, 409);
     const saved = await getDatabase().transaction(tx => recoverAttachmentAnalysis(tx, { profileId: allowed.row.profileId,
       attachmentId: allowed.row.id, expectedType: 'image' }));
     if (!saved || saved === 'conflict') return c.json({ error: 'Image not found' }, 404);
