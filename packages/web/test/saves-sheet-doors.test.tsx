@@ -88,6 +88,15 @@ it('searches what you kept from the top of the sheet, with the archive\'s own se
   await settle();
   expect(query('open')).toBe('saves');
   expect(query('note'), 'the result did not open its own page').toBe('near');
+
+  /* AND ITS "<" COMES BACK TO THE SHEET, on the same query: a save found on
+     the sheet never steps back to a list the person did not come from. */
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click()); await settle();
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 260)); }); await settle();
+  expect(query('open'), 'the "<" landed on the list of saves').toBeNull();
+  const back = world!.container.querySelector('.waka-stream');
+  expect(back, 'the sheet is not back').toBeTruthy();
+  expect(back!.querySelector<HTMLInputElement>('.waka-stream-find input[type="search"]')?.value, 'the query was dropped').toBe('quiet');
 });
 
 it('opens Principles from the sheet\'s "Principles ›", the walk View principles took', async () => {

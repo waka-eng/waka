@@ -2183,6 +2183,10 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const listing = !making && (viewNavigation.view?.open === 'saves' || viewNavigation.view?.open === 'conversations');
   /** Where a list was opened from by the bar's "All …", so ↩ can go back there (see the dock). */
   const listOrigin = useRef<{ kind: 'chat'; id: string; principleId?: string | null } | null>(null);
+  /* A SAVE OPENED FROM THE SHEET goes back to the sheet by its "<", on the
+     query it was found under; it never lands on a list it did not come from. */
+  const noteFromSheet = useRef<{ query: string } | null>(null);
+  const [sheetQuery, setSheetQuery] = useState('');
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
   const [principlesCrossing, setPrinciplesCrossing] = useState<{ going: 'in' | 'out'; home: CreatureSpot | null } | null>(null);
   if (crossSeen.open !== principlesOpen || crossSeen.now !== atNowView) {
@@ -5279,6 +5283,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
   };
 
   const backPage = () => {
+    const fromSheet = noteFromSheet.current;
+    noteFromSheet.current = null;
+    if (fromSheet && savedNoteOpen) { leaveOpen(); setSheetQuery(fromSheet.query); setStreamOpen(true); return; }
     const close = closeSavedNote.current;
     if (close) { close(); return; }
     if (making === 'inspiration') { saveAsDraft(); return; }
@@ -7759,6 +7766,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
      Principles are read for it once per profile, the same GET their own
      page makes. */
   const [streamOpen, setStreamOpen] = useState(false);
+  /* Left the sheet's save some other way: its "<" is the list's again. */
+  useEffect(() => { if (!savedNoteOpen) noteFromSheet.current = null; }, [savedNoteOpen]);
   const streamShown = streamOpen && phase === 'ready' && atNowView && !reviewing && !mouthOpen && atWall.kind === 'self';
   useEffect(() => { if (!atNowView || reviewing) setStreamOpen(false); }, [atNowView, reviewing]);
   useEffect(() => {
@@ -11656,7 +11665,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
           the corner is what returns from it, as it does from the lists. */}
       {phase === 'ready' && (listing || making || principlesOpen) && !viewNavigation.view?.sharePrinciple ? <PageBack
         navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making !== null || listing || principlesOpen}
-        belowCorners={(listing || principlesOpen) && !savedNoteOpen}
+        /* A LIST'S "‹ HOME" STANDS IN THE TOP ROW, as "⌄ Home" does over
+           the sheet — unless the row's left end is the profile switcher,
+           which says whose list this is; then it steps under it. */
+        belowCorners={(principlesOpen || (listing && Boolean(agentWall))) && !savedNoteOpen}
         /* ONE HEADER GRAMMAR (founder, 2026-11-08): a note being written, a
            saved note and a chat each leave by an unboxed "<" in the top-left,
            inline with the page's own row; a list keeps its word ("‹ Home").
@@ -11664,7 +11676,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            closing this like how it does for the saving"); Past chats moved
            to the top-right. */
         glyphOnly={making !== null || savedNoteOpen}
-        label={say(savedNoteOpen ? 'worldBackToAll' : making !== null ? 'worldClose' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
+        label={say(savedNoteOpen ? (noteFromSheet.current ? 'worldBackHome' : 'worldBackToAll') : making !== null ? 'worldClose' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
       {/* PAST CHATS, TOP-RIGHT ON A CHAT — a quiet word at the corners' height,
           like home's Actions, opening the list of chats. */}
       {phase === 'ready' && making === 'talk' && !viewNavigation.view?.sharePrinciple ? (
@@ -11682,8 +11694,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
              sheet is not an address, so the page still stands on Now and
              the creature crosses as it does from the bubble. */
           onOpenPrinciples={() => { setStreamOpen(false); toPrinciples(); }}
-          onClose={() => setStreamOpen(false)}
-          onOpenSave={id => { setStreamOpen(false); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }}
+          onClose={() => { setSheetQuery(''); setStreamOpen(false); }}
+          initialQuery={sheetQuery}
+          onOpenSave={(id, query) => { noteFromSheet.current = { query }; setStreamOpen(false); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }}
           more={fieldBeyond > 0 ? { onSeeAll: () => { setStreamOpen(false); listOrigin.current = null; openOverHome('saves'); } } : undefined} />
       ) : null}
       {/* "{n} INSPIRATIONS" LEFT THE NOTEPAD (founder, 2026-11-08: "i also dont
@@ -11877,8 +11890,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
              relative to the top right buttons." It sat centred under the
              row; now it is the row's left end, unboxed, on the icons'
              centre line. The chevron points the way the sheet goes. */
-          <button type="button" className="waka-stream-home" aria-expanded="true" onClick={() => setStreamOpen(false)}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+          <button type="button" className="waka-stream-home" aria-expanded="true" onClick={() => { setSheetQuery(''); setStreamOpen(false); }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
               strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" /></svg>
             <span>{say('worldBackHome')}</span>
           </button>

@@ -7305,7 +7305,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    corner icons' 44px height so the word and the glyphs share a centre line. */
 .waka-stream-home {
   pointer-events: auto; flex: none; display: inline-flex; align-items: center; gap: var(--sp-4);
-  height: var(--waka-corner); padding: 0 var(--sp-4) 0 0; border: 0; background: none;
+  height: var(--waka-corner); padding: 0 var(--sp-6); border: 0; background: none;
   color: var(--muted); font-family: var(--waka-face); font-size: var(--t-meta); cursor: pointer;
 }
 .waka-stream-home:hover, .waka-stream-home:focus-visible { color: var(--ink); }

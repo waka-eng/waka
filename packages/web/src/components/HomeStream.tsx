@@ -67,7 +67,10 @@ export function HomeStream(props: {
   inspirations: readonly Inspiration[];
   signals: readonly Signal[];
   principles: readonly ApiPrinciple[];
-  onOpenSave: (id: string) => void;
+  /** A save's own page; the query on at the press, so "<" can come back to it. */
+  onOpenSave: (id: string, query: string) => void;
+  /** The query to stand on when the sheet comes back from a save it opened. */
+  initialQuery?: string;
   onClose: () => void;
   /** Whose archive the field searches; null searches the signed-in default. */
   profileId: string | null;
@@ -81,14 +84,14 @@ export function HomeStream(props: {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const saves = [...props.inspirations].sort((a, b) => b.capturedMs - a.capturedMs);
   const principles = [...props.principles].sort((a, b) => a.rank - b.rank);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(props.initialQuery ?? '');
   const [memory] = useState(createListViewState);
   const needle = query.trim();
   const search = useArchiveSearch(props.profileId, needle ? needle : null, null, memory);
   const saveRow = (row: Inspiration) => {
     const source = sourceKey(row);
     return <li key={row.id}>
-      <button type="button" className="waka-stream-save" onClick={() => props.onOpenSave(row.id)}>
+      <button type="button" className="waka-stream-save" onClick={() => props.onOpenSave(row.id, query)}>
         <time className="waka-stream-meta" dateTime={new Date(row.capturedMs).toISOString()}>
           {source ? formatMessage(props.locale, source, { date: dayWords(row.capturedMs, props.locale) }) : dayWords(row.capturedMs, props.locale)}
         </time>
