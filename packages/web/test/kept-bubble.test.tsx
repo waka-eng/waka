@@ -8,9 +8,12 @@
  * abandoned before the server could land it.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): `lib/data` (the three layers, the seam
- * `render-home` names), `lib/api`'s save and the verbs a mounted world asks
- * for on boot, principles and the conversation list — the world outside the
- * page. The page, its timers and the save pipeline are the shipped ones.
+ * `helpers/render-home` names), `lib/api`'s save and the verbs a mounted world
+ * asks for on boot, `lib/api/principles` and `lib/api/conversations` (the
+ * reads a mounted world makes), `lib/auth-context` (a signed-in owner, so the
+ * save has a scope), `indexedDB` (fake-indexeddb, the draft store) and the
+ * canvas (`helpers/canvas-stub`) — the world outside the page. The page, its
+ * timers and the save pipeline are the shipped ones.
  */
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
