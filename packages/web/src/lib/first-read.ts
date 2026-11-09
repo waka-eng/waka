@@ -75,6 +75,11 @@ async function pastDerivation(profileId: string, inspirationId: string, deps: Fi
 }
 
 async function runFirstRead(profileId: string, inspirationIds: string[], deps: FirstReadDeps): Promise<string | null> {
+  /* NO ANSWERS NAMED, NO READ ASKED FOR. Waiting on derivation is what makes
+     the read cover all three; with nothing to wait on, a refresh now would
+     read too early and take the one manual pass. Home's own reading picks
+     up the automatic one when the answers' signals land. */
+  if (!inspirationIds.length) return null;
   const until = deps.now() + OUTER_LIMIT_MS;
   for (const id of inspirationIds) await pastDerivation(profileId, id, deps, until);
   const receipt = await deps.refresh();

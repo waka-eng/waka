@@ -90,6 +90,9 @@ function safeRedirect(from: unknown): string {
 
 /** How long the reading screen waits before letting the person in anyway. */
 export const FIRST_READ_PATIENCE_MS = 20_000;
+/** Listing the three answers, before the read can wait on them. */
+const ANSWER_TRIES = 3;
+const ANSWER_RETRY_MS = 1000;
 /** The fade from the last onboarding screen into home. */
 const LEAVE_FADE_MS = 250;
 
@@ -197,7 +200,11 @@ export default function OnboardingPage(): JSX.Element {
     }
     void (async () => {
       let known = answers;
-      if (known.length < ONBOARDING_QUESTIONS) {
+      /* THE ANSWERS, NAMED — tried a few times, because the read waits on
+         each of them; without them it is never asked for (see
+         `requestFirstRead`) and the screen simply waits out its patience. */
+      for (let attempt = 0; known.length < ONBOARDING_QUESTIONS && attempt < ANSWER_TRIES && live; attempt += 1) {
+        if (attempt) await new Promise((resolve) => window.setTimeout(resolve, ANSWER_RETRY_MS));
         try {
           const page = await fetchInspirationPage({ profile: profileId, limit: ONBOARDING_QUESTIONS });
           known = page.inspirations.slice(0, ONBOARDING_QUESTIONS).reverse().map((row) => ({
@@ -206,7 +213,9 @@ export default function OnboardingPage(): JSX.Element {
           if (live) setAnswers(known);
         } catch { known = []; }
       }
-      const reading = await withinBudget(requestFirstRead(profileId, known.map((row) => row.id)), FIRST_READ_PATIENCE_MS);
+      if (!live) return;
+      const ids = known.map((row) => row.id);
+      const reading = await withinBudget(ids.length ? requestFirstRead(profileId, ids) : new Promise<string | null>(() => {}), FIRST_READ_PATIENCE_MS);
       if (!live) return;
       if (reading) setPhase({ kind: "reveal", reading });
       else void finish(safeRedirect(state?.from));

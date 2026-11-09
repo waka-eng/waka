@@ -130,3 +130,18 @@ describe("the first read", () => {
     await expect(raced).resolves.toBeNull();
   });
 });
+
+describe("the first read without its answers", () => {
+  it("never asks for a read when it cannot name the answers to wait on", async () => {
+    const deps: FirstReadDeps = {
+      processing: vi.fn(),
+      refresh: vi.fn(async () => ({ jobId: "job", requestVersion: "1" })),
+      refreshStatus: vi.fn(),
+      current: vi.fn(),
+      wait: async () => {},
+      now: () => 0,
+    };
+    await expect(requestFirstRead("profile-empty", [], deps)).resolves.toBeNull();
+    expect(deps.refresh).not.toHaveBeenCalled();
+  });
+});

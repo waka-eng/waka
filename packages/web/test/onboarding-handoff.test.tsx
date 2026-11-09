@@ -144,7 +144,7 @@ beforeEach(() => {
   vi.mocked(fetchCurrentViewer).mockResolvedValue(viewer());
   vi.mocked(updateAuthProfile).mockImplementation(async (input) => viewer({ done: input.completeOnboarding ? "2026-11-08T00:00:00.000Z" : null }));
   vi.mocked(fetchInspirationSnapshot).mockImplementation(async () => ({ profileId: "prof-1", total: saved, fingerprint: null }));
-  vi.mocked(fetchInspirationPage).mockResolvedValue({ inspirations: [] });
+  vi.mocked(fetchInspirationPage).mockResolvedValue({ inspirations: [3, 2, 1].map((n) => ({ id: `insp-${n}`, textPreview: `Answer ${n}`, attachmentSummary: [] })) as never });
   vi.mocked(createInspiration).mockImplementation(async (input) => {
     saved += 1;
     return { id: `insp-${saved}`, profileId: "prof-1", text: input.text, kind: "note", source: "app" } as never;

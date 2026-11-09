@@ -153,7 +153,7 @@ beforeEach(() => {
     return current;
   });
   vi.mocked(fetchInspirationSnapshot).mockImplementation(async () => ({ profileId: "prof-1", total: saved, fingerprint: null }));
-  vi.mocked(fetchInspirationPage).mockResolvedValue({ inspirations: [] });
+  vi.mocked(fetchInspirationPage).mockResolvedValue({ inspirations: [3, 2, 1].map((n) => ({ id: `insp-${n}`, textPreview: `Answer ${n}`, attachmentSummary: [] })) as never });
   let uploads = 0;
   vi.mocked(presignAttachment).mockImplementation(async () => { uploads += 1; return { uploadUrl: "https://bucket.invalid/put", key: `key-${uploads}`, headers: {}, profileId: "prof-1" } as never; });
   vi.mocked(uploadToPresignedUrl).mockResolvedValue(undefined);
@@ -266,5 +266,26 @@ describe("a nameless profile that has already answered", () => {
     await act(async () => { page.querySelector("form")!.requestSubmit(); });
     await flush();
     expect(page.textContent).toContain("Share something you want more of in your life.");
+  });
+});
+
+describe("the read, when the answers cannot be listed at first", () => {
+  it("tries again for them, and asks for the read only with them in hand", async () => {
+    saved = 3;
+    vi.mocked(fetchInspirationPage)
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ inspirations: [3, 2, 1].map((n) => ({ id: `insp-${n}`, textPreview: `Answer ${n}`, attachmentSummary: [] })) as never });
+    await render();
+    await settle(1500);
+    expect(vi.mocked(fetchInspirationPage)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(requestFirstRead)).toHaveBeenCalledWith("prof-1", ["insp-1", "insp-2", "insp-3"]);
+  });
+
+  it("does not ask for a read at all when they never come", async () => {
+    saved = 3;
+    vi.mocked(fetchInspirationPage).mockRejectedValue(new Error("offline"));
+    await render();
+    await settle(3500);
+    expect(vi.mocked(requestFirstRead)).not.toHaveBeenCalled();
   });
 });
