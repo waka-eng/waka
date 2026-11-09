@@ -70,7 +70,7 @@ describe("a quiet control's own rule wins over its container's", () => {
      its blanket button rules must lose to the "<"'s own. */
   it("draws every surface's \"<\" the same, whatever surface it sits in", () => {
     const CONTAINERS = ["jar-inspiration-search", "waka-reading-full", "jar-reading-comparison", "waka-stream", "waka-over",
-      "jar-principle-share", "jar-thing-share", "jar-seek", "jar-prov-room", "waka-account", "waka-settings-heading", "waka-settings", "login-shell"];
+      "jar-principle-share", "jar-thing-share", "jar-seek", "jar-prov-room", "waka-account", "waka-settings", "login-shell"];
     const rules = selectors();
     const own = rules.filter(({ selector }) => /^[^ ]*\.waka-surface-back(?![\w-])[^ ]*$/.test(selector) && !/:hover|:focus|:disabled/.test(selector));
     expect(own.length, "no rule draws the sheet's \"<\"").toBeGreaterThan(0);

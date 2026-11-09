@@ -86,8 +86,9 @@ describe('the "<" is one glyph, named by what it does', () => {
       if (/login-shell|waka-surface-strip/.test(selector!)) continue;
       expect(body, `${selector!.trim()} takes the header out of its surface's flow`).not.toMatch(/position:\s*(fixed|absolute)/);
     }
-    const head = rules.find(([, selector]) => selector!.trim() === '.waka-surface-head')![2]!;
+    const head = rules.find(([, selector]) => selector!.trim() === '.waka-surface-head:is(.waka-surface-head, #waka-surface-head)')![2]!;
     expect(head).toMatch(/height:\s*var\(--waka-corner\)/);
+    expect(head).toMatch(/display:\s*grid/);
   });
 });
 

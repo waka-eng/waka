@@ -281,7 +281,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 
   return (
     <div ref={panel} className="waka-settings" role="group" aria-label={say("worldSettingsOpen")}>
-      <SurfaceHeader locale={props.locale} className="waka-settings-heading"
+      <SurfaceHeader locale={props.locale}
         back={{ kind: open === null ? "close" : "back", onBack: stepUp }}
         titleRef={heading}
         title={connectionProfile?.name ?? say(open === "agents" ? "profileAgentProfilesTitle"

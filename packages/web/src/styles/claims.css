@@ -5518,31 +5518,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   min-height: 0;
 }
 
-.waka-settings .waka-settings-heading {
-  flex: 0 0 auto;
-  min-height: var(--waka-corner);
-  justify-content: flex-start;
-  align-items: center;
-  padding-right: 60px;
-  gap: var(--sp-8);
-  color: var(--ink);
-}
-
-.waka-settings-heading h2 {
-  margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: var(--t-body);
-  font-weight: 500;
-}
-
-.waka-settings-heading button {
-  flex-shrink: 0;
-  width: var(--waka-corner);
-  min-height: var(--waka-corner);
-  text-align: center;
-}
-
 .waka-settings-content {
   display: flex;
   flex-direction: column;
@@ -7115,7 +7090,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   /* It stops above the home bar rather than running under it: the bar is
      not drawn over words you are reading. */
   bottom: calc(var(--sp-28) + var(--sp-64) + var(--sp-8) + env(safe-area-inset-bottom));
-  top: calc(var(--waka-corner) + var(--sp-20) + env(safe-area-inset-top));
+  /* To the top of the screen: its own header is the top row (nav system),
+     12px under the safe area, as on every page. */
+  top: 0; padding-top: calc(var(--sp-12) + env(safe-area-inset-top)); box-sizing: border-box;
   display: flex; flex-direction: column; align-items: center;
   background: var(--paper); color: var(--ink); font-family: var(--waka-face);
 }
@@ -7501,10 +7478,15 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
    sheet "<" used before this; no element carries that id). */
 .waka-surface-head {
   position: relative; flex: none; box-sizing: border-box;
-  display: grid; grid-template-columns: minmax(var(--waka-corner), 1fr) minmax(0, max-content) minmax(var(--waka-corner), 1fr);
-  align-items: center; column-gap: var(--sp-8);
-  width: 100%; height: var(--waka-corner); min-height: var(--waka-corner); margin: 0; padding: 0;
+  width: 100%; margin: 0; padding: 0;
   color: var(--ink); font-family: var(--waka-face); pointer-events: auto;
+}
+/* THE GRID ITSELF WINS OVER ANY SHEET'S `header` RULE (the settings card's
+   made it a flex row and pushed the title to the right). */
+.waka-surface-head:is(.waka-surface-head, #waka-surface-head) {
+  display: grid; grid-template-columns: minmax(var(--waka-corner), 1fr) minmax(0, max-content) minmax(var(--waka-corner), 1fr);
+  align-items: center; justify-content: stretch; column-gap: var(--sp-8);
+  height: var(--waka-corner); min-height: var(--waka-corner);
 }
 .waka-surface-back:is(.waka-surface-back, #waka-surface-head) {
   grid-column: 1; justify-self: start;
@@ -7567,7 +7549,13 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
    for a modal, the account card or a menu laid over the sky or the cards. */
 body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip { visibility: hidden; }
 
-/* THE KEPT SHEET'S HEADER sits above its field, on the sheet's own column. */
+/* EVERY HEADER STANDS AT THE SAME HEIGHT: 12px under the safe area, on every
+   page and sheet that fills the screen (measured at 390: lists and
+   Principles sat 24px lower than the notes, under the page's own top pad). */
+.waka-over:has(> .waka-surface-head:first-child) { padding-top: 0; }
+/* The count is part of the title's one line: "Kept (36)". */
+.waka-surface-title .waka-over-count { display: inline; margin: 0; font: inherit; color: inherit; }
+
 .waka-stream > .waka-surface-head { width: min(36rem, 100%); padding-inline: var(--sp-16); }
 
 /* A SHEET'S HEADER is its first row on the sheet's own padding. */
@@ -7610,7 +7598,19 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
    a saved note writes into the same `NoteBar`, small and centred at the foot
    of the page, on the page's own ground. */
 .waka-over--note .waka-over-one > .waka-note-bar--saved {
-  margin-top: auto; margin-bottom: calc(var(--sp-16) + env(safe-area-inset-bottom)); align-self: center;
+  /* 28px off the floor, as the notepad's pill stands (measured at 390:
+     the notepad's bar ends at 816 of 844; the saved note's at 792 before). */
+  margin-top: auto; margin-bottom: calc(var(--sp-28) + env(safe-area-inset-bottom)); align-self: center;
 }
+.waka-over.waka-over--note { max-height: none; }
 .waka-page.waka-page--note { padding-bottom: 0; }
+}
+
+@layer chrome {
+/* ═══ A CORNER'S CARD IS A SHEET: ITS HEADER OWNS THE TOP ROW (nav system R6) ═══
+   The info card and settings hang from the corner; while one is open it
+   rises over the corner row, and the i and the cog stand down under it, so
+   the screen's top row is the card's own "<", as on every sheet. */
+.waka-corners:has(.waka-account) .waka-corner-place > .waka-corner { visibility: hidden; }
+.waka-corner-place > .waka-account { top: 0; }
 }
