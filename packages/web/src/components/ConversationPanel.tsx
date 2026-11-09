@@ -697,7 +697,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       {focusFailed?<p className="chat-notice" role="alert">{say('worldPrincipleUnavailable')} <button type="button" onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button></p>:null}
       <div className="jar-conversation-body chat-scroll" ref={body} onScroll={()=>{const node=body.current;if(!node)return;nearBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80;try{sessionStorage.setItem(scrollKey,JSON.stringify({top:node.scrollTop,nearBottom:nearBottom.current,...(conversationRef.current?.messageWindowStart!==undefined?{messageWindowStart:conversationRef.current.messageWindowStart}:{})}));}catch{/* The transcript remains available. */}}}>
         <div className="chat-transcript">
-          {profile?<p className="chat-profile">{formatMessage(locale,'worldProfileMemory',{name:profile.name})}</p>:null}
+          {/* WHOSE MEMORY THIS CHAT READS is said once, by the creature's line in
+              the empty chat ("This chat only uses what {name} kept"); the
+              "What {name} kept" line over it said the same thing again. */}
           {/* The transcript's own top edge, not a feature beside it: a window
               of thirty messages that cannot reach the thirty before it is a
               transcript with its beginning cut off. */}

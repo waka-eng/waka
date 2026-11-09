@@ -2743,6 +2743,9 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const conversationProfile = conversationScope?.profileId === storageScope?.profileId
     ? { name: auth?.profile?.name ?? say('worldWallMe'), type: 'human' as const }
     : conversationAgent ? { name: conversationAgent.name, type: 'agent' as const } : null;
+  /** Whether this wall takes a new note: yours, or an agent profile your account owns. */
+  const canWriteHere = atWall.kind === 'self' ? true
+    : Boolean(agentRoster?.some(profile => profile.id === atWall.id) && conversationAgent?.id === atWall.id);
   const wallsRef = useRef<Space[]>([]);
   wallsRef.current = walls;
   const agentsRef = useRef<AgentBundle[]>([]);
@@ -7861,7 +7864,19 @@ const RETRY_READ_LIMIT_MS = 20_000;
      page makes. */
   const [streamOpen, setStreamOpen] = useState(false);
   /* Left the sheet's save some other way: its "<" is the list's again. */
-  useEffect(() => { if (!savedNoteOpen) noteFromSheet.current = null; }, [savedNoteOpen]);
+  /* AND THE BROWSER'S BACK DOES WHAT ITS "<" DOES (nav system R3): a note
+     opened from the sheet that is left by a history step (browser Back,
+     Android's back through history) and lands on home brings the sheet
+     back up on its query, exactly as the note's "<" does. The "<" itself
+     clears `noteFromSheet` before it leaves, so it never comes through here. */
+  const noteWasOpen = useRef(false);
+  useEffect(() => {
+    const was = noteWasOpen.current; noteWasOpen.current = savedNoteOpen;
+    if (savedNoteOpen || !was) return;
+    const fromSheet = noteFromSheet.current;
+    noteFromSheet.current = null;
+    if (fromSheet && atNowView && !reviewing) { setSheetQuery(fromSheet.query); setStreamOpen(true); }
+  }, [savedNoteOpen, atNowView, reviewing]);
   const streamShown = streamOpen && phase === 'ready' && atNowView && !reviewing && !mouthOpen && atWall.kind === 'self';
   /* ═══ THE CORNERS ARE HOME'S, AND ONLY HOME'S (nav system R6) ═══════════
      Me / My agent top-left, i and settings top-right, stand on Now and the
@@ -11789,9 +11804,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
           chat write into the one `NoteBar`. */}
       {phase === 'ready' && atNowView && !reviewing && !savedNoteOpen && !viewNavigation.view?.sharePrinciple ? (
         <HomeBar locale={locale}
-          /* NEVER ON THE AGENT: "you cannot add inspiration for the agent
-             mode" (founder, 2026-10-15). Only Chat stands there. */
-          save={standingAsAgent ? undefined : {
+          /* THE SAME PILL ON AN AGENT'S WALL, saving into the agent (nav
+             system: the Kept list's "Keep a thought" was the web's one way
+             to keep into an agent, and it went for this). Drawn only where
+             you may write: your own wall, or an agent profile you own (the
+             roster is your account's owned agents); a wall whose owner is
+             not one of those gets no pill. The notepad then reads
+             "Saving to {agent} · {date}". */
+          save={!canWriteHere ? undefined : {
             onWrite: startNewInspiration,
             onPhotos: screenshotIntoNewNote,
             onSay: sayIntoNewNote,

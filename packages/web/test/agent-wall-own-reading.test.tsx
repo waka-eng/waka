@@ -22,7 +22,7 @@ import { useLocation } from 'react-router-dom';
 import type { ApiOwnedProfile } from '../src/lib/api/profiles';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressDockRow, closeOverlay, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { mountWorld, dataMockFrom, apiMockFrom, chooseFromMenu, pressDockRow, closeOverlay, homeBarShape, pressHomeBar, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { ApiError, createInspiration, fetchPrinciples, updatePrinciple } from '../src/lib/api';
 import { fetchPrincipleRead } from '../src/lib/api/principles';
 import { loadInspirations, loadSignals, loadTopOfMind } from '../src/lib/data';
@@ -651,7 +651,7 @@ it('isolates each agent’s inspirations, chat list, transcript, and chat URL', 
     expect(world.audit().wallId, 'closing inspirations must preserve its agent').toBe(`agent-${name}`);
     await pressDockRow(world.container, 'New chat'); await settle();
     expect(new URLSearchParams(location!.search).get('profile')).toBe(`agent-${name}`);
-    expect(world.container.querySelector('.chat-profile')?.textContent).toContain(name);
+    expect(world.container.querySelector('.chat-transcript')?.textContent, 'the chat does not say whose memory it reads').toContain(`only uses what ${name} kept`);
     expect(world.container.querySelector('.chat-with')).toBeNull();
     expect(listConversations).toHaveBeenLastCalledWith(`agent-${name}`,expect.any(AbortSignal));
     expect(world.container.querySelector('.chat-transcript')?.textContent).not.toContain('Only noah chat');
@@ -679,17 +679,35 @@ it('isolates each agent’s inspirations, chat list, transcript, and chat URL', 
 
 });
 
-/* AN AGENT'S ARCHIVE WRITES NOTHING NEW FROM HERE (nav system, founder:
-   remove "Keep a thought" from the Kept list's top right; the home bar's
-   pill writes, and an agent's wall has no pill, "you cannot add inspiration
-   for the agent mode"). Its header is "<" and its name, nothing on the right. */
-it('gives an agent\'s archive no Keep a thought: its header is the "<" and whose it is', async () => {
+/* KEEP A THOUGHT ON AN AGENT'S WALL LANDS IN THE AGENT (nav system): the home
+   bar's pill stands on an agent wall you own, the notepad says whose it is
+   saving to, and the note is the agent's, never yours or another agent's.
+   The Kept list carries no "Keep a thought" of its own any more. */
+it('keeps a thought from the agent wall\'s home bar into that agent, not into you or another agent', async () => {
   PROFILES.rows = ['noah','another'].map((name,i)=>({id:`agent-${name}`,accountId:'account-1',name,type:'agent',avatarUrl:null,preferredLocale:'en-US',createdAt:`2026-10-0${i+1}T00:00:00Z`}));
   world=await mountWorld(FACTS); await settle();
   await act(async()=>face('noah')!.click()); await settle();
-  await pressDockRow(world.container,'Inspirations'); await settle();
-  expect(world.container.querySelector('.waka-over-new'), 'the agent archive grew a Keep a thought').toBeNull();
-  expect(world.container.querySelector('.waka-surface-title')?.textContent).toMatch(/^What noah kept/);
+  expect(homeBarShape(world.container), 'the agent wall has no pill to keep with').toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
+  await pressHomeBar(world.container, 'Keep a thought'); await settle();
+  expect(world.container.querySelector('.jar-inspiration-composer .waka-surface-title')?.textContent).toMatch(/^Saving to noah · /);
+  const area=world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
+  await act(async()=>{
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,'A new Noah observation');
+    area.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  await act(async()=>world.container.querySelector<HTMLButtonElement>('button.waka-dock-save')!.click()); await settle();
+  expect(createInspiration).toHaveBeenCalledWith(expect.objectContaining({text:'A new Noah observation'}),expect.objectContaining({profile:'agent-noah'}));
+  expect(CAPTURES.rows.map(row=>row.profileId)).toEqual(['agent-noah']);
+  await chooseFromMenu(world.container,'Inspirations'); await settle();
+  expect(world.container.querySelector('.waka-over[data-jar-surface]')?.textContent).toContain('A new Noah observation');
+  expect(world.container.querySelector('.waka-over-new'), 'the Kept list grew its own Keep a thought again').toBeNull();
+  await closeOverlay(world.container); await settle();
+  for(const name of ['another','Me']){
+    await act(async()=>face(name)!.click()); await settle();
+    await chooseFromMenu(world.container,'Inspirations'); await settle();
+    expect(world.container.querySelector('.waka-over[data-jar-surface]')?.textContent).not.toContain('A new Noah observation');
+    await closeOverlay(world.container); await settle();
+  }
 });
 
 

@@ -128,8 +128,8 @@ it('opens straight into the words, under the moment and the way back',async()=>{
   expect(props.onClose).not.toHaveBeenCalled();
   /* The one fact a blank page can state. Not asserted to an exact string —
      it is the clock — but it must be a real stamp rather than an empty node,
-     which is what a missing `momentStamp` would leave behind. */
-  expect(host.querySelector('.waka-surface-title')?.textContent).toMatch(/\d{4}/);
+     which is what a missing `noteStamp` would leave behind. */
+  expect(host.querySelector('.waka-surface-title')?.textContent).toMatch(/\d{1,2}:\d{2}/);
   expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('Keep a thought');
   expect(document.activeElement).toBe(host.querySelector('textarea'));
   expect(props.onSubmit).not.toHaveBeenCalled();

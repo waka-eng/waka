@@ -590,15 +590,16 @@ export async function pressSheetDoor(container: HTMLElement, label: string): Pro
     sheet's "Saves ›" on your own wall; on an agent's, the pull itself. */
 async function openArchive(container: HTMLElement): Promise<void> {
   if (!container.querySelector(".waka-home-bar") && !container.querySelector(".waka-stream")) await closeOverlay(container);
-  if (!container.querySelector(".waka-home-bar-pill")) {
-    for (let turn = 0; turn < 40; turn += 1) {
-      const pull = container.querySelector<HTMLButtonElement>(".waka-home-bar-pull");
-      if (pull) { await act(async () => pull.click()); return; }
-      await act(async () => { await Promise.resolve(); });
-    }
-    throw new Error("an agent's wall offers no Saves ⌃ to its archive");
+  /* The pull: your own wall raises the Kept sheet (then its "Kept ›"); an
+     agent's wall opens the agent's archive itself. Both walls draw the pill. */
+  for (let turn = 0; turn < 40; turn += 1) {
+    if (container.querySelector(".waka-over--archive")) return;
+    if (container.querySelector(".waka-stream")) { await pressSheetDoor(container, "Kept"); return; }
+    const pull = container.querySelector<HTMLButtonElement>(".waka-home-bar-pull");
+    if (pull) await act(async () => pull.click());
+    else await act(async () => { await Promise.resolve(); });
   }
-  await pressSheetDoor(container, "Kept");
+  throw new Error("the home bar's pull opened neither the Kept sheet nor an archive");
 }
 /* BY ACCESSIBLE NAME, which is what a person navigating by voice or by
    screen reader would say out loud. */

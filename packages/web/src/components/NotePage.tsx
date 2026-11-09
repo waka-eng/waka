@@ -51,7 +51,7 @@
  */
 import type { ReactNode } from "react";
 
-import { momentStamp } from "../lib/words";
+import { noteStamp } from "../lib/words";
 import type { SupportedLocale } from "../lib/locales";
 import { SurfaceHeader, type SurfaceBack } from "./SurfaceHeader";
 
@@ -72,7 +72,7 @@ export interface NotePageProps {
 
 /** THE HEADER IS THE SHARED ONE (nav system): "<", the owner and the moment centred, the "⋯". */
 export function NotePage({ locale, whenMs, owner, back, gesture = null, trailing, children }: NotePageProps): JSX.Element {
-  const when = momentStamp(whenMs, locale);
+  const when = noteStamp(whenMs, Date.now(), locale);
   return (
     <>
       <SurfaceHeader locale={locale} back={back} gesture={gesture} title={owner ? `${owner} · ${when}` : when} right={trailing} />

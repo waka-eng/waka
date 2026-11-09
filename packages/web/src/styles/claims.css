@@ -7157,28 +7157,33 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    field too: one line at rest, growing as it is typed into, and the pill
    spans the column. 32px corners, so a grown chat field rounds rather than
    turning into a stadium. */
+/* ONE WIDTH FOR EVERY CALLER (nav system, 2026-11-09; founder: the chat bar
+   should feel EXACTLY like the note bar). The notepad's, a saved note's and a
+   chat's pill all span their column on the page's 16px gutter, up to the
+   same 40rem measure: tools at the start, the primary word (Keep, Save,
+   Send) at the end, and between them the state line or, in a chat, the
+   field. Same height, radius and spacing everywhere. */
 .waka-note-bar {
-  display: flex; flex-direction: column; flex: none; align-self: center; max-width: 100%;
-  margin-top: auto; box-sizing: border-box; min-height: var(--sp-64); justify-content: center;
-  padding: var(--sp-6) var(--sp-10); border-radius: var(--sp-32); background: var(--waka-raised);
+  display: flex; flex-direction: column; flex: none; align-self: stretch; width: 100%; max-width: 40rem;
+  margin-top: auto; margin-inline: auto; box-sizing: border-box; min-height: var(--sp-64); justify-content: center;
+  padding: var(--sp-6) var(--sp-4); border-radius: var(--sp-32); background: var(--waka-raised);
 }
 .jar-inspiration-composer .jar-composer-body > .waka-note-bar { margin-top: var(--sp-12); }
-.waka-note-bar[data-field] { align-self: stretch; width: 100%; padding-inline: var(--sp-4); }
-.waka-note-bar-row { display: flex; align-items: center; gap: var(--sp-2); min-height: var(--sp-48); }
+.waka-note-bar-row { display: flex; align-items: center; gap: 0; min-height: var(--sp-48); }
 /* WITH THE FIELD IN THE ROW, EVERY PIXEL GOES TO THE WORDS: at 375 the three
    tools and Send leave the field about 155px, just enough for "What's on your
    mind?" on one line (measured: 149px in Jost at 16px). The tools keep their
    44px; the gaps and the act's padding give way. */
-.waka-note-bar[data-field] .waka-note-bar-row { align-items: flex-end; gap: 0; }
-.waka-note-bar-tools { display: flex; align-items: center; flex: none; }
+.waka-note-bar[data-field] .waka-note-bar-row { align-items: flex-end; }
+/* The tools hold the start; whatever is left pushes the primary word to the end. */
+.waka-note-bar-tools { display: flex; align-items: center; flex: none; margin-inline-end: auto; }
 .waka-note-bar-field { flex: 1 1 auto; min-width: 0; align-self: center; padding: var(--sp-10) 0 var(--sp-10) var(--sp-4); }
-.waka-note-bar[data-field] .waka-note-bar-row .waka-note-bar-action { padding-inline: var(--sp-8); }
 .waka-note-bar-state {
   /* A one-word state stays on the row; a sentence with its act (a save that
      could not be confirmed, and Try again) wraps inside the slot rather
      than spilling out of the bar. Empty, it takes no room, so the pill is
      as wide as its tools. */
-  flex: 0 1 auto; min-width: 0; max-width: 16em; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 var(--sp-4);
+  flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 var(--sp-4);
   color: var(--muted); font-size: var(--t-meta); line-height: 1.35; text-align: center; overflow-wrap: anywhere;
 }
 .waka-note-bar-state:empty { display: none; }
@@ -7600,7 +7605,7 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 .waka-over--note .waka-over-one > .waka-note-bar--saved {
   /* 28px off the floor, as the notepad's pill stands (measured at 390:
      the notepad's bar ends at 816 of 844; the saved note's at 792 before). */
-  margin-top: auto; margin-bottom: calc(var(--sp-28) + env(safe-area-inset-bottom)); align-self: center;
+  margin-top: auto; margin-bottom: calc(var(--sp-28) + env(safe-area-inset-bottom));
 }
 .waka-over.waka-over--note { max-height: none; }
 .waka-page.waka-page--note { padding-bottom: 0; }

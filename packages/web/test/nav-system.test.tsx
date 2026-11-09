@@ -189,6 +189,27 @@ describe('Escape goes exactly where the "<" goes', () => {
   });
 });
 
+/* THE BROWSER'S BACK AGREES WITH THE "<" TOO, where history alone would not:
+   a note opened from the Kept sheet goes back to the sheet, on its query. */
+describe('browser Back does what the "<" does', () => {
+  async function noteFromSheet() {
+    await openKeptSheet();
+    await act(async () => c().querySelector<HTMLButtonElement>('.waka-stream-save')!.click()); await settle();
+    expect(c().querySelector('.waka-over--note'), 'the note did not open from the sheet').not.toBeNull();
+  }
+  it('returns a note opened from the Kept sheet to the sheet, on its query, by "<" and by browser Back alike', async () => {
+    await noteFromSheet();
+    await act(async () => topBack()!.click()); await settle();
+    const byGlyph = { at: where(), sheet: Boolean(c().querySelector('.waka-stream')), query: c().querySelector<HTMLInputElement>('.waka-stream input[type="search"]')?.value };
+    expect(byGlyph.sheet, 'the "<" did not bring the sheet back').toBe(true);
+    world!.unmount(); world = undefined;
+    await noteFromSheet();
+    await act(async () => { go(-1); }); await settle();
+    expect({ at: where(), sheet: Boolean(c().querySelector('.waka-stream')), query: c().querySelector<HTMLInputElement>('.waka-stream input[type="search"]')?.value },
+      'browser Back from a note opened in the sheet did not return to the sheet').toEqual(byGlyph);
+  });
+});
+
 /* THE PLACES THAT NEVER RENDERED IN A BROWSER-LESS WORLD, held in the source. */
 describe('the source keeps one system', () => {
   function files(dir: string, out: string[] = []): string[] {
