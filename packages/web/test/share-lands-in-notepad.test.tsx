@@ -11,7 +11,8 @@
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): `lib/data` and `lib/api` via
  * `dataMockFrom` / `apiMockFrom` — the seams Home reads through — and
- * `createInspiration`, recorded, so a save on arrival would show.
+ * `createInspiration`, recorded, so a save on arrival would show, and
+ * `fetchProfiles`, so an agent's wall can be stood on.
  * `lib/auth-context` states the owner. `helpers/canvas-stub` and
  * `helpers/render-home` replace drawing and time.
  */
@@ -23,9 +24,11 @@ import { mountWorld, dataMockFrom, apiMockFrom, VIEWER_ID, type MountedWorld } f
 
 const FACTS = vi.hoisted(() => ({ inspirations: [] as Array<{ id: string; text: string; daysAgo: number }> }));
 const created = vi.hoisted(() => ({ calls: [] as unknown[] }));
+const AGENTS = vi.hoisted(() => ({ rows: [] as unknown[] }));
 vi.mock('../src/lib/data', async (original) => ({ ...await original<typeof import('../src/lib/data')>(), ...dataMockFrom(FACTS) }));
 vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),
-  createInspiration: async (input: unknown) => { created.calls.push(input); throw new Error('not in this test'); } }));
+  createInspiration: async (input: unknown) => { created.calls.push(input); throw new Error('not in this test'); },
+  fetchProfiles: async () => AGENTS.rows }));
 vi.mock('../src/lib/auth-context', async (original) => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
     profile: { id: VIEWER_ID, name: 'You', type: 'human' }, profiles: [], refresh: async () => undefined, signOut: async () => undefined };
@@ -35,7 +38,7 @@ vi.mock('../src/lib/auth-context', async (original) => {
 let world: MountedWorld;
 beforeAll(() => { installCanvasStub(); setViewport(390, 844); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => {
-  localStorage.clear(); sessionStorage.clear(); created.calls = [];
+  localStorage.clear(); sessionStorage.clear(); created.calls = []; AGENTS.rows = [];
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 });
 afterEach(() => { world?.unmount(); vi.useRealTimers(); });
@@ -98,4 +101,16 @@ it('ignores a share left behind long ago', async () => {
   world = await mountWorld(FACTS); await settle();
   expect(bubbleText()).not.toContain('stale');
   expect(field()?.value ?? '').not.toContain('stale');
+});
+
+it('waits, untouched, while home opens on an agent wall, and is offered back on your own', async () => {
+  AGENTS.rows = [{ id: 'agent-noah', accountId: 'account-1', name: 'noah', type: 'agent', avatarUrl: null, preferredLocale: 'en-US', createdAt: '2026-08-01T00:00:00Z' }];
+  share('words for me, not for my agent');
+  world = await mountWorld(FACTS, { initialEntries: ['/w/agent-noah'] }); await settle();
+  expect(bubbleText()).not.toContain('words for me');
+  expect([...world.container.querySelectorAll('button')].some(node => node.textContent?.trim() === 'Add a note')).toBe(false);
+  expect(sessionStorage.getItem(SHARED_KEY), 'the share was used up on an agent wall').not.toBeNull();
+  world.unmount();
+  world = await mountWorld(FACTS); await settle();
+  expect(bubbleText()).toContain('words for me, not for my agent');
 });

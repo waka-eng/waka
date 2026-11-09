@@ -5199,9 +5199,16 @@ const RETRY_READ_LIMIT_MS = 20_000;
      press, and only Save keeps it. The bookmarklet's small window closes
      itself once that save lands. */
   const closeAfterSave = useRef(false);
+  /* (Where the share may be offered: your own wall, not an agent's, and not
+     while home is still opening onto an agent's wall from its address.) */
   const [offeredShare, setOfferedShare] = useState<{ text: string; link: boolean; preview: string; fromBookmarklet: boolean } | null>(null);
   useEffect(() => {
     if (phase !== 'ready' || !memoryScope || !composerDraft.ready) return;
+    /* ONLY ON YOUR OWN WALL. An agent's wall has no save doors, and a note
+       begun there would be kept against the agent; so the share stays in this
+       tab, untouched, until you are back on your own (it still lapses after
+       `SHARED_MAX_AGE_MS`). */
+    if (standingAsAgent || memoryScope.profileId !== storageScope?.profileId) return;
     let payload: SharedPayload | null = null;
     try {
       const raw = sessionStorage.getItem(SHARED_KEY);
@@ -5215,11 +5222,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const words = text.split('\n')[0]!.trim();
     setOfferedShare({ text, link: Boolean(url), preview: words.length > 120 ? `${words.slice(0, 119)}…` : words,
       fromBookmarklet: payload.via === 'bookmarklet' && Boolean(window.opener) });
-  }, [phase, memoryScope, composerDraft.ready]);
+  }, [phase, memoryScope, composerDraft.ready, standingAsAgent, storageScope?.profileId]);
   /** "Add a note": only now does the share reach the notepad and its draft. */
   const takeOfferedShare = useCallback(() => {
     const offer = offeredShare;
-    if (!offer) return;
+    if (!offer || standingAsAgentRef.current || memoryScopeRef.current?.profileId !== storageScope?.profileId) return;
     setOfferedShare(null);
     const before = draftRef.current.trim();
     const next = before ? `${before}\n\n${offer.text}` : offer.text;
@@ -5228,7 +5235,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     /* and in the notepad the creature's ask carries on — a note, or That's all */
     setShareArrived(true);
     startNewInspiration();
-  }, [offeredShare, setDraft, startNewInspiration]);
+  }, [offeredShare, setDraft, startNewInspiration, storageScope?.profileId]);
 
   const [shareArrived, setShareArrived] = useState(false);
   /* Forgotten by the two ways a note ends — kept, or folded away as a
@@ -9596,7 +9603,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               about itself. */}
           {/* Review is offered only when selected by an avatar tap. Pending
               work never takes the reading's place on arrival. */}
-          {!offeredShare && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'review' ? (
+          {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'review' ? (
             <div className="jar-char-bubble jar-char-bubble--review" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">
@@ -9653,7 +9660,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               }}
             />
           ) : null}
-          {!offeredShare && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
+          {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
             <>
               {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over
                   there and being offered "Feeling inspired? Save one.":
@@ -9970,7 +9977,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               ) : null}
             </>
           ) : null}
-          {!offeredShare && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'principles' ? (
+          {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'principles' ? (
             <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">{say('worldCompanionPrinciplesPrompt')}</span>
@@ -9980,7 +9987,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               </span>
             </div>
           ) : null}
-          {offeredShare && !mouthOpen && !turning ? (
+          {offeredShare && !standingAsAgent && memoryScope?.profileId === storageScope?.profileId && !mouthOpen && !turning ? (
             <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">{say(offeredShare.link ? 'worldShareArrived' : 'worldShareArrivedText')}</span>
@@ -9992,7 +9999,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               </span>
             </div>
           ) : null}
-          {!offeredShare && !mouthOpen && !turning && companionLine ? (
+          {!(offeredShare && !standingAsAgent) && !mouthOpen && !turning && companionLine ? (
             /* THE SAME WHITE AS THE TOP OF MIND. This bubble wore a lighter
                fill (`--aside`) to step back from the reading; founder,
                2026-10-15: "make all ... the speech bubbles be the same color
