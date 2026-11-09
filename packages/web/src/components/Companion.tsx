@@ -37,7 +37,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { OWNER_BEING, type Being } from "../character/body";
 import { FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, GLASS_EASE_MS, REST_BLEED, coolRamp, restPose } from "../character/raster";
 import { formatMessage, normalizeSupportedLocale, readStoredLocale } from "../lib/locales";
-import { onZoomChange, renderScale } from "../canvas/scale";
+import { onViewportSettle, renderScale } from "../canvas/scale";
 import { MACHINE_CELLS, pixelate, rampFromCss, rasterGrain } from "../canvas/palette";
 import { prefersStillness } from "../lib/motion";
 
@@ -122,7 +122,7 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
      depends on, so a settled zoom is itself a reason to redraw at the scale
      `renderScale` now answers (see `canvas/scale.ts`). */
   const [zoomed, setZoomed] = useState(0);
-  useEffect(() => onZoomChange(() => setZoomed((n) => n + 1)), []);
+  useEffect(() => onViewportSettle(() => setZoomed((n) => n + 1), { height: false }), []);
   /* The language this browser chose, which is the language the page around
      it speaks (`writeStoredLocale` on every language choice). Read here
      rather than from the session so a creature drawn before sign-in — the

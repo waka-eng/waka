@@ -167,53 +167,32 @@ export function renderScale(w: number, h: number): number {
 const ZOOM_SETTLE_MS = 160;
 
 /**
- * Calls `onChange` once the zoom has settled on a different step, and returns
- * the unsubscribe. Only `visualViewport` reports a pinch — the window does not
- * resize — and every real resize is already the `ResizeObserver`'s.
- */
-/**
  * Calls `onChange` once the visual viewport has SETTLED on a different zoom
- * step or a different visible height, and returns the unsubscribe.
+ * step — or, unless `height` is false, a different visible height — and
+ * returns the unsubscribe. Only `visualViewport` reports a pinch (the window
+ * does not resize), and every real resize is already the `ResizeObserver`'s.
  *
- * ONE LISTENER, ONE SETTLE. The visible height changes without the root
+ * ONE HELPER, ONE SETTLE. The visible height changes without the root
  * resizing on iOS (a toolbar collapsing, the keyboard leaving), and a stale
- * tall height centres the creature under the bar — so height had its own
- * `resize` listener that called the re-measure directly. That re-measure
- * also re-reads the zoom and re-bakes the sprites, so a pinch re-baked them
- * on every frame of the gesture, bypassing the settle below (code review,
- * 2026-11-08). Both now wait for the same 160ms of stillness.
+ * tall height centres the creature under the bar, so the world listens for
+ * height too. It once did that with a raw `resize` listener that called the
+ * re-measure directly — and the re-measure also re-reads the zoom and
+ * re-bakes the sprites, so a pinch re-baked them on every frame of the
+ * gesture (code review, 2026-11-08). Both now wait for the same 160ms of
+ * stillness. A single drawn creature (`Companion`) cares only about the
+ * zoom, so it passes `{ height: false }`.
  */
-export function onViewportSettle(onChange: () => void): () => void {
+export function onViewportSettle(onChange: () => void, { height = true }: { height?: boolean } = {}): () => void {
   const vv = typeof window === "undefined" ? null : window.visualViewport;
   if (!vv) return () => {};
-  let last = { zoom: zoomNow(), height: vv.height };
+  const read = () => ({ zoom: zoomNow(), height: height ? vv.height : 0 });
+  let last = read();
   let timer = 0;
   const settle = () => {
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
-      const now = { zoom: zoomNow(), height: vv.height };
+      const now = read();
       if (now.zoom === last.zoom && now.height === last.height) return;
-      last = now;
-      onChange();
-    }, ZOOM_SETTLE_MS);
-  };
-  vv.addEventListener("resize", settle);
-  return () => {
-    window.clearTimeout(timer);
-    vv.removeEventListener("resize", settle);
-  };
-}
-
-export function onZoomChange(onChange: () => void): () => void {
-  const vv = typeof window === "undefined" ? null : window.visualViewport;
-  if (!vv) return () => {};
-  let last = zoomNow();
-  let timer = 0;
-  const settle = () => {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => {
-      const now = zoomNow();
-      if (now === last) return;
       last = now;
       onChange();
     }, ZOOM_SETTLE_MS);

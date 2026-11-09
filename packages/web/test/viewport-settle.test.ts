@@ -50,3 +50,17 @@ it('leaves no raw viewport listener in the world that skips the settle', () => {
   expect(simulation).not.toMatch(/visualViewport[\s\S]{0,80}addEventListener\("resize", measure\)/);
   expect(simulation).toContain('onViewportSettle(measure)');
 });
+
+/* Code review, 2026-11-08: a second helper (onZoomChange) repeated this one
+   minus height. One helper, with height as an option. */
+it('ignores a height change when asked to watch the zoom alone, and is the only viewport listener', () => {
+  const measure = vi.fn();
+  onViewportSettle(measure, { height: false });
+  viewport.height = 600; resize(); vi.advanceTimersByTime(200);
+  expect(measure, 'a zoom-only listener re-measured for height').not.toHaveBeenCalled();
+  viewport.scale = 2; resize(); vi.advanceTimersByTime(200);
+  expect(measure).toHaveBeenCalledTimes(1);
+  const scale = readFileSync(join('src', 'canvas', 'scale.ts'), 'utf8');
+  expect(scale.match(/addEventListener\("resize"/g), 'two viewport listeners again').toHaveLength(1);
+  expect(scale).not.toContain('export function onZoomChange');
+});
