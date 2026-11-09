@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ModelDidNotAnswerError, type ReflectionQuestionInput } from "../lib/model-provider.js";
+import { MAX_INSPIRATION_ATTACHMENTS } from "../lib/inspiration-attachment-input.js";
 import { buildReflectionQuestionRequest, parseReflectionQuestion } from "./gemini.js";
 
 const input: ReflectionQuestionInput = {
@@ -32,6 +33,15 @@ describe("answer-aware reflection questions", () => {
     expect(() => parseReflectionQuestion({ question: "You should try more experiments." }, input))
       .toThrow(ModelDidNotAnswerError);
     expect(() => parseReflectionQuestion({question:'What feels possible? What would you do next?'},input)).toThrow(ModelDidNotAnswerError);
+  });
+  it("reads every attachment a save may hold, the last one included", () => {
+    /* The cap was 5 and the prompt sliced to a literal 5. When a save could
+       hold 6, the sixth was dropped from the question without a word. */
+    const attachments = Array.from({ length: MAX_INSPIRATION_ATTACHMENTS }, (_, index) => ({
+      type: "image" as const, status: "ready" as const, kind: "image_description" as const, text: `picture number ${index + 1}`,
+    }));
+    const prompt = buildReflectionQuestionRequest({ ...input, attachments }).contents[0]!.parts[0]!.text;
+    expect(prompt).toContain(`picture number ${MAX_INSPIRATION_ATTACHMENTS}`);
   });
   it('distinguishes attachment sources and never passes unfinished attachment text as available', () => {
     const request = buildReflectionQuestionRequest({...input, attachments:[

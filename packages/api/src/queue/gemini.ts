@@ -82,6 +82,7 @@
 import { z } from "zod";
 import {conversationUsesSavedSources} from '../lib/conversation-corrections.js';
 import {fence} from '../lib/prompt-fence.js';
+import {MAX_INSPIRATION_ATTACHMENTS} from '../lib/inspiration-attachment-input.js';
 import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,renderPrincipleDistillContext} from '../lib/principle-input.js';
 
 import { topOfMindEntryTypeValues } from "../db/index.js";
@@ -1788,7 +1789,7 @@ export function buildReflectionQuestionRequest(input: ReflectionQuestionInput): 
     contents: [{ role: "user", parts: [{ text: [
       `Preferred locale: ${input.preferredLocale}`,
       fence("inspiration", input.inspirationText.slice(0, 4_000)),
-      ...(input.attachments ?? []).slice(0, 5).map((item, index) => fence(`attachment ${index + 1} (${item.type}, ${item.kind ?? 'unread'}, ${item.status})`,
+      ...(input.attachments ?? []).slice(0, MAX_INSPIRATION_ATTACHMENTS).map((item, index) => fence(`attachment ${index + 1} (${item.type}, ${item.kind ?? 'unread'}, ${item.status})`,
         item.status === 'ready' && item.text ? item.text.slice(0, 2_000) : 'Contents not available.')),
       "The final answer below is the one to follow up on:",
       history,
@@ -1851,7 +1852,7 @@ export function buildReviewQuestionRequest(input:ReviewQuestionInput):GenerateCo
     contents:[{role:'user',parts:[{text:[`Preferred locale: ${input.preferredLocale}`,`Earlier review context invalidated: ${input.contextChanged===true}`,
       ...input.sources.slice(0,5).map((source,index)=>fence(`source ${index+1}`,JSON.stringify({note:source.text.slice(0,2000),
         reflections:source.reflections.slice(-3).map(row=>({question:row.question.slice(0,240),answer:row.answer.slice(0,700)})),
-        attachments:source.attachments.slice(0,5).map(row=>({type:row.type,kind:row.kind,status:row.status,
+        attachments:source.attachments.slice(0,MAX_INSPIRATION_ATTACHMENTS).map(row=>({type:row.type,kind:row.kind,status:row.status,
           text:row.status==='ready'&&row.text?row.text.slice(0,1200):null}))}))),
       ...history.map((row,index)=>[fence(`prior tentative connection ${index+1}`,(row.connection??'').slice(0,280)),fence(`review question ${index+1}`,row.question.slice(0,240)),fence(`review answer ${index+1}`,row.answer.slice(0,index===history.length-1?3000:700))].join('\n')),
     ].join('\n\n')}]}],
@@ -1958,7 +1959,7 @@ export function buildReviewAnswerDerivationRequest(input:ReviewAnswerDerivationI
       note:source.text.slice(0,8192),noteTruncated:source.text.length>8192,
       reflections:source.reflections.slice(-3).map(row=>({answer:row.answer.slice(0,8192),truncated:row.answer.length>8192})),
       earlierReflectionsOmitted:source.reflections.length>3,
-      attachments:source.attachments.slice(0,5).map(row=>({type:row.type,status:row.status,kind:row.kind,
+      attachments:source.attachments.slice(0,MAX_INSPIRATION_ATTACHMENTS).map(row=>({type:row.type,status:row.status,kind:row.kind,
         text:row.status==='ready'&&row.text?row.text.slice(0,2000):null,truncated:row.status==='ready'&&(row.text?.length??0)>2000})),
     })))),fence('claims to assess',JSON.stringify(input.claims)),
   ].join('\n\n')}]}],generationConfig:{temperature:0,responseMimeType:'application/json',responseSchema:{type:'OBJECT',properties:{
