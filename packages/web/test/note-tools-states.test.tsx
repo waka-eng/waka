@@ -45,11 +45,11 @@ async function bar(extra: Partial<Parameters<typeof NoteTools>[0]>): Promise<str
 }
 
 it("keeps an earlier save failure beside the loading line", async () => {
-  expect(await bar({ reading: "Opening…", failed: "That didn’t save." })).toEqual(["Opening…", "That didn’t save."]);
+  expect(await bar({ reading: "Loading…", failed: "That didn’t save." })).toEqual(["Loading…", "That didn’t save."]);
 });
 
 it("keeps Stop in the bar while another note is still loading", async () => {
-  await bar({ reading: "Opening…", recording: { ...idle, phase: "recording", seconds: 12 } as never, stopLabel: "Done" });
+  await bar({ reading: "Loading…", recording: { ...idle, phase: "recording", seconds: 12 } as never, stopLabel: "Done" });
   /* Since the merge with claude/fix-usability, Stop keeps the microphone's 44px seat and the
      clock rides in the state line beside it (audit f2afcbe2: the wide clock-button re-laid the bar). */
   const stop = slot.querySelector('[aria-label="Done"]');
@@ -60,26 +60,26 @@ it("keeps Stop in the bar while another note is still loading", async () => {
 it("keeps Stop in the bar while a delete is armed during a recording", async () => {
   await bar({
     recording: { ...idle, phase: "recording", seconds: 7 } as never,
-    erasePending: true, eraseQuestion: "Delete this for good?", eraseConfirmLabel: "Delete it anyway",
+    erasePending: true, eraseQuestion: "Delete this for good?", eraseConfirmLabel: "Delete",
     cancelEraseLabel: "Not now", onCancelErase: vi.fn(), stopLabel: "Done",
   });
   const stop = slot.querySelector('[aria-label="Done"]');
   expect(stop, "the way to stop the microphone stayed").not.toBeNull();
   expect(stop!.nextElementSibling?.textContent).toContain("0:07");
-  expect(slot.querySelector('[aria-label="Delete it anyway"]')).not.toBeNull();
+  expect(slot.querySelector('[aria-label="Delete"]')).not.toBeNull();
 });
 
 it("keeps a recorder failure beside a failed read, and Try again and Delete stay", async () => {
   /* the recorder's error reaches the bar already said, inside `failed` (dev, #443) */
-  const lines = await bar({ readFailed: "Didn’t open.", failed: "The microphone stopped." });
-  expect(lines).toEqual(["Didn’t open.", "The microphone stopped."]);
+  const lines = await bar({ readFailed: "Couldn’t open this note.", failed: "The microphone stopped." });
+  expect(lines).toEqual(["Couldn’t open this note.", "The microphone stopped."]);
   expect(slot.querySelector(".waka-dock-retry")?.textContent).toBe("Try again");
   await openNoteActions();
   expect(document.querySelector('[aria-label="Delete"]')).not.toBeNull();
 });
 
 it('keeps Escape available when the only note action is temporarily disabled', async () => {
-  await bar({ readFailed: 'Didn’t open.', eraseDisabled: true });
+  await bar({ readFailed: 'Couldn’t open this note.', eraseDisabled: true });
   await openNoteActions();
   const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
   expect(document.activeElement).toBe(menu);

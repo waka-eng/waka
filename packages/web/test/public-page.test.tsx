@@ -264,7 +264,7 @@ describe("the page a stranger sees", () => {
   it("offers the way in while the page is still opening", async () => {
     vi.mocked(fetchPublicProfile).mockReturnValue(new Promise(() => undefined));
     await visit();
-    expect(host.textContent).toContain("Opening this page…");
+    expect(host.textContent).toContain("Loading…");
     expect(host.querySelector(".waka-public-enter")?.textContent).toBe("Create your WAKA");
   });
 
@@ -276,7 +276,7 @@ describe("the page a stranger sees", () => {
         signal?.addEventListener("abort", () => reject(new ApiError({ status: 0, message: "aborted" })));
       }));
       await visit();
-      expect(host.textContent).toContain("Opening this page…");
+      expect(host.textContent).toContain("Loading…");
       await act(async () => vi.advanceTimersByTimeAsync(15_000));
       expect(host.textContent).toContain("This page didn’t open");
     } finally {

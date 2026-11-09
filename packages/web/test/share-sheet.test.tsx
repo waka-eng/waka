@@ -93,7 +93,7 @@ it("opens on the one design, unsigned, with the kept words and two icon actions"
   expect(host.querySelector(".jar-share-look"), "one design: no looks row").toBeNull();
   expect(host.querySelector(".jar-share-name"), "always signed: no name switch").toBeNull();
   expect(button("Edit wording"), "the words are edited in the bubble").toBeUndefined();
-  expect(host.querySelector("h2")?.textContent).toBe("Share this inspiration, edit as needed");
+  expect(host.querySelector("h2")?.textContent).toBe("Share this note");
 });
 
 it("closes with a plain × in the corner", async () => {
@@ -175,7 +175,7 @@ it("says the top of mind the way the home bubble does, under the top-of-mind dat
   await mount({ kind: "topOfMind", text: "Build the place.", proof: "My top of mind · Oct 16, 2026" });
   await settle();
   expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "topOfMind", frame: "On your mind lately", name: "", proof: "My top of mind · Oct 16, 2026" }));
-  expect(host.querySelector("h2")?.textContent).toBe("Share what’s on your mind, edit as needed");
+  expect(host.querySelector("h2")?.textContent).toBe("Share what’s on your mind");
 });
 
 it("without a device share sheet, sharing puts the image on the clipboard", async () => {

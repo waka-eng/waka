@@ -55,7 +55,7 @@ const cases:Case[]=[
     question:'Does the article describe your priorities?',sources:[source('Article: work must always come before family.')],claim:'I put work ahead of family.',
     expectation:'Withdraw the work-first claim. New statements must preserve the rejection and the stated family-time preference.'},
   {name:'temporary-interest',expected:'temporary',answer:'I am trying pottery this October because a friend invited me. I do not know if I will keep doing it; this is a short experiment, not a guiding principle for my life.',
-    question:'What would you like to explore?',sources:[source('A beginner pottery workshop next Saturday.')],
+    question:'What’s on your mind?',sources:[source('A beginner pottery workshop next Saturday.')],
     expectation:'At most a current, explicitly time-limited interest in trying pottery. Do not turn this into an enduring preference for creativity or hands-on living.'},
   {name:'changed-experience',expected:'changed',answer:'I used to plan every hour of my weekends. After an unplanned walk last Sunday, I no longer want such a strict schedule. For now I want to leave Sunday mornings open.',
     question:'What changed for you?',sources:[source('Last year I planned every hour of my weekends.'),source('Last Sunday I enjoyed a walk with no route.')],claim:'I want to plan every hour of my weekends.',

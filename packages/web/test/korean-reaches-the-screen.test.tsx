@@ -187,7 +187,7 @@ describe('an attachment speaks the reader’s language', () => {
     ['no speech', transcript({ status: 'unavailable', reason: 'audio_no_speech', effectiveText: null, canRetry: true })],
     ['too long', transcript({ status: 'unavailable', reason: 'audio_too_long', effectiveText: null })],
     ['too large', transcript({ status: 'unavailable', reason: 'audio_too_large_to_transcribe', effectiveText: null })],
-    ['corrected', transcript({ correction: '내가 고친 문구', effectiveText: '내가 고친 문구' })],
+    ['corrected', transcript({ correction: '내가 고친 문장', effectiveText: '내가 고친 문장' })],
   ])('renders a recording in Korean while %s', async (_name, row) => {
     vi.mocked(fetchAttachmentTranscript).mockImplementation(async () => ({ ...row }));
     await act(async () => root.render(<AttachmentTranscript id="audio" locale="ko-KR" />));
@@ -217,9 +217,9 @@ describe('an attachment speaks the reader’s language', () => {
       status: 'unavailable', reason: 'audio_too_long', canRetry: true,
     }));
     await act(async () => root.render(<AttachmentTranscript id="audio" locale="en-US" />));
-    expect(host.textContent).toContain('Transcript');
-    expect(host.textContent).toContain('too long to transcribe');
-    expect(host.textContent).toContain('Retry transcription');
+    expect(host.textContent).toContain('What you said');
+    expect(host.textContent).toContain('too long to write out');
+    expect(host.textContent).toContain('Try again');
     expect(/[가-힣]/.test(host.textContent ?? ''), host.textContent ?? '').toBe(false);
   });
 });

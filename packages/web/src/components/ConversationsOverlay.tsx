@@ -346,7 +346,7 @@ export function ConversationsOverlay({ locale, profileId, title, onClose, onOpen
                             {say(going === row.id ? "worldDeleting" : "worldChatDelete")}
                           </button>
                           <button type="button" disabled={going === row.id} onClick={() => { setAsking(null); setFailed(null); }}>
-                            {say("worldNotNow")}
+                            {say("worldCancel")}
                           </button>
                         </span>
                       ) : (

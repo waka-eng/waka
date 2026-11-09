@@ -626,7 +626,7 @@ describe("deleting a memory", () => {
       "and the memory is simply gone",
     ).toBeNull();
     expect(
-      (layout.container.textContent ?? "").includes("didn’t go through"),
+      (layout.container.textContent ?? "").includes("Couldn’t delete"),
       "and nothing claimed it failed",
     ).toBe(false);
   });
@@ -642,7 +642,7 @@ describe("deleting a memory", () => {
     await layout.step(8);
 
     const open = layout.container.querySelector<HTMLElement>(".jar-panel--in")!;
-    expect(open.textContent ?? "").toContain("didn’t go through");
+    expect(open.textContent ?? "").toContain("Couldn’t delete");
     await pressPanelVerb(open, "Delete");
     await act(async () => {
       await Promise.resolve();
@@ -662,7 +662,7 @@ describe("deleting a memory", () => {
       await Promise.resolve();
     });
     await layout.step(8);
-    expect(layout.container.querySelector(".jar-panel--in")?.textContent ?? "").toContain("didn’t go through");
+    expect(layout.container.querySelector(".jar-panel--in")?.textContent ?? "").toContain("Couldn’t delete");
 
     const caret = () => layout.container.querySelector<HTMLElement>(".jar-panel--in .jar-panel-foot-c button");
     const away = caret()!.getAttribute("aria-label");
@@ -671,7 +671,7 @@ describe("deleting a memory", () => {
     expect(
       layout.container.querySelector(".jar-panel--in")?.textContent ?? "",
       "the other memory wore A's failure",
-    ).not.toContain("didn’t go through");
+    ).not.toContain("Couldn’t delete");
 
     const back = [...layout.container.querySelectorAll<HTMLElement>(".jar-panel--in .jar-panel-foot-c button")]
       .find((button) => button.getAttribute("aria-label") !== away);
@@ -680,7 +680,7 @@ describe("deleting a memory", () => {
     await layout.step(20);
     const again = layout.container.querySelector<HTMLElement>(".jar-panel--in")!;
     expect(again.querySelector(".jar-panel-text")?.textContent).toBe(first);
-    expect(again.textContent ?? "", "returning to A forgot its delete had failed").toContain("didn’t go through");
+    expect(again.textContent ?? "", "returning to A forgot its delete had failed").toContain("Couldn’t delete");
   });
 
   it("never offers Delete again on a memory whose delete has landed", { timeout: 30_000 }, async () => {
@@ -768,7 +768,7 @@ describe("deleting a memory", () => {
     await pressPanelVerb(second, "Delete");
     /* this one has a signal standing on it, so the press opens the ask */
     const anyway = [...layout.container.querySelectorAll<HTMLElement>(".jar-panel-askrow button")]
-      .find((button) => (button.textContent ?? "").trim() === "Delete it anyway");
+      .find((button) => (button.textContent ?? "").trim() === "Delete");
     if (anyway) {
       await act(async () => anyway.click());
       await layout.step(8);
@@ -851,13 +851,12 @@ describe("deleting a memory", () => {
        loses its ground. A warning that implied the signal went with it would
        be false, and false in the direction that stops people deleting. */
     const said = (ask?.textContent ?? "").toLowerCase();
-    expect(said).toContain("does not unlearn");
-    expect(said).toContain("loses this ground");
+    expect(said).toContain("won’t undo the pattern");
 
     /* the lit answer is keeping it: this is a door that would rather not be
        walked through */
     const keep = [...(ask?.querySelectorAll<HTMLElement>("button") ?? [])].find(
-      (b) => (b.textContent ?? "").trim() === "Keep it",
+      (b) => (b.textContent ?? "").trim() === "Cancel",
     );
     expect(keep?.className, "keeping is the lit half of the pair").toContain("jar-where-on");
     await act(async () => keep!.click());
@@ -923,11 +922,11 @@ describe("stepping between memories", () => {
 
     expect(said(), "opened on the oldest").toBe("something I kept, 5");
     expect(
-      await step(/before this one/),
+      await step(/^Previous note$/),
       "the oldest memory offers no way further back — the end of an archive is real",
     ).toBe(false);
 
-    expect(await step(/after this one/), "and it does offer the one after").toBe(true);
+    expect(await step(/^Next note$/), "and it does offer the one after").toBe(true);
     expect(said(), "which is the next one the ground was given").toBe("something I kept, 4");
 
     expect(
@@ -935,16 +934,16 @@ describe("stepping between memories", () => {
       "the card never closed — that is the whole point of stepping from it",
     ).toBe(1);
 
-    await step(/before this one/);
+    await step(/^Previous note$/);
     expect(said(), "and back again lands where it started").toBe("something I kept, 5");
 
     /* walk to the far end and check the other stop */
-    for (let i = 0; i < 5; i += 1) await step(/after this one/);
+    for (let i = 0; i < 5; i += 1) await step(/^Next note$/);
     expect(said(), "five steps forward from the oldest reaches the newest").toBe(
       "something I kept, 0",
     );
     expect(
-      await step(/after this one/),
+      await step(/^Next note$/),
       "and the newest offers no way further on",
     ).toBe(false);
   });

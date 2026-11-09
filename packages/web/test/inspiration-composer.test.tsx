@@ -114,7 +114,7 @@ it('opens straight into the words, under the moment and the way back',async()=>{
      and clicking on it leads to new inspiration and new chat, and user can
      go to inspiration list and chat list ONLY from that new page." The bar's
      word now makes a new note, so this page is the archive's only way in.
-     So the row held EXACTLY that one press — "All inspirations", in words.
+     So the row held EXACTLY that one press — "Back", in words.
 
      ═══ AND THEN NOTHING, BECAUSE NOTHING SITS IN A CORNER ════════════════
      Founder, the same day: "never put something on any corners. So at the

@@ -401,9 +401,9 @@ it('a returning visitor is greeted by the creature, and no card opens by itself'
   vi.mocked(loadInspiration).mockResolvedValue({...detail,id:'loaded'});
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>}); await settle();
   await act(async()=>{await vi.advanceTimersByTimeAsync(1500);}); await settle();
-  expect(world.container.querySelector('[aria-label="A saved inspiration"]'), 'the greeting opened a card').toBeNull();
+  expect(world.container.querySelector('[aria-label="A note"]'), 'the greeting opened a card').toBeNull();
   await act(async()=>{await vi.advanceTimersByTimeAsync(4000);}); await settle();
-  expect(world.container.querySelector('[aria-label="A saved inspiration"]'), 'a card opened by itself').toBeNull();
+  expect(world.container.querySelector('[aria-label="A note"]'), 'a card opened by itself').toBeNull();
   expect(location.search).not.toContain('inspiration=');
 });
 
@@ -877,7 +877,7 @@ it('keeps archive navigation outside the composer, and reaches chat history from
      word of the note's own bar, not a word beside its date. */
   expect(world.container.querySelector('.jar-note-see-all, .jar-note-lead'), 'the archive door is back in the note\'s corner').toBeNull();
   expect(pressesInTopRow(world.container), 'something pressable stands beside a new note\'s date').toEqual([]);
-  expect(row('All inspirations'), 'archive navigation competes with saving').toBeUndefined();
+  expect(row('Back'), 'archive navigation competes with saving').toBeUndefined();
   await act(async () => close()!.click()); await settle();
   await pressDockRow(world.container, 'Inspirations'); await settle();
   expect(open(), 'Search did not open the archive').toBe('saves');
@@ -956,7 +956,7 @@ it('steps back from a saved note open in the archive to the archive\'s list on â
      makes with. */
   const shape = barShape(world.container);
   expect(shape, 'a Close came back to the saved note\'s bar').not.toContain('Close');
-  expect(returnRow()!.textContent).toBe('All inspirations');
+  expect(returnRow()!.textContent).toBe('Back');
   expect(returnRow()!.querySelector('.sr-only'), 'the saved note\'s "<" shows a word').toBeTruthy();
   const slot = world.container.querySelector('span.waka-dock-slot');
   expect(slot?.querySelector('#waka-note-tools.waka-dock-making[role="group"]'), 'the note\'s tools are not in the return row\'s slot').toBeTruthy();
@@ -1000,7 +1000,7 @@ it('gives a new note a labeled Save and separate Close, without archive navigati
     expect(bar.firstElementChild?.matches('textarea.jar-composer-text'), 'the words are not first, across the bar').toBe(true);
     const presses = [...bar.querySelectorAll<HTMLButtonElement>('.waka-note-bar-row button')].map(node => node.getAttribute('aria-label') ?? node.textContent?.trim());
     expect(presses).toEqual(['Your voice', 'Add photo', 'Add file', 'Keep']);
-    expect(row('All inspirations')).toBeUndefined();
+    expect(row('Back')).toBeUndefined();
     expect(close()?.textContent?.trim(), 'the notepad has no Close apart from Save').toBe('Close');
     expect(world.container.querySelector('nav.waka-dock'), 'a dock stands under the note bar').toBeNull();
     const save = world.container.querySelector<HTMLButtonElement>('.waka-dock-save')!;

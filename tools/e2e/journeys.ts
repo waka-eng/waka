@@ -301,7 +301,7 @@ async function countInArchive(page: Page, base: string): Promise<number> {
     }
     if (!(await page.locator(".waka-over").count())) {
       await openTheNotepad(page);
-      await page.getByRole("button", { name: "All inspirations", exact: true }).click();
+      await page.getByRole("button", { name: "Back", exact: true }).click();
     }
     await page.waitForTimeout(3_000);
     const read = (await page.evaluate(() => {
@@ -613,7 +613,7 @@ const JOURNEYS: Journey[] = [
          this does the same and PRINTS HOW LONG the world took to answer. A
          window that reopens shows up in the log as a growing number instead
          of coming back as a flake for someone else to chase. */
-      const FIND = 'input[placeholder="Which words do you remember?"]';
+      const FIND = 'input[placeholder="Search what you kept"]';
       const askedAt = Date.now();
       let answeredMs: number | null = null;
       for (let i = 0; i < 20 && answeredMs === null; i += 1) {
@@ -641,7 +641,7 @@ const JOURNEYS: Journey[] = [
           detail: `pressing "/" opened no find line in 20s — focus was on ${at}`,
         };
       }
-      await page.fill('input[placeholder="Which words do you remember?"]', needle);
+      await page.fill('input[placeholder="Search what you kept"]', needle);
       await page.waitForTimeout(3_500);
       const found = await page.locator(".jar-search-results button").filter({ hasText: needle }).count() > 0;
       return {

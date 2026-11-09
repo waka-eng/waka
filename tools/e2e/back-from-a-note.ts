@@ -114,7 +114,7 @@ const q = (step: Step) => new URLSearchParams(step.url.split('?')[1] ?? '');
 async function openArchive(page: Page): Promise<void> {
   await page.locator('.waka-dock button.waka-dock-item', { hasText: /^New inspiration$/ }).first().click();
   await page.waitForURL(/compose=1/, { timeout: 10_000 });
-  await page.locator('.waka-dock button.waka-dock-item[aria-label="All inspirations"], .waka-dock button.waka-dock-item:has-text("All inspirations")').first().click({ timeout: 10_000 });
+  await page.locator('.waka-dock button.waka-dock-item[aria-label="Back"], .waka-dock button.waka-dock-item:has-text("Back")').first().click({ timeout: 10_000 });
   await page.locator('.waka-list-row').first().waitFor({ timeout: 10_000 });
 }
 

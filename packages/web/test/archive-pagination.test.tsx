@@ -35,14 +35,14 @@ it('fetches and renders only 50 first, adds older pages on demand, and retains r
   expect(host.querySelectorAll('.waka-list-row')).toHaveLength(50);
   expect(host.querySelector('.waka-list-index')?.textContent).toBe('#120');
   vi.mocked(fetchInspirationPage).mockRejectedValueOnce(new Error('offline'));
-  await click('More inspirations');
+  await click('See more');
   expect(host.querySelectorAll('.waka-list-row')).toHaveLength(50);
   expect(host.querySelector('[role="alert"]')).not.toBeNull();
   vi.mocked(fetchInspirationPage).mockResolvedValueOnce({ inspirations: [summary('old')], total: 120 });
   await click('Try again');
   expect(vi.mocked(fetchInspirationPage).mock.lastCall?.[0]).toMatchObject({ cursor: 'older', limit: 50, profile: 'noah' });
   expect(host.querySelectorAll('.waka-list-row')).toHaveLength(51);
-  expect(host.textContent).not.toContain('More inspirations');
+  expect(host.textContent).not.toContain('See more');
 });
 it('keeps categories from older pages available and applies them on the server', async () => {
   await show();
@@ -63,7 +63,7 @@ it('ignores an older-page response after switching profiles', async () => {
   await show();
   let resolve!: (page: ApiInspirationPage) => void;
   vi.mocked(fetchInspirationPage).mockImplementationOnce(() => new Promise(done => { resolve = done; }));
-  await click('More inspirations');
+  await click('See more');
   vi.mocked(fetchInspirationPage).mockResolvedValueOnce({ inspirations: [summary('anotherone')], total: 1 });
   await show('anotherone');
   await act(async () => resolve({ inspirations: [summary('noah-private')], total: 120 }));

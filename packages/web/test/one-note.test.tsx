@@ -177,7 +177,7 @@ function shape() {
     /* WHAT IS PRESSABLE BESIDE THE DATE. Read on both so that one page
        growing a control the other does not have fails here — which is the
        whole subject of this file. For one day (2026-10-15) the two differed
-       here by the new note's "All inspirations"; then "never put something
+       here by the new note's "Back"; then "never put something
        on any corners" moved that door into the note's bar, and the two rows
        are the same again — nothing pressable beside the date on either. */
     topPresses: pressesInTopRow(host),
@@ -214,7 +214,7 @@ it("gives a new note and a saved one the same chrome in the same order", async (
   expect(fresh.leads, "the archive door came back into the new note's corner").toBe(0);
   expect(kept.topPresses, "something pressable appeared beside a saved note's date").toEqual([]);
   expect(kept.leads, "a saved note, already in the archive, grew a door to it").toBe(0);
-  expect(host.textContent, "a saved note says All inspirations").not.toContain("All inspirations");
+  expect(host.textContent, "a saved note says All inspirations").not.toContain("Back");
   expect(fresh.whens).toBe(1);
   expect(fresh.whenIndex).toBe(0);
 });

@@ -163,7 +163,7 @@ it("keeps all 1,000 characters through open → edit → Save", async () => {
   /* Before the text arrives: the preview stands in, read-only, nothing can be saved. */
   expect(page().readOnly).toBe(true);
   expect(save()).toBeNull(); // no making tool is offered until there is a note to act on
-  expect(bar()).toBe("Opening…");
+  expect(bar()).toBe("Loading…");
   await openNoteActions();
   expect(document.querySelector('[aria-label="Delete"]'), "Delete needs only the id").not.toBeNull();
 
@@ -201,7 +201,7 @@ it("stays read-only and never saves when the read fails, and Try again recovers"
   await answer(false);
   expect(page().readOnly).toBe(true);
   expect(save()).toBeNull();
-  expect(bar()).toBe("Didn’t open.");
+  expect(bar()).toBe("Couldn’t open this note.");
   /* The alert holds the sentence only; Try again is its own control beside
      it, and Delete is still offered — it needs nothing but the id. */
   const alert = slot.querySelector('[role="alert"]')!;
@@ -217,7 +217,7 @@ it("stays read-only and never saves when the read fails, and Try again recovers"
   await answer(false);
   const retry = [...slot.querySelectorAll("button")].find((item) => item.textContent === "Try again")!;
   await act(async () => retry.click());
-  expect(bar()).toBe("Opening…");
+  expect(bar()).toBe("Loading…");
   await answer(true);
   expect(page().value).toBe(LONG);
   expect(page().readOnly).toBe(false);
@@ -298,7 +298,7 @@ it("folds Share and Delete into a More menu with the bar's menu keys", async () 
   expect(more.getAttribute("aria-haspopup")).toBe("menu");
   await act(async () => more.click());
   const rows = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-  expect(rows().map((row) => row.textContent)).toEqual(["Share this inspiration", "Delete"]);
+  expect(rows().map((row) => row.textContent)).toEqual(["Share this note", "Delete"]);
   expect(document.activeElement, "focus moves into the menu").toBe(rows()[0]);
   const key = async (name: string) => act(async () => {
     (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true }));
@@ -390,14 +390,14 @@ it("keeps one note's upload off another note's bar", async () => {
 });
 
 /* A READ THAT NEVER ANSWERS ENDS (review, 2026-10-18): after the limit the
-   note is a failed read with Try again, never an editor stuck "Opening…". */
+   note is a failed read with Try again, never an editor stuck "Loading…". */
 it("ends a full-text read that never answers as a failed read with Try again", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
     await openSave(longRow, LONG); // the read is held and never answered
-    expect(bar()).toBe("Opening…");
+    expect(bar()).toBe("Loading…");
     await act(async () => { vi.advanceTimersByTime(20_001); });
-    expect(bar()).toBe("Didn’t open.");
+    expect(bar()).toBe("Couldn’t open this note.");
     expect(page().readOnly).toBe(true);
     expect([...slot.querySelectorAll("button")].some((b) => b.textContent === "Try again")).toBe(true);
   } finally {

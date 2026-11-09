@@ -660,7 +660,7 @@ it('isolates each agent’s inspirations, chat list, transcript, and chat URL', 
     expect(vi.mocked(createConversation).mock.calls.at(-1)?.[0]).toBe(`agent-${name}`);
     expect(world.container.querySelector('.chat-transcript')?.textContent).toContain('Only '+name+' chat');
     expect(new URLSearchParams(location!.search).get('profile')).toBe(`agent-${name}`);
-    await pressDockRow(world.container, 'All chats'); await settle();
+    await pressDockRow(world.container, 'Past chats'); await settle();
     expect(listConversations).toHaveBeenLastCalledWith(`agent-${name}`,expect.any(AbortSignal));
     const list=world.container.querySelector('.waka-over[data-jar-surface]')!;
     expect(list.textContent).toContain('Only '+name+' chat');

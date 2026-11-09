@@ -635,7 +635,7 @@ export async function pressDockRow(container: HTMLElement, label: string): Promi
     return;
   }
   if (RENAMED[label]) label = RENAMED[label]!;
-  if (label === "All chats" && await pressPastChatsAside(container)) return;
+  if (label === "Past chats" && await pressPastChatsAside(container)) return;
   if (label === "New chat" && !dockRows(container).some(node => accessibleName(node) === label)) {
     await pressDockRow(container, "Chats");
     await pressDockRowWhenItAppears(container, "New chat", "the chat list's primary action");
@@ -652,7 +652,7 @@ export async function pressDockRow(container: HTMLElement, label: string): Promi
 /**
  * Press the bar row named `label` once it is in the bar. A new note and a new
  * chat each open through an effect and a history write, so the row that
- * becomes theirs ("All inspirations", "All chats", "Close") can land a flush
+ * becomes theirs ("Back", "Past chats", "Close") can land a flush
  * after the press that opened the page.
  */
 async function pressDockRowWhenItAppears(container: HTMLElement, label: string, what: string): Promise<void> {
@@ -723,7 +723,7 @@ async function pressKey(container: HTMLElement, key: string): Promise<void> {
  *
  * "Inspirations" / "Your inspirations" uses home's archive shortcut,
  * closing the current page first when needed.
- *   - "Chats" → the bar's Chat (a new chat), then "All chats" in its bar;
+ *   - "Chats" → the bar's Chat (a new chat), then "Past chats" in its bar;
  *   - "Principles" → ArrowRight on Now, the keyboard twin of pulling the
  *     creature right;
  *   - "Now" → the bar's Close when it has one (a note, a chat, and since
@@ -758,7 +758,7 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
  * conversations door reads the same; the door is two presses now.
  *
  * Founder, 2026-10-15: the bar's Chat opens a NEW chat, and the list of chats
- * is reached from a chat's bar, whose first word is "All chats" — not from a
+ * is reached from a chat's bar, whose first word is "Past chats" — not from a
  * header above it, since nothing sits in a corner any more.
  */
 export async function pressChatCorner(container: HTMLElement): Promise<void> {

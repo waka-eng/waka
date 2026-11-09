@@ -36,31 +36,31 @@ async function write(value: string) {
 it('shows loading before the first response, not an early failure state', async () => {
   let resolve!: (value: ApiAttachmentTranscript) => void;
   vi.mocked(fetchAttachmentTranscript).mockImplementationOnce(() => new Promise(done => { resolve = done; }));
-  await mount(); expect(host.textContent).toContain('Loading transcript'); expect(host.querySelector('[role="alert"]')).toBeNull();
+  await mount(); expect(host.textContent).toContain('Loading…'); expect(host.querySelector('[role="alert"]')).toBeNull();
   await act(async () => resolve({ ...current })); expect(host.textContent).toContain('Machine transcript');
 });
 it('saves corrected wording separately and preserves the original under disclosure', async () => {
-  await mount(); await click('Edit transcript'); await write('The words I meant'); await click('Save changes');
+  await mount(); await click('Edit'); await write('The words I meant'); await click('Save');
   expect(correctAttachmentTranscript).toHaveBeenCalledWith('audio', { revision: '1', correction: 'The words I meant' }, expect.any(AbortSignal));
-  expect(host.textContent).toContain('Your wording'); expect(host.querySelector('details')?.textContent).toContain('Machine transcript');
+  expect(host.textContent).toContain('Your edit'); expect(host.querySelector('details')?.textContent).toContain('Machine transcript');
   expect(host.querySelector('textarea')).toBeNull();
 });
 it('keeps a failed edit and requires an explicit choice before replacing newer wording', async () => {
-  await mount(); await click('Edit transcript'); await write('My unsaved wording');
+  await mount(); await click('Edit'); await write('My unsaved wording');
   vi.mocked(correctAttachmentTranscript).mockImplementationOnce(async () => {
     current = { ...current, revision: '2', correction: 'Other tab wording', effectiveText: 'Other tab wording' };
     throw new ApiError({ status: 409, message: 'Changed' });
   });
-  await click('Save changes');
+  await click('Save');
   expect(host.querySelector('textarea')?.value).toBe('My unsaved wording');
   expect(host.textContent).toContain('Other tab wording'); expect(correctAttachmentTranscript).toHaveBeenCalledTimes(1);
   await click('Use my edit');
   expect(vi.mocked(correctAttachmentTranscript).mock.calls[1]?.[1]).toEqual({ revision: '2', correction: 'My unsaved wording' });
 });
 it('retains input on a network failure and never automatically resends it', async () => {
-  await mount(); await click('Edit transcript'); await write('Keep these words');
+  await mount(); await click('Edit'); await write('Keep these words');
   vi.mocked(correctAttachmentTranscript).mockRejectedValueOnce(new Error('offline'));
-  await click('Save changes');
+  await click('Save');
   expect(host.querySelector('textarea')?.value).toBe('Keep these words');
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t save');
   expect(correctAttachmentTranscript).toHaveBeenCalledOnce();
@@ -69,15 +69,15 @@ it('offers an explicit transcription retry without revealing provider error text
   current = { ...current, status: 'failed', effectiveText: null, transcript: null, canRetry: true, reason: 'private provider failure' };
   vi.mocked(retryAttachmentTranscript).mockImplementation(async () => { current = { ...current, status: 'pending', canRetry: false }; return current; });
   await mount(); expect(host.textContent).not.toContain('private provider'); expect(retryAttachmentTranscript).not.toHaveBeenCalled();
-  await click('Retry transcription'); expect(retryAttachmentTranscript).toHaveBeenCalledOnce(); expect(host.textContent).toContain('Transcribing');
+  await click('Try again'); expect(retryAttachmentTranscript).toHaveBeenCalledOnce(); expect(host.textContent).toContain('Writing out what you said');
 });
 it('does not offer editing to a read-only viewer', async () => {
-  current.canEdit = false; await mount(); expect(button('Edit transcript')).toBeUndefined();
+  current.canEdit = false; await mount(); expect(button('Edit')).toBeUndefined();
 });
 it('can show an owned transcript in a read-only review without losing edits to card navigation',async()=>{
   current={...current,canRetry:true};
   await act(async()=>root.render(<AttachmentTranscript id="audio" locale="en-US" readOnly/>));
-  expect(host.textContent).toContain('Machine transcript');expect(button('Edit transcript')).toBeUndefined();expect(button('Retry transcription')).toBeUndefined();
+  expect(host.textContent).toContain('Machine transcript');expect(button('Edit')).toBeUndefined();expect(button('Try again')).toBeUndefined();
   expect(correctAttachmentTranscript).not.toHaveBeenCalled();expect(retryAttachmentTranscript).not.toHaveBeenCalled();
 });
 it('bounds background checks and offers a read-only check without auto-retrying work', async () => {
@@ -85,7 +85,7 @@ it('bounds background checks and offers a read-only check without auto-retrying 
   current = { ...current, status: 'pending', effectiveText: null, transcript: null };
   await mount(); await act(async () => vi.advanceTimersByTimeAsync(90_000));
   expect(fetchAttachmentTranscript).toHaveBeenCalledTimes(20);
-  expect(button('Check transcript')).toBeDefined(); expect(retryAttachmentTranscript).not.toHaveBeenCalled();
+  expect(button('Check again')).toBeDefined(); expect(retryAttachmentTranscript).not.toHaveBeenCalled();
 });
 it('ignores a previous owner view response after that view is replaced', async () => {
   let finish!: (row: ApiAttachmentTranscript) => void;

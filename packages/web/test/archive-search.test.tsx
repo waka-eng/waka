@@ -128,7 +128,7 @@ it('restores results before the background read finishes and retains them with a
   await settle();
   expect(leads()).toEqual(['Capture older']);
   await act(async () => reject(new Error('offline')));
-  expect(leads()).toEqual(['Capture older']); expect(host.textContent).toContain('Showing previous results');
+  expect(leads()).toEqual(['Capture older']); expect(host.textContent).toContain('Showing earlier results');
   vi.mocked(fetchInspirationPage).mockResolvedValueOnce({ inspirations: [summary('fresh')], total: 1 });
   await click('Try again'); await settle();
   expect(leads()).toEqual(['Capture fresh']);

@@ -6678,42 +6678,36 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   gap: var(--sp-8);
 }
 
-/* Bringing back is the act this shelf exists for, so it is the inked pill;
-   deleting for good is the quiet word beside it. */
+/* QUIET WORDS, NEVER A PILL (founder: a control is dim or full ink, never
+   filled or boxed). Restore is the act this shelf exists for, so it is full
+   ink; Delete for good is the muted word beside it until it is asked. */
 .waka-shelf-back,
 .waka-shelf-forget {
   min-height: 44px;
-  padding: 0 var(--sp-16);
+  padding: 0 var(--sp-8);
+  border: 0;
   border-radius: var(--r-pill);
+  background: none;
   font-family: var(--waka-face);
   font-size: var(--t-meta);
   white-space: nowrap;
   cursor: pointer;
 }
 
-.waka-shelf-back {
-  border: 1px solid var(--ink);
-  background: transparent;
-  color: var(--ink);
-}
+.waka-shelf-back { color: var(--ink); }
 
-.waka-shelf-back:hover,
-.waka-shelf-back:focus-visible {
-  background: var(--ink);
-  color: var(--bg);
-}
-
-.waka-shelf-forget {
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--muted);
-}
+.waka-shelf-forget { color: var(--muted); }
 
 .waka-shelf-forget:hover,
 .waka-shelf-forget:focus-visible,
 .waka-shelf-forget--armed {
-  border-color: var(--line);
   color: var(--ink);
+}
+
+.waka-shelf-ask {
+  color: var(--muted);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
 }
 
 .waka-shelf-back:focus-visible,

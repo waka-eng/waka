@@ -58,7 +58,6 @@ import {
   updateInspiration,
 } from "../lib/api";
 import { attachToNote } from "../lib/attach-to-note";
-import { useFirstVisit } from "../lib/first-visit";
 import { useArchiveRecorderContext } from "../lib/archive-recorder";
 import { canKeep, type KeepReadiness } from "../lib/keep-ready";
 import { archiveChapter, dateWords } from "../lib/words";
@@ -192,7 +191,6 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
   const recorder = useArchiveRecorderContext();
   /* Scoped to whose archive this is: being new to your own is not being new
      to your agent's. */
-  const newHere = useFirstVisit(profileId ? { accountId: "p", profileId } : null, "saves");
   const [rows, setRows] = useState<Inspiration[]>([]);
   const [archiveCursor, setArchiveCursor] = useState<string | undefined>();
   const [archiveCategories, setArchiveCategories] = useState<string[]>([]);
@@ -1408,7 +1406,6 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
             three info icons answered the question "in the one place it is
             least useful, before you arrive, about a thing you have not
             seen". */}
-        {newHere && !open && total === 0 ? <p className="waka-over-what">{say("worldFieldWhatIs")}</p> : null}
         {/* Search stays in the same place even in a small archive. */}
         {/* ═══ THE FIELD IS A SURFACE WITH THINGS IN IT, NOT A BARE INPUT ══
             Founder, pointing at this field: "search bar can also utilize some
@@ -1772,15 +1769,32 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                           {item.hadPhoto && !item.attachmentCount ? <span className="waka-list-rest">{say("worldDeletedAttachmentsGone")}</span> : null}
                         </span>
                       </span>
-                      <span className="waka-shelf-acts">
-                        <button type="button" className="waka-shelf-back" disabled={shelfBusy} onClick={() => void bringBack(item)}>
-                          {say("worldDeletedBringBack")}
-                        </button>
-                        <button type="button" className={`waka-shelf-forget${forgetting === item.id ? " waka-shelf-forget--armed" : ""}`}
-                          disabled={shelfBusy} onClick={() => void forget(item)}>
-                          {say(forgetting === item.id ? "worldDeletedForgetSure" : "worldDeletedForget")}
-                        </button>
-                      </span>
+                      {/* AN UNRECOVERABLE ACT ASKS IN PLACE: the question, then
+                          its verb and Cancel. It used to turn the button into
+                          "Sure? Delete for good", a question you answered by
+                          pressing the same spot twice. */}
+                      {forgetting === item.id ? (
+                        <span className="waka-shelf-acts" role="group" aria-label={say("worldDeletedForgetSure")}>
+                          <span className="waka-shelf-ask">{say("worldDeletedForgetSure")}</span>
+                          <button type="button" className="waka-shelf-back" disabled={shelfBusy} onClick={() => setForgetting(null)}>
+                            {say("worldCancel")}
+                          </button>
+                          <button type="button" className="waka-shelf-forget waka-shelf-forget--armed"
+                            disabled={shelfBusy} onClick={() => void forget(item)}>
+                            {say("worldDelete")}
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="waka-shelf-acts">
+                          <button type="button" className="waka-shelf-back" disabled={shelfBusy} onClick={() => void bringBack(item)}>
+                            {say("worldDeletedBringBack")}
+                          </button>
+                          <button type="button" className="waka-shelf-forget"
+                            disabled={shelfBusy} onClick={() => void forget(item)}>
+                            {say("worldDeletedForget")}
+                          </button>
+                        </span>
+                      )}
                     </li>
                   );
                 })}

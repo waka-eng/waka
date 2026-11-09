@@ -5,7 +5,7 @@
  * An audit at f2afcbe2 walked the chat list into its unlucky states and found
  * two that were sentences with nothing under them: the list that could not
  * load ("Couldn't load your conversation list." — and only leaving could
- * change it), and the empty list asking "What would you like to explore?"
+ * change it), and the empty list asking "What’s on your mind?"
  * over a page with nowhere to type. A state with no control in it is a dead
  * end however true its sentence is.
  *
@@ -65,10 +65,10 @@ describe("the chat list", () => {
       <ConversationsOverlay locale="en-US" profileId="profile-1" title="Chats"
         onClose={() => undefined} onOpen={() => undefined} />,
     );
-    expect(host.textContent).toContain("Couldn’t load your conversation list.");
+    expect(host.textContent).toContain("Couldn’t load past chats.");
     await press("Try again");
     expect(listConversations).toHaveBeenCalledTimes(2);
-    expect(host.textContent).not.toContain("Couldn’t load your conversation list.");
+    expect(host.textContent).not.toContain("Couldn’t load past chats.");
   });
 
   it("makes the empty list's question a door into a new chat", async () => {
@@ -78,7 +78,7 @@ describe("the chat list", () => {
       <ConversationsOverlay locale="en-US" profileId="profile-1" title="Chats"
         onClose={() => undefined} onOpen={open} />,
     );
-    expect(host.textContent).toContain("What would you like to explore?");
+    expect(host.textContent).toContain("What’s on your mind?");
     await press("New chat");
     expect(open).toHaveBeenCalledWith(null);
   });
@@ -97,14 +97,14 @@ it('offers a new chat from a populated list and explains deletion before sending
   await press('Delete');
   expect(host.textContent).toContain('Delete this chat? You won’t be able to reopen it.');
   expect(deleteConversation).not.toHaveBeenCalled();
-  await press('Not now');
+  await press('Cancel');
   expect(host.textContent).not.toContain('Delete this chat?');
   expect(host.textContent).toContain('A question worth keeping');
   vi.mocked(deleteConversation).mockRejectedValueOnce(new Error('offline'));
   await press('Delete');
   await press('Delete chat');
   expect(deleteConversation).toHaveBeenCalledWith('profile-1', 'chat-1');
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("It is still here");
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("It’s still here");
   expect(host.textContent).toContain('A question worth keeping');
   vi.mocked(deleteConversation).mockResolvedValueOnce(undefined);
   await press('Delete chat');

@@ -47,9 +47,9 @@ it('asks through the creature, glasses on, even without signals or collector sug
   await tapCreature();
   expect(world.container.querySelector('.jar-char-bubble--review')?.textContent).toContain('I have a question for you.');
   await diveIntoReview(world.container,world.step);
-  expect(world.container.textContent).toContain('Is this still relevant to you?');expect(world.container.textContent).toContain(original.text);
-  expect(world.container.textContent).toContain('Your saved inspiration');
-  await act(async()=>button('Still relevant').click());await settle();
+  expect(world.container.textContent).toContain('Does this still matter to you?');expect(world.container.textContent).toContain(original.text);
+  expect(world.container.textContent).toContain('Your note');
+  await act(async()=>button('Yes').click());await settle();
   expect(reviewInspiration).toHaveBeenCalledWith(original,VIEWER_ID,'relevant',expect.any(String));
   expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
 });
@@ -68,33 +68,33 @@ it('shows nothing about review, and no glasses, when nothing waits',async()=>{
 });
 it('keeps the same original on a failed write and retries with the same request identity',async()=>{
   vi.mocked(reviewInspiration).mockRejectedValueOnce(new Error('offline'));
-  await open();await act(async()=>button('No longer relevant').click());await settle();
+  await open();await act(async()=>button('Not really').click());await settle();
   expect(world.container.textContent).toContain(original.text);
   const first=vi.mocked(reviewInspiration).mock.calls[0];
-  await act(async()=>button('No longer relevant').click());await settle();
+  await act(async()=>button('Not really').click());await settle();
   expect(vi.mocked(reviewInspiration).mock.calls[1]).toEqual(first);
   expect(first[2]).toBe('not_relevant');expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
 });
 it('Later records a deferral without submitting a relevance verdict',async()=>{
-  await open();await act(async()=>button('Later').click());
+  await open();await act(async()=>button('Not now').click());
   expect(reviewInspiration).toHaveBeenCalledWith(original,VIEWER_ID,'later',expect.any(String));
   expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
 });
 it('requires reading changed wording before an explicit new choice',async()=>{
   vi.mocked(reviewInspiration).mockRejectedValueOnce(new ApiError({status:409,message:'changed'}));
   const fresh={...original,text:'Work with a small team.',sourceRevision:'4'};vi.mocked(readInspirationRelevance).mockResolvedValue(fresh);
-  await open();await act(async()=>button('Still relevant').click());await settle();
-  expect(world.container.textContent).toContain('This inspiration changed.');
-  await act(async()=>button('Read updated inspiration').click());expect(world.container.textContent).toContain(fresh.text);
+  await open();await act(async()=>button('Yes').click());await settle();
+  expect(world.container.textContent).toContain('This note changed.');
+  await act(async()=>button('Open the new version').click());expect(world.container.textContent).toContain(fresh.text);
   expect(reviewInspiration).toHaveBeenCalledOnce();
-  await act(async()=>button('Still relevant').click());await settle();
+  await act(async()=>button('Yes').click());await settle();
   expect(vi.mocked(reviewInspiration).mock.calls[1][0]).toEqual(fresh);
 });
 it('limits a mixed sitting to five and reserves two slots for originals',async()=>{
   vi.mocked(listInspirationReviews).mockResolvedValue([original,{...original,id:'original-2'}]);
   vi.mocked(listClaims).mockResolvedValue({claims:Array.from({length:5},(_,i)=>({id:`signal-${i}`,statement:`Signal ${i}`,status:'active',confidence:80,evidenceCount:3,lastEvidenceAt:null,locked:false,unsupported:false,sharedGroupIds:[],createdAt:'2026-08-01T00:00:00Z'})),more:false});
   await open();expect(world.container.textContent).toContain(original.text);
-  await act(async()=>button('Later').click());await act(async()=>button('Later').click());
+  await act(async()=>button('Not now').click());await act(async()=>button('Not now').click());
   expect(world.container.textContent).toContain('Signal 0');
   expect(world.container.textContent).not.toContain('Signal 3');
 });
@@ -113,14 +113,14 @@ it('shows nothing when the queue cannot load, and asks again on the next tap',as
 it('removes signals that lost their support after an original is marked irrelevant',async()=>{
   const signal={id:'retired-signal',statement:'A conclusion from this original.',status:'active' as const,confidence:80,evidenceCount:3,lastEvidenceAt:null,locked:false,unsupported:false,sharedGroupIds:[],createdAt:'2026-08-01T00:00:00Z'};
   vi.mocked(listClaims).mockResolvedValueOnce({claims:[signal],more:false}).mockResolvedValue({claims:[],more:false});
-  await open();await act(async()=>button('No longer relevant').click());await settle();
+  await open();await act(async()=>button('Not really').click());await settle();
   expect(listClaims).toHaveBeenCalledTimes(2);
   expect(world.container.textContent).not.toContain(signal.statement);
   expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
 });
 it('shows no stale signal cards when relevance revalidation fails, and asks again on the next tap',async()=>{
   vi.mocked(listClaims).mockResolvedValueOnce({claims:[],more:false}).mockRejectedValueOnce(new Error('offline'));
-  await open();await act(async()=>button('No longer relevant').click());await settle();
+  await open();await act(async()=>button('Not really').click());await settle();
   expect(world.container.querySelector('.jar-pick-slip'),'a stale signal card stayed up').toBeNull();
   expect(reviewInspiration).toHaveBeenCalledOnce();
   /* Nothing is shown for the failure; the next tap on the creature asks again. */

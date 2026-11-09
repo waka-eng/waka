@@ -12,5 +12,5 @@ it('summarizes media counts without showing filenames or object identifiers',()=
 it('uses a link title or hostname and never leaves an empty capture label',()=>{
   expect(inspirationPreview('',[{type:'link',label:'A place to think'}])).toBe('A place to think');
   expect(inspirationPreview('',[{type:'link',label:'https://example.test/long/path'}])).toBe('example.test');
-  expect(inspirationPreview('',[])).toBe('Saved inspiration');
+  expect(inspirationPreview('',[])).toBe('Note');
 });

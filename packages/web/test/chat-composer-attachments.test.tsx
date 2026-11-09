@@ -269,7 +269,7 @@ it('when the refusal names no attachment, every chip goes and the words stay', a
   vi.mocked(saveConversationMessage).mockRejectedValueOnce(new ApiError({status:409,message:'New messages arrived.'}));
   await act(async()=>send().click());await flush();
   expect(readConversationDrafts(scope,chat)[0]!.value.pending).toBe(true);
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t confirm this message');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t confirm it was sent');
 });
 
 it('× on a chip mid-upload takes it off at once, lets the upload finish, and discards what it made', async()=>{
