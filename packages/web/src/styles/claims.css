@@ -333,7 +333,9 @@ body:has(.waka-page-back[data-below-corners]) .waka-page {
 body:has(.waka-page-back) .waka-over--note {
   padding-top: calc(var(--waka-corner) + var(--sp-24) + env(safe-area-inset-top));
 }
-body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-page-back { visibility: hidden; }
+/* Both fixed corner words ("<" and a chat's "Past chats") step aside for a
+   modal, the account card or a menu: z-60 would stand them over it. */
+body:has([aria-modal="true"], .waka-account, [role="menu"]) :is(.waka-page-back, .waka-page-aside) { visibility: hidden; }
 .waka-back-swipe {
   position: fixed;
   z-index: 61;
