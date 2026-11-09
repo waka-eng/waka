@@ -104,7 +104,7 @@ it('offers a new chat from a populated list and explains deletion before sending
   await press('Delete');
   await press('Delete chat');
   expect(deleteConversation).toHaveBeenCalledWith('profile-1', 'chat-1');
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('it is still here');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("It is still here");
   expect(host.textContent).toContain('A question worth keeping');
   vi.mocked(deleteConversation).mockResolvedValueOnce(undefined);
   await press('Delete chat');

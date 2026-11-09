@@ -244,7 +244,7 @@ it('a send refused for a photo that is gone drops that chip, keeps the words, sa
   expect(draft.content).toBe('Two from the trip');
   expect(draft.attachments?.map(item=>item.id)).toEqual([kept!.id]);
   expect(chips()).toHaveLength(1);
-  expect(host.querySelector('.chat-composer')!.textContent).toContain('A photo or file couldn’t be found — add it again.');
+  expect(host.querySelector('.chat-composer')!.textContent).toContain('A photo or file couldn’t be found. Add it again.');
   expect(host.querySelector('[role="alert"]'),'it was reported as a failed save instead').toBeNull();
   expect(host.querySelector('textarea')!.disabled,'the words cannot be changed').toBe(false);
   expect(plus()!.disabled,'nothing can be added back').toBe(false);

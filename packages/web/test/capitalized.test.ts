@@ -121,9 +121,9 @@ function startsLower(value: string): boolean {
  * answered — the catalogue cannot tell you where its words land.
  *
  * WHAT IS NOT A REASON TO BE HERE. "It is short." "It is a verb." "It sits
- * after a dash." A clause after an em dash IS capitalised in this product
- * already, everywhere, because `whyFailed` appends the API's own sentences
- * that way ("That was not saved — That room could not be made."), so the
+ * after a dash." A reason clause IS capitalised in this product already,
+ * everywhere, because `whyFailed` appends the API's own sentences as a
+ * second sentence ("That was not saved. That room could not be made."), so the
  * reason-clause strings were capitalised rather than exempted. A segment
  * after a `·` is the start of its own segment and was capitalised too. Only a
  * fragment with no boundary in front of it — a verb between two names, an

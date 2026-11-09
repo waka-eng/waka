@@ -275,7 +275,7 @@ export function offlineHome(): OfflineHome | null {
     offlineSignal(
       6,
       7,
-      "오래된 기억은 사라지는 게 아니라 차가워지는 것 — 이 한 문장 차이가 제품 전체를 결정한다.",
+      "오래된 기억은 사라지는 게 아니라 차가워지는 것. 이 한 문장 차이가 제품 전체를 결정한다.",
     ),
     offlineSignal(
       7,

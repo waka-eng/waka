@@ -99,11 +99,13 @@ export function whyOf(err: unknown, locale: SupportedLocale): string {
 /**
  * A finished sentence: what the caller was trying to do, then why it did not.
  *
- * THE FULL STOP COMES OFF BEFORE THE DASH. Every caller writes its fallback as
- * a finished sentence — "That was not saved." — because that is what it says
- * on its own when there is nothing to add. Appending to it produced
+ * TWO SENTENCES, NEVER A DASH. Every caller writes its fallback as a
+ * finished sentence ("That was not saved.") because that is what it says on
+ * its own when there is nothing to add, and every reason `whyOf` returns is a
+ * capitalised sentence too. So the two are joined as two sentences with
+ * exactly one full stop between them. Appending blindly once produced
  * "That was not saved. — the server said no (500): …" everywhere in the
- * product until six of them were put side by side for the first time.
+ * product; the founder's no-dash rule (2026-11-08) retired the dash itself.
  */
 export function whyFailed(
   err: unknown,
@@ -112,5 +114,5 @@ export function whyFailed(
 ): string {
   const why = whyOf(err, locale);
   if (why === "") return fallback;
-  return `${fallback.replace(/\.\s*$/, "")} — ${why}`;
+  return `${fallback.replace(/\.\s*$/, "")}. ${why}`;
 }

@@ -290,7 +290,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
        every sentence a view of a stored record); what this file pins is
        WHEN the world says it: after the glide has returned, never before. */
     fetchTheWeather: async () => ({
-      told: "refused a candidate — too close to what you dismissed.",
+      told: "refused a candidate because it was too close to what you dismissed.",
       days: [],
       antechamber: [],
     }),

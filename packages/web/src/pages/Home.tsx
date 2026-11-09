@@ -4653,7 +4653,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
       e.quoteSource === "enrichment" ? "jar-prov-lit jar-prov-lit--page" : "jar-prov-lit";
     const said =
       e.quoteSource === "enrichment"
-        ? "a sentence from the page you saved — not your own words"
+        ? "a sentence from the page you saved, not your own words"
         : "a sentence that is really in your record";
     const at = full.indexOf(q);
     if (at < 0)
@@ -8636,7 +8636,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                                 }
                                 aria-label={
                                   ground.contested
-                                    ? `${ground.statement} — ${say("worldContested")}`
+                                    ? `${ground.statement.replace(/[.!?。]\s*$/, "")}. ${say("worldContested")}`
                                     : undefined
                                 }
                                 onClick={() =>

@@ -54,7 +54,7 @@ export const RECEIPTS = {
   /** not true: dampened in the choosing, never removed */
   verdictNo: {
     messageKey: "worldReceiptVerdictNo",
-    text: "Steps far back in the choosing — never erased",
+    text: "Steps far back in the choosing. Never erased",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /* `verdictGroup` IS GONE — "Answered — the room reads who stands where",
@@ -65,13 +65,13 @@ export const RECEIPTS = {
   /** Keep this one up */
   pinned: {
     messageKey: "worldReceiptPinned",
-    text: "Held at the front — rewrites keep it there",
+    text: "Held at the front. Rewrites keep it there",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /** Not this — rides beside the undo, because reversible is part of the law */
   dismissed: {
     messageKey: "worldReceiptDismissed",
-    text: "Set aside — it will not return to your top of mind",
+    text: "Set aside. It will not return to your top of mind",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /** "then let it go" on a pattern of your own — the ground-level law:
@@ -86,7 +86,7 @@ export const RECEIPTS = {
   /** the star's standing line, already on screen — documented here */
   starHeld: {
     messageKey: "worldReceiptStarHeld",
-    text: "Your own words — WAKA will not rewrite them",
+    text: "Your own words. WAKA will not rewrite them",
     enforcedBy: "packages/api/src/lib/signal-lock-contract.db.test.ts",
   },
   /** the release confirm, already on screen — documented here */

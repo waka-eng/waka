@@ -125,7 +125,7 @@ describe("a reason clause speaks the reader's language", () => {
     expect(englishIn(whyOf(new ApiError({ status: 0, message: 'x' }), 'ko-KR'))).toEqual([]);
     /* English is unchanged — this is a localisation fix, not a rewrite. */
     expect(whyFailed(new ApiError({ status: 401, message: 'x' }), 'That was not saved.', 'en-US'))
-      .toBe('That was not saved — You are signed out. Sign in and it is still here.');
+      .toBe('That was not saved. You are signed out. Sign in and it is still here.');
   });
 });
 
