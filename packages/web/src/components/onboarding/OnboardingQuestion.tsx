@@ -307,7 +307,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
           <div className="onb-ask-dots onb-ask-dots--tight"><Dots count={ONBOARDING_QUESTIONS} on={index + 1} className="onb-dots--center" /></div>
           <div className="onb-photo-head">
             <CreatureSlot size="tiny" glasses />
-            <SayBubble say="photo" className="onb-chip"><p className="onb-say-line">{say("onboardingPhotoAsk")}</p></SayBubble>
+            <SayBubble say="photo" className="onb-chip"><p>{say("onboardingPhotoAsk")}</p></SayBubble>
           </div>
           <div ref={photoRef} className="onb-photo">
             <img src={photo.url} alt="" />
@@ -363,10 +363,10 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
             <div className="onb-ask-room">
               <SayBubble say={handoff === "kept" ? "kept" : `ask-${index}`} className="onb-ask-bubble">
                 {handoff === "kept" ? (
-                  <p className="onb-say-line" role="status">{say("worldBubbleKept")}</p>
+                  <p role="status">{say("worldBubbleKept")}</p>
                 ) : (
                   <>
-                    <h1 className="onb-say-line">{say(question.ask)}</h1>
+                    <h1>{say(question.ask)}</h1>
                     <p className="onb-say-soft">{say(question.hint)}</p>
                   </>
                 )}

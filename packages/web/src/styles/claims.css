@@ -2558,7 +2558,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-held-first,
 .waka-held-says {
   color: var(--waka-on-light);
-  font-size: var(--t-lead);
 }
 
 .waka-held-card--arriving {
@@ -4755,11 +4754,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   }
 }
 
-/* The compact voice used by offers and empty states. Top of mind gets its
-   own roomier reading treatment below, in the same interface face. */
+/* What the creature says. Its size, face and measure are the shared bubble
+   spec ("ONE BUBBLE", by `.jar-char-bubble-body`); the top of mind is not
+   set larger than any other line it says. */
 .jar-char-bubble-reading {
   display: block;
-  max-width: 24rem;
   /* THE COMPANION SPEAKS IN THE INTERFACE FACE, NOT THE READING ONE.
      Founder, shown the same bubble set both ways: "I prefer this font
      over [the serif]." The reading face stays where a person settles in to
@@ -4768,13 +4767,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
      and at that length a serif reads as a pull quote rather than as
      speech. The claim keeps the same voice because it comes from the same
      mouth. */
-  font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  font-weight: inherit;
-  line-height: 1.45;
-  letter-spacing: normal;
   text-align: center;
-  text-wrap: pretty;
 }
 
 .jar-char-press {
@@ -4897,7 +4890,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 0 clamp(20px, 6vw, 28px);
+  /* No gutter of its own: `--bubble-max` keeps 16px each side, so this
+     bubble lands at the same width as onboarding's at every phone size. */
+  padding: 0;
   /* The world below stays draggable; the card inside opts back in. */
   pointer-events: none;
 }
@@ -4941,10 +4936,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
    WHY IT IS VISIBLY A CONTROL AT ALL: this offer appears on its own, under
    a sentence that is not pressable, so nothing else says it can be. */
-.jar-char-bubble-of {
-  font-size: var(--t-meta);
-  color: color-mix(in srgb, var(--waka-on-light) 60%, transparent);
-}
 
 /* The bubble's offers, side by side when there are two. Spoken lines, so
    the gap is a word space and a half, not a toolbar's. */
@@ -4953,7 +4944,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   align-self: stretch;
   /* Out to the bubble's own edges: the row is the bubble's foot, so it
      cancels the body's side and bottom padding rather than sitting inside it. */
-  margin: var(--sp-4) calc(var(--sp-16) * -1) calc(var(--sp-10) * -1);
+  margin: var(--sp-4) calc(var(--bubble-pad-x) * -1) calc(var(--bubble-pad-y) * -1);
   border-top: 1px solid color-mix(in srgb, var(--waka-on-light) 11%, transparent);
 }
 
@@ -4976,8 +4967,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
      medium weight: "maybe make the cta button much smaller and lighter font
      though." The sentence above stays the loudest thing in the bubble; the
      row is a quiet foot under it. Touch screens still get the full floor —
-     see the coarse-pointer rule for this class further down. */
-  min-height: var(--sp-32);
+     see the coarse-pointer rule for this class further down.
+     44 AND 15 EVERYWHERE NOW (2026-11-09, the one-bubble spec): the row
+     under every bubble is a thumb's target on every pointer, and its words
+     a step under the sentence rather than three. */
+  min-height: var(--bubble-act-h);
   margin: 0;
   padding: 0 var(--sp-12);
   border: 0;
@@ -4985,7 +4979,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   background: none;
   color: color-mix(in srgb, var(--waka-on-light) 78%, transparent);
   font: inherit;
-  font-size: var(--t-meta);
+  font-size: var(--bubble-act);
   font-weight: 400;
   letter-spacing: normal;
   text-transform: none;
@@ -5078,8 +5072,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   flex-direction: column;
   align-items: center;
   gap: var(--sp-6);
-  max-width: min(22rem, 100%);
-  padding: var(--sp-12) var(--sp-16) var(--sp-10);
   border: 0;
   /* Not a uniform radius: a said thing is softer on one side than the other,
      and a perfectly even pill reads as a component. */
@@ -5139,52 +5131,23 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .jar:has(.jar-char-bubble--reading) .jar-hq-inner--compact {
   visibility: hidden;
 }
-/* A SAID THING, NOT A READING PANEL (from design/one-pill-dock). Founder:
-   "the speech bubble is way too big." 24rem holds ~40 characters a line on
-   web — a spoken measure — at the same three lines as a phone. */
+/* THE READING IS THE SAME BUBBLE (2026-11-09). Its box, type and acts are
+   the shared spec below ("ONE BUBBLE"); founder: "I don't like that the top
+   of mind speech bubble is bigger than the other ones." What stays here is
+   only what being clamped to three lines in a measured slot needs. */
 .jar-char-bubble--reading .jar-char-bubble-body {
-  width: min(24rem, 100%);
-  max-width: 24rem;
   max-height: 100%;
   min-height: 0;
-  gap: var(--sp-6);
-  padding: var(--sp-12) var(--sp-20) 0;
-  border-radius: var(--sp-24);
 }
-.jar-char-bubble--reading .jar-char-bubble-of {
+.jar-char-bubble--reading .jar-char-bubble-of,
+.jar-char-bubble--reading .jar-char-bubble-acts {
   flex-shrink: 0;
 }
 .jar-char-bubble--reading .jar-char-bubble-reading {
-  max-width: 100%;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   overflow-wrap: anywhere;
-  /* 16 is the phone floor for reading; 17 caps it so web never shouts. */
-  font-size: clamp(16px, 1.1vw, 17px);
-  font-weight: 400;
-  line-height: 1.45;
-}
-.jar-char-bubble--reading .jar-char-bubble-acts {
-  flex-shrink: 0;
-  margin: var(--sp-4) calc(var(--sp-20) * -1) 0;
-}
-.jar-char-bubble--reading .jar-char-bubble-act {
-  min-height: var(--waka-corner);
-}
-.jar-char-bubble--reading .jar-char-bubble-act:first-child {
-  border-bottom-left-radius: var(--sp-24);
-}
-.jar-char-bubble--reading .jar-char-bubble-act:last-child {
-  border-bottom-right-radius: var(--sp-24);
-}
-/* Readings without an action row still need a bottom inset. */
-.jar-char-bubble--reading .jar-char-bubble-body:not(:has(.jar-char-bubble-acts)) {
-  padding-bottom: var(--sp-24);
-}
-.jar:has(.jar-hq-inner--compact) .jar-char-bubble--reading .jar-char-bubble-body {
-  padding-top: var(--sp-16);
-  gap: var(--sp-8);
 }
 
 /**
@@ -5329,16 +5292,46 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   background: var(--bubble-fill);
 }
 
-.jar-char-bubble-body p {
+/* ═══ ONE BUBBLE (2026-11-09) ═══════════════════════════════════════════
+   Founder: "I don't like that the top of mind speech bubble is bigger than
+   the other ones so make it all consistent. Just choose one size and font
+   that is best for mobile accessibility and usability and aesthetics."
+
+   It was five sizes for one voice: the reading at clamp(16px, 1.1vw, 17px)
+   in a 24rem box, every other home line at 13px in 22rem, onboarding at 17px
+   in 300px, its hint at 15px, the notepad's question at 15px. Now every
+   bubble the creature speaks in reads `--bubble-*` (`system.css`) through
+   these three rules and nowhere else — `bubble-spec.test.ts` holds it.
+
+   THE BOX: shrinks to what is said, never past `--bubble-max`. */
+.jar-char-bubble-body,
+.waka-note-says {
+  max-width: var(--bubble-max);
+  padding: var(--bubble-pad);
+}
+/* THE SENTENCE. Dark on light, so the weight is 400: 300 on a bright ground
+   is thin where 300 on a dark one is delicate. */
+.jar-char-bubble-reading,
+.jar-char-bubble-body :is(p, h1),
+.waka-note-says {
   margin: 0;
   font-family: var(--waka-face);
-  font-size: var(--t-ui);
-  /* Dark on light, so the weight steps up: 300 on a bright ground is thin
-     where 300 on a dark one is delicate. */
+  font-size: var(--bubble-text);
   font-weight: 400;
-  line-height: 1.45;
+  line-height: var(--bubble-lh);
+  letter-spacing: var(--bubble-ls);
   color: inherit;
   text-wrap: pretty;
+}
+/* THE LABEL OVER IT ("On your mind lately", "Kept") and the softer second
+   line under a question: one quieter voice, the same ink softened. */
+.jar-char-bubble-of,
+.jar-char-bubble-body .onb-say-soft,
+.waka-note-says-softer {
+  font-size: var(--bubble-label);
+  line-height: var(--bubble-lh);
+  letter-spacing: normal;
+  color: color-mix(in srgb, var(--waka-on-light) 60%, transparent);
 }
 
 /* ═══ `.jar-char-bubble-go` IS GONE, AND ITS JOB IS `-act`'s NOW ═════════
@@ -7377,9 +7370,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   width: var(--waka-companion-size); height: var(--waka-companion-size); background: none;
 }
 .waka-note-says {
-  margin: 0; padding: var(--sp-8) var(--sp-14); border-radius: 16px 16px 16px 4px;
+  /* Size, padding and measure are the shared bubble spec ("ONE BUBBLE"). */
+  border-radius: 16px 16px 16px 4px;
   background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep)); color: var(--waka-on-light);
-  font-size: var(--t-body); line-height: 1.4;
 }
 .waka-note-arrival { display: flex; gap: var(--sp-8); margin: 0 0 var(--sp-12) 50px; }
 .jar-inspiration-composer .waka-note-arrival-act { min-height: var(--sp-44); padding: 0 var(--sp-14); border: 1px solid var(--line); border-radius: var(--r-pill); background: none; color: var(--ink); font-size: var(--t-ui); }
@@ -7515,8 +7508,7 @@ body:has(.waka-page-back) .waka-over.waka-over--note { padding-top: calc(var(--s
 
 @layer chrome {
 /* The creature's question and its softer second line, one bubble. */
-.waka-note-says { text-wrap: pretty; }
-.waka-note-says-softer { display: block; margin-top: var(--sp-2); font-size: var(--t-ui); color: color-mix(in srgb, var(--waka-on-light) 62%, transparent); }
+.waka-note-says-softer { display: block; margin-top: var(--sp-2); }
 /* With the hint gone, the bar sits at the foot of the page by itself. */
 .jar-composer-body[data-hero] .waka-note-bar { margin-top: auto; }
 }

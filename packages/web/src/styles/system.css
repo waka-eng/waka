@@ -195,6 +195,28 @@
      mistake rather than a choice. */
   --t-micro: 8px;
 
+  /* ═══ ONE BUBBLE, ONE SIZE (2026-11-09) ═══════════════════════════════
+     Founder: "I don't like that the top of mind speech bubble is bigger than
+     the other ones so make it all consistent. Just choose one size and font
+     that is best for mobile accessibility and usability and aesthetics."
+     Every place the creature speaks in a bubble — home's reading, Kept,
+     answers, review, share; onboarding's questions, Kept, photo and reveal;
+     the notepad's question — reads these and nothing else. 17px is the
+     phone floor for a sentence somebody reads at arm's length; 320px is a
+     spoken measure (~38 characters) that is also the width of a 360px phone
+     minus its gutters. The rule that reads them is in `claims.css`, under
+     "ONE BUBBLE". */
+  --bubble-text: 17px;
+  --bubble-lh: 1.4;
+  --bubble-ls: -0.01em;
+  --bubble-label: var(--t-ui);
+  --bubble-act: var(--t-body);
+  --bubble-act-h: var(--waka-corner);
+  --bubble-max: min(320px, 100% - var(--sp-32));
+  --bubble-pad-y: var(--sp-12);
+  --bubble-pad-x: var(--sp-18);
+  --bubble-pad: var(--bubble-pad-y) var(--bubble-pad-x);
+
   /* -----------------------------------------------------------------------
    * VOICE
    *
