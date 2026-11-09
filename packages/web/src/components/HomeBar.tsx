@@ -1,7 +1,7 @@
 /**
  * ═══ THE HOME BAR — WHERE YOU START (design E1, F1, F3) ═══════════════════
  *
- * One 64px pill with three labelled doors after the word Keep, and a
+ * One 64px pill (Keep a thought…, then a picture and a mic), and a
  * round Chat beside it. It replaces "Inspiration · Chat" and the capture pill
  * that used to stand over it: saving was a door to a door, and the pill IS
  * the start now. Write opens the notepad (founder, on #463: "i want save to
@@ -19,13 +19,16 @@
  * "Saved" in its place (F3). The confirmation takes the pull's spot so the
  * screen never stacks two lines over the bar.
  *
- * "KEEP" · A THOUGHT · A SCREENSHOT · YOUR VOICE (2026-11-08). Founder:
- * "better text than Write, Photo, Say it. it's also not clear this is to
- * save inspiration." So the pill says its verb once, as a quiet word that is
- * not a button, and each door names WHAT you keep — the same three the
- * onboarding intro names (B: a thought, a screenshot, your voice). Each door's
- * accessible name is the whole phrase ("Keep a thought"), because a door is
- * pressed alone and "a thought" is not an act.
+ * "KEEP A THOUGHT…", PICTURE, MIC (2026-11-09). Founder, on the earlier "Keep · a
+ * thought · a screenshot · your voice": "sooo ugly". The pill now reads like
+ * a field you are about to write in: the words "Keep a thought…" at its left,
+ * dim like a placeholder, open the notepad; a picture and a microphone at its
+ * right, glyphs alone, keep a screenshot and your voice. Each is named by the
+ * whole act ("Keep a thought", "Keep a screenshot", "Keep your voice") for a
+ * screen reader and, on the glyphs, a pointer's tooltip.
+ *
+ * "{n} KEPT ⌃" ABOVE IT (founder: "should be x kept"). The pull says how many
+ * you have kept once that is known; before then, and at none, just "Kept".
  *
  * Past chats and Search are not here. Search is the field at the top of the
  * Saves sheet; past chats are reached from the chat page, through Chat.
@@ -33,6 +36,7 @@
 import { useRef } from 'react';
 
 import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
+import { formatMessage } from '../lib/i18n';
 import { t, type SupportedLocale } from '../lib/locales';
 import { HomeActionIcon } from './HomeActionIcon';
 
@@ -52,8 +56,9 @@ export function HomeBar(props: {
   chatDisabled?: boolean;
   /** "Saved", for a moment after a save lands; it takes the pull's place. */
   saved?: boolean;
-  /** "Saves ⌃": opens the saves, patterns and principles. */
-  pull?: { onOpen: () => void };
+  /** "{n} kept ⌃": opens the saves, patterns and principles. `kept` is how
+      many you have kept, absent while unknown; at none or unknown it reads "Kept". */
+  pull?: { onOpen: () => void; kept?: number };
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const photos = useRef<HTMLInputElement>(null);
@@ -66,23 +71,22 @@ export function HomeBar(props: {
         <button type="button" className="waka-home-bar-pull" aria-haspopup="dialog" onClick={props.pull.onOpen}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
             strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M6 15l6-6 6 6" /></svg>
-          <span>{say('worldBarSaves')}</span>
+          <span>{props.pull.kept ? formatMessage(props.locale, 'worldBarKeptCount', { count: props.pull.kept }) : say('worldBarSaves')}</span>
         </button>
       ) : null}
       <div className="waka-home-bar-row">
         {save ? (
           <nav className="waka-home-bar-pill" aria-label={say('worldBarLabel')}>
-            <span className="waka-home-bar-keep" aria-hidden="true">{say('worldBarKeep')}</span>
-            <button type="button" className="waka-home-bar-door" aria-label={say('worldBarKeepThought')} onClick={save.onWrite}>
-              <HomeActionIcon kind="write" /><span>{say('worldBarThought')}</span>
+            <button type="button" className="waka-home-bar-door waka-home-bar-field" aria-label={say('worldBarKeepThought')} onClick={save.onWrite}>
+              <span>{say('worldBarThoughtPrompt')}</span>
             </button>
             {/* THE PICKER OPENS INSIDE THE PRESS: a file input may only be
                 clicked from a person's own gesture. */}
-            <button type="button" className="waka-home-bar-door" aria-label={say('worldBarKeepScreenshot')} disabled={save.photoDisabled} onClick={() => photos.current?.click()}>
-              <HomeActionIcon kind="photo" /><span>{say('worldBarScreenshot')}</span>
+            <button type="button" className="waka-home-bar-door waka-home-bar-glyph" aria-label={say('worldBarKeepScreenshot')} title={say('worldBarKeepScreenshot')} disabled={save.photoDisabled} onClick={() => photos.current?.click()}>
+              <HomeActionIcon kind="photo" />
             </button>
-            <button type="button" className="waka-home-bar-door" aria-label={say('worldBarKeepVoice')} disabled={!save.canSay} onClick={save.onSay}>
-              <HomeActionIcon kind="record" /><span>{say('worldBarVoice')}</span>
+            <button type="button" className="waka-home-bar-door waka-home-bar-glyph" aria-label={say('worldBarKeepVoice')} title={say('worldBarKeepVoice')} disabled={!save.canSay} onClick={save.onSay}>
+              <HomeActionIcon kind="record" />
             </button>
             <input ref={photos} type="file" hidden multiple accept={PHOTO_ACCEPT}
               onChange={(event) => { const picked = [...event.target.files ?? []]; event.target.value = '';

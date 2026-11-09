@@ -11768,7 +11768,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
              archive's, which leads with the same search. With the Actions
              menu gone this is the agent wall's one door to them. */
           pull={standingAsAgent ? { onOpen: () => { listOrigin.current = null; openOverHome('saves'); } }
-            : streamShown ? undefined : { onOpen: openSheet }}
+            : streamShown ? undefined : {
+              onOpen: openSheet,
+              /* "{n} KEPT ⌃" (founder: "should be x kept"). The same count
+                 the field keeps true through every keep and removal
+                 (`fieldBeyond`); unknown until the field's first page. */
+              kept: inspirations ? inspirations.length + fieldBeyond : undefined,
+            }}
         />
             ) : phase==='ready'&&savedNoteOpen&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">

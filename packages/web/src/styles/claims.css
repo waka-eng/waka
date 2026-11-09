@@ -7126,39 +7126,39 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 @layer chrome {
 /* ═══ THE HOME BAR (design E1, F1, F3) ════════════════════════════════════
-   Measured off Save1/Home1: one 64px pill of three 80×52 doors (glyph over
-   word, 12px, 3px apart) and a 64px Chat circle 8px beside it, 28px off the
-   bottom, the row 358px wide on a phone and the same on a desk. Nothing
-   fills: a door is full ink, or dim when it cannot be used. The ground is
-   the raised material every other bar wears (`--waka-raised`). */
+   One 64px pill and a 64px Chat circle 8px beside it, 28px off the bottom.
+   The pill reads like a field (2026-11-09, founder: the doors row was
+   "sooo ugly"): "Keep a thought…" at its left, dim like a placeholder, then
+   a picture and a mic as glyphs alone. Nothing fills: a glyph is full ink,
+   or dim when it cannot be used. The row keeps a 16px gutter on a phone and
+   stops at a comfortable 560px on a desk. The ground is the raised material
+   every other bar wears (`--waka-raised`). */
 .waka-home-bar {
   position: fixed; z-index: 60; left: 50%; transform: translateX(-50%);
   bottom: calc(var(--sp-28) + env(safe-area-inset-bottom));
-  width: min(358px, calc(100vw - var(--sp-32) - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  width: min(560px, calc(100vw - var(--sp-32) - env(safe-area-inset-left) - env(safe-area-inset-right)));
   pointer-events: auto;
 }
 .waka-home-bar-row { display: flex; align-items: center; gap: var(--sp-8); }
 .waka-home-bar-pill {
-  flex: 1 1 auto; min-width: 0; margin-inline: auto; display: flex; align-items: center; justify-content: center; gap: var(--sp-4);
-  height: var(--sp-64); box-sizing: border-box; padding: var(--sp-6) var(--sp-10);
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--sp-2);
+  height: var(--sp-64); box-sizing: border-box; padding: var(--sp-6) var(--sp-8) var(--sp-6) var(--sp-6);
   border-radius: var(--r-pill); background: var(--waka-raised);
 }
-/* "Keep": the pill's verb, said once, quieter than the doors it governs.
-   Not a button, so it takes no press and no focus. */
-.waka-home-bar-keep {
-  /* On the doors' words' line, not the pill's middle: the doors stack a
-     glyph over a word, and "Keep" reads with the words. */
-  flex: none; align-self: flex-end; margin-bottom: var(--sp-8); padding-inline: var(--sp-6) var(--sp-2);
-  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-ui); line-height: 1; white-space: nowrap;
-}
-/* Each door is as wide as its words ("a screenshot" is longer than "a
-   thought"); equal thirds clipped the longest at 375. */
 .waka-home-bar-door {
-  appearance: none; flex: 1 1 auto; min-width: 0; height: calc(var(--sp-48) + var(--sp-4)); padding-inline: var(--sp-4);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-4);
-  padding-block: 0; border: 0; border-radius: var(--r-pill); background: none;
-  color: var(--ink); font-family: var(--waka-face); font-size: var(--t-meta); line-height: 1; white-space: nowrap; cursor: pointer;
+  appearance: none; display: flex; align-items: center; justify-content: center;
+  height: calc(var(--sp-48) + var(--sp-4)); padding: 0; border: 0; border-radius: var(--r-pill); background: none;
+  color: var(--ink); font-family: var(--waka-face); line-height: 1; white-space: nowrap; cursor: pointer;
 }
+/* "Keep a thought…": the whole left of the pill is the press, its words
+   placeholder-dim; they come up to full ink under a pointer or focus. */
+.waka-home-bar-field {
+  flex: 1 1 auto; min-width: 0; justify-content: flex-start; padding-inline: var(--sp-16) var(--sp-8);
+  color: var(--muted); font-size: var(--t-input); text-align: left;
+}
+.waka-home-bar-field > span { overflow: hidden; text-overflow: ellipsis; }
+.waka-home-bar-field:hover, .waka-home-bar-field:focus-visible { color: var(--ink); }
+.waka-home-bar-glyph { flex: none; width: var(--sp-48); }
 .waka-home-bar-door svg, .waka-home-bar-chat svg { width: var(--sp-20); height: var(--sp-20); stroke-width: 1.6; }
 .waka-home-bar-door:disabled, .waka-home-bar-chat:disabled { opacity: .38; cursor: default; }
 .waka-home-bar-chat {

@@ -130,14 +130,10 @@ function startsLower(value: string): boolean {
  * object after one — belongs on this list.
  */
 const EXEMPT: Record<string, string> = {
-  /* THE HOME BAR'S DOORS (2026-11-08) are the objects of the word "Keep"
-     printed before them in the same pill (`HomeBar.tsx`, and the onboarding
-     question bar): "Keep · a thought · a screenshot · your voice". A capital
-     would break the phrase the founder asked for; each door's accessible
-     name is the whole capitalised phrase ("Keep a thought"). */
-  worldBarThought: "HomeBar.tsx / OnboardingQuestion.tsx, after the word Keep",
-  worldBarScreenshot: "HomeBar.tsx / OnboardingQuestion.tsx, after the word Keep",
-  worldBarVoice: "HomeBar.tsx / OnboardingQuestion.tsx, after the word Keep",
+  /* THE HOME BAR'S DOORS LEFT THIS LIST (2026-11-09) with the words they
+     excused ("a thought", "a screenshot", "your voice"): the pill reads
+     "Keep a thought…" now, a whole capitalised phrase, and its other two
+     doors are glyphs with no words beside them. */
   /* THREE EXEMPTIONS WENT WITH `Profile.tsx` (2026-10-11), and the gate
      found them the same run — which is what the companion case below it
      exists for. They excused the mid-sentence verbs on the grants row and

@@ -68,6 +68,9 @@ it('reads each cited save outside the window once, however the answers land', as
 
 it('offers the rest from the Saves page when the archive holds more than was loaded', async () => {
   world = await mountWorld(FACTS); await settle();
+  /* "{n} kept" counts the whole archive, not the loaded window (founder:
+     "should be x kept"). */
+  expect(world.container.querySelector('.waka-home-bar-pull')?.textContent?.trim(), 'the pull counts only what was loaded').toBe('200 kept');
   await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-home-bar-pull')!.click()); await settle();
   const more = world.container.querySelector<HTMLButtonElement>('.waka-stream-more');
   expect(more, 'the Saves page hides that there are more').toBeTruthy();
