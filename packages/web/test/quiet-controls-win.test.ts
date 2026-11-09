@@ -53,7 +53,6 @@ describe("a quiet control's own rule wins over its container's", () => {
   it.each([
     [".waka-tab--on", ".waka-tab:not(.waka-tab--on):hover"],
     [".chat-page .chat-with-choice--on", ".chat-page .chat-with-choice:hover"],
-    [".chat-page .chat-dictate--on", ".chat-page .chat-dictate:hover:not(:disabled)"],
     [".waka-composer-mic--on", ".waka-composer-mic:hover:not(:disabled)"],
   ])("draws %s differently from its hover, by more than colour, and never fills it", (on, hover) => {
     const rules = selectors();

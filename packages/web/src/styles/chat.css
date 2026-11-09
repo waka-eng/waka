@@ -763,59 +763,6 @@
  * found before the keystroke. The disabled treatment below was already
  * reasoned about and is unchanged.
  */
-/* ═══ THE COMPOSER BODY ═════════════════════════════════════════════════
-   Founder, with a screenshot: "this is really ugly. Can you research some
-   actual components that are used to design chat experiences?"
-
-   The reference library names the parts and the naming is what was
-   missing here:
-   a FRAME holding a BODY, with the status message outside the body and the
-   send action in a FOOTER under the input rather than beside it. See the
-   long note at the markup in `ConversationPanel`.
-
-   WHY THE SEND MOVED UNDER THE TEXT. Beside it, the button's vertical
-   position is a function of how much you have typed — at one line it is
-   centred, at four it is not, and `align-items: flex-end` pins it to the
-   bottom where it reads as having slipped. In a footer row it does not
-   move at all, and the field above is free to grow.
-
-   FLAT, NOT RAISED, which is the reference's own `elevation="none"`
-   variant: "it then draws a border with the same rest / hover / focus
-   treatment as a text input." This product has one floating object per
-   screen and it is the dock, directly below. Two raised pills stacked is
-   the "double layer is so weird" the founder reported.
-
-   THE CONTRAST ARGUMENT CARRIES OVER INTACT, which a later tidy-up must
-   not undo. `--field-edge` is 3.48:1 against the ground where `--line` is
-   1.41:1 — see its note in `chrome.css` — and focus is the same 3:1
-   CHANGE in the same pixels. */
-.chat-composer-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  padding: var(--sp-12) var(--sp-14) var(--sp-8);
-  border: 1px solid var(--field-edge);
-  /* NOT `--r-pill`. That is the dock's radius and giving it to this would
-     rebuild the stutter above; a 20px corner on a box this tall is plainly
-     a rounded rectangle. */
-  border-radius: 20px;
-  background: none;
-}
-
-.chat-composer-body:focus-within {
-  border-color: color-mix(in srgb, var(--ink) 80%, transparent);
-}
-
-/* THE FOOTER: actions at the end, nothing at the start yet. `justify-content`
-   rather than a spacer, so adding a model picker or an attach control at the
-   start later needs no change here. */
-.chat-composer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--sp-4);
-}
-
 .chat-input-label {
   display: block;
   flex: 1;
@@ -866,10 +813,9 @@
   max-height: min(8lh, 30dvh);
   overflow-y: auto;
   margin: 0;
-  /* NO PADDING OF ITS OWN. `.chat-composer-body` is the padded surface
-     now — the reference's "rounded surface containing the header, input,
-     and footer" — and a field that pads itself inside a padded body is
-     two insets for one gap. */
+  /* NO PADDING OF ITS OWN. The shared note bar is the padded surface,
+     and a field that pads itself inside a padded bar is two insets for one
+     gap. */
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -948,16 +894,6 @@
 .chat-page .chat-dictate:focus-visible {
   color: color-mix(in srgb, var(--ink) 70%, var(--muted));
   outline: none;
-}
-
-/* LISTENING. The reference animates frequency bars off real microphone
-   volume; this product has a standing law that motion explains and never
-   decorates, and a bar chart of someone's voice is decoration. Full ink
-   says the same thing — the control is on — and says it without moving. */
-.chat-page .chat-dictate--on {
-  color: var(--ink);
-  background: none;
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--ink) 55%, transparent));
 }
 
 
@@ -1258,26 +1194,6 @@
 @media (prefers-reduced-motion: reduce) {
   .chat-attachment-image { transition: none; }
 }
-
-/* ═══ THE ＋ IN A CHAT STANDING ALONE ════════════════════════════════════
-   Ghost, beside the mic, for the same reason the mic is ghost: an input
-   method, not the act. On the home page both ride in the bar instead and
-   wear `.waka-dock-tool`. */
-.chat-page .chat-add {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  min-height: 40px;
-  margin: 0;
-  padding: 0;
-  border-radius: var(--r-pill);
-  color: var(--muted);
-}
-
-.chat-page .chat-add svg { width: 19px; height: 19px; }
 
 /* The menu's rows inside the page wear the page's blanket button rule
    unless told otherwise; this keeps them the bar's rows. */

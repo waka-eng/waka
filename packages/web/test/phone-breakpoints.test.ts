@@ -237,7 +237,7 @@ describe("the four breaks that a browser found and reading did not", () => {
   it("keeps every control in the bottom bar from shrinking, and tightens the bar on a phone", () => {
     const css = rules("claims.css");
     expect(
-      /\.waka-dock-item,\s*\.waka-dock-tool,\s*\.waka-dock-sep\s*\{\s*flex:\s*none;/.test(css),
+      /\.waka-dock-item,\s*\.waka-dock-tool\s*\{\s*flex:\s*none;/.test(css),
       "the dock's controls lost `flex: none`. Without it a crowded bar shrinks " +
         "Close and the tools below their 44px target — or, with nothing able " +
         "to shrink, runs off the right edge: Close at x 342-403 on a 320px phone.",
