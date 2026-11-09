@@ -1,26 +1,44 @@
 /**
- * ═══ WHY WAKA — the creature shows it before it asks ═════════════════════
+ * ═══ WHY WAKA — ONE SCENE IN FOUR BEATS ══════════════════════════════════
  *
- * Four frames (A–D on the canvas): the pile you never reopen, saving is one
- * tap, I read what you keep, I find your people. Next advances, a swipe
- * advances or goes back, arrow keys do the same. The last frame's control is
- * Start, which is where the questions begin.
+ * The four intro frames (A–D on the canvas): the pile you never reopen,
+ * saving is one tap, I read what you keep, I find your people. Founder: "the
+ * transition should be smooth for the 4 onboarding pages too. the character
+ * should move etc continuously rather than each screen feeling like its own."
  *
- * EACH FRAME IS DRAWN ON ITS OWN 390-WIDE PLATE, in the frame's coordinates,
- * and the plate is scaled down to fit a smaller phone. The scale is OBSERVED
- * (`ResizeObserver`), never read once — Law 6.
+ * So this is ONE plate that stays mounted, and Next (or a swipe, or an arrow
+ * key) advances a BEAT. Each frame's composition is a beat's resting state,
+ * and every prop carries into the next instead of cutting:
+ *
+ *   A → B  the sinking note cards dissolve into small lights — three of them
+ *          become the lights that rise from the three glyphs into the creature
+ *   B → C  those lights become the ones orbiting it, and one gathers bright
+ *   C → D  the orbit closes into that one light, which is the light that
+ *          passes between the two creatures once the other one has walked in
+ *
+ * The creature is the page's one creature (`CreatureStage`), hopping between
+ * its places; this file only leaves it a slot per beat. Text cross-fades in
+ * place. Going back reverses the same beats. Under reduced motion nothing
+ * travels: the beats cross-fade with every prop already where it ends.
+ *
+ * THE PLATE IS 390 WIDE in the frames' coordinates and is scaled down to fit a
+ * smaller phone. The scale is OBSERVED (`ResizeObserver`), never read once.
  */
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 
 import { t, type SupportedLocale } from "../../lib/locales";
+import type { MessageKey } from "../../lib/i18n";
 import { WALK_MS } from "../../character/walk";
-import { WalkingCompanion } from "../WalkingCompanion";
 import { OWNER_BEING } from "../../character/body";
-import { Creature, Dots, Glyph } from "./Creature";
+import { WalkingCompanion } from "../WalkingCompanion";
+import { CreatureSlot, type SlotLook } from "./CreatureStage";
+import { Dots, Glyph } from "./Creature";
 
 const PLATE_W = 390;
 const PLATE_H = 752;
-const FRAMES = 4;
+const BEATS = 4;
+/** How long the intro takes to step aside when Start is pressed. */
+const INTRO_LEAVE_MS = 250;
 
 function useFit() {
   const ref = useRef<HTMLDivElement>(null);
@@ -39,137 +57,108 @@ function useFit() {
   return { ref, fit };
 }
 
-const at = (left: number, top: number, extra: CSSProperties = {}): CSSProperties => ({ left, top, ...extra });
+/* ── where the creature stands in each beat (its footprint's top-left) ── */
+const CREATURE: Array<SlotLook & { left: number; top: number }> = [
+  { size: "small", left: 157, top: 430 },
+  { size: "large", left: 137, top: 150, motion: "catch" },
+  { size: "large", left: 137, top: 262, eyes: "closed", motion: "lift" },
+  { size: "medium", left: 66, top: 300, motion: "lean" },
+];
 
-function Pile({ say }: { say: (key: Parameters<typeof t>[1]) => string }) {
-  const card = (style: CSSProperties) => ({ ...style, position: "absolute" as const });
-  return (
-    <>
-      <div className="onb-pile-card" style={card({ ["--r" as string]: "-8deg", left: 34, top: 120, width: 120, height: 80, background: "#2a2c33" })}>
-        <div className="onb-pile-line" style={{ width: "80%" }} />
-        <div className="onb-pile-line" style={{ width: "60%", marginTop: 8 }} />
-        <p className="onb-pile-meta" style={{ marginTop: 10 }}>{say("onboardingPileNotes")}</p>
-      </div>
-      <div className="onb-pile-card" style={card({ ["--r" as string]: "6deg", left: 210, top: 96, width: 132, height: 96, padding: 10, background: "#26303c", animationDuration: "7s", animationDelay: "1s" })}>
-        <div style={{ height: 50, borderRadius: 6, background: "#34404e" }} />
-        <p className="onb-pile-meta" style={{ marginTop: 8 }}>{say("onboardingPileScreenshot")}</p>
-      </div>
-      <div className="onb-pile-card" style={card({ ["--r" as string]: "3deg", left: 120, top: 232, width: 150, height: 64, background: "#2b2a30", animationDuration: "5.5s", animationDelay: "0.5s" })}>
-        <p>{say("onboardingPileReadLater")}</p>
-        <div className="onb-pile-line" style={{ width: "70%", marginTop: 10 }} />
-      </div>
-      <div className="onb-pile-card" style={card({ ["--r" as string]: "-4deg", left: 22, top: 300, width: 110, height: 60, background: "#2c2a2f", animationDuration: "6.5s", animationDelay: "2s" })}>
-        <p>{say("onboardingPileVoiceMemo")}</p>
-        <div style={{ height: 14, marginTop: 8, background: "repeating-linear-gradient(90deg,#4a4c53 0 2px,transparent 2px 5px)" }} />
-      </div>
-      <div className="onb-pile-card" style={card({ ["--r" as string]: "9deg", left: 256, top: 268, width: 104, height: 70, background: "#292d33", animationDuration: "7.5s", animationDelay: "1.5s" })}>
-        <p>{say("onboardingPileSavedPost")}</p>
-        <div className="onb-pile-line" style={{ width: "70%", marginTop: 10 }} />
-      </div>
-      <Creature size="small" style={at(157, 430, { position: "absolute" })} />
-      <div className="onb-words" style={{ top: 540 }}>
-        <h1 className="onb-title">{say("onboardingPileTitle")}</h1>
-        <p className="onb-sub">{say("onboardingPileBody")}</p>
-      </div>
-    </>
-  );
-}
-
-function OneTap({ say }: { say: (key: Parameters<typeof t>[1]) => string }) {
-  const lights: Array<[number, string, string, string]> = [
-    [69, "60px", "#f3ebd8", "0s"], [189, "0px", "#f8f2e6", "0.8s"], [309, "-60px", "#efe3c8", "1.6s"],
-  ];
-  return (
-    <>
-      <Creature size="large"
-        style={at(137, 150, { position: "absolute", transformOrigin: "50% 100%", animation: "onb-catch 2.4s ease-in-out infinite" })} />
-      <div className="onb-words" style={{ top: 300 }}>
-        <h1 className="onb-title">{say("onboardingTapTitle")}</h1>
-        <p className="onb-sub">{say("onboardingTapBody")}</p>
-      </div>
-      {lights.map(([left, dx, colour, delay]) => (
-        <span key={left} className="onb-dot-light" style={{
-          left, top: 696, width: 12, height: 12, background: colour, boxShadow: `0 0 18px ${colour}`,
-          ["--dx" as string]: dx, animation: `onb-rise 2.4s ease-out ${delay} infinite`,
-        }} />
-      ))}
-      <div className="onb-glyphs" aria-hidden="true">
-        <span className="onb-glyph"><Glyph kind="write" /><span>{say("onboardingTapThought")}</span></span>
-        <span className="onb-glyph" style={{ animationDelay: "0.8s" }}><Glyph kind="photo" /><span>{say("onboardingTapScreenshot")}</span></span>
-        <span className="onb-glyph" style={{ animationDelay: "1.6s" }}><Glyph kind="voice" /><span>{say("onboardingTapVoice")}</span></span>
-      </div>
-    </>
-  );
-}
-
-function Reads({ say }: { say: (key: Parameters<typeof t>[1]) => string }) {
-  const orbit: Array<[string, number, string, string, string]> = [
-    ["92px", 10, "#f3ebd8", "5s", "0s"], ["78px", 9, "#efe3c8", "4s", "-1.3s"],
-    ["104px", 8, "#f8f2e6", "6s", "-3s"], ["86px", 9, "#f3ebd8", "4.6s", "-2.2s"],
-  ];
-  return (
-    <>
-      <span className="onb-dot-light" style={{ left: 189, top: 196, width: 14, height: 14, background: "#fff7e6",
-        boxShadow: "0 0 30px 8px rgba(255,240,210,0.6)", animation: "onb-gather 6s ease-out infinite alternate" }} />
-      <div style={{ position: "absolute", left: 190, top: 300, animation: "onb-thin 6s infinite alternate" }}>
-        {orbit.map(([d, size, colour, duration, delay]) => (
-          <span key={delay} className="onb-dot-light" style={{ width: size, height: size, background: colour, boxShadow: `0 0 14px ${colour}`,
-            ["--d" as string]: d, animation: `onb-orbit ${duration} linear ${delay} infinite` }} />
-        ))}
-      </div>
-      <Creature size="large" eyes="closed"
-        style={at(137, 262, { position: "absolute", animation: "onb-lift 3s ease-in-out infinite" })} />
-      <div className="onb-words" style={{ top: 470 }}>
-        <h1 className="onb-title">{say("onboardingReadTitle")}</h1>
-        <p className="onb-sub">{say("onboardingReadBody")}</p>
-      </div>
-    </>
-  );
-}
-
-/* THE OTHER PERSON WALKS OVER (founder: "use that same animation here for the
-   other character to walk towards the main character"). `WalkingCompanion`
-   is the walk between Now and Principles, travelling: it starts off to the
-   right, turns to face yours, steps across and turns back to face you. The
-   light passes between them only once it has arrived. */
-const ARRIVE_FROM = 150;
+/* ── the five props: a note card in A, a light after it ── */
+interface Card { left: number; top: number; w: number; h: number; r: string; ground: string; sink: string; delay: string }
+const CARDS: Card[] = [
+  { left: 34, top: 120, w: 120, h: 80, r: "-8deg", ground: "#2a2c33", sink: "6s", delay: "0s" },
+  { left: 210, top: 96, w: 132, h: 96, r: "6deg", ground: "#26303c", sink: "7s", delay: "1s" },
+  { left: 120, top: 232, w: 150, h: 64, r: "3deg", ground: "#2b2a30", sink: "5.5s", delay: "0.5s" },
+  { left: 22, top: 300, w: 110, h: 60, r: "-4deg", ground: "#2c2a2f", sink: "6.5s", delay: "2s" },
+  { left: 256, top: 268, w: 104, h: 70, r: "9deg", ground: "#292d33", sink: "7.5s", delay: "1.5s" },
+];
+/** After a prop has travelled to its new place, that beat's own motion starts. */
+const SETTLE = 0.6;
+/* The other person sets off this long after D begins and walks `WALK_MS`;
+   the light passes between them only once it has arrived. */
 const SET_OFF_MS = 400;
+const ARRIVED = `${(SET_OFF_MS + WALK_MS) / 1000}s`;
 
-function People({ say }: { say: (key: Parameters<typeof t>[1]) => string }) {
-  const arrivedAt = `${(SET_OFF_MS + WALK_MS) / 1000}s`;
-  return (
-    <>
-      <span style={at(66, 300, { position: "absolute", transformOrigin: "50% 100%", animation: "onb-lean 5s ease-in-out infinite alternate" })}>
-        <Creature size="medium" bodyClassName="onb-body-glow" />
-      </span>
-      <span className="onb-creature" style={at(224, 300, { position: "absolute", width: 100, height: 76 })}>
-        <span className="onb-creature-real">
-          <WalkingCompanion size={88} being={OWNER_BEING} cool distance={ARRIVE_FROM} delayMs={SET_OFF_MS} />
-        </span>
-      </span>
-      <span className="onb-dot-light" style={{ left: 150, top: 324, width: 12, height: 12, background: "#fff6e4",
-        boxShadow: "0 0 22px 4px rgba(255,240,210,0.7)", animation: `onb-pass 5s ease-in-out ${arrivedAt} infinite alternate both` }} />
-      <div className="onb-words" style={{ top: 470 }}>
-        <h1 className="onb-title">{say("onboardingPeopleTitle")}</h1>
-        <p className="onb-sub">{say("onboardingPeopleBody")}</p>
-      </div>
-    </>
-  );
+interface Light { left: number; top: number; size: number; colour: string; glow: string; animation: string; dx?: string; d?: string }
+const rise = (at: number, dx: string, delay: number, colour: string): Light =>
+  ({ left: at, top: 696, size: 12, colour, glow: `0 0 18px ${colour}`, dx, animation: `onb-rise 2.4s ease-out ${SETTLE + delay}s infinite` });
+const orbit = (d: string, size: number, duration: string, delay: string, colour: string): Light =>
+  ({ left: 190, top: 300, size, colour, glow: `0 0 14px ${colour}`, d,
+    animation: `onb-orbit ${duration} linear ${delay} infinite, onb-thin 6s ${SETTLE}s infinite alternate` });
+const GATHER: Light = { left: 189, top: 196, size: 14, colour: "#fff7e6", glow: "0 0 30px 8px rgba(255,240,210,0.6)",
+  animation: `onb-gather 6s ease-out ${SETTLE}s infinite alternate` };
+const PASS: Light = { left: 150, top: 324, size: 12, colour: "#fff6e4", glow: "0 0 22px 4px rgba(255,240,210,0.7)",
+  animation: `onb-pass 5s ease-in-out ${ARRIVED} infinite alternate both` };
+
+/** Each prop's light in beats B, C and D; null is gone, into the creature. */
+const LIGHTS: Array<[Light | null, Light | null, Light | null]> = [
+  [rise(69, "60px", 0, "#f3ebd8"), orbit("92px", 10, "5s", "0s", "#f3ebd8"), null],
+  [null, orbit("78px", 9, "4s", "-1.3s", "#efe3c8"), null],
+  [rise(189, "0px", 0.8, "#f8f2e6"), orbit("104px", 8, "6s", "-3s", "#f8f2e6"), null],
+  [null, GATHER, PASS],
+  [rise(309, "-60px", 1.6, "#efe3c8"), orbit("86px", 9, "4.6s", "-2.2s", "#f3ebd8"), null],
+];
+/** Where a light that is gone goes, per beat: into that beat's creature. */
+const INTO: Array<{ left: number; top: number }> = [
+  { left: 195, top: 470 },
+  { left: 195, top: 193 },
+  { left: 195, top: 305 },
+  { left: 116, top: 338 },
+];
+
+function prop(index: number, beat: number): CSSProperties {
+  if (beat === 0) {
+    const c = CARDS[index]!;
+    return { left: c.left, top: c.top, width: c.w, height: c.h, borderRadius: 10, background: c.ground,
+      ["--r" as string]: c.r, animation: `onb-sink ${c.sink} ease-in ${c.delay} infinite alternate`, opacity: 1 };
+  }
+  const light = LIGHTS[index]![beat - 1];
+  if (!light) {
+    const into = INTO[beat]!;
+    return { left: into.left, top: into.top, width: 4, height: 4, borderRadius: "50%", background: "#f3ebd8", opacity: 0, animation: "none" };
+  }
+  return { left: light.left, top: light.top, width: light.size, height: light.size, borderRadius: "50%",
+    background: light.colour, boxShadow: light.glow, opacity: 1, animation: light.animation,
+    ["--dx" as string]: light.dx ?? "0px", ["--d" as string]: light.d ?? "0px" };
 }
+
+const TEXT: Array<{ top: number; title: MessageKey; body: MessageKey }> = [
+  { top: 540, title: "onboardingPileTitle", body: "onboardingPileBody" },
+  { top: 300, title: "onboardingTapTitle", body: "onboardingTapBody" },
+  { top: 470, title: "onboardingReadTitle", body: "onboardingReadBody" },
+  { top: 470, title: "onboardingPeopleTitle", body: "onboardingPeopleBody" },
+];
+const CARD_WORDS: MessageKey[] = ["onboardingPileNotes", "onboardingPileScreenshot", "onboardingPileReadLater", "onboardingPileVoiceMemo", "onboardingPileSavedPost"];
 
 export function OnboardingIntro({ locale, onDone }: { locale: SupportedLocale; onDone: () => void }): JSX.Element {
-  const say = (key: Parameters<typeof t>[1]) => t(locale, key);
-  const [frame, setFrame] = useState(0);
+  const say = (key: MessageKey) => t(locale, key);
+  const [beat, setBeat] = useState(0);
+  const [leaving, setLeaving] = useState(false);
+  /* The other person stays a moment after D, so it fades rather than vanishes. */
+  const [walker, setWalker] = useState(false);
   const { ref, fit } = useFit();
   const start = useRef<{ x: number; y: number } | null>(null);
-  const last = frame === FRAMES - 1;
-  const next = () => (last ? onDone() : setFrame((value) => Math.min(FRAMES - 1, value + 1)));
-  const back = () => setFrame((value) => Math.max(0, value - 1));
+  const last = beat === BEATS - 1;
+  const forward = () => {
+    if (leaving) return;
+    if (!last) { setBeat((value) => Math.min(BEATS - 1, value + 1)); return; }
+    setLeaving(true);
+    window.setTimeout(onDone, INTRO_LEAVE_MS);
+  };
+  const back = () => { if (!leaving) setBeat((value) => Math.max(0, value - 1)); };
+
+  useEffect(() => {
+    if (beat === BEATS - 1) { setWalker(true); return undefined; }
+    const timer = window.setTimeout(() => setWalker(false), 300);
+    return () => window.clearTimeout(timer);
+  }, [beat]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "ArrowRight") setFrame((value) => Math.min(FRAMES - 1, value + 1));
-      if (event.key === "ArrowLeft") setFrame((value) => Math.max(0, value - 1));
+      if (event.key === "ArrowRight") setBeat((value) => Math.min(BEATS - 1, value + 1));
+      if (event.key === "ArrowLeft") setBeat((value) => Math.max(0, value - 1));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -181,23 +170,57 @@ export function OnboardingIntro({ locale, onDone }: { locale: SupportedLocale; o
     if (!from) return;
     const dx = event.clientX - from.x, dy = event.clientY - from.y;
     if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return;
-    if (dx < 0 && !last) next();
+    if (dx < 0 && !last) forward();
     if (dx > 0) back();
   };
 
-  const Frame = [Pile, OneTap, Reads, People][frame]!;
+  const here = CREATURE[beat]!;
   return (
-    <main className={`onb onb-intro ${frame === 0 ? "" : "onb--deep"}`.trim()} onPointerDown={down} onPointerUp={up}
-      onPointerCancel={() => { start.current = null; }}>
+    <main className={`onb onb-intro${leaving ? " onb-intro--leaving" : ""}`} data-beat={beat}
+      onPointerDown={down} onPointerUp={up} onPointerCancel={() => { start.current = null; }}>
+      <span className="onb-intro-glow" aria-hidden="true" />
       <div className="onb-stage">
         <div className="onb-fit" ref={ref}>
-          <div key={frame} className="onb-plate onb-plate-enter" style={{ ["--onb-fit" as string]: fit }}>
-            <Frame say={say} />
+          <div className="onb-plate" style={{ ["--onb-fit" as string]: fit }}>
+            <div className="onb-props" aria-hidden="true">
+              {CARDS.map((_, index) => (
+                <div key={index} className="onb-bit" style={prop(index, beat)}>
+                  <div className="onb-bit-face">
+                    {index === 0 ? <><div className="onb-pile-line" style={{ width: "80%" }} /><div className="onb-pile-line" style={{ width: "60%", marginTop: 8 }} /></> : null}
+                    {index === 1 ? <div className="onb-bit-shot" /> : null}
+                    <p className={index < 2 ? "onb-pile-meta" : undefined}>{say(CARD_WORDS[index]!)}</p>
+                    {index === 2 || index === 4 ? <div className="onb-pile-line" style={{ width: "70%", marginTop: 10 }} /> : null}
+                    {index === 3 ? <div className="onb-bit-wave" /> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <CreatureSlot size={here.size} eyes={here.eyes} motion={here.motion} place={beat}
+              style={{ position: "absolute", left: here.left, top: here.top }} />
+            {walker ? (
+              <span className={`onb-walker${last && !leaving ? "" : " onb-walker--gone"}`}>
+                <span className="onb-creature-real">
+                  <WalkingCompanion size={88} being={OWNER_BEING} cool distance={150} delayMs={SET_OFF_MS} />
+                </span>
+              </span>
+            ) : null}
+            <div className="onb-glyphs" aria-hidden="true" data-on={beat === 1 ? "" : undefined}>
+              <span className="onb-glyph"><Glyph kind="write" /><span>{say("onboardingTapThought")}</span></span>
+              <span className="onb-glyph" style={{ animationDelay: "0.8s" }}><Glyph kind="photo" /><span>{say("onboardingTapScreenshot")}</span></span>
+              <span className="onb-glyph" style={{ animationDelay: "1.6s" }}><Glyph kind="voice" /><span>{say("onboardingTapVoice")}</span></span>
+            </div>
+            {TEXT.map((words, index) => (
+              <div key={index} className="onb-words onb-beat-words" data-on={index === beat ? "" : undefined}
+                aria-hidden={index === beat ? undefined : true} style={{ top: words.top }}>
+                {index === beat ? <h1 className="onb-title">{say(words.title)}</h1> : <p className="onb-title">{say(words.title)}</p>}
+                <p className="onb-sub">{say(words.body)}</p>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="onb-foot">
-          <Dots count={FRAMES} on={frame + 1} />
-          <button type="button" className="onb-go" onClick={next}>
+        <div className="onb-foot onb-intro-foot">
+          <Dots count={BEATS} on={beat + 1} />
+          <button type="button" className="onb-go" onClick={forward} disabled={leaving}>
             {last ? say("onboardingStart") : say("onboardingNext")}
           </button>
         </div>

@@ -11,7 +11,7 @@ import { useState } from "react";
 
 import { t, type SupportedLocale } from "../../lib/locales";
 import type { MessageKey } from "../../lib/i18n";
-import { Creature } from "./Creature";
+import { CreatureSlot } from "./CreatureStage";
 
 const ORBS: Array<[number, string, string]> = [
   [12, "#f1e9d6", "onb-drift-a 2.4s"],
@@ -28,14 +28,14 @@ export function OnboardingReading({ locale, error = "", busy = false, onContinue
 }): JSX.Element {
   const say = (key: MessageKey) => t(locale, key);
   return (
-    <main className="onb onb--deep">
+    <main className="onb onb--deep onb-arrive">
       <div className="onb-stage onb-reading">
         <div className="onb-orbs">
           {ORBS.map(([size, colour, motion]) => (
             <span key={motion} className="onb-orb" style={{ width: size, height: size, background: colour,
               boxShadow: `0 0 18px ${colour}`, animation: `${motion} ease-in-out infinite alternate` }} />
           ))}
-          <Creature size="large" eyes="closed" style={{ position: "absolute", left: 0, top: 0 }} />
+          <CreatureSlot size="large" eyes="closed" style={{ position: "absolute", left: 0, top: 0 }} />
         </div>
         <p className="onb-reading-words" role="status">{say("onboardingReading")}</p>
         {error && onContinue ? (
@@ -62,7 +62,7 @@ export function OnboardingReveal({ locale, reading, behind, busy, error, onTalk,
   const say = (key: MessageKey) => t(locale, key);
   const [why, setWhy] = useState(false);
   return (
-    <main className="onb onb--lift">
+    <main className="onb onb--lift onb-arrive">
       <div className="onb-stage onb-reveal">
         <div className="onb-center">
           <div className="onb-group">
@@ -81,7 +81,7 @@ export function OnboardingReveal({ locale, reading, behind, busy, error, onTalk,
         </section>
         <span className="onb-tail" aria-hidden="true" />
         <div className="onb-tail-gap" />
-        <Creature size="large" />
+        <CreatureSlot size="large" />
         <p className="onb-sharpen">{say("onboardingSharpen")}</p>
           </div>
         </div>

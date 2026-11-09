@@ -106,11 +106,21 @@ function type(words: string): void {
   act(() => { setter.call(area, words); area.dispatchEvent(new Event("input", { bubbles: true })); });
 }
 
+/* Real time, for the beats onboarding stages on purpose: the intro steps
+   aside before the questions, an answer is handed to the creature before
+   the next is asked, and the scene fades before home. Generous on purpose —
+   the suite asserts order, not timing. */
+async function settle(ms: number): Promise<void> {
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)); });
+  await flush();
+}
+
 async function answer(words: string): Promise<void> {
   press("Write");
   type(words);
   press("Save");
   await flush();
+  await settle(1700);
 }
 
 const completions = () => vi.mocked(updateAuthProfile).mock.calls.filter(([input]) => input.completeOnboarding === true);
@@ -159,11 +169,12 @@ describe("the preview on a dev server", () => {
     expect(fetchInspirationSnapshot).not.toHaveBeenCalled();
     for (let i = 0; i < 3; i += 1) press("Next");
     press("Start");
+    await settle(400);
     for (const words of ["One", "Two", "Three"]) {
       press("Write");
       type(words);
       press("Save");
-      await wait(400);
+      await wait(2300);
       await flush();
     }
     expect(page.textContent).toContain("Reading your three…");
@@ -174,7 +185,7 @@ describe("the preview on a dev server", () => {
     expect(page.textContent).toContain("Three");
     expect(createInspiration).not.toHaveBeenCalled();
     press("Talk about this");
-    await flush();
+    await settle(400);
     expect(page.textContent).toContain("HOME");
     expect(completions()).toHaveLength(0);
     expect(updateAuthProfile).not.toHaveBeenCalled();

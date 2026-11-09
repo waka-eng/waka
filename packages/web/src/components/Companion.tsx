@@ -58,8 +58,12 @@ import { MACHINE_CELLS, pixelate, rampFromCss, rasterGrain } from "../canvas/pal
  * already a press target (a switcher row, a portrait in a list), so it never
  * steals the press the row is for.
  */
-export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel = false, label = "WAKA", eyes = "open", pressable = true }: {
+export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel = false, label = "WAKA", eyes = "open", pressable = true, flareKey = 0 }: {
   size?: number;
+  /** Change it to light the creature as a press would — for a page that
+      answers something the person did elsewhere (an answer landing in it).
+      0 never lights. */
+  flareKey?: number;
   /** False inside another interactive element: the row keeps its press. */
   pressable?: boolean;
   /** "shut" while it reads (onboarding's intro and reading screens). The same
@@ -102,6 +106,7 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
     };
     timer.current.frame = requestAnimationFrame(step);
   }, []);
+  useEffect(() => { if (flareKey) shine(); }, [flareKey, shine]);
 
   useEffect(() => {
     const node = canvas.current;

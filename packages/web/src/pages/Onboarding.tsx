@@ -54,6 +54,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createConversation } from "../lib/api/conversations";
 import { ApiError, fetchInspirationPage, fetchInspirationSnapshot, type ApiInspiration } from "../lib/api";
 import { Companion } from "../components/Companion";
+import { CreatureStage } from "../components/onboarding/CreatureStage";
 import { OnboardingIntro } from "../components/onboarding/OnboardingIntro";
 import { OnboardingQuestion } from "../components/onboarding/OnboardingQuestion";
 import { OnboardingReading, OnboardingReveal } from "../components/onboarding/OnboardingRead";
@@ -70,7 +71,9 @@ import {
 import type { SupportedLocale } from "../lib/locales";
 import {
   clearOnboardingMarker,
+  leaveOnboardingFor,
   ONBOARDING_QUESTIONS,
+  takeOnboardingExit,
   onboardingStep,
   readOnboardingMarker,
   writeOnboardingMarker,
@@ -86,6 +89,8 @@ function safeRedirect(from: unknown): string {
 
 /** How long the reading screen waits before letting the person in anyway. */
 export const FIRST_READ_PATIENCE_MS = 20_000;
+/** The fade from the last onboarding screen into home. */
+const LEAVE_FADE_MS = 250;
 
 /** One line per answer, for "Why?": its words, else what it is. */
 function lineOf(locale: SupportedLocale, words: string, attachment?: "image" | "audio" | "file" | "link" | null): string {
@@ -136,16 +141,32 @@ export default function OnboardingPage(): JSX.Element {
   /* LEAVING, and the one place onboarding is stamped done. The stamp and the
      move happen together, so the route guard never sees a finished account
      standing on /onboarding. */
+  /* INTO HOME, A FADE. Home's creature is drawn by the world at a place this
+     page cannot know in advance, so the creature does not try to hop there;
+     the whole scene fades and home is simply under it. */
+  const [fading, setFading] = useState(false);
+  const fadeOut = () => new Promise<void>((resolve) => {
+    setFading(true);
+    window.setTimeout(resolve, LEAVE_FADE_MS);
+  });
+
   const finish = useCallback(async (destination: string) => {
     if (!profile) return;
     /* A preview stamps nothing: it returns home exactly as it found the account. */
-    if (preview) { navigate("/", { replace: true }); return; }
+    if (preview) { await fadeOut(); navigate("/", { replace: true }); return; }
     setLeaving(true); setLeaveError("");
+    /* The fade comes FIRST: the moment onboarding is stamped, the route guard
+       sends a finished account away from /onboarding, so the stamp and the
+       move have to land together. A stamp that fails brings the scene back. */
+    await fadeOut();
+    leaveOnboardingFor(destination);
     try {
       await updateProfile({ name: profile.name, preferredLocale: normalizeSupportedLocale(profile.preferredLocale), completeOnboarding: true });
       clearOnboardingMarker(accountId);
       navigate(destination, { replace: true });
     } catch (reason) {
+      takeOnboardingExit();
+      setFading(false);
       setLeaveError(reason instanceof ApiError ? reason.message : say("profileSaveError"));
       setLeaving(false);
     }
@@ -191,7 +212,7 @@ export default function OnboardingPage(): JSX.Element {
 
   const talk = async (reading: string) => {
     if (!profileId) return;
-    if (preview) { navigate("/", { replace: true }); return; }
+    if (preview) { await fadeOut(); navigate("/", { replace: true }); return; }
     setLeaving(true); setLeaveError("");
     const conversationId = crypto.randomUUID();
     try {
@@ -203,8 +224,10 @@ export default function OnboardingPage(): JSX.Element {
   };
 
   const marker = preview ? <p className="onb-preview-mark" aria-label={say("onboardingPreviewMarkLabel")}>{say("onboardingPreviewMark")}</p> : null;
-  const screen = renderStep();
-  return marker ? <>{screen}{marker}</> : screen;
+  /* ONE CREATURE FOR EVERY STEP (`CreatureStage`): the stage stays mounted
+     while the steps under it change, so the creature hops from one to the
+     next instead of each step drawing its own. */
+  return <CreatureStage fading={fading}>{renderStep()}{marker}</CreatureStage>;
 
   function renderStep(): JSX.Element {
   if (phase.kind === "name") {
@@ -214,7 +237,7 @@ export default function OnboardingPage(): JSX.Element {
     return <OnboardingIntro locale={locale} onDone={() => { if (!preview) writeOnboardingMarker(accountId, { introSeen: true }); setPhase({ kind: "question", index: 0 }); }} />;
   }
   if (phase.kind === "question" && profileId) {
-    return <OnboardingQuestion key={phase.index} locale={locale} index={phase.index} profileId={profileId}
+    return <OnboardingQuestion locale={locale} index={phase.index} profileId={profileId}
       calling={calling} onTouched={() => setCalling(false)} onSaved={saved(phase.index)} simulate={preview} />;
   }
   if (phase.kind === "reading") {

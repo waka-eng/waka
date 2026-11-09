@@ -102,11 +102,21 @@ function type(words: string): void {
   act(() => { setter.call(area, words); area.dispatchEvent(new Event("input", { bubbles: true })); });
 }
 
+/* Real time, for the beats onboarding stages on purpose: the intro steps
+   aside before the questions, an answer is handed to the creature before
+   the next is asked, and the scene fades before home. Generous on purpose —
+   the suite asserts order, not timing. */
+async function settle(ms: number): Promise<void> {
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)); });
+  await flush();
+}
+
 async function answer(words: string): Promise<void> {
   press("Write");
   type(words);
   press("Save");
   await flush();
+  await settle(1700);
 }
 
 const completions = () => vi.mocked(updateAuthProfile).mock.calls.filter(([input]) => input.completeOnboarding === true);
@@ -160,6 +170,7 @@ describe("the onboarding gate", () => {
     expect(page.textContent).toContain("How many notes have you saved and never looked at again?");
     for (let i = 0; i < 3; i += 1) press("Next");
     press("Start");
+    await settle(400);
     expect(page.textContent).toContain("Share one thing that’s stuck with you lately.");
     expect(completions()).toHaveLength(0);
   });
@@ -211,7 +222,7 @@ describe("three saves, then the first read", () => {
     expect(page.textContent).toContain("My sister saying she finally sleeps");
 
     press("Continue");
-    await flush();
+    await settle(400);
     expect(completions()).toHaveLength(1);
     expect(page.textContent).toContain("HOME");
     expect(window.localStorage.getItem("waka.onboarding:acc-1")).toBeNull();
@@ -228,7 +239,7 @@ describe("three saves, then the first read", () => {
     saved = 3;
     const page = await render();
     press("Talk about this");
-    await flush();
+    await settle(400);
     expect(completions()).toHaveLength(1);
     expect(page.textContent).toContain("CHAT");
   });
@@ -241,6 +252,8 @@ describe("three saves, then the first read", () => {
     expect(page.textContent).toContain("Reading your three…");
     expect(completions()).toHaveLength(0);
     await act(async () => { vi.advanceTimersByTime(FIRST_READ_PATIENCE_MS); });
+    await flush();
+    await act(async () => { vi.advanceTimersByTime(400); });
     await flush();
     expect(completions()).toHaveLength(1);
     expect(page.textContent).toContain("HOME");

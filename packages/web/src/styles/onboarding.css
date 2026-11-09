@@ -98,6 +98,28 @@
   pointer-events: none;
 }
 
+/* THE ONE CREATURE (`CreatureStage`): fixed over every screen, standing in
+   whichever slot the screen left for it. Its box is the frame's large
+   footprint; it is moved and scaled from JS, and only the body's own button
+   inside takes a press. */
+.onb-lead {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  width: 116px;
+  height: 86px;
+  pointer-events: none;
+  will-change: transform;
+}
+.onb-lead-pose { position: absolute; inset: 0; transform-origin: 50% 100%; }
+.onb-lead--catch { animation: onb-catch 2.4s ease-in-out infinite; }
+.onb-lead--lift { animation: onb-lift 3s ease-in-out infinite; }
+.onb-lead--lean { animation: onb-lean 5s ease-in-out infinite alternate; }
+.onb-slot { display: block; flex-shrink: 0; }
+.onb-scene { transition: opacity 250ms ease; }
+.onb-scene--out { opacity: 0; }
+
 /* ─── intro frames ─────────────────────────────────────────────────── */
 .onb-intro { touch-action: pan-y; user-select: none; }
 .onb-fit {
@@ -114,7 +136,6 @@
   transform: translate(-50%, -50%) scale(var(--onb-fit, 1));
   transform-origin: 50% 50%;
 }
-.onb-plate-enter { animation: onb-enter 320ms ease-out both; }
 .onb-words {
   position: absolute;
   left: var(--sp-24);
@@ -124,15 +145,51 @@
 .onb-title { margin: 0; font-size: 25px; letter-spacing: 0; line-height: 1.3; font-weight: 400; color: var(--onb-ink); text-wrap: balance; }
 .onb-sub { margin: var(--sp-12) 0 0; font-size: var(--t-body); line-height: 1.45; color: var(--onb-ink-soft); text-wrap: pretty; }
 
-.onb-pile-card {
+/* ONE SCENE, FOUR BEATS (`OnboardingIntro`). A prop is a note card in A and
+   a light after it; it travels between its beats' places instead of cutting.
+   Each beat's own motion (rise, orbit, pass) starts once it has arrived. */
+.onb-intro-glow {
   position: absolute;
-  border-radius: 10px;
-  padding: var(--sp-12);
-  box-sizing: border-box;
-  animation: onb-sink 6s ease-in infinite alternate;
+  inset: 0;
+  background: radial-gradient(circle at 50% 38%, var(--onb-ground-deep) 0%, var(--onb-ground) 58%);
+  opacity: 0;
+  transition: opacity 600ms ease;
+  pointer-events: none;
 }
-.onb-pile-card p { margin: 0; font-size: 11px; color: var(--onb-ink-quiet); }
-.onb-pile-card .onb-pile-meta { font-size: 10px; color: var(--onb-ink-faint); }
+.onb-intro:not([data-beat="0"]) .onb-intro-glow { opacity: 1; }
+.onb-intro > .onb-stage { position: relative; }
+.onb-props { position: absolute; inset: 0; }
+.onb-bit {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  transition:
+    left 600ms cubic-bezier(0.4, 0, 0.2, 1), top 600ms cubic-bezier(0.4, 0, 0.2, 1),
+    width 600ms ease, height 600ms ease, border-radius 600ms ease,
+    background-color 600ms ease, box-shadow 600ms ease, opacity 400ms ease;
+}
+.onb-bit-face { padding: var(--sp-12); transition: opacity 250ms ease; }
+.onb-intro:not([data-beat="0"]) .onb-bit-face { opacity: 0; }
+.onb-bit-face p { margin: 0; font-size: 11px; color: var(--onb-ink-quiet); white-space: nowrap; }
+.onb-bit-face .onb-pile-meta { margin-top: var(--sp-10); font-size: 10px; color: var(--onb-ink-faint); }
+.onb-bit-shot { height: 50px; margin: -2px -2px 0; border-radius: 6px; background: #34404e; }
+.onb-bit-wave { height: 14px; margin-top: var(--sp-8); background: repeating-linear-gradient(90deg, #4a4c53 0 2px, transparent 2px 5px); }
+.onb-glyphs { opacity: 0; transition: opacity 300ms ease; }
+.onb-glyphs[data-on] { opacity: 1; transition-delay: 300ms; }
+.onb-beat-words { opacity: 0; transition: opacity 200ms ease; pointer-events: none; }
+.onb-beat-words[data-on] { opacity: 1; transition: opacity 300ms ease 200ms; }
+.onb-walker {
+  position: absolute;
+  left: 224px;
+  top: 300px;
+  width: 100px;
+  height: 76px;
+  transition: opacity 250ms ease;
+}
+.onb-walker--gone { opacity: 0; }
+.onb-intro--leaving .onb-beat-words,
+.onb-intro--leaving .onb-intro-foot { opacity: 0; transition: opacity 250ms ease; }
+.onb-intro-foot { transition: opacity 250ms ease; }
 .onb-pile-line { height: 6px; border-radius: 3px; background: #4a4c53; }
 
 .onb-glyphs {
@@ -224,16 +281,23 @@
   width: 300px;
   max-width: 100%;
   box-sizing: border-box;
-  padding: var(--sp-12) var(--sp-18);
+  padding: 0;
+  overflow: hidden;
   background: var(--onb-bubble);
   color: var(--onb-bubble-ink);
   border-radius: 22px;
   text-align: center;
+  box-shadow: 0 0 40px rgba(216, 207, 190, 0.18);
+  transition: height 300ms ease;
+}
+.onb-bubble-words {
+  padding: var(--sp-12) var(--sp-18);
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  box-shadow: 0 0 40px rgba(216, 207, 190, 0.18);
+  animation: onb-swap 300ms ease both;
 }
+.onb-bubble-words--kept { height: 100%; box-sizing: border-box; justify-content: center; }
 .onb-bubble-ask { margin: 0; font-size: 17px; line-height: 1.4; font-weight: 400; }
 .onb-bubble-hint { margin: 0; font-size: 14px; line-height: 1.4; color: var(--onb-bubble-soft); }
 .onb-tail {
@@ -398,6 +462,29 @@
 .onb-mic--on { animation: onb-ring 1.4s ease-out infinite; }
 .onb .onb-listen .onb-word-btn { height: 52px; padding: 0 var(--sp-16); }
 
+/* THE BAR ZONE: whatever the bar is showing (the three ways, the note, the
+   listening bar), and the cue above it. During a handoff the cue goes quiet
+   and the ways are dim: nothing can be pressed. */
+.onb-bar-zone { align-self: stretch; display: flex; flex-direction: column; align-items: center; }
+.onb-share-cue { display: flex; flex-direction: column; align-items: center; transition: opacity 200ms ease; }
+.onb-share-cue--quiet { opacity: 0; }
+.onb .onb-choice:disabled { color: var(--onb-ink-faint); cursor: default; }
+/* What was answered, on its way into the creature (`flyInto`). */
+.onb-ghost { z-index: 3; pointer-events: none; }
+
+/* ARRIVING: the creature lands first (it is the page's one creature and hops
+   in on its own), then the bubble grows out of its tail, then the dots and the
+   bar rise in. Runs once, when a screen mounts; reduced motion skips it. */
+.onb-arrive .onb-bubble,
+.onb-arrive .onb-tail,
+.onb-arrive .onb-read { animation: onb-grow-in 300ms ease-out 600ms both; transform-origin: 50% 100%; }
+.onb-arrive .onb-ask-dots,
+.onb-arrive .onb-bar-zone,
+.onb-arrive .onb-sharpen,
+.onb-arrive > .onb-stage > .onb-go { animation: onb-rise-in 250ms ease-out 900ms both; }
+.onb-arrive .onb-reading-words,
+.onb-arrive .onb-reading-wait { animation: onb-enter 300ms ease-out 500ms both; }
+
 /* ─── reading and reveal ───────────────────────────────────────────── */
 .onb-reading { align-items: center; }
 .onb-orbs { position: relative; width: 116px; height: 86px; margin-top: max(var(--sp-96), calc(50dvh - 43px)); flex-shrink: 0; }
@@ -465,6 +552,9 @@
 
 /* ─── motion, from the frames ──────────────────────────────────────── */
 @keyframes onb-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes onb-swap { from { opacity: 0; } to { opacity: 1; } }
+@keyframes onb-grow-in { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: none; } }
+@keyframes onb-rise-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes onb-sink { 0% { transform: translateY(0) rotate(var(--r)); opacity: .9; } 100% { transform: translateY(60px) rotate(var(--r)); opacity: .12; } }
 @keyframes onb-rise { 0% { transform: translate(0, 0) scale(.6); opacity: 0; } 12% { opacity: 1; } 80% { opacity: 1; } 100% { transform: translate(var(--dx), -322px) scale(1); opacity: 0; } }
 @keyframes onb-catch { 0%, 78%, 100% { transform: scale(1, 1); } 86% { transform: scale(1.07, .93); } 93% { transform: scale(.97, 1.04); } }
@@ -489,5 +579,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .onb *, .onb *::before, .onb *::after { animation: none !important; }
+  /* nothing travels: props are where their beat ends, and only fade */
+  .onb-bit { transition-property: opacity; }
 }
 }

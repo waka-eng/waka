@@ -33,7 +33,8 @@ import { useAudioRecording } from "../../lib/use-audio-recording";
 import { dictationAvailable, useDictation } from "../../lib/use-dictation";
 import { whyOf } from "../../lib/why-failed";
 import { ONBOARDING_QUESTIONS } from "../../lib/onboarding-progress";
-import { Creature, Dots, Glyph } from "./Creature";
+import { Dots, Glyph } from "./Creature";
+import { CreatureSlot, useCreatureStage } from "./CreatureStage";
 
 const QUESTIONS: Array<{ ask: MessageKey; hint: MessageKey }> = [
   { ask: "onboardingAskStuck", hint: "onboardingAskStuckHint" },
@@ -42,6 +43,35 @@ const QUESTIONS: Array<{ ask: MessageKey; hint: MessageKey }> = [
 ];
 
 type Mode = "choose" | "write" | "photo" | "voice";
+
+/** The handoff's beats (see `receive`). */
+const RECEIVE_MS = 500;
+const KEPT_MS = 700;
+const ASK_MS = 300;
+/** How long a screen's staged arrival takes, end to end (see `.onb-arrive`). */
+const ARRIVE_MS = 1200;
+
+const reducedMotion = () =>
+  typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** The answer, as it looks on screen, shrinks into the creature and is gone. */
+function flyInto(from: HTMLElement | null, to: { x: number; y: number }): void {
+  if (!from || typeof from.animate !== "function") return;
+  const box = from.getBoundingClientRect();
+  if (!box.width) return;
+  const ghost = from.cloneNode(true) as HTMLElement;
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.classList.add("onb-ghost");
+  Object.assign(ghost.style, { position: "fixed", left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px`, margin: "0" });
+  (from.closest(".onb") ?? document.body).appendChild(ghost);
+  const dx = to.x - (box.left + box.width / 2), dy = to.y - (box.top + box.height / 2);
+  const flight = ghost.animate([
+    { transform: "translate(0, 0) scale(1)", opacity: 1 },
+    { transform: `translate(${dx}px, ${dy}px) scale(0.08)`, opacity: 0 },
+  ], { duration: RECEIVE_MS, easing: "cubic-bezier(0.5, 0, 0.75, 0)", fill: "forwards" });
+  flight.onfinish = () => ghost.remove();
+  flight.oncancel = () => ghost.remove();
+}
 
 const WAVE = [10, 18, 26, 14, 22, 30, 16, 24, 12, 20, 28, 14, 10];
 
@@ -69,10 +99,55 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
   const textRef = useRef(text); textRef.current = text;
   const fileInput = useRef<HTMLInputElement>(null);
   const area = useRef<HTMLTextAreaElement>(null);
+  const photoRef = useRef<HTMLDivElement>(null);
   /* One identity per answer: a retried Save is the same save to the server. */
   const requestId = useRef<string>(crypto.randomUUID());
   /* Upload receipts survive a failed save, so a retry does not upload twice. */
   const uploaded = useRef(new Map<string, InspirationDraftMedia["uploaded"]>());
+
+  /* ═══ THE HANDOFF, after a Save lands (founder: "should have confirmation
+     visually somehow the agent received ur input and is asking the next
+     question"). Three beats, about a second and a half:
+       receive  the answer flies into the creature, which hops and flares —
+                the keep it gets at home (`acknowledge`)
+       kept     the bubble says "Saved" and the next dot fills
+       ask      the bubble cross-fades to the next question, the bar returns
+     Nothing can be pressed while it plays. A save that fails never starts
+     it: the error is said and the answer stays. Under reduced motion there
+     is no flight and no hop — "Saved" for a moment, then the next question. */
+  const [handoff, setHandoff] = useState<"receive" | "kept" | "ask" | null>(null);
+  const stage = useCreatureStage();
+  const bar = useRef<HTMLDivElement>(null);
+  const timers = useRef<number[]>([]);
+  useEffect(() => () => timers.current.forEach((timer) => window.clearTimeout(timer)), []);
+  const later = (ms: number, then: () => void) => { timers.current.push(window.setTimeout(then, ms)); };
+  /* A new question is a new answer: fresh words, fresh identity. */
+  const asked = useRef(index);
+  useEffect(() => {
+    if (asked.current === index) return;
+    asked.current = index;
+    setMode("choose"); setText(""); setPhoto(null); setAudio(null); setVoiceOn(false); setError("");
+    requestId.current = crypto.randomUUID();
+    uploaded.current = new Map();
+  }, [index]);
+
+  /* Measured so the bubble's height can ease between what it says. */
+  const bubbleWords = useRef<HTMLDivElement>(null);
+  const [bubbleHeight, setBubbleHeight] = useState(0);
+  useEffect(() => {
+    const node = bubbleWords.current;
+    /* "Saved" keeps the question's height, so nothing under it moves while
+       it is said; the next question then eases the bubble to its own. */
+    if (!node || handoff === "kept" || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => setBubbleHeight(node.offsetHeight));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [handoff, index, mode]);
+  /* The first time this screen is shown it arrives in stages (the creature
+     lands, the bubble grows from its tail, the dots and bar rise last);
+     after that, questions follow each other inside it. */
+  const [arrived, setArrived] = useState(false);
+  useEffect(() => { const timer = window.setTimeout(() => setArrived(true), ARRIVE_MS); return () => window.clearTimeout(timer); }, []);
 
   const canDictate = dictationAvailable();
   const dictation = useDictation(() => textRef.current, (words) => setText(words), locale);
@@ -127,7 +202,26 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
   };
 
   const hasAnswer = Boolean(text.trim() || photo || audio);
-  const canSave = hasAnswer && !saving && !listening && !finishing;
+  const canSave = hasAnswer && !saving && !listening && !finishing && !handoff;
+
+  /** The answer has landed: hand it to the creature, then ask the next. */
+  const receive = (saved: ApiInspiration) => {
+    const still = reducedMotion();
+    const target = stage?.center() ?? null;
+    if (!still && target) flyInto(photoRef.current ?? bar.current, target);
+    setHandoff("receive");
+    setMode("choose"); setVoiceOn(false);
+    later(still ? 0 : RECEIVE_MS, () => {
+      if (!still) stage?.acknowledge();
+      setHandoff("kept");
+      later(KEPT_MS, () => {
+        const more = index + 1 < ONBOARDING_QUESTIONS;
+        setHandoff(more ? "ask" : null);
+        onSaved(saved);
+        if (more) later(ASK_MS, () => setHandoff(null));
+      });
+    });
+  };
 
   const save = async () => {
     if (!canSave) return;
@@ -137,8 +231,8 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
       await new Promise((resolve) => window.setTimeout(resolve, 350));
       const words = text.trim();
       const kind = photo ? (words ? "mixed" : "image") : audio ? (words ? "mixed" : "audio") : "note";
-      onSaved({ id: `preview-${index}`, profileId, text: words, kind, source: "app" } as ApiInspiration);
       setSaving(false);
+      receive({ id: `preview-${index}`, profileId, text: words, kind, source: "app" } as ApiInspiration);
       return;
     }
     try {
@@ -159,10 +253,10 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
         { text: words, kind, source: "app", ...(attachments.length ? { attachments } : {}) },
         { profile: profileId, requestId: requestId.current },
       );
-      onSaved(saved);
+      setSaving(false);
+      receive(saved);
     } catch (reason) {
       setError(say(draftProblem(reason, "worldComposerSaveFailed")));
-    } finally {
       setSaving(false);
     }
   };
@@ -216,10 +310,10 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
         <div className="onb-stage onb-ask">
           <div className="onb-ask-dots onb-ask-dots--tight"><Dots count={ONBOARDING_QUESTIONS} on={index + 1} className="onb-dots--center" /></div>
           <div className="onb-photo-head">
-            <Creature size="tiny" />
+            <CreatureSlot size="tiny" />
             <p className="onb-photo-ask">{say("onboardingPhotoAsk")}</p>
           </div>
-          <div className="onb-photo">
+          <div ref={photoRef} className="onb-photo">
             <img src={photo.url} alt="" />
             <button type="button" className="onb-icon-btn" aria-label={say("onboardingPhotoRemove")} disabled={saving} onClick={backToChoice}>
               <Glyph kind="close" size={18} />
@@ -254,37 +348,52 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
     );
   }
 
+  const dotsOn = index + (handoff === "kept" ? 2 : 1);
+  const locked = Boolean(handoff);
   return (
-    <main className="onb onb--lift">
+    <main className={`onb onb--lift${arrived ? "" : " onb-arrive"}`}>
       <div className="onb-stage onb-ask">
-        <div className="onb-ask-dots"><Dots count={ONBOARDING_QUESTIONS} on={index + 1} className="onb-dots--center" /></div>
+        <div className="onb-ask-dots"><Dots count={ONBOARDING_QUESTIONS} on={dotsOn} className="onb-dots--center" /></div>
         {/* THE ASK SITS AT THE OPTICAL CENTRE of whatever room is left between
             the dots and the bar — centred, then nudged up — so it holds on a
             short phone, a tall one and a desktop window alike. */}
         <div className="onb-center">
           <div className="onb-group">
-            <div className="onb-bubble">
-              <h1 className="onb-bubble-ask">{say(question.ask)}</h1>
-              <p className="onb-bubble-hint">{say(question.hint)}</p>
+            {/* THE BUBBLE GROWS AND SHRINKS TO WHAT IT SAYS, smoothly: its
+                height follows its words (observed), and a change of words
+                cross-fades rather than cutting. */}
+            <div className="onb-bubble" style={bubbleHeight ? { height: bubbleHeight } : undefined}>
+              <div ref={bubbleWords} key={handoff === "kept" ? "kept" : `ask-${index}`}
+                className={`onb-bubble-words${handoff === "kept" ? " onb-bubble-words--kept" : ""}`}>
+                {handoff === "kept" ? (
+                  <p className="onb-bubble-ask" role="status">{say("worldSavedWord")}</p>
+                ) : (
+                  <>
+                    <h1 className="onb-bubble-ask">{say(question.ask)}</h1>
+                    <p className="onb-bubble-hint">{say(question.hint)}</p>
+                  </>
+                )}
+              </div>
             </div>
             <span className="onb-tail" aria-hidden="true" />
             <div className="onb-tail-gap" />
-            <Creature size="large" />
+            <CreatureSlot size="large" />
           </div>
         </div>
         {mode === "voice" ? said : null}
+        <div ref={bar} className="onb-bar-zone">
         {mode === "choose" ? (
           <>
             {error ? <p className="onb-error" role="alert">{error}</p> : (
-              <>
+              <span className={`onb-share-cue${locked ? " onb-share-cue--quiet" : ""}`}>
                 <p className="onb-share-here">{say("onboardingShareHere")}</p>
                 <span className="onb-nudge"><Glyph kind="down" size={16} /></span>
-              </>
+              </span>
             )}
-            <nav className={`onb-pill onb-choose${calling ? " onb-choose--call" : ""}`} aria-label={say(question.ask)}>
-              <button type="button" className="onb-choice" onClick={() => choose("write")}><Glyph kind="write" /><span>{say("onboardingWrite")}</span></button>
-              <button type="button" className="onb-choice" onClick={() => choose("photo")}><Glyph kind="photo" /><span>{say("onboardingPhoto")}</span></button>
-              <button type="button" className="onb-choice" onClick={() => choose("voice")}><Glyph kind="voice" /><span>{say("onboardingSayIt")}</span></button>
+            <nav className={`onb-pill onb-choose${calling && !locked ? " onb-choose--call" : ""}`} aria-label={say(question.ask)}>
+              <button type="button" className="onb-choice" disabled={locked} onClick={() => choose("write")}><Glyph kind="write" /><span>{say("onboardingWrite")}</span></button>
+              <button type="button" className="onb-choice" disabled={locked} onClick={() => choose("photo")}><Glyph kind="photo" /><span>{say("onboardingPhoto")}</span></button>
+              <button type="button" className="onb-choice" disabled={locked} onClick={() => choose("voice")}><Glyph kind="voice" /><span>{say("onboardingSayIt")}</span></button>
             </nav>
           </>
         ) : mode === "write" ? (
@@ -319,6 +428,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
             {listenBar}
           </>
         )}
+        </div>
       </div>
       {fileField}
     </main>

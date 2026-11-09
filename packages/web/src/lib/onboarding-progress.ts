@@ -78,3 +78,13 @@ export function onboardingStep(input: { saved: number; marker: OnboardingMarker;
   if (!input.marker.introSeen) return { kind: "intro" };
   return { kind: "question", index: 0 };
 }
+
+/* WHERE ONBOARDING IS GOING AS IT FINISHES. The moment onboarding is stamped
+   done, the route guard sends a finished account away from /onboarding — and
+   it renders before any navigation onboarding queued after the stamp (route
+   changes are transitions; the session update is not). So onboarding names
+   its destination here first, synchronously, and the guard sends the person
+   there instead of home. Read once. */
+let leavingTo: string | null = null;
+export function leaveOnboardingFor(destination: string): void { leavingTo = destination; }
+export function takeOnboardingExit(): string | null { const to = leavingTo; leavingTo = null; return to; }

@@ -93,6 +93,7 @@ import { bakeBeing, buildPalette, MACHINE_CELLS, type BeingSprites, type Palette
 import { renderScale } from "./scale";
 import { VIGNETTE, mix, rgbCss } from "./sprites";
 import type { Measured } from "./measured";
+import { ANTICIPATE_MS, ANTICIPATE_SQ, HOP_MS, hopLift } from "../character/hop";
 import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, EYE_SHUT, FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, FACE_R, GLASS_GLINT, GLASS_MAGNIFY, GLASS_R, GLASS_RIM_ALPHA, GLASS_TINT, GLASS_W, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
@@ -403,11 +404,8 @@ export const UNWIND_MS = 650;
  * seeing it and answering, which is why nothing about the keep is delayed to
  * pay for them.
  */
-const ANTICIPATE_MS = 130;
-/** The keep's hop: two bounces over this long, the second lower. */
-const HOP_MS = 720;
-/** How far it compresses at the bottom of the gather. Squash, so positive. */
-const ANTICIPATE_SQ = 0.03;
+/* `ANTICIPATE_MS`, `HOP_MS` and `ANTICIPATE_SQ` — the gather and the keep's
+   hop — live in `character/hop.ts`, read here and by onboarding's creature. */
 /** And how long the body takes to come back up out of it, once released. */
 const ANTICIPATE_EASE = 4.6e-4;
 /**
@@ -4172,9 +4170,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            the ground, and the decay makes the second one lower — a creature
            that is delighted, not one that is bouncing on a spring. */
         const hopT = companion.hopAt > 0 ? clamp01((performance.now() - companion.hopAt) / HOP_MS) : 0;
-        const hop = hopT > 0 && hopT < 1
-          ? -Math.abs(Math.sin(Math.PI * 2 * hopT)) * companion.size * 0.14 * (1 - hopT * 0.45)
-          : 0;
+        const hop = hopLift(hopT, companion.size);
         const cyC = companion.y + bob + companion.lift + hop + companion.asideNow;
         /* THE TRAVELER'S PLACE. The companion is screen-anchored — it is the
            one who travels, so the layout slides under it — and during a
