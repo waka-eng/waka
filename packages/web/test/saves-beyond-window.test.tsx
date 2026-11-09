@@ -20,15 +20,22 @@ import { mountWorld, dataMockFrom, apiMockFrom, type MountedWorld } from './help
 import { HomeStream } from '../src/components/HomeStream';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [{ id: 'near', text: 'A save in the window', daysAgo: 1 }] }));
+const ASKED = vi.hoisted(() => ({ far: 0, further: 0 }));
 vi.mock('../src/lib/data', async original => {
   const base = dataMockFrom(FACTS);
   return { ...await original<typeof import('../src/lib/data')>(), ...base,
     loadInspirations: async () => ({ ...await base.loadInspirations(), total: 200, short: true }),
-    loadInspiration: async (id: string) => id === 'far'
-      ? { id: 'far', preview: 'An older save, outside the window', text: 'An older save, outside the window', isPublic: false, kind: 'note', source: 'app', category: null,
-          capturedMs: 0, updatedMs: 0, attachments: [], reflectionCount: 0, reflections: [], conversationOrigin: null }
-      : base.loadInspiration(id),
-    loadSignals: async () => [{ id: 'sig', statement: 'You keep the quiet hours.', status: 'active', inspirationIds: ['near', 'far'], lastEvidenceMs: 0 }],
+    loadInspiration: async (id: string) => {
+      if (id !== 'far' && id !== 'further') return base.loadInspiration(id);
+      ASKED[id] += 1;
+      /* The two land at different times, so the first changes what is
+         missing while the second is still in flight. */
+      await new Promise(resolve => setTimeout(resolve, id === 'far' ? 5 : 40));
+      const text = id === 'far' ? 'An older save, outside the window' : 'Another, older still';
+      return { id, preview: text, text, isPublic: false, kind: 'note', source: 'app', category: null,
+        capturedMs: 0, updatedMs: 0, attachments: [], reflectionCount: 0, reflections: [], conversationOrigin: null };
+    },
+    loadSignals: async () => [{ id: 'sig', statement: 'You keep the quiet hours.', status: 'active', inspirationIds: ['near', 'far', 'further'], lastEvidenceMs: 0 }],
     loadTopOfMind: async () => ({ id: 'tom', version: 1, reason: 'initial', createdMs: 0, entries: [{ id: 'lead', type: 'hypothesis', body: 'You guard your quiet hours.',
       belief: null, prompt: null, locked: false, pinned: true, dismissed: false, sortOrder: 0, createdMs: 0,
       citedSignals: [{ id: 'sig', statement: 'You keep the quiet hours.', answered: false, locked: false, contested: false }] }] }),
@@ -46,9 +53,17 @@ it('answers Why? with a cited save the field had not loaded', async () => {
   world = await mountWorld(FACTS); await settle();
   const why = [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-act')].find(b => b.textContent === 'Why?');
   expect(why, 'the read offers no Why?').toBeTruthy();
-  await act(async () => why!.click()); await settle();
+  await act(async () => why!.click());
+  for (let turn = 0; turn < 6; turn += 1) { await settle(); await act(async () => { await new Promise(resolve => setTimeout(resolve, 15)); }); }
   expect([...world.container.querySelectorAll('.waka-says-why-row')].map(row => row.textContent))
-    .toEqual(['“A save in the window”', '“An older save, outside the window”']);
+    .toEqual(['“A save in the window”', '“An older save, outside the window”', '“Another, older still”']);
+});
+
+it('reads each cited save outside the window once, however the answers land', async () => {
+  ASKED.far = 0; ASKED.further = 0;
+  world = await mountWorld(FACTS);
+  for (let turn = 0; turn < 10; turn += 1) { await settle(); await act(async () => { await new Promise(resolve => setTimeout(resolve, 15)); }); }
+  expect(ASKED, 'a read was asked for again while another was in flight').toEqual({ far: 1, further: 1 });
 });
 
 it('offers the rest from the Saves page when the archive holds more than was loaded', async () => {

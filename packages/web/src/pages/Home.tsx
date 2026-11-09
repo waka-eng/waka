@@ -7695,15 +7695,21 @@ const RETRY_READ_LIMIT_MS = 20_000;
     .filter(row => row.preview);
   const whyMissing = whyIds(lead && !standingAsAgent ? lead : null)
     .filter(id => !inspirations?.some(row => row.id === id) && !whyFetched.has(id)).join(',');
+  /* EACH ONCE (code review, 2026-11-08). Keyed on the missing set alone, the
+     first answer to land changed that set, the effect's cleanup abandoned
+     the reads still in flight, and the next run asked for them again — a
+     refetch storm. The ids already asked for are remembered instead, and
+     nothing in flight is abandoned. */
+  const whyAsked = useRef(new Set<string>());
   useEffect(() => {
     if (!whyMissing || offline || !inspirations) return;
-    let live = true;
     for (const id of whyMissing.split(',')) {
+      if (whyAsked.current.has(id)) continue;
+      whyAsked.current.add(id);
       void loadInspiration(id, memoryProfileId ?? undefined)
-        .then(detail => { if (live) setWhyFetched(known => new Map(known).set(id, detail.preview || detail.text)); })
+        .then(detail => { setWhyFetched(known => new Map(known).set(id, detail.preview || detail.text)); })
         .catch(() => undefined);
     }
-    return () => { live = false; };
   }, [whyMissing, offline, Boolean(inspirations), memoryProfileId]);
   /* ═══ A PATTERN STILL FORMING, ASKED IN THE BUBBLE (design F3) ════════
      Only before there is a read — with one, the read is what the bubble is
