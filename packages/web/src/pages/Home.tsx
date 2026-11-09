@@ -5289,6 +5289,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [offeredShare, setDraft, startNewInspiration, storageScope?.profileId]);
 
   const [shareArrived, setShareArrived] = useState(false);
+  /* THE "<" ASKS BEFORE IT LEAVES A NOTE WITH SOMETHING IN IT (founder,
+     2026-11-09): Keep as draft or Discard, in the creature's bubble on the
+     notepad (`LeaveAsk` in `InspirationComposer`). An empty note just leaves. */
+  const [leaveAsking, setLeaveAsking] = useState(false);
+  useEffect(() => { if (!mouthOpen) setLeaveAsking(false); }, [mouthOpen]);
   /* Forgotten by the two ways a note ends — kept, or folded away as a
      draft — and not by the notepad merely being closed, which it also is
      while it is on its way open (and may blink through while the page's
@@ -5330,7 +5335,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
     if (fromSheet && savedNoteOpen) { leaveOpen(); setSheetQuery(fromSheet.query); setStreamOpen(true); return; }
     const close = closeSavedNote.current;
     if (close) { close(); return; }
-    if (making === 'inspiration') { saveAsDraft(); return; }
+    if (making === 'inspiration') {
+      /* A second press on "<" while it asks is "no, I'm staying". */
+      if (leaveAsking) { setLeaveAsking(false); return; }
+      const live = composerDraft.current.current;
+      const something = Boolean(live.text.trim() || live.media.length || live.linkText?.trim() || live.recordingCandidate)
+        || recording.phase !== 'idle' || dictation.listening;
+      if (something && mouthOpen) { setLeaveAsking(true); return; }
+      saveAsDraft(); return;
+    }
     /* A CHAT'S "<" CLOSES IT (founder, 2026-11-08: "< on top left should be
        closing this like how it does for the saving"): to home, unless the
        chat was opened from Past chats, which it closes back to, as the
@@ -10515,6 +10528,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); }
             }
           }}
+          asking={leaveAsking} onStay={() => setLeaveAsking(false)}
           onClose={() => saveAsDraft()} onSubmit={() => { void keepIt(); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),

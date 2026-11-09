@@ -7263,33 +7263,55 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    The mic and the attach glyphs keep `.waka-dock-tool`, re-seated here; "Done"
    needs room the 44px circle does not have. */
 .jar-composer-body { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 0; }
-.waka-note-bar {
-  display: flex; flex-direction: column; flex: 1; min-height: calc(var(--sp-44) * 3); margin-top: var(--sp-12);
-  box-sizing: border-box; padding: var(--sp-14) var(--sp-8) var(--sp-4) var(--sp-16);
-  border-radius: var(--sp-28); background: var(--waka-raised);
+/* ═══ NO BOX, AN OPEN PAGE (founder, 2026-11-09: "notepad feels so 답답해") ═══
+   The words were typed into a big dark card inside the page. Now they are
+   written straight on the page, in a readable column, and the page itself is
+   the field: it fills what the pill leaves, so a tap anywhere under the words
+   writes. The notepad's autosize writes an inline height; the page owns the
+   height here, so it must not win. */
+.jar-seek.jar-inspiration-composer .jar-composer-body > .jar-composer-text {
+  flex: 1 1 auto; min-height: calc(var(--sp-44) * 3); max-height: none; height: auto !important;
+  margin: var(--sp-8) 0 0; padding: 0; border: 0; border-radius: 0; background: none; resize: none;
+  font-size: var(--t-input); line-height: 1.6; color: var(--ink); overflow-y: auto;
 }
-.jar-composer-body[data-hero] .waka-note-bar { flex: none; min-height: 0; margin-top: 0; }
-.jar-inspiration-composer .waka-note-bar .jar-composer-text {
-  /* The page owns this field's height (it fills the bar); the notepad's
-     autosize writes an inline height that must not win here. */
-  flex: 1; min-height: 0; max-height: none; height: auto !important; margin: 0; padding: 0 var(--sp-10) 0 0;
-  border: 0; resize: none; font-size: var(--t-input); line-height: 1.45; color: var(--ink);
-}
-.jar-composer-body[data-hero] .waka-note-bar .jar-composer-text {
+.jar-seek.jar-inspiration-composer .jar-composer-body[data-hero] > .jar-composer-text {
   /* With a picture the note is a line that grows with what is typed, not a
-     page: the field sizes to its words (the notepad's own autosize sets an
-     inline height for the page-sized field, which is not this one). */
-  flex: none; min-height: calc(var(--t-input) * 1.45); max-height: 24dvh; height: auto !important; field-sizing: content;
+     page: the field sizes to its words. */
+  flex: none; min-height: calc(var(--t-input) * 1.6); max-height: 24dvh; field-sizing: content;
 }
-.waka-note-bar-row { display: flex; align-items: center; gap: var(--sp-4); min-height: var(--sp-44); margin-left: calc(var(--sp-10) * -1); }
+/* ═══ THE NOTE BAR IS ONE PILL, THE HOME BAR'S SHAPE ═════════════════════════
+   Raised, round, 64px at rest, and its buttons are dim or full ink, never
+   filled. On the notepad it holds only the tools and Keep, so it is as wide as
+   they are and floats centred at the foot of the page. In a chat it holds the
+   field too: one line at rest, growing as it is typed into, and the pill
+   spans the column. 32px corners, so a grown chat field rounds rather than
+   turning into a stadium. */
+.waka-note-bar {
+  display: flex; flex-direction: column; flex: none; align-self: center; max-width: 100%;
+  margin-top: auto; box-sizing: border-box; min-height: var(--sp-64); justify-content: center;
+  padding: var(--sp-6) var(--sp-10); border-radius: var(--sp-32); background: var(--waka-raised);
+}
+.jar-inspiration-composer .jar-composer-body > .waka-note-bar { margin-top: var(--sp-12); }
+.waka-note-bar[data-field] { align-self: stretch; width: 100%; padding-inline: var(--sp-4); }
+.waka-note-bar-row { display: flex; align-items: center; gap: var(--sp-2); min-height: var(--sp-48); }
+/* WITH THE FIELD IN THE ROW, EVERY PIXEL GOES TO THE WORDS: at 375 the three
+   tools and Send leave the field about 155px, just enough for "What's on your
+   mind?" on one line (measured: 149px in Jost at 16px). The tools keep their
+   44px; the gaps and the act's padding give way. */
+.waka-note-bar[data-field] .waka-note-bar-row { align-items: flex-end; gap: 0; }
 .waka-note-bar-tools { display: flex; align-items: center; flex: none; }
+.waka-note-bar-field { flex: 1 1 auto; min-width: 0; align-self: center; padding: var(--sp-10) 0 var(--sp-10) var(--sp-4); }
+.waka-note-bar[data-field] .waka-note-bar-row .waka-note-bar-action { padding-inline: var(--sp-8); }
 .waka-note-bar-state {
   /* A one-word state stays on the row; a sentence with its act (a save that
      could not be confirmed, and Try again) wraps inside the slot rather
-     than spilling out of the bar. */
-  flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 var(--sp-4);
+     than spilling out of the bar. Empty, it takes no room, so the pill is
+     as wide as its tools. */
+  flex: 0 1 auto; min-width: 0; max-width: 16em; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 var(--sp-4);
   color: var(--muted); font-size: var(--t-meta); line-height: 1.35; text-align: center; overflow-wrap: anywhere;
 }
+.waka-note-bar-state:empty { display: none; }
+.waka-note-bar[data-field] > .waka-note-bar-state { max-width: none; padding: var(--sp-4) var(--sp-10) 0; }
 .jar-inspiration-composer .waka-note-bar-state button { min-height: var(--sp-32); padding: 0 var(--sp-4); border: 0; background: none; color: var(--ink); font-size: var(--t-meta); text-decoration: underline; }
 .waka-note-bar .waka-dock-tool { border: 0; background: none; color: var(--ink); }
 .waka-note-bar .waka-dock-tool:disabled { opacity: 0.4; }
@@ -7315,6 +7337,21 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   border-radius: 16px 16px 16px 4px;
   background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep)); color: var(--waka-on-light);
 }
+/* ═══ THE "<"'S QUESTION, IN THE SAME BUBBLE ═════════════════════════════════
+   "Leave this note?" with Keep as draft and Discard as the bubble's foot row
+   (`.jar-char-bubble-acts`, the one the founder chose for every bubble). The
+   creature sits by the tail, at the bubble's foot. */
+.waka-note-ask { align-items: flex-end; }
+.waka-note-says--ask { display: flex; flex-direction: column; }
+.waka-note-ask-q { margin: 0 0 var(--sp-4); }
+.jar-inspiration-composer .waka-note-ask .jar-char-bubble-act {
+  min-width: 0; min-height: var(--bubble-act-h); padding: 0 var(--sp-12); border: 0; border-radius: 0; background: none;
+  color: color-mix(in srgb, var(--waka-on-light) 78%, transparent); font-size: var(--bubble-act);
+}
+.jar-inspiration-composer .waka-note-ask .jar-char-bubble-act + .jar-char-bubble-act { border-left: 1px solid color-mix(in srgb, var(--waka-on-light) 11%, transparent); }
+.jar-inspiration-composer .waka-note-ask .jar-char-bubble-act:first-child { border-bottom-left-radius: 4px; }
+.jar-inspiration-composer .waka-note-ask .jar-char-bubble-act:last-child { border-bottom-right-radius: 16px; }
+.jar-inspiration-composer .waka-note-ask .jar-char-bubble-act:focus-visible { outline: 2px solid var(--waka-on-light); outline-offset: -3px; }
 .waka-note-arrival { display: flex; gap: var(--sp-8); margin: 0 0 var(--sp-12) 50px; }
 .jar-inspiration-composer .waka-note-arrival-act { min-height: var(--sp-44); padding: 0 var(--sp-14); border: 1px solid var(--line); border-radius: var(--r-pill); background: none; color: var(--ink); font-size: var(--t-ui); }
 
@@ -7397,18 +7434,21 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .waka-page-aside:hover, .waka-page-aside:focus-visible { color: var(--ink); }
 
-/* THE NOTE'S ROW: level with the "<", the stamp beside it, "⋯" at the end. */
+/* THE NOTE'S ROW: level with the "<", the stamp in the middle; a saved note's "⋯" at the end. */
 body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer[data-visual-viewport] {
   padding-top: calc(var(--sp-12) + env(safe-area-inset-top));
 }
 body .jar-seek.jar-inspiration-composer > .jar-note-top { margin-top: 0; padding-top: 0; }
 body:has(.waka-page-back) .waka-over.waka-over--note { padding-top: calc(var(--sp-12) + env(safe-area-inset-top)); }
+/* "SAVING TO … · DATE" IN THE MIDDLE (founder, 2026-11-09). Equal tracks
+   either side, the "<" over the first and the saved note's "⋯" in the last,
+   so the line is centred on the page and not on what is left of it. */
 .jar-seek.jar-inspiration-composer .jar-note-top, .waka-over.waka-over--note .jar-note-top {
-  grid-template-columns: var(--waka-corner) minmax(0, 1fr) auto;
+  grid-template-columns: var(--waka-corner) minmax(0, 1fr) var(--waka-corner);
   min-height: var(--waka-corner); margin: 0 0 var(--sp-12); padding: 0; gap: var(--sp-6);
 }
 .jar-seek.jar-inspiration-composer .jar-note-when, .waka-over.waka-over--note .jar-note-when {
-  grid-column: 2; justify-self: start; text-align: start; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  grid-column: 2; justify-self: center; text-align: center; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .jar-seek.jar-inspiration-composer .jar-note-verb, .waka-over.waka-over--note .jar-note-verb { grid-column: 3; justify-self: end; }
 .jar-inspiration-composer .jar-note-actions-trigger, .waka-over--note .jar-note-actions-trigger,
@@ -7439,8 +7479,8 @@ body:has(.waka-page-back) .waka-over.waka-over--note { padding-top: calc(var(--s
 @layer chrome {
 /* The creature's question and its softer second line, one bubble. */
 .waka-note-says-softer { display: block; margin-top: var(--sp-2); }
-/* With the hint gone, the bar sits at the foot of the page by itself. */
-.jar-composer-body[data-hero] .waka-note-bar { margin-top: auto; }
+/* With a picture the words are a line, so the pill keeps to the page's foot. */
+.jar-composer-body[data-hero] > .waka-note-bar { margin-top: auto; }
 }
 
 @layer chrome {
@@ -7449,17 +7489,28 @@ body:has(.waka-page-back) .waka-over.waka-over--note { padding-top: calc(var(--s
    same size and weight (founder: "use the same code so it looks
    identical"). A chat's own label wrapper steps out of the way. */
 .waka-note-bar textarea, .chat-page .waka-note-bar textarea {
-  display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 0 var(--sp-10) 0 0;
+  display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 0;
   border: 0; border-radius: 0; background: none; color: var(--ink); resize: none;
   font-family: var(--waka-face); font-size: var(--t-input); font-weight: 400; line-height: 1.45;
 }
 .chat-page .waka-note-bar textarea { min-height: calc(var(--t-input) * 1.45); max-height: min(8lh, 30dvh); field-sizing: content; }
 .waka-note-bar .chat-input-label { display: block; }
-.waka-note-bar .chat-chips { margin: 0 0 var(--sp-8); }
+.waka-note-bar .chat-chips { margin: var(--sp-6) var(--sp-6) var(--sp-4); }
 /* The chat's bar spans the page like the notepad's, on the same gutter. */
 /* The chat's column is indented (`.chat-main`, clamp(20px, 6vw, 28px)); its
    bar steps back out of that indent to the page's own 16px gutter. */
-.chat-page .chat-composer { max-width: none; padding-inline: 0; margin-inline: calc(-1 * clamp(20px, 6vw, 28px)); width: auto; }
+/* ═══ THE CHAT'S BAR SITS ON THE FLOOR (founder, 2026-11-09: "so much wasted
+   space at bottom") ═══════════════════════════════════════════════════════
+   The page reserved the home dock's height under a chat (88px), and the
+   composer added its own 20px under that, so the pill floated 108px up with
+   nothing beneath it. A chat has no dock, so the page reserves nothing and
+   the pill stands 16px off the bottom (plus the phone's own inset); the
+   conversation gets the rest. */
+.waka-page:has(> .waka-over--talk) { padding-bottom: 0; }
+.chat-page .chat-composer {
+  max-width: none; padding-inline: 0; margin-inline: calc(-1 * clamp(20px, 6vw, 28px)); width: auto;
+  padding-top: var(--sp-12); padding-bottom: calc(var(--sp-16) + env(safe-area-inset-bottom));
+}
 }
 
 @layer chrome {

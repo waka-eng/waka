@@ -214,6 +214,10 @@ it('releases the microphone when the notepad closes', async () => {
      the words (`saveAsDraft`) and takes the page down. */
   await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-page-back')!.click());
   await settle();
+  /* A note with words asks first (founder, 2026-11-09); Keep as draft is
+     what "<" used to do on its own. */
+  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-note-ask .jar-char-bubble-act')].find(node => node.textContent === 'Keep as draft')!.click());
+  await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad is still open').toBeFalsy();
   expect(live.started, 'the engine is still transcribing into a page nobody is looking at').toBe(false);
 });
@@ -378,3 +382,4 @@ it('dims Say it, and starts nothing, where the notepad could not keep the words'
   await act(async () => sayIt().click());
   expect(FakeEngine.all, 'the microphone started anyway').toHaveLength(0);
 });
+

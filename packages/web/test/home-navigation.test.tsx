@@ -845,6 +845,21 @@ it('does not walk to Principles on → while a field has the key', async () => {
    in the corner, since its bar became the note bar (design E3). */
 const close = () => world.container.querySelector<HTMLButtonElement>('.waka-dock button.waka-dock-item--close')
   ?? [...world.container.querySelectorAll<HTMLButtonElement>('button.waka-page-back')].find(node => node.textContent?.trim() === 'Close') ?? null;
+/* "<" ON A NOTE WITH SOMETHING IN IT ASKS (founder, 2026-11-09): Keep as
+   draft or Discard, in the creature's bubble. */
+const askAct = (label: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-note-ask .jar-char-bubble-act')].find(node => node.textContent?.trim() === label) ?? null;
+const leaveKeepingDraft = async () => {
+  await act(async () => close()!.click()); await settle();
+  await act(async () => askAct('Keep as draft')!.click()); await settle();
+};
+const typeInNote = async (words: string) => {
+  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, words);
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle();
+};
 
 it('makes a new note from Inspiration, and its Close goes home with the draft kept', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
@@ -861,7 +876,10 @@ it('makes a new note from Inspiration, and its Close goes home with the draft ke
   await settle();
 
   await act(async () => close()!.click()); await settle();
-  expect(new URLSearchParams(location.search).get('compose'), 'Close did not leave the note').toBeNull();
+  expect(new URLSearchParams(location.search).get('compose'), '"<" on a note with words left without asking').toBe('1');
+  expect(askAct('Keep as draft'), '"<" on a note with words did not ask').not.toBeNull();
+  await act(async () => askAct('Keep as draft')!.click()); await settle();
+  expect(new URLSearchParams(location.search).get('compose'), 'Keep as draft did not leave the note').toBeNull();
   expect(open(), 'Close on a note went somewhere other than home').toBeNull();
   expect(world.container.querySelector('textarea.jar-composer-text'), 'the note is still up').toBeNull();
   expect(close(), 'home still offers a Close').toBeNull();
@@ -870,6 +888,41 @@ it('makes a new note from Inspiration, and its Close goes home with the draft ke
   await act(async () => row('Keep a thought').click()); await settle();
   expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value,
     'going home threw the draft away').toBe('half a thought');
+});
+
+it('leaves an empty note on "<" without asking', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await act(async () => row('Keep a thought').click()); await settle();
+  expect(world.container.querySelector('.jar-note-top button, .jar-note-actions-trigger'), 'the ⋯ is back in the notepad header').toBeNull();
+  await act(async () => close()!.click()); await settle();
+  expect(world.container.querySelector('.waka-note-ask'), 'an empty note asked before leaving').toBeNull();
+  expect(new URLSearchParams(location.search).get('compose'), '"<" did not leave an empty note').toBeNull();
+});
+
+it('asks on "<" with words; Escape stays, Keep as draft keeps it, Discard removes it', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await act(async () => row('Keep a thought').click()); await settle();
+  await typeInNote('a line worth keeping');
+  await act(async () => close()!.click()); await settle();
+  expect(world.container.querySelector('.waka-note-ask .waka-note-says')?.textContent).toContain('Leave this note?');
+  expect(document.activeElement, 'focus did not move to the first act').toBe(askAct('Keep as draft'));
+  /* Escape puts the question away; the note stays, and focus goes to "<". */
+  await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))); await settle();
+  expect(world.container.querySelector('.waka-note-ask'), 'Escape did not put the question away').toBeNull();
+  expect(new URLSearchParams(location.search).get('compose'), 'Escape on the question left the note').toBe('1');
+  expect(document.activeElement, 'focus did not go back to "<"').toBe(close());
+
+  await leaveKeepingDraft();
+  expect(new URLSearchParams(location.search).get('compose')).toBeNull();
+  await act(async () => row('Keep a thought').click()); await settle();
+  expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value, 'Keep as draft lost the words').toBe('a line worth keeping');
+
+  await act(async () => close()!.click()); await settle();
+  await act(async () => askAct('Discard')!.click()); await settle();
+  expect(new URLSearchParams(location.search).get('compose'), 'Discard did not leave the note').toBeNull();
+  expect(document.body.textContent, 'Discard asked a second time').not.toContain('Discard this draft?');
+  await act(async () => row('Keep a thought').click()); await settle();
+  expect(world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')?.value, 'Discard kept the words').toBe('');
 });
 
 it('keeps archive navigation outside the composer, and reaches chat history from a chat', async () => {
@@ -1003,7 +1056,10 @@ it('gives a new note a labeled Save and separate Close, without archive navigati
        The way out is the labelled Close in the corner, apart from Save. */
     const bar = world.container.querySelector('.waka-note-bar')!;
     expect(bar, 'the notepad has no note bar').toBeTruthy();
-    expect(bar.firstElementChild?.matches('textarea.jar-composer-text'), 'the words are not first, across the bar').toBe(true);
+    /* NO BOX (founder, 2026-11-09): the words are on the page, the bar is a
+       pill of tools under them. */
+    expect(bar.querySelector('textarea'), 'the words went back into the bar').toBeNull();
+    expect(world.container.querySelector('.jar-composer-body > textarea.jar-composer-text'), 'the words are not on the page').toBeTruthy();
     const presses = [...bar.querySelectorAll<HTMLButtonElement>('.waka-note-bar-row button')].map(node => node.getAttribute('aria-label') ?? node.textContent?.trim());
     expect(presses).toEqual(['Your voice', 'Add photo', 'Add file', 'Keep']);
     expect(row('Back')).toBeUndefined();
@@ -1073,7 +1129,7 @@ it('starts a capture directly from a populated archive and names a retained draf
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'A draft from the archive');
     field.dispatchEvent(new Event('input', { bubbles: true }));
   }); await settle();
-  await act(async () => close()!.click()); await settle();
+  await leaveKeepingDraft();
   await pressDockRow(world.container, 'Inspirations'); await settle();
   expect(action().textContent?.trim()).toBe('Continue draft');
   await act(async () => action().click()); await settle();
