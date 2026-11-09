@@ -5493,22 +5493,30 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [mouthOpen, dictation.listening, dictation.stop]);
 
   /* ═══ SAY IT: THE NOTEPAD, ALREADY LISTENING (design E1) ═══════════════
-     The bar's Say it opens the notepad and the microphone in the same
-     press — the page and the engine are asked for inside one gesture, so
-     the browser's permission prompt belongs to the press that wanted it,
-     and both state changes commit together (the release above sees the
-     notepad open, not a microphone left on over the world). TAP to start,
+     The bar's Say it opens the notepad and starts the microphone as soon as
+     that notepad is open — never over the world, so the release above never
+     sees a microphone on with no page to write into. TAP to start,
      TAP Done to stop — never held: holding is unusable while walking or
      retelling a conversation. Where the browser cannot transcribe, the
      recorder takes the same press. */
+  /* IT WAITS FOR THE WORLD, AS WRITE DOES (code review, 2026-11-08). With
+     the dial in the past or the camera on the ground, the notepad used to
+     open — and the microphone start — while the world was still winding
+     back. So Say it asks through `startNewInspiration`, which opens the
+     notepad once the world is at now, and the microphone starts the moment
+     that notepad is open (the effect below), never before. */
+  const listenWhenOpen = useRef(false);
   const sayIntoNewNote = () => {
-    if (!atNow && dial) windTo(dial.end);
-    simApiRef.current?.toTop();
-    if (mouthOpen) mouthFieldRef.current?.focus(); else openMouth();
+    listenWhenOpen.current = true;
     setMouthNote('');
+    startNewInspiration();
+  };
+  useEffect(() => {
+    if (!listenWhenOpen.current || !mouthOpen || newInspirationRequested) return;
+    listenWhenOpen.current = false;
     if (dictationAvailable()) dictation.start();
     else if (supportedRecordingType()) startNotepadRecording();
-  };
+  }, [mouthOpen, newInspirationRequested]);
 
   /* ═══ THE SAVE RULE, SAID ONCE, AND NOW ACTUALLY ONCE ═════════════════
      `lib/keep-ready.ts` was written so this condition exists in one place,

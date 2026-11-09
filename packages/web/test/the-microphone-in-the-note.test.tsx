@@ -310,3 +310,18 @@ it('does not splice a finished session\'s last words into the next one', async (
   await settle();
   expect(world.container.querySelector('.waka-dock-tool--live'), 'the Stop control went while the engine ran').toBeTruthy();
 });
+
+/* CODE REVIEW, 2026-11-08: Say it opened the notepad and started listening
+   while the world was still on its way back to now (the camera on the
+   ground, the dial in the past). It waits, as Write does: nothing listens
+   before the notepad is open over a world at now. */
+it('waits for the world to come back before Say it opens the notepad and listens', async () => {
+  world = await mountWorld(FACTS); await settle();
+  await world.toField();
+  const sayIt = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')].find(row => row.textContent?.trim() === 'Say it')!;
+  await act(async () => sayIt.click());
+  expect(FakeEngine.all, 'the microphone started while the world was still on the ground').toHaveLength(0);
+  await settle();
+  expect(world.container.querySelector('.jar-inspiration-composer'), 'Say it never opened the notepad').toBeTruthy();
+  expect(engine().started, 'the notepad opened without listening').toBe(true);
+});
