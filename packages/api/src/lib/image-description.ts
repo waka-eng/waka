@@ -90,16 +90,19 @@ const NO_WORDS = /^none\.?$/i;
 
 /**
  * The words half of a stored description, for showing the person what was
- * read. `null` means the model read no meaningful words. A description stored
- * before the two-part shape (or one where the model ignored it) has no
- * marker; it began with any transcription, so it is returned whole rather
- * than guessed at.
+ * read. `null` means the model read no meaningful words.
+ *
+ * `undefined` means the words are UNKNOWN: a description stored before the
+ * two-part shape (or one where the model ignored it) has no "Words:" marker,
+ * and quoting it whole showed "A photograph of a cat on a sofa." as "The
+ * words I read" (code review, 2026-11-08). It is neither words nor "no
+ * words", so nothing is quoted and nothing is asked.
  */
-export function readImageWords(description: string | null | undefined): string | null {
+export function readImageWords(description: string | null | undefined): string | null | undefined {
   const text = description?.trim();
   if (!text) return null;
   const marked = /^words:[ \t]*([\s\S]*?)(?:\n\s*image:[\s\S]*)?$/i.exec(text);
-  if (!marked) return text;
+  if (!marked) return undefined;
   const words = marked[1]!.trim();
   return words && !NO_WORDS.test(words) ? words : null;
 }

@@ -280,8 +280,12 @@ describe("readImageWords", () => {
     expect(readImageWords("Words:\nImage: A diagram.")).toBeNull();
   });
 
-  it("returns a description stored before the two-part shape whole", () => {
-    expect(readImageWords("HANDMADE TOOLS OUTLAST BIG PLANS. A poster.")).toBe("HANDMADE TOOLS OUTLAST BIG PLANS. A poster.");
+  /* A description from before the two-part shape cannot say which part is
+     words: quoting it whole showed "A photograph of a cat on a sofa." as
+     "The words I read". Unknown, not "no words". */
+  it("calls a description stored before the two-part shape unknown, never words", () => {
+    expect(readImageWords("A photograph of a cat on a sofa.")).toBeUndefined();
+    expect(readImageWords("HANDMADE TOOLS OUTLAST BIG PLANS. A poster.")).toBeUndefined();
   });
 
   it("reads nothing from nothing", () => {

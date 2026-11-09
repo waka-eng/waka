@@ -31,6 +31,11 @@ describe('imageWordsState', () => {
     expect(imageWordsState(row(), 'failed').status).toBe('retrying');
   });
 
+  it('is unknown, with nothing to quote, for a reading from before the two-part shape', () => {
+    expect(imageWordsState(row({ enrichmentStatus: 'ready', enrichmentText: 'A photograph of a cat on a sofa.' })))
+      .toEqual({ status: 'unknown', text: null, read: null, correction: null, revision: '0' });
+  });
+
   it("prefers the owner's fix over any machine state", () => {
     for (const enrichmentStatus of ['pending', 'failed', 'unavailable', 'ready'] as const) {
       expect(imageWordsState(row({ enrichmentStatus, enrichmentText: enrichmentStatus === 'ready' ? 'Words: Machine\nImage: x' : null,

@@ -17,8 +17,11 @@ import { readImageWords } from './image-description.js';
  *               be read (unsupported, too large, refused). Nothing retries.
  * - retrying:   a read failed for a reason that can pass (network, rate
  *               limit, out of credit) and another attempt is due or allowed.
+ * - unknown:    the reading predates the "Words: / Image:" shape, so which
+ *               part is words cannot be told. Show nothing: no quote, no Fix,
+ *               no "which line stuck?".
  */
-export type ImageWordsStatus = 'reading' | 'ready' | 'unreadable' | 'retrying';
+export type ImageWordsStatus = 'reading' | 'ready' | 'unreadable' | 'retrying' | 'unknown';
 
 export type ImageWordsRow = Pick<Attachment, 'enrichmentStatus' | 'enrichmentText' | 'enrichmentErrorReason' |
   'enrichmentRetryCount' | 'transcriptCorrection' | 'transcriptRevision'>;
@@ -26,10 +29,11 @@ export type ImageWordsRow = Pick<Attachment, 'enrichmentStatus' | 'enrichmentTex
 /** `analysis` is the job-aware status from `attachmentAnalysisState` when the
  * caller has it; without it the row alone decides. */
 export function imageWordsState(row: ImageWordsRow, analysis?: 'pending' | 'ready' | 'failed' | 'unavailable') {
-  const read = row.enrichmentStatus === 'ready' ? readImageWords(row.enrichmentText) : null;
+  const words = row.enrichmentStatus === 'ready' ? readImageWords(row.enrichmentText) : null;
+  const read = words ?? null;
   const machine = analysis ?? row.enrichmentStatus;
   const status: ImageWordsStatus = row.transcriptCorrection !== null ? 'ready'
-    : machine === 'ready' ? (read ? 'ready' : 'unreadable')
+    : machine === 'ready' ? (words === undefined ? 'unknown' : read ? 'ready' : 'unreadable')
     : machine === 'failed' ? 'retrying'
     : machine === 'pending' ? (row.enrichmentErrorReason !== null || row.enrichmentRetryCount > 0 ? 'retrying' : 'reading')
     : 'unreadable';
