@@ -85,7 +85,7 @@ it('says there are more saves than the list holds, and goes to the archive that 
   const host = document.createElement('div'); document.body.append(host); const root = createRoot(host);
   const seeAll = vi.fn();
   const saves = [{ id: 'a', preview: 'One', isPublic: false, kind: 'note' as const, source: 'app' as const, capturedMs: Date.now(), updatedMs: Date.now(), attachments: [], reflectionCount: 0 }];
-  await act(async () => root.render(<HomeStream locale="en-US" inspirations={saves} signals={[]} principles={[]} onOpenSave={() => {}} onClose={() => {}} more={{ onSeeAll: seeAll }} />));
+  await act(async () => root.render(<HomeStream locale="en-US" inspirations={saves} signals={[]} principles={[]} onOpenSave={() => {}} onClose={() => {}} query="" onQueryChange={() => {}} more={{ onSeeAll: seeAll }} />));
   const more = document.querySelector<HTMLButtonElement>('.waka-stream-more');
   expect(more?.textContent).toBe('See all');
   await act(async () => more!.click());
