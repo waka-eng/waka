@@ -2187,8 +2187,24 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      query it was found under; it never lands on a list it did not come from. */
   const noteFromSheet = useRef<{ query: string } | null>(null);
   /* A CHAT OPENED FROM PAST CHATS closes back to Past chats by its "<", as a
-     note opened from the list does; set by the list, cleared by any other open. */
-  const chatFromList = useRef(false);
+     note opened from the list does. HELD AS THE CONVERSATION'S ID and honoured
+     only while that same conversation is open (`chatBackToList`), so no other
+     way into a chat — the bubble's or a principle's "Talk about this", a
+     browser Back — can inherit it (code review, 2026-11-09). */
+  const [chatFromList, setChatFromList] = useState<string | null>(null);
+  const chatHere = viewNavigation.view?.conversationId ?? null;
+  const chatBackToList = making === 'talk' && chatFromList !== null && chatFromList === chatHere;
+  /* AND FORGOTTEN THE MOMENT THE PERSON STANDS ANYWHERE ELSE: the list itself
+     and that chat are the only two places it means anything. A new chat
+     begun from the list keeps it when its first message gives it an id. */
+  const chatBefore = useRef<string | null>(null);
+  useEffect(() => {
+    const before = chatBefore.current; chatBefore.current = chatHere;
+    if (chatFromList === null) return;
+    if (!chatHere && viewNavigation.view?.open === 'conversations') return;
+    if (chatHere === chatFromList) return;
+    setChatFromList(chatFromList === 'new' && before === 'new' && chatHere && chatHere !== 'new' ? chatHere : null);
+  }, [chatFromList, chatHere, viewNavigation.view?.open]);
   const [sheetQuery, setSheetQuery] = useState('');
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
   const [principlesCrossing, setPrinciplesCrossing] = useState<{ going: 'in' | 'out'; home: CreatureSpot | null } | null>(null);
@@ -4873,7 +4889,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
    * not an exit."
    */
   const openTalk = useCallback((id: string | null, principleId: string | null = null) => {
-    chatFromList.current = false;
+    setChatFromList(null);
     const nav = viewNavigationRef.current;
     nav.write(
       { ...EMPTY_VIEW, wallId: atWallRef.current.kind === 'agent' ? atWallRef.current.id : null, conversationId: id ?? 'new', principleId: id ? null : principleId },
@@ -5280,7 +5296,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [recording.stop]);
 
   const closePage = () => {
-    listOrigin.current = null; chatFromList.current = false;
+    listOrigin.current = null; setChatFromList(null);
     if (viewNavigationRef.current.view?.compose) { saveAsDraft(); return; }
     commitOpenNote();
     viewNavigationRef.current.closeToHome();
@@ -5299,7 +5315,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
        notepad's "<" does for a note opened from the list. Past chats is its
        own word, top-right. */
     if (making === 'talk') {
-      if (chatFromList.current) { chatFromList.current = false; listOrigin.current = null; openOverHome('conversations'); return; }
+      if (chatBackToList) { setChatFromList(null); listOrigin.current = null; openOverHome('conversations'); return; }
       closePage(); return;
     }
     const origin = listOrigin.current;
@@ -11670,7 +11686,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            closing this like how it does for the saving"); Past chats moved
            to the top-right. */
         glyphOnly={making !== null || savedNoteOpen}
-        label={say(savedNoteOpen ? (noteFromSheet.current ? 'worldBackHome' : 'worldBackToAll') : making !== null ? 'worldClose' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
+        label={say(savedNoteOpen ? (noteFromSheet.current ? 'worldBackHome' : 'worldBackToAll') : chatBackToList ? 'worldBackToPastChats' : making !== null ? 'worldClose' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
       {/* THE CREATURE'S QUESTIONS LEAVE BY THE SAME "<". Their way out was
           "Exit review mode" in the bar, the one page that left by a sentence
           at the bottom. */}
@@ -11925,7 +11941,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         locale={locale} profileId={conversationScope.profileId}
         title={formatMessage(locale, 'worldProfileChats', { name: conversationProfile.name })}
         onClose={closePage}
-        onOpen={id=>{ openTalk(id); chatFromList.current = true; }}/>:null}
+        onOpen={id=>{ openTalk(id); setChatFromList(id ?? 'new'); }}/>:null}
 
       {/* THE CONVERSATION ITSELF, ALSO OVER THE WORLD.
           Founder: "also dont move talk to waka in a new page. find better
