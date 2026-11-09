@@ -62,9 +62,10 @@ beforeEach(()=>{
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();document.getElementById('lent-slot')?.remove();vi.restoreAllMocks();});
 
-const mount=(id:string|null=chat,toolsSlot?:string)=>act(async()=>root.render(<ConversationPanel key={String(id)} scope={scope} id={id} locale="en-US" onChoose={choose} toolsSlot={toolsSlot}/>));
+const mount=(id:string|null=chat)=>act(async()=>root.render(<ConversationPanel key={String(id)} scope={scope} id={id} locale="en-US" onChoose={choose}/>));
 const flush=()=>act(async()=>{for(let turn=0;turn<6;turn+=1)await Promise.resolve();});
-const plus=(within:ParentNode=host)=>within.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
+/** The note bar's photo press (2026-11-08: photo and file straight on the bar, no ＋ menu). */
+const plus=(within:ParentNode=host)=>within.querySelector<HTMLButtonElement>('[data-note-bar="1"] button[aria-label="Add photos"]');
 const send=()=>host.querySelector<HTMLButtonElement>('button.chat-send')!;
 const chips=()=>[...host.querySelectorAll<HTMLElement>('.chat-composer .chat-chip')];
 const type=(content:string)=>act(async()=>{const area=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,content);area.dispatchEvent(new Event('input',{bubbles:true}));});
@@ -80,17 +81,21 @@ async function pick(row:'photos'|'file',files:File[]){
   await flush();
 }
 
-it('offers the ＋ beside Send as a menu of Add photos and Add file', async()=>{
+it('offers Add photos and Add file straight on the note bar, beside Send, with no ＋ menu', async()=>{
   await mount();await flush();
-  expect(plus()?.getAttribute('aria-label')).toBe('Add photo or file');
-  expect(plus()!.closest('footer.chat-composer'),'a panel standing alone lost its ＋').toBeTruthy();
-  await act(async()=>plus()!.click());
-  expect([...host.querySelectorAll('[role="menu"] [role="menuitem"]')].map(row=>row.textContent?.trim())).toEqual(['Add photos','Add file']);
-  /* Escape is the menu's, not the page's. */
-  await act(async()=>{host.querySelector('[role="menu"]')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));});
-  expect(host.querySelector('[role="menu"]')).toBeNull();
-  expect(document.activeElement).toBe(plus());
+  const bar=host.querySelector('footer.chat-composer [data-note-bar="1"]')!;
+  expect(bar,'the chat does not write into the note bar').toBeTruthy();
+  expect(bar.querySelector('[aria-haspopup="menu"]'),'a ＋ menu came back').toBeNull();
+  const photos=bar.querySelector<HTMLButtonElement>('button[aria-label="Add photos"]'),file=bar.querySelector<HTMLButtonElement>('button[aria-label="Add file"]');
+  expect(photos?.querySelector('[data-home-action-icon="photo"]'),'no Add photos on the bar').toBeTruthy();
+  expect(file?.querySelector('[data-home-action-icon="file"]'),'no Add file on the bar').toBeTruthy();
+  const opened:string[]=[];
+  for(const input of host.querySelectorAll<HTMLInputElement>('input[type="file"]'))input.addEventListener('click',event=>{event.preventDefault();opened.push(input.accept);});
+  await act(async()=>photos!.click());await act(async()=>file!.click());
+  expect(opened[0],'Add photos did not open the photo chooser').toContain('image/png');
+  expect(opened[1],'Add file did not open the file chooser').toContain('application/pdf');
 });
+
 
 it('uploads a photo for a new chat under the ids the create will use, shows a chip, and sends it alone', async()=>{
   await mount(null);await flush();
@@ -198,19 +203,19 @@ it('takes six at most, says so, and dims the ＋ with the reason', async()=>{
   expect(plus()!.title).toBe('Up to 6 at a time');
 });
 
-it('puts the mic and the ＋ into a slot the page lends, and not in the box', async()=>{
+it('keeps the mic, photo and file in the panel\'s own note bar, with the field and Send', async()=>{
   class StubRecognition{start():void{}stop():void{}abort():void{}}
   (window as unknown as {SpeechRecognition?:unknown}).SpeechRecognition=StubRecognition;
-  const slot=document.createElement('span');slot.id='lent-slot';document.body.append(slot);
   try{
-    await mount(chat,'lent-slot');await flush();
-    expect(plus(slot),'the ＋ did not go into the lent slot').toBeTruthy();
-    expect(slot.querySelector('button.waka-dock-tool.chat-dictate'),'the mic did not go into the lent slot').toBeTruthy();
-    expect(host.querySelector('footer.chat-composer button[aria-haspopup="menu"], footer.chat-composer .chat-dictate'),'the box kept them too').toBeNull();
-    expect(host.querySelector('footer.chat-composer textarea'),'the box lost its field').toBeTruthy();
-    expect(host.querySelector('footer.chat-composer button.chat-send'),'the box lost its Send').toBeTruthy();
+    await mount(chat);await flush();
+    const bar=host.querySelector('footer.chat-composer [data-note-bar="1"]')!;
+    expect(bar.querySelector('button.waka-dock-tool.chat-dictate'),'the mic is not on the note bar').toBeTruthy();
+    expect(plus(bar),'photo is not on the note bar').toBeTruthy();
+    expect(bar.querySelector('textarea'),'the bar lost its field').toBeTruthy();
+    expect(bar.querySelector('button.chat-send'),'the bar lost its Send').toBeTruthy();
   }finally{delete (window as unknown as {SpeechRecognition?:unknown}).SpeechRecognition;}
 });
+
 
 it('a photo sent with only spaces in the box is confirmed, clears the draft, and opens the new chat', async()=>{
   await mount(null);await flush();

@@ -88,52 +88,40 @@ async function aNewChat(): Promise<void> {
   await chatField(world.container);
 }
 
-describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page keeps its own field and Send', () => {
-  it('gives a chat the bar All chats │ ＋ │ Close, with nothing to type into in it', async () => {
+/** The chat's note bar, in the order a person meets it: tools, then the act. */
+const noteBarShape = () => [...world!.container.querySelectorAll<HTMLElement>('footer.chat-composer [data-note-bar="1"] .waka-note-bar-row button')]
+  .map(node => node.getAttribute('aria-label') ?? node.textContent?.trim());
+
+describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', () => {
+  /* Founder, 2026-11-08: "make this bottom for chatting feel EXACTLY like
+     [the notepad's note bar]. use the same code so it looks identical" —
+     and "< on top left should be closing this like how it does for the
+     saving. put Past Chats in top right corner instead." */
+  it('gives a chat the shared note bar: the words, then photo and file on the left and Send on the right, and no dock', async () => {
     await aNewChat();
-    expect(barShape(world!.container), 'a chat\'s bar is not its door, its tools, Close').toEqual(['Add photo or file', '│', 'Close']);
-    expect(world!.container.querySelectorAll('nav.waka-dock span.waka-dock-sep[aria-hidden="true"]'),
-      'the two rules are not hidden from a screen reader').toHaveLength(1);
-    const bar = world!.container.querySelector('nav.waka-dock')!;
-    expect(bar.querySelector('textarea, .chat-send'), 'the chat\'s field or Send is in the bar again').toBeNull();
-    expect(bar.querySelector('#waka-chat-tools.waka-dock-making[role="group"] button.waka-dock-tool[aria-haspopup="menu"]'),
-      'the ＋ is not in the bar\'s lent group').toBeTruthy();
-    expect(world!.container.querySelector('footer.chat-composer button[aria-haspopup="menu"], footer.chat-composer .chat-dictate'),
-      'the ＋ or the mic is still in the page\'s box as well').toBeNull();
-    expect(world!.container.querySelector('#waka-chat-composer, .waka-dock-chat'), 'the chat-in-the-bar slot came back').toBeNull();
-    expect(world!.container.querySelector('.waka-dock .waka-dock-item[aria-current="page"]'), 'a chat lights a bar row, as if it were the list').toBeNull();
-    /* AND NOTHING IN THE CORNER. */
+    const bar = world!.container.querySelector('footer.chat-composer [data-note-bar="1"]');
+    expect(bar, 'the chat does not write into the note bar').toBeTruthy();
+    expect(bar!.querySelector(':scope > .chat-input-label textarea'), 'the words are not across the bar').toBeTruthy();
+    expect(noteBarShape()).toEqual(['Add photos', 'Add file', 'Send']);
+    expect(world!.container.querySelectorAll('.chat-page textarea'), 'more than one message field').toHaveLength(1);
+    expect(world!.container.querySelector('nav.waka-dock'), 'a dock stands under the chat').toBeNull();
+    expect(bar!.querySelector('[aria-haspopup="menu"]'), 'a ＋ menu came back').toBeNull();
     expect(world!.container.querySelector('header.jar-chat-top, .jar-chat-see-all'), 'the All chats header came back above the chat').toBeNull();
   });
 
-  it('gives the page its own composer, with its invitation and exactly one message field', async () => {
-    await aNewChat();
-    const field = await chatField(world!.container);
-    expect(field.closest('nav.waka-dock'), 'the page\'s field is inside the bar').toBeNull();
-    expect(field.placeholder, 'the page\'s field lost its invitation').toBe('What would you like to explore?');
-    const footer = world!.container.querySelector('footer.chat-composer');
-    expect(footer?.querySelector('button.chat-send')?.getAttribute('aria-label'), 'the page\'s composer has no Send').toBe('Send');
-    const named = field.getAttribute('aria-label');
-    expect(named, 'the page\'s field has no name to be found by').toBeTruthy();
-    expect([...world!.container.querySelectorAll('textarea')].filter((node) => node.getAttribute('aria-label') === named),
-      'two message fields on one chat').toHaveLength(1);
-    expect(world!.container.textContent, 'the bar\'s old invitation is still on screen').not.toContain('Let’s chat');
-  });
-
-  it('offers the mic in the bar, not the page\'s box, where the browser can listen', async () => {
+  it('offers the mic in the note bar where the browser can listen', async () => {
     class StubRecognition { start(): void {} stop(): void {} abort(): void {} }
     (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition = StubRecognition;
     try {
       await aNewChat();
-      expect(world!.container.querySelector('nav.waka-dock button.waka-dock-tool.chat-dictate'), 'the bar has no mic').toBeTruthy();
-      expect(world!.container.querySelector('footer.chat-composer .chat-dictate'), 'the mic is still in the page\'s box').toBeNull();
-      expect(barShape(world!.container)).toEqual(['Speak', 'Add photo or file', '│', 'Close']);
+      expect(world!.container.querySelector('footer.chat-composer [data-note-bar="1"] button.waka-dock-tool.chat-dictate'), 'the bar has no mic').toBeTruthy();
+      expect(noteBarShape()).toEqual(['Speak', 'Add photos', 'Add file', 'Send']);
     } finally {
       delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
     }
   });
 
-  it('sends what is typed in the page\'s field when the page\'s Send is pressed', async () => {
+  it('sends what is typed when Send is pressed, and Send is a quiet word', async () => {
     await aNewChat();
     const field = await chatField(world!.container);
     await act(async () => {
@@ -141,50 +129,33 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
       field.dispatchEvent(new Event('input', { bubbles: true }));
     });
     const send = world!.container.querySelector<HTMLButtonElement>('footer.chat-composer button.chat-send');
-    expect(send, 'the page has no Send').toBeTruthy();
+    expect(send?.textContent, 'Send is not a word').toBe('Send');
+    expect(send!.classList.contains('waka-note-bar-action'), 'Send is not the bar\'s quiet act').toBe(true);
     expect(send!.disabled, 'Send is dim with words in the field').toBe(false);
     await act(async () => send!.click()); await settle();
-    expect(createConversation, 'pressing the page\'s Send sent nothing').toHaveBeenCalledOnce();
+    expect(createConversation, 'pressing Send sent nothing').toHaveBeenCalledOnce();
     expect(vi.mocked(createConversation).mock.calls[0]![4]).toMatchObject({ content: 'What has changed in how I think?' });
     expect(world!.container.querySelector('.chat-message[data-role="user"]')?.textContent).toContain('What has changed in how I think?');
     expect(location.pathname, 'the chat did not take its id once it was created').toMatch(/^\/chat\/(?!new$)/);
-    expect((await chatField(world!.container)).value, 'the page\'s field kept what was sent').toBe('');
-    expect(barShape(world!.container), 'the bar changed shape once the chat had an id').toEqual(['Add photo or file', '│', 'Close']);
+    expect((await chatField(world!.container)).value, 'the field kept what was sent').toBe('');
   });
 
-  it('opens the ＋ in the bar as a menu of Add photos and Add file', async () => {
+  it('closes the chat by its "<" and opens the chats list by Past chats, top-right', async () => {
     await aNewChat();
-    const plus = world!.container.querySelector<HTMLButtonElement>('nav.waka-dock button[aria-haspopup="menu"]')!;
-    await act(async () => plus.click());
-    const menu = world!.container.querySelector('nav.waka-dock [role="menu"]');
-    expect(menu, 'the ＋ in the bar opened no menu').toBeTruthy();
-    expect([...menu!.querySelectorAll('[role="menuitem"]')].map((row) => row.textContent?.trim())).toEqual(['Add photos', 'Add file']);
-    expect(document.activeElement, 'the first row did not take focus').toBe(menu!.querySelector('[role="menuitem"]'));
-    await act(async () => { menu!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }); await settle();
-    expect(world!.container.querySelector('nav.waka-dock [role="menu"]'), 'Escape left the menu open').toBeNull();
-    expect(location.pathname, 'Escape on the menu closed the chat under it').toBe('/chat/new');
-  });
-
-  it('goes home from a chat on Close, and to the chats list on All chats', async () => {
-    await aNewChat();
-    const close = world!.container.querySelector<HTMLButtonElement>('nav.waka-dock button.waka-dock-item.waka-dock-item--close');
-    expect(close?.textContent?.trim(), 'a chat\'s bar does not end in Close').toBe('Close');
-    await act(async () => close!.click()); await settle();
-    expect(location.pathname, 'Close left the chat up').not.toContain('/chat/');
-    expect(open(), 'Close on a chat went somewhere other than home').toBeNull();
+    const back = world!.container.querySelector<HTMLButtonElement>('button.waka-page-back');
+    expect(back?.textContent?.trim(), 'the chat\'s "<" is not named for closing').toBe('Close');
+    await act(async () => back!.click()); await settle();
+    expect(location.pathname, 'the "<" left the chat up').not.toContain('/chat/');
+    expect(open(), 'the "<" on a chat went somewhere other than home').toBeNull();
     expect(homeBarShape(world!.container), 'home is not back to the home bar').toEqual(['Write', 'Photo', 'Say it', 'Chat']);
     expect(world!.container.querySelector('.chat-composer'), 'the chat\'s composer outlived the chat').toBeNull();
 
     await pressHomeBar(world!.container, 'Chat'); await settle();
-    const allChats = row('All chats');
-    expect(allChats, 'a chat offers no way to the chats list').toBeTruthy();
-    await act(async () => allChats!.click()); await settle();
-    expect(location.pathname, 'All chats left the chat up').not.toContain('/chat/');
-    expect(open(), 'All chats did not open the chats list').toBe('conversations');
-    /* On the list the way out is the labelled Back in the corner; the home
-       bar stands only on the home itself. */
-    expect(world!.container.querySelector('.waka-home-bar'), 'the home bar stands over the chats list').toBeNull();
-    expect(world!.container.querySelector('button.waka-page-back'), 'the chats list has no visible way back').toBeTruthy();
+    const past = world!.container.querySelector<HTMLButtonElement>('button.waka-page-aside');
+    expect(past?.textContent?.trim(), 'a chat offers no Past chats').toBe('Past chats');
+    await act(async () => past!.click()); await settle();
+    expect(location.pathname, 'Past chats left the chat up').not.toContain('/chat/');
+    expect(open(), 'Past chats did not open the chats list').toBe('conversations');
   });
 
   it('returns from history to the same principle-started draft', async () => {
@@ -195,7 +166,7 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(field,'Keep this question with its starting point.');
       field.dispatchEvent(new Event('input',{bubbles:true}));
     });
-    await act(async()=>row('All chats')!.click());await settle();
+    await act(async()=>world!.container.querySelector<HTMLButtonElement>('button.waka-page-aside')!.click());await settle();
     expect(open()).toBe('conversations');
     await act(async()=>world!.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click());await settle();
     expect(new URLSearchParams(location.search).get('principle')).toBe(principleId);
@@ -222,6 +193,6 @@ describe('a chat\'s bar is All chats │ dictate · ＋ │ Close, and the page 
       if (name !== 'Chat') expect(button!.hasAttribute('aria-label'), `${name} gained an aria-label over its word`).toBe(false);
     }
     await pressHomeBar(world!.container, 'Chat'); await settle();
-    expect(row('All chats')?.textContent).toBe('All chats');
+    expect(world!.container.querySelector('button.waka-page-aside')?.textContent).toBe('Past chats');
   });
 });
