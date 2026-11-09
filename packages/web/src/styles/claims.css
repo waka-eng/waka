@@ -2881,8 +2881,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   flex: 0 0 auto;
   white-space: nowrap;
   min-height: 32px;
-  padding: 0 var(--sp-16);
-  border: 1px solid var(--line);
+  padding: 0 var(--sp-8);
+  border: 0;
   border-radius: var(--r-pill);
   background: transparent;
   color: var(--muted);
@@ -2898,11 +2898,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   color: var(--ink);
 }
 
-/* Inked, not coloured. */
+/* Full ink, never filled (a control is dim or full ink). */
 .waka-tab--on {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--bg);
+  border-color: transparent;
+  background: none;
+  color: var(--ink);
 }
 
 .waka-tab:focus-visible {
@@ -3471,9 +3471,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    is listening, which is the same way every other on-state in this product
    is shown. No red, no blinking dot. */
 .waka-composer-mic--on {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--bg);
+  border-color: transparent;
+  background: none;
+  color: var(--ink);
 }
 
 .waka-composer-mic:disabled {
@@ -3603,11 +3603,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   margin-left: auto;
   min-height: 32px;
   white-space: nowrap;
-  padding: 0 var(--sp-16);
-  border: 1px solid var(--ink);
+  padding: 0 var(--sp-12);
+  border: 0;
   border-radius: var(--waka-r-control);
-  background: var(--ink);
-  color: var(--bg);
+  background: none;
+  color: var(--ink);
   font-family: var(--waka-face);
   font-size: var(--t-ui);
   cursor: pointer;
@@ -3626,8 +3626,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    the label stays light. */
 .waka-composer-send:disabled {
   border-color: transparent;
-  background: color-mix(in srgb, var(--ink) 18%, transparent);
-  color: var(--muted);
+  background: none;
+  color: var(--ink);
+  opacity: 0.4;
 }
 
 .waka-composer-send:focus-visible {
@@ -6634,7 +6635,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* The last tab, in a quieter dash than the shelves of kept things: it is
    where things went, not a kind of thing you keep. */
 .waka-tab--shelf {
-  border-style: dashed;
+  font-style: italic;
 }
 
 .waka-shelf {
@@ -7057,13 +7058,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   gap: var(--sp-4); font-size: var(--t-fine);
 }
 .waka-dock--tabs svg { width: var(--sp-20); height: var(--sp-20); }
-.waka-primary-capture {
-  display: flex; align-items: center; justify-content: center; gap: var(--sp-8);
-  width: min(20rem, 100%); min-height: var(--sp-44); margin: 0 auto var(--sp-16);
-  padding: var(--sp-12) var(--sp-20); border: 0; border-radius: var(--r-pill);
-  background: var(--ink); color: var(--paper); font: inherit; font-size: var(--t-body); cursor: pointer;
-}
-.waka-primary-capture svg { width: var(--sp-20); height: var(--sp-20); }
 
 /* The selected identity stays visible; a menu accommodates any number of names. */
 .waka-profile-switcher { position: relative; pointer-events: auto; min-width: 0; }
@@ -7597,4 +7591,10 @@ header:has(> .waka-sheet-back), .jar-search-heading:has(> .waka-sheet-back) {
 .waka-account:has(.waka-settings-heading > .waka-sheet-back) > .waka-sheet-back { display: none; }
 .waka-account:has(.waka-settings-heading > .waka-sheet-back) .waka-settings-heading { padding-inline-start: 0; }
 .jar-prov-room-top { display: flex; align-items: center; }
+}
+
+@layer chrome {
+/* Stop, while a reply is coming, is the bar's quieter word: interrupting
+   is not the thing you came to do. */
+.waka-note-bar .chat-send--stop { color: var(--muted); }
 }

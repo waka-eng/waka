@@ -909,7 +909,6 @@
    with `--sp-8` of body padding under it, and the coarse-pointer rule at
    the foot of this file still takes it to 44 on a touch screen, where the
    floor is not a recommendation. */
-.chat-page .chat-send,
 .chat-page .chat-dictate {
   flex: none;
   display: grid;
@@ -925,20 +924,15 @@
   cursor: pointer;
 }
 
-.chat-page .chat-send {
-  background: var(--ink);
-  color: var(--bg);
-}
+/* SEND IS A WORD, AND IT NEVER FILLS (founder, 2026-11-05: a control is
+   dim or full ink). It was an inked pill here, and this sheet loads after
+   the note bar's quiet rule at the same weight, so the chat's Send drew
+   filled and 40px wide inside the shared bar (audit, 2026-11-08). Send and
+   Stop are dressed by the shared bar alone now. */
 
-.chat-page .chat-send svg { width: 20px; height: 20px; }
 
 /* STOP IS SECONDARY, which is the reference's word for it. Filling it the
    same as send would make interrupting look like the thing you came to do. */
-.chat-page .chat-send--stop {
-  background: none;
-  border: 1px solid var(--field-edge);
-  color: var(--ink);
-}
 
 /* THE MICROPHONE IS GHOST — "the underlying Button with ghost variant and
    isIconOnly, providing the hit target and focus ring". It is an input
@@ -962,14 +956,9 @@
    says the same thing — the control is on — and says it without moving. */
 .chat-page .chat-dictate--on {
   color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  background: none;
 }
 
-.chat-page .chat-send:disabled {
-  border-color: var(--line);
-  background: transparent;
-  color: var(--muted);
-}
 
 /* A SENTENCE, NOT A TOOLBAR. This was a flex row because three buttons —
    stop, retry, check — stood in it beside the text. Two of the three were
@@ -1085,8 +1074,8 @@
 
 .chat-page .chat-with-choice {
   min-height: 36px;
-  padding: 0 var(--sp-16);
-  border: 1px solid var(--line);
+  padding: 0 var(--sp-8);
+  border: 0;
   border-radius: var(--r-pill);
   background: transparent;
   color: var(--muted);
@@ -1100,11 +1089,12 @@
   color: var(--ink);
 }
 
+/* Chosen is full ink, never filled: a control is dim or full ink. */
 .chat-page .chat-with-choice--on,
 .chat-page .chat-with-choice--on:hover:not(:disabled) {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--bg);
+  border-color: transparent;
+  background: none;
+  color: var(--ink);
 }
 
 .chat-with-note {
