@@ -15,9 +15,16 @@ const corrected = correctedAttachment;
    (code review, 2026-11-08). A description from before the two-part shape
    has no marker, so it is kept whole as the Image part. Audio is unchanged:
    a transcript's fix is the whole transcript. */
+/* AS TOLERANT AS `readImageWords` (code review, 2026-11-08): the labels may
+   follow a preamble line, carry markdown (**Words:**, ## Image:) and any case;
+   the Image part is re-labelled plainly so every reader sees one shape. */
+const WORDS_MARK = sql.raw(String.raw`'(^|\n)[[:space:]>#*_]*words[[:space:]*_]*:'`);
+const IMAGE_FROM = sql.raw(String.raw`'\n[[:space:]>#*_]*[Ii][Mm][Aa][Gg][Ee][[:space:]*_]*:.*$'`);
+const IMAGE_LABEL = sql.raw(String.raw`'^\n[[:space:]>#*_]*image[[:space:]*_]*:[[:space:]*_]*'`);
 const imagePart = sql<string>`CASE
   WHEN ${attachments.enrichmentStatus} <> 'ready' OR nullif(trim(coalesce(${attachments.enrichmentText},'')),'') IS NULL THEN ''
-  WHEN ${attachments.enrichmentText} ~* '^\\s*words:' THEN coalesce(substring(${attachments.enrichmentText} from '\\n\\s*[Ii][Mm][Aa][Gg][Ee]:.*$'),'')
+  WHEN ${attachments.enrichmentText} ~* ${WORDS_MARK}
+    THEN coalesce(regexp_replace(substring(${attachments.enrichmentText} from ${IMAGE_FROM}), ${IMAGE_LABEL}, chr(10) || 'Image: ', 'i'),'')
   ELSE chr(10) || 'Image: ' || trim(${attachments.enrichmentText}) END`;
 export const effectiveAttachmentText = sql<string | null>`CASE
   WHEN ${corrected} AND ${attachments.type} = 'image' THEN 'Words: ' || ${attachments.transcriptCorrection} || ${imagePart}

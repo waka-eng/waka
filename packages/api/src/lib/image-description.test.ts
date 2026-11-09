@@ -267,11 +267,26 @@ describe("DESCRIPTION_PROMPT", () => {
 describe("readImageWords", () => {
   it("returns the words half of a two-part description", () => {
     expect(readImageWords('Words: "You don\'t need permission to begin."\nImage: A screenshot of a reel with a caption.'))
-      .toBe('"You don\'t need permission to begin."');
+      .toBe("You don't need permission to begin.");
   });
 
   it("keeps multi-line words and is case-tolerant about the markers", () => {
     expect(readImageWords("words: First line\nSecond line\n\nIMAGE: A note app.")).toBe("First line\nSecond line");
+  });
+
+  /* Code review, 2026-11-08: a model does not always write the labels the
+     way the prompt does. Each of these is the same reading. */
+  it("tolerates a preamble, markdown, any case and quotes around the words", () => {
+    const words = "Nobody feels ready.";
+    for (const description of [
+      `Here is what I see:\nWords: ${words}\nImage: A reel.`,
+      `**Words:** ${words}\n**Image:** A reel.`,
+      `## Words:\n${words}\n\n## Image:\nA reel.`,
+      `WORDS: “${words}”\nIMAGE: A reel.`,
+      `  words:   '${words}'  \n  image: A reel.`,
+      `*Words*: "${words}"\n*Image*: A reel.`,
+    ]) expect(readImageWords(description), description).toBe(words);
+    expect(readImageWords("**Words:** none\n**Image:** A beach.")).toBeNull();
   });
 
   it("reads no words when the model found none", () => {

@@ -88,6 +88,18 @@ it('keeps a reading from before the two-part shape whole as the picture, under a
   const material = await loadInspirationMaterial(t.db as never, f.profileId, f.sourceId, 'personal');
   expect(material?.attachmentRows).toMatchObject([{ text: 'Words: Cats know.\nImage: A photograph of a cat on a sofa.' }]);
 });
+it('reads the words and keeps the picture under a fix however the model formatted its labels', async () => {
+  for (const reading of [
+    'Here is what I see:\n**Words:** "Start before you are ready."\n**Image:** A reel with a caption.',
+    '## WORDS:\nStart before you are ready.\n\n## image:\nA reel with a caption.',
+  ]) {
+    const f = await fixture({ status: 'ready', text: reading });
+    expect(await (await f.app.request(f.path)).json(), reading).toMatchObject({ status: 'ready', text: 'Start before you are ready.' });
+    await f.edit('Begin anyway.');
+    const material = await loadInspirationMaterial(t.db as never, f.profileId, f.sourceId, 'personal');
+    expect(material?.attachmentRows, reading).toMatchObject([{ text: 'Words: Begin anyway.\nImage: A reel with a caption.' }]);
+  }
+});
 it('refuses a stale or empty fix and can return to the words read', async () => {
   const f = await fixture(); await f.edit('First fix');
   expect((await f.edit('Stale fix')).status).toBe(409);
