@@ -26,7 +26,7 @@ it('queues another read',async()=>{
   expect(fetch.mock.calls[0][0]).toBe('/api/attachments/img/words/retry');
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({});
 });
-it.each([{...words,attachmentId:'other'},{...words,status:'failed'},{...words,revision:'x'},{...words,text:3},{...words,canRetry:'no'}])
+it.each([{...words,attachmentId:'other'},{...words,status:'queued'},{...words,revision:'x'},{...words,text:3},{...words,canRetry:'no'}])
 ('refuses words it cannot verify %#',async(body)=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(reply(body)));
   await expect(fetchImageWords('img')).rejects.toMatchObject({code:'invalid_response'});
