@@ -95,7 +95,7 @@ export function HomeStream(props: {
         <time className="waka-stream-meta" dateTime={new Date(row.capturedMs).toISOString()}>
           {source ? formatMessage(props.locale, source, { date: dayWords(row.capturedMs, props.locale) }) : dayWords(row.capturedMs, props.locale)}
         </time>
-        <span className="waka-stream-words">{row.preview || say('worldSavedWord')}</span>
+        <span className="waka-stream-words">{row.preview || say('worldBubbleKept')}</span>
       </button>
     </li>;
   };
@@ -146,7 +146,7 @@ export function HomeStream(props: {
           {/* THE REST ARE NOT DROPPED (code review, 2026-11-08): this page
               shows the saves already loaded, and the archive pages in every
               one, so when there are more it says so and goes there. */}
-          {props.more ? <button type="button" className="waka-stream-more" onClick={props.more.onSeeAll}>{say('worldStreamSeeEvery')}</button> : null}
+          {props.more ? <button type="button" className="waka-stream-more" onClick={props.more.onSeeAll}>{say('worldBubbleSeeAll')}</button> : null}
         </section> : null}
         {props.signals.length ? <section aria-labelledby="waka-stream-patterns">
           <h2 id="waka-stream-patterns" className="waka-stream-label">{say('worldStreamPatterns')}</h2>

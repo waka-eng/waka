@@ -104,7 +104,7 @@ it("offers to chat about what the creature said, and no longer sends the person 
   await ground(chat);
   expect(host.querySelector(".waka-ground-act"), "the answer link went").toBeNull();
   const row = host.querySelector<HTMLButtonElement>(".waka-ground-bubble .jar-char-bubble-act")!;
-  expect(row.textContent).toBe("Talk about this");
+  expect(row.textContent).toBe("Chat about this");
   await act(async () => row.click());
   expect(chat).toHaveBeenCalledWith(line());
 });

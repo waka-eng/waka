@@ -286,7 +286,7 @@ it("holds up the agent's own reading on its wall, never the owner's", async () =
      these checks hold the observable half: no settled step mislabels. */
   const mislabelled = () => {
     const b = bubble();
-    return b?.querySelector('.jar-char-bubble-of')?.textContent?.trim() === 'This is what’s on my mind right now.'
+    return b?.querySelector('.jar-char-bubble-of')?.textContent?.trim() === 'On my mind lately'
       && (b.textContent ?? '').includes(OWNER_SAYS);
   };
   await act(async () => { toAgent!.click(); });
@@ -305,7 +305,7 @@ it("holds up the agent's own reading on its wall, never the owner's", async () =
   expect(said?.textContent ?? '', 'the owner\'s sentence leaked onto the agent\'s wall').not.toContain(OWNER_SAYS);
   expect(said?.querySelector('.jar-char-bubble-reading')?.textContent?.trim(),
     'the agent wall fell through to the resting line over a reading it holds').toBe(AGENT_SAYS);
-  expect(said?.querySelector('.jar-char-bubble-of')?.textContent?.trim()).toBe('This is what’s on my mind right now.');
+  expect(said?.querySelector('.jar-char-bubble-of')?.textContent?.trim()).toBe('On my mind lately');
   expect(said?.textContent ?? '', 'the bubble held the newest entry rather than the pinned lead').not.toContain(AGENT_NEWER);
 });
 
@@ -685,7 +685,7 @@ it('saves a capture into the selected agent without adding it to the human or an
   await act(async()=>face('noah')!.click()); await settle();
   await pressDockRow(world.container,'Inspirations'); await settle();
   const newNote=world.container.querySelector<HTMLButtonElement>('.waka-over-head .waka-over-new')!;
-  expect(newNote.textContent).toBe('New inspiration');
+  expect(newNote.textContent).toBe('Keep a thought');
   await act(async()=>newNote.click()); await settle();
   const area=world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
   await act(async()=>{

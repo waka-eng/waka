@@ -37,15 +37,16 @@ it('keeps sharing available for a short reading only inside its expanded view', 
   const root = createRoot(host);
   try {
     await act(async () => root.render(<ReadingBubbleText text="A short reading." locale="en-US" onShare={share} onChat={chat} />));
-    expect(host.textContent).not.toContain('Share it');
+    expect(host.textContent).not.toContain('Share');
     await act(async () => host.querySelector<HTMLButtonElement>('.jar-char-bubble-acts button:last-child')!.click());
     expect(chat).toHaveBeenCalledOnce();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
-    const opener = host.querySelector<HTMLButtonElement>('.jar-char-bubble-acts button')!;
-    expect(opener.textContent).toBe('View reading');
+    /* NO "VIEW READING": the sentence is its own way in. */
+    expect(host.querySelector('.jar-char-bubble-acts')?.textContent).toBe('Chat about this');
+    const opener = host.querySelector<HTMLButtonElement>('button.waka-reading-open')!;
     await act(async () => { opener.focus(); opener.click(); });
     const shareButton = document.querySelector<HTMLButtonElement>('.waka-reading-full footer button')!;
-    expect(shareButton.textContent).toBe('Share it');
+    expect(shareButton.textContent).toBe('Share');
     await act(async () => shareButton.click());
     expect(share).toHaveBeenCalledOnce();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -64,10 +65,10 @@ it('offers a full reading only when clipped, closes by Escape, and returns focus
   const root = createRoot(host);
   try {
     await act(async () => root.render(<ReadingBubbleText text="Every word remains available." locale="en-US" />));
-    const more = host.querySelector<HTMLButtonElement>('.jar-char-bubble-acts button')!;
-    expect(more.textContent).toBe('Read in full');
-    /* The sentence itself opens it in full too (design F1: three lines). */
-    expect(host.querySelector('button.waka-reading-open')?.textContent).toBe('Every word remains available.');
+    /* THE SENTENCE IS THE ONLY WAY IN: no "Read in full" beside it. */
+    expect(host.querySelector('.jar-char-bubble-acts')).toBeNull();
+    const more = host.querySelector<HTMLButtonElement>('button.waka-reading-open')!;
+    expect(more.textContent).toBe('Every word remains available.');
     await act(async () => { more.focus(); more.click(); });
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Every word remains available.');
@@ -90,13 +91,13 @@ it('answers Why? in place with the saves behind the read, and Back returns to th
   try {
     await act(async () => root.render(<ReadingBubbleText text="You keep returning to small rituals." label="On your mind lately" locale="en-US" why={why} onSeeAll={seeAll} onChat={chat} />));
     const acts = () => [...host.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-acts button')];
-    expect(acts().map(button => button.textContent)).toEqual(['Why?', 'Talk about this']);
+    expect(acts().map(button => button.textContent)).toEqual(['Why?', 'Chat about this']);
     expect(host.textContent).toContain('On your mind lately');
     await act(async () => acts()[0]!.click());
     expect(host.textContent).toContain('Because you kept these');
     expect([...host.querySelectorAll('.waka-says-why-row')].map(row => row.textContent)).toEqual(['“Small rituals hold a day together.”', '“Walked the long way home.”']);
     expect(host.textContent).not.toContain('You keep returning');
-    expect(acts().map(button => button.textContent)).toEqual(['Back', 'See all saves']);
+    expect(acts().map(button => button.textContent)).toEqual(['Back', 'See all']);
     await act(async () => acts()[0]!.click());
     expect(host.textContent).toContain('You keep returning to small rituals.');
     await act(async () => acts()[0]!.click());

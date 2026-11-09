@@ -174,7 +174,7 @@ it("makes a words-only card and says so when the photo cannot be read", async ()
 it("says the top of mind the way the home bubble does, under the top-of-mind date line", async () => {
   await mount({ kind: "topOfMind", text: "Build the place.", proof: "My top of mind · Oct 16, 2026" });
   await settle();
-  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "topOfMind", frame: "This is what’s on your mind right now.", name: "", proof: "My top of mind · Oct 16, 2026" }));
+  expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "topOfMind", frame: "On your mind lately", name: "", proof: "My top of mind · Oct 16, 2026" }));
   expect(host.querySelector("h2")?.textContent).toBe("Share what’s on your mind, edit as needed");
 });
 

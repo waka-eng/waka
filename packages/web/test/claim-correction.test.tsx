@@ -402,17 +402,17 @@ async function press(target: EventTarget, key: string) {
   await world.step(4);
 }
 
-it("counts what waits in the invitation, in the singular and the plural", async () => {
+it("asks in the invitation without counting what waits", async () => {
   await mountQueue(CLAIM);
   expect(invite()).toBeNull();
   await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
-  expect(inviteSays()).toBe("There is 1 thing to review!");
-  expect(invite()?.querySelector("button.jar-char-bubble-act")?.textContent?.trim()).toBe("Dive into review");
+  expect(inviteSays()).toBe("I have a question for you.");
+  expect(invite()?.querySelector("button.jar-char-bubble-act")?.textContent?.trim()).toBe("Ask me");
   world.unmount();
 
   await mountQueue(CLAIM, SECOND, { ...CLAIM, id: "claim-3", statement: "You finish what you start." });
   await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
-  expect(inviteSays()).toBe("There are 3 things to review!");
+  expect(inviteSays(), "states render, numerals never").toBe("I have a question for you.");
 });
 
 it("shows no card until the dive, and the first card has the keys once in", async () => {
@@ -439,19 +439,20 @@ it("steps back out to Top of Mind on Escape", async () => {
   expect(invite(), "Escape should return to the reading, not another review invitation").toBeNull();
 });
 
-it("makes the bar one way out while reviewing: Exit review mode", async () => {
-  /* Founder, 2026-10-15: "in the review mode, bottom bar should say exit
-     review mode." */
+it("leaves the questions by the page's \"<\", with no bar while they are up", async () => {
+  /* The bar's "Exit review mode" was the one way out that was a sentence at
+     the bottom; the questions leave by the same "<" as every other page. */
   const bar = () => [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item, .waka-home-bar-row button")]
     .map((n) => n.getAttribute("aria-label") || n.textContent?.trim());
   await mountQueue(CLAIM, SECOND);
   expect(bar(), "the bar before review").toEqual(["Keep a thought", "Keep a screenshot", "Keep your voice", "Chat"]);
   await diveIntoReview(world.container, world.step);
-  expect(bar(), "the bar while reviewing").toEqual(["Exit review mode"]);
-  const exit = [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item")].find((n) => n.textContent?.trim() === "Exit review mode")!;
-  await act(async () => { exit.click(); });
-  expect(card(), "Exit review mode left the cards up").toBeNull();
-  expect(invite(), "Exit review mode should return to the reading").toBeNull();
+  expect(bar(), "the bar while reviewing").toEqual([]);
+  const back = world.container.querySelector<HTMLButtonElement>(".waka-page-back")!;
+  expect(back.textContent?.trim()).toBe("Back");
+  await act(async () => { back.click(); });
+  expect(card(), "the \"<\" left the cards up").toBeNull();
+  expect(invite(), "the \"<\" should return to the reading").toBeNull();
   expect(bar(), "the bar after review").toEqual(["Keep a thought", "Keep a screenshot", "Keep your voice", "Chat"]);
 });
 
@@ -540,7 +541,7 @@ it('shows Top of Mind before pending reviews and cycles only on avatar presses',
   const tap = () => act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
   expect(bubbleText()).toContain(body);
   expect(invite()).toBeNull();
-  await tap(); expect(inviteSays()).toBe('There are 2 things to review!');
+  await tap(); expect(inviteSays()).toBe('I have a question for you.');
   await tap(); expect(invite()).toBeNull(); expect(bubbleText()).not.toContain(body);
   await tap(); expect(bubbleText()).toContain('Which principles are guiding you lately?');
   await tap(); expect(bubbleText()).toContain(body);

@@ -121,7 +121,7 @@ type World = { profileId?: string };
     every render, exactly as Home passes them. */
 async function renderArchive(whose: World = {}): Promise<void> {
   await act(async () => root.render(
-    <Archive locale="en-US" title="Your Inspirations" onClose={vi.fn()}
+    <Archive locale="en-US" title="Kept" onClose={vi.fn()}
       profileId={whose.profileId}
       onNoteOpen={(close) => { closer = close; }} />,
   ));

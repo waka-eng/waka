@@ -391,7 +391,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
 
      THROUGH `keep.ts`, WHICH IS THE WHOLE POINT OF `keep.ts`. This pasted the
      old four lines — open the notepad, fill
-     `textarea[aria-label="Capture inspiration"]`, press Enter — and that
+     `textarea[aria-label="Keep a thought"]`, press Enter — and that
      textarea is the CLOSED composer slot: it is in the DOM and it is not
      visible, so the fill retried for thirty seconds and threw. `keep.ts`
      exists because eleven gates pasted a stale composer flow once before;

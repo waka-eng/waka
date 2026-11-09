@@ -115,7 +115,7 @@ it('drops a weather answer that was asked for on the wall you just left', async 
   expect(press(), 'the creature has nothing to press').toBeTruthy();
   await act(async () => { press()!.click(); });
   await world.step(0);
-  expect(speech(), 'a prompt appears immediately while activity is loading').toBe('Want to explore what’s on your mind?');
+  expect(speech(), 'a prompt appears immediately while activity is loading').toBe('Want to chat about what’s on your mind?');
 
   /* SWITCH FORM WHILE THE ANSWER IS STILL IN FLIGHT. */
   const toAgent = face('Ouroboros maintainer');
@@ -302,7 +302,7 @@ it('speaks its own line when the weather does not come back', async () => {
   await world.step(0);
   /* Before the grace period, nothing — the product still prefers the real
      answer and will wait a moment for it. */
-  expect(speech(), 'the tap should immediately offer a conversation').toBe('Want to explore what’s on your mind?');
+  expect(speech(), 'the tap should immediately offer a conversation').toBe('Want to chat about what’s on your mind?');
 
   await act(async () => { await vi.advanceTimersByTimeAsync(400); });
   await settle();
@@ -316,7 +316,7 @@ it('cycles through other prompts without repeating already-seen activity', async
   await tap(); expect(speech()).toBe('You kept one memory today.');
   await tap(); expect(speech()).toBe('Which principles are guiding you lately?');
   await tap(); expect(speech()).toBeNull();
-  await tap(); expect(speech()).toBe('Want to explore what’s on your mind?');
+  await tap(); expect(speech()).toBe('Want to chat about what’s on your mind?');
   vi.mocked(fetchTheWeather).mockResolvedValue({ ...WEATHER, days: [{ ...WEATHER.days[0]!, sentences: [
     ...WEATHER.days[0]!.sentences, { text: 'your memory was consulted', backing: 'consultations' },
   ] }] });

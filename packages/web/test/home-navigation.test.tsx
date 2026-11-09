@@ -316,7 +316,7 @@ it('hides a principleâ€™s expanded evidence when Back closes that principle',asy
   const why=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principles-list--personal button')].find(button=>button.textContent==='Why this fits')!;
   await act(async()=>why.click());expect(world.container.querySelector('.jar-principle-evidence')).not.toBeNull();
   await navigate(-1);expect(location.pathname+location.search).toBe('/');
-  expect(world.container.textContent).not.toContain('Talk about this');
+  expect(world.container.textContent).not.toContain('Chat about this');
   expect(world.container.querySelector('.jar-principle-evidence')).toBeNull();
 });
 
@@ -374,7 +374,7 @@ it('keeps what you typed in the box across a re-render, without opening anything
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(capture,'An unfinished spark');
     capture.dispatchEvent(new Event('input',{bubbles:true}));
   });
-  expect(world.container.querySelector('[role="dialog"][aria-label="Capture inspiration"]')).toBeNull();
+  expect(world.container.querySelector('[role="dialog"][aria-label="Keep a thought"]')).toBeNull();
   expect(location.search).not.toContain('compose=1');
   await world.rerender();await settle();
   expect(keepBox(world.container).value).toBe('An unfinished spark');
@@ -960,7 +960,7 @@ it('steps back from a saved note open in the archive to the archive\'s list on â
   expect(returnRow()!.querySelector('.sr-only'), 'the saved note\'s "<" shows a word').toBeTruthy();
   const slot = world.container.querySelector('span.waka-dock-slot');
   expect(slot?.querySelector('#waka-note-tools.waka-dock-making[role="group"]'), 'the note\'s tools are not in the return row\'s slot').toBeTruthy();
-  expect(shape, 'Inspiration is in the bar on a saved note').not.toContain('New inspiration');
+  expect(shape, 'Inspiration is in the bar on a saved note').not.toContain('Keep a thought');
   expect(shape, 'Chat is in the bar on a saved note').not.toContain('New chat');
 
   await act(async () => returnRow()!.click()); await settle();
@@ -1058,7 +1058,7 @@ it('keeps background inspiration processing out of the Saves sheet', async () =>
 it('starts a capture directly from a populated archive and names a retained draft', async () => {
   world = await mountWorld(FACTS, { initialEntries: ['/?open=saves'], routerTools: <RouterTools/> }); await settle();
   const action = () => world.container.querySelector<HTMLButtonElement>('.waka-over-head .waka-over-new')!;
-  expect(action().textContent?.trim()).toBe('New inspiration');
+  expect(action().textContent?.trim()).toBe('Keep a thought');
   await act(async () => action().click()); await settle();
   expect(new URLSearchParams(location.search).get('open')).toBeNull();
   expect(new URLSearchParams(location.search).get('compose')).toBe('1');

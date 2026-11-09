@@ -61,7 +61,7 @@ export function HomeBar(props: {
   return (
     <div className="waka-home-bar" data-jar-chrome="1" data-jar-interactive="1">
       {props.saved ? (
-        <p className="waka-home-bar-saved" role="status">{say('worldSavedWord')}</p>
+        <p className="waka-home-bar-saved" role="status">{say('worldBubbleKept')}</p>
       ) : props.pull ? (
         <button type="button" className="waka-home-bar-pull" aria-haspopup="dialog" onClick={props.pull.onOpen}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"

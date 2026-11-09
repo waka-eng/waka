@@ -10004,7 +10004,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">{say('worldCompanionPrinciplesPrompt')}</span>
                 <span className="jar-char-bubble-acts">
-                  <button type="button" className="jar-char-bubble-act" onClick={toPrinciples}>{say('worldViewPrinciples')}</button>
+                  <button type="button" className="jar-char-bubble-act" onClick={toPrinciples}>{say('worldBubbleSeeAll')}</button>
                 </span>
               </span>
             </div>
@@ -10086,7 +10086,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     ) : visibleInspiration && keptSubject(visibleInspiration).text ? <button type="button" className="jar-char-bubble-act"
                       disabled={talking}
                       onClick={() => { void talkAbout(keptSubject(visibleInspiration)); }}>
-                      {say(talking ? 'worldTalkOpening' : 'worldBubbleTalkAboutIt')}
+                      {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
                     </button> : null}
                     <button type="button" className="jar-char-bubble-act"
                       onClick={() => { setCharSay(''); setStreamOpen(true); }}>{say('worldBubbleSeeAll')}</button>
@@ -11677,6 +11677,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
            to the top-right. */
         glyphOnly={making !== null || savedNoteOpen}
         label={say(savedNoteOpen ? (noteFromSheet.current ? 'worldBackHome' : 'worldBackToAll') : making !== null ? 'worldClose' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
+      {/* THE CREATURE'S QUESTIONS LEAVE BY THE SAME "<". Their way out was
+          "Exit review mode" in the bar, the one page that left by a sentence
+          at the bottom. */}
+      {phase === 'ready' && reviewing && !making && !listing && !principlesOpen && !savedNoteOpen ? <PageBack
+        navigationKey={`${viewNavigation.href}#questions`} onBack={() => setReviewing(false)} glyphOnly label={say('worldBack')} /> : null}
       {/* PAST CHATS, TOP-RIGHT ON A CHAT — a quiet word at the corners' height,
           like home's Actions, opening the list of chats. */}
       {phase === 'ready' && making === 'talk' && !viewNavigation.view?.sharePrinciple ? (
@@ -11731,11 +11736,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
           pull={standingAsAgent ? { onOpen: () => { listOrigin.current = null; openOverHome('saves'); } }
             : streamShown ? undefined : { onOpen: () => setStreamOpen(true) }}
         />
-            ) : phase==='ready'&&(reviewing||savedNoteOpen)&&!viewNavigation.view?.sharePrinciple ? (
+            ) : phase==='ready'&&savedNoteOpen&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
-            ...(reviewing && !making ? [{ id: 'review', label: 'worldReviewExit' as const, here: false,
-              go: () => { setReviewing(false); } }] : []),
             ...(listing ? [{ id: 'return', label: 'worldBack' as const, here: false, go: backPage }] : []),
             ...(making === 'inspiration' ? [{ id: 'inspiration', label: 'worldDockSaves' as const, here: false, go: startNewInspiration }] : []),
             ...(making === 'talk' ? [{ id: 'talk', label: 'worldDockTalk' as const, here: false,

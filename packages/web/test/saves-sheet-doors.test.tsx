@@ -110,7 +110,7 @@ it('opens Principles from the sheet\'s "Principles ›", the walk View principle
 
 it('opens the whole archive from the sheet\'s "Saves ›"', async () => {
   world = await mountWorld(FACTS, { routerTools: <Where /> }); await settle();
-  await pressSheetDoor(world.container, 'Saves'); await settle();
+  await pressSheetDoor(world.container, 'Kept'); await settle();
   expect(query('open')).toBe('saves');
   expect(query('note')).toBeNull();
 });

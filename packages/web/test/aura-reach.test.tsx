@@ -72,8 +72,8 @@ const speech = () => world.container
   .querySelector('.jar-char-bubble:not(.jar-char-bubble--review) .jar-char-bubble-reading[role="status"]')?.textContent?.trim() ?? null;
 const press = () => world.container.querySelector<HTMLButtonElement>('.jar-char-press');
 const QUIET = ['Quiet lately', 'It has been quiet', 'Nothing new in a while'];
-const WARM = ['Something is still warm from last week', 'Last week is still holding on'];
-const FRONTIER = ['Some of these still hold nothing up', 'There are memories here nothing rests on'];
+const WARM = ['Last week is still on your mind.', 'Something from last week keeps coming back.'];
+const FRONTIER = ['Some of what you kept isn’t part of a pattern yet.', 'A few things you kept don’t fit a pattern yet.'];
 async function ask(): Promise<string | null> {
   expect(press(), 'the creature has nothing to press').toBeTruthy();
   await act(async () => { press()!.click(); });

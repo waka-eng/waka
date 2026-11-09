@@ -446,10 +446,11 @@ describe("every surface has a way out you can see", () => {
        floor: a third row coming back is a design change, not drift. */
     expect(dock, "the dock's item list could not be read out of Home.tsx, or it is not the two rows").toEqual(["inspiration", "talk"]);
     /* AND THE TWO ROWS THAT STAND IN FOR THEM, each on one kind of page
-       (2026-10-15): ↩ on a list, Exit review mode while reviewing. Exact,
-       for the same reason. */
+       (2026-10-15): ↩ on a list. Exact, for the same reason. The questions'
+       "Exit review mode" row left the bar on 2026-11-08: they leave by the
+       page's "<" like every other page. */
     const standIns = [...home.matchAll(/\[\{ id: '([a-z]+)', label: 'world(?!Dock)[A-Za-z]+' as const, here: false,/g)].map((hit) => hit[1]!);
-    expect(standIns, "the bar's stand-in rows could not be read out of Home.tsx, or they are not ↩ and Exit review mode").toEqual(["review", "return"]);
+    expect(standIns, "the bar's stand-in rows could not be read out of Home.tsx, or it is not ↩").toEqual(["return"]);
     const rows = [...dock, ...standIns];
 
     /* WHAT IS BEING MADE, read where the bar reads it. Since 2026-10-15
@@ -489,11 +490,9 @@ describe("every surface has a way out you can see", () => {
     expect(code(home)).toContain("making === 'inspiration' ? [{ id: 'inspiration'");
     expect(code(home)).toContain("making === 'talk' ? [{ id: 'talk'");
 
-    /* AND WHILE REVIEWING, THE BAR IS ONLY ITS OWN WAY OUT. Founder,
-       2026-10-15: "in the review mode, bottom bar should say exit review
-       mode." Both doors to other rooms step out, and the one row left ends
-       the sitting — and Esc ends it too. */
-    expect(home, "the review bar has no Exit review mode row").toMatch(/\.\.\.\(reviewing && !making \? \[\{ id: 'review', label: 'worldReviewExit' as const, here: false,\s*go: \(\) => \{ setReviewing\(false\); \} \}\] : \[\]\)/);
+    /* AND WHILE REVIEWING, THE WAY OUT IS THE PAGE'S "<" (2026-11-08), and
+       Esc ends the sitting too. */
+    expect(code(home), "the questions lost their \"<\"").toMatch(/reviewing && !making[^\n]*\? <PageBack[\s\S]{0,120}onBack=\{\(\) => setReviewing\(false\)\} glyphOnly/);
     expect(code(home), "Esc no longer ends the review").toMatch(
       /if \(event\.key === 'Escape'\) \{\s*if \(reviewing && atNowView && nothingOpen && !harvestWhy\) \{[^}]*setReviewing\(false\); \}/);
 

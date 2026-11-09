@@ -87,7 +87,7 @@ it('says there are more saves than the list holds, and goes to the archive that 
   const saves = [{ id: 'a', preview: 'One', isPublic: false, kind: 'note' as const, source: 'app' as const, capturedMs: Date.now(), updatedMs: Date.now(), attachments: [], reflectionCount: 0 }];
   await act(async () => root.render(<HomeStream locale="en-US" inspirations={saves} signals={[]} principles={[]} onOpenSave={() => {}} onClose={() => {}} more={{ onSeeAll: seeAll }} />));
   const more = document.querySelector<HTMLButtonElement>('.waka-stream-more');
-  expect(more?.textContent).toBe('See every save');
+  expect(more?.textContent).toBe('See all');
   await act(async () => more!.click());
   expect(seeAll).toHaveBeenCalledOnce();
   await act(async () => root.unmount()); host.remove();

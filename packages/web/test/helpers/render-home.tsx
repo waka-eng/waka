@@ -559,7 +559,7 @@ async function pressPastChatsAside(container: HTMLElement): Promise<boolean> {
   await act(async () => aside.click());
   return true;
 }
-const RENAMED: Record<string, string> = { "New inspiration": "Keep a thought" };
+const RENAMED: Record<string, string> = { "Keep a thought": "Keep a thought" };
 
 /** Pull the Saves sheet up from home ("Saves ⌃" above the bar). */
 export async function openSavesSheet(container: HTMLElement): Promise<HTMLElement> {
@@ -574,7 +574,7 @@ export async function openSavesSheet(container: HTMLElement): Promise<HTMLElemen
   throw new Error("the Saves sheet never came up (is there a Saves ⌃ above the home bar?)");
 }
 
-/** Press a heading door in the Saves sheet: "Saves" or "Principles". */
+/** Press a heading door in the Saves sheet: "Kept" or "Principles". */
 export async function pressSheetDoor(container: HTMLElement, label: string): Promise<void> {
   const sheet = await openSavesSheet(container);
   for (let turn = 0; turn < 40; turn += 1) {
@@ -598,7 +598,7 @@ async function openArchive(container: HTMLElement): Promise<void> {
     }
     throw new Error("an agent's wall offers no Saves ⌃ to its archive");
   }
-  await pressSheetDoor(container, "Saves");
+  await pressSheetDoor(container, "Kept");
 }
 /* BY ACCESSIBLE NAME, which is what a person navigating by voice or by
    screen reader would say out loud. */
@@ -803,7 +803,7 @@ export async function closeOverlay(container: HTMLElement): Promise<void> {
  *
  * Founder, 2026-10-15: "the entry point into the card swipe left and right
  * should be the agent should say 'there are x things to review!' and the CTA
- * becomes 'Dive into review'". The cards no longer lie on home waiting; the
+ * becomes 'Ask me'". The cards no longer lie on home waiting; the
  * creature's bubble counts them and this press is the way in. Pass the
  * world's `step` to run the frame that hands the first card focus.
  */

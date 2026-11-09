@@ -4,7 +4,7 @@
  *
  *   A replaced photo must upload itself — not ride the receipt of the photo it
  *   replaced, after a save that failed.
- *   "Talk about this" must reach the chat under StrictMode, which renders the
+ *   "Chat about this" must reach the chat under StrictMode, which renders the
  *   route guard twice: where onboarding is going is read, never consumed,
  *   during render.
  *

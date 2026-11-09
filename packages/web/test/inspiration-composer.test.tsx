@@ -130,7 +130,7 @@ it('opens straight into the words, under the moment and the way back',async()=>{
      it is the clock — but it must be a real stamp rather than an empty node,
      which is what a missing `momentStamp` would leave behind. */
   expect(host.querySelector('.jar-note-when')?.textContent).toMatch(/\d{4}/);
-  expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('Capture inspiration');
+  expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('Keep a thought');
   expect(document.activeElement).toBe(host.querySelector('textarea'));
   expect(props.onSubmit).not.toHaveBeenCalled();
 });

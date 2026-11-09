@@ -179,7 +179,7 @@ it("stops a recording whose Record and the archive's leaving land in one commit"
   function Toggle() {
     const [shown, setShown] = useState(true);
     hide = () => setShown(false);
-    return shown ? <SavesOverlay locale="en-US" title="Your Inspirations" onClose={() => undefined} /> : null;
+    return shown ? <SavesOverlay locale="en-US" title="Kept" onClose={() => undefined} /> : null;
   }
   const Host = () => <ArchiveRecorderProvider><Toggle /></ArchiveRecorderProvider>;
   const slot = document.createElement("span");

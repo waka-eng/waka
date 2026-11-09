@@ -45,7 +45,7 @@ it('asks through the creature, glasses on, even without signals or collector sug
   /* The reading still comes first; a tap is the ask. */
   expect(world.container.querySelector('.jar-char-bubble--review')).toBeNull();
   await tapCreature();
-  expect(world.container.querySelector('.jar-char-bubble--review')?.textContent).toContain('There is 1 thing to review!');
+  expect(world.container.querySelector('.jar-char-bubble--review')?.textContent).toContain('I have a question for you.');
   await diveIntoReview(world.container,world.step);
   expect(world.container.textContent).toContain('Is this still relevant to you?');expect(world.container.textContent).toContain(original.text);
   expect(world.container.textContent).toContain('Your saved inspiration');
@@ -108,7 +108,7 @@ it('shows nothing when the queue cannot load, and asks again on the next tap',as
   expect(vi.mocked(listInspirationReviews).mock.calls.length,'the tap did not ask for the queue again').toBeGreaterThan(asked);
   /* Around the cycle once more, and the queue that came back is asked about. */
   for(let tap=0;tap<4&&!world.container.querySelector('.jar-char-bubble--review');tap+=1)await tapCreature();
-  expect(world.container.querySelector('.jar-char-bubble--review')?.textContent,'the queue that came back was not asked about').toContain('Dive into review');
+  expect(world.container.querySelector('.jar-char-bubble--review')?.textContent,'the queue that came back was not asked about').toContain('Ask me');
 });
 it('removes signals that lost their support after an original is marked irrelevant',async()=>{
   const signal={id:'retired-signal',statement:'A conclusion from this original.',status:'active' as const,confidence:80,evidenceCount:3,lastEvidenceAt:null,locked:false,unsupported:false,sharedGroupIds:[],createdAt:'2026-08-01T00:00:00Z'};

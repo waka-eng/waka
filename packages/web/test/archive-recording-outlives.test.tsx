@@ -319,7 +319,7 @@ it("does not let the notepad record while the archive's recording is still finis
   await closeOverlay(world.container);
   await settle();
   expect(archiveOpen()).toBe(false);
-  await pressDockRow(world.container, "New inspiration");
+  await pressDockRow(world.container, "Keep a thought");
   await settle();
   const notepadRecord = () => q<HTMLButtonElement>('.waka-note-bar .waka-dock-tool[aria-label="Record"]');
   expect(notepadRecord(), "the notepad under the archive is not on screen").toBeTruthy();

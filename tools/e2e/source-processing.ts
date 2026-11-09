@@ -4,10 +4,10 @@
    ═══════════════════════════════════════════════════════════════════════
 
    It stops at line ~165 on
-   `getByRole('button', { name: 'Capture inspiration' })`, after 10s. That
+   `getByRole('button', { name: 'Keep a thought' })`, after 10s. That
    is not a flake and not a renamed button:
 
-     - `Capture inspiration` (`worldCaptureInspiration`) is still in the
+     - `Keep a thought` (`worldCaptureInspiration`) is still in the
        catalogue, but it is the TEXTAREA's accessible name now, not a
        button's. The composer is opened from the dock's plus — see
        `keep.ts`, which is where that door is written down once.
@@ -191,8 +191,8 @@ try {
     page.setDefaultTimeout(10_000);
     page.on('pageerror', (error) => pageErrors.push(error.message));
     const openComposer = async () => {
-      const textbox = page.getByRole('textbox', { name: 'Capture inspiration', exact: true });
-      if (!await textbox.isVisible()) await page.getByRole('button', { name: 'Capture inspiration', exact: true }).click();
+      const textbox = page.getByRole('textbox', { name: 'Keep a thought', exact: true });
+      if (!await textbox.isVisible()) await page.getByRole('button', { name: 'Keep a thought', exact: true }).click();
       return textbox;
     };
     try {
@@ -200,8 +200,8 @@ try {
     const poster = page.locator('.jar-poster[data-jar-chrome="1"]');
     await poster.waitFor();
     assert.equal((await poster.textContent())?.trim(), before);
-    await page.getByRole('button', { name: 'Capture inspiration', exact: true }).click();
-    await page.getByRole('textbox', { name: 'Capture inspiration', exact: true }).fill('An unfinished corner invites someone else to add something.');
+    await page.getByRole('button', { name: 'Keep a thought', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Keep a thought', exact: true }).fill('An unfinished corner invites someone else to add something.');
     await page.getByRole('button', { name: 'Save and reflect on this inspiration', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'reflect on what you just kept', exact: true });
     await dialog.waitFor();
@@ -269,8 +269,8 @@ try {
 
     // A later failed pass recovers the same source, without repeating a save.
     await page.reload();
-    await page.getByRole('button', { name: 'Capture inspiration', exact: true }).click();
-    await page.getByRole('textbox', { name: 'Capture inspiration', exact: true }).fill('Another thought about making room.');
+    await page.getByRole('button', { name: 'Keep a thought', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Keep a thought', exact: true }).fill('Another thought about making room.');
     await page.getByRole('button', { name: 'Save inspiration', exact: true }).click();
     await page.getByText('Kept. Waiting to be read.', { exact: true }).waitFor();
     status = 'failed';
@@ -295,8 +295,8 @@ try {
     const keptText = 'A capture whose response never reached this browser.';
     const newerDraft = 'A newer unfinished thought must survive recovery.';
     loseCaptureResponse = true;
-    await page.getByRole('button', { name: 'Capture inspiration', exact: true }).click();
-    await page.getByRole('textbox', { name: 'Capture inspiration', exact: true }).fill(keptText);
+    await page.getByRole('button', { name: 'Keep a thought', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Keep a thought', exact: true }).fill(keptText);
     await page.getByRole('button', { name: 'Save inspiration', exact: true }).click();
     await page.getByText("Your words are here. Couldn't confirm the save.", { exact: true }).waitFor();
     const captureRequest = authoredPosts.at(-1)!;
@@ -322,7 +322,7 @@ try {
     await poster.waitFor();
     assert.equal((await poster.textContent())?.trim(), 'Other account reading');
     await openComposer();
-    assert.equal(await page.getByRole('textbox', { name: 'Capture inspiration', exact: true }).inputValue(), '', 'The second account must not inherit the first account draft');
+    assert.equal(await page.getByRole('textbox', { name: 'Keep a thought', exact: true }).inputValue(), '', 'The second account must not inherit the first account draft');
     assert.equal(await page.locator('.jar-source-status').count(), 0, 'The second account must not inherit save or processing status');
     assert.equal(saveLookups.some((item) => item.profileId === otherProfile.id && item.requestId === captureRequest.requestId), false);
     assert.equal((await pending()).length, 1, 'The first account journal must remain available to its owner');
@@ -337,7 +337,7 @@ try {
     assert.equal(authoredPosts.filter((item) => item.requestId === captureRequest.requestId).length, 1, 'Returning to the owner recovers by GET, without a replay POST');
     assert.equal(inspirations.filter((item) => item.text === keptText).length, 1);
     await openComposer();
-    assert.equal(await page.getByRole('textbox', { name: 'Capture inspiration', exact: true }).inputValue(), newerDraft);
+    assert.equal(await page.getByRole('textbox', { name: 'Keep a thought', exact: true }).inputValue(), newerDraft);
     await page.screenshot({ path: join(output, `recovered-capture-${viewport.width}.png`) });
 
     // A saved answer must also reconcile on reopening its inspiration. Its
