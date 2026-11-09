@@ -456,3 +456,39 @@ it("opens the listening view from a saved note's mic, and Done drops the words i
     delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
   }
 });
+
+/* A NOTE THAT CLOSES ABORTS ITS MICROPHONE (review, 2026-11-09). It used to
+   `stop`, which asks the engine for one more final; that late final then
+   landed in whatever note was open next. Leaving keeps the words already
+   heard, and nothing the session sends afterwards is written anywhere. */
+it("aborts the mic when the note closes: the words heard are kept, a late result is dropped", async () => {
+  class Engine {
+    static live: Engine | null = null;
+    lang = ""; continuous = false; interimResults = false; aborted = false; stopped = false;
+    onresult: ((event: unknown) => void) | null = null;
+    onerror: ((event: unknown) => void) | null = null;
+    onend: (() => void) | null = null;
+    constructor() { Engine.live = this; }
+    start() {}
+    stop() { this.stopped = true; }
+    abort() { this.aborted = true; }
+    say(text: string) { this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: text }], { isFinal: true })] }); }
+  }
+  (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition = Engine;
+  try {
+    await openSave(longRow, "an older line");
+    await answer(true);
+    await act(async () => slot.querySelector<HTMLButtonElement>('.waka-dock-tool[aria-label="Your voice"]')!.click());
+    const session = Engine.live!;
+    await act(async () => session.say("and a new one"));
+    await act(async () => { closer?.(); await Promise.resolve(); });
+    expect(session.aborted, "the closing note stopped its mic instead of aborting it").toBe(true);
+    expect(session.stopped, "stop asks for a late final").toBe(false);
+    const kept = JSON.stringify(state.written);
+    expect(kept, "leaving dropped the words that were heard").toContain("an older line and a new one");
+    await act(async () => session.say("and a new one and a late tail"));
+    expect(JSON.stringify(state.written), "a late result was written after the note closed").toBe(kept);
+  } finally {
+    delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+  }
+});

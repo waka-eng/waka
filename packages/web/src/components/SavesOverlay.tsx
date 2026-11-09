@@ -284,9 +284,12 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
   const editNow = useRef(editOpenNote); editNow.current = editOpenNote;
   /* THE MIC WRITES INTO THE NOTE, as it does on the notepad and in a chat. */
   const dictation = useDictation(() => draftNow.current, (text) => editNow.current(text), locale);
-  const stopDictation = dictation.stop;
-  /* A NOTE THAT CLOSES TAKES ITS MICROPHONE WITH IT. */
-  useEffect(() => () => stopDictation(), [open?.id, stopDictation]);
+  const abortDictation = dictation.abort;
+  /* A NOTE THAT CLOSES TAKES ITS MICROPHONE WITH IT, by `abort` and not
+     `stop` (review, 2026-11-09): stop asks the engine for one more final,
+     which landed in the next note opened. The words already heard are in
+     the draft, which is what leaving the note commits. */
+  useEffect(() => () => abortDictation(), [open?.id, abortDictation]);
   const reading = useRef<AbortController | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   /* ═══ DELETE AT ONCE, UNDO FOR A MOMENT, THE SHELF FOR A MONTH ═══════════

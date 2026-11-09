@@ -186,6 +186,22 @@ describe("speaking into a note", () => {
     expect(broken.now.error).toBe("dictation-failed");
   });
 
+  /* A NOTE THAT CLOSES ABORTS (review, 2026-11-09): `stop` asks the engine
+     for one more final, which would land in whatever note is open next.
+     `abort` ends the session and drops anything it still sends; the words
+     already written stay where they are. */
+  it("drops whatever an aborted session still sends, and keeps what it had written", () => {
+    const d = dictate();
+    act(() => d.now.start());
+    const old = FakeEngine.live!;
+    act(() => old.say([{ text: "kept words", final: true }]));
+    act(() => d.now.abort());
+    expect(old.aborted).toBe(true);
+    expect(d.now.listening).toBe(false);
+    act(() => old.say([{ text: "kept words and a late tail", final: true }]));
+    expect(d.read(), "a late result wrote after abort").toBe("kept words");
+  });
+
   /* THE ENGINE ENDS ON ITS OWN after a long silence, even in continuous
      mode. The words stay; the button goes back to offering. Restarting
      automatically would be a microphone that will not switch off. */
