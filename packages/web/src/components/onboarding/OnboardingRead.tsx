@@ -82,7 +82,6 @@ export function OnboardingReveal({ locale, reading, behind, busy, error, onTalk,
         </SayBubble>
         <div className="onb-tail-gap" />
         <CreatureSlot size="large" />
-        <p className="onb-sharpen">{say("onboardingSharpen")}</p>
           </div>
         </div>
         {error ? <p className="onb-error" role="alert">{error}</p> : null}
