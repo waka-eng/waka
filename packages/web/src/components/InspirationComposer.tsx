@@ -239,7 +239,7 @@ export type { ReadWords } from './ImageWords';
     draws — never a figure drawn in CSS. */
 function CreatureLine({ children }: { children: ReactNode }) {
   return <div className="waka-note-line">
-    <span className="waka-note-creature" aria-hidden="true"><Companion size={32} label="" /></span>
+    <span className="waka-note-creature" aria-hidden="true"><Companion size={32} label="" pressable={false} /></span>
     <p className="waka-note-says">{children}</p>
   </div>;
 }

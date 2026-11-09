@@ -427,3 +427,14 @@ it('asks why about a shared link, with Add a note and That\'s all, and That\'s a
   await act(async () => acts[1]!.click());
   expect(props.onSubmit).toHaveBeenCalledOnce();
 });
+
+/* Code review, 2026-11-08: the Companion beside the question became a
+   pressable button, so a focusable control sat inside an aria-hidden figure
+   — reachable by Tab, named nothing. Beside a line it is a picture. */
+it('keeps the creature beside the question out of the tab order', async () => {
+  props.media = [{ id: 'shot', type: 'image', name: 'Screenshot.png', blob: new Blob(['p'], { type: 'image/png' }) }];
+  await mount();
+  const figure = host.querySelector('.waka-note-creature')!;
+  expect(figure).toBeTruthy();
+  expect(figure.querySelector('button, [tabindex]:not([tabindex="-1"]), a[href]'), 'a focusable control hides inside the aria-hidden figure').toBeNull();
+});
