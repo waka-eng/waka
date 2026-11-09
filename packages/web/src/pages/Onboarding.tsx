@@ -234,7 +234,11 @@ export default function OnboardingPage(): JSX.Element {
 
   function renderStep(): JSX.Element {
   if (phase.kind === "name") {
-    return <NameStep onNamed={() => setPhase(onboardingStep({ saved: 0, marker: readOnboardingMarker(accountId), hasName: true }))} />;
+    /* FROM WHAT JUST HAPPENED, NOT FROM STORAGE. The marker is only a hint for
+       coming back; a browser that keeps nothing (private mode, blocked site
+       data) would read "not named" straight back and ask the name forever —
+       and onboarding is mandatory, so that is a person stuck at the door. */
+    return <NameStep onNamed={() => setPhase(onboardingStep({ saved: 0, marker: { ...readOnboardingMarker(accountId), named: true }, hasName: true }))} />;
   }
   if (phase.kind === "intro") {
     return <OnboardingIntro locale={locale} onDone={() => { if (!preview) writeOnboardingMarker(accountId, { introSeen: true }); setPhase({ kind: "question", index: 0 }); }} />;

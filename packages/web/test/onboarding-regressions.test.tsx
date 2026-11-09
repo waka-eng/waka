@@ -36,6 +36,7 @@ import {
   type ApiViewer,
 } from "../src/lib/api";
 import { requestFirstRead } from "../src/lib/first-read";
+import { createConversation } from "../src/lib/api/conversations";
 import { AuthProvider } from "../src/lib/auth-context";
 import OnboardingPage from "../src/pages/Onboarding";
 
@@ -197,5 +198,24 @@ describe("Talk about this under StrictMode", () => {
     press("Talk about this");
     await settle(500);
     expect(page.textContent).toContain("CHAT");
+  });
+});
+
+describe("naming, when this browser keeps nothing", () => {
+  it("moves on to the intro instead of asking the name again forever", async () => {
+    window.localStorage.clear();
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(viewer({ name: "" }));
+    vi.mocked(updateAuthProfile).mockResolvedValue(viewer({ name: "Mina" }));
+    const blocked = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("blocked", "SecurityError"); });
+    try {
+    const page = await render();
+    const input = page.querySelector<HTMLInputElement>('input[name="name"]')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    act(() => { setter.call(input, "Mina"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+    await act(async () => { page.querySelector("form")!.requestSubmit(); });
+    await flush();
+    expect(page.querySelector('input[name="name"]')).toBeNull();
+    expect(page.textContent).toContain("How many notes have you saved and never looked at again?");
+    } finally { blocked.mockRestore(); }
   });
 });
