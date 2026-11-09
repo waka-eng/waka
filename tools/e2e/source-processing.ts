@@ -211,7 +211,7 @@ try {
     await dialog.getByText('What could someone else add to that unfinished corner?', { exact: true }).waitFor();
     await dialog.locator('textarea').fill('My unfinished answer must stay here.');
     status = 'ready'; version = 2;
-    await dialog.getByRole('button', { name: 'Check again', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Try again', exact: true }).click();
     await dialog.getByRole('button', { name: 'See reading', exact: true }).waitFor();
     assert.equal(await dialog.locator('textarea').inputValue(), 'My unfinished answer must stay here.');
     const bounds = await dialog.boundingBox();
@@ -274,7 +274,7 @@ try {
     await page.getByRole('button', { name: 'Keep', exact: true }).click();
     await page.getByText('Kept. Waiting to be read.', { exact: true }).waitFor();
     status = 'failed';
-    await page.getByRole('button', { name: 'Check again', exact: true }).click();
+    await page.getByRole('button', { name: 'Try again', exact: true }).click();
     await page.getByRole('button', { name: 'Try again', exact: true }).waitFor();
     await page.screenshot({ path: join(output, `failed-reading-${viewport.width}.png`) });
     await page.getByRole('button', { name: 'Try again', exact: true }).click();
@@ -284,7 +284,7 @@ try {
     await page.getByText('Kept. Waiting to be read.', { exact: true }).waitFor();
     assert.equal(saveCount, 2); assert.equal(retryCount, 1, 'Resuming progress must only read status');
     status = 'ready';
-    const check = page.getByRole('button', { name: 'Check again', exact: true });
+    const check = page.getByRole('button', { name: 'Try again', exact: true });
     if (viewport.width < 500) await check.tap(); else await check.click();
     await page.getByText('Your reading still holds.', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Hide', exact: true }).click();

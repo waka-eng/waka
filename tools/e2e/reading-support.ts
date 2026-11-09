@@ -95,11 +95,11 @@ try {
     assert.ok(recovery.size >= 14 && recovery.height >= 44 && recovery.contrast >= 4.5, 'Recovery action must be readable and touchable at rest');
     failCheck = true;
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await page.getByRole('button', { name: 'Check again', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Try again', exact: true }).waitFor();
     assert.ok((await page.locator('body').innerText()).includes("Couldn’t load this."));
     await page.screenshot({ path: join(output, `retry-${viewport.width}.png`) });
     failCheck = false;
-    await page.getByRole('button', { name: 'Check again', exact: true }).click();
+    await page.getByRole('button', { name: 'Try again', exact: true }).click();
     await page.getByRole('button', { name: 'Write a new one', exact: true }).waitFor();
     assert.equal(generated, 0, 'A status-check retry must not trigger generation');
     await page.getByRole('button', { name: 'principles', exact: true }).click();
