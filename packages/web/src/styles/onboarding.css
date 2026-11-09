@@ -190,6 +190,8 @@
   transition: opacity 250ms ease;
 }
 .onb-walker--gone { opacity: 0; }
+/* The walker is moved every frame of its walk (`WalkingCompanion`). */
+.waka-walking { will-change: transform; }
 .onb-intro--leaving .onb-beat-words,
 .onb-intro--leaving .onb-intro-foot { opacity: 0; transition: opacity 250ms ease; }
 .onb-intro-foot { transition: opacity 250ms ease; }
