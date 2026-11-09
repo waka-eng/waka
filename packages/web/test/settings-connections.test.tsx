@@ -64,13 +64,13 @@ afterEach(async () => {
 });
 async function openConnections(locale: SettingsPanelProps["locale"] = "en-US", profileId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa') {
   await act(async () => root.render(<SettingsPanel {...props} locale={locale} />));
-  await act(async () => button(locale === "en-US" ? "Agent profiles" : "에이전트 프로필").click());
+  await act(async () => button(locale === "en-US" ? "Agents" : "에이전트").click());
   const name = profileId.startsWith('b') ? 'anotherone' : 'noah';
   const label = locale === 'en-US' ? `Settings for ${name}` : `${name} 설정`;
   await act(async () => host.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click());
 }
 async function chooseAnotherAgent() {
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Settings for anotherone"]')!.click());
 }
 
@@ -84,7 +84,7 @@ it("keeps MCP connections and keys under their agent without a Manage tab", asyn
   expect(host.textContent).toContain("Work laptop");
   expect(host.textContent).toContain("Last used");
   expect(host.textContent).toContain("Expires");
-  expect(host.textContent).toContain("Read and write only this agent’s own memory");
+  expect(host.textContent).toContain("Reads and writes only this agent’s notes");
   expect(host.textContent).not.toContain("Current browser");
   expect(host.querySelectorAll(".waka-session-list li")).toHaveLength(1);
   expect(host.querySelector("pre")).toBeNull();
@@ -130,7 +130,7 @@ it("keeps personal sign-ins in account settings, with no agent list or setup con
   await act(async () => button('Disconnect').click());
   await act(async () => button('Disconnect').click());
   expect(requests.filter(row => row.method === 'DELETE')).toEqual([{path:'/api/sessions/personal-browser',method:'DELETE'}]);
-  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Back to Settings"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Back"]')!.click());
   expect(host.querySelector("h2")?.textContent).toBe("Settings");
   expect(document.activeElement).toBe(host.querySelector('[data-settings-target="sessions"]'));
 });
@@ -153,7 +153,7 @@ it('disconnects only the selected agent’s device and preserves other profiles'
 it("keeps the connection when disconnect fails, then revokes only its session on retry", async () => {
   await openConnections();
   await act(async () => button("Disconnect").click());
-  expect(host.textContent).toContain("The profile and its memory stay saved");
+  expect(host.textContent).toContain("Everything it kept stays");
   expect(document.activeElement).toBe(host.querySelector(".waka-session-confirm p"));
   expect(requests.filter((request) => request.method === "DELETE")).toHaveLength(0);
   await act(async () => button("Cancel").click());
@@ -162,13 +162,13 @@ it("keeps the connection when disconnect fails, then revokes only its session on
   await act(async () => button("Disconnect").click());
   failDelete = true;
   await act(async () => button("Disconnect").click());
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Could not disconnect");
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Couldn’t disconnect");
   expect(host.querySelectorAll(".waka-session-list li")).toHaveLength(1);
   failDelete = false;
   await act(async () => button("Disconnect").click());
   expect(host.querySelector('[role="alert"]')).toBeNull();
   expect(host.querySelectorAll(".waka-session-list li")).toHaveLength(0);
-  expect(host.textContent).toContain("The profile and its memory are still saved");
+  expect(host.textContent).toContain("Everything it kept is still here");
   expect(host.textContent).toContain("No live sign-in connections for noah");
   expect(requests.filter((request) => request.method === "DELETE")).toEqual([
     { path: "/api/sessions/agent-session", method: "DELETE" },
@@ -179,7 +179,7 @@ it("keeps the connection when disconnect fails, then revokes only its session on
 it("distinguishes a failed load from an empty list and refreshes after an external login", async () => {
   failRead = true;
   await openConnections();
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Could not load connections");
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Couldn’t load connections");
   expect(host.textContent).not.toContain("No live sign-in connections for noah");
   failRead = false;
   await act(async () => button("Refresh").click());
@@ -275,7 +275,7 @@ it('rejects stale, expired and cross-profile verification and recovers from a fa
   target.profile = expectedProfile;
   failRead = true;
   await act(async () => button('Check connection').click());
-  expect(host.textContent).toContain('Could not check the connection');
+  expect(host.textContent).toContain('Couldn’t check the connection');
   failRead = false;
   await act(async () => button('Check connection').click());
   expect(host.textContent).toContain('Verified for noah · Work laptop');

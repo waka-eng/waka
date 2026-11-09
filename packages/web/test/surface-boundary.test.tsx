@@ -134,7 +134,7 @@ it("offers a way home as well as a reload, on any page but home", async () => {
       <Boom message="Cannot read properties of undefined (reading 'length')" />
     </SurfaceBoundary>,
   );
-  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Go to your WAKA");
+  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Home");
   expect(home, "the crash screen offers only a reload").toBeDefined();
   await act(async () => home!.click());
   expect(assign).toHaveBeenCalledWith("/");
@@ -151,7 +151,7 @@ it("does not offer home on home, where it would be the reload again", async () =
       <Boom message="Cannot read properties of undefined (reading 'length')" />
     </SurfaceBoundary>,
   );
-  expect(host.textContent).not.toContain("Go to your WAKA");
+  expect(host.textContent).not.toContain("Home");
 });
 
 it("offers home on '/' with a query, since the query may be what breaks it, and goes to a clean '/'", async () => {
@@ -166,7 +166,7 @@ it("offers home on '/' with a query, since the query may be what breaks it, and 
       <Boom message="Cannot read properties of undefined (reading 'length')" />
     </SurfaceBoundary>,
   );
-  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Go to your WAKA");
+  const home = [...host.querySelectorAll("button")].find((button) => button.textContent === "Home");
   expect(home, "a home with a query got no way to a clean home").toBeDefined();
   await act(async () => home!.click());
   expect(assign).toHaveBeenCalledWith("/");

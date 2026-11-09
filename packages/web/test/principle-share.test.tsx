@@ -43,7 +43,7 @@ const changeMode=()=>act(async()=>{const select=[...host.querySelectorAll('selec
 it('starts with an exportable preview and keeps editing and customization optional',async()=>{
   await mount();await settle();
   expect(host.querySelector('img')?.alt).toBe(source.statement);
-  expect(button('Save image').disabled).toBe(false);
+  expect(button('Download image').disabled).toBe(false);
   const words=host.querySelector<HTMLDetailsElement>('.jar-share-word-editor')!,customize=host.querySelector<HTMLDetailsElement>('.jar-share-customize')!;
   expect(words.open).toBe(false);expect(customize.open).toBe(false);
   expect(words.querySelector('summary')?.textContent).toBe('Edit');
@@ -66,8 +66,8 @@ it('never enables export from a late preview of earlier wording',async()=>{
   let resolve!:(value:Awaited<ReturnType<typeof renderShareCard>>)=>void;
   vi.mocked(renderShareCard).mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));await mount();await settle();
   await type('Changed while the image was rendering');
-  await act(async()=>resolve({blob:new Blob(['old']),width:1080,height:1080,fallbackFont:false}));expect(button('Save image').disabled).toBe(true);
-  await settle();expect(button('Save image').disabled).toBe(false);expect(host.querySelector('img')!.alt).toBe('Changed while the image was rendering');
+  await act(async()=>resolve({blob:new Blob(['old']),width:1080,height:1080,fallbackFont:false}));expect(button('Download image').disabled).toBe(true);
+  await settle();expect(button('Download image').disabled).toBe(false);expect(host.querySelector('img')!.alt).toBe('Changed while the image was rendering');
 });
 it('keeps wording after native cancellation and never claims it was published',async()=>{
   nativeCanShare.mockReturnValue(true);nativeShare.mockRejectedValueOnce(new DOMException('Canceled','AbortError'));
@@ -79,26 +79,26 @@ it('hides an obsolete preview after a render failure and retries without changin
   await mount();await settle();
   vi.mocked(renderShareCard).mockRejectedValueOnce(new ArtifactLayoutError('unavailable'));
   await type('Keep these words after an image failure');await settle();
-  expect(button('Save image').disabled).toBe(true);expect(host.querySelector('img')).toBeNull();
+  expect(button('Download image').disabled).toBe(true);expect(host.querySelector('img')).toBeNull();
   expect(host.querySelector('textarea')!.value).toBe('Keep these words after an image failure');
   await act(async()=>button('Try again').click());await settle();
-  expect(button('Save image').disabled).toBe(false);expect(host.querySelector('img')!.alt).toBe('Keep these words after an image failure');
+  expect(button('Download image').disabled).toBe(false);expect(host.querySelector('img')!.alt).toBe('Keep these words after an image failure');
 });
 it('exports the preview blob and preserves the draft when download handoff fails',async()=>{
   await mount();await type('My export, not private evidence');await settle();
   const previewBlob=vi.mocked(URL.createObjectURL).mock.calls.at(-1)![0];
   const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementationOnce(()=>{throw new Error('Download refused');});
-  await act(async()=>button('Save image').click());
-  expect(host.textContent).toContain('Couldn’t start the download.');expect(host.textContent).not.toContain('Image download started.');
+  await act(async()=>button('Download image').click());
+  expect(host.textContent).toContain('Couldn’t download.');expect(host.textContent).not.toContain('Downloading.');
   expect(host.querySelector('textarea')!.value).toBe('My export, not private evidence');expect(document.querySelector('a[download]')).toBeNull();
-  click.mockImplementation(()=>{});await act(async()=>button('Save image').click());
-  expect(URL.createObjectURL).toHaveBeenLastCalledWith(previewBlob);expect(host.textContent).toContain('Image download started.');
+  click.mockImplementation(()=>{});await act(async()=>button('Download image').click());
+  expect(URL.createObjectURL).toHaveBeenLastCalledWith(previewBlob);expect(host.textContent).toContain('Downloading.');
   expect(readPrincipleArtifactDrafts(scope,id)[0].value.entries[0].text).toBe('My export, not private evidence');
 });
 it('falls back to download after native sharing fails and sends only the preview image',async()=>{
   nativeCanShare.mockReturnValue(true);nativeShare.mockRejectedValueOnce(new DOMException('Unavailable','NotAllowedError'));
   await mount();await settle();await act(async()=>button('Share image').click());
-  expect(host.textContent).toContain('You can save the image instead.');expect(button('Save image').disabled).toBe(false);
+  expect(host.textContent).toContain('Download the image instead.');expect(button('Download image').disabled).toBe(false);
   const payload=nativeShare.mock.calls[0][0];expect(Object.keys(payload)).toEqual(['files']);
   expect(payload.files).toHaveLength(1);expect(payload.files[0].type).toBe('image/png');
   expect(host.querySelector('textarea')!.value).toBe(source.statement);
@@ -107,22 +107,22 @@ it('recovers a failed source read without creating a draft or an export from mis
   vi.mocked(fetchPrinciples).mockRejectedValueOnce(new Error('Offline'));
   await mount();expect(host.querySelector('textarea')).toBeNull();expect(renderShareCard).not.toHaveBeenCalled();
   await act(async()=>button('Try again').click());await settle();
-  expect(host.querySelector('textarea')!.value).toBe(source.statement);expect(button('Save image').disabled).toBe(false);
+  expect(host.querySelector('textarea')!.value).toBe(source.statement);expect(button('Download image').disabled).toBe(false);
 });
 it.each(['empty','too_long'] as const)('keeps unrenderable %s wording editable and disables export',async code=>{
   await mount();await settle();vi.mocked(renderShareCard).mockRejectedValueOnce(new ArtifactLayoutError(code));
   const words=code==='empty'?'   ':'Long wording '.repeat(100);await type(words);await settle();
-  expect(host.querySelector('textarea')!.value).toBe(words);expect(button('Save image').disabled).toBe(true);expect(host.querySelector('img')).toBeNull();
-  await type('Fits again');await settle();expect(button('Save image').disabled).toBe(false);
+  expect(host.querySelector('textarea')!.value).toBe(words);expect(button('Download image').disabled).toBe(true);expect(host.querySelector('img')).toBeNull();
+  await type('Fits again');await settle();expect(button('Download image').disabled).toBe(false);
   expect(host.querySelector<HTMLDetailsElement>('.jar-share-word-editor')!.open).toBe(true);
 });
 it('keeps visible words after storage failure and saves them on explicit retry',async()=>{
   await mount();vi.spyOn(Storage.prototype,'setItem').mockImplementationOnce(()=>{throw new DOMException('Full','QuotaExceededError');});
   await type('Keep me even if storage fills up');await settle();
-  expect(host.textContent).toContain('This device couldn’t keep the draft.');
+  expect(host.textContent).toContain('This device couldn’t save the draft.');
   expect(host.querySelector('textarea')!.value).toBe('Keep me even if storage fills up');
-  await act(async()=>button('Try saving draft').click());
-  expect(host.textContent).not.toContain('This device couldn’t keep the draft.');
+  await act(async()=>button('Try again').click());
+  expect(host.textContent).not.toContain('This device couldn’t save the draft.');
   expect(readPrincipleArtifactDrafts(scope,id)[0].value.entries[0].text).toBe('Keep me even if storage fills up');
 });
 it('does not restore or export a local draft if the source is no longer accessible',async()=>{
@@ -144,11 +144,11 @@ it('builds change cards from recorded words and dates with no editable invented 
 });
 it('does not fabricate a change card when the principle has no saved earlier wording',async()=>{
   vi.mocked(fetchPrincipleStatements).mockResolvedValue({profileId:scope.profileId,principleId:id,currentStatementId:null,statements:[]});
-  await mount();await changeMode();await settle();expect(host.textContent).toContain('needs two saved wordings');expect(button('Save image').disabled).toBe(true);
+  await mount();await changeMode();await settle();expect(host.textContent).toContain('hasn’t changed yet');expect(button('Download image').disabled).toBe(true);
 });
 /* THE CARD OPENS WITH THE ONE YOU PRESSED (audit f2afcbe2, desk/77). It
    used to open with the set — the pressed principle and the next two by rank
-   — so "Make a share card" on one principle put every principle on the card.
+   — so "Share" on one principle put every principle on the card.
    What this case still protects: the pressed principle leads, the set is one
    choice away and capped at three, an edit touches one entry only, removing
    takes the chosen one, and nothing about the card writes back to the
@@ -179,22 +179,20 @@ it('puts the proof on the card, counting each save once',async()=>{
   vi.mocked(fetchPrinciples).mockResolvedValue([a]);await mount();await settle();
   const last=vi.mocked(renderShareCard).mock.calls.at(-1)![0];
   expect(last.proof,'the card carries no proof, so it is a sentiment with nothing behind it').toBeTruthy();
-  expect(last.proof).toContain('2 things I kept');
+  expect(last.proof,'states render, numerals never').not.toMatch(/\d/);expect(last.proof).toBe('This is what stayed.');
 });
 /* "6 things I kept over 1 month" was printed for a principle held since that
    morning: the span was max(1, months) from `heldSince`. It still runs from
    `heldSince` — the examples' dates are only the two newest per signal, so
    they cannot say how long anything was kept (review) — but in plain units,
    and absent when there is none worth naming. */
-it('says the span honestly from heldSince: none under a week, weeks under two months, then months',async()=>{
+it('says what stayed in words, with no count or span, and nothing without a held date',async()=>{
   const day=86_400_000,now=Date.parse('2026-10-17T12:00:00Z');
   /* The examples are always recent: what moves is `heldSince`. */
   const at=(daysAgo:number)=>({...source,heldSince:new Date(now-daysAgo*day).toISOString(),
     citedSignals:[{id:'s',statement:'x',examples:[{text:'one',createdAt:new Date(now-day).toISOString()},{text:'two',createdAt:new Date(now-day/2).toISOString()}]}]});
-  expect(principleShareProof('en-US',[at(0.5)],now)).toBe('2 things I kept. This is what stayed.');
-  expect(principleShareProof('en-US',[at(20)],now)).toBe('2 things I kept over 2 weeks. This is what stayed.');
-  expect(principleShareProof('en-US',[at(7)],now)).toBe('2 things I kept over 1 week. This is what stayed.');
-  expect(principleShareProof('en-US',[at(200)],now)).toBe('2 things I kept over 6 months. This is what stayed.');
+  expect(principleShareProof('en-US',[at(0.5)],now)).toBe('This is what stayed.');
+  expect(principleShareProof('en-US',[at(200)],now)).toBe('This is what stayed.');
   expect(principleShareProof('en-US',[at(200),{...at(200),id:'other'}],now)).toContain('These are what stayed.');
   expect(principleShareProof('en-US',[{...at(200),heldSince:null}],now),'no heldSince, no span to claim').toBeUndefined();
   expect(principleShareProof('ko-KR',[at(0.5)],now)).not.toMatch(/개월|주 동안/);
@@ -202,9 +200,9 @@ it('says the span honestly from heldSince: none under a week, weeks under two mo
 
 it('retries a failed history read without showing the previous regular-card preview',async()=>{
   await mount();await settle();vi.mocked(fetchPrincipleStatements).mockRejectedValueOnce(new Error('No access'));
-  await changeMode();await settle();expect(host.querySelector('img')).toBeNull();expect(button('Save image').disabled).toBe(true);
+  await changeMode();await settle();expect(host.querySelector('img')).toBeNull();expect(button('Download image').disabled).toBe(true);
   vi.mocked(fetchPrincipleStatements).mockResolvedValueOnce({profileId:scope.profileId,principleId:id,currentStatementId:null,statements:[]});
-  await act(async()=>button('Try again').click());await settle();expect(host.textContent).toContain('needs two saved wordings');
+  await act(async()=>button('Try again').click());await settle();expect(host.textContent).toContain('hasn’t changed yet');
 });
 it('preserves exact selected history and offers feasible options for an overlong change card',async()=>{
   const old='22222222-2222-4222-8222-222222222222',recent='33333333-3333-4333-8333-333333333333',currentId='44444444-4444-4444-8444-444444444444';
@@ -215,8 +213,8 @@ it('preserves exact selected history and offers feasible options for an overlong
   await mount();await changeMode();await settle();expect(readPrincipleArtifactDrafts(scope,id)[0].value.beforeStatementId).toBe(recent);
   vi.mocked(renderShareCard).mockRejectedValueOnce(new ArtifactLayoutError('too_long'));
   await act(async()=>{const select=[...host.querySelectorAll('select')].find(row=>[...row.options].some(option=>option.value===old))!;select.value=old;select.dispatchEvent(new Event('change',{bubbles:true}));});await settle();
-  expect(host.textContent).toContain('These recorded words don’t fit.');expect(host.textContent).not.toContain('Shorten the text');
-  expect(host.querySelector('textarea')).toBeNull();expect(button('Save image').disabled).toBe(true);
+  expect(host.textContent).toContain('Too long to fit.');expect(host.textContent).not.toContain('Shorten the text');
+  expect(host.querySelector('textarea')).toBeNull();expect(button('Download image').disabled).toBe(true);
   await act(async()=>root.unmount());root=createRoot(host);await mount();await settle();
   expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({items:[expect.objectContaining({text:'First.'}),expect.objectContaining({text:'Today.'})]}));
 });

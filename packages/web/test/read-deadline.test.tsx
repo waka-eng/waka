@@ -49,12 +49,12 @@ describe("the loading screen's failure face", () => {
     const retry = vi.fn(), out = vi.fn();
     await act(async () => {
       root!.render(createElement(LoadingHome, { problem: {
-        message: "Your home didn’t load.", detail: "The server could not be reached.",
+        message: "Couldn’t load your home.", detail: "Couldn’t connect.",
         actions: [{ label: "Try again", onClick: retry }, { label: "Sign out", onClick: out }],
       } }));
     });
     expect(text()).not.toContain("Loading");
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Your home didn’t load.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Couldn’t load your home.");
     await press("Try again");
     await press("Sign out");
     expect(retry).toHaveBeenCalledTimes(1);

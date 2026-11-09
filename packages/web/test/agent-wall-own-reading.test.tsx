@@ -602,7 +602,7 @@ it('shows every named agent, keeps their memory separate, and syncs Settings cha
   expect(world.audit().wallId).toBe('agent-another');
 
   expect(world.container.querySelector('.waka-settings-heading h2')?.textContent).toBe('third');
-  await act(async () => world.container.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
+  await act(async () => world.container.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
   await act(async () => world.container.querySelector<HTMLButtonElement>('[data-agent-id="agent-another"]')!.click());
   const another = world.container.querySelector<HTMLInputElement>('.waka-agent-details input')!;
   await act(async () => { another.focus(); type(another, 'renamed'); another.blur(); });
@@ -611,12 +611,12 @@ it('shows every named agent, keeps their memory separate, and syncs Settings cha
   expect(face('renamed')?.getAttribute('aria-pressed')).toBe('true');
   expect(world.audit().wallId).toBe('agent-another');
 
-  await act(async () => world.container.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
+  await act(async () => world.container.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
   const erase = async (name: string) => {
     await act(async () => world.container.querySelector<HTMLButtonElement>(`[aria-label="Settings for ${name}"]`)!.click());
     const button = world.container.querySelector<HTMLButtonElement>('[data-agent-delete]')!;
     await act(async () => { button.click(); });
-    const confirm = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-settings-danger button')].find(node => node.textContent === 'Delete profile and memory')!;
+    const confirm = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-settings-danger button')].find(node => node.textContent === 'Delete')!;
     await act(async () => { confirm.click(); });
     await settle();
   };
@@ -728,7 +728,7 @@ it('keeps agent principle detail, curation, and share cards bound to their profi
   });
   await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-ask button')].find(button=>button.textContent==='Save')!.click());await settle();
   expect(updatePrinciple).toHaveBeenLastCalledWith('first','Noah corrected words',expect.objectContaining({profile:'agent-noah',expectedStatementRevision:'1'}));
-  await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principle-actions button')].find(button=>button.textContent==='Make a share card')!.click());await settle();
+  await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principle-actions button')].find(button=>button.textContent==='Share')!.click());await settle();
   expect(location!.pathname).toBe('/principles/first/share');
   expect(world.container.querySelector('.jar-share-name')?.textContent).toContain('noah');
   expect(world.container.querySelector('.jar-share-name')?.textContent).not.toContain('You');

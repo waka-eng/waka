@@ -125,7 +125,7 @@ describe("a reason clause speaks the reader's language", () => {
     expect(englishIn(whyOf(new ApiError({ status: 0, message: 'x' }), 'ko-KR'))).toEqual([]);
     /* English is unchanged — this is a localisation fix, not a rewrite. */
     expect(whyFailed(new ApiError({ status: 401, message: 'x' }), 'Couldn’t save that.', 'en-US'))
-      .toBe('Couldn’t save that. You are signed out. Sign in and it is still here.');
+      .toBe('Couldn’t save that. You’re signed out. Sign in again; your words are still here.');
   });
 });
 
@@ -164,7 +164,7 @@ describe('an attachment speaks the reader’s language', () => {
     expect(englishIn(host.textContent ?? ''), host.textContent ?? '').toEqual([]);
   });
 
-  it('says in Korean that a preview could not be loaded at all', async () => {
+  it('says in Korean that a preview Couldn’t load your agents at all', async () => {
     vi.mocked(fetchAttachmentDetails).mockImplementation(async () => { throw new ApiError({ status: 0, message: 'network unreachable' }); });
     await act(async () => root.render(<AttachmentPreview item={{ id: 'photo', type: 'image', label: '사진' }} locale="ko-KR" />));
     const said = host.textContent ?? '';

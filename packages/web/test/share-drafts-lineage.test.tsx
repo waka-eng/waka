@@ -41,7 +41,7 @@ const mount=async()=>{await act(async()=>root.render(<PrincipleShare scope={scop
 const remount=async()=>{await act(async()=>root.unmount());root=createRoot(host);await mount();};
 const button=(text:string)=>[...host.querySelectorAll<HTMLButtonElement>('button')].find(row=>row.textContent===text)!;
 const type=(text:string)=>act(async()=>{const area=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(area,text);area.dispatchEvent(new Event('input',{bubbles:true}));});
-const discard=async()=>{await act(async()=>button('Discard draft').click());await settle();};
+const discard=async()=>{await act(async()=>button('Discard draft').click());await act(async()=>button('Discard').click());await settle();};
 const texts=()=>readPrincipleArtifactDrafts(scope,id).map(row=>row.value.entries[0].text);
 const picker=()=>[...host.querySelectorAll('select')].find(row=>[...row.options].some(option=>/^\d+\. /.test(option.textContent??'')));
 

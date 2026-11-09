@@ -84,7 +84,7 @@ it("opens on the one design, unsigned, with the kept words and two icon actions"
   expect(renderShareCard).toHaveBeenLastCalledWith({ items: [{ text: SAVE.text }], name: "", appearance: "dark", format: "square", kind: "inspiration", proof: SAVE.proof, photo: null });
   expect(host.querySelector("img")?.alt).toContain(SAVE.text);
   /* Save and share are two plain icons, named for screen readers, no text. */
-  const save = button("Save image")!, share = button("Share image")!;
+  const save = button("Download image")!, share = button("Share image")!;
   expect(save.disabled).toBe(false);
   expect(save.className).toBe("jar-share-icon");
   expect(share.className).toBe("jar-share-icon");
@@ -168,7 +168,7 @@ it("makes a words-only card and says so when the photo cannot be read", async ()
   await settle();
   expect(renderShareCard).toHaveBeenLastCalledWith(expect.objectContaining({ items: [{ text: SAVE.text }], photo: null }));
   expect(host.textContent).toContain("The photo couldn’t go on this card");
-  expect(button("Save image")!.disabled).toBe(false);
+  expect(button("Download image")!.disabled).toBe(false);
 });
 
 it("says the top of mind the way the home bubble does, under the top-of-mind date line", async () => {
@@ -196,7 +196,7 @@ it("without a share sheet or a clipboard, sharing saves the image", async () => 
   await settle();
   await act(async () => button("Share image")!.click());
   expect(URL.createObjectURL).toHaveBeenCalled();
-  expect(host.textContent).toContain("Image download started.");
+  expect(host.textContent).toContain("Downloading.");
 });
 
 /* NO FOCUS-ZOOM IN THE BUBBLE. iOS zooms the page when a field under 16px
@@ -285,14 +285,14 @@ it("keeps the field over the last good card when the words stop fitting, and say
   expect(still!.classList.contains("jar-share-inline--live"), "shown solid over the stale card").toBe(true);
   expect(host.querySelector(".jar-share-card img"), "the last good card stays").not.toBeNull();
   expect(host.querySelector("[role=alert]")?.textContent).toContain("Shorten the words so they fit on the card.");
-  expect(button("Save image")!.disabled).toBe(true);
+  expect(button("Download image")!.disabled).toBe(true);
   /* Shortened in place, the card draws again and the field goes back to clear. */
   vi.mocked(renderShareCard).mockImplementation(async (content) => ({ blob: new Blob([content.items[0]!.text], { type: "image/png" }), width: 1080, height: 1080, fallbackFont: false, layout: LAYOUT }));
   await typeInto(area, "Short again.");
   await settle();
   expect(host.querySelector("[role=alert]")).toBeNull();
   expect(area.classList.contains("jar-share-inline--live")).toBe(false);
-  expect(button("Save image")!.disabled).toBe(false);
+  expect(button("Download image")!.disabled).toBe(false);
 });
 
 it("opens on a blank bubble with the field when the kept words cannot be drawn at all", async () => {
@@ -332,7 +332,7 @@ it("when the clipboard refuses the image, sharing saves it instead", async () =>
     await act(async () => button("Share image")!.click());
     expect(write).toHaveBeenCalledOnce();
     expect(URL.createObjectURL).toHaveBeenCalled();
-    expect(host.textContent).toContain("Image download started.");
+    expect(host.textContent).toContain("Downloading.");
     expect(host.textContent).not.toContain("Sharing isn’t available here.");
   } finally {
     Reflect.deleteProperty(navigator, "clipboard");

@@ -280,7 +280,7 @@ it('offers the re-read once the unsent words are cleared from the box',async()=>
   expect(acts).not.toContain('Send again');expect(acts).toContain('Try again');
 });
 /* Review: with a pending message and a conversation that could not be read,
-   "Retry" was offered and did nothing (sending needs the conversation). */
+   "Try again" was offered and did nothing (sending needs the conversation). */
 it('offers the re-read, not a dead Retry, when a pending message sits on an unread conversation',async()=>{
   vi.mocked(saveConversationMessage).mockRejectedValueOnce(new Error('Response lost'));
   await mount();await type('A thought in flight');await click('Send');

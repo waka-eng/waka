@@ -50,8 +50,8 @@ describe("a paused reading", () => {
     vi.mocked(retryPausedReading).mockResolvedValue(status(false));
     render(createElement(Page));
     await settle();
-    expect(container!.textContent).toContain("Reading is paused. Your saves are safe.");
-    const retry = [...container!.querySelectorAll("button")].find((b) => b.textContent === "Retry")!;
+    expect(container!.textContent).toContain("WAKA is paused for now. Everything you kept is safe.");
+    const retry = [...container!.querySelectorAll("button")].find((b) => b.textContent === "Try again")!;
     vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(false));
     vi.useFakeTimers();
     try {
@@ -120,7 +120,7 @@ describe("a paused reading", () => {
     render(createElement(Two));
     await settle();
     const overlay = () => container!.querySelector("#overlay")!.textContent;
-    expect(overlay()).toContain("Reading is paused");
+    expect(overlay()).toContain("WAKA is paused");
     let answerOverlay!: (value: ReturnType<typeof status>) => void;
     vi.useFakeTimers();
     try {
@@ -179,7 +179,7 @@ describe("a paused reading", () => {
     try {
       render(createElement(Page));
       await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-      expect(container!.textContent).toContain("Reading is paused");
+      expect(container!.textContent).toContain("WAKA is paused");
       const gets = vi.mocked(fetchPrincipleStatus).mock.calls.length;
       await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
       expect(vi.mocked(fetchPrincipleStatus)).toHaveBeenCalledTimes(gets);
@@ -197,7 +197,7 @@ describe("a paused reading", () => {
     }
     render(createElement(AgentPage));
     await settle();
-    expect(container!.textContent).toContain("Reading is paused. Your saves are safe.");
+    expect(container!.textContent).toContain("WAKA is paused for now. Everything you kept is safe.");
     expect(container!.querySelector("button"), "an agent session was offered Retry").toBeNull();
   });
 
@@ -212,7 +212,7 @@ describe("a paused reading", () => {
     expect(container!.textContent, "two failure lines and two Retry buttons for one stall").toBe("");
   });
 
-  /* No server cooldown: Retry guards itself, disabled and "Retrying…" until
+  /* No server cooldown: Retry guards itself, disabled and "Thinking…" until
      its request answers and for at least three seconds, even when the server
      refuses at once. */
   it("never aborts a slow Retry: Still trying… after 20s, then the real answer", async () => {
@@ -226,7 +226,7 @@ describe("a paused reading", () => {
     try {
       await act(async () => { button()!.click(); });
       await act(async () => { await vi.advanceTimersByTimeAsync(20_100); });
-      expect(button()?.textContent).toBe("Still trying…");
+      expect(button()?.textContent).toBe("Thinking…");
       expect(button()?.disabled).toBe(true);
       expect(vi.mocked(retryPausedReading).mock.calls[0], "the retry was given an abort signal").toEqual([]);
       vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(false));
@@ -245,7 +245,7 @@ describe("a paused reading", () => {
     vi.useFakeTimers();
     try {
       await act(async () => { button().click(); });
-      expect(button().textContent).toBe("Retrying…");
+      expect(button().textContent).toBe("Thinking…");
       expect(button().disabled).toBe(true);
       await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
       expect(button().disabled, "an instant refusal re-armed the button at once").toBe(true);

@@ -4,7 +4,7 @@
  *
  * Audit f2afcbe2 (desk/51, desk/52): the list offered the person's OWN human
  * profile as a memory to rename and delete, and a failed delete said "Your
- * memories could not be loaded" about a list that was on screen.
+ * memories Couldn’t load your agents" about a list that was on screen.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): `lib/api/profiles` — the roster read
  * and the delete are network calls this panel makes. `lib/api/sessions`
@@ -45,7 +45,7 @@ afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi
 async function openAgentProfiles() {
   await act(async () => root.render(<SettingsPanel locale="en-US" email="you@example.test" name="Mobi" onName={vi.fn()} onLocale={vi.fn()}
     nameBusy={false} localeBusy={false} failed={false} onSignOut={vi.fn()} onDeleteAccount={vi.fn(async () => {})} onClose={vi.fn()} />));
-  const toggle = [...host.querySelectorAll<HTMLButtonElement>(".waka-settings-row")].find((b) => b.textContent?.includes("Agent profiles"))!;
+  const toggle = [...host.querySelectorAll<HTMLButtonElement>(".waka-settings-row")].find((b) => b.textContent?.includes("Agents"))!;
   await act(async () => { toggle.click(); });
   await act(async () => { await Promise.resolve(); });
 }
@@ -61,19 +61,19 @@ it("lists agent profiles only, never the person's own profile", async () => {
   expect(rows[0]?.textContent).toContain('Work agent');
   expect(rows[0]?.querySelectorAll('button')).toHaveLength(1);
   expect(rows[0]?.querySelector('input')).toBeNull();
-  expect(host.textContent).not.toContain('Delete profile');
-  expect(host.textContent).toContain('Each agent keeps its own memory');
+  expect(host.textContent).not.toContain('Delete agent');
+  expect(host.textContent).toContain('Each agent keeps its own notes');
   await openAgent();
   expect(nameInput().value).toBe('Work agent');
   expect(host.querySelector('h2')?.textContent).toBe('Work agent');
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
   expect(document.activeElement).toBe(host.querySelector('[data-agent-id="agent-1"]'));
 });
 
 it("cancels a pending delete confirmation when returning to the agent list", async () => {
   await openAgentProfiles(); await openAgent();
-  await act(async () => button('Delete profile').click());
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
+  await act(async () => button('Delete agent').click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
   await openAgent();
   expect(host.querySelector('.waka-session-confirm')).toBeNull();
   expect(deleteProfile).not.toHaveBeenCalled();
@@ -82,12 +82,12 @@ it("cancels a pending delete confirmation when returning to the agent list", asy
 it("says the delete failed, not that the list failed to load", async () => {
   vi.mocked(deleteProfile).mockRejectedValue(new Error("nope"));
   await openAgentProfiles(); await openAgent();
-  const erase = button('Delete profile');
+  const erase = button('Delete agent');
   await act(async () => { erase.click(); });
-  await act(async () => button("Delete profile and memory").click());
+  await act(async () => button("Delete").click());
   await act(async () => { await Promise.resolve(); });
   const alert = host.querySelector('[role="alert"]')?.textContent ?? "";
-  expect(alert).toContain("could not be deleted");
+  expect(alert).toContain("Couldn’t delete that agent");
   expect(alert).not.toContain("loaded");
   expect(nameInput().value).toBe('Work agent');
 });
@@ -95,7 +95,7 @@ it("says the delete failed, not that the list failed to load", async () => {
 it('replaces failed loading with Retry and recovers the agent roster', async () => {
   vi.mocked(fetchProfiles).mockRejectedValueOnce(new Error('offline'));
   await openAgentProfiles();
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('could not be loaded');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t load your agents');
   expect(host.querySelector('[role="status"]')).toBeNull();
   expect(button('Add agent').disabled).toBe(true);
   await act(async () => button('Try again').click());
@@ -129,19 +129,19 @@ it('validates blank names and makes failed, pending and saved renames explicit',
 
 it('names the agent being deleted and lets Cancel return focus without deleting memory', async () => {
   await openAgentProfiles(); await openAgent();
-  await act(async () => button('Delete profile').click());
-  expect(host.textContent).toContain('Permanently delete Work agent and all of its memory?');
+  await act(async () => button('Delete agent').click());
+  expect(host.textContent).toContain('Delete Work agent and everything it kept?');
   expect(document.activeElement).toBe(host.querySelector('.waka-session-confirm p'));
   await act(async () => button('Cancel').click());
   expect(deleteProfile).not.toHaveBeenCalled();
   expect(host.querySelector('.waka-session-confirm')).toBeNull();
-  expect(document.activeElement).toBe(button('Delete profile'));
+  expect(document.activeElement).toBe(button('Delete agent'));
   vi.mocked(deleteProfile).mockResolvedValueOnce(undefined);
-  await act(async () => button('Delete profile').click());
-  await act(async () => button('Delete profile and memory').click());
+  await act(async () => button('Delete agent').click());
+  await act(async () => button('Delete').click());
   expect(deleteProfile).toHaveBeenCalledWith('agent-1');
   expect(host.querySelector('.waka-agent-profile')).toBeNull();
-  expect(host.querySelector('h2')?.textContent).toBe('Agent profiles');
+  expect(host.querySelector('h2')?.textContent).toBe('Agents');
   expect(document.activeElement).toBe(host.querySelector('h2'));
 });
 
@@ -166,7 +166,7 @@ it('waits for a rename on Back, keeps errors and drafts visible, and allows an e
   let reject!: (error: Error) => void;
   vi.mocked(renameProfile).mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
   await editName('New name');
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
   expect(host.querySelector('h2')?.textContent).toBe('Work agent');
   expect(renameProfile).toHaveBeenCalledTimes(1);
   await act(async () => reject(new Error('offline')));
@@ -174,8 +174,8 @@ it('waits for a rename on Back, keeps errors and drafts visible, and allows an e
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('Name not saved');
   await act(async () => button('Discard name change').click());
   expect(nameInput().value).toBe('Work agent');
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back to agent profiles"]')!.click());
-  expect(host.querySelector('h2')?.textContent).toBe('Agent profiles');
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
+  expect(host.querySelector('h2')?.textContent).toBe('Agents');
 });
 
 

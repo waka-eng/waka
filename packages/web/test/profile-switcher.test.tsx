@@ -14,7 +14,7 @@ it('shows complete names on a phone and selects the correct profile with keyboar
   const root = createRoot(host), select = vi.fn();
   const options = [{ id: null, name: 'Me', selected: true }, { id: 'noah-id', name: 'noah', selected: false }, { id: 'another-id', name: 'anotherone', selected: false }];
   try {
-    await act(async () => root.render(<ProfileSwitcher label="Choose a profile" options={options} onSelect={select} />));
+    await act(async () => root.render(<ProfileSwitcher label="Switch between you and your agents" options={options} onSelect={select} />));
     const trigger = host.querySelector<HTMLButtonElement>('button')!;
     await act(async () => { trigger.focus(); trigger.click(); });
     expect([...host.querySelectorAll('[role="menuitemradio"]')].map(node => node.textContent)).toEqual(['Me✓', 'noah', 'anotherone']);
