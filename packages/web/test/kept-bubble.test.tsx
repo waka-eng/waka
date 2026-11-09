@@ -47,7 +47,7 @@ void ApiError;
 let world: MountedWorld | undefined;
 beforeAll(() => { installCanvasStub(); setViewport(390, 844); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => { vi.stubGlobal('indexedDB', new IDBFactory()); localStorage.clear(); sessionStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
-afterEach(() => { world?.unmount(); world = undefined; vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => { world?.unmount(); world = undefined; vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 async function settle(ms = 100, turns = 8) { for (let turn = 0; turn < turns; turn += 1) { await world!.step(4); await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); } }
 const bubble = () => [...world!.container.querySelectorAll('.jar-char-bubble .jar-char-bubble-reading')].map(n => n.textContent?.trim()).join(' | ');
 
@@ -79,4 +79,35 @@ it('keeps "Kept" up past the four seconds a whisper gets, and lets it go after i
   expect(bubble(), '"Kept" went with the whispers, at four seconds').toContain('Kept');
   await settle(500, 8); // nine seconds on
   expect(bubble(), '"Kept" never left').not.toContain('Kept');
+});
+
+/* Code review, 2026-11-08: a second save while "Kept" stood said the same
+   word, so its stay was measured from the first save and it left early. */
+it('gives a second save its own stay, though it says the same word', async () => {
+  /* The stay is measured with Date.now; the timers here are fake, so the
+     clock is moved with them or every elapsed time would read as zero. */
+  world = await mountWorld(FACTS); await settle();
+  /* After the mount, which installs the world's own clock on Date.now. */
+  const start = Date.now();
+  let moved = 0;
+  vi.spyOn(Date, 'now').mockImplementation(() => start + moved);
+  const advance = vi.advanceTimersByTimeAsync.bind(vi);
+  vi.spyOn(vi, 'advanceTimersByTimeAsync').mockImplementation(async (ms: number) => { moved += ms; return advance(ms); });
+  const saveOne = async (words: string) => {
+    await pressHomeBar(world!.container, 'Write'); await settle();
+    const field = world!.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, words);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-dock-save')!.click());
+    await settle(50, 6);
+  };
+  await saveOne('The first thing.');
+  await settle(500, 10); // five seconds into the first "Kept"
+  await saveOne('The second thing.');
+  expect(bubble()).toContain('Kept');
+  await settle(500, 10); // five seconds into the second, ten from the first
+  expect(bubble(), 'the second "Kept" left on the first one\'s clock').toContain('Kept');
 });

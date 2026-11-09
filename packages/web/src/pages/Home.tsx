@@ -5399,7 +5399,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
            forming, F3): a save does not talk over a question, so the bar
            says "Saved" for a moment instead and the question stays. */
         if (initiated && atWallRef.current.kind === 'self' && tentativeUpRef.current) flashSaved();
-        else setCharSay(atWallRef.current.kind === 'self' ? say('worldBubbleKept') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
+        else {
+          /* Each save is its own "Kept", even when the words are the same. */
+          setKeptSaves(n => n + 1);
+          setCharSay(atWallRef.current.kind === 'self' ? say('worldBubbleKept') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
+        }
         if (initiated) setShareArrived(false);
         if (initiated && closeAfterSave.current) { closeAfterSave.current = false; window.setTimeout(() => window.close(), 1700); }
         if(initiated&&memoryScope)setRecentInspiration({owner:`${memoryScope.accountId}:${memoryScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
@@ -6277,17 +6281,22 @@ const RETRY_READ_LIMIT_MS = 20_000;
      that was already settled is not asked for again. */
   const keptWords = useImageWords(charSay === say('worldBubbleKept') ? keptImageId : null, keptImage?.words).words;
   /* HOW LONG THE LINE STAYS. Measured from when it began saying it, so a
-     word arriving mid-stay re-plans the time left instead of restarting it. */
+     word arriving mid-stay re-plans the time left instead of restarting it.
+     Keyed on the SAVE, not the string (code review, 2026-11-08): a second
+     save while "Kept" stood said the same word, so its stay was measured
+     from the first save and it left early. */
+  const [keptSaves, setKeptSaves] = useState(0);
   const lineSince = useRef<{ said: string; at: number }>({ said: '', at: 0 });
   const keptWaiting = Boolean(keptImageId) && (!keptWords || keptWords.status === 'reading');
   useEffect(() => {
     if (!charSay || companionPrompt === 'activity') return undefined;
-    if (lineSince.current.said !== charSay) lineSince.current = { said: charSay, at: Date.now() };
+    const saying = `${charSay}#${keptSaves}`;
+    if (lineSince.current.said !== saying) lineSince.current = { said: saying, at: Date.now() };
     const kept = charSay === say('worldBubbleKept');
     const stay = bubbleStayMs({ kept, waitingForWords: kept && keptWaiting, elapsedMs: Date.now() - lineSince.current.at });
     const id = window.setTimeout(() => { lineSince.current = { said: '', at: 0 }; setCharSay(""); }, stay);
     return () => window.clearTimeout(id);
-  }, [charSay, companionPrompt, keptWaiting]);
+  }, [charSay, companionPrompt, keptWaiting, keptSaves]);
   /** What a chat about the save opens with: the note, and the words read. */
   const keptSubject = (kept: { id: string; text: string }) => {
     const read = keptWords?.status === 'ready' && kept.id === visibleInspiration?.id ? keptWords.text?.trim() : '';
