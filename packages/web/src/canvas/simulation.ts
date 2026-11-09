@@ -94,7 +94,7 @@ import { onZoomChange, renderScale } from "./scale";
 import { VIGNETTE, mix, rgbCss } from "./sprites";
 import type { Measured } from "./measured";
 import { ANTICIPATE_MS, ANTICIPATE_SQ, HOP_MS, hopLift } from "../character/hop";
-import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, EYE_SHUT, FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, FACE_R, GLASS_GLINT, GLASS_MAGNIFY, GLASS_R, GLASS_RIM_ALPHA, GLASS_TINT, GLASS_W, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
+import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, EYE_SHUT, FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, FACE_R, GAZE_LAT, GLASS_MAGNIFY, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, THINK_EYE_X, THINK_EYE_Y, THINK_SQUINT, bodyPath, drawGlasses, glassLenses } from "../character/raster";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import {
@@ -476,13 +476,11 @@ const MOOD_BOB_FLOOR = 0.4;
  */
 const MOOD_RATE = 0.45;
 const MOOD_BLINK = 0.4;
-/* THINKING (see `think`). The gaze in px, in the same units as the hover's
-   ±2 — up and to one side, held. The blink comes 1.6× less often, and the
-   eyes narrow to this share of their height: weighing, not dozing. */
-const THINK_EYE_X = 1.5;
-const THINK_EYE_Y = -1.9;
+/* THINKING (see `think`). The gaze and the narrowing are anatomy a page can
+   wear too, so they live in `character/raster.ts` (THINK_EYE_X, THINK_EYE_Y,
+   THINK_SQUINT). The blink is behaviour, and only the loop blinks: while
+   thinking it comes 1.6× less often. */
 const THINK_BLINK = 1.6;
-const THINK_SQUINT = 0.74;
 /* The ease the glasses come on with: `thinkNow` covers ~96% of the way in
    0.6s. The glow the wind-up releases when they go on — gentler than a save
    (0.95) or an answer (0.72): settling in, not celebrating. How far above
@@ -4499,44 +4497,22 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            the yaw is a longitude one: it moves them across the face, and it
            foreshortens as it approaches the pole. Independent of the yaw
            term, so a diagonal composes rather than fights. */
-        const lat = clamp(-companion.pitch * PITCH_LOOK + companion.eyeY * 0.06, -0.9, 0.9);
+        const lat = clamp(-companion.pitch * PITCH_LOOK + companion.eyeY * GAZE_LAT, -0.9, 0.9);
         const cosLat = Math.cos(lat);
         const eyY = -bh * 0.06 + Math.sin(lat) * bh * FACE_R + companion.eyeY;
         /* WHERE THE LENSES SIT, worked out before the eyes so their tint can
            go UNDER them. A lens sits where its eye RESTS, not where it looks:
            glasses stay on the face while the eyes move behind them. */
-        const lenses: Array<{ x: number; rx: number; ry: number; alpha: number; ca: number }> = [];
         /* `think` is how far on they are; the lenses come DOWN onto the face
            along `landing` (a small overshoot past the eyes, then settled) and
-           go back UP the same way, fading in as they arrive. */
+           go back UP the same way, fading in as they arrive. The pair itself
+           is `character/raster.ts`'s — the one a page's creature wears. */
         const think = companion.thinkNow;
         const lensY = -bh * 0.06 + Math.sin(lat) * bh * FACE_R - (1 - landing(think)) * bh * GLASS_DROP;
-        const lensFade = clamp01(think * 1.6);
-        if (think > 0.01) {
-          for (const lon of [-EYE_LON, EYE_LON]) {
-            const a = companion.yaw + lon;
-            const ca = Math.cos(a);
-            if (ca <= 0) continue;
-            lenses.push({
-              x: Math.sin(a) * bw * FACE_R * cosLat,
-              rx: companion.size * GLASS_R * Math.max(ca * cosLat, 0.2),
-              ry: companion.size * GLASS_R * Math.max(cosLat, 0.35),
-              alpha: clamp01(ca / Math.sin(0.25)) * lensFade,
-              ca,
-            });
-          }
-          /* the tint first, so the eyes are read THROUGH the lens */
-          if (!formMachine) {
-            ctx!.fillStyle = GLASS_TINT;
-            for (const lens of lenses) {
-              ctx!.globalAlpha = lens.alpha;
-              ctx!.beginPath();
-              ctx!.ellipse(lens.x, lensY, lens.rx, lens.ry, 0, 0, TAU);
-              ctx!.fill();
-            }
-            ctx!.fillStyle = EYE_INK;
-          }
-        }
+        const lenses = think > 0.01 ? glassLenses(companion.size, bw, companion.yaw, cosLat, clamp01(think * 1.6)) : [];
+        const glassCells = formMachine ? { x: bw / MACHINE_CELLS, y: bh / MACHINE_CELLS } : null;
+        /* the tint first, so the eyes are read THROUGH the lens */
+        drawGlasses(ctx!, lenses, lensY, companion.size, "tint", glassCells);
         for (const lon of [-EYE_LON, EYE_LON]) {
           const a = companion.yaw + lon;
           const ca = Math.cos(a);
@@ -4596,64 +4572,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           );
           ctx!.fill();
         }
-        /* ═══ BIG SOFT ROUNDS, WHILE REVIEWING ═══════════════════════════
-           Founder, 2026-10-15, choosing from six drawn pairs: "lets do big
-           soft rounds" — after the first, hairline pair was "kinda ugly".
-           Oversized round lenses with a faint blue tint (drawn above, under
-           the eyes), a thick rim in the eyes' ink softened to 85%, a small
-           highlight at each lens's upper left, and a heavier bridge. On the
-           same turning surface the eyes sit on: each lens foreshortens with
-           its eye and fades with it at the edge, and the bridge is drawn only
-           while both are in view. A machine's glasses are made of cells,
-           like everything else it is. */
-        if (lenses.length) {
-          ctx!.strokeStyle = EYE_INK;
-          ctx!.fillStyle = EYE_INK;
-          if (formMachine) {
-            const cx = bw / MACHINE_CELLS;
-            const cy = bh / MACHINE_CELLS;
-            for (const lens of lenses) {
-              ctx!.globalAlpha = lens.alpha;
-              const wC = Math.max(3, Math.round((2 * lens.rx) / cx));
-              const hC = Math.max(3, Math.round((2 * lens.ry) / cy));
-              const left = Math.round((lens.x - (wC * cx) / 2) / cx) * cx;
-              const top = Math.round((lensY - (hC * cy) / 2) / cy) * cy;
-              const t = Math.max(1, Math.min(cx, cy) * 0.5);
-              ctx!.fillRect(left, top, wC * cx, t);
-              ctx!.fillRect(left, top + hC * cy - t, wC * cx, t);
-              ctx!.fillRect(left, top, t, hC * cy);
-              ctx!.fillRect(left + wC * cx - t, top, t, hC * cy);
-            }
-          } else {
-            const w = companion.size * GLASS_W;
-            ctx!.lineCap = "round";
-            for (const lens of lenses) {
-              /* the rim, softened */
-              ctx!.globalAlpha = lens.alpha * GLASS_RIM_ALPHA;
-              ctx!.lineWidth = w;
-              ctx!.beginPath();
-              ctx!.ellipse(lens.x, lensY, lens.rx, lens.ry, 0, 0, TAU);
-              ctx!.stroke();
-              /* the glint: a short arc inside the upper left of the lens */
-              ctx!.strokeStyle = GLASS_GLINT;
-              ctx!.globalAlpha = lens.alpha;
-              ctx!.lineWidth = w * 0.62;
-              ctx!.beginPath();
-              ctx!.ellipse(lens.x, lensY, lens.rx * 0.66, lens.ry * 0.66, 0, Math.PI * 1.08, Math.PI * 1.42);
-              ctx!.stroke();
-              ctx!.strokeStyle = EYE_INK;
-            }
-            if (lenses.length === 2) {
-              const [l, r] = lenses[0]!.x < lenses[1]!.x ? [lenses[0]!, lenses[1]!] : [lenses[1]!, lenses[0]!];
-              ctx!.globalAlpha = Math.min(l.alpha, r.alpha) * GLASS_RIM_ALPHA;
-              ctx!.lineWidth = w * 0.85;
-              ctx!.beginPath();
-              ctx!.moveTo(l.x + l.rx, lensY - l.ry * 0.12);
-              ctx!.quadraticCurveTo((l.x + r.x) / 2, lensY - Math.min(l.ry, r.ry) * 0.5, r.x - r.rx, lensY - r.ry * 0.12);
-              ctx!.stroke();
-            }
-          }
-        }
+        /* ═══ BIG SOFT ROUNDS, WHILE REVIEWING ═══ — the rims, glint and
+           bridge over the eyes. Drawn by `drawGlasses`, which the page's rest
+           pose calls too: one pair of glasses in the product. */
+        drawGlasses(ctx!, lenses, lensY, companion.size, "rims", glassCells);
         ctx!.globalAlpha = 1;
         ctx!.restore();
 

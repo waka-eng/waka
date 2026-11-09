@@ -46,6 +46,10 @@ export interface SlotLook {
   eyes?: "open" | "closed";
   /** One of the frames' idle motions: "catch", "lift", "lean". */
   motion?: string;
+  /** The reading glasses it wears at home while reviewing your saves — on
+      while it asks you something and while it reads your three. Changing
+      them never moves the creature (`dress`, not `claim`). */
+  glasses?: boolean;
 }
 
 interface Claim extends SlotLook { id: number; node: HTMLElement }
@@ -53,6 +57,8 @@ interface Claim extends SlotLook { id: number; node: HTMLElement }
 interface Stage {
   claim: (claim: Claim) => void;
   release: (id: number) => void;
+  /** Glasses on or off where it already stands: no hop. */
+  dress: (id: number, glasses: boolean) => void;
   /** Where its body's centre is on screen right now, for things that fly into it. */
   center: () => { x: number; y: number } | null;
   /** The keep: two bounces and a flare. */
@@ -66,7 +72,7 @@ const reducedMotion = () =>
   typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** Where the creature should stand, and how — rendered by each screen. */
-export function CreatureSlot({ size, eyes = "open", motion, place, className = "", style }: SlotLook & {
+export function CreatureSlot({ size, eyes = "open", motion, glasses = false, place, className = "", style }: SlotLook & {
   /** Anything that moves the slot without resizing it (an intro beat). */
   place?: string | number;
   className?: string;
@@ -78,9 +84,11 @@ export function CreatureSlot({ size, eyes = "open", motion, place, className = "
   if (!id.current) id.current = nextId++;
   useLayoutEffect(() => {
     if (!stage || !node.current) return undefined;
-    stage.claim({ id: id.current, node: node.current, size, eyes, motion });
+    stage.claim({ id: id.current, node: node.current, size, eyes, motion, glasses });
     return undefined;
+    /* glasses are not a reason to re-claim: they go on via `dress`, which never hops */
   }, [stage, size, eyes, motion, place]);
+  useLayoutEffect(() => { stage?.dress(id.current, glasses); }, [stage, glasses]);
   useLayoutEffect(() => () => { stage?.release(id.current); }, [stage]);
   const f = FOOTPRINT[size];
   return <span ref={node} className={`onb-slot ${className}`.trim()} aria-hidden="true" data-creature-slot={size}
@@ -147,6 +155,12 @@ export function CreatureStage({ children, fading = false }: { children: ReactNod
     release: (id) => {
       if (current.current?.id === id) { current.current = null; setClaim(null); }
     },
+    dress: (id, glasses) => {
+      const c = current.current;
+      if (c?.id !== id || Boolean(c.glasses) === glasses) return;
+      current.current = { ...c, glasses };
+      setClaim(current.current);
+    },
     center: () => at.current ? { x: at.current.x, y: at.current.y } : null,
     acknowledge: () => {
       setFlareKey((key) => key + 1);
@@ -184,7 +198,7 @@ export function CreatureStage({ children, fading = false }: { children: ReactNod
           style={{ transform: `translate(${spot.x}px, ${spot.y + lift}px) translate(-50%, -50%) scale(${spot.scale})` }}>
           <span className={`onb-lead-pose${claim.motion ? ` onb-lead--${claim.motion}` : ""}`}>
             <span className="onb-creature-real">
-              <Companion size={DRAWN} eyes={claim.eyes === "closed" ? "shut" : "open"} flareKey={flareKey} />
+              <Companion size={DRAWN} eyes={claim.eyes === "closed" ? "shut" : "open"} glasses={Boolean(claim.glasses)} flareKey={flareKey} />
             </span>
           </span>
         </div>

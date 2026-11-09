@@ -35,7 +35,7 @@ export function OnboardingReading({ locale, error = "", busy = false, onContinue
             <span key={motion} className="onb-orb" style={{ width: size, height: size, background: colour,
               boxShadow: `0 0 18px ${colour}`, animation: `${motion} ease-in-out infinite alternate` }} />
           ))}
-          <CreatureSlot size="large" eyes="closed" style={{ position: "absolute", left: 0, top: 0 }} />
+          <CreatureSlot size="large" eyes="closed" glasses style={{ position: "absolute", left: 0, top: 0 }} />
         </div>
         <p className="onb-reading-words" role="status">{say("onboardingReading")}</p>
         {error && onContinue ? (
