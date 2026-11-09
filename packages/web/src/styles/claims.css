@@ -7587,6 +7587,10 @@ header:has(> .waka-sheet-back), .jar-search-heading:has(> .waka-sheet-back) {
 
 @layer chrome {
 /* Stop, while a reply is coming, is the bar's quieter word: interrupting
-   is not the thing you came to do. */
-.waka-note-bar .chat-send--stop { color: var(--muted); }
+   is not the thing you came to do. The same chain as the bar's own action
+   rule (above), so it is not drawn as Send: muted until pointed at, never
+   filled. */
+.waka-note-bar .waka-note-bar-row .waka-note-bar-action.chat-send--stop { color: var(--muted); }
+.waka-note-bar .waka-note-bar-row .waka-note-bar-action.chat-send--stop:hover,
+.waka-note-bar .waka-note-bar-row .waka-note-bar-action.chat-send--stop:focus-visible { color: var(--ink); }
 }
