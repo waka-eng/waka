@@ -56,6 +56,17 @@ it('asks through the creature, glasses on only while it asks, even without signa
   expect(reviewInspiration).toHaveBeenCalledWith(original,VIEWER_ID,'relevant',expect.any(String));
   expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
 });
+/* TOP OF MIND IS THE MAIN BUBBLE: a tapped bubble goes back to it after a few seconds. */
+it('returns to top of mind a few seconds after a tap changed the bubble',async()=>{
+  world=await mountWorld();
+  await tapCreature();
+  expect(world.container.querySelector('.jar-char-bubble--review'),'the tap did not offer review').not.toBeNull();
+  await act(async()=>{await new Promise(r=>setTimeout(r,6300));});await world.step(5);
+  expect(world.container.querySelector('.jar-char-bubble--review'),'the tapped bubble stayed').toBeNull();
+  /* and the cycle starts again from top of mind: the next tap is review again */
+  await tapCreature();
+  expect(world.container.querySelector('.jar-char-bubble--review')).not.toBeNull();
+},15000);
 it('shows nothing about review, and no glasses, when nothing waits',async()=>{
   vi.mocked(listInspirationReviews).mockResolvedValue([]);
   world=await mountWorld();
