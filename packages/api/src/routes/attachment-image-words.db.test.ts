@@ -11,6 +11,7 @@ import { loadInspirationMaterial } from '../lib/inspiration-material.js';
 import { ensureInspirationEmbedding } from '../lib/inspiration-embeddings.js';
 import { readConversationMaterial } from '../lib/conversation-material.js';
 import { recoverInspirationProcessing } from '../lib/inspiration-processing-recovery.js';
+import { enrichAttachment } from '../lib/signal-enrichment.js';
 import { readInspirationProcessingStatus } from '../lib/inspiration-processing-status.js';
 import type { AuthEnv } from '../lib/middleware.js';
 const state = vi.hoisted(() => ({ db: null as unknown }));
@@ -105,6 +106,17 @@ it('reads the words and keeps the picture under a fix however the model formatte
     const material = await loadInspirationMaterial(t.db as never, f.profileId, f.sourceId, 'personal');
     expect(material?.attachmentRows, reading).toMatchObject([{ text: 'Words: Begin anyway.\nImage: A reel with a caption.' }]);
   }
+});
+it('refuses a fix made against words a later read replaced', async () => {
+  const f = await fixture({ status: 'pending', text: null });
+  const seen = await (await f.app.request(f.path)).json() as { revision: string };
+  await enrichAttachment(f.id, { db: t.db as never, readAttachment: async () => (
+    { result: { status: 'ready', kind: 'image_description', reason: null, text: 'Words: Begin now.\nImage: A reel.' } }) });
+  expect(await (await f.app.request(f.path)).json()).toMatchObject({ status: 'ready', text: 'Begin now.' });
+  /* The person typed against what they saw before the read landed. */
+  const stale = await f.edit('My own line', seen.revision);
+  expect(stale.status, 'a fix against words the read replaced was taken').toBe(409);
+  expect(await stale.json()).toMatchObject({ code: 'words_changed' });
 });
 it('refuses a stale or empty fix and can return to the words read', async () => {
   const f = await fixture(); await f.edit('First fix');

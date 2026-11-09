@@ -57,6 +57,7 @@ import {
   ImageDescriptionError,
   isDescribableImageType,
   MAX_IMAGE_BYTES,
+  readImageWords,
 } from "./image-description.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 import { enrichAudioAttachment } from './audio-enrichment.js';
@@ -842,8 +843,17 @@ export async function enrichAttachment(
       return { status: 'ready', kind: current.enrichmentKind, reason: null, text: current.enrichmentText } as const;
     }
     const nextText = result.status === "ready" ? (result.text ?? link.text ?? null) : null;
-    const transcriptChanged = current.type === 'audio' && (current.enrichmentStatus !== result.status || current.enrichmentText !== nextText ||
-      current.enrichmentKind !== (result.status === 'ready' ? result.kind : null));
+    /* THE REVISION A FIX IS MADE AGAINST moves when what the person sees
+       moves: an audio transcript, and — since an image's words are fixable
+       too (code review, 2026-11-08) — the words read off an image (or its
+       status). A fix typed against the words from before is then refused
+       (409 words_changed) instead of quietly accepted. */
+    const transcriptChanged = current.type === 'audio'
+      ? (current.enrichmentStatus !== result.status || current.enrichmentText !== nextText ||
+        current.enrichmentKind !== (result.status === 'ready' ? result.kind : null))
+      : current.type === 'image'
+        ? (current.enrichmentStatus !== result.status || readImageWords(current.enrichmentText) !== readImageWords(nextText))
+        : false;
     await tx
     .update(attachments)
     .set({
