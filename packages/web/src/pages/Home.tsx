@@ -5499,24 +5499,26 @@ const RETRY_READ_LIMIT_MS = 20_000;
      TAP Done to stop — never held: holding is unusable while walking or
      retelling a conversation. Where the browser cannot transcribe, the
      recorder takes the same press. */
-  /* IT WAITS FOR THE WORLD, AS WRITE DOES (code review, 2026-11-08). With
-     the dial in the past or the camera on the ground, the notepad used to
-     open — and the microphone start — while the world was still winding
-     back. So Say it asks through `startNewInspiration`, which opens the
-     notepad once the world is at now, and the microphone starts the moment
-     that notepad is open (the effect below), never before. */
-  const listenWhenOpen = useRef(false);
+  /* THE MICROPHONE STARTS INSIDE THE TAP, OR NOT AT ALL (code review,
+     2026-11-08). WebKit lets speech recognition and getUserMedia start only
+     inside a person's gesture, and its window is short.
+     - The world is already at now (the common case): the notepad opens and
+       the microphone starts right here, synchronously in the tap — both
+       state changes commit together, so the release above sees the notepad
+       open, never a microphone on over the world.
+     - The world must wind back first (the dial in the past, the camera on
+       the ground or in the sky): the notepad opens through the same wait
+       Write uses (`startNewInspiration`), and the microphone is NOT started
+       later, outside the gesture, where Safari would refuse it. It stands in
+       the note bar ready to tap. */
   const sayIntoNewNote = () => {
-    listenWhenOpen.current = true;
     setMouthNote('');
-    startNewInspiration();
-  };
-  useEffect(() => {
-    if (!listenWhenOpen.current || !mouthOpen || newInspirationRequested) return;
-    listenWhenOpen.current = false;
+    if (!atNow || inField || inSky) { startNewInspiration(); return; }
+    simApiRef.current?.toTop();
+    if (mouthOpen) mouthFieldRef.current?.focus(); else openMouth();
     if (dictationAvailable()) dictation.start();
     else if (supportedRecordingType()) startNotepadRecording();
-  }, [mouthOpen, newInspirationRequested]);
+  };
 
   /* ═══ THE SAVE RULE, SAID ONCE, AND NOW ACTUALLY ONCE ═════════════════
      `lib/keep-ready.ts` was written so this condition exists in one place,

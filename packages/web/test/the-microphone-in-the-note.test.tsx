@@ -311,17 +311,32 @@ it('does not splice a finished session\'s last words into the next one', async (
   expect(world.container.querySelector('.waka-dock-tool--live'), 'the Stop control went while the engine ran').toBeTruthy();
 });
 
-/* CODE REVIEW, 2026-11-08: Say it opened the notepad and started listening
-   while the world was still on its way back to now (the camera on the
-   ground, the dial in the past). It waits, as Write does: nothing listens
-   before the notepad is open over a world at now. */
-it('waits for the world to come back before Say it opens the notepad and listens', async () => {
+/* CODE REVIEW, 2026-11-08: WebKit lets speech recognition start only inside
+   a person's tap. At now, Say it opens the notepad and starts listening in
+   the tap itself; when the world must wind back first, it never starts the
+   microphone later (outside the gesture) — the notepad opens with the mic
+   ready to tap. */
+const sayIt = () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')].find(row => row.textContent?.trim() === 'Say it')!;
+
+it('starts listening inside the tap when the world is already at now', async () => {
   world = await mountWorld(FACTS); await settle();
-  await world.toField();
-  const sayIt = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')].find(row => row.textContent?.trim() === 'Say it')!;
-  await act(async () => sayIt.click());
-  expect(FakeEngine.all, 'the microphone started while the world was still on the ground').toHaveLength(0);
+  await act(async () => sayIt().click());
+  expect(FakeEngine.all, 'Say it did not start the microphone in the tap').toHaveLength(1);
+  expect(engine().started).toBe(true);
   await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'Say it never opened the notepad').toBeTruthy();
-  expect(engine().started, 'the notepad opened without listening').toBe(true);
+  expect(engine().started, 'the microphone stopped when the notepad opened').toBe(true);
+});
+
+it('opens the notepad with the mic ready to tap, and never listens outside the tap, when the world must wind back first', async () => {
+  world = await mountWorld(FACTS); await settle();
+  await world.toField();
+  await act(async () => sayIt().click());
+  await settle();
+  expect(world.container.querySelector('.jar-inspiration-composer'), 'Say it never opened the notepad').toBeTruthy();
+  expect(FakeEngine.all, 'the microphone started outside the tap').toHaveLength(0);
+  const ready = world.container.querySelector<HTMLButtonElement>('.waka-note-bar .waka-dock-tool[aria-label="Speak"]');
+  expect(ready?.disabled, 'the mic is not ready to tap').toBe(false);
+  await act(async () => ready!.click());
+  expect(engine().started, 'the ready mic did not listen when tapped').toBe(true);
 });
