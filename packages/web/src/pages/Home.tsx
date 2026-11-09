@@ -5600,8 +5600,25 @@ const RETRY_READ_LIMIT_MS = 20_000;
        Write uses (`startNewInspiration`), and the microphone is NOT started
        later, outside the gesture, where Safari would refuse it. It stands in
        the note bar ready to tap. */
+  /* A FRESH NOTE FROM HOME'S VOICE AND SCREENSHOT (founder, 2026-11-09:
+     "the photo is here when im trying to record fresh"). Each is a new thing
+     to keep, so it starts on a blank page; the draft it would have reopened is
+     set aside in its own row and comes back to Keep a thought once this one
+     is done (`startFresh` / `resumeLatest` in `use-inspiration-draft`). Only
+     from home: with the notepad already open, the press belongs to that note. */
+  const freshNoteFromHome = () => {
+    if (mouthOpen) return;
+    if (composerDraft.startFresh()) draftRef.current = '';
+  };
+  const screenshotIntoNewNote = (files: File[]) => {
+    freshNoteFromHome(); startNewInspiration(); void addInspirationFiles(files);
+  };
+  useEffect(() => {
+    if (!mouthOpen && composerDraft.ready) void composerDraft.resumeLatest();
+  }, [mouthOpen, composerDraft.ready, composerDraft.draft.id, composerDraft.resumeLatest]);
   const sayIntoNewNote = () => {
     setMouthNote('');
+    freshNoteFromHome();
     if (!atNow || inField || inSky || !composerDraft.available) { startNewInspiration(); return; }
     simApiRef.current?.toTop();
     if (mouthOpen) mouthFieldRef.current?.focus(); else openMouth();
@@ -11767,7 +11784,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
              mode" (founder, 2026-10-15). Only Chat stands there. */
           save={standingAsAgent ? undefined : {
             onWrite: startNewInspiration,
-            onPhotos: files => { startNewInspiration(); void addInspirationFiles(files); },
+            onPhotos: screenshotIntoNewNote,
             onSay: sayIntoNewNote,
             /* The notepad's own mic is dim while its draft store cannot take
                words (`composerDraft.available`); Say it, which starts that mic,

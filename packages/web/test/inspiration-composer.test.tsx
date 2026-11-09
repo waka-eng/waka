@@ -459,3 +459,19 @@ it('keeps the creature beside the question out of the tab order', async () => {
   expect(figure.querySelector('button, [tabindex]:not([tabindex="-1"]), a[href]'), 'a focusable control hides inside the aria-hidden figure').toBeNull();
 });
 
+/* A RESTORED PHOTO THE BROWSER CANNOT DRAW IS NOT A BLANK FRAME (founder,
+   2026-11-09: "a big empty dark preview with an ×"). It drops to the shelf
+   as a named tile, still there to keep or remove. */
+it('moves a photo that cannot be drawn off the large frame and onto the shelf, by name', async () => {
+  props.media = [{ id: 'restored', type: 'image', name: 'Restored.png', blob: new Blob(['not a picture'], { type: 'image/png' }) }];
+  await mount();
+  const img = host.querySelector<HTMLImageElement>('.waka-note-hero img');
+  expect(img, 'the photo was not offered large first').not.toBeNull();
+  await act(async () => img!.dispatchEvent(new Event('error')));
+  expect(host.querySelector('.waka-note-hero'), 'the blank frame stayed').toBeNull();
+  expect(host.querySelector('.jar-shelf li')?.getAttribute('title')).toBe('Restored.png');
+  /* An empty blob is never drawn large in the first place. */
+  props.media = [{ id: 'empty', type: 'image', name: 'Empty.png', blob: new Blob([], { type: 'image/png' }) }];
+  await mount();
+  expect(host.querySelector('.waka-note-hero')).toBeNull();
+});

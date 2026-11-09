@@ -290,18 +290,26 @@ function LeaveAsk({ question, keepLabel, discardLabel, failed, failedLabel, busy
 }
 
 /** The picture the note is about, as large as the page allows. */
-function HeroPhoto({ item, name, blurred, removeLabel, disabled, onRemove }: {
+/* ═══ A PICTURE THAT CANNOT BE DRAWN IS NOT DRAWN LARGE (founder, 2026-11-09:
+   a restored draft's photo stood as "a big empty dark preview with an ×") ═══
+   A restored file the browser cannot decode (a HEIC outside Safari, a blob
+   the store gave back unreadable or empty) used to keep the whole 340px frame
+   with nothing in it. Now the frame says so (`onBroken`) and the page puts
+   that file on the shelf instead, as a named tile with its ×, so it is still
+   there to keep or remove and never a blank box. */
+function HeroPhoto({ item, name, blurred, removeLabel, disabled, onRemove, onBroken }: {
   item: InspirationDraftMedia; name: string; blurred: boolean; removeLabel: string; disabled: boolean; onRemove: () => void;
+  onBroken: () => void;
 }) {
   const [url, setUrl] = useState('');
-  const [failed, setFailed] = useState(false);
+  const broken = useRef(onBroken); broken.current = onBroken;
   useEffect(() => {
     if (!item.blob) return;
-    const value = URL.createObjectURL(item.blob); setUrl(value); setFailed(false);
+    const value = URL.createObjectURL(item.blob); setUrl(value);
     return () => URL.revokeObjectURL(value);
   }, [item.blob]);
   return <figure className="waka-note-hero" data-blurred={blurred ? '1' : undefined}>
-    {url && !failed ? <img src={url} alt={name} onError={() => setFailed(true)} /> : <span className="waka-note-hero-name">{name}</span>}
+    {url ? <img src={url} alt={name} onError={() => broken.current()} /> : null}
     <button type="button" className="waka-note-hero-x" aria-label={removeLabel} disabled={disabled} onClick={onRemove}>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" /></svg>
     </button>
@@ -426,7 +434,9 @@ export function InspirationComposer(props: {
   /* THE HERO: the first picture that can be shown, shown large; anything
      else (another photo, a recording, a file, one that needs attention)
      stays on the shelf of tiles under it. */
-  const hero = props.media.find(item => item.type === 'image' && item.blob && !item.validationError && !item.uploadError) ?? null;
+  const [broken, setBroken] = useState<ReadonlySet<string>>(() => new Set());
+  const hero = props.media.find(item => item.type === 'image' && item.blob && item.blob.size > 0 && !broken.has(item.id)
+    && !item.validationError && !item.uploadError) ?? null;
   const shelf = hero ? props.media.filter(item => item !== hero) : props.media;
   const unreadable = Boolean(hero && (props.readWords?.status === 'unreadable' || props.readWords?.status === 'retrying' || props.readWords?.status === 'failed'));
   const line = hero
@@ -516,7 +526,8 @@ export function InspirationComposer(props: {
     </div> : null}
     {hero ? <HeroPhoto item={hero} name={attachmentLabel(props.locale, hero.type, hero.name)} blurred={unreadable} disabled={blocked}
       removeLabel={formatMessage(props.locale, 'worldComposerRemoveFile', { name: attachmentLabel(props.locale, hero.type, hero.name) })}
-      onRemove={() => props.onRemove(hero.id)} /> : null}
+      onRemove={() => props.onRemove(hero.id)}
+      onBroken={() => setBroken(previous => new Set(previous).add(hero.id))} /> : null}
     {hero && props.readWords ? <ReadWordsQuote words={props.readWords} locale={props.locale} onFix={props.onFixReadWords} disabled={blocked} /> : null}
     {/* ═══ THE WORDS ARE WRITTEN ON THE PAGE, NOT IN A BOX ════════════════
         Founder, 2026-11-09: "notepad feels so 답답해." The words sat in a big

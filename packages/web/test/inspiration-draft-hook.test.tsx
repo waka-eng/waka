@@ -175,3 +175,46 @@ it('keeps a draft when a competing tab edited it before discard', async () => {
   expect(hook.draft.text).toBe('Original');
   expect((await loadInspirationDraft(scope,original.id))?.text).toBe('Newer words');
 });
+
+/* ═══ A FRESH NOTE FROM HOME'S VOICE AND SCREENSHOT (founder, 2026-11-09) ═══
+   "the photo is here when im trying to record fresh": starting from home's
+   voice or screenshot opens a blank page, and the draft it would have
+   reopened is set aside in its own row, untouched, and comes back once the
+   page is empty again. */
+it('starts fresh without losing the draft it steps off, and brings that draft back when the page is empty', async () => {
+  const photo = { id: 'old-photo', type: 'image' as const, name: 'Old.png', blob: new Blob(['png bytes']) };
+  await act(async () => { hook.setText('xdfsdf'); hook.setMedia([photo]); await hook.flush(); });
+  const parked = hook.draft.id;
+  let fresh = false;
+  await act(async () => { fresh = hook.startFresh(); });
+  expect(fresh).toBe(true);
+  expect(hook.draft.id).not.toBe(parked);
+  expect(hook.draft.text, 'the fresh page carried the old words').toBe('');
+  expect(hook.draft.media, 'the fresh page carried the old photo').toEqual([]);
+  const kept = await loadInspirationDraft(scope, parked);
+  expect(kept?.text, 'the set-aside draft lost its words').toBe('xdfsdf');
+  expect(await kept?.media[0]?.blob?.text(), 'the set-aside draft lost its photo').toBe('png bytes');
+
+  /* With words on the fresh page nothing is taken up over them. */
+  await act(async () => { hook.setText('a new voice note'); await hook.flush(); });
+  let resumed = true;
+  await act(async () => { resumed = await hook.resumeLatest(); });
+  expect(resumed).toBe(false);
+  expect(hook.draft.text).toBe('a new voice note');
+
+  /* Kept (settled): the page is empty, and the set-aside draft comes back. */
+  const saved = { id: hook.draft.id, revision: hook.draft.revision };
+  await act(async () => { await hook.settle(saved, 'inspiration'); });
+  expect(hook.draft.text).toBe('');
+  await act(async () => { resumed = await hook.resumeLatest(); });
+  expect(resumed).toBe(true);
+  expect(hook.draft.id).toBe(parked);
+  expect(hook.draft.text).toBe('xdfsdf');
+  expect(hook.draft.media.map(item => item.id)).toEqual(['old-photo']);
+});
+
+it('does not start fresh over an empty page', async () => {
+  let fresh = true;
+  await act(async () => { fresh = hook.startFresh(); });
+  expect(fresh).toBe(false);
+});
