@@ -29,25 +29,28 @@ afterEach(()=>{world?.unmount();vi.clearAllMocks();});
 const button=(text:string)=>[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent?.trim()===text)!;
 const settle=async()=>{await act(async()=>{await new Promise(r=>setTimeout(r,330));});await world.step(5);};
 async function open(){world=await mountWorld();await diveIntoReview(world.container,world.step);}
-/* NO MENU ROW FOR REVIEW (2026-11-08): the creature asks, glasses on. */
+/* NO MENU ROW FOR REVIEW (2026-11-08): a tap on the creature offers it, and
+   the glasses go on only while it asks (2026-11-09). */
 const sim=()=>(window as unknown as {wakaSim:()=>{think(on:boolean):void}}).wakaSim();
 const tapCreature=async()=>{await act(async()=>world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());};
-it('asks through the creature, glasses on, even without signals or collector suggestions',async()=>{
+it('asks through the creature, glasses on only while it asks, even without signals or collector suggestions',async()=>{
   world=await mountWorld();
   expect(world.container.querySelector('.waka-home-actions'),'the Actions menu is still on home').toBeNull();
-  /* THE GLASSES ARE ON AT REST while something waits: the notepad takes
-     them off, and coming home puts them back on. */
+  /* AT REST THE CREATURE IS PLAIN, even with something waiting: founder,
+     "this glass mode is only when agent asks u if certain things are still
+     true". */
   const think=vi.spyOn(sim(),'think');
   await pressHomeBar(world.container,'Keep a thought');await settle();
-  expect(think).toHaveBeenLastCalledWith(false);
   await closeOverlay(world.container);await settle();
-  expect(think,'home with a review waiting did not put the glasses on').toHaveBeenLastCalledWith(true);
+  expect(think.mock.calls.some(([on])=>on),'the glasses went on at rest').toBe(false);
   /* The reading still comes first; a tap is the ask. */
   expect(world.container.querySelector('.jar-char-bubble--review')).toBeNull();
   await tapCreature();
   expect(world.container.querySelector('.jar-char-bubble--review')?.textContent).toContain('I have a question for you.');
+  expect(think.mock.calls.some(([on])=>on),'the glasses went on before it asked').toBe(false);
   await diveIntoReview(world.container,world.step);
   expect(world.container.textContent).toContain('Does this still matter to you?');expect(world.container.textContent).toContain(original.text);
+  expect(think,'the glasses are not on while it asks').toHaveBeenLastCalledWith(true);
   expect(world.container.textContent).toContain('Your note');
   await act(async()=>button('Yes').click());await settle();
   expect(reviewInspiration).toHaveBeenCalledWith(original,VIEWER_ID,'relevant',expect.any(String));

@@ -1839,16 +1839,14 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /* GLASSES ON FOR THE SITTING. The creature reads with you while you review
      — see `think` — and takes them off when the cards run out or you step
      out of it. */
-  /* AND ON AT REST WHILE SOMETHING WAITS (2026-11-08). The Actions menu's
-     "Review suggestions" row is gone; founder: when something is reviewable
-     the creature asks, wearing its review glasses, and when nothing is, nothing
-     is shown. So the glasses say "I have something to ask" before a word is
-     said, and a tap brings the bubble that asks (`companionPrompt` 'review').
-     The reading still comes first: pending work never takes its place. */
-  const glassesAtRest = canOfferReview && atWall.kind === 'self';
+  /* ONLY FOR THE SITTING (2026-11-09). For a day they also went on at rest
+     whenever something waited to be reviewed; founder: "this glass mode is
+     only when agent asks u if certain things are still true". So the
+     creature at rest is its plain self, and the review is offered by a tap,
+     like every other bubble (`companionPrompt` 'review'). */
   useEffect(() => {
-    simApiRef.current?.think((reviewing || glassesAtRest) && !mouthOpen);
-  }, [reviewing, glassesAtRest, mouthOpen]);
+    simApiRef.current?.think(reviewing && !mouthOpen);
+  }, [reviewing, mouthOpen]);
   /* A candidate whose card is mid-trip, and those whose keep failed while it
      was: a failure that lands before the card has gone is held until it
      has, so the queue is never rewritten from under a card in flight. */
