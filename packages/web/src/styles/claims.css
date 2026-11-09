@@ -5613,6 +5613,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 /* SAVE FROM ANYWHERE: the bookmarklet is a thing to drag, so it looks like
    one, a pill rather than a link in a line of text. Edged, not filled. */
+.waka-save-anywhere {
+  gap: var(--sp-8);
+}
 .waka-bookmarklet {
   justify-self: start;
   display: inline-flex;
