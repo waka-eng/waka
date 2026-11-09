@@ -118,7 +118,7 @@ async function settle(ms: number): Promise<void> {
 async function answer(words: string): Promise<void> {
   press("Keep a thought");
   type(words);
-  press("Save");
+  press("Keep");
   await flush();
   await settle(2200);
 }
@@ -173,18 +173,18 @@ describe("the preview on a dev server", () => {
     for (const words of ["One", "Two", "Three"]) {
       press("Keep a thought");
       type(words);
-      press("Save");
+      press("Keep");
       await wait(2700);
       await flush();
     }
-    expect(page.textContent).toContain("Reading your three…");
+    expect(page.textContent).toContain("Thinking…");
     await wait(2600);
     await flush();
-    expect(page.textContent).toContain("An early read");
+    expect(page.textContent).toContain("On your mind, so far");
     press("Why?");
     expect(page.textContent).toContain("Three");
     expect(createInspiration).not.toHaveBeenCalled();
-    press("Talk about this");
+    press("Chat about this");
     await settle(400);
     expect(page.textContent).toContain("HOME");
     expect(completions()).toHaveLength(0);

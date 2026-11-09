@@ -335,7 +335,7 @@ describe("auth boundary", () => {
     });
     await flushReactWork();
 
-    expect(container.textContent).toContain("Begin your archive.");
+    expect(container.textContent).toContain("Start keeping what moves you.");
     expect(container.textContent).toContain("Continue with Google");
     const selector = container.querySelector<HTMLSelectElement>(
       'select[name="preferredLocale"]',

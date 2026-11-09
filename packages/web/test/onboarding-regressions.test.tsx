@@ -125,7 +125,7 @@ async function settle(ms: number): Promise<void> {
 async function answer(words: string): Promise<void> {
   press("Keep a thought");
   type(words);
-  press("Save");
+  press("Keep");
   await flush();
   await settle(1700);
 }
@@ -176,13 +176,13 @@ describe("a replaced photo", () => {
     await render();
     await choosePhoto(photo("first.png"));
     vi.mocked(createInspiration).mockRejectedValueOnce(new Error("offline"));
-    press("Save");
+    press("Keep");
     await flush();
     expect(container!.querySelector("[role=status].onb-error, .onb-error")).not.toBeNull();
     press("Remove photo");
     await flush();
     await choosePhoto(photo("second.png"));
-    press("Save");
+    press("Keep");
     await flush();
     const calls = vi.mocked(createInspiration).mock.calls;
     expect(calls).toHaveLength(2);
@@ -195,7 +195,7 @@ describe("Talk about this under StrictMode", () => {
   it("lands in the chat, not at home", async () => {
     saved = 3;
     const page = await render();
-    press("Talk about this");
+    press("Chat about this");
     await settle(500);
     expect(page.textContent).toContain("CHAT");
   });
@@ -225,10 +225,10 @@ describe("Talk about this, retried after the finish failed", () => {
     saved = 3;
     const page = await render();
     vi.mocked(updateAuthProfile).mockRejectedValueOnce(new Error("offline"));
-    press("Talk about this");
+    press("Chat about this");
     await settle(500);
     expect(page.textContent).not.toContain("CHAT");
-    press("Talk about this");
+    press("Chat about this");
     await settle(500);
     expect(page.textContent).toContain("CHAT");
     expect(vi.mocked(createConversation)).toHaveBeenCalledTimes(1);
@@ -265,7 +265,7 @@ describe("a nameless profile that has already answered", () => {
     act(() => { setter.call(input!, "Mina"); input!.dispatchEvent(new Event("input", { bubbles: true })); });
     await act(async () => { page.querySelector("form")!.requestSubmit(); });
     await flush();
-    expect(page.textContent).toContain("Share something you want more of in your life.");
+    expect(page.textContent).toContain("Tell me something you want more of in your life.");
   });
 });
 
