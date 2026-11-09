@@ -19,18 +19,28 @@ type WakaDb = ReturnType<typeof getDb>;
 
 const HANDLE_PATTERN = /^[A-Za-z0-9_-]{3,24}$/;
 
+/* A public page lives at `/<handle>`, and the web app's own top-level pages
+   (`packages/web/src/main.tsx`) are matched before it — so a handle spelled
+   like one of them would leave its owner's public page unreachable. Every
+   such page is here; `public-handles.test.ts` lists them. */
 const RESERVED_HANDLES = new Set([
   "admin",
   "api",
   "auth",
+  "chat",
+  "days",
   "health",
+  "inspirations",
   "login",
   "logout",
   "me",
+  "mobile-check",
   "onboarding",
+  "principles",
   "profile",
   "public",
   "settings",
+  "share",
   "signin",
   "signup",
   "top-of-mind",
