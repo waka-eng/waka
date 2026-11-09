@@ -485,7 +485,13 @@ it('shows an unavailable link without silently opening another room and can retu
   world = await mountWorld(FACTS, { initialEntries: ['/w/missing-id/old-name'], routerTools: <RouterTools /> }); await settle();
   expect(world.container.querySelector('[role="alert"]')?.textContent).toContain('isn’t available to this account');
   expect(world.container.querySelector('[role="alert"]')?.textContent).not.toContain('Try again');
-  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.jar-navigation-notice button')].find(button => button.textContent === 'Me')!.click()); await settle();
+  /* ONE WAY HOME, IN THE NOTICE'S OWN ROW (code review, 2026-11-09): the
+     corner "Home" laid over the message is gone; the row under it holds it. */
+  const homes = [...world.container.querySelectorAll<HTMLButtonElement>('.jar-navigation-notice button')].filter(button => button.textContent === 'Home');
+  expect(homes, 'the notice should offer Home once').toHaveLength(1);
+  expect(world.container.querySelector('.jar-navigation-notice-close'), 'a corner close came back over the message').toBeNull();
+  expect(homes[0]!.closest('.jar-navigation-notice-acts'), 'Home is not in the notice row').not.toBeNull();
+  await act(async () => homes[0]!.click()); await settle();
   expect(world.container.querySelector('.jar-navigation-notice')).toBeNull(); expect(world.audit().wallKind).toBe('self');
 });
 /* The notice's Escape is the notice's only while it is the topmost layer:

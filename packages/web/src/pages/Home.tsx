@@ -7925,19 +7925,20 @@ const RETRY_READ_LIMIT_MS = 20_000;
         </div>
       ) : null}
       {navigationProblem ? <div className="jar-navigation-notice" role="alert" data-jar-chrome="1">
-        {/* A NOTICE IN THE MIDDLE OF THE SCREEN NEEDS THE TWO WAYS EVERY
-            OTHER ONE HAS: a ✕ inside it, and Escape (the listener below).
-            Both do what "Me" does — the view that failed is not there to go
-            back to, so dismissing it IS going home. */}
-        <button type="button" className="jar-navigation-notice-close"
-          onClick={() => viewNavigation.write({ ...EMPTY_VIEW }, { replace: true })}>{say('worldBackHome')}</button>
+        {/* A NOTICE IN THE MIDDLE OF THE SCREEN HAS TWO WAYS OUT: Home in its
+            own row under the message, and Escape (the listener below). The
+            view that failed is not there to go back to, so leaving IS going
+            home. (A corner close laid over the message went, 2026-11-09:
+            the row already said the same thing.) */}
         <p>{say(navigationProblem === 'unavailable' ? 'worldPrivateLinkUnavailable' : 'worldLinkUnavailable')}</p>
+        <div className="jar-navigation-notice-acts">
         {navigationProblem === 'retryable' ? <button type="button" onClick={() => viewNavigation.write(viewNavigation.view ?? { ...EMPTY_VIEW }, { replace: true, query: viewNavigation.query })}>{say('worldRoomHistoryRetry')}</button> : auth?.isAuthenticated ?
           <button type="button" onClick={() => {
             const from = viewNavigation.href;
             void auth.logout().then(() => navigate('/login', { replace: true, state: { from } })).catch(() => setCharSay(say('profileSignOutError')));
           }}>{say('worldSwitchAccount')}</button> : null}
-        <button type="button" onClick={() => viewNavigation.write({ ...EMPTY_VIEW }, { replace: true })}>{say('worldMe')}</button>
+        <button type="button" onClick={() => viewNavigation.write({ ...EMPTY_VIEW }, { replace: true })}>{say('worldBackHome')}</button>
+        </div>
       </div> : null}
       {/* ═══ A CLIP THAT DID NOT ATTACH IS SAID HERE, NOT IN THE ARCHIVE (L12)
           The archive's recorder lives on this page, so its upload can fail
