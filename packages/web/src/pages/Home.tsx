@@ -132,6 +132,7 @@ import { deleteAccount } from "../lib/api/auth";
 import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { useImageWords } from "../lib/use-image-words";
+import { bubbleStayMs } from "../lib/kept-bubble";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { useOpenClaimsLink } from "../lib/open-claims-link";
 import { InspirationReviewCard } from "../components/InspirationReviewCard";
@@ -4438,13 +4439,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
      every tap — see the note on `.jar-panel`. `simApi.place()` survives for
      the sim's own use; nothing in the page asks it where to put a panel. */
 
-  /* the companion's line is a whisper, not a status bar: it goes after 4s —
-     6s for "I'm inspired!", which carries a button worth reaching for */
-  useEffect(() => {
-    if (!charSay || companionPrompt === 'activity') return undefined;
-    const id = window.setTimeout(() => setCharSay(""), charSay === say('worldImInspired') ? 6000 : 4000);
-    return () => window.clearTimeout(id);
-  }, [charSay, companionPrompt]);
+  /* The companion's line is a whisper, not a status bar: it goes after 4s.
+     "Kept" stays longer and waits for a screenshot's words — see
+     `bubbleStayMs` and the effect beside `keptWords`, below. */
 
   /* THE EVIDENCE INDEX HAS NO CHANGE SIGNAL ANY MORE, because it no longer
      changes after load. `provTick` was how React was told the ref had been
@@ -6260,6 +6257,18 @@ const RETRY_READ_LIMIT_MS = 20_000;
      that bubble is up. */
   const keptImageId = visibleInspiration?.attachments.find(item => item.type === 'image')?.id ?? null;
   const keptWords = useImageWords(charSay === say('worldBubbleKept') ? keptImageId : null).words;
+  /* HOW LONG THE LINE STAYS. Measured from when it began saying it, so a
+     word arriving mid-stay re-plans the time left instead of restarting it. */
+  const lineSince = useRef<{ said: string; at: number }>({ said: '', at: 0 });
+  const keptWaiting = Boolean(keptImageId) && (!keptWords || keptWords.status === 'reading');
+  useEffect(() => {
+    if (!charSay || companionPrompt === 'activity') return undefined;
+    if (lineSince.current.said !== charSay) lineSince.current = { said: charSay, at: Date.now() };
+    const kept = charSay === say('worldBubbleKept');
+    const stay = bubbleStayMs({ kept, waitingForWords: kept && keptWaiting, elapsedMs: Date.now() - lineSince.current.at });
+    const id = window.setTimeout(() => { lineSince.current = { said: '', at: 0 }; setCharSay(""); }, stay);
+    return () => window.clearTimeout(id);
+  }, [charSay, companionPrompt, keptWaiting]);
   /** What a chat about the save opens with: the note, and the words read. */
   const keptSubject = (kept: { id: string; text: string }) => {
     const read = keptWords?.status === 'ready' && kept.id === visibleInspiration?.id ? keptWords.text?.trim() : '';
