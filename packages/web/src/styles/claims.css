@@ -2894,14 +2894,19 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    `.waka-tab--on` (one), so hovering the chosen tab painted ink text on its
    own ink fill and the label vanished (audit f2afcbe2, #39). */
 .waka-tab:not(.waka-tab--on):hover {
-  color: var(--ink);
+  color: color-mix(in srgb, var(--ink) 70%, var(--muted));
 }
 
-/* Full ink, never filled (a control is dim or full ink). */
+/* CHOSEN: full ink and a soft lit line under it, never filled. Pointed at
+   is only a step toward ink (above), so the two never look alike. */
 .waka-tab--on {
   border-color: transparent;
   background: none;
   color: var(--ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+  text-decoration-color: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
 .waka-tab:focus-visible {
@@ -3462,17 +3467,18 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 
 .waka-composer-mic:hover:not(:disabled) {
-  color: var(--ink);
-  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+  color: color-mix(in srgb, var(--ink) 70%, var(--muted));
+  border-color: color-mix(in srgb, var(--ink) 30%, transparent);
 }
 
-/* Recording is a STATE, so it renders as one: the control is inked while it
-   is listening, which is the same way every other on-state in this product
-   is shown. No red, no blinking dot. */
+/* Recording is a STATE, so it renders as one: full ink and lit, the light
+   being this product's one meaning channel. No fill, no red, no blinking
+   dot; pointed at is only a step toward ink. */
 .waka-composer-mic--on {
   border-color: transparent;
   background: none;
   color: var(--ink);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--ink) 55%, transparent));
 }
 
 .waka-composer-mic:disabled {

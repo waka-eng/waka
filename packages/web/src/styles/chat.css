@@ -946,7 +946,7 @@
 
 .chat-page .chat-dictate:hover:not(:disabled),
 .chat-page .chat-dictate:focus-visible {
-  color: var(--ink);
+  color: color-mix(in srgb, var(--ink) 70%, var(--muted));
   outline: none;
 }
 
@@ -957,6 +957,7 @@
 .chat-page .chat-dictate--on {
   color: var(--ink);
   background: none;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--ink) 55%, transparent));
 }
 
 
@@ -1085,16 +1086,22 @@
   cursor: pointer;
 }
 
+/* POINTED AT IS A STEP TOWARD INK; CHOSEN IS FULL INK WITH A SOFT LIT LINE
+   UNDER IT (code review, 2026-11-09: chosen and hovered were the same).
+   Never filled: a control is dim or full ink, and light carries the rest. */
 .chat-page .chat-with-choice:hover {
-  color: var(--ink);
+  color: color-mix(in srgb, var(--ink) 70%, var(--muted));
 }
 
-/* Chosen is full ink, never filled: a control is dim or full ink. */
 .chat-page .chat-with-choice--on,
 .chat-page .chat-with-choice--on:hover:not(:disabled) {
   border-color: transparent;
   background: none;
   color: var(--ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+  text-decoration-color: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
 .chat-with-note {

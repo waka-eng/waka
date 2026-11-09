@@ -46,4 +46,23 @@ describe("a quiet control's own rule wins over its container's", () => {
     expect(stop.some(({ selector }) => beats(specificity(selector), send)),
       `Stop's colour loses to the bar's action rule: ${stop.map((row) => row.selector).join(" | ")}`).toBe(true);
   });
+
+  /* CODE REVIEW, 2026-11-09: once nothing filled, "chosen" and "pointed at"
+     were the same full ink, so a selected tab looked exactly like a hovered
+     one. Chosen has to say more than a colour, and still never fill. */
+  it.each([
+    [".waka-tab--on", ".waka-tab:not(.waka-tab--on):hover"],
+    [".chat-page .chat-with-choice--on", ".chat-page .chat-with-choice:hover"],
+    [".chat-page .chat-dictate--on", ".chat-page .chat-dictate:hover:not(:disabled)"],
+    [".waka-composer-mic--on", ".waka-composer-mic:hover:not(:disabled)"],
+  ])("draws %s differently from its hover, by more than colour, and never fills it", (on, hover) => {
+    const rules = selectors();
+    const onBody = rules.filter((row) => row.selector === on).map((row) => row.body).join(";");
+    const hoverBody = rules.filter((row) => row.selector === hover).map((row) => row.body).join(";");
+    expect(onBody, `no rule for ${on}`).not.toBe("");
+    expect(onBody, `${on} has no mark beyond colour`).toMatch(/text-decoration|box-shadow|filter|border-bottom/);
+    expect(hoverBody, `${hover} carries the chosen mark too`).not.toMatch(/text-decoration-line|text-decoration:\s*underline|filter:\s*drop-shadow/);
+    expect(onBody, `${on} fills`).not.toMatch(/background(-color)?:\s*(?!\s|none\b|transparent\b)\S/);
+  });
 });
+
