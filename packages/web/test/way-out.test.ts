@@ -470,8 +470,10 @@ describe("every surface has a way out you can see", () => {
        a list. */
     expect(code(home), "the bar no longer knows it is on one of the two lists").toMatch(
       /const listing = !making && \(viewNavigation\.view\?\.open === 'saves' \|\| viewNavigation\.view\?\.open === 'conversations'\);/);
-    expect(code(home), "the bar's groups no longer hang off the making row, or the return row on a list").toMatch(
-      /const barOwner: 'inspiration' \| 'talk' \| 'return' \| null = making \?\? \(listing \? 'return' : null\);/);
+    /* ONE HEADER GRAMMAR (founder, 2026-11-08): no page's bar ends in a
+       Close any more — every page leaves by its unboxed "<" top-left. */
+    expect(code(home), "a Close came back to a bar").not.toMatch(/waka-dock-item--close/);
+    expect(code(home), "the page's \"<\" is not drawn as a glyph on a note or a chat").toContain("glyphOnly={making !== null || savedNoteOpen}");
 
     // The page toolbar is reserved for creating/editing. On the home at rest
     // the home bar stands instead (design E1, `HomeBar`); the lists and
@@ -514,20 +516,12 @@ describe("every surface has a way out you can see", () => {
     expect(talk).not.toMatch(/here:[^\n]*conversationId/);
 
     expect(code(home), "archive navigation must stay outside the composer").toContain("{making === null && item.id !== 'return' ? <button");
-    expect(code(home), "the chat's row no longer says All chats").toMatch(/making === 'talk' \? 'worldAllChats'/);
+    expect(code(home), "a chat's \"<\" no longer closes it").toContain("if (making === 'talk') { closePage(); return; }");
+    expect(code(home), "a chat lost its Past chats, top-right").toContain('className="waka-page-aside"');
 
-    /* Only tools and Close need a separator; a list has Close alone. */
-    expect(code(home), "the second rule is drawn where there is no middle group (a bare list)").toMatch(
-      /\{barOwner && item\.id === barOwner && \(making !== null \|\| \(viewNavigation\.view\?\.open === 'saves' && savedNoteOpen\)\) \? <span className="waka-dock-sep" aria-hidden="true" \/> : null\}/);
-    expect(code(home), "a chat no longer lends its middle group to the panel's mic and ＋").toMatch(
-      /item\.id === 'talk' && making === 'talk' \? \(\s*<span className="waka-dock-making" role="group" id=\{CHAT_TOOLS_SLOT\}/);
-
-    /* AND CLOSE, LAST, THE ONE-PRESS WAY HOME on a making page and on a
-       list: the note goes down as a draft; a chat, a list, or a saved note
-       in the archive (committed first) simply goes home. Rendered beside
-       the bar owner's row and nowhere else. */
-    const close = /onClick=\{\(\) => leaveAsModal\(closePage\)\}>\s*\{say\('worldClose'\)\}/;
-    expect(code(home), "a making page's or a list's bar no longer ends in a Close that goes home (with the note kept)").toMatch(close);
+    /* A CHAT LENDS NOTHING TO THE BAR: it writes into the notepad's own
+       note bar (`NoteBar`, 2026-11-08), so no slot and no dock under it. */
+    expect(code(home), "a chat lends its tools to the bar again").not.toMatch(/CHAT_TOOLS_SLOT/);
 
     /* THE CHAT WRITES ON ITS OWN PAGE AGAIN. The chat-in-the-bar composer
        was reverted the same day ("lets just make the bottom be All chats |
@@ -538,6 +532,7 @@ describe("every surface has a way out you can see", () => {
     const panel = code(readFileSync(join("src", "components", "ConversationPanel.tsx"), "utf8"));
     expect(panel, "the chat panel takes a bar slot again").not.toMatch(/dockSlot|CHAT_DOCK_SLOT/);
     expect(panel, "the chat panel no longer draws its own composer").toMatch(/<footer className="chat-composer">/);
+    expect(panel, "the chat no longer writes into the shared note bar").toMatch(/<NoteBar\b/);
 
     /* The condition the dock renders under. A destination may only lean on
        the bar if the bar is actually up while it is open — which is exactly

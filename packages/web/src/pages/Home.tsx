@@ -68,7 +68,7 @@ import {
 import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
 import { createConversation } from "../lib/api/conversations";
-import { DialogSurface, leaveAsModal } from "../components/DialogSurface";
+import { DialogSurface } from "../components/DialogSurface";
 import { PageBack } from "../components/PageBack";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
@@ -142,7 +142,7 @@ import { ClaimSlip } from "../components/ClaimSlip";
 import { HarvestReasons } from "../components/HarvestReasons";
 import { AgentPick } from "../components/AgentPick";
 import { ConversationsOverlay } from "../components/ConversationsOverlay";
-import { ConversationPanel, CHAT_TOOLS_SLOT } from "../components/ConversationPanel";
+import { ConversationPanel } from "../components/ConversationPanel";
 
 import type { ApiConversation } from "../lib/api/conversations";
 import { useMeasured } from "../canvas/measured";
@@ -2169,8 +2169,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     : viewNavigation.view?.conversationId ? 'talk' : null;
   /** On one of the two lists (reached from a new note or chat): the bar is ↩ │ Close. */
   const listing = !making && (viewNavigation.view?.open === 'saves' || viewNavigation.view?.open === 'conversations');
-  /** Which bar row the page's own groups (rules, tools, Close) hang off. */
-  const barOwner: 'inspiration' | 'talk' | 'return' | null = making ?? (listing ? 'return' : null);
   /** Where a list was opened from by the bar's "All …", so ↩ can go back there (see the dock). */
   const listOrigin = useRef<{ kind: 'chat'; id: string; principleId?: string | null } | null>(null);
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
@@ -3980,11 +3978,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
   /* AND THE RESTING LINE IS THE AGENT'S AT NOW, from `wallChromeNow`, for the
      same reason `agentSays` is not `chrome`: `chrome.formingAlt` is written
      an effect late and at the dial's T. */
-  /** How many saves this wall holds, for the notepad's door to them; null
-      while that is not known yet. */
-  const inspirationCount: number | null = standingAsAgent
-    ? standingBundle?.inspirationTotal ?? null
-    : inspirations ? inspirations.length + fieldBeyond : null;
   const agentIsEmpty = standingAsAgent && !agentBundleMissing && !agentSays && !standingBundle?.topOfMind.notes.length &&
     (standingBundle?.inspirationTotal === 0 || (standingBundle?.inspirationTotal === undefined && agentRoster?.find(profile => profile.id === atWall.id)?.hasInspirations === false));
   const restingWord = standingAsAgent
@@ -5277,11 +5270,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const close = closeSavedNote.current;
     if (close) { close(); return; }
     if (making === 'inspiration') { saveAsDraft(); return; }
-    if (making === 'talk') {
-      listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new', principleId: viewNavigation.view?.principleId };
-      openOverHome('conversations');
-      return;
-    }
+    /* A CHAT'S "<" CLOSES IT (founder, 2026-11-08) — back to where it was
+       opened from (a list it came from, else home), as the notepad's does.
+       Past chats is its own word, top-right. */
+    if (making === 'talk') { closePage(); return; }
     const origin = listOrigin.current;
     listOrigin.current = null;
     if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id, origin.principleId);
@@ -7832,7 +7824,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
      there is something to keep, dim when there is not. It says why it cannot
      be pressed, as the chat's Send does. */
   const noteBarSave = (
-    <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save"
+    <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save waka-note-bar-action"
       aria-label={say('worldSaveInspiration')}
       title={whyNotKeeping ? say(whyNotKeeping) : undefined}
       disabled={!composerCanKeep}
@@ -10437,6 +10429,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
              hero attachment's id — and `InspirationComposer` does the rest. */
           readWords={readWordsFor(inputMedia)}
           arrival={shareArrived}
+          /* SPEECH HAS ITS OWN VIEW (founder, 2026-11-08): while dictation
+             listens, the bar gives way to `ListeningView`; Done stops it and
+             the words stand in the note as text. */
+          listening={dictation.listening ? { notice: dictation.firstTime ? say('worldComposerDictateCloud') : undefined, onDone: () => dictation.stop() } : undefined}
           onRetryFile={id => { void retryDraftFile(id); }}
           onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
@@ -11649,28 +11645,32 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {phase === 'ready' && (listing || making || principlesOpen) && !viewNavigation.view?.sharePrinciple ? <PageBack
         navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making !== null || listing || principlesOpen}
         belowCorners={(listing || principlesOpen) && !savedNoteOpen}
-        /* THE NOTEPAD'S WAY OUT IS THE LABELLED CLOSE IN THE CORNER (design
-           E3): its bar is the note bar now — the words, the mic, Save — so
-           leaving (the draft kept) moved up beside the date. */
-        label={say(savedNoteOpen ? 'worldBackToAll' : making === 'talk' ? 'worldAllChats' : making === 'inspiration' ? 'worldClose' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
+        /* ONE HEADER GRAMMAR (founder, 2026-11-08): a note being written, a
+           saved note and a chat each leave by an unboxed "<" in the top-left,
+           inline with the page's own row; a list keeps its word ("‹ Home").
+           On a chat the "<" CLOSES it (founder: "< on top left should be
+           closing this like how it does for the saving"); Past chats moved
+           to the top-right. */
+        glyphOnly={making !== null || savedNoteOpen}
+        label={say(savedNoteOpen ? 'worldBackToAll' : making !== null ? 'worldClose' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
+      {/* PAST CHATS, TOP-RIGHT ON A CHAT — a quiet word at the corners' height,
+          like home's Actions, opening the list of chats. */}
+      {phase === 'ready' && making === 'talk' && !viewNavigation.view?.sharePrinciple ? (
+        <button type="button" className="waka-page-aside" data-jar-chrome="1" data-jar-interactive="1"
+          onClick={() => {
+            listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new', principleId: viewNavigation.view?.principleId };
+            openOverHome('conversations');
+          }}>{say('worldActionsChats')}</button>
+      ) : null}
       {streamShown ? (
         <HomeStream locale={locale} inspirations={inspirations ?? []} signals={streamSignals(signals)} principles={principles}
           onClose={() => setStreamOpen(false)}
           onOpenSave={id => { setStreamOpen(false); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }}
           more={fieldBeyond > 0 ? { onSeeAll: () => { setStreamOpen(false); listOrigin.current = null; openOverHome('saves'); } } : undefined} />
       ) : null}
-      {/* ═══ "{n} INSPIRATIONS" — THE NOTEPAD'S DOOR TO EVERYTHING KEPT ═══
-          Founder (design/one-pill-dock, 845f3cec): a new note leads to the
-          full list of saves, and says how many there are — the count was
-          asked for by name, so it is printed. The draft is kept first, as
-          Close keeps it. Top-right, where nothing else stands while the
-          notepad is up; a word, never a filled button. */}
-      {phase === 'ready' && making === 'inspiration' && !viewNavigation.view?.sharePrinciple ? (
-        <button type="button" className="waka-note-to-list"
-          onClick={() => leaveAsModal(() => { listOrigin.current = null; saveAsDraft(() => openOverHome('saves')); })}>
-          {inspirationCount === null ? say('worldBackToAll') : formatMessage(locale, 'worldInspirationCount', { count: inspirationCount })}
-        </button>
-      ) : null}
+      {/* "{n} INSPIRATIONS" LEFT THE NOTEPAD (founder, 2026-11-08: "i also dont
+          like seeing 0 inspirations while im saving sth new"). Saves are
+          reached from home (Saves ⌃, Actions › Search), not from a new note. */}
       {/* ═══ THE HOME BAR (design E1) ══════════════════════════════════════
           Write · Photo · Say it in one pill, Chat beside it — see
           `HomeBar`. It stands on the home at rest and nowhere else: the
@@ -11695,7 +11695,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           saved={barSaved}
           pull={standingAsAgent || streamShown ? undefined : { onOpen: () => setStreamOpen(true) }}
         />
-            ) : phase==='ready'&&(making==='talk'||reviewing||savedNoteOpen)&&!viewNavigation.view?.sharePrinciple ? (
+            ) : phase==='ready'&&(reviewing||savedNoteOpen)&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
             ...(reviewing && !making ? [{ id: 'review', label: 'worldReviewExit' as const, here: false,
@@ -11806,36 +11806,16 @@ const RETRY_READ_LIMIT_MS = 20_000;
             {item.id === 'return' && viewNavigation.view?.open === 'saves' && savedNoteOpen ? (
               <span className="waka-dock-making" role="group" id={DOCK_SLOT}
                 aria-label={say('worldCaptureInspiration')} />
-            ) : item.id === 'talk' && making === 'talk' ? (
-              /* ═══ AND A CHAT'S TOOLS COME INTO THE BAR TOO (2026-10-16) ═══
-                 Founder: "bar becomes All chats │ dictate · ＋ │ Close. The
-                 dictate button and ＋ move OUT of the chat box INTO the bar's
-                 middle group (the box keeps the text field and Send)."
-
-                 THE SAME LOAN THE ARCHIVE'S NOTE TAKES. The draft, the
-                 microphone and the uploads all belong to `ConversationPanel`
-                 — lifting them here would put a second copy of the unsent
-                 message in the world — so the bar lends an empty group and
-                 the panel portals its two tools into it, as `NoteTools` does
-                 for an open saved note. What the earlier note about "a chat
-                 does not get this" was refusing still holds: the FIELD does
-                 not come into the bar, and that was the arithmetic. Two
-                 glyphs fit where two glyphs already sit on a note. */
-              <span className="waka-dock-making" role="group" id={CHAT_TOOLS_SLOT}
-                aria-label={say('worldConversationMessage')} />
             ) : null}
             {/* CLOSE, LAST IN THE ROW, on the page you are making something
                 on: back to the main screen, the note kept as a draft. A chat
                 has its middle group again since 2026-10-16 — the mic and the
                 ＋, lent to the panel (above) — so it reads All chats │ tools
                 │ Close like a note does. */}
-            {barOwner && item.id === barOwner && (making !== null || (viewNavigation.view?.open === 'saves' && savedNoteOpen)) ? <span className="waka-dock-sep" aria-hidden="true" /> : null}
-            {barOwner && item.id === barOwner ? (
-              <button type="button" className="waka-dock-item waka-dock-item--close"
-                onClick={() => leaveAsModal(closePage)}>
-                {say('worldClose')}
-              </button>
-            ) : null}
+
+            {/* NO CLOSE IN THE BAR (founder, 2026-11-08): every page leaves by
+                the one unboxed "<" in its top-left corner — a chat, a saved
+                note, a list — so the bar holds only what the page makes with. */}
             </span>
           ))}
         </nav>
@@ -12109,7 +12089,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
               profile={conversationProfile}
               onHistory={()=>{listOrigin.current={kind:'chat',id:talkId??'new',principleId:viewNavigation.view?.principleId};openOverHome('conversations');}}
               /* The bar's middle group, lent for the mic and the ＋. */
-              toolsSlot={CHAT_TOOLS_SLOT}
               onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};}}
               /* `replace` on the new-to-id hop so dismissing does not land
                  back on the blank conversation you just started. */

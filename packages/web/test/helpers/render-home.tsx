@@ -550,6 +550,13 @@ function dockRows(container: HTMLElement): HTMLButtonElement[] {
  * Suites keep saying what they mean; this is the one place the route moved.
  */
 const MOVED_TO_ACTIONS: Record<string, string> = { Inspirations: "Search", Chats: "Past chats" };
+/** A chat's list door is its top-right "Past chats" (2026-11-08), not a bar row. */
+async function pressPastChatsAside(container: HTMLElement): Promise<boolean> {
+  const aside = container.querySelector<HTMLButtonElement>(".waka-page-aside");
+  if (!aside) return false;
+  await act(async () => aside.click());
+  return true;
+}
 const RENAMED: Record<string, string> = { "New inspiration": "Write" };
 
 /** Open the corner's Actions menu and press its row named `label`. */
@@ -601,6 +608,7 @@ export async function pressDockRow(container: HTMLElement, label: string): Promi
     return;
   }
   if (RENAMED[label]) label = RENAMED[label]!;
+  if (label === "All chats" && await pressPastChatsAside(container)) return;
   if (label === "New chat" && !dockRows(container).some(node => accessibleName(node) === label)) {
     await pressDockRow(container, "Chats");
     await pressDockRowWhenItAppears(container, "New chat", "the chat list's primary action");
@@ -646,11 +654,11 @@ function dockClose(container: HTMLElement): HTMLButtonElement | null {
  */
 export async function chatField(container: HTMLElement): Promise<HTMLTextAreaElement> {
   for (let turn = 0; turn < 40; turn += 1) {
-    const field = container.querySelector<HTMLTextAreaElement>(".chat-composer .chat-composer-body textarea");
+    const field = container.querySelector<HTMLTextAreaElement>(".chat-composer .waka-note-bar textarea");
     if (field) return field;
     await act(async () => { await Promise.resolve(); });
   }
-  throw new Error("the chat's own field never arrived (.chat-composer .chat-composer-body textarea)");
+  throw new Error("the chat's own field never arrived (.chat-composer .waka-note-bar textarea)");
 }
 
 /**
@@ -747,33 +755,18 @@ export async function pressChatCorner(container: HTMLElement): Promise<void> {
  * `home-navigation.test.tsx`'s to test.
  */
 export async function closeOverlay(container: HTMLElement): Promise<void> {
-  /* A LIST OR PRINCIPLES LEAVES BY THE LABELLED BACK in the corner since the
-     tabs went (design E1); a page you are making something on still has its
-     bar's Close. */
-  const back = container.querySelector<HTMLButtonElement>(".waka-page-back");
-  if (!container.querySelector(".waka-dock") && back) {
-    const home = back.textContent?.trim() === "Home";
-    await act(async () => back.click());
-    /* A list opened from a chat steps back to that chat first ("Back to
-       chat"), whose bar then ends in Close — two presses, both visible. */
-    if (!home && (container.querySelector(".waka-dock") || container.querySelector(".waka-page-back"))) {
-      for (let turn = 0; turn < 10; turn += 1) await act(async () => { await Promise.resolve(); });
-      await closeOverlay(container);
-    }
-    return;
+  /* ONE HEADER GRAMMAR (2026-11-08): every page leaves by its unboxed "<" in
+     the top-left — a note being written and a chat close, a saved note steps
+     back to its list, a list goes home. So this presses the "<" until home's
+     bar is back, never more than a few times; Escape for Principles. */
+  for (let turn = 0; turn < 4; turn += 1) {
+    if (container.querySelector(".waka-home-bar") && !container.querySelector(".waka-page-back")) return;
+    const back = container.querySelector<HTMLButtonElement>(".waka-page-back");
+    if (back) await act(async () => back.click());
+    else if (container.querySelector(".waka-over[data-jar-surface]")) await pressKey(container, "Escape");
+    else throw new Error("no visible way out: no \"<\" on screen");
+    for (let wait = 0; wait < 10; wait += 1) await act(async () => { await Promise.resolve(); });
   }
-  if (!container.querySelector(".waka-dock")) throw new Error("no visible way out: the dock is not on screen");
-  const close = dockClose(container);
-  if (close) {
-    await act(async () => close.click());
-    return;
-  }
-  const home = dockRows(container).find(node => accessibleName(node) === "Home");
-  if (home) {
-    await act(async () => home.click());
-    return;
-  }
-  await pressKey(container, "Escape");
 }
 
 /**

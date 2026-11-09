@@ -37,7 +37,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
-import { apiMockFrom, dataMockFrom, mountWorld, pressDockRow, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
+import { apiMockFrom, closeOverlay, dataMockFrom, mountWorld, pressDockRow, VIEWER_ID, type MountedWorld } from "./helpers/render-home";
 
 const FACTS = {
   inspirations: Array.from({ length: 3 }, (_, i) => ({ id: `own-${i}`, text: `something I kept, ${i}`, daysAgo: i + 1 })),
@@ -192,11 +192,12 @@ it("attaches the clip to its note when the archive is closed with Close mid-reco
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
   await openArchive();
   await recordOn("own-1");
-  const close = q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close");
-  expect(close, "the bar has no Close").toBeTruthy();
-  await act(async () => close!.click());
+  /* Leaving by the visible "<" (2026-11-08: the note steps back to its
+     list, the list goes home), mid-recording. */
+  expect(q(".waka-page-back"), "the note has no visible way out").toBeTruthy();
+  await closeOverlay(world.container);
   await settle();
-  expect(archiveOpen(), "Close did not close the archive").toBe(false);
+  expect(archiveOpen(), "the \"<\" did not close the archive").toBe(false);
   await deliverStops();
   expect(S.finalized, "the clip was lost with the archive").toEqual(["own-1"]);
   expect(S.presigned).toEqual([VIEWER_ID]);
@@ -252,7 +253,7 @@ it("attaches the clip when a cold link's archive is closed mid-recording (the re
   world = await mountWorld(FACTS, { initialEntries: ["/?open=saves"], routerTools: <RouterTools /> }); await settle();
   expect(archiveOpen()).toBe(true);
   await recordOn("own-0");
-  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await closeOverlay(world.container);
   await settle();
   expect(archiveOpen()).toBe(false);
   await deliverStops();
@@ -281,7 +282,7 @@ it("says on Home that a clip failed to attach after the archive closed, and Try 
   await openArchive();
   await recordOn("own-2");
   S.failFinalize = 1;
-  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await closeOverlay(world.container);
   await settle();
   expect(archiveOpen()).toBe(false);
   await deliverStops();
@@ -315,7 +316,7 @@ it("does not let the notepad record while the archive's recording is still finis
   expect(S.recorders).toBe(1);
   /* the archive closes; the browser has not yet handed over its clip, so
      its microphone is still live — and a new note is opened at once */
-  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await closeOverlay(world.container);
   await settle();
   expect(archiveOpen()).toBe(false);
   await pressDockRow(world.container, "New inspiration");
@@ -363,7 +364,7 @@ it("lets the failure line go with ×, without attaching anything", async () => {
   await openArchive();
   await recordOn("own-0");
   S.failFinalize = 1;
-  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await closeOverlay(world.container);
   await settle();
   await deliverStops();
   const close = q<HTMLButtonElement>('.waka-clip-failed button[aria-label="Close"]');
@@ -410,7 +411,7 @@ it("says on Home that a recording failed after the archive closed, and keeps say
   await openArchive();
   await recordOn("own-2");
   S.emptyClip = true;
-  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await closeOverlay(world.container);
   await settle();
   expect(archiveOpen()).toBe(false);
   await deliverStops();
@@ -438,7 +439,7 @@ it("keeps the clip for a restore when the server no longer has its note", async 
   await openArchive();
   await recordOn("own-1");
   S.noteGone = true;
-  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await closeOverlay(world.container);
   await settle();
   await deliverStops();
   const line = q(".waka-clip-failed");
@@ -459,7 +460,7 @@ it("keeps the clip and offers Try again when finalize cannot find the uploaded o
   await openArchive();
   await recordOn("own-1");
   S.objectMissing = 1;
-  await act(async () => q<HTMLButtonElement>(".waka-dock button.waka-dock-item--close")!.click());
+  await closeOverlay(world.container);
   await settle();
   await deliverStops();
   const line = q(".waka-clip-failed");

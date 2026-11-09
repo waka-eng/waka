@@ -7355,7 +7355,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-note-bar .waka-dock-tool--live { width: auto; padding: 0 var(--sp-12); font-size: var(--t-input); }
 .jar-inspiration-composer .waka-note-bar .waka-dock-save { flex: none; min-height: var(--sp-44); border: 0; background: none; color: var(--ink); font-size: var(--t-input); }
 .jar-inspiration-composer .waka-note-bar .waka-dock-save:disabled { opacity: 0.4; }
-.waka-note-hint { margin: auto 0 var(--sp-8); padding-top: var(--sp-16); text-align: center; color: var(--muted); font-size: var(--t-ui); }
 
 /* THE CREATURE, SMALL, BESIDE WHAT IT SAYS — the real `Companion`, never drawn here. */
 .waka-note-line { display: flex; align-items: center; gap: var(--sp-10); margin: var(--sp-8) 0 var(--sp-14); }
@@ -7443,4 +7442,127 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .waka-note-to-list:hover, .waka-note-to-list:focus-visible { color: var(--ink); }
 body:has([aria-modal="true"], [role="menu"]) .waka-note-to-list { visibility: hidden; }
+}
+
+@layer chrome {
+/* ═══ ONE HEADER GRAMMAR (founder, 2026-11-08) ═══════════════════════════════
+   "i hate the <Close and … at top right and left corners." Every page that
+   leaves by a corner leaves by an unboxed "<": no pill, no fill, soft ink,
+   a 44px target — on a note being written, a saved note and a chat the "<"
+   alone (its name said to a screen reader), on a list "‹ Home". The page's
+   own row sits beside it at the same height: the note's "Saving to … ·
+   date" and its unboxed "⋯", a chat's "Past chats". */
+.waka-page-back, .waka-page-back[data-below-corners] {
+  min-width: var(--waka-corner); min-height: var(--waka-corner); padding: 0 var(--sp-6);
+  background: none; color: var(--muted); gap: var(--sp-4);
+}
+.waka-page-back:hover, .waka-page-back:focus-visible { background: none; color: var(--ink); }
+.waka-page-back[data-glyph] { justify-content: center; padding: 0; }
+.waka-page-aside {
+  position: fixed; z-index: 60; top: calc(var(--sp-12) + env(safe-area-inset-top)); right: max(var(--sp-16), env(safe-area-inset-right));
+  min-height: var(--waka-corner); padding: 0 var(--sp-6); border: 0; background: none;
+  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-ui); cursor: pointer; pointer-events: auto;
+}
+.waka-page-aside:hover, .waka-page-aside:focus-visible { color: var(--ink); }
+
+/* THE NOTE'S ROW: level with the "<", the stamp beside it, "⋯" at the end. */
+body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer[data-visual-viewport] {
+  padding-top: calc(var(--sp-12) + env(safe-area-inset-top));
+}
+body .jar-seek.jar-inspiration-composer > .jar-note-top { margin-top: 0; padding-top: 0; }
+body:has(.waka-page-back) .waka-over.waka-over--note { padding-top: calc(var(--sp-12) + env(safe-area-inset-top)); }
+.jar-seek.jar-inspiration-composer .jar-note-top, .waka-over.waka-over--note .jar-note-top {
+  grid-template-columns: var(--waka-corner) minmax(0, 1fr) auto;
+  min-height: var(--waka-corner); margin: 0 0 var(--sp-12); padding: 0; gap: var(--sp-6);
+}
+.jar-seek.jar-inspiration-composer .jar-note-when, .waka-over.waka-over--note .jar-note-when {
+  grid-column: 2; justify-self: start; text-align: start; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.jar-seek.jar-inspiration-composer .jar-note-verb, .waka-over.waka-over--note .jar-note-verb { grid-column: 3; justify-self: end; }
+.jar-inspiration-composer .jar-note-actions-trigger, .waka-over--note .jar-note-actions-trigger,
+.jar-inspiration-composer .jar-note-actions-trigger:hover, .jar-inspiration-composer .jar-note-actions-trigger:focus-visible {
+  border: 0; background: none; color: var(--muted); border-radius: 50%;
+}
+.jar-inspiration-composer .jar-note-actions-trigger:hover, .jar-inspiration-composer .jar-note-actions-trigger:focus-visible { color: var(--ink); }
+
+/* SAVE AND SEND, QUIETER (founder: "the save button … feels too big and
+   ugly"): 15px, regular weight, never filled or boxed, on the tools' line —
+   dim when there is nothing to act on, full ink when there is. */
+.waka-note-bar .waka-note-bar-action, .jar-inspiration-composer .waka-note-bar .waka-note-bar-action {
+  flex: none; display: inline-flex; align-items: center; width: auto; min-width: var(--waka-corner); min-height: var(--waka-corner);
+  padding: 0 var(--sp-12); border: 0; border-radius: var(--r-pill); background: none; box-shadow: none;
+  color: var(--ink); font-family: var(--waka-face); font-size: var(--t-body); font-weight: 400; cursor: pointer;
+}
+.waka-note-bar .waka-note-bar-action:disabled { opacity: 0.4; cursor: default; }
+/* ONE BAR, ONE SIZE: a chat's mic and Send still wear their old classes
+   (`.chat-dictate`, `.chat-send`, 40px and filled in chat.css) for their
+   handlers' tests; inside the note bar they take the notepad's measure. */
+.waka-note-bar .waka-note-bar-row .waka-note-bar-action { width: auto; height: auto; min-width: var(--waka-corner); min-height: var(--waka-corner); padding: 0 var(--sp-12); background: none; color: var(--ink); }
+.waka-note-bar .waka-note-bar-row .waka-note-bar-action:disabled { border: 0; background: none; color: var(--ink); }
+.waka-note-bar .waka-note-bar-tools .waka-dock-tool svg { width: 1.4em; height: 1.4em; }
+.waka-note-bar .waka-note-bar-tools .waka-dock-tool { width: var(--waka-corner); height: auto; min-width: var(--waka-corner); min-height: var(--waka-corner); padding: 0; color: var(--ink); }
+
+}
+
+@layer chrome {
+/* The creature's question and its softer second line, one bubble. */
+.waka-note-says { text-wrap: pretty; }
+.waka-note-says-softer { display: block; margin-top: var(--sp-2); font-size: var(--t-ui); color: color-mix(in srgb, var(--waka-on-light) 62%, transparent); }
+/* With the hint gone, the bar sits at the foot of the page by itself. */
+.jar-composer-body[data-hero] .waka-note-bar { margin-top: auto; }
+}
+
+@layer chrome {
+/* ═══ THE NOTE BAR'S FIELD, ONE LOOK FOR EVERY CALLER ═══════════════════════
+   The notepad's and the chat's words sit in the same raised field at the
+   same size and weight (founder: "use the same code so it looks
+   identical"). A chat's own label wrapper steps out of the way. */
+.waka-note-bar textarea, .chat-page .waka-note-bar textarea {
+  display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 0 var(--sp-10) 0 0;
+  border: 0; border-radius: 0; background: none; color: var(--ink); resize: none;
+  font-family: var(--waka-face); font-size: var(--t-input); font-weight: 400; line-height: 1.45;
+}
+.chat-page .waka-note-bar textarea { min-height: calc(var(--t-input) * 1.45); max-height: min(8lh, 30dvh); field-sizing: content; }
+.waka-note-bar .chat-input-label { display: block; }
+.waka-note-bar .chat-chips { margin: 0 0 var(--sp-8); }
+/* The chat's bar spans the page like the notepad's, on the same gutter. */
+/* The chat's column is indented (`.chat-main`, clamp(20px, 6vw, 28px)); its
+   bar steps back out of that indent to the page's own 16px gutter. */
+.chat-page .chat-composer { max-width: none; padding-inline: 0; margin-inline: calc(-1 * clamp(20px, 6vw, 28px)); width: auto; }
+}
+
+@layer chrome {
+/* ═══ LISTENING (founder, 2026-11-08) ═══════════════════════════════════════
+   The bar gives way to the creature and the words arriving under it: no
+   box, no caret, lighter ink, centred. The light breathes while the
+   microphone is open — the one motion, and it says the microphone is open;
+   under reduced motion it holds still. Done is a word, never filled. */
+.waka-listening {
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-10);
+  margin-top: auto; padding: var(--sp-16) var(--sp-8) var(--sp-4); text-align: center;
+}
+.waka-listening-being { position: relative; display: grid; place-items: center; width: 120px; height: 120px; }
+.waka-listening-being > .waka-companion { position: relative; width: auto; height: auto; background: none; }
+.waka-listening-light {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--jar-live, var(--moon-warm)) 26%, transparent) 0%, transparent 68%);
+  animation: waka-listening-breathe 2.4s ease-in-out infinite;
+}
+@keyframes waka-listening-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) { .waka-listening-light { animation: none; opacity: 0.8; } }
+.waka-listening-label { margin: 0; color: var(--muted); font-size: var(--t-ui); letter-spacing: 0.02em; }
+.waka-listening-words {
+  min-height: calc(var(--t-input) * 1.5 * 2); max-width: 34rem; margin: 0;
+  color: color-mix(in srgb, var(--ink) 72%, transparent); font-size: var(--t-input); line-height: 1.5; text-wrap: pretty;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.waka-listening-notice { max-width: 34rem; margin: 0; color: var(--muted); font-size: var(--t-meta); line-height: 1.45; }
+.waka-listening-done, .jar-inspiration-composer .waka-listening-done {
+  min-height: var(--waka-corner); padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill); background: none; box-shadow: none;
+  color: var(--ink); font-family: var(--waka-face); font-size: var(--t-body); font-weight: 400; cursor: pointer;
+}
+.chat-page .waka-listening { margin-top: 0; }
 }

@@ -633,28 +633,21 @@ async function openANewChat(root: HTMLElement) {
   await act(async () => chat!.click()); await settle();
 }
 
-it('closes a conversation from its own X, which the overlay handler could not', async () => {
+it('closes a conversation from the unboxed "<" in its top-left corner', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   await openANewChat(world.container);
   expect(location.pathname.startsWith('/chat/'), 'the conversation never opened').toBe(true);
-
-  /* THE X IS GONE FROM EVERY DESTINATION. Founder: "how do we even need the
-     close button for inspiration and chat? There's no reason for there to be
-     an X button when we're just moving across the pages." So what this
-     presses is the control that replaced it — since 2026-10-15 ("say all
-     chats and then close") the word Close, last in the chat's own bar, which
-     is visible the whole time a conversation is open and is the way out the
-     law is actually satisfied by. Nothing in the bar is lit on a chat: the
-     chat is not a list. The assertion is unchanged: an address, not a
-     rendered button. */
-  expect(world.container.querySelector('.waka-dock .waka-dock-item[aria-current="page"]'),
-    'a chat lights a bar row, as if it were the chats list').toBeNull();
-  const close = world.container.querySelector<HTMLButtonElement>('.waka-dock button.waka-dock-item--close');
-  expect(close?.textContent?.trim(), 'a conversation offers no Close in its bar').toBe('Close');
-  await act(async () => close!.click()); await settle();
-  expect(location.pathname, 'the dock still does nothing from a conversation').not.toContain('/chat/');
-  expect(new URLSearchParams(location.search).get('open'), 'Close on a chat did not go home').toBeNull();
+  /* ONE HEADER GRAMMAR (founder, 2026-11-08): "< on top left should be
+     closing this like how it does for the saving." No Close in the bar. */
+  expect(world.container.querySelector('.waka-dock button.waka-dock-item--close'), 'a Close came back to the chat\'s bar').toBeNull();
+  const back = world.container.querySelector<HTMLButtonElement>('button.waka-page-back');
+  expect(back?.querySelector('svg'), 'the chat has no "<"').toBeTruthy();
+  expect(back?.textContent?.trim(), 'the "<" is not named for closing').toBe('Close');
+  await act(async () => back!.click()); await settle();
+  expect(location.pathname, 'the "<" left the conversation up').not.toContain('/chat/');
+  expect(new URLSearchParams(location.search).get('open'), 'the "<" on a chat did not go home').toBeNull();
 });
+
 
 /**
  * AND IT STEPS BACK TO THE LIST, which is the other half of the way out.
@@ -669,38 +662,18 @@ it('closes a conversation from its own X, which the overlay handler could not', 
  * Pressed, not counted — `six-laws.md` Law 8: the previous one-press return
  * in this product rendered, read correctly, was enabled, and did nothing.
  */
-it('steps from a new chat to the list of them', async () => {
+it('steps from a new chat to the list of them by Past chats, top-right', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   await openANewChat(world.container);
   expect(location.pathname.startsWith('/chat/'), 'the conversation never opened').toBe(true);
-
-  /* ═══ THE WAY TO THE LIST IS ON THE NEW CHAT, AND IT IS PRESSED ═══════
-     Founder, 2026-10-15: "user can go to inspiration list and chat list
-     ONLY from that new page." The bar's word makes a new chat, so the list's
-     one door is the new chat's own "All chats", in words.
-
-     WHAT THIS CASE IS FOR DOES NOT CHANGE. Law 8 — "pressed, not counted"
-     — is why it exists: the previous one-press return in this product
-     rendered, read correctly, was enabled, and did nothing. A different
-     control is pressed; the assertion that you end up on the list is the
-     same, and it is now covering the control people will actually use.
-
-     ═══ AND THE DOOR MOVED FROM THE CORNER TO THE BAR ═════════════════
-     Founder, the same day: "never put something on any corners" — and of a
-     chat's bar, "all chats and then ... close." The header above the chat is
-     gone; the list's door is the first word of the chat's own bar. */
-  expect(world.container.querySelector('header.jar-chat-top, .jar-chat-see-all'),
-    'the All chats header came back above the chat').toBeNull();
-  const back = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-page-back, .waka-home-bar button, .waka-over-new')]
-    .find(node => node.textContent?.trim() === 'All chats');
-  expect(back, 'a new chat offers no way to the list of chats').toBeTruthy();
-  await act(async () => back!.click()); await settle();
+  /* Founder, 2026-11-08: "put Past Chats in top right corner instead." */
+  const past = world.container.querySelector<HTMLButtonElement>('button.waka-page-aside');
+  expect(past?.textContent?.trim(), 'a chat offers no Past chats').toBe('Past chats');
+  await act(async () => past!.click()); await settle();
   expect(location.pathname, 'it stayed in the conversation').not.toContain('/chat/');
-  expect(
-    new URLSearchParams(location.search).get('open'),
-    'the step back did not land on the chats',
-  ).toBe('conversations');
+  expect(new URLSearchParams(location.search).get('open'), 'Past chats did not land on the chats').toBe('conversations');
 });
+
 
 /**
  * THE DOCK STANDS ON AN OPEN CHAT, as it does on every other destination.
@@ -709,14 +682,15 @@ it('steps from a new chat to the list of them', async () => {
  * inspiration, which is the same depth of the same gesture — so reading one
  * conversation was the single state in the product with no bottom bar.
  */
-it('keeps the dock standing while a conversation is open', async () => {
+it('gives a conversation the notepad\'s own note bar, and no dock under it', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   await openANewChat(world.container);
-  expect(
-    world.container.querySelector('.waka-dock'),
-    'the bottom bar goes missing on the one surface that most needs it',
-  ).toBeTruthy();
+  /* Founder, 2026-11-08: "make this bottom for chatting feel EXACTLY like
+     [the notepad's note bar]. use the same code". */
+  expect(world.container.querySelector('.chat-composer [data-note-bar="1"] textarea'), 'the chat does not write into the note bar').toBeTruthy();
+  expect(world.container.querySelector('nav.waka-dock'), 'a dock stands under the chat\'s note bar').toBeNull();
 });
+
 
 /**
  * ═══ A COMMENT IS NOT COPY ═════════════════════════════════════════════
@@ -911,10 +885,10 @@ it('keeps archive navigation outside the composer, and reaches chat history from
   await openANewChat(world.container);
   expect(location.pathname, 'Chat did not open a NEW chat').toBe('/chat/new');
   expect(world.container.querySelector('header.jar-chat-top, .jar-chat-see-all'), 'the All chats header is back above the chat').toBeNull();
-  const allChats = row('All chats');
-  expect(allChats, 'a new chat offers no way to the chats').toBeTruthy();
-  await act(async () => allChats!.click()); await settle();
-  expect(open(), 'All chats did not open the chats list').toBe('conversations');
+  const pastChats = world.container.querySelector<HTMLButtonElement>('button.waka-page-aside');
+  expect(pastChats, 'a new chat offers no way to the chats').toBeTruthy();
+  await act(async () => pastChats!.click()); await settle();
+  expect(open(), 'Past chats did not open the chats list').toBe('conversations');
   expect(world.container.querySelector('.waka-home-bar'), 'the home bar stands over the chats list').toBeNull();
   await closeOverlay(world.container); await settle();
   expect(open(), 'Close on the chats list did not go home').toBeNull();
@@ -951,7 +925,7 @@ it('opens both lists from Actions with nothing lit, and leaves each by its label
 it('returns home from chat history without stepping back into a chat', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   await openANewChat(world.container);
-  await act(async () => row('All chats').click()); await settle();
+  await act(async () => world.container.querySelector<HTMLButtonElement>('button.waka-page-aside')!.click()); await settle();
   expect(open()).toBe('conversations');
   await closeOverlay(world.container); await settle();
   expect(location.pathname + location.search).toBe('/');
@@ -973,12 +947,13 @@ it('steps back from a saved note open in the archive to the archive\'s list on �
   await act(async () => saved!.click()); await settle();
   expect(world.container.querySelector('.jar-note-top'), 'the saved note did not open as a note page').toBeTruthy();
 
-  /* ↩ │ THE NOTE'S TOOLS │ CLOSE. The tools ride in the return row's slot. */
+  /* THE NOTE'S TOOLS, AND NO CLOSE (2026-11-08): the way back is the
+     unboxed "<" top-left, to the list; the bar holds only what the note
+     makes with. */
   const shape = barShape(world.container);
-  const seps = shape.flatMap((part, at) => (part === '│' ? [at] : []));
-  expect(seps, 'tools and Close are separate groups').toHaveLength(1);
+  expect(shape, 'a Close came back to the saved note\'s bar').not.toContain('Close');
   expect(returnRow()!.textContent).toBe('All inspirations');
-  expect(shape.slice(seps[0]! + 1), 'the last group is not Close alone').toEqual(['Close']);
+  expect(returnRow()!.querySelector('.sr-only'), 'the saved note\'s "<" shows a word').toBeTruthy();
   const slot = world.container.querySelector('span.waka-dock-slot');
   expect(slot?.querySelector('#waka-note-tools.waka-dock-making[role="group"]'), 'the note\'s tools are not in the return row\'s slot').toBeTruthy();
   expect(shape, 'Inspiration is in the bar on a saved note').not.toContain('New inspiration');
@@ -1053,10 +1028,12 @@ it('closes the archive to home even when the previous history entry is also the 
   expect(world.container.querySelector('.waka-over')).toBeNull();
 });
 
-it.each(['/?compose=1', '/?open=saves', '/?open=saves&note=loaded', '/?open=conversations', '/chat/new'])(
+/* A saved note's "<" steps back to its list first (2026-11-08), so it is
+   held below; every other page leaves for home in one press. */
+it.each(['/?compose=1', '/?open=saves', '/?open=conversations', '/chat/new'])(
   'closes a directly opened %s in one press', async path => {
     world = await mountWorld(FACTS, { initialEntries: [path], routerTools: <RouterTools/> }); await settle();
-    const exit = close() ?? row('Home');
+    const exit = close() ?? world.container.querySelector<HTMLButtonElement>('button.waka-page-back')!;
     expect(exit).toBeTruthy();
     await act(async () => exit.click()); await settle();
     expect(location.pathname + location.search).toBe('/');
@@ -1102,19 +1079,19 @@ it('shows only owned profiles when a signed-in account has no agents', async () 
 /* THE NOTEPAD'S DOOR TO EVERYTHING KEPT (founder, design/one-pill-dock): a
    new note says how many saves there are and opens their list, keeping the
    draft on the way out. */
-it('leads a new note to the list of saves by their count, and keeps the draft', async () => {
+it('keeps the count of saves off a new note (founder: "i also dont like seeing 0 inspirations while im saving sth new")', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   await act(async () => row('Write').click()); await settle();
-  const door = world.container.querySelector<HTMLButtonElement>('button.waka-note-to-list');
-  expect(door?.textContent, 'the notepad does not say how many saves there are').toMatch(/^\d+ inspirations?$/);
-  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'kept on the way out');
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await settle();
-  await act(async () => door!.click()); await settle();
-  expect(open(), 'the door did not open the list of saves').toBe('saves');
-  expect(new URLSearchParams(location.search).get('compose'), 'the notepad is still up').toBeNull();
-  expect(world.container.querySelector('.waka-over-head .waka-over-new')?.textContent?.trim(), 'the draft was not kept').toBe('Continue draft');
+  expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad did not open').toBeTruthy();
+  expect(world.container.querySelector('button.waka-note-to-list'), 'the count door came back').toBeNull();
+  expect(world.container.textContent, 'a count of saves is printed on the new note').not.toMatch(/\d+ inspirations?/);
 });
+
+it('steps a saved note back to its list, then the list home, by its "<"', async () => {
+  world = await mountWorld(FACTS, { initialEntries: ['/?open=saves&note=loaded'], routerTools: <RouterTools/> }); await settle();
+  await act(async () => world.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click()); await settle();
+  expect(open()).toBe('saves');
+  await act(async () => world.container.querySelector<HTMLButtonElement>('button.waka-page-back')!.click()); await settle();
+  expect(location.pathname + location.search).toBe('/');
+});
+
