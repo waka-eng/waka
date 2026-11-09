@@ -223,7 +223,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       KEPT.calls.push({ id: inspirationId, text: input.text });
       return { id: inspirationId, text: input.text };
     },
-    /* The write behind "Keep these words". Its RESULT is discarded by the page
+    /* The write behind "Save". Its RESULT is discarded by the page
        — the new sentence is already in hand — so this only has to resolve.
        What matters is that it is mocked at all: unmocked it would reach the
        network, fail, and the page would put the machine's sentence back, which
@@ -237,7 +237,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
        the row when the request died, which would strand the let-go case
        below: "then let it go" is only offered while the not-true stands. */
     createFeedback: async () => ({ id: "feedback-1" }),
-    /* The writes behind "then let it go" and "Put it back". The page reads
+    /* The writes behind "then let it go" and "Undo". The page reads
        only `status` from the restore's result; the dismissal's result is not
        read at all — what matters is that neither reaches a network that is
        not there. The real law they enact is pinned server-side by
@@ -994,7 +994,7 @@ describe("stepping between memories", () => {
     /* `Delete`, WHERE THIS ASSERTED `Reflect` (2026-10-10). The marker had to
        change because the verb did: the footer's left cell offered `Reflect` on
        a save with no answers, which opened the writing flow the founder
-       folded — it now offers `Read reflection` only when there is an answer to
+       folded — it now offers `Read your note` only when there is an answer to
        read, and this memory has none, so that cell is empty by design.
        `Delete` is the better marker anyway and was the one to reach for first:
        it exists ONLY on the reading footer (the editing footer offers Add a

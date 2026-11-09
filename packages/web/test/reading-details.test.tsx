@@ -19,7 +19,7 @@ beforeEach(()=>{
   api.edit.mockResolvedValue({});api.feedback.mockResolvedValue({});
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.clearAllMocks();});
-it('binds feedback and evidence to the displayed profile, loading inspirations only after source disclosure',async()=>{
+it('binds edits and evidence to the displayed profile, loading notes only after source disclosure, and asks no second question',async()=>{
   api.signal.mockResolvedValue({id:'signal',evidence:[{inspirationId:'source',preview:'Source preview'}]});
   await act(async()=>root.render(<ReadingDetails text="A reading" locale="en-US" actions={actions} onClose={()=>{}}/>));
   expect(api.read).toHaveBeenCalledWith({profile:'agent'},expect.any(AbortSignal));expect(api.signal).not.toHaveBeenCalled();
@@ -27,9 +27,14 @@ it('binds feedback and evidence to the displayed profile, loading inspirations o
   await act(async()=>{disclosure.open=true;disclosure.dispatchEvent(new Event('toggle'));});
   expect(api.signal).toHaveBeenCalledWith('signal',expect.any(AbortSignal),{profile:'agent'});
   await act(async()=>button('Source preview').click());expect(actions.onOpenInspiration).toHaveBeenCalledWith('source');
-  await act(async()=>button(t('en-US','worldReadingFeedback')).click());
-  await act(async()=>button(t('en-US','worldClaimTrue')).click());
-  expect(api.feedback).toHaveBeenCalledWith(expect.objectContaining({profile:'agent',targetId:'entry',targetType:'top_of_mind_entry'}));
+  /* ONE ACT: Edit. No "Give feedback" row of True/Partly/Not true (Law 11:
+     the creature already asks; a page gets one ask). */
+  expect(button('Give feedback')).toBeUndefined();expect(button(t('en-US','worldClaimTrue'))).toBeUndefined();
+  await act(async()=>button('Edit').click());
+  await act(async()=>{const area=host.querySelector('textarea')!;const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!;set.call(area,'A sharper reading');area.dispatchEvent(new Event('input',{bubbles:true}));});
+  await act(async()=>button('Save').click());
+  expect(api.edit).toHaveBeenCalledWith('entry',{body:'A sharper reading'},{profile:'agent'});
+  expect(api.feedback).not.toHaveBeenCalled();
 });
 it('does not attach actions to newer wording and ignores a late response after unmount',async()=>{
   api.read.mockResolvedValue({entries:[{id:'new',body:'New reading',dismissed:false,citedSignals:[]}]});

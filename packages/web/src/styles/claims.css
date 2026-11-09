@@ -7575,3 +7575,9 @@ body:has(.waka-page-back) .waka-over.waka-over--note { padding-top: calc(var(--s
 }
 .chat-page .waka-listening { margin-top: 0; }
 }
+
+@layer chrome {
+/* A principle's removal, asked in place: the question in the row's muted
+   voice, then Cancel and Remove. */
+.jar-principle-ask { color: var(--muted); font-family: var(--waka-face); font-size: var(--t-meta); margin-inline-end: var(--sp-8); }
+}

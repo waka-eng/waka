@@ -293,7 +293,7 @@ it('keeps the selected principle and its route after editing, so Back returns to
   principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'declared',rank:0,locked:true,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[]}];
   vi.mocked(updatePrinciple).mockImplementation(async(_id,text)=>{principleState.rows=[{...principleState.rows[0],statement:text}];return principleState.rows[0];});
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();await navigate('/principles/principle-one');
-  await act(async()=>world.container.querySelector<HTMLButtonElement>('[aria-label="Edit wording"]')!.click());
+  await act(async()=>world.container.querySelector<HTMLButtonElement>('[aria-label="Edit"]')!.click());
   const editor=world.container.querySelector<HTMLTextAreaElement>('[aria-label="This principle in your own words"]')!;
   await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(editor,'Leave unhurried time for thought.');editor.dispatchEvent(new Event('input',{bubbles:true}));});
   await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principles-list--personal button')].find(button=>button.textContent==='Save')!.click());await settle();
@@ -307,13 +307,13 @@ it('shows principle management only after choosing the words to read',async()=>{
   expect(world.container.querySelector('.jar-principle-tools')).toBeNull();
   const words=world.container.querySelector<HTMLButtonElement>('.jar-values-value')!;await act(async()=>words.click());await settle();
   expect(location.pathname).toBe('/principles/principle-one');
-  expect(world.container.querySelector('[aria-label="Edit wording"]')).not.toBeNull();
+  expect(world.container.querySelector('[aria-label="Edit"]')).not.toBeNull();
   await navigate(-1);expect(world.container.querySelector('.jar-principle-tools')).toBeNull();
 });
 it('hides a principle’s expanded evidence when Back closes that principle',async()=>{
   principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'minted',rank:0,locked:false,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[{id:'signal-one',statement:'Make space to think.',examples:[{text:'I left an unhurried morning for thinking.',createdAt:'2026-10-03T12:00:00Z'}]}]}];
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();await navigate('/principles/principle-one');
-  const why=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principles-list--personal button')].find(button=>button.textContent==='Why this fits')!;
+  const why=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principles-list--personal button')].find(button=>button.textContent==='Why?')!;
   await act(async()=>why.click());expect(world.container.querySelector('.jar-principle-evidence')).not.toBeNull();
   await navigate(-1);expect(location.pathname+location.search).toBe('/');
   expect(world.container.textContent).not.toContain('Chat about this');
@@ -389,7 +389,7 @@ it('does not let the returning-visitor greeting replace an explicitly linked ref
 });
 it('records explicit reflection opening immediately, before the world observer debounce', async()=>{
   world=await mountWorld(FACTS,{initialEntries:['/inspirations/older'],routerTools:<RouterTools/>}); await settle();
-  const open=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Read reflection')!;
+  const open=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Read your note')!;
   expect(open).toBeDefined(); await act(async()=>open.click());
   expect(location.search).toContain('reflection=open');
 });
@@ -412,7 +412,7 @@ it('restores an older card, its earlier reflection and date across Back/Forward 
   const date = 1780000000000;
   await navigate(`/?view=field&at=${date}&inspiration=older&reflection=answer-1`);
   expect(world.container.textContent).toContain(detail.text);
-  expect(world.container.querySelector('.jar-reading-heading')?.textContent).toContain('Earlier reading');
+  expect(world.container.querySelector('.jar-reading-heading')?.textContent).toContain('Earlier version');
   /* `[data-reflection-id]`, WHERE THIS READ `.jar-reflection-turns` + `.open`
      (2026-10-10). `ReflectionFlow` kept earlier answers inside a collapsed
      `<details>` and opened it when the address named one; the flow is folded

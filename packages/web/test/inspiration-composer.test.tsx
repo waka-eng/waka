@@ -344,7 +344,7 @@ it('renders exactly one of each corner, never two', async () => {
 
 it('requires confirmation to discard a draft, allows cancel, and blocks discard during a pending save', async () => {
   props.onDiscard=vi.fn().mockResolvedValue(true);
-  props.text='Keep these words'; await mount();
+  props.text='Save'; await mount();
   const button=(label:string)=>[...host.querySelectorAll('button')].find(node=>node.textContent===label)!;
   const more=()=>host.querySelector<HTMLButtonElement>('button[aria-label="More"]')!;
   expect(host.textContent).not.toContain('Discard draft');

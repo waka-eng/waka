@@ -116,7 +116,7 @@ describe("a reason clause speaks the reader's language", () => {
        package. What is asserted here is that every word the WEB chooses is
        Korean. */
     for (const status of [0, 401]) {
-      const sentence = whyFailed(new ApiError({ status, message: 'network unreachable' }), '저장되지 않았어요.', 'ko-KR');
+      const sentence = whyFailed(new ApiError({ status, message: 'network unreachable' }), '저장하지 못했어요.', 'ko-KR');
       expect(englishIn(sentence), `ko-KR, status ${status}: ${sentence}`).toEqual([]);
       expect(/[가-힣]/.test(sentence), sentence).toBe(true);
     }
@@ -124,8 +124,8 @@ describe("a reason clause speaks the reader's language", () => {
        fallback in front of it. */
     expect(englishIn(whyOf(new ApiError({ status: 0, message: 'x' }), 'ko-KR'))).toEqual([]);
     /* English is unchanged — this is a localisation fix, not a rewrite. */
-    expect(whyFailed(new ApiError({ status: 401, message: 'x' }), 'That was not saved.', 'en-US'))
-      .toBe('That was not saved. You are signed out. Sign in and it is still here.');
+    expect(whyFailed(new ApiError({ status: 401, message: 'x' }), 'Couldn’t save that.', 'en-US'))
+      .toBe('Couldn’t save that. You are signed out. Sign in and it is still here.');
   });
 });
 

@@ -719,7 +719,7 @@ it('keeps agent principle detail, curation, and share cards bound to their profi
   expect(location!.pathname).toBe('/principles/first');
   expect(new URLSearchParams(location!.search).get('profile')).toBe('agent-noah');
   expect(world.container.querySelector('.jar-principles-list')?.textContent).toContain('Noah principle first');
-  const edit=world.container.querySelector<HTMLButtonElement>('button[aria-label="Edit wording"]')!;
+  const edit=world.container.querySelector<HTMLButtonElement>('button[aria-label="Edit"]')!;
   await act(async()=>edit.click());
   await act(async()=>{
     const area=world.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="This principle in your own words"]')!;

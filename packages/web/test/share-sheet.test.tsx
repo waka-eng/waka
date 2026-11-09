@@ -92,7 +92,7 @@ it("opens on the one design, unsigned, with the kept words and two icon actions"
   /* No looks, no name switch, no separate wording box. */
   expect(host.querySelector(".jar-share-look"), "one design: no looks row").toBeNull();
   expect(host.querySelector(".jar-share-name"), "always signed: no name switch").toBeNull();
-  expect(button("Edit wording"), "the words are edited in the bubble").toBeUndefined();
+  expect(button("Edit"), "the words are edited in the bubble").toBeUndefined();
   expect(host.querySelector("h2")?.textContent).toBe("Share this note");
 });
 

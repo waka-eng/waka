@@ -48,7 +48,7 @@
  *   measuring the fixture's rewrite of the fixture's own words.
  *
  *   `lib/api` — for the group reads, which have no loader, and for one write:
- *   `updateTopOfMindEntry`, the call behind "Keep these words". Its reason is
+ *   `updateTopOfMindEntry`, the call behind "Save". Its reason is
  *   given at the mock itself, and it is not decoration — left unmocked it
  *   reaches the network, fails, and the page recovers by reloading the board,
  *   which puts the OLD sentence back and turns every rewrite case here into a
@@ -269,7 +269,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     fetchTopOfMindRefresh: async () => ({ status: refreshState.status, runAfter: null,
       requestVersion: "1", completedVersion: refreshState.status === "succeeded" ? "1" : "0",
       result: refreshState.status === "succeeded" ? { kind: "top_of_mind", topOfMindId: "tom-self", version: 3, outcome: refreshState.empty ? "empty" : "changed" } : null }),
-    /* The write behind "Keep these words". Its RESULT is discarded by the
+    /* The write behind "Save". Its RESULT is discarded by the
        page — the new sentence is already in hand — so this only has to
        resolve. What matters is that it is mocked at all: unmocked it would
        reach the network, fail, and the page would answer by reloading the
@@ -417,7 +417,7 @@ async function press(selector: string, name: RegExp): Promise<void> {
 /**
  * REWRITE THE STATEMENT, THE WAY A PERSON DOES.
  *
- * "Say it in my words" is the product's own rewrite verb and it goes through
+ * "Edit" is the product's own rewrite verb and it goes through
  * the whole path: the entry is edited, the board's adopted sentence is
  * dropped, the chrome is recomputed, and the sentence being replaced is
  * carried forward as `prevText`. Driving `posterWords` directly would skip
@@ -435,7 +435,7 @@ async function rewriteTo(next: string): Promise<void> {
   const was = posterText();
   await press(".jar-board-act", /^edit$/i);
   const box = layout.container.querySelector<HTMLTextAreaElement>("textarea.jar-reflect-box");
-  if (!box) throw new Error("the edit box never opened — 'Say it in my words' did nothing");
+  if (!box) throw new Error("the edit box never opened — 'Edit' did nothing");
   const nativeValue = Object.getOwnPropertyDescriptor(
     HTMLTextAreaElement.prototype,
     "value",
@@ -445,7 +445,7 @@ async function rewriteTo(next: string): Promise<void> {
     nativeValue.call(box, next);
     box.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await press(".jar-reflect button", /keep these words/i);
+  await press(".jar-reflect button", /^save$/i);
   await layout.step(10);
 
   expect(posterText(), "the rewrite never reached the poster").toBe(next);
@@ -689,10 +689,10 @@ describe("board acts leave receipts", () => {
     await act(async () => window.dispatchEvent(new Event("focus")));
     await layout.step(12);
     expect(layout.container.textContent).not.toContain(FIRST);
-    expect(layout.container.textContent).toContain("This reading needs another look.");
+    expect(layout.container.textContent).toContain("What this came from has changed.");
     expect(refreshState.requests).toBe(0);
     const reread = [...layout.container.querySelectorAll<HTMLButtonElement>(".jar-board-act")]
-      .find((button) => /^read again$/i.test(button.textContent?.trim() ?? ""));
+      .find((button) => /^write a new one$/i.test(button.textContent?.trim() ?? ""));
     expect(reread).toBeDefined();
     await act(async () => reread!.click());
     expect(refreshState.requests).toBe(1);
@@ -705,7 +705,7 @@ describe("board acts leave receipts", () => {
     expect(posterText()).toBe(FIRST);
     const checks = refreshState.checks;
     refreshState.failCheck = false;
-    await press(".jar-board-act", /check again/i);
+    await press(".jar-board-act", /try again/i);
     expect(refreshState.checks).toBeGreaterThan(checks);
     expect(refreshState.requests).toBe(0);
   });
@@ -715,7 +715,7 @@ describe("board acts leave receipts", () => {
        three cases protect; "refresh" described the mechanism, and the new
        name describes what happens to you. */
     await press(".jar-board-act", /write a new one/i);
-    await press(".jar-board-act", /^read again$/i);
+    await press(".jar-board-act", /^write a new one$/i);
     expect(refreshState.requests).toBe(1);
     expect(posterText()).toBe(FIRST);
     expect(layout.container.textContent).not.toContain("sky was redrawn");
@@ -725,7 +725,7 @@ describe("board acts leave receipts", () => {
     refreshState.body = "We now test assumptions with a small experiment";
     refreshState.status = "succeeded";
     await press(".jar-board-act", /write a new one/i);
-    await press(".jar-board-act", /^read again$/i);
+    await press(".jar-board-act", /^write a new one$/i);
     await layout.step(20);
     expect(posterText()).toBe(refreshState.body);
   });
@@ -733,10 +733,10 @@ describe("board acts leave receipts", () => {
   it("keeps an empty completion visible after the old headline disappears", async () => {
     refreshState.empty = true; refreshState.status = "succeeded";
     await press(".jar-board-act", /write a new one/i);
-    await press(".jar-board-act", /^read again$/i);
+    await press(".jar-board-act", /^write a new one$/i);
     await layout.step(10);
     expect(layout.container.textContent).not.toContain(FIRST);
-    expect(layout.container.textContent).toContain("Nothing new to read yet.");
+    expect(layout.container.textContent).toContain("Nothing new yet.");
   });
   /**
    * goal: the-legible-loop, Phase 2. A gesture on the board says what it
@@ -769,7 +769,7 @@ describe("board acts leave receipts", () => {
     expect(
       row?.parentElement?.textContent,
       "the receipt and the way back must share one breath",
-    ).toContain("Put it back");
+    ).toContain("Undo");
   });
 });
 

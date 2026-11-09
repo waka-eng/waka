@@ -58,10 +58,10 @@ it('keeps a failed edit and requires an explicit choice before replacing newer w
   expect(vi.mocked(correctAttachmentTranscript).mock.calls[1]?.[1]).toEqual({ revision: '2', correction: 'My unsaved wording' });
 });
 it('retains input on a network failure and never automatically resends it', async () => {
-  await mount(); await click('Edit'); await write('Keep these words');
+  await mount(); await click('Edit'); await write('Save');
   vi.mocked(correctAttachmentTranscript).mockRejectedValueOnce(new Error('offline'));
   await click('Save');
-  expect(host.querySelector('textarea')?.value).toBe('Keep these words');
+  expect(host.querySelector('textarea')?.value).toBe('Save');
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t save');
   expect(correctAttachmentTranscript).toHaveBeenCalledOnce();
 });

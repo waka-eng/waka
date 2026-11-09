@@ -174,7 +174,7 @@ describe("the page a stranger sees", () => {
   it("says a reading needs another look in the words the rest of the product uses", async () => {
     await visit();
     expect(host.querySelector(".waka-public-aside")?.textContent).toBe(
-      "This reading needs another look.",
+      "What this came from has changed.",
     );
   });
 

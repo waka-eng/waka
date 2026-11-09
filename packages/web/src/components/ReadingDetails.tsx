@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchTopOfMind, updateTopOfMindEntry, type ApiTopOfMind, type ApiTopOfMindEntry } from '../lib/api/top-of-mind';
 import { fetchSignal, type ApiSignalDetail } from '../lib/api/signals';
-import { createFeedback, type ApiFeedbackValue } from '../lib/api/feedback';
 import { t, type SupportedLocale } from '../lib/locales';
 
 export interface ReadingDetailActions {
@@ -37,8 +36,8 @@ export default function ReadingDetails({ text, locale, actions, onClose, onEditS
   const [board, setBoard] = useState<ApiTopOfMind | null>(null), [entry, setEntry] = useState<ApiTopOfMindEntry | null>(null);
   const [loading, setLoading] = useState(true), [failed, setFailed] = useState(false), [retry, setRetry] = useState(0);
   const [source, setSource] = useState<string | null>(null);
-  const [mode, setMode] = useState<'edit' | 'feedback' | null>(null), [words, setWords] = useState(text);
-  const [busy, setBusy] = useState(false), [saved, setSaved] = useState(false);
+  const [mode, setMode] = useState<'edit' | null>(null), [words, setWords] = useState(text);
+  const [busy, setBusy] = useState(false);
   useEffect(() => { onEditState?.({ dirty: mode === 'edit' && words !== text, busy }); }, [mode, words, text, busy, onEditState]);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -51,16 +50,18 @@ export default function ReadingDetails({ text, locale, actions, onClose, onEditS
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [actions.profileId, text, retry]);
-  const write = async (verdict?: ApiFeedbackValue) => {
-    if (!entry || busy || (!verdict && !words.trim())) return;
+  /* ONE ACT HERE: EDIT. A second answer row ("Give feedback": True,
+     Partly true, Not true) sat under a sentence whose answers the creature
+     already asks for (Law 11: a page gets one ask). */
+  const write = async () => {
+    if (!entry || busy || !words.trim()) return;
     setBusy(true); setFailed(false); const finish = actions.onMutation?.();
     try {
-      if (verdict) await createFeedback({ targetType: 'top_of_mind_entry', targetId: entry.id, profile: actions.profileId, value: verdict });
-      else await updateTopOfMindEntry(entry.id, { body: words.trim() }, { profile: actions.profileId });
+      await updateTopOfMindEntry(entry.id, { body: words.trim() }, { profile: actions.profileId });
       finish?.();
       if (!alive.current) return;
       actions.onUpdated();
-      if (verdict) { setSaved(true); setMode(null); } else onClose();
+      onClose();
     } catch { if (alive.current) setFailed(true); }
     finally { finish?.(); if (alive.current) setBusy(false); }
   };
@@ -78,19 +79,13 @@ export default function ReadingDetails({ text, locale, actions, onClose, onEditS
           onOpen={id => { onClose(); actions.onOpenInspiration(id); }} /> : null}
       </details>) : <p>{t(locale, 'worldReadingNoSources')}</p>}
     </details>
-    <details hidden={mode === 'edit'}><summary>{t(locale, 'worldReadingActions')}</summary>
-      <button disabled={busy} onClick={() => { setMode('edit'); setSaved(false); }}>{t(locale, 'worldEditWording')}</button>
-      <button disabled={busy} onClick={() => { setMode('feedback'); setSaved(false); }}>{t(locale, 'worldReadingFeedback')}</button>
-    </details>
+    {mode !== 'edit' ? <button disabled={busy} onClick={() => setMode('edit')}>{t(locale, 'worldEditWording')}</button> : null}
     {mode === 'edit' ? <div>
       <label>{t(locale, 'worldEditWording')}<textarea autoFocus value={words} maxLength={2000} disabled={busy} onChange={event => setWords(event.currentTarget.value)} /></label>
       <p className="waka-reading-meta">{t(locale, 'worldReadingLockedHint')}</p>
+      <button disabled={busy} onClick={() => { setWords(text); setMode(null); }}>{t(locale, 'worldCancel')}</button>
       <button disabled={busy || !words.trim()} onClick={() => void write()}>{t(locale, 'worldSave')}</button>
-      <button disabled={busy} onClick={() => { setWords(text); setMode(null); }}>{t(locale, 'worldCancelEdit')}</button>
-    </div> : mode === 'feedback' ? <div>{(['true', 'partly', 'not_true'] as const).map(value => <button key={value} disabled={busy} onClick={() => void write(value)}>
-      {t(locale, value === 'true' ? 'worldClaimTrue' : value === 'partly' ? 'worldReadingPartly' : 'worldNotTrue')}
-    </button>)}</div> : null}
-    {saved ? <p role="status">{t(locale, 'worldReadingFeedbackSaved')}</p> : null}
+    </div> : null}
     {failed ? <p role="alert">{t(locale, 'worldReadingDetailsFailed')}</p> : null}
   </div>;
 }

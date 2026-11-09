@@ -86,9 +86,9 @@ try {
     })(document.querySelector(${JSON.stringify(selector)}), ${JSON.stringify(backdropSelector)})`) as Promise<{ size: number; height: number; contrast: number }>;
     page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.goto(origin);
-    await page.getByText('This reading needs another look.', { exact: true }).first().waitFor();
-    assert.equal(await page.getByText('This reading needs another look.', { exact: true }).count(), 1);
-    await page.getByRole('button', { name: 'Read again', exact: true }).waitFor();
+    await page.getByText('What this came from has changed.', { exact: true }).first().waitFor();
+    assert.equal(await page.getByText('What this came from has changed.', { exact: true }).count(), 1);
+    await page.getByRole('button', { name: 'Write a new one', exact: true }).waitFor();
     await page.screenshot({ path: join(output, `personal-${viewport.width}.png`) });
     const recovery = await measureText('.jar-board-act', '.jar');
     console.log('Recovery action', recovery);
@@ -96,15 +96,15 @@ try {
     failCheck = true;
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await page.getByRole('button', { name: 'Check again', exact: true }).waitFor();
-    assert.ok((await page.locator('body').innerText()).includes("Couldn't check this reading."));
+    assert.ok((await page.locator('body').innerText()).includes("Couldn’t load this."));
     await page.screenshot({ path: join(output, `retry-${viewport.width}.png`) });
     failCheck = false;
     await page.getByRole('button', { name: 'Check again', exact: true }).click();
-    await page.getByRole('button', { name: 'Read again', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Write a new one', exact: true }).waitFor();
     assert.equal(generated, 0, 'A status-check retry must not trigger generation');
     await page.getByRole('button', { name: 'principles', exact: true }).click();
     await page.getByText(ownWords, { exact: true }).waitFor();
-    await page.getByText('Your words are kept. Their support is not confirmed.', { exact: true }).waitFor();
+    await page.getByText('Your words are still here. Where they came from isn’t confirmed yet.', { exact: true }).waitFor();
     await page.waitForFunction(() => {
       const element = document.querySelector('.jar-values-value');
       if (!element) return false;

@@ -44,7 +44,7 @@ const settled=()=>world!.container.querySelector('.jar-char-bubble-reading');
 const poster=()=>world!.container.querySelector('h1.jar-poster[data-jar-chrome="1"]');
 const retry=()=>[...world!.container.querySelectorAll<HTMLButtonElement>('.jar-hq-inner--activities .jar-forming button')].find(row=>row.textContent==='Try again')!;
 const expectLoading=()=>{
-  expect(forming()?.textContent).toContain('Loading…');
+  expect(forming()?.textContent).toContain('Thinking…');
   expect(forming()?.getAttribute('role')).toBe('status');
   expect(world!.container.textContent).not.toContain('Nothing to say yet. Keep a few more things.');
   expect(world!.container.textContent).not.toContain('Capture your first inspiration');
@@ -54,7 +54,7 @@ it('keeps Home usable while a delayed reading loads, without claiming it is empt
   world=await mountWorld(facts);expectLoading();expect(reads.requests).toHaveLength(1);expect(reads.requests[0]!.profile).toBe(VIEWER_ID);
   await act(async()=>reads.requests[0]!.resolve(board()));await world.step(2);
   expect(poster()?.textContent).toContain('Leave room for a small experiment.');
-  expect(world.container.textContent).not.toContain('Loading…');expect(refreshTopOfMind).not.toHaveBeenCalled();
+  expect(world.container.textContent).not.toContain('Thinking…');expect(refreshTopOfMind).not.toHaveBeenCalled();
 });
 it('shows the real empty state only after the owned response confirms no reading',async()=>{
   world=await mountWorld(facts);expectLoading();await act(async()=>reads.requests[0]!.resolve(null));
@@ -70,13 +70,13 @@ it('shows the real empty state only after the owned response confirms no reading
      sixty pixels apart, with the bubble overlapping the words, is exactly
      what the founder reported. */
   expect(forming()).toBeNull();
-  expect(world.container.textContent).not.toContain('Loading…');expect(refreshTopOfMind).not.toHaveBeenCalled();
+  expect(world.container.textContent).not.toContain('Thinking…');expect(refreshTopOfMind).not.toHaveBeenCalled();
 });
 it('does not tell someone to capture their first inspiration until both reads confirm the empty state',async()=>{
   facts.inspirations=[];world=await mountWorld(facts);expectLoading();
   await act(async()=>reads.requests[0]!.resolve(null));
   expect(settled()?.textContent).toContain('Nothing kept yet.');
-  expect(world.container.textContent).not.toContain('Loading…');
+  expect(world.container.textContent).not.toContain('Thinking…');
 });
 it('shows a read failure, preserves a Capture draft, and coalesces explicit read-only retries',async()=>{
   world=await mountWorld(facts);
@@ -154,11 +154,11 @@ it('offers an explicit re-read when stale support is hidden and automatic readin
     phase:'waiting',stage:'reading',runAfter:new Date(Date.now()+86400000).toISOString(),result:null,unavailableAttachments:0,canRetry:false});
   world=await mountWorld(facts);
   await act(async()=>reads.requests[0]!.resolve({...board(),entries:[],supportChanged:true}));await world.step(2);
-  expect(world.container.textContent).toContain('This reading needs another look.');
+  expect(world.container.textContent).toContain('What this came from has changed.');
   expect(world.container.textContent).not.toContain('WAKA can start the next reading after');
   expect(world.container.querySelector('.jar-source-status')).toBeNull();
   expect(refreshTopOfMind).not.toHaveBeenCalled();
-  const reread=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].find(row=>row.textContent?.trim()==='Read again');
+  const reread=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].find(row=>row.textContent?.trim()==='Write a new one');
   expect(reread).toBeDefined();
   await act(async()=>reread!.click());expect(refreshTopOfMind).toHaveBeenCalledOnce();
 });
@@ -168,7 +168,7 @@ it.each(['queued','processing','waiting','failed','unknown'] as const)('keeps %s
     currentMaterialRevision:'1',requestedMaterialRevision:'1',latestDerivedRevision:'0',latestCompletedRevision:'0',superseded:false,
     phase,stage:'derivation',runAfter:new Date(Date.now()+86400000).toISOString(),result:null,unavailableAttachments:0,canRetry:false});
   world=await mountWorld(facts);await act(async()=>reads.requests[0]!.resolve({...board(),entries:[],supportChanged:true}));await world.step(2);
-  expect([...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].some(row=>row.textContent?.trim()==='Read again')).toBe(false);
+  expect([...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].some(row=>row.textContent?.trim()==='Write a new one')).toBe(false);
   expect(world.container.querySelector('.jar-source-status')).toBeNull();
   expect(refreshTopOfMind).not.toHaveBeenCalled();
 });

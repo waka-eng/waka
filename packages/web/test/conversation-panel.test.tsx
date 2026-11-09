@@ -574,7 +574,7 @@ it('stops after two failed progress reads, as dev, keeping the reply in flight u
   const send=()=>[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
   expect(send().disabled,'a failed progress read let a second message cross a reply that may be running').toBe(true);
   vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:1}));
-  await click('Check again');await tick(0);
+  await click('Try again');await tick(0);
   expect(host.textContent).not.toContain('Couldn’t get a reply');
   expect(send().disabled,'Send stayed off after the server answered').toBe(false);
 });
@@ -586,7 +586,7 @@ it('treats a 429 reply read as "try later", not gone: retried once, then Check a
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:429,message:'Slow down'}));await mount();await tick(1000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length).toBe(2);
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
-  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
 });
 it.each([400,403])('treats a %i reply read as an error, not gone, and stops after two in a row: Check again, Send off',async(status)=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
@@ -599,7 +599,7 @@ it.each([400,403])('treats a %i reply read as an error, not gone, and stops afte
   await tick(15000);await tick(15000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'a repeated 4xx kept being polled').toBe(calls);
   expect(host.textContent).not.toContain('Trying again');
-  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
   await type('Still there?');
   expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
 });
@@ -612,7 +612,7 @@ it('on a 401 reply read stops asking but says it could not check, with Check aga
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
   expect(host.textContent,'a 401 left the reply silently unconfirmed').toContain('Couldn’t get a reply');
   expect(host.textContent,'it claims to be retrying while it has stopped').not.toContain('Trying again');
-  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
   await type('Still there?');
   expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
 });
@@ -654,13 +654,13 @@ it('keeps Send off and keeps asking while answers are older than the screen, the
   await tick(15000);await tick(15000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'an older state ended the watch').toBeGreaterThan(calls);
   expect(host.textContent).toContain('Thinking…');
-  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
   expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Reload conversation'),'an older state was treated as terminal').toBe(false);
   await type('Still there?');
   const send=()=>[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
   expect(send().disabled,'Send came back while the reply was unconfirmed').toBe(true);
   vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:3}));
-  await click('Check again');await tick(0);
+  await click('Try again');await tick(0);
   expect(host.textContent).not.toContain('Thinking…');
   expect(send().disabled).toBe(false);
 });
@@ -679,7 +679,7 @@ it('stops asking after the old window of older-than-shown answers, says it could
   clockSpy.mockRestore();
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'the older-state wait outlived about a minute (focus reset it)').toBe(calls);
   expect(host.textContent).toContain('Couldn’t get a reply');
-  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Check again')).toBe(true);
+  expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
   await type('Still there?');
   expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
 });

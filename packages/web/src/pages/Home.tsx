@@ -8286,16 +8286,20 @@ const RETRY_READ_LIMIT_MS = 20_000;
                               ) : null : (
                                 <>
                                   {pGoing === pr.id ? (
+                                    /* ASKED IN PLACE: the question, Cancel,
+                                       then the verb (the one destructive
+                                       pattern for what cannot be undone). */
                                     <>
+                                      <span className="jar-principle-ask">{say("worldPrincipleRemoveQuestion")}</span>
+                                      <button type="button" onClick={() => setPGoing(null)}>
+                                        {say("worldCancel")}
+                                      </button>
                                       <button
                                         type="button"
                                         disabled={pBusy}
                                         onClick={() => removePrinciple(pr.id)}
                                       >
                                         {pBusy ? say("worldWithdrawing") : say("worldYesWithdrawIt")}
-                                      </button>
-                                      <button type="button" onClick={() => setPGoing(null)}>
-                                        {say("worldKeepIt")}
                                       </button>
                                     </>
                                   ) : (
@@ -8664,16 +8668,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
                                   }}
                                 >
                                   {say("worldYes")}
-                                </button>
-                                <span aria-hidden="true"> · </span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setGroundAsk(null);
-                                    sayVerdict(ground.id, "partly", undefined, ground.contested, ground.statementRevision);
-                                  }}
-                                >
-                                  {say("worldPartly")}
                                 </button>
                                 <span aria-hidden="true"> · </span>
                                 <button

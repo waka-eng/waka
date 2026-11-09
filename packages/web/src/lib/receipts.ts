@@ -48,13 +48,13 @@ export const RECEIPTS = {
    */
   verdictKept: {
     messageKey: "worldReceiptVerdictKept",
-    text: "This now carries weight in what reaches your top of mind",
+    text: "This now shapes what’s on your mind.",
     enforcedBy: "packages/api/src/lib/top-of-mind-affirmation.test.ts",
   },
   /** not true: dampened in the choosing, never removed */
   verdictNo: {
     messageKey: "worldReceiptVerdictNo",
-    text: "Steps far back in the choosing. Never erased",
+    text: "This will count much less. It isn’t deleted.",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /* `verdictGroup` IS GONE — "Answered — the room reads who stands where",
@@ -65,13 +65,13 @@ export const RECEIPTS = {
   /** Keep this one up */
   pinned: {
     messageKey: "worldReceiptPinned",
-    text: "Held at the front. Rewrites keep it there",
+    text: "Pinned. It stays when WAKA writes a new one.",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /** Not this — rides beside the undo, because reversible is part of the law */
   dismissed: {
     messageKey: "worldReceiptDismissed",
-    text: "Set aside. It will not return to your top of mind",
+    text: "Removed. It won’t come back.",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /** "then let it go" on a pattern of your own — the ground-level law:
@@ -80,19 +80,19 @@ export const RECEIPTS = {
       claim would have been the advisory-button lie. */
   groundRefuses: {
     messageKey: "worldReceiptGroundRefuses",
-    text: "WAKA will also set aside rewordings of this pattern",
+    text: "WAKA won’t bring back rewordings of it either.",
     enforcedBy: "packages/api/src/lib/signal-suppression.db.test.ts",
   },
   /** the star's standing line, already on screen — documented here */
   starHeld: {
     messageKey: "worldReceiptStarHeld",
-    text: "Your own words. WAKA will not rewrite them",
+    text: "Your own words. WAKA won’t change them.",
     enforcedBy: "packages/api/src/lib/signal-lock-contract.db.test.ts",
   },
   /** the release confirm, already on screen — documented here */
   releaseOffer: {
     messageKey: "worldReceiptReleaseOffer",
-    text: "WAKA will be allowed to rewrite this sentence",
+    text: "WAKA can reword this again.",
     enforcedBy: "packages/api/src/lib/signal-lock-contract.db.test.ts",
   },
 } satisfies Record<string, Receipt>;

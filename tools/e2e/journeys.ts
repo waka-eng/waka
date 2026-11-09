@@ -1686,7 +1686,7 @@ const JOURNEYS: Journey[] = [
       let reviewed = 0;
       while (!(await share.isVisible()) && Date.now() < deadline) {
         const review = page.getByRole("button", { name: "Ask me", exact: true });
-        const accept = page.getByRole("button", { name: "True", exact: true });
+        const accept = page.getByRole("button", { name: "Yes", exact: true });
         const leave = page.getByRole("button", { name: "Exit review mode", exact: true });
         if (await review.isVisible()) await review.click();
         else if (await accept.isVisible() && await accept.isEnabled()) {

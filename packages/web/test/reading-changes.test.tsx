@@ -40,7 +40,7 @@ it('compares the displayed reading with its predecessor even when a newer readin
 });
 it('can retry a failed read without replacing it with an invented first-reading state',async()=>{
   vi.mocked(fetchTopOfMindVersions).mockRejectedValueOnce(new Error('Unavailable'));await mount();await click('What changed');
-  expect(document.querySelector('[role="alert"]')!.textContent).toContain('couldn’t be opened');expect(document.body.textContent).not.toContain('This is your first reading');
+  expect(document.querySelector('[role="alert"]')!.textContent).toContain('Couldn’t load the earlier version');expect(document.body.textContent).not.toContain('This is the first one');
   await click('Try again');expect(document.querySelector('[role="alert"]')).toBeNull();expect(document.querySelector('.jar-drift-left')!.textContent).toContain('earlier');
 });
 it('refuses a foreign reading instead of displaying its words',async()=>{
@@ -49,9 +49,9 @@ it('refuses a foreign reading instead of displaying its words',async()=>{
 });
 it('states that wording stayed the same when the actual stored bodies match',async()=>{
   vi.mocked(fetchTopOfMindVersion).mockImplementation(async id=>{const row=readings.find(value=>value.id===id)!;return {...row,entries:row.entries.map(entry=>({...entry,body:'The same kept wording.'}))};});
-  await mount();await click('What changed');expect(document.body.textContent).toContain('The reading stayed the same.');
+  await mount();await click('What changed');expect(document.body.textContent).toContain('didn’t change');
 });
 it('does not call a missing predecessor the first reading when the displayed reading is later',async()=>{
   vi.mocked(fetchTopOfMindVersions).mockResolvedValue([]);await mount();await click('What changed');
-  expect(document.body.textContent).not.toContain('This is your first reading');expect(document.body.textContent).toContain('no longer available');
+  expect(document.body.textContent).not.toContain('This is the first one');expect(document.body.textContent).toContain('isn’t available');
 });

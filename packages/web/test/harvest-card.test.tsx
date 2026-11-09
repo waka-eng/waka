@@ -95,7 +95,7 @@ it('offers at most five reviews total, with agent picks before readings',async()
   await act(async()=>button('Keep it').click());await leaves();
   for(const claim of claims.slice(0,3)){
     expect(statement()).toContain(claim.statement);
-    await act(async()=>button('True').click());await leaves();
+    await act(async()=>button('Yes').click());await leaves();
   }
   expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
 });

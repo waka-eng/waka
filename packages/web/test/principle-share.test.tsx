@@ -46,7 +46,7 @@ it('starts with an exportable preview and keeps editing and customization option
   expect(button('Save image').disabled).toBe(false);
   const words=host.querySelector<HTMLDetailsElement>('.jar-share-word-editor')!,customize=host.querySelector<HTMLDetailsElement>('.jar-share-customize')!;
   expect(words.open).toBe(false);expect(customize.open).toBe(false);
-  expect(words.querySelector('summary')?.textContent).toBe('Edit wording');
+  expect(words.querySelector('summary')?.textContent).toBe('Edit');
   await act(async()=>words.querySelector('summary')!.click());expect(words.open).toBe(true);
   expect(host.textContent).toContain('Edits here change the card only.');
 });
