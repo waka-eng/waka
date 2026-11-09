@@ -312,6 +312,8 @@ const SPEAK_GRACE_MS = 220;
    fetch on a normal connection, so the light and the sentence read as one
    event rather than two. */
 const LIT_MS = 1400;
+/** How long a tapped bubble stays before the creature goes back to what is on your mind. */
+const PROMPT_RETURN_MS = 6000;
 /** How long "Saved" stands above the home bar after a save (design F3). */
 const BAR_SAVED_MS = 1800;
 /** How far the creature is pulled right, in CSS px, before the pull is the walk to Principles. */
@@ -1839,16 +1841,14 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /* GLASSES ON FOR THE SITTING. The creature reads with you while you review
      — see `think` — and takes them off when the cards run out or you step
      out of it. */
-  /* AND ON AT REST WHILE SOMETHING WAITS (2026-11-08). The Actions menu's
-     "Review suggestions" row is gone; founder: when something is reviewable
-     the creature asks, wearing its review glasses, and when nothing is, nothing
-     is shown. So the glasses say "I have something to ask" before a word is
-     said, and a tap brings the bubble that asks (`companionPrompt` 'review').
-     The reading still comes first: pending work never takes its place. */
-  const glassesAtRest = canOfferReview && atWall.kind === 'self';
+  /* ONLY FOR THE SITTING (2026-11-09). For a day they also went on at rest
+     whenever something waited to be reviewed; founder: "this glass mode is
+     only when agent asks u if certain things are still true". So the
+     creature at rest is its plain self, and the review is offered by a tap,
+     like every other bubble (`companionPrompt` 'review'). */
   useEffect(() => {
-    simApiRef.current?.think((reviewing || glassesAtRest) && !mouthOpen);
-  }, [reviewing, glassesAtRest, mouthOpen]);
+    simApiRef.current?.think(reviewing && !mouthOpen);
+  }, [reviewing, mouthOpen]);
   /* A candidate whose card is mid-trip, and those whose keep failed while it
      was: a failure that lands before the card has gone is held until it
      has, so the queue is never rewritten from under a card in flight. */
@@ -2175,6 +2175,28 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     promptChoiceRef.current = { scope: promptScope, kind: 'reading' };
     setPromptChoice(promptChoiceRef.current);
   }, [atNowView, reviewing, promptScope, promptChoice.scope, setCharSay]);
+  /* TOP OF MIND IS THE MAIN BUBBLE (2026-11-09). Founder: "even after
+     message changes after use clicks on it, it should return to top of mind
+     after a few sec". Every tap restarts the wait; a bubble the person is
+     pointing at or has focus in is not taken from them, so the wait starts
+     again instead. */
+  useEffect(() => {
+    if (companionPrompt === 'reading' || !atNowView || reviewing) return;
+    let timer = 0;
+    const arm = () => {
+      timer = window.setTimeout(() => {
+        const held = [...document.querySelectorAll('.jar-char-bubble')]
+          .some(bubble => bubble.matches(':hover') || bubble.contains(document.activeElement));
+        if (held) { arm(); return; }
+        speechEpoch += 1;
+        setCharSay('');
+        promptChoiceRef.current = { scope: promptScope, kind: 'reading' };
+        setPromptChoice(promptChoiceRef.current);
+      }, PROMPT_RETURN_MS);
+    };
+    arm();
+    return () => window.clearTimeout(timer);
+  }, [companionPrompt, promptChoice, atNowView, reviewing, promptScope, setCharSay]);
 
   /** What is being made right now, if anything — the bar becomes that page's own (see the dock). */
   const making: 'inspiration' | 'talk' | null = viewNavigation.view?.compose ? 'inspiration'
