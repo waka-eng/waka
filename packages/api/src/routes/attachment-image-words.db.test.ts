@@ -95,6 +95,9 @@ it('reads the words and keeps the picture under a fix however the model formatte
     /* Image first (code review, 2026-11-08): the description was dropped. */
     'Image: A reel with a caption.\nWords: Start before you are ready.',
     '**Image:** A reel with a caption.\n\n**Words:** "Start before you are ready."',
+    /* Both labels on one line, either order. */
+    'Words: Start before you are ready. Image: A reel with a caption.',
+    'Image: A reel with a caption. Words: Start before you are ready.',
   ]) {
     const f = await fixture({ status: 'ready', text: reading });
     expect(await (await f.app.request(f.path)).json(), reading).toMatchObject({ status: 'ready', text: 'Start before you are ready.' });

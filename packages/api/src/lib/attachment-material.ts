@@ -16,12 +16,14 @@ export const correctedAttachment = sql<boolean>`(${attachments.type} IN ('audio'
    a transcript's fix is the whole transcript. */
 /* AS TOLERANT AS `readImageWords` (code review, 2026-11-08): the labels may
    follow a preamble line, carry markdown (**Words:**, ## Image:), use any
-   case, and come in EITHER ORDER — the Image part is read from its label to
-   the Words label or the end, wherever it stands (a model that wrote
-   "Image: …" first lost its description under a fix). It is re-labelled
-   plainly so every reader sees one shape. */
-const WORDS_MARK = sql.raw(String.raw`'(^|\n)[[:space:]>#*_]*words[[:space:]*_]*:'`);
-const IMAGE_PART = sql.raw(String.raw`'(?:^|\n)[[:space:]>#*_]*image[[:space:]*_]*:[[:space:]*_]*((?:(?!\n[[:space:]>#*_]*words[[:space:]*_]*:).)*)'`);
+   case, and come in EITHER ORDER, on separate lines or on one — the Image
+   part is read from its label to the Words label or the end, wherever it
+   stands (a model that wrote "Image: …" first lost its description under a
+   fix). It is re-labelled plainly so every reader sees one shape. */
+/* A label starts a line, or a sentence on the same line ("Words: … . Image:
+   …"), in either order — the same rule as `readImageWords`. */
+const WORDS_MARK = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:'`);
+const IMAGE_PART = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:[[:space:]*_]*((?:(?!(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:).)*)'`);
 const described = sql<string>`trim(regexp_replace(coalesce((regexp_match(${attachments.enrichmentText}, ${IMAGE_PART}, 'i'))[1], ''), '[[:space:]*_]+$', ''))`;
 const imagePart = sql<string>`CASE
   WHEN ${attachments.enrichmentStatus} <> 'ready' OR nullif(trim(coalesce(${attachments.enrichmentText},'')),'') IS NULL THEN ''

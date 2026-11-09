@@ -286,6 +286,10 @@ describe("readImageWords", () => {
       `  words:   '${words}'  \n  image: A reel.`,
       `*Words*: "${words}"\n*Image*: A reel.`,
       `Image: A reel.\nWords: ${words}`,
+      /* Both labels on ONE line, either order (code review, 2026-11-08). */
+      `Words: ${words} Image: A reel.`,
+      `Image: A reel. Words: ${words}`,
+      `**Words:** "${words}" **Image:** A reel.`,
       `**Image:** A reel.\n\n**Words:** "${words}"`,
     ]) expect(readImageWords(description), description).toBe(words);
     expect(readImageWords("**Words:** none\n**Image:** A beach.")).toBeNull();
@@ -295,6 +299,10 @@ describe("readImageWords", () => {
     expect(readImageWords("Words: none\nImage: A photograph of a beach at dusk.")).toBeNull();
     expect(readImageWords("Words: None.\nImage: A diagram.")).toBeNull();
     expect(readImageWords("Words:\nImage: A diagram.")).toBeNull();
+  });
+
+  it("does not take a label word in the middle of a sentence for a label", () => {
+    expect(readImageWords("A note listing the words: buy milk, call mum.")).toBeUndefined();
   });
 
   /* A description from before the two-part shape cannot say which part is
