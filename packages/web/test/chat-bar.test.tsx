@@ -101,7 +101,11 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     await aNewChat();
     const bar = world!.container.querySelector('footer.chat-composer [data-note-bar="1"]');
     expect(bar, 'the chat does not write into the note bar').toBeTruthy();
-    expect(bar!.querySelector(':scope > .chat-input-label textarea'), 'the words are not across the bar').toBeTruthy();
+    /* ONE PILL (founder, 2026-11-09: "so much wasted space at bottom"): the
+       field sits in the row between the tools and Send, one line at rest. */
+    expect(bar!.querySelector(':scope > .waka-note-bar-row > .waka-note-bar-field > .chat-input-label textarea'), 'the words are not in the pill between the tools and Send').toBeTruthy();
+    const row = [...bar!.querySelector('.waka-note-bar-row')!.children].map(node => node.className);
+    expect(row, 'the pill is not tools, then the words, then Send').toEqual(['waka-note-bar-tools', 'waka-note-bar-field', expect.stringContaining('waka-note-bar-action')]);
     expect(noteBarShape()).toEqual(['Add photo', 'Add file', 'Send']);
     expect(world!.container.querySelectorAll('.chat-page textarea'), 'more than one message field').toHaveLength(1);
     expect(world!.container.querySelector('nav.waka-dock'), 'a dock stands under the chat').toBeNull();

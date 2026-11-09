@@ -4171,7 +4171,10 @@
      `max-width: 544px` both before and after this cut. */
   .jar-inspiration-composer > :not(.jar-note-top) {
     width: 100%;
-    max-width: 34rem;
+    /* A READABLE MEASURE, NOT A NARROW ONE (founder, 2026-11-09: the
+       notepad felt "답답해"): 640px of page on a desktop, the phone's own
+       16px gutter on a phone. */
+    max-width: 40rem;
     margin-inline: auto;
   }
 
@@ -4485,7 +4488,10 @@
      many different buttons that I have no idea what its supposed to do". */
   width: min(650px, 100%);
   height: auto;
-  max-height: 88dvh;
+  /* THE PAGE'S HEIGHT IS THE CAP (founder, 2026-11-09: "so much wasted space
+     at bottom"). 88dvh was a sheet's cap, from before a chat was a page, and
+     it left a band under the bar with nothing in it. */
+  max-height: 100%;
   /* The composer is the bottom edge of this surface, so the shell stops
      reserving air under it. */
   padding-bottom: 0;

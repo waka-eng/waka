@@ -214,6 +214,10 @@ it('releases the microphone when the notepad closes', async () => {
      the words (`saveAsDraft`) and takes the page down. */
   await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-page-back')!.click());
   await settle();
+  /* A note with words asks first (founder, 2026-11-09); Keep as draft is
+     what "<" used to do on its own. */
+  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-note-ask .jar-char-bubble-act')].find(node => node.textContent === 'Keep as draft')!.click());
+  await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad is still open').toBeFalsy();
   expect(live.started, 'the engine is still transcribing into a page nobody is looking at').toBe(false);
 });
@@ -377,4 +381,25 @@ it('dims Say it, and starts nothing, where the notepad could not keep the words'
   expect(sayIt().disabled, 'Say it is offered where the notepad mic is not').toBe(true);
   await act(async () => sayIt().click());
   expect(FakeEngine.all, 'the microphone started anyway').toHaveLength(0);
+});
+
+/* ═══ YOUR VOICE FROM HOME IS A FRESH NOTE (founder, 2026-11-09) ═══════════
+   "the photo is here when im trying to record fresh": the old draft's words
+   were reopened and the dictation was written after them. From home, Your
+   voice starts on a blank page; the draft stays stored (see
+   `inspiration-draft-hook.test.tsx` for it coming back). */
+it('starts Your voice from home on a blank page, not inside the kept draft', async () => {
+  await openNotepad('xdfsdf');
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-page-back')!.click()); await settle();
+  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-note-ask .jar-char-bubble-act')].find(node => node.textContent === 'Keep as draft')!.click());
+  await settle();
+  expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad is still open').toBeFalsy();
+  const voice = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')].find(row => row.getAttribute('aria-label') === 'Keep your voice');
+  expect(voice, 'home offers no Your voice').toBeTruthy();
+  await act(async () => voice!.click()); await settle();
+  expect(world.container.querySelector('.jar-inspiration-composer'), 'Your voice did not open the notepad').toBeTruthy();
+  expect(listening(), 'Your voice did not start listening').toBeTruthy();
+  expect(listening()!.textContent, 'the old draft\'s words came into the fresh note').not.toContain('xdfsdf');
+  await act(async () => done().click()); await settle();
+  expect(field().value, 'the old draft\'s words came into the fresh note').toBe('');
 });

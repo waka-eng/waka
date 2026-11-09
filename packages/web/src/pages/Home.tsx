@@ -5289,6 +5289,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [offeredShare, setDraft, startNewInspiration, storageScope?.profileId]);
 
   const [shareArrived, setShareArrived] = useState(false);
+  /* THE "<" ASKS BEFORE IT LEAVES A NOTE WITH SOMETHING IN IT (founder,
+     2026-11-09): Keep as draft or Discard, in the creature's bubble on the
+     notepad (`LeaveAsk` in `InspirationComposer`). An empty note just leaves. */
+  const [leaveAsking, setLeaveAsking] = useState(false);
+  useEffect(() => { if (!mouthOpen) setLeaveAsking(false); }, [mouthOpen]);
   /* Forgotten by the two ways a note ends — kept, or folded away as a
      draft — and not by the notepad merely being closed, which it also is
      while it is on its way open (and may blink through while the page's
@@ -5330,7 +5335,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
     if (fromSheet && savedNoteOpen) { leaveOpen(); setSheetQuery(fromSheet.query); setStreamOpen(true); return; }
     const close = closeSavedNote.current;
     if (close) { close(); return; }
-    if (making === 'inspiration') { saveAsDraft(); return; }
+    if (making === 'inspiration') {
+      /* A second press on "<" while it asks is "no, I'm staying". */
+      if (leaveAsking) { setLeaveAsking(false); return; }
+      const live = composerDraft.current.current;
+      const something = Boolean(live.text.trim() || live.media.length || live.linkText?.trim() || live.recordingCandidate)
+        || recording.phase !== 'idle' || dictation.listening;
+      if (something && mouthOpen) { setLeaveAsking(true); return; }
+      saveAsDraft(); return;
+    }
     /* A CHAT'S "<" CLOSES IT (founder, 2026-11-08: "< on top left should be
        closing this like how it does for the saving"): to home, unless the
        chat was opened from Past chats, which it closes back to, as the
@@ -5587,8 +5600,25 @@ const RETRY_READ_LIMIT_MS = 20_000;
        Write uses (`startNewInspiration`), and the microphone is NOT started
        later, outside the gesture, where Safari would refuse it. It stands in
        the note bar ready to tap. */
+  /* A FRESH NOTE FROM HOME'S VOICE AND SCREENSHOT (founder, 2026-11-09:
+     "the photo is here when im trying to record fresh"). Each is a new thing
+     to keep, so it starts on a blank page; the draft it would have reopened is
+     set aside in its own row and comes back to Keep a thought once this one
+     is done (`startFresh` / `resumeLatest` in `use-inspiration-draft`). Only
+     from home: with the notepad already open, the press belongs to that note. */
+  const freshNoteFromHome = () => {
+    if (mouthOpen) return;
+    if (composerDraft.startFresh()) draftRef.current = '';
+  };
+  const screenshotIntoNewNote = (files: File[]) => {
+    freshNoteFromHome(); startNewInspiration(); void addInspirationFiles(files);
+  };
+  useEffect(() => {
+    if (!mouthOpen && composerDraft.ready) void composerDraft.resumeLatest();
+  }, [mouthOpen, composerDraft.ready, composerDraft.draft.id, composerDraft.resumeLatest]);
   const sayIntoNewNote = () => {
     setMouthNote('');
+    freshNoteFromHome();
     if (!atNow || inField || inSky || !composerDraft.available) { startNewInspiration(); return; }
     simApiRef.current?.toTop();
     if (mouthOpen) mouthFieldRef.current?.focus(); else openMouth();
@@ -10515,6 +10545,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); }
             }
           }}
+          asking={leaveAsking} onStay={() => setLeaveAsking(false)}
           onClose={() => saveAsDraft()} onSubmit={() => { void keepIt(); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
@@ -11753,7 +11784,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
              mode" (founder, 2026-10-15). Only Chat stands there. */
           save={standingAsAgent ? undefined : {
             onWrite: startNewInspiration,
-            onPhotos: files => { startNewInspiration(); void addInspirationFiles(files); },
+            onPhotos: screenshotIntoNewNote,
             onSay: sayIntoNewNote,
             /* The notepad's own mic is dim while its draft store cannot take
                words (`composerDraft.available`); Say it, which starts that mic,
