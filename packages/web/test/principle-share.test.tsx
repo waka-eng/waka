@@ -191,11 +191,11 @@ it('says what stayed in words, with no count or span, and nothing without a held
   /* The examples are always recent: what moves is `heldSince`. */
   const at=(daysAgo:number)=>({...source,heldSince:new Date(now-daysAgo*day).toISOString(),
     citedSignals:[{id:'s',statement:'x',examples:[{text:'one',createdAt:new Date(now-day).toISOString()},{text:'two',createdAt:new Date(now-day/2).toISOString()}]}]});
-  expect(principleShareProof('en-US',[at(0.5)],now)).toBe('This is what stayed.');
-  expect(principleShareProof('en-US',[at(200)],now)).toBe('This is what stayed.');
-  expect(principleShareProof('en-US',[at(200),{...at(200),id:'other'}],now)).toContain('These are what stayed.');
-  expect(principleShareProof('en-US',[{...at(200),heldSince:null}],now),'no heldSince, no span to claim').toBeUndefined();
-  expect(principleShareProof('ko-KR',[at(0.5)],now)).not.toMatch(/개월|주 동안/);
+  expect(principleShareProof('en-US',[at(0.5)])).toBe('This is what stayed.');
+  expect(principleShareProof('en-US',[at(200)])).toBe('This is what stayed.');
+  expect(principleShareProof('en-US',[at(200),{...at(200),id:'other'}])).toContain('These are what stayed.');
+  expect(principleShareProof('en-US',[{...at(200),heldSince:null}]),'no heldSince, no span to claim').toBeUndefined();
+  expect(principleShareProof('ko-KR',[at(0.5)])).not.toMatch(/개월|주 동안/);
 });
 
 it('retries a failed history read without showing the previous regular-card preview',async()=>{

@@ -11,41 +11,22 @@ import {ShareLooks} from './ShareLooks';
 import {SHARE_NOTICE_KEY,useShareImage} from '../lib/use-share-image';
 
 /**
- * THE PROOF, COMPUTED FROM WHAT IS ACTUALLY ON THE CARD.
+ * THE PROOF, ONLY WHEN SOMETHING STANDS BEHIND IT.
  *
  * The postable fact is not the sentiment, it is that the sentiment was
- * EARNED — so this counts the real saves behind the chosen principles and
- * the span they were kept across. Distinct saves, never the sum of the
- * per-principle counts: two principles standing on the same evidence must
- * not let it be counted twice, because the one number a stranger cannot
- * check is the one the card must not inflate.
- *
- * (THE COUNT AND THE SPAN LEFT THE CARD on 2026-11-08; the guard below
- * still refuses a proof with nothing behind it.)
- *
- * AND THE SPAN WAS TOLD HONESTLY (audit f2afcbe2). It was `max(1,
- * round(months))` from the principle's `heldSince`, so a principle held since
- * this morning printed "6 things I kept over 1 month". It still runs from
- * `heldSince` (the examples the API sends are only the two newest per signal,
- * so their dates cannot say how long anything was kept), but in weeks under
- * two months and months after; under a week there is no span to speak of,
- * and the line says the count alone rather than inventing one.
+ * EARNED. The card used to say so with a count of the real saves behind the
+ * chosen principles and the span they were held across; both left the card on
+ * 2026-11-08 ("states render, numerals never"). What stays is the honesty:
+ * the line appears only when cited saves and a held date are really there.
  */
-export function principleShareProof(locale:SupportedLocale,chosen:ApiPrinciple[],_now:number):string|undefined{
-  const saves=new Set<string>();
-  let earliest=Number.POSITIVE_INFINITY;
-  for(const row of chosen){
-    for(const signal of row.citedSignals)for(const example of signal.examples??[])saves.add(example.createdAt+example.text);
-    /* THE SPAN IS THE PRINCIPLE'S `heldSince`, as on dev (review): the API
-       sends only the two newest examples per signal, so their dates said
-       nothing about how long anything was kept. */
-    const held=row.heldSince?Date.parse(row.heldSince):Number.NaN;
-    if(Number.isFinite(held))earliest=Math.min(earliest,held);
-  }
-  if(!saves.size||!Number.isFinite(earliest))return undefined;
+export function principleShareProof(locale:SupportedLocale,chosen:ApiPrinciple[]):string|undefined{
   /* NO COUNT AND NO SPAN ON THE CARD ("states render, numerals never",
-     2026-11-08): the proof still only appears when real saves and a held
-     date stand behind the principles, and it says what stayed in words. */
+     2026-11-08). What survives is the guard: the proof appears only when real
+     saves and a held date stand behind the chosen principles, and it says
+     what stayed in words. */
+  const backed=chosen.some(row=>row.citedSignals.some(signal=>(signal.examples??[]).length>0));
+  const held=chosen.some(row=>Boolean(row.heldSince)&&Number.isFinite(Date.parse(row.heldSince!)));
+  if(!backed||!held)return undefined;
   return formatMessage(locale,'worldShareProof',{principles:chosen.length});
 }
 
@@ -74,7 +55,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const fresh=(row:ApiPrinciple):PrincipleArtifactDraft=>({id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),appearance:'dark',format:'square',showName:false,mode:'card',beforeStatementId:null,
     entries:[{principleId:row.id,text:row.statement,originalStatement:row.statement}]});
 
-  const proofFor=(chosen:ApiPrinciple[]):string|undefined=>principleShareProof(locale,chosen,Date.now());
+  const proofFor=(chosen:ApiPrinciple[]):string|undefined=>principleShareProof(locale,chosen);
   useEffect(()=>{
     const controller=new AbortController();setLoadFailed(false);
     const timer=window.setTimeout(()=>{controller.abort();setLoadFailed(true);},15000);

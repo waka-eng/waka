@@ -156,8 +156,8 @@
  * blank rectangle — a bug this repo has shipped before — and an unreadable
  * label is worse than a bright one, because a person cannot even tell what it
  * is they are not allowed to press. So the label stays at `--muted` (7:1) and
- * the only filled control on the surface drops its fill instead; see
- * `.chat-send:disabled` at the bottom of the file. What a disabled control
+ * nothing on the surface fills (Send is the shared note bar's quiet word,
+ * dim when disabled, since 2026-11-08). What a disabled control
  * loses here is its hover, and most of them say their state in the label
  * anyway ("Loading earlier messages…", "Sending…").
  */
@@ -1042,7 +1042,6 @@
    the same 80px everywhere, which is its own argument. */
 
 @media (pointer: coarse) {
-  .chat-page .chat-send,
   .chat-page .chat-earlier button {
     min-height: var(--waka-corner);
   }

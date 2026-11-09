@@ -550,8 +550,16 @@ describe("the acts are reachable by a thumb", () => {
     ["claims.css", ".waka-list-row", "opening a conversation, a save or a principle"],
     ["claims.css", ".waka-account-out", "signing out"],
     ["claims.css", ".jar-char-bubble-act", "the way into a conversation"],
-    ["chat.css", ".chat-page .chat-send", "the one act on the chat surface"],
+    /* `.chat-page .chat-send` LEFT THIS LIST on 2026-11-09: Send is the
+       shared note bar's action now, 44px (`--waka-corner`) at every pointer
+       (checked below), so there is no coarse-only growth left to ask for. */
   ];
+
+  it("gives the chat's Send the bar's 44px target at every pointer", () => {
+    const claims = readFileSync(resolve(STYLES, "claims.css"), "utf8");
+    expect(claims).toMatch(/--waka-corner:\s*44px/);
+    expect(claims).toMatch(/\.waka-note-bar \.waka-note-bar-row \.waka-note-bar-action \{[^}]*min-height: var\(--waka-corner\)/);
+  });
 
   for (const [file, selector, what] of ACTS) {
     it(`grows ${selector} to a thumb's target on a coarse pointer`, () => {

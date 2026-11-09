@@ -3253,9 +3253,6 @@
   font-size: var(--t-ui);
   line-height: 1.6;
   color: var(--jar-faint);
-}.jar-prov-room-close {
-  margin: var(--sp-16) 0 0;
-  justify-content: flex-end;
 }
 /* one column on a narrow screen: the chosen memory reads UNDER its own row
    rather than beside it, which is the same object in the only order that
