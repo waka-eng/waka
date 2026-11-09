@@ -139,6 +139,25 @@ async function signIn(
        would not open rather than a world that would not draw. */
     console.log("[first-paint] could not sign in OR sign up — the door itself is shut");
   }
+  /* ONBOARDING IS MANDATORY since #464: a brand-new account lands on
+     /onboarding, not the world, and both cases here are about the world (the
+     second withholds the world's own chunk, which onboarding never loads).
+     Finish it the way `journeys.ts`'s sign-up does, with the one profile
+     write the onboarding page makes, from Playwright's own client (outside
+     the context's routes), then go home. */
+  /* The redirect to /onboarding lands after the first non-login URL. */
+  await page.waitForURL((u) => u.pathname === "/onboarding", { timeout: 8_000 }).catch(() => {});
+  if (new URL(page.url()).pathname === "/onboarding") {
+    const host = new URL(baseUrl).hostname;
+    const cookie = (await ctx.cookies()).filter((c) => c.domain.replace(/^\./, "") === host)
+      .map((c) => `${c.name}=${c.value}`).join("; ");
+    const answer = await ctx.request.patch(`${baseUrl}/api/auth/me/profile`, {
+      data: { name: "First Paint", preferredLocale: "en-US", completeOnboarding: true },
+      headers: { Cookie: cookie, Origin: baseUrl },
+    });
+    if (!answer.ok()) console.log(`[first-paint] could not finish onboarding: ${answer.status()}`);
+    await page.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
+  }
   return page;
 }
 

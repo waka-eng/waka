@@ -248,11 +248,9 @@ async function openSettings(page: Page, base: string): Promise<void> {
      and the journey reported a settings group missing that is right there.
      The click did not throw, which is why this needed a browser to find. */
   if ((await page.locator(".waka-over").count()) > 0) {
-    /* The archive leaves by its "‹ Home" in the top-left. */
-    await page
-      .getByRole("button", { name: "Home", exact: true })
-      .first()
-      .click({ timeout: 8_000 });
+    /* The archive leaves by its header's "<" (the shared SurfaceHeader,
+       named Close: it goes home). */
+    await page.locator(".waka-surface-back[aria-label='Close']").last().click({ timeout: 8_000 });
     await page.waitForTimeout(1_200);
   }
   await page.locator("button.waka-corner--settings").click({ timeout: 10_000 });
@@ -356,11 +354,9 @@ async function countInArchive(page: Page, base: string): Promise<number> {
        about a group that was there at the time. Caught by running it.
        (That journey is gone — see its tombstone — and the group with it;
        the overlay-swallows-the-click defect this guards against is not.) */
-    /* The archive leaves by its "‹ Home" in the top-left. */
-    await page
-      .getByRole("button", { name: "Home", exact: true })
-      .first()
-      .click({ timeout: 8_000 });
+    /* The archive leaves by its header's "<" (the shared SurfaceHeader,
+       named Close: it goes home). */
+    await page.locator(".waka-surface-back[aria-label='Close']").last().click({ timeout: 8_000 });
     await page.waitForTimeout(1_200);
     return read;
   } catch {
@@ -1727,8 +1723,8 @@ const JOURNEYS: Journey[] = [
       while (!(await opener.isVisible()) && Date.now() < deadline) {
         const review = page.getByRole("button", { name: "Ask me", exact: true });
         const accept = page.getByRole("button", { name: "Yes", exact: true });
-        /* The questions leave by the "<" in the top-left now. */
-        const leave = page.locator("button.waka-page-back");
+        /* The questions leave by the shared header's "<" in the top-left. */
+        const leave = page.locator(".waka-surface-strip .waka-surface-back");
         if (await review.isVisible()) await review.click();
         else if (await accept.isVisible() && await accept.isEnabled()) {
           await accept.click(); reviewed += 1;
@@ -1743,7 +1739,7 @@ const JOURNEYS: Journey[] = [
       await page.locator(".jar-thing-share .jar-share-card img").waitFor({ state: "visible", timeout: 15_000 });
       const shared = await page.locator(".jar-share-inline").inputValue();
       if (shared !== reading) return { ok: false, detail: "the share card changed the selected reading" };
-      await page.locator(".jar-thing-share").getByRole("button", { name: "Back", exact: true }).click();
+      await page.locator(".jar-thing-share").getByRole("button", { name: "Close", exact: true }).click();
       await bubble.getByRole("button", { name: "Chat about this", exact: true }).click({ timeout: 8_000 });
       await page.locator('.chat-message[data-role="user"]').waitFor({ state: "visible", timeout: 15_000 });
       const sent = await page.locator('.chat-message[data-role="user"] .chat-bubble').innerText();
