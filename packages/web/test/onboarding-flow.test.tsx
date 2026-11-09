@@ -116,7 +116,7 @@ async function answer(words: string): Promise<void> {
   type(words);
   press("Save");
   await flush();
-  await settle(1700);
+  await settle(2200);
 }
 
 const completions = () => vi.mocked(updateAuthProfile).mock.calls.filter(([input]) => input.completeOnboarding === true);

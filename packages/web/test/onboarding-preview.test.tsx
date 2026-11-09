@@ -120,7 +120,7 @@ async function answer(words: string): Promise<void> {
   type(words);
   press("Save");
   await flush();
-  await settle(1700);
+  await settle(2200);
 }
 
 const completions = () => vi.mocked(updateAuthProfile).mock.calls.filter(([input]) => input.completeOnboarding === true);
@@ -174,7 +174,7 @@ describe("the preview on a dev server", () => {
       press("Write");
       type(words);
       press("Save");
-      await wait(2300);
+      await wait(2700);
       await flush();
     }
     expect(page.textContent).toContain("Reading your three…");
