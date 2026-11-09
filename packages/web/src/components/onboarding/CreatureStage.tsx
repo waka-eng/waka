@@ -26,6 +26,8 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { HOP_MS, hopArc, hopLift } from "../../character/hop";
 import { easeInOut } from "../../lib/num";
 import { Companion } from "../Companion";
+import { rampFromCss, rasterGrain } from "../../canvas/palette";
+import { GRAIN_PX, GRAIN_TILE } from "../../canvas/sprites";
 
 export type CreatureSize = "tiny" | "small" | "medium" | "large";
 
@@ -175,9 +177,26 @@ export function CreatureStage({ children, fading = false }: { children: ReactNod
   }, [claim, follow]);
   useEffect(() => () => stop(), []);
 
+  /* THE FILM, FOR THE BUBBLES. Home's bubble wears the world's grain through
+     `--jar-grain`, which home publishes when its world is built — and this
+     page has no world. So the stage bakes the same tile from the same
+     generator (`rasterGrain` on the ramp's dorm cast, as the world and
+     `Companion` do) and publishes it the same way, for its own subtree. */
+  const scene = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = scene.current;
+    if (!node) return;
+    try {
+      const tile = rasterGrain(rampFromCss(document.documentElement).dorm);
+      if (!tile) return;
+      node.style.setProperty("--jar-grain", `url(${tile.toDataURL()})`);
+      node.style.setProperty("--jar-grain-size", `${GRAIN_PX * GRAIN_TILE}px`);
+    } catch { /* no film is a smoother bubble, not a broken one */ }
+  }, []);
+
   return (
     <StageContext.Provider value={stage}>
-      <div className={`onb-scene${fading ? " onb-scene--out" : ""}`}>
+      <div ref={scene} className={`onb-scene${fading ? " onb-scene--out" : ""}`}>
       {children}
       {claim && spot ? (
         <div className="onb-lead" data-testid="onboarding-creature"

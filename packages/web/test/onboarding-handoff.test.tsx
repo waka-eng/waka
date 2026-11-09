@@ -127,7 +127,7 @@ async function answer(words: string): Promise<void> {
 }
 
 const dots = () => container!.querySelectorAll(".onb-dot--on").length;
-const bubble = () => container!.querySelector(".onb-bubble")?.textContent ?? "";
+const bubble = () => container!.querySelector(".onb-ask-bubble")?.textContent ?? "";
 const ways = () => [...container!.querySelectorAll<HTMLButtonElement>(".onb-choice")];
 const tick = async (ms: number) => { await act(async () => { vi.advanceTimersByTime(ms); }); await flush(); };
 
@@ -189,7 +189,10 @@ describe("the handoff after a save", () => {
     expect(ways().every((way) => way.disabled)).toBe(true);
 
     /* ask */
-    await tick(700);
+    /* Kept is home's bubble, hugging one word: nothing else is in it */
+    expect(container!.querySelector(".onb-ask-bubble")!.classList.contains("jar-char-bubble-body")).toBe(true);
+    expect(container!.querySelector(".onb-ask-bubble .onb-say-soft")).toBeNull();
+    await tick(900);
     expect(bubble()).toContain("Share a conversation you keep thinking about.");
     expect(dots()).toBe(2);
     expect(ways().every((way) => way.disabled)).toBe(true);

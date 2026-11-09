@@ -12,6 +12,7 @@ import { useState } from "react";
 import { t, type SupportedLocale } from "../../lib/locales";
 import type { MessageKey } from "../../lib/i18n";
 import { CreatureSlot } from "./CreatureStage";
+import { SayBubble } from "./SayBubble";
 
 const ORBS: Array<[number, string, string]> = [
   [12, "#f1e9d6", "onb-drift-a 2.4s"],
@@ -66,20 +67,19 @@ export function OnboardingReveal({ locale, reading, behind, busy, error, onTalk,
       <div className="onb-stage onb-reveal">
         <div className="onb-center">
           <div className="onb-group">
-        <section className="onb-read" aria-label={say("onboardingEarlyRead")}>
-          <p className="onb-read-label">{say("onboardingEarlyRead")}</p>
-          <p className="onb-read-body">{reading}</p>
+        <SayBubble say="read" className="onb-read" label={say("onboardingEarlyRead")}>
+          <span className="jar-char-bubble-of">{say("onboardingEarlyRead")}</span>
+          <p className="onb-say-line">{reading}</p>
           {why && behind.length ? (
             <ul className="onb-read-why" aria-label={say("onboardingWhyFrom")}>
               {behind.map((line, at) => <li key={at}>{line}</li>)}
             </ul>
           ) : null}
-          <div className="onb-read-acts">
-            <button type="button" aria-expanded={why} disabled={!behind.length} onClick={() => setWhy((open) => !open)}>{say("onboardingWhy")}</button>
-            <button type="button" disabled={busy} onClick={onTalk}>{say("onboardingTalk")}</button>
-          </div>
-        </section>
-        <span className="onb-tail" aria-hidden="true" />
+          <span className="jar-char-bubble-acts">
+            <button type="button" className="jar-char-bubble-act" aria-expanded={why} disabled={!behind.length} onClick={() => setWhy((open) => !open)}>{say("onboardingWhy")}</button>
+            <button type="button" className="jar-char-bubble-act" disabled={busy} onClick={onTalk}>{say("onboardingTalk")}</button>
+          </span>
+        </SayBubble>
         <div className="onb-tail-gap" />
         <CreatureSlot size="large" />
         <p className="onb-sharpen">{say("onboardingSharpen")}</p>

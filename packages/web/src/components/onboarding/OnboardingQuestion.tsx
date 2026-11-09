@@ -35,6 +35,7 @@ import { whyOf } from "../../lib/why-failed";
 import { ONBOARDING_QUESTIONS } from "../../lib/onboarding-progress";
 import { Dots, Glyph } from "./Creature";
 import { CreatureSlot, useCreatureStage } from "./CreatureStage";
+import { SayBubble } from "./SayBubble";
 
 const QUESTIONS: Array<{ ask: MessageKey; hint: MessageKey }> = [
   { ask: "onboardingAskStuck", hint: "onboardingAskStuckHint" },
@@ -46,7 +47,11 @@ type Mode = "choose" | "write" | "photo" | "voice";
 
 /** The handoff's beats (see `receive`). */
 const RECEIVE_MS = 500;
-const KEPT_MS = 700;
+/* "Kept": the bubble shrinks to the word (`SayBubble`), then holds while the
+   creature's light carries the confirmation. */
+const KEPT_MS = 900;
+/* Under reduced motion there is no shrink to wait for: the word, then on. */
+const STILL_KEPT_MS = 700;
 const ASK_MS = 300;
 /** How long a screen's staged arrival takes, end to end (see `.onb-arrive`). */
 const ARRIVE_MS = 1200;
@@ -134,18 +139,6 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
     uploaded.current = new WeakMap();
   }, [index]);
 
-  /* Measured so the bubble's height can ease between what it says. */
-  const bubbleWords = useRef<HTMLDivElement>(null);
-  const [bubbleHeight, setBubbleHeight] = useState(0);
-  useEffect(() => {
-    const node = bubbleWords.current;
-    /* "Saved" keeps the question's height, so nothing under it moves while
-       it is said; the next question then eases the bubble to its own. */
-    if (!node || handoff === "kept" || typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(() => setBubbleHeight(node.offsetHeight));
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [handoff, index, mode]);
   /* The first time this screen is shown it arrives in stages (the creature
      lands, the bubble grows from its tail, the dots and bar rise last);
      after that, questions follow each other inside it. */
@@ -217,7 +210,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
     later(still ? 0 : RECEIVE_MS, () => {
       if (!still) stage?.acknowledge();
       setHandoff("kept");
-      later(KEPT_MS, () => {
+      later(still ? STILL_KEPT_MS : KEPT_MS, () => {
         const more = index + 1 < ONBOARDING_QUESTIONS;
         setHandoff(more ? "ask" : null);
         onSaved(saved);
@@ -315,7 +308,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
           <div className="onb-ask-dots onb-ask-dots--tight"><Dots count={ONBOARDING_QUESTIONS} on={index + 1} className="onb-dots--center" /></div>
           <div className="onb-photo-head">
             <CreatureSlot size="tiny" />
-            <p className="onb-photo-ask">{say("onboardingPhotoAsk")}</p>
+            <SayBubble say="photo" className="onb-chip"><p className="onb-say-line">{say("onboardingPhotoAsk")}</p></SayBubble>
           </div>
           <div ref={photoRef} className="onb-photo">
             <img src={photo.url} alt="" />
@@ -363,23 +356,23 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
             short phone, a tall one and a desktop window alike. */}
         <div className="onb-center">
           <div className="onb-group">
-            {/* THE BUBBLE GROWS AND SHRINKS TO WHAT IT SAYS, smoothly: its
-                height follows its words (observed), and a change of words
-                cross-fades rather than cutting. */}
-            <div className="onb-bubble" style={bubbleHeight ? { height: bubbleHeight } : undefined}>
-              <div ref={bubbleWords} key={handoff === "kept" ? "kept" : `ask-${index}`}
-                className={`onb-bubble-words${handoff === "kept" ? " onb-bubble-words--kept" : ""}`}>
+            {/* THE BUBBLE IS ANCHORED AT ITS TAIL. It sits in a room of its own
+                above the creature, held to the room's floor, so when it shrinks
+                to "Kept" and grows into the next question it changes size
+                upward and outward from the tail — and the creature, whose
+                place does not depend on it, never moves. */}
+            <div className="onb-ask-room">
+              <SayBubble say={handoff === "kept" ? "kept" : `ask-${index}`} className="onb-ask-bubble">
                 {handoff === "kept" ? (
-                  <p className="onb-bubble-ask" role="status">{say("worldBubbleKept")}</p>
+                  <p className="onb-say-line" role="status">{say("worldBubbleKept")}</p>
                 ) : (
                   <>
-                    <h1 className="onb-bubble-ask">{say(question.ask)}</h1>
-                    <p className="onb-bubble-hint">{say(question.hint)}</p>
+                    <h1 className="onb-say-line">{say(question.ask)}</h1>
+                    <p className="onb-say-soft">{say(question.hint)}</p>
                   </>
                 )}
-              </div>
+              </SayBubble>
             </div>
-            <span className="onb-tail" aria-hidden="true" />
             <div className="onb-tail-gap" />
             <CreatureSlot size="large" />
           </div>

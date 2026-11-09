@@ -19,10 +19,13 @@
   --onb-ink-soft: #a9a398;
   --onb-ink-quiet: #8f8a80;
   --onb-ink-faint: #6f6b63;
-  --onb-bubble: #d8cfbe;
-  --onb-bubble-ink: #1b1a17;
-  --onb-bubble-soft: #5f594e;
-  --onb-bubble-rule: #c4bba9;
+  /* HOME'S BUBBLE READS THE WORLD'S LIGHT AND GROUND (`.jar-char-bubble-body`
+     mixes `--jar-live` toward `--jar-deep`). Those are declared on `.jar`,
+     which this page is not inside, so they are named here as the tokens that
+     hold the same values by construction (`chrome.css`: `--moon-warm` is the
+     creature's light, `--moon-ground` the ground) — an alias, not a copy. */
+  --jar-live: var(--moon-warm);
+  --jar-deep: var(--moon-ground);
   --onb-pill: #1d1f26;
   --onb-white: #ffffff;
   --onb-light: #f3ebd8;
@@ -76,7 +79,7 @@
 /* Specific enough to beat chrome.css's `button[type="submit"]` and
    `button:disabled` in the same layer: Save here is a word, never underlined,
    and dim is its colour rather than an opacity. */
-.onb button,
+.onb button:not(.jar-char-bubble-act),
 .onb button[type="submit"] { font-family: inherit; text-decoration: none; min-height: 0; }
 .onb button:disabled,
 .onb button[type="submit"]:disabled { opacity: 1; }
@@ -275,38 +278,56 @@
   padding: var(--sp-12) 0 calc(var(--sp-12) + 5dvh);
 }
 .onb-group { display: flex; flex-direction: column; align-items: center; width: 100%; }
-/* THE BUBBLE, at the home bubble's and iOS body's size: 17px, 14px under it,
-   300px at most (about three quarters of a phone). */
-.onb-bubble {
-  width: 300px;
-  max-width: 100%;
-  box-sizing: border-box;
-  padding: 0;
-  overflow: hidden;
-  background: var(--onb-bubble);
-  color: var(--onb-bubble-ink);
-  border-radius: 22px;
-  text-align: center;
-  box-shadow: 0 0 40px rgba(216, 207, 190, 0.18);
-  transition: height 300ms ease;
+/* ─── what the creature says: HOME'S bubble (`SayBubble`) ───────────────
+   Fill, grain, halo, radius and tail are `.jar-char-bubble-body`'s. This
+   sheet only places it and sets its words: Jost 400 at body size, a touch of
+   negative tracking, balanced so no word is left alone on a line. */
+.onb-ask-room {
+  position: relative;
+  align-self: stretch;
+  /* Room for a question; a taller one grows upward into the free space. The
+     bubble is held to this room's floor, so changing size never moves the
+     creature below it. */
+  height: 100px;
 }
-.onb-bubble-words {
-  padding: var(--sp-12) var(--sp-18);
+.onb .onb-ask-bubble {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  translate: -50% 0;
+  width: max-content;
+  max-width: min(300px, 100%);
+}
+.onb-say-words {
+  align-self: stretch;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--sp-4);
-  animation: onb-swap 300ms ease both;
+  animation: onb-swap 250ms ease 150ms both;
 }
-.onb-bubble-words--kept { height: 100%; box-sizing: border-box; justify-content: center; }
-.onb-bubble-ask { margin: 0; font-size: 17px; line-height: 1.4; font-weight: 400; }
-.onb-bubble-hint { margin: 0; font-size: 14px; line-height: 1.4; color: var(--onb-bubble-soft); }
-.onb-tail {
-  width: 0;
-  height: 0;
-  border-left: 9px solid transparent;
-  border-right: 9px solid transparent;
-  border-top: 9px solid var(--onb-bubble);
-  flex-shrink: 0;
+.onb .jar-char-bubble-body .onb-say-line {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  text-wrap: pretty;
+  text-wrap: balance;
+}
+/* The bubble's own quieter voice, not form help: the same ink, softened
+   toward the bubble's fill. */
+.onb .jar-char-bubble-body .onb-say-soft {
+  margin: 0;
+  font-family: var(--waka-face);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: color-mix(in srgb, var(--waka-on-light) 66%, var(--bubble-fill));
+  text-wrap: pretty;
+  text-wrap: balance;
 }
 .onb-tail-gap { height: 22px; flex-shrink: 0; }
 .onb-grow { flex: 1 1 auto; min-height: var(--sp-16); }
@@ -394,15 +415,9 @@
 
 /* PHOTO: the image is the hero. */
 .onb-photo-head { display: flex; align-items: center; gap: var(--sp-10); width: 100%; }
-.onb-photo-ask {
-  margin: 0;
-  padding: var(--sp-12) var(--sp-18);
-  background: var(--onb-bubble);
-  color: var(--onb-bubble-ink);
-  border-radius: 16px 16px 16px 4px;
-  font-size: 17px;
-  line-height: 1.4;
-}
+.onb .onb-chip { flex: 0 1 auto; max-width: calc(100% - 50px); }
+/* Its tail points left, at the small creature beside it. */
+.onb .onb-chip::after { left: -4px; bottom: auto; top: 50%; transform: translateY(-50%) rotate(45deg); border-radius: 0 0 0 4px; }
 .onb-photo {
   position: relative;
   width: 100%;
@@ -475,12 +490,9 @@
 /* ARRIVING: the creature lands first (it is the page's one creature and hops
    in on its own), then the bubble grows out of its tail, then the dots and the
    bar rise in. Runs once, when a screen mounts; reduced motion skips it. */
-.onb-arrive .onb-bubble,
-.onb-arrive .onb-tail,
-.onb-arrive .onb-read { animation: onb-grow-in 300ms ease-out 600ms both; transform-origin: 50% 100%; }
+.onb-arrive .jar-char-bubble-body { animation: onb-grow-in 300ms ease-out 600ms both; transform-origin: 50% 100%; }
 .onb-arrive .onb-ask-dots,
 .onb-arrive .onb-bar-zone,
-.onb-arrive .onb-sharpen,
 .onb-arrive > .onb-stage > .onb-go { animation: onb-rise-in 250ms ease-out 900ms both; }
 .onb-arrive .onb-reading-words,
 .onb-arrive .onb-reading-wait { animation: onb-enter 300ms ease-out 500ms both; }
@@ -499,37 +511,9 @@
 }
 
 .onb-reveal { align-items: center; padding: 0 var(--sp-16); }
-.onb-read {
-  width: 100%;
-  max-width: 300px;
-  box-sizing: border-box;
-  padding: var(--sp-12) var(--sp-18) 0;
-  background: var(--onb-bubble);
-  color: var(--onb-bubble-ink);
-  border-radius: 24px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-6);
-  box-shadow: 0 0 40px rgba(216, 207, 190, 0.18);
-}
-.onb-read-label { margin: 0; font-size: var(--t-meta); color: var(--onb-bubble-soft); }
-.onb-read-body { margin: 0; font-size: 17px; line-height: 1.4; }
+.onb .onb-read { max-width: min(320px, 100%); }
 .onb-read-why { margin: var(--sp-4) 0 0; padding: 0; list-style: none; text-align: left; display: flex; flex-direction: column; gap: var(--sp-6); }
-.onb-read-why li { font-size: 14px; line-height: 1.4; color: var(--onb-bubble-ink); padding-left: var(--sp-10); border-left: 2px solid var(--onb-bubble-rule); }
-.onb-read-acts { display: flex; margin: var(--sp-4) calc(-1 * var(--sp-18)) 0; border-top: 1px solid var(--onb-bubble-rule); }
-.onb-read-acts button {
-  flex: 1;
-  min-height: 44px;
-  border: 0;
-  background: none;
-  font-size: var(--t-ui);
-  color: #3d3a34;
-  cursor: pointer;
-}
-.onb-read-acts button + button { border-left: 1px solid var(--onb-bubble-rule); }
-.onb-read-acts button:disabled { color: var(--onb-bubble-soft); cursor: default; }
-.onb-sharpen { margin: var(--sp-18) 0 0; font-size: var(--t-meta); color: var(--onb-ink-quiet); text-align: center; max-width: 260px; }
+.onb-read-why li { font-family: var(--waka-face); font-size: 14px; line-height: 1.4; padding-left: var(--sp-10); border-left: 2px solid color-mix(in srgb, var(--waka-on-light) 18%, var(--bubble-fill)); text-wrap: pretty; }
 .onb-reveal > .onb-go { margin-bottom: var(--sp-36); }
 
 .onb-wait { align-items: center; justify-content: center; gap: var(--sp-16); }
