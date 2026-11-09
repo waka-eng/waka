@@ -90,10 +90,11 @@
 import type { MutableRefObject, RefObject } from "react";
 
 import { bakeBeing, buildPalette, MACHINE_CELLS, type BeingSprites, type Palette } from "./palette";
-import { renderScale } from "./scale";
+import { onViewportSettle, renderScale } from "./scale";
 import { VIGNETTE, mix, rgbCss } from "./sprites";
 import type { Measured } from "./measured";
-import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, FACE_R, GLASS_GLINT, GLASS_MAGNIFY, GLASS_R, GLASS_RIM_ALPHA, GLASS_TINT, GLASS_W, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
+import { ANTICIPATE_MS, ANTICIPATE_SQ, HOP_MS, hopLift } from "../character/hop";
+import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, EYE_SHUT, FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, FACE_R, GAZE_LAT, GLASS_MAGNIFY, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, THINK_EYE_X, THINK_EYE_Y, THINK_SQUINT, bodyPath, drawGlasses, glassLenses } from "../character/raster";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import {
@@ -403,11 +404,8 @@ export const UNWIND_MS = 650;
  * seeing it and answering, which is why nothing about the keep is delayed to
  * pay for them.
  */
-const ANTICIPATE_MS = 130;
-/** The keep's hop: two bounces over this long, the second lower. */
-const HOP_MS = 720;
-/** How far it compresses at the bottom of the gather. Squash, so positive. */
-const ANTICIPATE_SQ = 0.03;
+/* `ANTICIPATE_MS`, `HOP_MS` and `ANTICIPATE_SQ` — the gather and the keep's
+   hop — live in `character/hop.ts`, read here and by onboarding's creature. */
 /** And how long the body takes to come back up out of it, once released. */
 const ANTICIPATE_EASE = 4.6e-4;
 /**
@@ -478,13 +476,11 @@ const MOOD_BOB_FLOOR = 0.4;
  */
 const MOOD_RATE = 0.45;
 const MOOD_BLINK = 0.4;
-/* THINKING (see `think`). The gaze in px, in the same units as the hover's
-   ±2 — up and to one side, held. The blink comes 1.6× less often, and the
-   eyes narrow to this share of their height: weighing, not dozing. */
-const THINK_EYE_X = 1.5;
-const THINK_EYE_Y = -1.9;
+/* THINKING (see `think`). The gaze and the narrowing are anatomy a page can
+   wear too, so they live in `character/raster.ts` (THINK_EYE_X, THINK_EYE_Y,
+   THINK_SQUINT). The blink is behaviour, and only the loop blinks: while
+   thinking it comes 1.6× less often. */
 const THINK_BLINK = 1.6;
-const THINK_SQUINT = 0.74;
 /* The ease the glasses come on with: `thinkNow` covers ~96% of the way in
    0.6s. The glow the wind-up releases when they go on — gentler than a save
    (0.95) or an answer (0.72): settling in, not celebrating. How far above
@@ -2580,7 +2576,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
      */
     const wallSaving = new Map<string, number>();
     /** The aura's reach right now: the eased saving reading, plus the flare. */
-    const auraLit = () => clamp01(companion.savingNow + companion.flare * 0.5);
+    const auraLit = () => clamp01(companion.savingNow + companion.flare * FLARE_REACH);
     /** The same reach without the flare: what the saving says, not the
         beat of light an event just added to it. See `sayLine`. */
     const savingLit = () => clamp01(companion.savingNow);
@@ -4172,9 +4168,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            the ground, and the decay makes the second one lower — a creature
            that is delighted, not one that is bouncing on a spring. */
         const hopT = companion.hopAt > 0 ? clamp01((performance.now() - companion.hopAt) / HOP_MS) : 0;
-        const hop = hopT > 0 && hopT < 1
-          ? -Math.abs(Math.sin(Math.PI * 2 * hopT)) * companion.size * 0.14 * (1 - hopT * 0.45)
-          : 0;
+        const hop = hopLift(hopT, companion.size);
         const cyC = companion.y + bob + companion.lift + hop + companion.asideNow;
         /* THE TRAVELER'S PLACE. The companion is screen-anchored — it is the
            one who travels, so the layout slides under it — and during a
@@ -4272,7 +4266,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            here rather than in a document because the next person to put
            the two screenshots side by side will reach for exactly this
            number. */
-        const auraR = companion.size * lerp(1.25, 2.1, lit) * (1 + companion.flare * 0.25);
+        const auraR = companion.size * lerp(1.25, 2.1, lit) * (1 + companion.flare * FLARE_SPREAD);
         for (let i = 0; i < 4; i++) {
           const ph = t * (0.16 + i * 0.05) + i * 1.9;
           const off = view.reduced ? 0 : companion.size * 0.08;
@@ -4503,50 +4497,28 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            the yaw is a longitude one: it moves them across the face, and it
            foreshortens as it approaches the pole. Independent of the yaw
            term, so a diagonal composes rather than fights. */
-        const lat = clamp(-companion.pitch * PITCH_LOOK + companion.eyeY * 0.06, -0.9, 0.9);
+        const lat = clamp(-companion.pitch * PITCH_LOOK + companion.eyeY * GAZE_LAT, -0.9, 0.9);
         const cosLat = Math.cos(lat);
         const eyY = -bh * 0.06 + Math.sin(lat) * bh * FACE_R + companion.eyeY;
         /* WHERE THE LENSES SIT, worked out before the eyes so their tint can
            go UNDER them. A lens sits where its eye RESTS, not where it looks:
            glasses stay on the face while the eyes move behind them. */
-        const lenses: Array<{ x: number; rx: number; ry: number; alpha: number; ca: number }> = [];
         /* `think` is how far on they are; the lenses come DOWN onto the face
            along `landing` (a small overshoot past the eyes, then settled) and
-           go back UP the same way, fading in as they arrive. */
+           go back UP the same way, fading in as they arrive. The pair itself
+           is `character/raster.ts`'s — the one a page's creature wears. */
         const think = companion.thinkNow;
         const lensY = -bh * 0.06 + Math.sin(lat) * bh * FACE_R - (1 - landing(think)) * bh * GLASS_DROP;
-        const lensFade = clamp01(think * 1.6);
-        if (think > 0.01) {
-          for (const lon of [-EYE_LON, EYE_LON]) {
-            const a = companion.yaw + lon;
-            const ca = Math.cos(a);
-            if (ca <= 0) continue;
-            lenses.push({
-              x: Math.sin(a) * bw * FACE_R * cosLat,
-              rx: companion.size * GLASS_R * Math.max(ca * cosLat, 0.2),
-              ry: companion.size * GLASS_R * Math.max(cosLat, 0.35),
-              alpha: clamp01(ca / Math.sin(0.25)) * lensFade,
-              ca,
-            });
-          }
-          /* the tint first, so the eyes are read THROUGH the lens */
-          if (!formMachine) {
-            ctx!.fillStyle = GLASS_TINT;
-            for (const lens of lenses) {
-              ctx!.globalAlpha = lens.alpha;
-              ctx!.beginPath();
-              ctx!.ellipse(lens.x, lensY, lens.rx, lens.ry, 0, 0, TAU);
-              ctx!.fill();
-            }
-            ctx!.fillStyle = EYE_INK;
-          }
-        }
+        const lenses = think > 0.01 ? glassLenses(companion.size, bw, companion.yaw, cosLat, clamp01(think * 1.6)) : [];
+        const glassCells = formMachine ? { x: bw / MACHINE_CELLS, y: bh / MACHINE_CELLS } : null;
+        /* the tint first, so the eyes are read THROUGH the lens */
+        drawGlasses(ctx!, lenses, lensY, companion.size, "tint", glassCells);
         for (const lon of [-EYE_LON, EYE_LON]) {
           const a = companion.yaw + lon;
           const ca = Math.cos(a);
           if (ca <= 0) continue;
           /* at the edge a blink is a flicker, so it is suppressed there */
-          const eh = (ca < 0.3 ? 1 : Math.max(0.12, 1 - companion.blink)) * lerp(1, THINK_SQUINT, companion.thinkNow);
+          const eh = (ca < 0.3 ? 1 : Math.max(EYE_SHUT, 1 - companion.blink)) * lerp(1, THINK_SQUINT, companion.thinkNow);
           ctx!.globalAlpha = clamp01(ca / Math.sin(0.25));
           const ex = Math.sin(a) * bw * FACE_R * cosLat + companion.eyeX * ca;
           if (formMachine) {
@@ -4600,64 +4572,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           );
           ctx!.fill();
         }
-        /* ═══ BIG SOFT ROUNDS, WHILE REVIEWING ═══════════════════════════
-           Founder, 2026-10-15, choosing from six drawn pairs: "lets do big
-           soft rounds" — after the first, hairline pair was "kinda ugly".
-           Oversized round lenses with a faint blue tint (drawn above, under
-           the eyes), a thick rim in the eyes' ink softened to 85%, a small
-           highlight at each lens's upper left, and a heavier bridge. On the
-           same turning surface the eyes sit on: each lens foreshortens with
-           its eye and fades with it at the edge, and the bridge is drawn only
-           while both are in view. A machine's glasses are made of cells,
-           like everything else it is. */
-        if (lenses.length) {
-          ctx!.strokeStyle = EYE_INK;
-          ctx!.fillStyle = EYE_INK;
-          if (formMachine) {
-            const cx = bw / MACHINE_CELLS;
-            const cy = bh / MACHINE_CELLS;
-            for (const lens of lenses) {
-              ctx!.globalAlpha = lens.alpha;
-              const wC = Math.max(3, Math.round((2 * lens.rx) / cx));
-              const hC = Math.max(3, Math.round((2 * lens.ry) / cy));
-              const left = Math.round((lens.x - (wC * cx) / 2) / cx) * cx;
-              const top = Math.round((lensY - (hC * cy) / 2) / cy) * cy;
-              const t = Math.max(1, Math.min(cx, cy) * 0.5);
-              ctx!.fillRect(left, top, wC * cx, t);
-              ctx!.fillRect(left, top + hC * cy - t, wC * cx, t);
-              ctx!.fillRect(left, top, t, hC * cy);
-              ctx!.fillRect(left + wC * cx - t, top, t, hC * cy);
-            }
-          } else {
-            const w = companion.size * GLASS_W;
-            ctx!.lineCap = "round";
-            for (const lens of lenses) {
-              /* the rim, softened */
-              ctx!.globalAlpha = lens.alpha * GLASS_RIM_ALPHA;
-              ctx!.lineWidth = w;
-              ctx!.beginPath();
-              ctx!.ellipse(lens.x, lensY, lens.rx, lens.ry, 0, 0, TAU);
-              ctx!.stroke();
-              /* the glint: a short arc inside the upper left of the lens */
-              ctx!.strokeStyle = GLASS_GLINT;
-              ctx!.globalAlpha = lens.alpha;
-              ctx!.lineWidth = w * 0.62;
-              ctx!.beginPath();
-              ctx!.ellipse(lens.x, lensY, lens.rx * 0.66, lens.ry * 0.66, 0, Math.PI * 1.08, Math.PI * 1.42);
-              ctx!.stroke();
-              ctx!.strokeStyle = EYE_INK;
-            }
-            if (lenses.length === 2) {
-              const [l, r] = lenses[0]!.x < lenses[1]!.x ? [lenses[0]!, lenses[1]!] : [lenses[1]!, lenses[0]!];
-              ctx!.globalAlpha = Math.min(l.alpha, r.alpha) * GLASS_RIM_ALPHA;
-              ctx!.lineWidth = w * 0.85;
-              ctx!.beginPath();
-              ctx!.moveTo(l.x + l.rx, lensY - l.ry * 0.12);
-              ctx!.quadraticCurveTo((l.x + r.x) / 2, lensY - Math.min(l.ry, r.ry) * 0.5, r.x - r.rx, lensY - r.ry * 0.12);
-              ctx!.stroke();
-            }
-          }
-        }
+        /* ═══ BIG SOFT ROUNDS, WHILE REVIEWING ═══ — the rims, glint and
+           bridge over the eyes. Drawn by `drawGlasses`, which the page's rest
+           pose calls too: one pair of glasses in the product. */
+        drawGlasses(ctx!, lenses, lensY, companion.size, "rims", glassCells);
         ctx!.globalAlpha = 1;
         ctx!.restore();
 
@@ -4985,7 +4903,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         companion.ant = 0;
       }
       if (companion.flare > 0) {
-        companion.flare = Math.max(0, companion.flare - dt / 0.7);
+        companion.flare = Math.max(0, companion.flare - dt / FLARE_SECONDS);
         easing = true;
       }
       if (companion.hopAt > 0) {
@@ -5821,6 +5739,16 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
        the whole of "the page just feels unbalanced to my eyes": the lift was
        computed correctly and then never recomputed. */
     if (measured.charSay.current) ro.observe(measured.charSay.current);
+    /* AND A PINCH, which no element's size reports: `measure` re-reads the
+       render scale, re-sizes the backing store and re-bakes the sprites when
+       the zoom settles on a new step (`canvas/scale.ts`). Layout is unchanged
+       by a zoom, so nothing in the world moves. */
+    /* AND iOS CAN CHANGE THE VISIBLE HEIGHT WITHOUT RESIZING THE ROOT — a
+       toolbar collapsing, the keyboard leaving — and a stale tall `view.h`
+       centres the creature under the bar (founder's phone, 2026-11-05). Both
+       arrive as the visual viewport's `resize`, and both wait for it to
+       settle (`onViewportSettle`), so a pinch does not re-bake mid-gesture. */
+    const offZoom = onViewportSettle(measure);
 
     measure();
     /* `measure` is the first moment `vw` is real, so the horizontal camera can
@@ -6723,6 +6651,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       clock.running = false;
       cancelAnimationFrame(clock.raf);
       ro.disconnect();
+      offZoom();
       root.style.cursor = "";
       root.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("pointermove", onMove);

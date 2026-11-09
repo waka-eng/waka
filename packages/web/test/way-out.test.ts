@@ -473,9 +473,11 @@ describe("every surface has a way out you can see", () => {
     expect(code(home), "the bar's groups no longer hang off the making row, or the return row on a list").toMatch(
       /const barOwner: 'inspiration' \| 'talk' \| 'return' \| null = making \?\? \(listing \? 'return' : null\);/);
 
-    // The page toolbar is reserved for creating/editing; peer destinations
-    // use PrimaryNavigation, whose selected-tab behavior is exercised by Home.
-    expect(code(home)).toContain("!making && !savedNoteOpen && !reviewing");
+    // The page toolbar is reserved for creating/editing. On the home at rest
+    // the home bar stands instead (design E1, `HomeBar`); the lists and
+    // Principles leave by the labelled Back, which is visible on all three.
+    expect(code(home)).toContain("atNowView && !reviewing && !savedNoteOpen");
+    expect(code(home)).toContain("visible={savedNoteOpen || making !== null || listing || principlesOpen}");
     expect(code(home)).toContain("making === 'inspiration' ? [{ id: 'inspiration'");
     expect(code(home)).toContain("making === 'talk' ? [{ id: 'talk'");
 
@@ -494,7 +496,7 @@ describe("every surface has a way out you can see", () => {
       /const close = closeSavedNote\.current;\s*if \(close\) \{ close\(\); return; \}/);
     expect(back, "Back consumes the list origin once").toMatch(
       /const origin = listOrigin\.current;\s*listOrigin\.current = null;/);
-    expect(back).toContain("else openOverHome(null);");
+    expect(back, "Home on a list or Principles goes home, not one history step").toContain("else closePage();");
     expect(code(home)).toMatch(/<PageBack\s+navigationKey=\{viewNavigation.href\} onBack=\{backPage\}/);
 
     /* EVERY ROW IS THE SAME SLOT (2026-10-16): Chat's row was a bare inline

@@ -845,7 +845,7 @@ describe("returning home keeps the reading", () => {
       layout = await mountWorld(FACTS);
       const said = () => layout.container.querySelector('.jar-char-bubble')?.textContent ?? '';
       const reading = said();
-      expect(reading).toContain('This is what’s on your mind right now.');
+      expect(reading).toContain('On your mind lately');
       await act(async () => { vi.advanceTimersByTime(6000); });
       await layout.step(5);
       expect(said()).toBe(reading);

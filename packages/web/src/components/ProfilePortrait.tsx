@@ -6,6 +6,6 @@ import { Companion } from './Companion';
 export function ProfilePortrait({ agentId, size = 24 }: { agentId?: string; size?: number }) {
   const being = useMemo(() => agentId ? agentBeing(agentId) : OWNER_BEING, [agentId]);
   return <span className="waka-profile-portrait" aria-hidden="true">
-    <Companion size={size} being={being} cool={Boolean(agentId)} pixel={Boolean(agentId)} />
+    <Companion size={size} being={being} cool={Boolean(agentId)} pixel={Boolean(agentId)} pressable={false} />
   </span>;
 }

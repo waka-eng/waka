@@ -117,6 +117,9 @@ function revives(file: string, className: string): boolean {
  * what `.waka-rungs` did to all four rungs at once.
  */
 const MUST_TAKE_A_PRESS: ReadonlyArray<readonly [string, string, readonly string[]]> = [
+  /* THE COMPANION ON A PAGE LIGHTS WHEN PRESSED (2026-11): its aura box
+     stays light and takes no press, but the body inside it is a button. */
+  ["claims.css", ".waka-companion", ["waka-companion-press"]],
   [
     "claims.css",
     ".waka-corners",
@@ -254,10 +257,10 @@ describe("nothing visible loses its press", () => {
                gradient lying over whatever the page put there. A press
                target that size, holding nothing, would swallow the sentence
                under it — which is exactly what it does on the chat's
-               opening. Nothing inside it is pressable: it is one `<canvas>`
-               with `role="img"`. On the WORLD the creature is pressable, and
-               that is a real button of its own (`.jar-char-press`) rather
-               than this. */
+               opening. The one thing inside it that takes a press is the
+               body's own button (`.waka-companion-press`, a press lights it,
+               2026-11), revived in `MUST_TAKE_A_PRESS` above; the aura
+               around it still takes none. */
             ".waka-companion",
             /* THE TAG ON A CLAIM SLIP (2026-10-15): one word, `aria-hidden`,
                on the slip's edge while it is dragged or leaving. The press

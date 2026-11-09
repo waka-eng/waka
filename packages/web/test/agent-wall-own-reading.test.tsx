@@ -163,17 +163,17 @@ function twoAgents() {
 it('opens history directly for the standing agent without starting a note or conversation', async () => {
   twoAgents();
   world = await mountWorld(FACTS); await settle();
-  const dock = (label: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock button')]
-    .find(button => button.textContent?.trim() === label)!;
-  const close = async () => { await act(async () => dock('Home').click()); await settle(); };
+  /* Inspirations and Chats are the corner's Actions now (design E1); a list
+     leaves by its labelled Back. */
+  const close = async () => { await closeOverlay(world.container); await settle(); };
   for (const name of ['noah', 'another']) {
     await act(async () => face(name)!.click()); await settle();
-    await act(async () => dock('Inspirations').click()); await settle();
+    await pressDockRow(world.container, 'Inspirations'); await settle();
     const archive = world.container.querySelector('.waka-over[data-jar-surface]')!;
     expect(archive.textContent).toContain(`Only agent-${name} kept this`);
     expect(world.container.querySelector('textarea.jar-composer-text')).toBeNull();
     await close();
-    await act(async () => dock('Chats').click()); await settle();
+    await pressDockRow(world.container, 'Chats'); await settle();
     expect(vi.mocked(listConversations).mock.lastCall?.[0]).toBe(`agent-${name}`);
     expect(createConversation).not.toHaveBeenCalled();
     await close();

@@ -46,6 +46,7 @@ import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { InspirationAttachments } from "./InspirationAttachments";
+import { SavedImageWords } from "./ImageWords";
 import { NOTE_ACTIONS_SLOT, NoteTools } from "./NoteTools";
 import {
   ApiError,
@@ -1675,6 +1676,13 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
             >
               {canReview&&profileId&&loaded?<InspirationRelevanceControl key={open.id} id={open.id} profileId={profileId} locale={locale} onChanged={onRelevanceChanged}/>:null}
               <InspirationAttachments items={open.attachments.filter(item => item.type !== "link")} locale={locale} quiet />
+              {/* "THE WORDS I READ" (design E3/E3′): read off a saved image by
+                  the server after the save, so this page is where they land —
+                  quoted with Fix, or "Which line stuck?" when it could not
+                  read them. The server says who may edit (`canEdit`). */}
+              {open.attachments.filter(item => item.type === "image").map(item => (
+                <SavedImageWords key={item.id} attachmentId={item.id} locale={locale} inline={item.words} />
+              ))}
 
               {/* THE WORDS ARE THE PAGE. No border, no fill, no label — the
                   same blank-page treatment the notepad gives a new one, so a

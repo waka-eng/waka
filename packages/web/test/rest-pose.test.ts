@@ -56,6 +56,9 @@ const ANATOMY = [
   "FACE_R",
   "EYE_R",
   "EYE_INK",
+  /* The blink's floor, which the rest pose's shut eyes share (2026-11,
+     onboarding's reading creature): one number for "a closed eye". */
+  "EYE_SHUT",
   "NUB_LON",
   "NUB_X",
   "NUB_Y",
@@ -63,9 +66,33 @@ const ANATOMY = [
   "NUB_R_LIT",
   "NUB_DIM",
   "NUB_LIT",
+  /* The thinking face and the magnification behind a lens (2026-11,
+     onboarding's questioning creature): the loop wears them on its
+     `thinkNow`, a page on its `thinking` / `glasses`. */
+  "THINK_EYE_X",
+  "THINK_EYE_Y",
+  "THINK_SQUINT",
+  "GLASS_MAGNIFY",
+  "GAZE_LAT",
 ] as const;
 
+/** The pair of glasses itself. Drawn only by `drawGlasses`, so NEITHER the
+    loop nor a page may even name these — naming one is drawing a lens of
+    your own. */
+const GLASSES = ["GLASS_R", "GLASS_W", "GLASS_RIM_ALPHA", "GLASS_TINT", "GLASS_GLINT"] as const;
+/** Their values, which is what a copy would look like. */
+const GLASS_LITERALS = ["0.135", "0.021", "196, 208, 245", "255, 255, 255, 0.75", "1.12", "0.74", "-1.9"] as const;
+const code = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
 describe("the creature is drawn from one anatomy", () => {
+  it("closes its eyes at rest the way the loop's blink does, from the same floor", () => {
+    const raster = readFileSync(RASTER, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const loop = readFileSync(LOOP, "utf8");
+    expect(raster, "the rest pose's shut eye must squash by EYE_SHUT, not a number of its own").toMatch(/shut \? EYE_SHUT : 1/);
+    expect(loop, "the loop's blink must stop at EYE_SHUT, not a literal").toMatch(/Math\.max\(EYE_SHUT, 1 - companion\.blink\)/);
+    expect(loop).not.toMatch(/Math\.max\(0\.12, 1 - companion\.blink\)/);
+  });
+
   it("declares every part of it in raster.ts", () => {
     const raster = readFileSync(RASTER, "utf8");
     const missing = ANATOMY.filter((name) => !new RegExp(`export const ${name}\\b`).test(raster));
@@ -130,5 +157,42 @@ describe("the creature is drawn from one anatomy", () => {
         "running. It draws the creature with every behaviour at zero; a live " +
         "term in it is a second simulation nobody can keep in step.",
     ).toEqual([]);
+  });
+
+  it("wears ONE pair of glasses: the world and the page call the same drawing", () => {
+    const raster = code(readFileSync(RASTER, "utf8"));
+    const loop = code(readFileSync(LOOP, "utf8"));
+    const home = code(readFileSync(HOME, "utf8"));
+    const missing = GLASSES.filter((name) => !new RegExp(`export const ${name}\\b`).test(raster));
+    expect(missing, "the glasses' own numbers live in raster.ts").toEqual([]);
+    expect(raster).toMatch(/export function drawGlasses\(/);
+    expect(raster).toMatch(/export function glassLenses\(/);
+    /* the world draws them through the shared pair, tint and rims */
+    expect(loop, "the loop's glasses must be `drawGlasses`'s").toMatch(/drawGlasses\(ctx!, lenses, lensY, companion\.size, "tint"/);
+    expect(loop).toMatch(/drawGlasses\(ctx!, lenses, lensY, companion\.size, "rims"/);
+    expect(loop).toMatch(/glassLenses\(/);
+    /* and so does the page: `restPose` is `turnedPose` at zero, and
+       `turnedPose` lays the lenses out and draws both layers the same way */
+    const pose = raster.slice(raster.indexOf("export function turnedPose"));
+    expect(pose).toMatch(/glassLenses\(/);
+    expect(pose).toMatch(/drawGlasses\(g, lenses, restY, size, "tint"\)/);
+    expect(pose).toMatch(/drawGlasses\(g, lenses, restY, size, "rims"\)/);
+    expect(pose, "the rest pose must pass its glasses through").toMatch(/turnedPose\([^)]*glasses, thinking\)/);
+    /* nobody else may draw a lens of their own */
+    const named = GLASSES.filter((name) => new RegExp(`\\b${name}\\b`).test(loop) || new RegExp(`\\b${name}\\b`).test(home) || new RegExp(`\\b${name}\\b`).test(pose));
+    expect(named, "only `drawGlasses` / `glassLenses` may read the glasses' numbers").toEqual([]);
+    const copied = GLASS_LITERALS.filter((value) => loop.includes(value) || home.includes(value) || pose.includes(value));
+    expect(copied, "a number of the glasses or the thinking face has been copied in as a literal").toEqual([]);
+  });
+
+  it("makes the world's thinking face on a page from the world's numbers", () => {
+    const raster = code(readFileSync(RASTER, "utf8"));
+    const pose = raster.slice(raster.indexOf("export function turnedPose"));
+    for (const name of ["THINK_EYE_X", "THINK_EYE_Y", "THINK_SQUINT", "GLASS_MAGNIFY", "GAZE_LAT"]) {
+      expect(pose, `the page's thinking face must read ${name}`).toMatch(new RegExp(`\\b${name}\\b`));
+    }
+    const loop = code(readFileSync(LOOP, "utf8"));
+    expect(loop).toMatch(/lerp\(1, THINK_SQUINT, companion\.thinkNow\)/);
+    expect(loop).toMatch(/companion\.eyeY \* GAZE_LAT/);
   });
 });

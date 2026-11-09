@@ -3835,8 +3835,11 @@
     max-height: none;
     display: flex;
     flex-direction: column;
-    padding: calc(var(--sp-24) + env(safe-area-inset-top)) clamp(20px, 6vw, 28px)
-      calc(var(--sp-20) + var(--waka-corner) + var(--sp-24) + env(safe-area-inset-bottom));
+    /* The note bar is the bottom of the page now (design E3), so the page
+       ends 28px off the bottom, as the frames do — no dock to clear. A 16px
+       gutter on a phone. */
+    padding: calc(var(--sp-24) + env(safe-area-inset-top)) clamp(16px, 4vw, 28px)
+      calc(var(--sp-28) + env(safe-area-inset-bottom));
     border: 0;
     border-radius: 0;
     /* ═══ IT STANDS ON THE WORLD'S GROUND LIKE EVERY OTHER PLACE ═══════
@@ -4118,7 +4121,11 @@
      which column each child belongs in is the same outcome with nothing to
      explain, and it survives the next change to what is in this row. */
   .jar-note-when { grid-column: 2; }
-  .jar-note-owner { display: block; white-space: normal; overflow-wrap: anywhere; max-width: min(70vw, 32rem); margin-bottom: 0.4rem; }
+  /* ONE LINE WITH THE DATE. Founder: "saving to Yun Ji Chung is making the
+     top part take up too much space." The name gives way first (ellipsis);
+     the date never wraps. */
+  .jar-note-owner { display: inline-block; vertical-align: bottom; max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jar-note-owner::after { content: '\00a0·\00a0'; }
 
   /* ═══ THE ROW IS THE SAME HEIGHT WITH OR WITHOUT THE VERB ═════════════
      Measured in a browser: a new note's row was the date's own 18px and a

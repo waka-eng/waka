@@ -116,7 +116,7 @@ describe("one accepted set of photos, stated once", () => {
     ).toEqual(sorted(BY_HAND));
   });
 
-  it("knows that exactly four upload paths consult the sniffer", () => {
+  it("knows that exactly five upload paths consult the sniffer", () => {
     /**
      * AND THE HALF THAT IS NOT ABOUT THE PICKER AT ALL.
      *
@@ -160,6 +160,10 @@ describe("one accepted set of photos, stated once", () => {
      *   notepad's and the archive note's "Add file" rows reach the sniffer
      *   through the two calls already counted, by their 'file' door.
      *
+     *   `OnboardingQuestion`'s `pickPhoto` — THE FIFTH, 2026-11: the
+     *   onboarding questions' Photo answer, sniffed before it is shown or
+     *   uploaded, through the same `uploadInspirationMedia` the notepad uses.
+     *
      * THERE IS NO UNCOUNTED PATH LEFT. When this paragraph said there was,
      * it named `SavesOverlay`; `grep -rn "finalizeAttachment" src` now
      * reaches only call sites that appear in this count.
@@ -175,6 +179,6 @@ describe("one accepted set of photos, stated once", () => {
       calls.length,
       "the number of upload paths that sniff the bytes changed. If it went UP, somebody closed " +
         "another path — raise this number and name it. If it went DOWN, a path stopped checking.",
-    ).toBe(4);
+    ).toBe(5);
   });
 });

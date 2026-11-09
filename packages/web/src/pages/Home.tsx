@@ -89,14 +89,16 @@ import { useSettingsWrites } from '../lib/use-settings-writes';
 import { DraftProblem, draftProblem, forkDraftAndClear } from '../lib/draft-problem';
 import { supportedRecordingType, useAudioRecording } from '../lib/use-audio-recording';
 import { ArchiveRecorderFallback, useArchiveClips } from '../lib/archive-recorder';
-import { InspirationComposer } from '../components/InspirationComposer';
+import { InspirationComposer, type ReadWords } from '../components/InspirationComposer';
 import { attachmentLabel } from '../lib/attachment-label';
 import { Menu } from '../components/Menu';
 import { usePageMenu } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
-import { PrimaryNavigation } from '../components/PrimaryNavigation';
+import { HomeBar } from '../components/HomeBar';
+import { HomeStream, streamSignals } from '../components/HomeStream';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
+import { SHARED_KEY, SHARED_MAX_AGE_MS, sharedText, type SharedPayload } from '../components/ShareArrival';
 import { ShareSheet, inspirationShareTarget, type ShareTarget } from '../components/ShareSheet';
 import { type CreatureSpot } from '../components/CrossingCompanion';
 import { prefersStillness } from '../lib/motion';
@@ -125,11 +127,12 @@ import { deriveAgentChrome } from "../space-kinds/agent";
 import { buildPalette, type Palette } from "../canvas/palette";
 import { SavesOverlay } from "../components/SavesOverlay";
 import { DOCK_SLOT } from "../components/NoteTools";
-import { AddMenu } from "../components/AddMenu";
 import { inspectAttachmentFile, FileRefused } from "../lib/api/file-accept";
 import { deleteAccount } from "../lib/api/auth";
 import { canKeep, whyNotKept, type KeepReadiness } from "../lib/keep-ready";
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
+import { useImageWords } from "../lib/use-image-words";
+import { bubbleStayMs } from "../lib/kept-bubble";
 import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
 import { useOpenClaimsLink } from "../lib/open-claims-link";
 import { InspirationReviewCard } from "../components/InspirationReviewCard";
@@ -182,7 +185,7 @@ import {
   type Ball,
   type BornSeed,
 } from "../space/inspiration/orb";
-import { showsDebug } from "../lib/dev-build";
+import { inventedDataAllowed, showsDebug } from "../lib/dev-build";
 import type { AgentBundle } from "../lib/agent-contract";
 /* THE ONLY TWO IMPORTS IN THE PRODUCT THAT REACH INVENTED DATA, and they are
    deliberately on their own lines so that a grep for `lib/fixture` over `src/`
@@ -310,6 +313,8 @@ const SPEAK_GRACE_MS = 220;
    fetch on a normal connection, so the light and the sentence read as one
    event rather than two. */
 const LIT_MS = 1400;
+/** How long "Saved" stands above the home bar after a save (design F3). */
+const BAR_SAVED_MS = 1800;
 /** How far the creature is pulled right, in CSS px, before the pull is the walk to Principles. */
 const CREATURE_PULL = 56;
 
@@ -2680,7 +2685,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     profileId: viewNavigation.view?.wallId ?? storageScope.profileId,
   } : null, [storageScope, viewNavigation.view?.wallId]);
   const listViews = useProfileListViews(conversationScope);
-  const [listTopRequest, setListTopRequest] = useState(0);
   const conversationAgent = agentRoster?.find(profile => profile.id === conversationScope?.profileId);
   const conversationProfile = conversationScope?.profileId === storageScope?.profileId
     ? { name: auth?.profile?.name ?? say('worldWallMe'), type: 'human' as const }
@@ -3976,6 +3980,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
   /* AND THE RESTING LINE IS THE AGENT'S AT NOW, from `wallChromeNow`, for the
      same reason `agentSays` is not `chrome`: `chrome.formingAlt` is written
      an effect late and at the dial's T. */
+  /** How many saves this wall holds, for the notepad's door to them; null
+      while that is not known yet. */
+  const inspirationCount: number | null = standingAsAgent
+    ? standingBundle?.inspirationTotal ?? null
+    : inspirations ? inspirations.length + fieldBeyond : null;
   const agentIsEmpty = standingAsAgent && !agentBundleMissing && !agentSays && !standingBundle?.topOfMind.notes.length &&
     (standingBundle?.inspirationTotal === 0 || (standingBundle?.inspirationTotal === undefined && agentRoster?.find(profile => profile.id === atWall.id)?.hasInspirations === false));
   const restingWord = standingAsAgent
@@ -4426,13 +4435,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
      every tap — see the note on `.jar-panel`. `simApi.place()` survives for
      the sim's own use; nothing in the page asks it where to put a panel. */
 
-  /* the companion's line is a whisper, not a status bar: it goes after 4s —
-     6s for "I'm inspired!", which carries a button worth reaching for */
-  useEffect(() => {
-    if (!charSay || companionPrompt === 'activity') return undefined;
-    const id = window.setTimeout(() => setCharSay(""), charSay === say('worldImInspired') ? 6000 : 4000);
-    return () => window.clearTimeout(id);
-  }, [charSay, companionPrompt]);
+  /* The companion's line is a whisper, not a status bar: it goes after 4s.
+     "Kept" stays longer and waits for a screenshot's words — see
+     `bubbleStayMs` and the effect beside `keptWords`, below. */
 
   /* THE EVIDENCE INDEX HAS NO CHANGE SIGNAL ANY MORE, because it no longer
      changes after load. `provTick` was how React was told the ref had been
@@ -5184,14 +5189,81 @@ const RETRY_READ_LIMIT_MS = 20_000;
       mouthFieldRef.current?.focus();
     } else openMouth();
   }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth, leaveOpen]);
+  /* ═══ A SHARE ARRIVING FROM OUTSIDE ═════════════════════════════════
+     `/share` (the phone's share menu, the bookmarklet) left what was shared
+     in this tab's session. ANY PAGE ON THE WEB can open `/share` with words
+     of its choosing, so it is OFFERED, never taken: the creature says it got
+     it, with a short preview, and asks — "Add a note" puts it in the notepad
+     (after anything already written there, so into the draft this device
+     keeps), "Not this" drops it. Nothing touches the draft before that
+     press, and only Save keeps it. The bookmarklet's small window closes
+     itself once that save lands. */
+  const closeAfterSave = useRef(false);
+  /* (Where the share may be offered: your own wall, not an agent's, and not
+     while home is still opening onto an agent's wall from its address.) */
+  const [offeredShare, setOfferedShare] = useState<{ text: string; link: boolean; preview: string; fromBookmarklet: boolean } | null>(null);
+  useEffect(() => {
+    if (phase !== 'ready' || !memoryScope || !composerDraft.ready) return;
+    /* ONLY ON YOUR OWN WALL. An agent's wall has no save doors, and a note
+       begun there would be kept against the agent; so the share stays in this
+       tab, untouched, until you are back on your own (it still lapses after
+       `SHARED_MAX_AGE_MS`). */
+    if (standingAsAgent || memoryScope.profileId !== storageScope?.profileId) return;
+    let payload: SharedPayload | null = null;
+    try {
+      const raw = sessionStorage.getItem(SHARED_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(SHARED_KEY);
+      payload = JSON.parse(raw) as SharedPayload;
+    } catch { return; }
+    if (!payload || Date.now() - payload.at > SHARED_MAX_AGE_MS) return;
+    const { text, url } = sharedText(payload);
+    if (!text) return;
+    const words = text.split('\n')[0]!.trim();
+    setOfferedShare({ text, link: Boolean(url), preview: words.length > 120 ? `${words.slice(0, 119)}…` : words,
+      fromBookmarklet: payload.via === 'bookmarklet' && Boolean(window.opener) });
+  }, [phase, memoryScope, composerDraft.ready, standingAsAgent, storageScope?.profileId]);
+  /** "Add a note": only now does the share reach the notepad and its draft. */
+  const takeOfferedShare = useCallback(() => {
+    const offer = offeredShare;
+    if (!offer || standingAsAgentRef.current || memoryScopeRef.current?.profileId !== storageScope?.profileId) return;
+    setOfferedShare(null);
+    const before = draftRef.current.trim();
+    const next = before ? `${before}\n\n${offer.text}` : offer.text;
+    draftRef.current = next; setDraft(next);
+    closeAfterSave.current = offer.fromBookmarklet;
+    /* and in the notepad the creature's ask carries on — a note, or That's all */
+    setShareArrived(true);
+    startNewInspiration();
+  }, [offeredShare, setDraft, startNewInspiration, storageScope?.profileId]);
 
+  const [shareArrived, setShareArrived] = useState(false);
+  /* Forgotten by the two ways a note ends — kept, or folded away as a
+     draft — and not by the notepad merely being closed, which it also is
+     while it is on its way open (and may blink through while the page's
+     own address settles). */
+  /* "THE WORDS I READ" IN THE NOTEPAD (design E3). The server reads an
+     image's words only AFTER the save (`enrichment.words`), so a draft's
+     photo has none yet: the words land on the "Kept" bubble (`keptWords`)
+     and on the saved note (`SavedImageWords`), and this answers null for a
+     draft. A dev build may preview the states via the window hook below. */
+  const readWordsFor = (media: readonly InspirationDraftMedia[]): ReadWords | null => {
+    void media;
+    /* DEV ONLY, FOR LOOKING AT THE STATES: with no API behind the seam yet,
+       a dev build lets `window.wakaReadWordsPreview` stand in, so the three
+       states can be seen and reviewed. `inventedDataAllowed()` is false in
+       every production build, so a real notepad never reads it. */
+    if (inventedDataAllowed()) return (window as { wakaReadWordsPreview?: ReadWords }).wakaReadWordsPreview ?? null;
+    return null;
+  };
   /** The way out that keeps the words: the page folds, the draft stays. */
-  const saveAsDraft = useCallback(() => {
+  const saveAsDraft = useCallback((then: () => void = () => viewNavigationRef.current.closeToHome()) => {
     if (preparingInspirationRef.current) {
       composerEpoch.current += 1; uploadController.current?.abort(); preparingInspirationRef.current = false;
       setPreparingInspiration(false); setUploadingMediaId(null);
     }
-    void recording.stop().then(() => { setMouthOpen(false); setMouthNote(''); viewNavigationRef.current.closeToHome(); });
+    setShareArrived(false);
+    void recording.stop().then(() => { setMouthOpen(false); setMouthNote(''); then(); });
   }, [recording.stop]);
 
   const closePage = () => {
@@ -5213,7 +5285,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const origin = listOrigin.current;
     listOrigin.current = null;
     if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id, origin.principleId);
-    else openOverHome(null);
+    /* "HOME" GOES HOME. This stepped back through history, which was right
+       while the bar's Home tab was the way home and wrong now the labelled
+       Back is (design E1): two archive entries in a row landed the press on
+       the earlier archive. */
+    else closePage();
   };
 
   /**
@@ -5317,7 +5393,19 @@ const RETRY_READ_LIMIT_MS = 20_000;
            how the character jumps up and down, but for a few sec, make that
            say 'I'm inspired!' and the CTA should be let's chat about it." The
            bubble's act is the chat about THIS save (see the bubble below). */
-        setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
+        /* ═══ "KEPT", SAID BY THE ONE WHO JUST JUMPED (design E4) ═════════
+           The bubble answers the save with "Kept" and two acts — Talk about
+           it, See all. EXCEPT while it is asking something (a pattern still
+           forming, F3): a save does not talk over a question, so the bar
+           says "Saved" for a moment instead and the question stays. */
+        if (initiated && atWallRef.current.kind === 'self' && tentativeUpRef.current) flashSaved();
+        else {
+          /* Each save is its own "Kept", even when the words are the same. */
+          setKeptSaves(n => n + 1);
+          setCharSay(atWallRef.current.kind === 'self' ? say('worldBubbleKept') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
+        }
+        if (initiated) setShareArrived(false);
+        if (initiated && closeAfterSave.current) { closeAfterSave.current = false; window.setTimeout(() => window.close(), 1700); }
         if(initiated&&memoryScope)setRecentInspiration({owner:`${memoryScope.accountId}:${memoryScope.profileId}`,id:made.id,text:displayText,attachments:detail.attachments});
         viewNavigationRef.current.closeComposer();
       } };
@@ -5421,6 +5509,34 @@ const RETRY_READ_LIMIT_MS = 20_000;
   useEffect(() => {
     if (!mouthOpen && dictation.listening) dictation.stop();
   }, [mouthOpen, dictation.listening, dictation.stop]);
+
+  /* ═══ SAY IT: THE NOTEPAD, ALREADY LISTENING (design E1) ═══════════════
+     The bar's Say it opens the notepad and starts the microphone as soon as
+     that notepad is open — never over the world, so the release above never
+     sees a microphone on with no page to write into. TAP to start,
+     TAP Done to stop — never held: holding is unusable while walking or
+     retelling a conversation. Where the browser cannot transcribe, the
+     recorder takes the same press. */
+  /* THE MICROPHONE STARTS INSIDE THE TAP, OR NOT AT ALL (code review,
+     2026-11-08). WebKit lets speech recognition and getUserMedia start only
+     inside a person's gesture, and its window is short.
+     - The world is already at now (the common case): the notepad opens and
+       the microphone starts right here, synchronously in the tap — both
+       state changes commit together, so the release above sees the notepad
+       open, never a microphone on over the world.
+     - The world must wind back first (the dial in the past, the camera on
+       the ground or in the sky): the notepad opens through the same wait
+       Write uses (`startNewInspiration`), and the microphone is NOT started
+       later, outside the gesture, where Safari would refuse it. It stands in
+       the note bar ready to tap. */
+  const sayIntoNewNote = () => {
+    setMouthNote('');
+    if (!atNow || inField || inSky || !composerDraft.available) { startNewInspiration(); return; }
+    simApiRef.current?.toTop();
+    if (mouthOpen) mouthFieldRef.current?.focus(); else openMouth();
+    if (dictationAvailable()) dictation.start();
+    else if (supportedRecordingType()) startNotepadRecording();
+  };
 
   /* ═══ THE SAVE RULE, SAID ONCE, AND NOW ACTUALLY ONCE ═════════════════
      `lib/keep-ready.ts` was written so this condition exists in one place,
@@ -5550,7 +5666,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
     || (!composerDraft.ready ? say('worldComposerOpening') : '')
     || (uploadingMediaId ? say('worldComposerUploading') : '')
     || (recording.phase === 'idle' && recording.notice ? say(recording.notice) : '')
-    || (preparingInspiration || inspirationSave.busy ? say('worldSaving') : draft.trim() || inputMedia.length ? say('worldDraftWord') : '');
+    /* "Unsaved changes" WENT (2026-11-08). It sat between the tools and
+       Save in the note bar, crowding the row on a 375px phone, and said what
+       Save's own brightness already says (Law 4): full ink means there is
+       something to keep. "Saving…" stays — that one is news. */
+    || (preparingInspiration || inspirationSave.busy ? say('worldSaving') : '');
 
   const keepIt = useCallback(async () => {
     let text = draftRef.current.trim();
@@ -6077,6 +6197,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
    * its visibility on screen around a textarea (founder, 2026-08-25: "have
    * reflect workflow in modal"). Null unless the mouth asked.
    */
+  /* ═══ "SAVED", ABOVE THE BAR, FOR A MOMENT (design F3) ═════════════════
+     A save lands without a page change; the bar says so where the pull to
+     Saves stands, and gives the spot back after `BAR_SAVED_MS`. */
+  const [barSaved, setBarSaved] = useState(false);
+  const barSavedTimer = useRef<number | null>(null);
+  const flashSaved = useCallback(() => {
+    setBarSaved(true);
+    if (barSavedTimer.current !== null) window.clearTimeout(barSavedTimer.current);
+    barSavedTimer.current = window.setTimeout(() => { barSavedTimer.current = null; setBarSaved(false); }, BAR_SAVED_MS);
+  }, []);
+  useEffect(() => () => { if (barSavedTimer.current !== null) window.clearTimeout(barSavedTimer.current); }, []);
   const [recentInspiration,setRecentInspiration]=useState<{owner:string;id:string;text:string;attachments:InspirationDetail['attachments']}|null>(null);
   /**
    * FROM KEEPING A THING TO TALKING ABOUT IT.
@@ -6119,11 +6250,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
     setTalking(true);
     try {
       const conversationId = crypto.randomUUID();
+      /* E5: A CHAT STARTS FROM THE SAVE. A real save's id pins it as what
+         the chat is about, so the chat shows it on top and the reply reads
+         it first; the creature answers with the first question. */
       await createConversation(profileId, conversationId, undefined, undefined, {
         id: crypto.randomUUID(),
         content: kept.text,
         requestReply: true,
-      });
+      }, undefined, kept.id || undefined);
       setRecentInspiration(null);
       navigate(viewHref({ ...EMPTY_VIEW, wallId: profileId === storageScope?.profileId ? null : profileId, conversationId }));
     } catch {
@@ -6136,6 +6270,38 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [navigate, say, memoryScope?.profileId, storageScope?.profileId, talking]);
   const inspirationOwner=memoryScope?`${memoryScope.accountId}:${memoryScope.profileId}`:null;
   const visibleInspiration=recentInspiration?.owner===inspirationOwner?recentInspiration:null;
+  /* ═══ THE WORDS READ OFF WHAT WAS JUST KEPT (design E4, E3/E3′) ════════
+     A screenshot's words are read by the server after the save, so the
+     "Kept" bubble is the first place they can be shown: quoted under
+     "Kept", or the question when it could not read them. Asked only while
+     that bubble is up. */
+  const keptImage = visibleInspiration?.attachments.find(item => item.type === 'image') ?? null;
+  const keptImageId = keptImage?.id ?? null;
+  /* Seeded from the save's own response (`enrichment.words`), so a read
+     that was already settled is not asked for again. */
+  const keptWords = useImageWords(charSay === say('worldBubbleKept') ? keptImageId : null, keptImage?.words).words;
+  /* HOW LONG THE LINE STAYS. Measured from when it began saying it, so a
+     word arriving mid-stay re-plans the time left instead of restarting it.
+     Keyed on the SAVE, not the string (code review, 2026-11-08): a second
+     save while "Kept" stood said the same word, so its stay was measured
+     from the first save and it left early. */
+  const [keptSaves, setKeptSaves] = useState(0);
+  const lineSince = useRef<{ said: string; at: number }>({ said: '', at: 0 });
+  const keptWaiting = Boolean(keptImageId) && (!keptWords || keptWords.status === 'reading');
+  useEffect(() => {
+    if (!charSay || companionPrompt === 'activity') return undefined;
+    const saying = `${charSay}#${keptSaves}`;
+    if (lineSince.current.said !== saying) lineSince.current = { said: saying, at: Date.now() };
+    const kept = charSay === say('worldBubbleKept');
+    const stay = bubbleStayMs({ kept, waitingForWords: kept && keptWaiting, elapsedMs: Date.now() - lineSince.current.at });
+    const id = window.setTimeout(() => { lineSince.current = { said: '', at: 0 }; setCharSay(""); }, stay);
+    return () => window.clearTimeout(id);
+  }, [charSay, companionPrompt, keptWaiting, keptSaves]);
+  /** What a chat about the save opens with: the note, and the words read. */
+  const keptSubject = (kept: { id: string; text: string }) => {
+    const read = keptWords?.status === 'ready' && kept.id === visibleInspiration?.id ? keptWords.text?.trim() : '';
+    return { id: kept.id, text: [kept.text.trim(), read ? `“${read}”` : ''].filter(Boolean).join('\n\n') };
+  };
 
   useEffect(() => {
     setReflectOpen(false);
@@ -7518,6 +7684,180 @@ const RETRY_READ_LIMIT_MS = 20_000;
     catch { setCharSay(say('worldLinkCopyFailed')); }
   };
 
+  /* ═══ "WHY?" — THE SAVES BEHIND A READ (design F2, from #463) ═════════
+     Read through each cited signal's own `inspirationIds` (`citations` is
+     keyed the other way, a save → the signals citing it), in the order the
+     signals are cited, at most three (the bubble holds three rows without
+     scrolling, as drawn), each said by the save's own preview. */
+  /* WHICH SAVES, before whether they are loaded: the first three cited, in
+     the order the signals cite them. */
+  const whyIds = (entry: Entry | null): string[] => {
+    const ids: string[] = [];
+    for (const cited of entry?.citedSignals ?? []) {
+      for (const id of signals?.find(row => row.id === cited.id)?.inspirationIds ?? []) {
+        if (!ids.includes(id)) ids.push(id);
+        if (ids.length >= 3) return ids;
+      }
+    }
+    return ids;
+  };
+  /* A CITED SAVE OUTSIDE THE LOADED WINDOW IS READ, NOT DROPPED (code
+     review, 2026-11-08): the field loads the newest saves, and a read can
+     rest on an older one. Its words are fetched once and kept here. */
+  const [whyFetched, setWhyFetched] = useState<ReadonlyMap<string, string>>(new Map());
+  const whyFor = (entry: Entry | null): Array<{ id: string; preview: string }> => whyIds(entry)
+    .map(id => ({ id, preview: inspirations?.find(row => row.id === id)?.preview ?? whyFetched.get(id) ?? '' }))
+    .filter(row => row.preview);
+  const whyMissing = whyIds(lead && !standingAsAgent ? lead : null)
+    .filter(id => !inspirations?.some(row => row.id === id) && !whyFetched.has(id)).join(',');
+  /* EACH ONCE (code review, 2026-11-08). Keyed on the missing set alone, the
+     first answer to land changed that set, the effect's cleanup abandoned
+     the reads still in flight, and the next run asked for them again — a
+     refetch storm. The ids already asked for are remembered instead, and
+     nothing in flight is abandoned. */
+  const whyAsked = useRef(new Set<string>());
+  useEffect(() => {
+    if (!whyMissing || offline || !inspirations) return;
+    for (const id of whyMissing.split(',')) {
+      if (whyAsked.current.has(id)) continue;
+      whyAsked.current.add(id);
+      void loadInspiration(id, memoryProfileId ?? undefined)
+        .then(detail => { setWhyFetched(known => new Map(known).set(id, detail.preview || detail.text)); })
+        .catch(() => undefined);
+    }
+  }, [whyMissing, offline, Boolean(inspirations), memoryProfileId]);
+  /* ═══ A PATTERN STILL FORMING, ASKED IN THE BUBBLE (design F3) ════════
+     Only before there is a read — with one, the read is what the bubble is
+     for — and never on an agent's wall, whose patterns are the agent's. */
+  const tentativeClaim = !standingAsAgent && !lead ? claimQueue.find(claim => claim.status === 'emerging') ?? null : null;
+  const tentativeUpRef = useRef(false);
+  /* Read when a save lands — which is while the notepad is still up, so it
+     asks whether the bubble WILL be asking when home comes back, not
+     whether home is on screen this instant. */
+  tentativeUpRef.current = Boolean(tentativeClaim) && !reviewing;
+  const [answering, setAnswering] = useState(false);
+  const [answerFailed, setAnswerFailed] = useState(false);
+  /* Yes / Not really: the same verdict the review sends, then the claim
+     leaves the queue — no page, no sheet. A failure keeps it and says so. */
+  const answerTentative = async (claim: ApiClaim, value: 'true' | 'not_true') => {
+    if (answering) return;
+    setAnswering(true); setAnswerFailed(false);
+    try {
+      const sent = sayVerdict(claim.id, value, undefined, claim.contested, claim.statementRevision);
+      const ok = sent ? await sent : false;
+      if (ok) setClaimQueue(queue => queue.filter(row => row.id !== claim.id));
+      else setAnswerFailed(true);
+    } catch { setAnswerFailed(true); }
+    finally { setAnswering(false); }
+  };
+  /* ═══ SAVES → PATTERNS → PRINCIPLES (design F4) ══════════════════════════
+     Pulled up over the home; it goes down again whenever home is left.
+     Principles are read for it once per profile, the same GET their own
+     page makes. */
+  const [streamOpen, setStreamOpen] = useState(false);
+  const streamShown = streamOpen && phase === 'ready' && atNowView && !reviewing && !mouthOpen && atWall.kind === 'self';
+  useEffect(() => { if (!atNowView || reviewing) setStreamOpen(false); }, [atNowView, reviewing]);
+  useEffect(() => {
+    if (!streamShown || principlesRead || offline || !memoryProfileId) return;
+    let live = true;
+    void fetchPrinciples({ profile: memoryProfileId }).then(rows => { if (live) acceptPrinciples(rows); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [streamShown, principlesRead, offline, memoryProfileId, acceptPrinciples]);
+  /* ═══ THE NOTE BAR'S PARTS (design E3, Writing, PhotoNote) ═══════════════
+     They stood in the dock's middle group; the notepad draws them now, in a
+     slim row UNDER its words so the words get the whole width — mic on the
+     left, Save on the right. TAP the mic to start and TAP "Done" to stop:
+     never held (holding is unusable while walking or retelling a talk). The
+     state line rides between them. */
+  const noteBarMic = (<>
+                {dictationAvailable() ? (
+                  dictation.listening ? (
+                    /* ═══ STOP IS WHERE THE MICROPHONE WAS (audit f2afcbe2) ══
+                       This was a wide word, "Stop", and the bar is centred:
+                       the wider button and the disclosure line beside it
+                       re-laid the whole bar, so Stop landed ~110px left of
+                       where the microphone had been (675 → 561 at 1440) and
+                       a second press on the same spot hit ＋. Now the SAME
+                       button stays in the SAME slot at the SAME size, lit
+                       and breathing while it listens (`--live`), and the
+                       press that started it is the press that ends it. */
+                    <button type="button" className="waka-dock-tool waka-dock-tool--live"
+                      aria-pressed="true"
+                      onClick={() => dictation.stop()}>{say('worldComposerDictateStop')}</button>
+                  ) : (
+                    <button type="button" className="waka-dock-tool"
+                      aria-label={say('worldComposerDictate')}
+                      disabled={!composerDraft.available}
+                      /* THE PRESS CLEARS THE ANSWER TO THE LAST ACT, which
+                         is what every other act on this page does —
+                         typing, opening the notepad and saving all call
+                         `setMouthNote('')`. It matters more here than
+                         anywhere else: the line it clears would otherwise
+                         outrank the cloud disclosure (see `composerState`),
+                         so a stale complaint about a file was enough to
+                         open the microphone with nothing said about where
+                         the audio goes. Nothing true is lost — the marked
+                         file is still marked on screen, and the next press
+                         of Save says so again. */
+                      onClick={() => { setMouthNote(''); dictation.start(); }}><HomeActionIcon kind="record"/></button>
+                  )
+                ) : supportedRecordingType() ? (
+                  recording.phase === 'idle' ? (
+                    <button type="button" className="waka-dock-tool"
+                      aria-label={say(inputMedia.some(m => m.type === 'audio') ? 'worldComposerRecordAgain' : 'worldComposerRecord')}
+                      disabled={!composerDraft.available || notepadRecordBlocked}
+                      onClick={startNotepadRecording}><HomeActionIcon kind="record"/></button>
+                  ) : (
+                    /* STOP KEEPS IT, CANCEL THROWS IT AWAY — both, because a
+                       recording you can start and stop but not discard is
+                       worse than one you cannot start. Stop stands in the
+                       microphone's own slot for the reason dictation's does
+                       (above); the clock — words, because a red dot cannot
+                       say how long you have been talking — rides in the
+                       state line. CANCEL IS ITS OWN ITEM BESIDE STOP, as on
+                       dev (review): inside the state line it was ellipsized
+                       with it and its press clipped to ~17px on a phone. */
+                    <>
+                      <button type="button" className="waka-dock-tool waka-dock-tool--live"
+                        disabled={recording.phase === 'finishing'}
+                        onClick={() => void recording.stop()}>{say('worldComposerDictateStop')}</button>
+                      <button type="button" className="waka-dock-item waka-dock-cancel"
+                        disabled={recording.phase === 'finishing'}
+                        onClick={() => void recording.cancel()}>{say('worldComposerCancelRecording')}</button>
+                    </>
+                  )
+                ) : null}
+  </>);
+  /* SAVE IS A WORD, AND IT NEVER FILLS (founder, 2026-11-05): full ink when
+     there is something to keep, dim when there is not. It says why it cannot
+     be pressed, as the chat's Send does. */
+  const noteBarSave = (
+    <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save"
+      aria-label={say('worldSaveInspiration')}
+      title={whyNotKeeping ? say(whyNotKeeping) : undefined}
+      disabled={!composerCanKeep}
+      onClick={() => { void keepIt(); }}>{say('worldSave')}</button>
+  );
+  const noteBarState = (<>
+                {dictation.listening || recording.phase !== 'idle' ? (
+                  /* THE CLOCK IS NOT A LIVE REGION (review): inside
+                     `role="status"` a screen reader re-announced it every
+                     second. The disclosure and a one-word "Recording" are
+                     the live part; the clock is for eyes and is hidden. */
+                  <span className="waka-dock-state">
+                    {/* Shown for eyes; said by `LiveWord`, which mounts empty
+                        and fills a beat later so the words are announced. */}
+                    {composerState ? <span aria-hidden="true">{composerState}</span> : null}
+                    {/* ONE "Recording" AT A TIME (review): the composer foot says it
+                        while the mouth is closed (`!mouthOpen`), so the bar says it
+                        only while the mouth is open — never both regions at once. */}
+                    <LiveWord text={composerState || (recording.phase !== 'idle' && mouthOpen ? say('worldComposerRecordingNow') : '')} />
+                    {recording.phase !== 'idle' ? <span aria-hidden="true">{clockWords(recording.seconds)}</span> : null}
+                  </span>
+                ) : inspirationSave.phase !== 'idle' ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : composerState ? (
+                  <span className="waka-dock-state" role="status">{composerState}</span>
+                ) : null}
+  </>);
   const backgroundHidden = Boolean(viewNavigation.view?.open || viewNavigation.view?.conversationId || viewNavigation.view?.sharePrinciple || viewNavigation.view?.compose || walkingHome);
   return (
     <div
@@ -9272,7 +9612,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               about itself. */}
           {/* Review is offered only when selected by an avatar tap. Pending
               work never takes the reading's place on arrival. */}
-          {!mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'review' ? (
+          {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'review' ? (
             <div className="jar-char-bubble jar-char-bubble--review" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">
@@ -9329,7 +9669,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               }}
             />
           ) : null}
-          {!mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
+          {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
             <>
               {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over
                   there and being offered "Feeling inspired? Save one.":
@@ -9534,8 +9874,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                          empty state both knew; only the sentence did not. */
                       lead && !standingAsAgent ? (
                         <>
-                          <span className="jar-char-bubble-of">{say('worldBubbleActMine')}</span>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
+                            label={say('worldBubbleOnYourMind')}
+                            why={whyFor(lead)} onSeeAll={() => setStreamOpen(true)}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true),
                               onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
@@ -9600,7 +9941,26 @@ const RETRY_READ_LIMIT_MS = 20_000;
                            is the notepad. The offer ("Feeling inspired?
                            Save it.") and this line are the two that name
                            it, and they go to the same place. */
-                        <>
+                        tentativeClaim ? (
+                          /* ═══ "I MIGHT BE NOTICING" (design F3, from #463) ═══
+                             No read yet, but a pattern is forming. The bubble
+                             says it tentatively and the only acts are the
+                             answer — Law 11: under a statement about you, the
+                             controls answer it. Recorded through the same
+                             `sayVerdict` the review uses; the card leaves the
+                             queue with no page change. */
+                          <>
+                            <span className="jar-char-bubble-of">{say('worldBubbleTentative')}</span>
+                            <span className="jar-char-bubble-reading">{tentativeClaim.statement}</span>
+                            <span className="jar-char-bubble-acts">
+                              <button type="button" className="jar-char-bubble-act" disabled={answering}
+                                onClick={() => { void answerTentative(tentativeClaim, 'true'); }}>{say('worldBubbleYes')}</button>
+                              <button type="button" className="jar-char-bubble-act" disabled={answering}
+                                onClick={() => { void answerTentative(tentativeClaim, 'not_true'); }}>{say('worldBubbleNotReally')}</button>
+                            </span>
+                            {answerFailed ? <span className="jar-char-bubble-of" role="alert">{say('worldReviewAnswerFailed')}</span> : null}
+                          </>
+                        ) : <>
                           <span className="jar-char-bubble-reading">{restingWord}</span>
                           {/* NEVER ON THE AGENT. Founder, 2026-10-15: "you
                               cannot add inspiration for the agent mode. only
@@ -9626,7 +9986,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               ) : null}
             </>
           ) : null}
-          {!mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'principles' ? (
+          {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'principles' ? (
             <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">{say('worldCompanionPrinciplesPrompt')}</span>
@@ -9636,7 +9996,19 @@ const RETRY_READ_LIMIT_MS = 20_000;
               </span>
             </div>
           ) : null}
-          {!mouthOpen && !turning && companionLine ? (
+          {offeredShare && !standingAsAgent && memoryScope?.profileId === storageScope?.profileId && !mouthOpen && !turning ? (
+            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
+              <span className="jar-char-bubble-body">
+                <span className="jar-char-bubble-reading" role="status">{say(offeredShare.link ? 'worldShareArrived' : 'worldShareArrivedText')}</span>
+                <span className="jar-char-bubble-of">“{offeredShare.preview}”</span>
+                <span className="jar-char-bubble-acts">
+                  <button type="button" className="jar-char-bubble-act" onClick={takeOfferedShare}>{say('worldShareAddNote')}</button>
+                  <button type="button" className="jar-char-bubble-act" onClick={() => setOfferedShare(null)}>{say('worldShareNotThis')}</button>
+                </span>
+              </span>
+            </div>
+          ) : null}
+          {!(offeredShare && !standingAsAgent) && !mouthOpen && !turning && companionLine ? (
             /* THE SAME WHITE AS THE TOP OF MIND. This bubble wore a lighter
                fill (`--aside`) to step back from the reading; founder,
                2026-10-15: "make all ... the speech bubbles be the same color
@@ -9664,7 +10036,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     speech bubbles should have an action at the end." This
                     is the bubble that reports what has been happening, and
                     it led into a chat on a press nothing advertised. */}
-                <span className="jar-char-bubble-reading" role="status">{companionLine}</span>
+                {charSay === say('worldBubbleKept') && keptWords && keptWords.status !== 'unknown' ? <>
+                  <span className="jar-char-bubble-of">{say('worldBubbleKept')}</span>
+                  <span className="jar-char-bubble-reading" role="status">{keptWords.status === 'ready' && keptWords.text ? `“${keptWords.text}”`
+                    : keptWords.status === 'reading' ? say('worldReadWordsReading') : say('worldNoteAskUnreadable')}</span>
+                </> : <span className="jar-char-bubble-reading" role="status">{companionLine}</span>}
                 {/* ═══ CHAT WHEN THERE IS SOMETHING, SAVE WHEN THERE IS NOT ══
                     Founder, of "Quiet lately — Let's talk about it":
                     "determine when it's appropriate to say 'lets chat about
@@ -9682,16 +10058,26 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 {/* AFTER A SAVE, THE CHAT IS ABOUT WHAT WAS SAVED — not about
                     the words "I'm inspired!". A keep with no words (a file and
                     nothing else) has nothing to talk about yet, so no act. */}
-                {charSay === say('worldImInspired') ? (
-                  visibleInspiration?.text.trim() ? (
-                    <span className="jar-char-bubble-acts">
+                {charSay === say('worldBubbleKept') ? (
+                  /* E4: Talk about it opens a chat with this save on top
+                     (E5); See all pulls up the saves. A keep with no words
+                     has nothing to talk about yet, so it offers See all. */
+                  <span className="jar-char-bubble-acts">
+                    {visibleInspiration && (keptWords?.status === 'unreadable' || keptWords?.status === 'retrying' || keptWords?.status === 'failed') ? (
+                      /* "Which line stuck?" is answered on the saved note,
+                         where the line becomes its words (a Fix). */
                       <button type="button" className="jar-char-bubble-act"
-                        disabled={talking}
-                        onClick={() => { void talkAbout(visibleInspiration); }}>
-                        {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
+                        onClick={() => { setCharSay(''); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: visibleInspiration.id }); }}>
+                        {say('worldReadWordsTypeLine')}
                       </button>
-                    </span>
-                  ) : null
+                    ) : visibleInspiration && keptSubject(visibleInspiration).text ? <button type="button" className="jar-char-bubble-act"
+                      disabled={talking}
+                      onClick={() => { void talkAbout(keptSubject(visibleInspiration)); }}>
+                      {say(talking ? 'worldTalkOpening' : 'worldBubbleTalkAboutIt')}
+                    </button> : null}
+                    <button type="button" className="jar-char-bubble-act"
+                      onClick={() => { setCharSay(''); setStreamOpen(true); }}>{say('worldBubbleSeeAll')}</button>
+                  </span>
                 ) : sayIsAboutNothing(charSay) ? (
                   standingAsAgent ? null : (
                     <span className="jar-char-bubble-acts">
@@ -10043,6 +10429,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
           save={inspirationSave} recording={recording} inputRef={mouthFieldRef}
           onText={(text, caret) => { mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
           onFiles={files => { void addInspirationFiles(files); }}
+          onDocuments={files => { void addInspirationFiles(files, 'file'); }}
+          noteBar={{ mic: noteBarMic, save: noteBarSave, state: noteBarState }}
+          /* SEAM (design E3): what the server read off the large photo. The
+             reading API is being built separately; until it lands nothing
+             answers, so the quote is not drawn. Wire it here — keyed by the
+             hero attachment's id — and `InspirationComposer` does the rest. */
+          readWords={readWordsFor(inputMedia)}
+          arrival={shareArrived}
           onRetryFile={id => { void retryDraftFile(id); }}
           onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
@@ -10068,7 +10462,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); }
             }
           }}
-          onClose={saveAsDraft} onSubmit={() => { void keepIt(); }}
+          onClose={() => saveAsDraft()} onSubmit={() => { void keepIt(); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
             sayProblem: sayMouthProblem }); }}
@@ -11249,23 +11643,59 @@ const RETRY_READ_LIMIT_MS = 20_000;
           surface that made this rule: "this should be its own page, so bottom
           navigation always visible." A conversation is a page like the rest
           of them now, so it keeps the bar like the rest of them. */}
-      {phase === 'ready' && (listing || making) && !viewNavigation.view?.sharePrinciple ? <PageBack
-        navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making === 'talk' || (listing && Boolean(listOrigin.current))}
-        belowCorners={listing && !savedNoteOpen}
-        label={say(savedNoteOpen ? 'worldBackToAll' : making === 'talk' ? 'worldAllChats' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
-      {phase === 'ready' && !viewNavigation.view?.sharePrinciple && !making && !savedNoteOpen && !reviewing ? (
-        <PrimaryNavigation locale={locale}
-          onReselect={() => setListTopRequest(value => value + 1)}
-          current={atNowView ? 'home' : viewNavigation.view?.open === 'saves' ? 'inspirations' : viewNavigation.view?.open === 'conversations' ? 'chats' : null}
-          onNavigate={destination => {
-            listOrigin.current = null;
-            commitOpenNote();
-            if (destination === 'home') closePage();
-            else openOverHome(destination === 'inspirations' ? 'saves' : 'conversations');
+      {/* PRINCIPLES TAKES THE PAGE'S BACK TOO. Its way out was the bar's
+          Home tab; the tabs are gone (design E1), so the labelled Back in
+          the corner is what returns from it, as it does from the lists. */}
+      {phase === 'ready' && (listing || making || principlesOpen) && !viewNavigation.view?.sharePrinciple ? <PageBack
+        navigationKey={viewNavigation.href} onBack={backPage} visible={savedNoteOpen || making !== null || listing || principlesOpen}
+        belowCorners={(listing || principlesOpen) && !savedNoteOpen}
+        /* THE NOTEPAD'S WAY OUT IS THE LABELLED CLOSE IN THE CORNER (design
+           E3): its bar is the note bar now — the words, the mic, Save — so
+           leaving (the draft kept) moved up beside the date. */
+        label={say(savedNoteOpen ? 'worldBackToAll' : making === 'talk' ? 'worldAllChats' : making === 'inspiration' ? 'worldClose' : listOrigin.current ? 'worldBackToChat' : 'worldBackHome')}/> : null}
+      {streamShown ? (
+        <HomeStream locale={locale} inspirations={inspirations ?? []} signals={streamSignals(signals)} principles={principles}
+          onClose={() => setStreamOpen(false)}
+          onOpenSave={id => { setStreamOpen(false); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }}
+          more={fieldBeyond > 0 ? { onSeeAll: () => { setStreamOpen(false); listOrigin.current = null; openOverHome('saves'); } } : undefined} />
+      ) : null}
+      {/* ═══ "{n} INSPIRATIONS" — THE NOTEPAD'S DOOR TO EVERYTHING KEPT ═══
+          Founder (design/one-pill-dock, 845f3cec): a new note leads to the
+          full list of saves, and says how many there are — the count was
+          asked for by name, so it is printed. The draft is kept first, as
+          Close keeps it. Top-right, where nothing else stands while the
+          notepad is up; a word, never a filled button. */}
+      {phase === 'ready' && making === 'inspiration' && !viewNavigation.view?.sharePrinciple ? (
+        <button type="button" className="waka-note-to-list"
+          onClick={() => leaveAsModal(() => { listOrigin.current = null; saveAsDraft(() => openOverHome('saves')); })}>
+          {inspirationCount === null ? say('worldBackToAll') : formatMessage(locale, 'worldInspirationCount', { count: inspirationCount })}
+        </button>
+      ) : null}
+      {/* ═══ THE HOME BAR (design E1) ══════════════════════════════════════
+          Write · Photo · Say it in one pill, Chat beside it — see
+          `HomeBar`. It stands on the home at rest and nowhere else: the
+          lists and the principles leave by the labelled Back above, the
+          notepad and a chat have their own bars. Inspirations and Chats
+          are reached from the corner's Actions (Search, Past chats). */}
+      {phase === 'ready' && atNowView && !reviewing && !savedNoteOpen && !viewNavigation.view?.sharePrinciple ? (
+        <HomeBar locale={locale}
+          /* NEVER ON THE AGENT: "you cannot add inspiration for the agent
+             mode" (founder, 2026-10-15). Only Chat stands there. */
+          save={standingAsAgent ? undefined : {
+            onWrite: startNewInspiration,
+            onPhotos: files => { startNewInspiration(); void addInspirationFiles(files); },
+            onSay: sayIntoNewNote,
+            /* The notepad's own mic is dim while its draft store cannot take
+               words (`composerDraft.available`); Say it, which starts that mic,
+               is dim for the same reason (code review, 2026-11-08). */
+            canSay: composerDraft.available && (dictationAvailable() || Boolean(supportedRecordingType())),
+            photoDisabled: !composerDraft.available,
           }}
-          capture={atNowView ? { label: say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves'), onClick: startNewInspiration } : undefined}
+          onChat={() => { listOrigin.current = null; openTalk(null); }}
+          saved={barSaved}
+          pull={standingAsAgent || streamShown ? undefined : { onOpen: () => setStreamOpen(true) }}
         />
-      ) : phase==='ready'&&!viewNavigation.view?.sharePrinciple ? (
+            ) : phase==='ready'&&(making==='talk'||reviewing||savedNoteOpen)&&!viewNavigation.view?.sharePrinciple ? (
         <nav className="waka-dock" aria-label={say('worldMenuLabel')} data-jar-chrome="1" data-jar-interactive="1">
           {([
             ...(reviewing && !making ? [{ id: 'review', label: 'worldReviewExit' as const, here: false,
@@ -11376,223 +11806,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
             {item.id === 'return' && viewNavigation.view?.open === 'saves' && savedNoteOpen ? (
               <span className="waka-dock-making" role="group" id={DOCK_SLOT}
                 aria-label={say('worldCaptureInspiration')} />
-            ) : item.id === 'inspiration' && viewNavigation.view?.compose ? (
-              <span className="waka-dock-making" role="group" aria-label={say('worldCaptureInspiration')}>
-                {/* ═══ THE MICROPHONE SPEAKS INTO THE NOTE WHERE IT CAN ════
-                    Founder: "is it not possible to do speech to text
-                    easily, or is audio the only easy way to record?"
-
-                    Easily, and it is the better default — `use-dictation.ts`
-                    carries the reasoning, which comes down to this: a
-                    spoken thought that lands as TEXT feeds the top of mind,
-                    shows as a lead line in the archive and can be searched;
-                    the same thought as a file does none of those things.
-
-                    RECORDING IS NOT GONE AND IS NOT HIDDEN. Where the
-                    browser cannot transcribe — Firefox — this slot is the
-                    recorder, with no mention anywhere of a feature that
-                    does not exist here. Where it can, the recorder is still
-                    the right tool when the SOUND is the point (a melody,
-                    somebody else talking) and it is one press away behind
-                    the camera's own menu rather than a second glyph in a
-                    slot that holds three things already. That is a trade
-                    and it is the founder's to revisit; what is not a trade
-                    is which one the bare microphone should do. */}
-                {dictationAvailable() ? (
-                  dictation.listening ? (
-                    /* ═══ STOP IS WHERE THE MICROPHONE WAS (audit f2afcbe2) ══
-                       This was a wide word, "Stop", and the bar is centred:
-                       the wider button and the disclosure line beside it
-                       re-laid the whole bar, so Stop landed ~110px left of
-                       where the microphone had been (675 → 561 at 1440) and
-                       a second press on the same spot hit ＋. Now the SAME
-                       button stays in the SAME slot at the SAME size, lit
-                       and breathing while it listens (`--live`), and the
-                       press that started it is the press that ends it. */
-                    <button type="button" className="waka-dock-tool waka-dock-tool--live"
-                      aria-pressed="true" aria-label={say('worldComposerDictateStop')}
-                      onClick={() => dictation.stop()}><HomeActionIcon kind="record"/></button>
-                  ) : (
-                    <button type="button" className="waka-dock-tool"
-                      aria-label={say('worldComposerDictate')}
-                      disabled={!composerDraft.available}
-                      /* THE PRESS CLEARS THE ANSWER TO THE LAST ACT, which
-                         is what every other act on this page does —
-                         typing, opening the notepad and saving all call
-                         `setMouthNote('')`. It matters more here than
-                         anywhere else: the line it clears would otherwise
-                         outrank the cloud disclosure (see `composerState`),
-                         so a stale complaint about a file was enough to
-                         open the microphone with nothing said about where
-                         the audio goes. Nothing true is lost — the marked
-                         file is still marked on screen, and the next press
-                         of Save says so again. */
-                      onClick={() => { setMouthNote(''); dictation.start(); }}><HomeActionIcon kind="record"/></button>
-                  )
-                ) : supportedRecordingType() ? (
-                  recording.phase === 'idle' ? (
-                    <button type="button" className="waka-dock-tool"
-                      aria-label={say(inputMedia.some(m => m.type === 'audio') ? 'worldComposerRecordAgain' : 'worldComposerRecord')}
-                      disabled={!composerDraft.available || notepadRecordBlocked}
-                      onClick={startNotepadRecording}><HomeActionIcon kind="record"/></button>
-                  ) : (
-                    /* STOP KEEPS IT, CANCEL THROWS IT AWAY — both, because a
-                       recording you can start and stop but not discard is
-                       worse than one you cannot start. Stop stands in the
-                       microphone's own slot for the reason dictation's does
-                       (above); the clock — words, because a red dot cannot
-                       say how long you have been talking — rides in the
-                       state line. CANCEL IS ITS OWN ITEM BESIDE STOP, as on
-                       dev (review): inside the state line it was ellipsized
-                       with it and its press clipped to ~17px on a phone. */
-                    <>
-                      <button type="button" className="waka-dock-tool waka-dock-tool--live"
-                        aria-label={say('worldComposerStop')}
-                        disabled={recording.phase === 'finishing'}
-                        onClick={() => void recording.stop()}><HomeActionIcon kind="stop"/></button>
-                      <button type="button" className="waka-dock-item waka-dock-cancel"
-                        disabled={recording.phase === 'finishing'}
-                        onClick={() => void recording.cancel()}>{say('worldComposerCancelRecording')}</button>
-                    </>
-                  )
-                ) : null}
-                {/* ═══ THE PHOTO BECAME ＋ (2026-10-16) ═════════════════════
-                    Founder: "the bar's PHOTO icon becomes ＋. Pressing ＋
-                    opens a small pop-up menu with two rows: 'Add photo' and
-                    'Add file'." So the row reads All inspirations │ dictate ·
-                    ＋ · save │ Close, and a note can carry a PDF as readily
-                    as a picture.
-
-                    THE PHOTO ROW IS THE OLD BUTTON, UNCHANGED BEHIND IT:
-                    `PHOTO_ACCEPT` at the chooser and `addInspirationFiles`
-                    sniffing every file — as do the drop and the paste
-                    handlers on the note, which never pass a chooser and so
-                    never see an `accept` at all. The file row goes through
-                    the same function by the 'file' door, where
-                    `inspectAttachmentFile` is the lock instead. Both pickers
-                    and their `accept` live in `AddMenu`, quoted from the
-                    rules (`one-photo-accept-list.test.ts`). */}
-                <AddMenu buttonClassName="waka-dock-tool" multiple
-                  label={say('worldAddMenu')} photoLabel={say('worldAddPhoto')} fileLabel={say('worldAddFile')}
-                  disabled={!composerDraft.available || recording.phase !== 'idle'}
-                  onPhotos={files => { void addInspirationFiles(files); }}
-                  onFiles={files => { void addInspirationFiles(files, 'file'); }} />
-
-                {/* ═══ KEEPING IT IS A BAR ACTION NOW ═══════════════════════
-                    Founder, with the pale pill in the bottom-right corner of
-                    the note: "the save button is very hard to see. Maybe the
-                    save button should be in the bottom bar as well. And then
-                    it should have save or save as draft."
-
-                    IT WAS HARD TO SEE BECAUSE IT WAS NOWHERE. A lone control
-                    floating in the corner of an otherwise empty page has no
-                    neighbour to be read against and no object to belong to —
-                    and this product now has exactly one object at the bottom
-                    of every screen. Putting it in the bar is not a relocation
-                    for tidiness; it is the control finally having a place.
-
-                    AND THE TWO ENDINGS SIT TOGETHER, which is the half the
-                    founder asked for and the half that was genuinely missing.
-                    Leaving a half-written note already kept it — `saveAsDraft`
-                    is what Now and the chevron both call — but nothing on
-                    screen ever said so, so the only visible way out of a note
-                    you were not finished with was a button that finished it.
-                    Named side by side, the choice is a choice.
-
-                    ONLY ONCE THERE IS SOMETHING TO KEEP, which is the note
-                    the floating button already carried: "an always-present
-                    Save on a blank page is a button for a thing that does not
-                    exist." A blank note still leaves by the chevron or by
-                    Now. */}
-                {/* ═══ OVERRULED: IT IS ALWAYS THERE, AND DIM UNTIL IT IS NOT ═
-                    Founder: "when the user didn't make any change, then make
-                    it lower opacity, like basically disable it. And then once
-                    the user starts having changes, then make it clickable and
-                    then clicking it would save it."
-
-                    THE ARGUMENT ABOVE WAS GOOD AND IS STILL WRONG. "An
-                    always-present Save on a blank page is a button for a
-                    thing that does not exist" is true about the OBJECT and
-                    false about the PERSON, and the person is who has to find
-                    it. A control that appears is a control you have to
-                    discover twice: once to learn it exists, and again to
-                    learn what summons it — and the thing that summons this
-                    one is typing, which is the act you are already doing and
-                    therefore not looking at the bar during. A control that
-                    DIMS is learned once. It is in the same place before and
-                    after, so the only thing left to notice is that it got
-                    brighter, and brightness is the one channel this product
-                    uses for meaning anyway.
-
-                    It also makes the blank page honest about what it is FOR.
-                    The notepad with nothing on it now shows mic, photo and a
-                    dim Save: three things you could do and one of them not
-                    yet. Before, it showed two, and the page gave no sign that
-                    keeping was even among the endings.
-
-                    NOTHING ELSE MOVES. `composerCanKeep` already folds
-                    `composerHasWords` in, so the empty note lands on exactly
-                    the disabled state every other blocked reason produces
-                    rather than a fourth appearance of its own — and
-                    `whyNotKept` deliberately returns `null` for an empty
-                    note, so the tooltip stays silent instead of complaining
-                    that you have not written anything yet. Dim is the whole
-                    message. See `.waka-dock-tool--keep:disabled` for why that
-                    dim is an opacity and never an outline. */}
-                {/* A labeled Save is the primary action; archive navigation stays
-                    on home so it cannot be mistaken for finishing this draft. */}
-                <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save"
-                  aria-label={say('worldSaveInspiration')}
-                  /* AND IT SAYS WHY IT CANNOT BE PRESSED, the same way the
-                     chat's Send does and for the reason written there: the
-                     reason belongs to the control, and is wanted only by
-                     somebody who has just tried. */
-                  title={whyNotKeeping ? say(whyNotKeeping) : undefined}
-                  disabled={!composerCanKeep}
-                  onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep"/><span>{say('worldSave')}</span></button>
-
-                {/* ═══ AND THE TRANSIENT STATE, IN THE BAR AND NOWHERE ELSE ══
-                    Founder, with "Recording canceled." printed across the
-                    middle of an empty note: "states should show and disappear
-                    in the bottom bar only."
-
-                    The rule is sharper than the instance. A sentence that
-                    arrives and leaves on its own is the one kind of text that
-                    must not be in the page's flow: it pushes whatever is
-                    under it, it appears in the part of the screen somebody is
-                    reading or writing in, and when it goes it leaves a hole
-                    the eye has to re-find its place in. The bar is where
-                    transient things belong because the bar is already the
-                    thing that changes — it has a slot that transforms, it is
-                    out of the way of the words, and it is the same place on
-                    every screen.
-
-                    `role="status"` so it is still announced; it is the
-                    position that changed, not whether it is said. */}
-                {/* WHILE THE MICROPHONE IS OPEN the state line stays in the
-                    bar's row, as on dev. A caption lifted off the bar (so the
-                    row never widens and the disclosure is never cut at 14rem)
-                    was tried and set aside for its own change — see
-                    docs/known-issues.md. */}
-                {dictation.listening || recording.phase !== 'idle' ? (
-                  /* THE CLOCK IS NOT A LIVE REGION (review): inside
-                     `role="status"` a screen reader re-announced it every
-                     second. The disclosure and a one-word "Recording" are
-                     the live part; the clock is for eyes and is hidden. */
-                  <span className="waka-dock-state">
-                    {/* Shown for eyes; said by `LiveWord`, which mounts empty
-                        and fills a beat later so the words are announced. */}
-                    {composerState ? <span aria-hidden="true">{composerState}</span> : null}
-                    {/* ONE "Recording" AT A TIME (review): the composer foot says it
-                        while the mouth is closed (`!mouthOpen`), so the bar says it
-                        only while the mouth is open — never both regions at once. */}
-                    <LiveWord text={composerState || (recording.phase !== 'idle' && mouthOpen ? say('worldComposerRecordingNow') : '')} />
-                    {recording.phase !== 'idle' ? <span aria-hidden="true">{clockWords(recording.seconds)}</span> : null}
-                  </span>
-                ) : inspirationSave.phase !== 'idle' ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : composerState ? (
-                  <span className="waka-dock-state" role="status">{composerState}</span>
-                ) : null}
-              </span>
             ) : item.id === 'talk' && making === 'talk' ? (
               /* ═══ AND A CHAT'S TOOLS COME INTO THE BAR TOO (2026-10-16) ═══
                  Founder: "bar becomes All chats │ dictate · ＋ │ Close. The
@@ -11630,7 +11843,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         actions={!viewNavigation.view?.open && !viewNavigation.view?.conversationId && !mouthOpen ? <HomeActions key={memoryScope?.profileId ?? 'preview'} locale={locale}
           onPrinciples={toPrinciples} onReview={atWall.kind === 'self' && canOfferReview ? startReview : undefined}
-          onRetryReview={atWall.kind==='self'&&reviewLoadFailed?loadClaims:undefined} /> : undefined}
+          onRetryReview={atWall.kind==='self'&&reviewLoadFailed?loadClaims:undefined}
+          /* "Search" opens the archive, which leads with its own search
+             field and keeps what a save's own page holds (editing, the
+             deleted shelf). It was the bar's Inspirations tab; Past chats
+             was its Chats tab. */
+          onSearch={() => { listOrigin.current = null; openOverHome('saves'); }}
+          onChats={() => { listOrigin.current = null; openOverHome('conversations'); }} /> : undefined}
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
            Founder: "I kind of want to give the feeling of, rather than my
            agent moving rooms, it kind of switches itself up to its agent
@@ -11742,7 +11961,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
         newSaveLabel={say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}
         key={`${conversationScope.accountId}:${conversationScope.profileId}:saves:${savesFocus?.ids.join(',') ?? ''}`}
         viewState={savesFocus ? undefined : listViews.inspirations}
-        topRequest={listTopRequest}
         scope={conversationScope} ownerName={conversationProfile.name}
         locale={locale} profileId={conversationScope.profileId}
         title={conversationProfile.type==='agent'?formatMessage(locale,'worldProfileInspirations',{name:conversationProfile.name}):say('worldMenuField')}
@@ -11788,7 +12006,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {conversationScope&&conversationProfile&&viewNavigation.view?.open==='conversations'?<ConversationsOverlay
         key={`${conversationScope.accountId}:${conversationScope.profileId}:talks`}
         viewState={listViews.chats}
-        topRequest={listTopRequest}
         locale={locale} profileId={conversationScope.profileId}
         title={formatMessage(locale, 'worldProfileChats', { name: conversationProfile.name })}
         onClose={closePage}

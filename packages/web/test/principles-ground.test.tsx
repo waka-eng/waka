@@ -104,7 +104,7 @@ it("offers to chat about what the creature said, and no longer sends the person 
   await ground(chat);
   expect(host.querySelector(".waka-ground-act"), "the answer link went").toBeNull();
   const row = host.querySelector<HTMLButtonElement>(".waka-ground-bubble .jar-char-bubble-act")!;
-  expect(row.textContent).toBe("Let’s chat about it");
+  expect(row.textContent).toBe("Talk about this");
   await act(async () => row.click());
   expect(chat).toHaveBeenCalledWith(line());
 });
@@ -273,4 +273,14 @@ it("explains an agent’s empty memory in Korean without offering to write into 
   expect(host.querySelector(".waka-ground-bubble button")).toBeNull();
   expect(fetchSignals).toHaveBeenCalledWith({ profile: PROFILE, status: "active", limit: 20 });
   expect(add).not.toHaveBeenCalled();
+});
+
+/* Code review, 2026-11-08: the creature over the ground is named for itself,
+   with lighting it up as the description, not the name. */
+it('names the creature over the ground for the creature', async () => {
+  vi.mocked(fetchSignals).mockResolvedValue([]);
+  await ground();
+  const being = document.querySelector<HTMLButtonElement>('.waka-ground-being button');
+  expect(being?.getAttribute('aria-label')).toBe('WAKA');
+  expect(document.getElementById(being!.getAttribute('aria-describedby')!)?.textContent).toBe('Light up WAKA');
 });

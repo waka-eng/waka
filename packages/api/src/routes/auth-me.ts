@@ -226,7 +226,7 @@ export async function profileHandler(c: Context<AuthEnv>): Promise<Response> {
         ? normalizePublicHandle(parsed.data.publicHandle)
         : null;
   if (normalizedHandle) {
-    const handleError = validatePublicHandle(normalizedHandle);
+    const handleError = validatePublicHandle(normalizedHandle, { keeping: current.profile.publicHandle });
     if (handleError) {
       return c.json(
         {

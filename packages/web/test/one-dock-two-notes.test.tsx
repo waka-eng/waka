@@ -170,7 +170,9 @@ async function settle(): Promise<void> {
  * ask from out here.
  */
 function dockPresses(): Array<{ label: string; className: string; disabled: boolean }> {
-  const slot = world!.container.querySelector(".waka-dock-making");
+  /* The notepad's presses are in its note bar (design E3); a saved note's
+     are still in the dock's making-slot. */
+  const slot = world!.container.querySelector(".waka-note-bar-row, .waka-dock-making");
   if (!slot) throw new Error("the dock is not showing its making-slot, so neither note page has a bar");
   return [...slot.querySelectorAll("button")].map((button) => ({
     label: (button.getAttribute("aria-label") ?? button.textContent ?? "").trim(),
@@ -187,10 +189,10 @@ async function notepad(words: string): Promise<ReturnType<typeof dockPresses>> {
   world = await mountWorld(FACTS, { initialEntries: ["/?compose=1"] });
   await settle();
   expect(world.container.querySelector(".jar-inspiration-composer"), "the notepad did not open").toBeTruthy();
-  const slot = world.container.querySelector(".waka-dock span.waka-dock-slot");
-  expect(slot?.querySelector(":scope > .waka-dock-making")).toBeTruthy();
-  expect(slot?.querySelector(".waka-dock-save")?.textContent).toBe("Save");
-  expect(slot?.querySelector(".waka-dock-item--close")?.textContent).toBe("Close");
+  const bar = world.container.querySelector(".waka-note-bar-row");
+  expect(bar, "the notepad has no note bar").toBeTruthy();
+  expect(bar?.querySelector(".waka-dock-save")?.textContent).toBe("Save");
+  expect(world.container.querySelector(".waka-page-back")?.textContent?.trim(), "the notepad has no Close").toBe("Close");
   return dockPresses();
 }
 

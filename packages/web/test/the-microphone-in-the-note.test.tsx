@@ -137,8 +137,8 @@ const savesStarted = () => vi.mocked(fetchInspirationSaveRequest).mock.calls.len
     which since 2026-10-15 makes a new note in one press (the plus is gone). */
 async function openNotepad(words = ''): Promise<void> {
   world = await mountWorld(FACTS); await settle();
-  const inspiration = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-primary-capture')]
-    .find(row => row.textContent?.trim() === 'New inspiration');
+  const inspiration = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')]
+    .find(row => row.textContent?.trim() === 'Write');
   expect(inspiration, 'the bar offers no Inspiration row').toBeTruthy();
   await act(async () => inspiration!.click()); await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad did not open').toBeTruthy();
@@ -205,7 +205,7 @@ it('releases the microphone when the notepad closes', async () => {
 
   /* "NOW" IS THE WAY OUT OF THE NOTEPAD — the bar's first row, which keeps
      the words (`saveAsDraft`) and takes the page down. */
-  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock-item')][0]!.click());
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-page-back')!.click());
   await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad is still open').toBeFalsy();
   expect(live.started, 'the engine is still transcribing into a page nobody is looking at').toBe(false);
@@ -309,4 +309,44 @@ it('does not splice a finished session\'s last words into the next one', async (
   await act(async () => finished.onerror?.({ error: 'network' }));
   await settle();
   expect(world.container.querySelector('.waka-dock-tool--live'), 'the Stop control went while the engine ran').toBeTruthy();
+});
+
+/* CODE REVIEW, 2026-11-08: WebKit lets speech recognition start only inside
+   a person's tap. At now, Say it opens the notepad and starts listening in
+   the tap itself; when the world must wind back first, it never starts the
+   microphone later (outside the gesture) — the notepad opens with the mic
+   ready to tap. */
+const sayIt = () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')].find(row => row.textContent?.trim() === 'Say it')!;
+
+it('starts listening inside the tap when the world is already at now', async () => {
+  world = await mountWorld(FACTS); await settle();
+  await act(async () => sayIt().click());
+  expect(FakeEngine.all, 'Say it did not start the microphone in the tap').toHaveLength(1);
+  expect(engine().started).toBe(true);
+  await settle();
+  expect(world.container.querySelector('.jar-inspiration-composer'), 'Say it never opened the notepad').toBeTruthy();
+  expect(engine().started, 'the microphone stopped when the notepad opened').toBe(true);
+});
+
+it('opens the notepad with the mic ready to tap, and never listens outside the tap, when the world must wind back first', async () => {
+  world = await mountWorld(FACTS); await settle();
+  await world.toField();
+  await act(async () => sayIt().click());
+  await settle();
+  expect(world.container.querySelector('.jar-inspiration-composer'), 'Say it never opened the notepad').toBeTruthy();
+  expect(FakeEngine.all, 'the microphone started outside the tap').toHaveLength(0);
+  const ready = world.container.querySelector<HTMLButtonElement>('.waka-note-bar .waka-dock-tool[aria-label="Speak"]');
+  expect(ready?.disabled, 'the mic is not ready to tap').toBe(false);
+  await act(async () => ready!.click());
+  expect(engine().started, 'the ready mic did not listen when tapped').toBe(true);
+});
+
+/* Code review, 2026-11-08: the notepad's mic is dim while its draft store
+   cannot take words; the bar's Say it started dictation anyway. */
+it('dims Say it, and starts nothing, where the notepad could not keep the words', async () => {
+  (globalThis as { indexedDB?: IDBFactory }).indexedDB = undefined;
+  world = await mountWorld(FACTS); await settle();
+  expect(sayIt().disabled, 'Say it is offered where the notepad mic is not').toBe(true);
+  await act(async () => sayIt().click());
+  expect(FakeEngine.all, 'the microphone started anyway').toHaveLength(0);
 });

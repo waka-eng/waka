@@ -57,6 +57,7 @@ import { hasSignedInHere, useAuth } from "../lib/auth-context";
 import { formatMessage, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 import { resolveRedirect, safeInAppPath } from "../lib/sign-in-destination";
+import { writeOnboardingMarker } from "../lib/onboarding-progress";
 
 /**
  * THE ONE WAY BACK OUT OF THE DOOR, and why there is exactly one.
@@ -202,6 +203,9 @@ export function SignupForm({
         name: values.name.trim(),
         preferredLocale: values.preferredLocale,
       });
+      /* The name and language were just chosen here, so onboarding opens on
+         the intro rather than asking them again (Law 4). */
+      writeOnboardingMarker(created.account.id, { named: true });
       // AuthContext has already cached the user; the route guard on `/`
       // (or the user's pre-redirect destination) will see them as
       // authenticated on the very next render.

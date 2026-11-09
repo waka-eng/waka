@@ -35,7 +35,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { AddMenu } from "./AddMenu";
+import { PHOTO_ACCEPT } from "../lib/inspiration-photo";
+import { FILE_ACCEPT } from "../lib/api/file-accept";
 import { HomeActionIcon } from "./HomeActionIcon";
 import { LiveWord } from "./LiveWord";
 import { clockWords } from "../lib/words";
@@ -147,6 +148,7 @@ export function NoteTools(props: {
      would otherwise fall to the page; "Delete it anyway" is what a keyboard
      user is being asked about. */
   const confirm = useRef<HTMLButtonElement>(null);
+  const photoInput = useRef<HTMLInputElement>(null), fileInput = useRef<HTMLInputElement>(null);
   const armed = Boolean(props.erasePending && props.eraseQuestion);
   useEffect(() => { if (armed) confirm.current?.focus(); }, [armed, slot]);
   if (!slot) return null;
@@ -270,11 +272,17 @@ export function NoteTools(props: {
           the overlay's `attach`, not to this component, because the same
           `onFile` also carries the recorder's audio. One at a time: `attach`
           lands each file on the row before the next is chosen. */}
-      <AddMenu buttonClassName="waka-dock-tool"
-        label={props.addLabel} photoLabel={props.photoLabel} fileLabel={props.fileLabel}
-        disabled={busy || props.recording.phase !== "idle"}
-        onPhotos={(picked) => { if (picked[0]) props.onFile(picked[0], "photo"); }}
-        onFiles={(picked) => { if (picked[0]) props.onFile(picked[0], "file"); }} />
+      {/* PHOTO AND FILE SIT ON THE BAR, NO ＋ MENU (founder, 2026-11-05) —
+          the same two presses the notepad's note bar has, so the two note
+          pages stay one page. */}
+      <button type="button" className="waka-dock-tool" aria-label={props.photoLabel}
+        disabled={busy || props.recording.phase !== "idle"} onClick={() => photoInput.current?.click()}><HomeActionIcon kind="photo" /></button>
+      <button type="button" className="waka-dock-tool" aria-label={props.fileLabel}
+        disabled={busy || props.recording.phase !== "idle"} onClick={() => fileInput.current?.click()}><HomeActionIcon kind="file" /></button>
+      <input ref={photoInput} type="file" hidden accept={PHOTO_ACCEPT}
+        onChange={(event) => { const picked = event.target.files?.[0]; event.target.value = ""; if (picked) props.onFile(picked, "photo"); }} />
+      <input ref={fileInput} type="file" hidden accept={FILE_ACCEPT}
+        onChange={(event) => { const picked = event.target.files?.[0]; event.target.value = ""; if (picked) props.onFile(picked, "file"); }} />
       {/* ═══ AND THE SAVE, IN THE SAME SEAT IT HAS ON THE NOTEPAD ═════════
           Founder: "this button should appear when I'm editing old
           inspirations as well. So when I'm looking at past saved
@@ -317,7 +325,7 @@ export function NoteTools(props: {
           true of it only by luck. It is a contract now. */}
       <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save"
         aria-label={props.keepLabel} disabled={!props.canKeep}
-        onClick={props.onKeep}><HomeActionIcon kind="keep" /><span>{props.saveLabel ?? props.keepLabel}</span></button>
+        onClick={props.onKeep}>{props.saveLabel ?? props.keepLabel}</button>
       {/* ═══ AND THE WAY TO UNDO KEEPING IT, IN THE SAME BAR ══════════════
           Founder: "let's just add delete icon next to the save icon."
 

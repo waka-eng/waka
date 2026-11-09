@@ -386,7 +386,7 @@ it("keeps one note's upload off another note's bar", async () => {
   await act(async () => other.click());
   await answer(true);
   expect(bar(), "and not on the next note").toBe("Saved");
-  expect(slot.querySelector<HTMLButtonElement>('[aria-label="Add photo or file"]')?.disabled, "whose tools it does not hold").toBe(false);
+  expect(slot.querySelector<HTMLButtonElement>('[aria-label="Add file"]')?.disabled, "whose tools it does not hold").toBe(false);
 });
 
 /* A READ THAT NEVER ANSWERS ENDS (review, 2026-10-18): after the limit the

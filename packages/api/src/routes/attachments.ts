@@ -65,6 +65,7 @@ import { validationDetails } from "../lib/validation.js";
 import { profileQuerySchema } from './inspirations-validation.js';
 import { resolveTargetProfile } from './inspirations-tenancy.js';
 import { createAttachmentTranscriptRoutes } from './attachment-transcripts.js';
+import { imageWordsState } from '../lib/image-words.js';
 import { attachmentAnalysisState, recoverAttachmentAnalysis } from '../lib/attachment-analysis-retry.js';
 import { fetchLinkPreviewImage } from '../lib/signal-enrichment.js';
 
@@ -367,6 +368,9 @@ export type SerializableAttachment = Pick<
   | "imageWidth"
   | "imageHeight"
   | "createdAt"
+  | "enrichmentRetryCount"
+  | "transcriptCorrection"
+  | "transcriptRevision"
 >;
 
 /**
@@ -405,6 +409,12 @@ export function serializeAttachment(row: SerializableAttachment) {
         row.type === "image"
           ? { width: row.imageWidth, height: row.imageHeight }
           : null,
+      /**
+       * "The words I read" under a saved image: the machine's verbatim
+       * reading, or the owner's fix of it. Row-derived; the job-aware view
+       * (and Fix / retry) is `GET|PATCH /attachments/:id/words`.
+       */
+      words: row.type === "image" && row.inspirationId !== null ? imageWordsState(row) : null,
     },
   };
 }
@@ -432,6 +442,9 @@ export const attachmentSelection = {
   imageWidth: attachments.imageWidth,
   imageHeight: attachments.imageHeight,
   createdAt: attachments.createdAt,
+  enrichmentRetryCount: attachments.enrichmentRetryCount,
+  transcriptCorrection: attachments.transcriptCorrection,
+  transcriptRevision: attachments.transcriptRevision,
 } as const;
 
 // ---------------------------------------------------------------------------

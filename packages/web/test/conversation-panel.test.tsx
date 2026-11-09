@@ -427,8 +427,13 @@ it('keeps the surface to a transcript, a box and nothing at rest',async()=>{
      photos" and "Add file". Standing alone — no bar lending it a slot — the
      panel keeps it in its own footer, beside Send; on the home page it rides
      in the bar (`chat-bar.test.tsx`). Its two rows are not buttons until it
-     is pressed. */
-  expect(named()).toEqual(['Add photo or file','Send']);
+     is pressed.
+
+     AND THE CREATURE ABOVE THEM (2026-11): pressed, it lights, as it does
+     at home (`Companion`). It is the opening's own face rather than a new
+     control, and it does nothing else — named for the creature, not for the
+     press (code review, 2026-11-08). */
+  expect(named()).toEqual(['WAKA','Add photo or file','Send']);
   expect(host.querySelector('textarea')!.value).toBe('A sentence in the box');
 });
 it('keeps the full-page composer within the visible keyboard viewport',async()=>{
@@ -810,4 +815,27 @@ it('retries a failed reply against the saved message without sending another use
   await act(async()=>finish(structuredClone(replyState)));
   expect(saveConversationMessage).toHaveBeenCalledTimes(sent);
   expect(stored.messages.filter(message=>message.role==='user')).toHaveLength(1);
+});
+/* DESIGN E5: A CHAT STARTS FROM THE SAVE. "Talk about it" pins the save as
+   `initialInspiration`; it stands on top, and the opening turn that only
+   repeated it is not printed again, so the creature's question comes first. */
+it('shows the save a chat was opened from on top, without repeating it as your turn',async()=>{
+  stored={...stored,generationEnabled:true,revision:2,initialInspiration:{id:'kept',text:'Nobody feels ready.'},messages:[
+    {id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Nobody feels ready.',createdAt:'2026-10-03T01:00:00Z'},
+    {id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:2,role:'assistant',content:'What are you waiting to feel ready for?',createdAt:'2026-10-03T01:00:01Z'}]};
+  await mount();
+  const topic=host.querySelector('.chat-topic[data-about="save"]');
+  expect(topic?.textContent).toContain('You kept this');
+  expect(topic?.querySelector('blockquote')?.textContent).toBe('Nobody feels ready.');
+  expect([...host.querySelectorAll('.chat-message')].map(node=>node.getAttribute('data-role'))).toEqual(['assistant']);
+});
+/* Code review, 2026-11-08: a save with no words of its own (a screenshot kept
+   without a note) matched every opening turn — '' starts every string — and
+   hid the person's real first message. */
+it('does not hide your first message under a save that has no words of its own',async()=>{
+  stored={...stored,generationEnabled:true,revision:1,initialInspiration:{id:'kept',text:''},messages:[
+    {id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'What did that screenshot mean to me?',createdAt:'2026-10-03T01:00:00Z'}]};
+  await mount();
+  expect(host.querySelector('.chat-topic[data-about="save"]')).toBeNull();
+  expect([...host.querySelectorAll('.chat-message')].map(node=>node.textContent)).toEqual([expect.stringContaining('What did that screenshot mean to me?')]);
 });

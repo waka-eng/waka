@@ -115,7 +115,7 @@ export function LoadingHome({ problem }: { problem?: LoadingProblem | null } = {
           justifyContent: "center",
         }}
       >
-        <Companion size={CREATURE} />
+        <Companion size={CREATURE} pressable={false} />
         <div
           style={{
             position: "absolute",
@@ -164,7 +164,7 @@ export function LoadingHome({ problem }: { problem?: LoadingProblem | null } = {
     >
       {/* THE SIZE THE OLD DRAWING OCCUPIED, so the screen it replaces does
           not jump in scale between a build and the next one. */}
-      <Companion size={CREATURE} />
+      <Companion size={CREATURE} pressable={false} />
       {/* the resting line's slot, wearing the label register's face; the word
           is the only honest one this early */}
       <div

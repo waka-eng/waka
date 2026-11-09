@@ -198,8 +198,12 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
   // 3. Hash. Awaited so we surface bcrypt errors as 500s, not silent failures.
   const passwordHash = await hashPassword(password);
 
-  // 4. Insert both rows together. A name supplied at signup is the whole of
-  //    onboarding, so the account is stamped complete in the same write.
+  // 4. Insert both rows together. ONBOARDING IS NEVER STAMPED HERE (2026-11).
+  //    A name at signup used to be the whole of onboarding; onboarding is now
+  //    the name AND three answers that become the first saves, and it is
+  //    stamped by `PATCH /auth/me/profile { completeOnboarding }` only once
+  //    those three exist. The web skips the name step for a signup that
+  //    already chose one.
   let created: { account: AccountRow; profile: ProfileRow };
   try {
     created = await db.transaction(async (tx) => {
@@ -208,7 +212,7 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
         .values({
           email,
           passwordHash,
-          onboardingCompletedAt: name?.trim() ? new Date() : null,
+          onboardingCompletedAt: null,
         })
         .returning(accountColumns);
 

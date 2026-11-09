@@ -517,6 +517,7 @@ export function toInspirationDetail(row: Awaited<ReturnType<typeof fetchInspirat
       type: a.type,
       label: a.name ?? (a.type === 'audio' ? 'Recording' : a.type === 'image' ? 'Photo' : a.url),
       ...(a.type === 'link' ? { url: a.url } : {}),
+      ...(a.type === 'image' && a.enrichment?.words ? { words: a.enrichment.words } : {}),
     })),
     reflectionCount: (row.reflections ?? []).filter((r) => !r.skipped && r.answer).length,
     conversationOrigin:row.conversationOrigin??null,

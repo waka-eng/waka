@@ -190,12 +190,14 @@ it('labels unnamed photos, files and recordings by kind, in the reader\'s langua
     { id: 'a', type: 'audio', blob: new Blob(['a'], { type: 'audio/webm' }) },
   ];
   await mount();
-  expect([...host.querySelectorAll('.jar-tile')].map(tile => tile.getAttribute('title'))).toEqual(['Photo', 'File', 'Recording']);
+  /* The photo stands large as the note's picture (design E3); the rest are tiles. */
+  expect(host.querySelector('.waka-note-hero [aria-label="Remove Photo"]'), 'the photo is not the page\'s picture').toBeTruthy();
+  expect([...host.querySelectorAll('.jar-tile')].map(tile => tile.getAttribute('title'))).toEqual(['File', 'Recording']);
   expect(host.querySelector('[aria-label="Remove Recording"]'), 'the recording\'s × does not say what it removes').toBeTruthy();
   expect(host.querySelector('[aria-label="Play Recording"]')).toBeTruthy();
   expect(props.media.every(item => item.name === undefined), 'a label was written into the draft').toBe(true);
   props.locale = 'ko-KR'; await mount();
-  expect([...host.querySelectorAll('.jar-tile')].map(tile => tile.getAttribute('title'))).toEqual(['사진', '파일', '녹음']);
+  expect([...host.querySelectorAll('.jar-tile')].map(tile => tile.getAttribute('title'))).toEqual(['파일', '녹음']);
 });
 /* ═══ WHICH FILE IS IN FLIGHT, SHOWN RATHER THAN COUNTED ═══════════════
    "Uploading file 1 of 1… Keep this window open." is gone. A person cannot
@@ -233,7 +235,7 @@ it('retains invalid/extra selections with removal controls and blocks saving unt
      answer and is enumerated in `keep-ready.test.ts`, and the sentence
      "Keep up to five attachments…" that used to appear here is on that
      control's `title` now rather than pushing the shelf down the page. */
-  expect(host.querySelectorAll('.jar-shelf > .jar-tile')).toHaveLength(6);
+  expect(host.querySelectorAll('.jar-shelf > .jar-tile').length + host.querySelectorAll('.waka-note-hero').length).toBe(6);
   /* THE ONE THAT IS WRONG SAYS SO, and only that one. A shelf where every
      tile is outlined would be no information at all. */
   expect(host.querySelectorAll('.jar-tile--wrong')).toHaveLength(1);
@@ -377,4 +379,64 @@ it('keeps a failed discard available to retry and lets Escape return to editing'
   expect(props.onClose).not.toHaveBeenCalled();
   expect(host.querySelector('textarea')?.readOnly).toBe(false);
   expect(document.activeElement).toBe(more);
+});
+
+/* ═══ THE PICTURE IS THE POST, AND IT SHOWS WHAT IT READ (design E3, E3′) ═══
+   A photo stands large with the creature's question over it and the note bar
+   under it. "The words I read" is a seam the reading API will fill: absent,
+   nothing is drawn; ready, the words are quoted with Fix; unreadable, the
+   creature asks which line stuck and says the save is safe either way. */
+it('makes a photo the page\'s picture, and draws the words it read only when they are given', async () => {
+  props.media = [{ id: 'shot', type: 'image', name: 'Screenshot.png', blob: new Blob(['p'], { type: 'image/png' }) }];
+  props.noteBar = { mic: <button type="button" aria-label="Speak" />, save: <button type="button" className="waka-dock-save">Save</button>, state: null };
+  await mount();
+  expect(host.querySelector('.waka-note-hero img')?.getAttribute('alt')).toBe('Screenshot.png');
+  expect(host.querySelector('.waka-note-says')?.textContent).toBe('What about it stuck with you?');
+  expect(host.textContent).not.toContain('The words I read');
+  expect(host.querySelector('.waka-note-hint')?.textContent).toBe('A few words is plenty. Or none — just Save.');
+  expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Add a note…');
+  /* The words get the whole bar; the row is under them. */
+  expect(host.querySelector('.waka-note-bar')!.firstElementChild?.tagName).toBe('TEXTAREA');
+
+  const fix = vi.fn(async () => 'saved' as const);
+  props.readWords = { status: 'ready', text: 'Nobody feels ready.' }; props.onFixReadWords = fix; await mount();
+  expect(host.querySelector('.waka-note-says')?.textContent).toBe('What made this line stick with you?');
+  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
+  await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-read-act')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-read-act')!.click());
+  expect(fix).toHaveBeenCalledWith('Nobody feels ready.');
+
+  props.readWords = { status: 'unreadable' }; await mount();
+  expect(host.querySelector('.waka-note-says')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
+  expect(host.querySelector('.waka-note-hero')?.hasAttribute('data-blurred')).toBe(true);
+  /* Unreadable promises nothing; only a read queued again says it will retry. */
+  expect(host.textContent).not.toContain('Your screenshot is saved either way.');
+  expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Type the line, or just Save');
+  /* Retrying asks the same; "I'll try reading it again" is promised only
+     where a read is known to be queued (the saved note), never on a guess. */
+  props.readWords = { status: 'retrying' }; await mount();
+  expect(host.querySelector('.waka-note-says')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
+  expect(host.textContent).not.toContain('Your screenshot is saved either way.');
+});
+
+/* F5: a share from another app is asked about, and still waits for Save. */
+it('asks why about a shared link, with Add a note and That\'s all, and That\'s all saves', async () => {
+  props.media = []; props.text = 'https://example.com/a'; props.arrival = true; await mount();
+  expect(host.querySelector('.waka-note-says')?.textContent).toBe('Got the link you shared. Want to say why?');
+  const acts = [...host.querySelectorAll<HTMLButtonElement>('.waka-note-arrival-act')];
+  expect(acts.map(act => act.textContent)).toEqual(['Add a note', 'That\'s all']);
+  expect(props.onSubmit).not.toHaveBeenCalled();
+  await act(async () => acts[1]!.click());
+  expect(props.onSubmit).toHaveBeenCalledOnce();
+});
+
+/* Code review, 2026-11-08: the Companion beside the question became a
+   pressable button, so a focusable control sat inside an aria-hidden figure
+   — reachable by Tab, named nothing. Beside a line it is a picture. */
+it('keeps the creature beside the question out of the tab order', async () => {
+  props.media = [{ id: 'shot', type: 'image', name: 'Screenshot.png', blob: new Blob(['p'], { type: 'image/png' }) }];
+  await mount();
+  const figure = host.querySelector('.waka-note-creature')!;
+  expect(figure).toBeTruthy();
+  expect(figure.querySelector('button, [tabindex]:not([tabindex="-1"]), a[href]'), 'a focusable control hides inside the aria-hidden figure').toBeNull();
 });

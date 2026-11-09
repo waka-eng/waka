@@ -517,9 +517,56 @@ export async function mountWorld(facts: WorldFacts, options: { initialEntries?: 
   };
 }
 
+/**
+ * THE HOME BAR, IN THE ORDER A PERSON MEETS IT (design E1): the pill's doors
+ * by their words, then the round Chat by its name. Nothing above it — the
+ * pull and "Saved" are not doors in the bar.
+ */
+export function homeBarShape(container: HTMLElement): string[] {
+  const bar = container.querySelector(".waka-home-bar-row");
+  if (!bar) throw new Error("the home bar is not on screen");
+  return [...bar.querySelectorAll<HTMLElement>("button")].map(accessibleName);
+}
+
+/** Press the home bar's button named exactly `label`. */
+export async function pressHomeBar(container: HTMLElement, label: string): Promise<void> {
+  for (let turn = 0; turn < 40; turn += 1) {
+    const button = [...container.querySelectorAll<HTMLButtonElement>(".waka-home-bar-row button")].find((node) => accessibleName(node) === label);
+    if (button) { await act(async () => button.click()); return; }
+    await act(async () => { await Promise.resolve(); });
+  }
+  throw new Error(`the home bar has no ${label}`);
+}
+
 /** The bar's rows. */
 function dockRows(container: HTMLElement): HTMLButtonElement[] {
-  return [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item, .waka-page-back, .waka-primary-capture, .waka-over-new")];
+  return [...container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item, .waka-page-back, .waka-home-bar button, .waka-over-new")];
+}
+
+/**
+ * THE NAMES THE OLD BAR USED, AND WHERE THEIR DOORS ARE NOW (design E1,
+ * 2026-11-08). "New inspiration" is the home bar's Write; "Inspirations" and
+ * "Chats" were tabs and are the corner's Actions → Search and Past chats.
+ * Suites keep saying what they mean; this is the one place the route moved.
+ */
+const MOVED_TO_ACTIONS: Record<string, string> = { Inspirations: "Search", Chats: "Past chats" };
+const RENAMED: Record<string, string> = { "New inspiration": "Write" };
+
+/** Open the corner's Actions menu and press its row named `label`. */
+export async function chooseFromActions(container: HTMLElement, label: string): Promise<void> {
+  for (let turn = 0; turn < 40; turn += 1) {
+    const trigger = container.querySelector<HTMLButtonElement>(".waka-home-actions > button");
+    if (trigger) {
+      if (trigger.getAttribute("aria-expanded") !== "true") await act(async () => trigger.click());
+      const row = [...container.querySelectorAll<HTMLButtonElement>(".waka-home-actions-list > button")]
+        .find((node) => node.textContent?.trim() === label);
+      if (!row) throw new Error(`Actions has no row named ${label}`);
+      await act(async () => row.click());
+      return;
+    }
+    await act(async () => { await Promise.resolve(); });
+  }
+  throw new Error("the corner's Actions menu never appeared");
 }
 /* BY ACCESSIBLE NAME, which is what a person navigating by voice or by
    screen reader would say out loud. */
@@ -548,6 +595,12 @@ function isReturnRow(node: HTMLElement): boolean {
 
 /** Press the bar row named exactly `label`, or say what the bar offers. */
 export async function pressDockRow(container: HTMLElement, label: string): Promise<void> {
+  if (MOVED_TO_ACTIONS[label] && !dockRows(container).some(node => accessibleName(node) === label)) {
+    if (!container.querySelector(".waka-home-bar")) await closeOverlay(container);
+    await chooseFromActions(container, MOVED_TO_ACTIONS[label]!);
+    return;
+  }
+  if (RENAMED[label]) label = RENAMED[label]!;
   if (label === "New chat" && !dockRows(container).some(node => accessibleName(node) === label)) {
     await pressDockRow(container, "Chats");
     await pressDockRowWhenItAppears(container, "New chat", "the chat list's primary action");
@@ -645,8 +698,8 @@ async function pressKey(container: HTMLElement, key: string): Promise<void> {
  */
 export async function chooseFromMenu(container: HTMLElement, label: string): Promise<void> {
   if (label === "Inspirations" || label === "Your inspirations") {
-    if (dockClose(container)) await closeOverlay(container);
-    await pressDockRowWhenItAppears(container, "Inspirations", "the Inspirations tab");
+    if (!container.querySelector(".waka-home-bar")) await closeOverlay(container);
+    await chooseFromActions(container, "Search");
     return;
   }
   if (label === "Chats") {
@@ -675,8 +728,8 @@ export async function chooseFromMenu(container: HTMLElement, label: string): Pro
  * header above it, since nothing sits in a corner any more.
  */
 export async function pressChatCorner(container: HTMLElement): Promise<void> {
-  if (dockClose(container)) await closeOverlay(container);
-  await pressDockRowWhenItAppears(container, "Chats", "the Chats tab");
+  if (!container.querySelector(".waka-home-bar")) await closeOverlay(container);
+  await chooseFromActions(container, "Past chats");
 }
 
 /**
@@ -694,6 +747,21 @@ export async function pressChatCorner(container: HTMLElement): Promise<void> {
  * `home-navigation.test.tsx`'s to test.
  */
 export async function closeOverlay(container: HTMLElement): Promise<void> {
+  /* A LIST OR PRINCIPLES LEAVES BY THE LABELLED BACK in the corner since the
+     tabs went (design E1); a page you are making something on still has its
+     bar's Close. */
+  const back = container.querySelector<HTMLButtonElement>(".waka-page-back");
+  if (!container.querySelector(".waka-dock") && back) {
+    const home = back.textContent?.trim() === "Home";
+    await act(async () => back.click());
+    /* A list opened from a chat steps back to that chat first ("Back to
+       chat"), whose bar then ends in Close — two presses, both visible. */
+    if (!home && (container.querySelector(".waka-dock") || container.querySelector(".waka-page-back"))) {
+      for (let turn = 0; turn < 10; turn += 1) await act(async () => { await Promise.resolve(); });
+      await closeOverlay(container);
+    }
+    return;
+  }
   if (!container.querySelector(".waka-dock")) throw new Error("no visible way out: the dock is not on screen");
   const close = dockClose(container);
   if (close) {

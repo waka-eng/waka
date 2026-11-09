@@ -32,15 +32,81 @@
  * nobody asked for. The founder's law stands: nothing moves unless the user
  * moved it.
  */
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { OWNER_BEING, type Being } from "../character/body";
-import { REST_BLEED, coolRamp, restPose } from "../character/raster";
-import { renderScale } from "../canvas/scale";
+import { FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, GLASS_EASE_MS, REST_BLEED, coolRamp, restPose } from "../character/raster";
+import { formatMessage, normalizeSupportedLocale, readStoredLocale } from "../lib/locales";
+import { onViewportSettle, renderScale } from "../canvas/scale";
 import { MACHINE_CELLS, pixelate, rampFromCss, rasterGrain } from "../canvas/palette";
+import { prefersStillness } from "../lib/motion";
 
-export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel = false, label = "WAKA" }: {
+
+/**
+ * 0..1, eased toward `on` over `GLASS_EASE_MS` (easeOutCubic) — the glasses
+ * and the thinking face going on and off. Not motion of its own: it answers
+ * the page changing what the creature is doing. Under reduced motion, or
+ * with no frames to draw on, it is simply there.
+ */
+function useEased(on: boolean): number {
+  const [value, setValue] = useState(on ? 1 : 0);
+  const now = useRef(value);
+  useEffect(() => {
+    const target = on ? 1 : 0;
+    const from = now.current;
+    if (from === target) return undefined;
+    const set = (v: number) => { now.current = v; setValue(v); };
+    if (prefersStillness() || typeof requestAnimationFrame !== "function") { set(target); return undefined; }
+    const began = performance.now();
+    const span = GLASS_EASE_MS * Math.abs(target - from);
+    let frame = 0;
+    const step = (at: number) => {
+      const t = Math.min(1, (at - began) / span);
+      set(from + (target - from) * (1 - Math.pow(1 - t, 3)));
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [on]);
+  return value;
+}
+
+/**
+ * ═══ AND A PRESS LIGHTS IT, AS IT DOES AT HOME ══════════════════════════
+ *
+ * Founder: the creature "should be clickable to light up" — like home, where a
+ * press raises the loop's flare to 1 and it decays over `FLARE_SECONDS`,
+ * strengthening the aura by `FLARE_REACH` and widening it by `FLARE_SPREAD`.
+ * The same three numbers drive this one, imported from the anatomy, so a
+ * page's creature and the world's light the same way.
+ *
+ * This is not the world moving on its own: it answers a press, and only the
+ * light changes — no outline, no fill, no scale (light is the only meaning
+ * channel). Under reduced motion the light comes on and goes off at the end of
+ * the same span without easing.
+ *
+ * `pressable={false}` where the creature sits inside something that is
+ * already a press target (a switcher row, a portrait in a list), so it never
+ * steals the press the row is for.
+ */
+export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel = false, label = "WAKA", eyes = "open", pressable = true, flareKey = 0, glasses = false, thinking = false }: {
   size?: number;
+  /** Change it to light the creature as a press would — for a page that
+      answers something the person did elsewhere (an answer landing in it).
+      0 never lights. */
+  flareKey?: number;
+  /** False inside another interactive element: the row keeps its press. */
+  pressable?: boolean;
+  /** "shut" while it reads (onboarding's intro and reading screens). The same
+      body with its eyes at the loop's blink floor — see `EYE_SHUT`. */
+  eyes?: "open" | "shut";
+  /** The reading glasses the world's creature puts on while it reviews your
+      saves with you (`think` in the loop) — the same pair, from the same
+      `drawGlasses`. They ease on and off over `GLASS_EASE_MS`. */
+  glasses?: boolean;
+  /** The face it wears with them at home: eyes up and to one side, a little
+      narrowed. Eases with the same timing. */
+  thinking?: boolean;
   /** Whose body. Your own by default; an agent's is `agentBeing(agentId)`. */
   being?: Being;
   /** An agent is the same creature in colder light (`coolRamp`). */
@@ -52,6 +118,40 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
   label?: string;
 }): JSX.Element {
   const canvas = useRef<HTMLCanvasElement>(null);
+  /* A pinch magnifies this bitmap without changing anything the effect below
+     depends on, so a settled zoom is itself a reason to redraw at the scale
+     `renderScale` now answers (see `canvas/scale.ts`). */
+  const [zoomed, setZoomed] = useState(0);
+  useEffect(() => onViewportSettle(() => setZoomed((n) => n + 1), { height: false }), []);
+  /* The language this browser chose, which is the language the page around
+     it speaks (`writeStoredLocale` on every language choice). Read here
+     rather than from the session so a creature drawn before sign-in — the
+     door, the loading screen — still names its press in the reader's words. */
+  const locale = normalizeSupportedLocale(readStoredLocale());
+  /** The flare, 1 at the press and 0 at rest. */
+  const [flare, setFlare] = useState(0);
+  const timer = useRef<{ frame: number; hold: number }>({ frame: 0, hold: 0 });
+  useEffect(() => () => { cancelAnimationFrame(timer.current.frame); window.clearTimeout(timer.current.hold); }, []);
+  const shine = useCallback(() => {
+    cancelAnimationFrame(timer.current.frame); window.clearTimeout(timer.current.hold);
+    setFlare(1);
+    const span = FLARE_SECONDS * 1000;
+    const still = prefersStillness();
+    if (still || typeof requestAnimationFrame !== "function") {
+      timer.current.hold = window.setTimeout(() => setFlare(0), span);
+      return;
+    }
+    const began = performance.now();
+    const step = (now: number) => {
+      const left = Math.max(0, 1 - (now - began) / span);
+      setFlare(left);
+      if (left > 0) timer.current.frame = requestAnimationFrame(step);
+    };
+    timer.current.frame = requestAnimationFrame(step);
+  }, []);
+  useEffect(() => { if (flareKey) shine(); }, [flareKey, shine]);
+  const wear = useEased(glasses);
+  const ponder = useEased(thinking);
 
   useEffect(() => {
     const node = canvas.current;
@@ -88,7 +188,7 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
     const tile = rasterGrain(ramp.dorm);
     const grain = tile ? g.createPattern(tile, "repeat") : null;
     if (!pixel) {
-      restPose(g, size, ramp, being, 1, dpr, grain);
+      restPose(g, size, ramp, being, 1, dpr, grain, eyes, wear, ponder);
       return;
     }
     /* Drawn whole, then stepped: the world quantises the BODY sprite, so the
@@ -100,27 +200,46 @@ export function Companion({ size = 72, being = OWNER_BEING, cool = false, pixel 
     if (!sg) return;
     sg.scale(dpr, dpr);
     sg.translate(pad, pad);
-    restPose(sg, size, ramp, being, 1, dpr, grain);
+    restPose(sg, size, ramp, being, 1, dpr, grain, eyes, wear, ponder);
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.drawImage(pixelate(sharp, MACHINE_CELLS * (box / size)), 0, 0);
-  }, [size, being, cool, pixel]);
+  }, [size, being, cool, pixel, eyes, wear, ponder, zoomed]);
 
   /* The element is the padded box too, so the drawing is not squashed back
      into `size` by CSS — which would reintroduce the crop as a scale. */
   const pad = Math.ceil(size * REST_BLEED);
   const box = size + pad * 2;
+  const lightStyle = {
+    ["--waka-companion-size" as string]: `${box}px`,
+    ["--waka-companion-reach" as string]: String(1 + flare * FLARE_REACH),
+    ["--waka-companion-spread" as string]: String(1 + flare * FLARE_SPREAD),
+  };
+  const body = (
+    <canvas
+      ref={canvas}
+      className="waka-companion-body"
+      style={{ width: box, height: box }}
+      /* The world's canvas is unlabelled by a standing founder decision
+         because it is a whole scene. This is one fixed illustration of one
+         thing, so it can say what it is in a word, and does — unless it is
+         the face of a button, which then says it instead. */
+      {...(pressable ? { "aria-hidden": true } : { role: "img", "aria-label": label })}
+    />
+  );
+  /* THE BUTTON IS NAMED FOR THE CREATURE, AND THE PRESS IS ITS HINT (code
+     review, 2026-11-08). Named "Light up X", every portrait read as a verb
+     and the chat's companions lost the agent's name they used to carry. The
+     name is the creature's own; what a press does is said as a description. */
+  const hint = useId();
   return (
-    <span className="waka-companion" style={{ ["--waka-companion-size" as string]: `${box}px` }}>
-      <canvas
-        ref={canvas}
-        className="waka-companion-body"
-        style={{ width: box, height: box }}
-        /* The world's canvas is unlabelled by a standing founder decision
-           because it is a whole scene. This is one fixed illustration of one
-           thing, so it can say what it is in a word, and does. */
-        role="img"
-        aria-label={label}
-      />
+    <span className="waka-companion" style={lightStyle} data-lit={flare > 0 ? "" : undefined}>
+      {pressable ? (
+        <button type="button" className="waka-companion-press" onClick={shine}
+          aria-label={label || "WAKA"} aria-describedby={hint}>
+          {body}
+          <span id={hint} className="sr-only">{formatMessage(locale, "companionLightUp", { name: label || "WAKA" })}</span>
+        </button>
+      ) : body}
     </span>
   );
 }
