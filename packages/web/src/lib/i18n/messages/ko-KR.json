@@ -934,5 +934,6 @@
   "worldReadWordsFixFailed": "저장하지 못했어요. 적은 문장은 그대로 있어요. 다시 해 보세요.",
   "worldReadWordsTypeLine": "문장 적기",
   "worldReadWordsLine": "남은 문장",
-  "worldInspirationCount": "영감 {count}개"
+  "worldInspirationCount": "영감 {count}개",
+  "worldStreamSeeEvery": "저장한 것 전부 보기"
 }

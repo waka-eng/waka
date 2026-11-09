@@ -52,6 +52,8 @@ export function HomeStream(props: {
   principles: readonly ApiPrinciple[];
   onOpenSave: (id: string) => void;
   onClose: () => void;
+  /** Older saves past the loaded window: the full archive pages them in. */
+  more?: { onSeeAll: () => void };
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const saves = [...props.inspirations].sort((a, b) => b.capturedMs - a.capturedMs);
@@ -82,6 +84,10 @@ export function HomeStream(props: {
               </li>;
             })}
           </ul>
+          {/* THE REST ARE NOT DROPPED (code review, 2026-11-08): this page
+              shows the saves already loaded, and the archive pages in every
+              one, so when there are more it says so and goes there. */}
+          {props.more ? <button type="button" className="waka-stream-more" onClick={props.more.onSeeAll}>{say('worldStreamSeeEvery')}</button> : null}
         </section> : null}
         {props.signals.length ? <section aria-labelledby="waka-stream-patterns">
           <h2 id="waka-stream-patterns" className="waka-stream-label">{say('worldStreamPatterns')}</h2>

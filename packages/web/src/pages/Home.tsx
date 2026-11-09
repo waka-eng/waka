@@ -7671,20 +7671,37 @@ const RETRY_READ_LIMIT_MS = 20_000;
      keyed the other way, a save → the signals citing it), in the order the
      signals are cited, at most three (the bubble holds three rows without
      scrolling, as drawn), each said by the save's own preview. */
-  const whyFor = (entry: Entry | null): Array<{ id: string; preview: string }> => {
-    const out: Array<{ id: string; preview: string }> = [];
-    const seen = new Set<string>();
+  /* WHICH SAVES, before whether they are loaded: the first three cited, in
+     the order the signals cite them. */
+  const whyIds = (entry: Entry | null): string[] => {
+    const ids: string[] = [];
     for (const cited of entry?.citedSignals ?? []) {
       for (const id of signals?.find(row => row.id === cited.id)?.inspirationIds ?? []) {
-        if (seen.has(id)) continue;
-        seen.add(id);
-        const preview = inspirations?.find(row => row.id === id)?.preview;
-        if (preview) out.push({ id, preview });
-        if (out.length >= 3) return out;
+        if (!ids.includes(id)) ids.push(id);
+        if (ids.length >= 3) return ids;
       }
     }
-    return out;
+    return ids;
   };
+  /* A CITED SAVE OUTSIDE THE LOADED WINDOW IS READ, NOT DROPPED (code
+     review, 2026-11-08): the field loads the newest saves, and a read can
+     rest on an older one. Its words are fetched once and kept here. */
+  const [whyFetched, setWhyFetched] = useState<ReadonlyMap<string, string>>(new Map());
+  const whyFor = (entry: Entry | null): Array<{ id: string; preview: string }> => whyIds(entry)
+    .map(id => ({ id, preview: inspirations?.find(row => row.id === id)?.preview ?? whyFetched.get(id) ?? '' }))
+    .filter(row => row.preview);
+  const whyMissing = whyIds(lead && !standingAsAgent ? lead : null)
+    .filter(id => !inspirations?.some(row => row.id === id) && !whyFetched.has(id)).join(',');
+  useEffect(() => {
+    if (!whyMissing || offline || !inspirations) return;
+    let live = true;
+    for (const id of whyMissing.split(',')) {
+      void loadInspiration(id, memoryProfileId ?? undefined)
+        .then(detail => { if (live) setWhyFetched(known => new Map(known).set(id, detail.preview || detail.text)); })
+        .catch(() => undefined);
+    }
+    return () => { live = false; };
+  }, [whyMissing, offline, Boolean(inspirations), memoryProfileId]);
   /* ═══ A PATTERN STILL FORMING, ASKED IN THE BUBBLE (design F3) ════════
      Only before there is a read — with one, the read is what the bubble is
      for — and never on an agent's wall, whose patterns are the agent's. */
@@ -11606,7 +11623,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {streamShown ? (
         <HomeStream locale={locale} inspirations={inspirations ?? []} signals={streamSignals(signals)} principles={principles}
           onClose={() => setStreamOpen(false)}
-          onOpenSave={id => { setStreamOpen(false); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }} />
+          onOpenSave={id => { setStreamOpen(false); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }}
+          more={fieldBeyond > 0 ? { onSeeAll: () => { setStreamOpen(false); listOrigin.current = null; openOverHome('saves'); } } : undefined} />
       ) : null}
       {/* ═══ "{n} INSPIRATIONS" — THE NOTEPAD'S DOOR TO EVERYTHING KEPT ═══
           Founder (design/one-pill-dock, 845f3cec): a new note leads to the

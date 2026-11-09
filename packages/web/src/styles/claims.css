@@ -7308,6 +7308,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   background: var(--waka-raised); color: var(--ink); font: inherit; text-align: start; cursor: pointer;
 }
 .waka-stream-meta { font-size: var(--t-ui); color: var(--muted); }
+.waka-stream-more { display: block; min-height: var(--sp-44); margin: var(--sp-8) auto 0; padding: 0 var(--sp-16); border: 0; background: none; color: var(--ink); font: inherit; font-size: var(--t-ui); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .waka-stream-words { font-size: var(--t-input); line-height: 1.4; overflow-wrap: anywhere; }
 .waka-stream-statement {
   display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-12) var(--sp-16); border-radius: var(--sp-16);

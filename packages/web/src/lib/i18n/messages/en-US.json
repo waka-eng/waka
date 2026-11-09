@@ -934,5 +934,6 @@
   "worldReadWordsFixFailed": "Couldn't save that. Your line is still here — try again.",
   "worldReadWordsTypeLine": "Type the line",
   "worldReadWordsLine": "The line that stuck",
-  "worldInspirationCount": "{count} {count, plural, one {inspiration} other {inspirations}}"
+  "worldInspirationCount": "{count} {count, plural, one {inspiration} other {inspirations}}",
+  "worldStreamSeeEvery": "See every save"
 }
