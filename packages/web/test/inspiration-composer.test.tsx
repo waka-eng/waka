@@ -412,9 +412,11 @@ it('makes a photo the page\'s picture, and draws the words it read only when the
   /* Unreadable promises nothing; only a read queued again says it will retry. */
   expect(host.textContent).not.toContain('Your screenshot is saved either way.');
   expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Type the line, or just Save');
+  /* Retrying asks the same; "I'll try reading it again" is promised only
+     where a read is known to be queued (the saved note), never on a guess. */
   props.readWords = { status: 'retrying' }; await mount();
   expect(host.querySelector('.waka-note-says')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
-  expect(host.textContent).toContain('Your screenshot is saved either way.');
+  expect(host.textContent).not.toContain('Your screenshot is saved either way.');
 });
 
 /* F5: a share from another app is asked about, and still waits for Save. */
