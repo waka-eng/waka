@@ -123,6 +123,9 @@ it('keeps under a fix exactly the picture the parser reads, when Image labels st
   for (const reading of [
     'Image: An old caption\nWords: Begin.\nImage: A reel with a caption.',
     'Words: Save this. Image: credit @nasa\nImage: a screenshot of a post.',
+    /* No words, the Image label right after the Words label (PR #464). */
+    '**Words:** **Image:** A diagram.',
+    'Words: Image: A diagram.',
   ]) {
     const f = await fixture({ status: 'ready', text: reading });
     await f.edit('My line.');

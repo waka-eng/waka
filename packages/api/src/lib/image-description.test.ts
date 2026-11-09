@@ -339,5 +339,11 @@ describe("readImageScene", () => {
     expect(readImageScene("Words: Save this. Image: credit @nasa\nImage: a screenshot of a post.")).toBe("credit @nasa\nImage: a screenshot of a post.");
     expect(readImageScene("**Words:** Begin.\n\n**Image:** A reel.")).toBe("A reel.");
     expect(readImageScene("Words: Begin.")).toBeNull();
+    /* No words, and the Image label right after the Words label on one line
+       (code review, PR #464): still the picture, and no words. */
+    expect(readImageScene("**Words:** **Image:** A diagram.")).toBe("A diagram.");
+    expect(readImageScene("Words: Image: A diagram.")).toBe("A diagram.");
+    expect(readImageWords("**Words:** **Image:** A diagram.")).toBeNull();
+    expect(readImageWords("Words: Image: A diagram.")).toBeNull();
   });
 });

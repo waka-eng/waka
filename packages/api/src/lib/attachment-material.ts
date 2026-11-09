@@ -29,7 +29,11 @@ const IMAGE_PART = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:b
    and what follows that label is the picture. Only when no Image label
    follows the words is the one before them used (code review, 2026-11-08). */
 const IMAGE_AFTER_WORDS = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:(?:(?!(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:).)*(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:[[:space:]*_]*(.*)$'`);
-const described = sql<string>`trim(regexp_replace(coalesce((regexp_match(${attachments.enrichmentText}, ${IMAGE_AFTER_WORDS}, 'i'))[1], (regexp_match(${attachments.enrichmentText}, ${IMAGE_PART}, 'i'))[1], ''), '[[:space:]*_]+$', ''))`;
+/* AND AN IMAGE LABEL RIGHT AFTER AN EMPTY WORDS LABEL, on the same line with
+   only blanks or markdown between ("**Words:** **Image:** A diagram.") —
+   the parser reads that as no words and this picture (code review, PR #464). */
+const IMAGE_RIGHT_AFTER_WORDS = sql.raw(String.raw`'(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:[[:blank:]>#*_]*image[[:blank:]*_]*:[[:space:]*_]*(.*)$'`);
+const described = sql<string>`trim(regexp_replace(coalesce((regexp_match(${attachments.enrichmentText}, ${IMAGE_RIGHT_AFTER_WORDS}, 'i'))[1], (regexp_match(${attachments.enrichmentText}, ${IMAGE_AFTER_WORDS}, 'i'))[1], (regexp_match(${attachments.enrichmentText}, ${IMAGE_PART}, 'i'))[1], ''), '[[:space:]*_]+$', ''))`;
 const imagePart = sql<string>`CASE
   WHEN ${attachments.enrichmentStatus} <> 'ready' OR nullif(trim(coalesce(${attachments.enrichmentText},'')),'') IS NULL THEN ''
   WHEN ${attachments.enrichmentText} ~* ${WORDS_MARK}
