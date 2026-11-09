@@ -64,5 +64,24 @@ describe("a quiet control's own rule wins over its container's", () => {
     expect(hoverBody, `${hover} carries the chosen mark too`).not.toMatch(/text-decoration-line|text-decoration:\s*underline|filter:\s*drop-shadow/);
     expect(onBody, `${on} fills`).not.toMatch(/background(-color)?:\s*(?!\s|none\b|transparent\b)\S/);
   });
+
+  /* CODE REVIEW, 2026-11-09: the sheet's "<" lost to `.jar-inspiration-search
+     button` and `.waka-reading-full button`, so two of the "<"s were boxed
+     and padded unlike the rest. Every container that holds one is listed;
+     its blanket button rules must lose to the "<"'s own. */
+  it("draws every sheet's \"<\" the same, whatever sheet it sits in", () => {
+    const CONTAINERS = ["jar-inspiration-search", "jar-search-heading", "waka-reading-full", "jar-reading-comparison",
+      "jar-principle-share", "jar-thing-share", "jar-seek", "jar-prov-room", "waka-account", "waka-settings-heading", "waka-settings"];
+    const rules = selectors();
+    const own = rules.filter(({ selector }) => /^[^ ]*\.waka-sheet-back(?![\w-])[^ ]*$/.test(selector) && !/:hover|:focus|:disabled/.test(selector));
+    expect(own.length, "no rule draws the sheet's \"<\"").toBeGreaterThan(0);
+    const mine = own.map(({ selector }) => specificity(selector)).sort((a, b) => (beats(a, b) ? -1 : 1))[0]!;
+    const losers = rules.filter(({ selector }) =>
+      CONTAINERS.some((name) => new RegExp(`\\.${name}(?![\\w-])`).test(selector))
+      && /(^|[\s>])button(?![\w-])[^\s>]*$/.test(selector)
+      && !/:not\(\.waka-sheet-back\)/.test(selector)
+      && !beats(mine, specificity(selector)));
+    expect(losers.map(({ selector }) => selector), "a sheet's button rule out-ranks the \"<\"").toEqual([]);
+  });
 });
 

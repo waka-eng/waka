@@ -7565,15 +7565,23 @@ body:has(.waka-page-back) .waka-over.waka-over--note { padding-top: calc(var(--s
 }
 
 @layer chrome {
-/* A sheet's "<": the page back's glyph, unboxed, first in the sheet's row. */
-.waka-sheet-back {
+/* A sheet's "<": the page back's glyph, unboxed, first in the sheet's row.
+   THE SAME IN EVERY SHEET, WHICHEVER SHEET IT IS IN (code review,
+   2026-11-09). Most sheets dress their buttons with a blanket
+   `.<sheet> button` rule, and two of them out-ranked this one, so their "<"
+   came out boxed and padded. `:is(…, #waka-sheet-back)` takes the
+   specificity of an id (no element carries that id; it exists only to
+   weigh), so this one rule outranks every container's button rule without
+   naming each container or reaching for !important. */
+.waka-sheet-back:is(.waka-sheet-back, #waka-sheet-back) {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
-  min-width: var(--waka-corner); min-height: var(--waka-corner); padding: 0; margin: 0;
-  border: 0; border-radius: var(--r-pill); background: none; box-shadow: none; color: var(--muted); cursor: pointer;
+  width: auto; min-width: var(--waka-corner); min-height: var(--waka-corner); padding: 0; margin: 0;
+  border: 0; border-radius: var(--r-pill); background: none; box-shadow: none; color: var(--muted);
+  font: inherit; text-decoration: none; cursor: pointer;
 }
-.waka-sheet-back:hover { background: none; color: var(--muted); }
-.waka-sheet-back:focus-visible { background: none; color: var(--ink); }
-.waka-sheet-back:disabled { opacity: 0.4; cursor: default; }
+.waka-sheet-back:is(.waka-sheet-back, #waka-sheet-back):hover { border: 0; background: none; color: var(--muted); }
+.waka-sheet-back:is(.waka-sheet-back, #waka-sheet-back):focus-visible { background: none; color: var(--ink); outline: 2px solid var(--ink); outline-offset: 2px; }
+.waka-sheet-back:is(.waka-sheet-back, #waka-sheet-back):disabled { opacity: 0.4; cursor: default; }
 header:has(> .waka-sheet-back), .jar-search-heading:has(> .waka-sheet-back) {
   display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-6);
 }
@@ -7586,7 +7594,7 @@ header:has(> .waka-sheet-back), .jar-search-heading:has(> .waka-sheet-back) {
 .waka-account > .waka-sheet-back { position: absolute; top: var(--sp-12); left: var(--sp-12); z-index: 1; }
 .waka-account:has(> .waka-sheet-back) .waka-about-title,
 .waka-account:has(> .waka-sheet-back) .waka-settings-heading { padding-inline-start: calc(var(--waka-corner) + var(--sp-4)); }
-.waka-account:has(.waka-settings-heading > .waka-sheet-back) > .waka-sheet-back { display: none; }
+.waka-account:has(.waka-settings-heading > .waka-sheet-back) > .waka-sheet-back:is(.waka-sheet-back, #waka-sheet-back) { display: none; }
 .waka-account:has(.waka-settings-heading > .waka-sheet-back) .waka-settings-heading { padding-inline-start: 0; }
 .jar-prov-room-top { display: flex; align-items: center; }
 }
