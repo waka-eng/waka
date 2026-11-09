@@ -43,18 +43,30 @@ it('on a stale revision, reads the words again, keeps the line, and says so plai
   expect(host.querySelector('textarea')?.value, 'the typed line was lost').toBe('My line');
 });
 
-it('asks which line stuck when it could not read them, retries once when nothing is queued, and says it will try again', async () => {
+it('asks which line stuck when it could not read them, says it will try again, and queues no read of its own', async () => {
   vi.useFakeTimers();
   vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: true }));
-  vi.mocked(retryImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: false }));
   await mount();
-  expect(retryImageWords).toHaveBeenCalledTimes(1);
   expect(host.textContent).toContain("I couldn't make out the words. Which line stuck?");
   expect(host.textContent).toContain("I'll try reading it again in a bit.");
-  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
-  expect(retryImageWords, 'it asked for a read again on every poll').toHaveBeenCalledTimes(1);
-  expect(vi.mocked(fetchImageWords).mock.calls.length).toBeGreaterThan(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+  /* Code review, 2026-11-08: a paid re-read was queued on every mount,
+     spending the shared budget so the person's own retry met a 429. */
+  expect(retryImageWords, 'the screen queued a paid read by itself').not.toHaveBeenCalled();
+  expect(fetchImageWords, 'it kept asking though nothing is queued').toHaveBeenCalledTimes(1);
+  await act(async () => root.render(<></>)); await mount();
+  expect(retryImageWords, 'a second opening queued a read').not.toHaveBeenCalled();
 });
+
+it('follows a queued read until it lands', async () => {
+  vi.useFakeTimers();
+  vi.mocked(fetchImageWords).mockResolvedValueOnce(row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null }))
+    .mockResolvedValue(row({}));
+  await mount();
+  await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
+});
+
 
 it('offers no Fix where the server says the words may not be edited', async () => {
   vi.mocked(fetchImageWords).mockResolvedValue(row({ canEdit: false }));
@@ -80,18 +92,15 @@ it('keeps asking through a timeout or a rate limit', async () => {
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
 });
 
-it('waits for the retry budget once, instead of asking every few seconds, when nothing can hurry the read', async () => {
+it('stops asking when the retry budget is spent, instead of polling an answer that cannot change', async () => {
   vi.useFakeTimers();
   const reopens = new Date(Date.now() + 60_000).toISOString();
   vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: reopens }));
   await mount();
-  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(180_000); });
   expect(fetchImageWords, 'it polled a read nothing could hurry').toHaveBeenCalledTimes(1);
-  await act(async () => { await vi.advanceTimersByTimeAsync(31_000); });
-  expect(fetchImageWords, 'it did not ask again when the budget reopened').toHaveBeenCalledTimes(2);
-  await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
-  expect(fetchImageWords, 'it kept waiting past the one reopening').toHaveBeenCalledTimes(2);
 });
+
 
 it('shows nothing for words it cannot tell apart from the description (a reading from before the two-part shape)', async () => {
   vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'unknown', text: null, read: null }));
@@ -121,11 +130,3 @@ it('asks only while the inline read is still going', async () => {
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
 });
 
-it('stops asking about a retrying read whose one retry is spent and none of ours is queued', async () => {
-  vi.useFakeTimers();
-  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null }));
-  await mount();
-  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
-  expect(fetchImageWords, 'it kept asking about a read nothing will hurry').toHaveBeenCalledTimes(1);
-  expect(retryImageWords).not.toHaveBeenCalled();
-});

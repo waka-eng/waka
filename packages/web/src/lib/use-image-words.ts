@@ -11,8 +11,7 @@
  * Past that it stops asking and keeps saying it is still reading; the next
  * time the note is opened it asks again.
  *
- * `retrying` WITH `canRetry` means nothing is queued: it asks for one more
- * read, once per attachment per sitting (the server caps retries too).
+ * It never queues a read of its own — see `readUnderWay`.
  *
  * A FIX CARRIES THE REVISION IT WAS MADE AGAINST. If the words changed in
  * the meantime (409 `words_changed`), the fix is not sent over them: the
@@ -22,7 +21,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiError } from './api/http';
-import { correctImageWords, fetchImageWords, retryImageWords, type ApiImageWords, type ApiImageWordsSummary } from './api/attachments';
+import { correctImageWords, fetchImageWords, type ApiImageWords, type ApiImageWordsSummary } from './api/attachments';
 
 const MAX_POLLS = 30;
 const MAX_POLL_MS = 120_000;
@@ -32,6 +31,23 @@ export type FixOutcome = 'saved' | 'changed' | 'failed';
 /** Statuses that will not change by asking: shown as they came. */
 const SETTLED: ReadonlySet<string> = new Set(['ready', 'unknown', 'unreadable']);
 const KNOWN: ReadonlySet<string> = new Set(['reading', 'ready', 'unknown', 'unreadable', 'retrying']);
+
+/**
+ * WHETHER ASKING AGAIN CAN SHOW ANYTHING NEW (code review, 2026-11-08).
+ * A first read in progress (`reading`), or a read that is queued: `retrying`
+ * with no retry allowed and no `retryAfter` (the contract's "something is
+ * queued"). `retrying` with a retry allowed means NOTHING is queued, and
+ * with a `retryAfter` the budget is spent: in both the answer will not
+ * change by asking, so the asking stops.
+ *
+ * AND THIS SCREEN NEVER QUEUES A READ ITSELF. It used to ask for one on
+ * every mount, spending the shared paid budget (three an hour) so the
+ * person's own retry met a 429. Only a person's explicit act, or the
+ * server's own recovery, queues a read.
+ */
+function readUnderWay(row: ApiImageWords): boolean {
+  return row.status === 'reading' || (row.status === 'retrying' && !row.canRetry && !row.retryAfter);
+}
 
 /** The inline summary, standing in for the full read until one is needed.
     Fix stays offered (a read-only session's PATCH is refused and said so). */
@@ -50,7 +66,6 @@ export function useImageWords(attachmentId: string | null, inline?: ApiImageWord
   fix: (text: string) => Promise<FixOutcome>;
 } {
   const [words, setWords] = useState<ApiImageWords | null>(null);
-  const retried = useRef(new Set<string>());
   const wordsRef = useRef<ApiImageWords | null>(null);
   wordsRef.current = words;
   const seed = inline && KNOWN.has(inline.status) ? inline : null;
@@ -65,35 +80,12 @@ export function useImageWords(attachmentId: string | null, inline?: ApiImageWord
     const control = new AbortController();
     let timer = 0, polls = 0;
     const began = Date.now();
-    let waitedForBudget = false;
     const ask = async () => {
       try {
-        let row = await fetchImageWords(attachmentId, control.signal);
-        if (row.status === 'retrying' && row.canRetry && !retried.current.has(attachmentId)) {
-          retried.current.add(attachmentId);
-          row = await retryImageWords(attachmentId, control.signal).catch(() => row);
-        }
+        const row = await fetchImageWords(attachmentId, control.signal);
         if (control.signal.aborted) return;
         setWords(row);
-        if (row.status !== 'reading' && row.status !== 'retrying') return;
-        /* RETRYING ON A SPENT BUDGET: no read is queued and none may be
-           until `retryAfter`. Asking every few seconds would only read the
-           same answer, so it asks once, then, and stops. (Retrying with no
-           `retryAfter` and no retry allowed means a read IS queued — that one
-           is still asked about on the budget below, because it will land.) */
-        if (row.status === 'retrying' && !row.canRetry && row.retryAfter) {
-          const reopens = Date.parse(row.retryAfter) - Date.now();
-          if (waitedForBudget || !Number.isFinite(reopens)) return;
-          waitedForBudget = true;
-          timer = window.setTimeout(() => void ask(), Math.max(0, Math.min(reopens, 2_147_000_000)));
-          return;
-        }
-        /* RETRYING, NO RETRY ALLOWED, AND NONE OF OURS QUEUED: its one
-           allowed retry is spent and nothing this screen asked for is on its
-           way, so asking again only reads the same answer. Stop; the next
-           opening asks afresh. A retry WE queued this sitting is still
-           followed until it lands. */
-        if (row.status === 'retrying' && !row.canRetry && !retried.current.has(attachmentId)) return;
+        if (!readUnderWay(row)) return;
       } catch (reason) {
         if (control.signal.aborted) return;
         /* A PERMANENT REFUSAL ENDS THE ASKING: gone (404), not yours (403),
