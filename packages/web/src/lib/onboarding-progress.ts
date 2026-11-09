@@ -84,7 +84,13 @@ export function onboardingStep(input: { saved: number; marker: OnboardingMarker;
    it renders before any navigation onboarding queued after the stamp (route
    changes are transitions; the session update is not). So onboarding names
    its destination here first, synchronously, and the guard sends the person
-   there instead of home. Read once. */
+   there instead of home.
+
+   READ WITHOUT BEING CONSUMED. The guard reads this during render, and
+   StrictMode renders twice: a read that cleared it handed the second render
+   nothing, and Talk about this landed at home. Onboarding clears it itself —
+   when it leaves the screen, or when the stamp fails. */
 let leavingTo: string | null = null;
 export function leaveOnboardingFor(destination: string): void { leavingTo = destination; }
-export function takeOnboardingExit(): string | null { const to = leavingTo; leavingTo = null; return to; }
+export function onboardingExit(): string | null { return leavingTo; }
+export function clearOnboardingExit(): void { leavingTo = null; }

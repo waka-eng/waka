@@ -71,9 +71,9 @@ import {
 import type { SupportedLocale } from "../lib/locales";
 import {
   clearOnboardingMarker,
+  clearOnboardingExit,
   leaveOnboardingFor,
   ONBOARDING_QUESTIONS,
-  takeOnboardingExit,
   onboardingStep,
   readOnboardingMarker,
   writeOnboardingMarker,
@@ -150,6 +150,9 @@ export default function OnboardingPage(): JSX.Element {
     window.setTimeout(resolve, LEAVE_FADE_MS);
   });
 
+  /* Where onboarding was going is forgotten once onboarding is gone. */
+  useEffect(() => () => clearOnboardingExit(), []);
+
   const finish = useCallback(async (destination: string) => {
     if (!profile) return;
     /* A preview stamps nothing: it returns home exactly as it found the account. */
@@ -165,7 +168,7 @@ export default function OnboardingPage(): JSX.Element {
       clearOnboardingMarker(accountId);
       navigate(destination, { replace: true });
     } catch (reason) {
-      takeOnboardingExit();
+      clearOnboardingExit();
       setFading(false);
       setLeaveError(reason instanceof ApiError ? reason.message : say("profileSaveError"));
       setLeaving(false);

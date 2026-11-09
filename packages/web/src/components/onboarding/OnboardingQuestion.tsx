@@ -103,7 +103,10 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
   /* One identity per answer: a retried Save is the same save to the server. */
   const requestId = useRef<string>(crypto.randomUUID());
   /* Upload receipts survive a failed save, so a retry does not upload twice. */
-  const uploaded = useRef(new Map<string, InspirationDraftMedia["uploaded"]>());
+  /* KEYED BY THE FILE ITSELF, not by "photo"/"audio": a photo replaced after
+     a failed save is a different file and must upload itself, never inherit
+     the receipt — and the stored object — of the one it replaced. */
+  const uploaded = useRef(new WeakMap<Blob, NonNullable<InspirationDraftMedia["uploaded"]>>());
 
   /* ═══ THE HANDOFF, after a Save lands (founder: "should have confirmation
      visually somehow the agent received ur input and is asking the next
@@ -128,7 +131,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
     asked.current = index;
     setMode("choose"); setText(""); setPhoto(null); setAudio(null); setVoiceOn(false); setError("");
     requestId.current = crypto.randomUUID();
-    uploaded.current = new Map();
+    uploaded.current = new WeakMap();
   }, [index]);
 
   /* Measured so the bubble's height can ease between what it says. */
@@ -237,11 +240,12 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
     }
     try {
       const media: InspirationDraftMedia[] = [];
-      if (photo) media.push({ id: "photo", type: "image", ...(photo.file.name ? { name: photo.file.name.slice(0, 255) } : {}), blob: photo.file, uploaded: uploaded.current.get("photo") });
-      if (audio) media.push({ id: "audio", type: "audio", name: audio.name, blob: audio, uploaded: uploaded.current.get("audio") });
+      const files = new Map<string, Blob>();
+      if (photo) { files.set("photo", photo.file); media.push({ id: "photo", type: "image", ...(photo.file.name ? { name: photo.file.name.slice(0, 255) } : {}), blob: photo.file, uploaded: uploaded.current.get(photo.file) }); }
+      if (audio) { files.set("audio", audio); media.push({ id: "audio", type: "audio", name: audio.name, blob: audio, uploaded: uploaded.current.get(audio) }); }
       const sent = await uploadInspirationMedia({
         media, profileId, signal: controller.signal, assertCurrent: () => {}, uploading: () => {},
-        persist: async (id, update) => { if (update.uploaded) uploaded.current.set(id, update.uploaded); },
+        persist: async (id, update) => { const file = files.get(id); if (file && update.uploaded) uploaded.current.set(file, update.uploaded); },
       });
       const attachments: NonNullable<CreateInspirationRequest["attachments"]> = sent.map((item) => {
         if (!item.uploaded || item.type === "link" || item.type === "file") throw new DraftProblem("worldComposerNotUploaded");

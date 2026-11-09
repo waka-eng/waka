@@ -29,7 +29,7 @@ import { Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../lib/auth-context";
 import { onboardingPreviewRequested } from "../lib/onboarding-preview";
-import { takeOnboardingExit } from "../lib/onboarding-progress";
+import { onboardingExit } from "../lib/onboarding-progress";
 import { safeInAppPath } from "../lib/sign-in-destination";
 import { LoadingHome } from "./LoadingHome";
 
@@ -79,7 +79,7 @@ export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps
     /* Onboarding names where it is going before it stamps itself done (Talk
        about this opens a chat), so the stamp lands the person there rather
        than racing a second navigation to it. */
-    const leavingTo = safeInAppPath(takeOnboardingExit()) ?? "/";
+    const leavingTo = safeInAppPath(onboardingExit()) ?? "/";
     return <Navigate to={leavingTo} replace />;
   }
 
