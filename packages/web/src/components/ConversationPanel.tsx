@@ -293,10 +293,12 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      failures, leaving Send off for good; `useConversationReply` now keeps
      retrying until the server answers, the line says it is retrying, and
      "Check again" asks at once. */
-  const savedOrigin=conversation?.initialInspiration??null;
+  /* Only a save with words of its own stands on top. One with none (a
+     screenshot kept without a note) has nothing to show there, and matching
+     its empty text would hide the person's real first message (every string
+     starts with ''); its chat reads like any other. */
+  const savedOrigin=conversation?.initialInspiration?.text.trim()?conversation.initialInspiration:null;
   const opening=conversation?.messages?.[0];
-  /* A screenshot kept with no note has no text of its own: the opening turn
-     then carries the words read off it, and is the save's face on top. */
   const originRepeated=Boolean(savedOrigin&&(conversation?.messageWindowStart??1)<=1&&opening?.role==='user'&&opening.content.trim().startsWith(savedOrigin.text.trim()));
   const replyUnconfirmed=Boolean(generationEnabled&&latestMessage?.role==='user'&&(!reply.state||reply.error));
   /* Only a 404 (`terminal`) is not a reply in flight: Send comes back and the

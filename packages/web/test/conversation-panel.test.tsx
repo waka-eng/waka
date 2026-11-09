@@ -828,3 +828,13 @@ it('shows the save a chat was opened from on top, without repeating it as your t
   expect(topic?.querySelector('blockquote')?.textContent).toBe('Nobody feels ready.');
   expect([...host.querySelectorAll('.chat-message')].map(node=>node.getAttribute('data-role'))).toEqual(['assistant']);
 });
+/* Code review, 2026-11-08: a save with no words of its own (a screenshot kept
+   without a note) matched every opening turn — '' starts every string — and
+   hid the person's real first message. */
+it('does not hide your first message under a save that has no words of its own',async()=>{
+  stored={...stored,generationEnabled:true,revision:1,initialInspiration:{id:'kept',text:''},messages:[
+    {id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'What did that screenshot mean to me?',createdAt:'2026-10-03T01:00:00Z'}]};
+  await mount();
+  expect(host.querySelector('.chat-topic[data-about="save"]')).toBeNull();
+  expect([...host.querySelectorAll('.chat-message')].map(node=>node.textContent)).toEqual([expect.stringContaining('What did that screenshot mean to me?')]);
+});
