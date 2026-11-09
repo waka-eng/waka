@@ -68,7 +68,7 @@ import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
 import { createConversation } from "../lib/api/conversations";
 import { DialogSurface } from "../components/DialogSurface";
-import { PageBack } from "../components/PageBack";
+import { PageBack, SheetBack } from "../components/PageBack";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { useNavigate } from "react-router-dom";
 import { useViewNavigation } from '../lib/use-view-navigation';
@@ -7929,8 +7929,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
             OTHER ONE HAS: a ✕ inside it, and Escape (the listener below).
             Both do what "Me" does — the view that failed is not there to go
             back to, so dismissing it IS going home. */}
-        <button type="button" className="jar-navigation-notice-close" aria-label={say('worldClose')}
-          onClick={() => viewNavigation.write({ ...EMPTY_VIEW }, { replace: true })}>×</button>
+        <button type="button" className="jar-navigation-notice-close"
+          onClick={() => viewNavigation.write({ ...EMPTY_VIEW }, { replace: true })}>{say('worldBackHome')}</button>
         <p>{say(navigationProblem === 'unavailable' ? 'worldPrivateLinkUnavailable' : 'worldLinkUnavailable')}</p>
         {navigationProblem === 'retryable' ? <button type="button" onClick={() => viewNavigation.write(viewNavigation.view ?? { ...EMPTY_VIEW }, { replace: true, query: viewNavigation.query })}>{say('worldRoomHistoryRetry')}</button> : auth?.isAuthenticated ?
           <button type="button" onClick={() => {
@@ -7957,7 +7957,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               : note ? formatMessage(locale, 'worldRecordingAttachFailed', { note })
               : say('worldRecordingAttachFailedUntitled')}</span>
             {failure.file ? <button type="button" className="waka-clip-failed-retry" onClick={() => archiveClips.retry(failure.id)}>{say('surfaceUnavailableRetry')}</button> : null}
-            <button type="button" className="waka-clip-failed-close" aria-label={say('worldClose')} onClick={() => archiveClips.dismiss(failure.id)}>×</button>
+            <button type="button" className="waka-clip-failed-close" onClick={() => archiveClips.dismiss(failure.id)}>{say('worldSourceDismiss')}</button>
           </div>
         );
       })() : null}
@@ -10720,7 +10720,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   complaint. */}
               <p className="jar-ask jar-ask--row">
                 <button type="button" onClick={() => { setReflectOpen(false); viewNavigation.write({ ...observedRef.current, reflectionId: null }, { observed: true, replace: true }); }}>
-                  {say('worldClose')}
+                  {say('worldBack')}
                 </button>
               </p>
             </div>
@@ -10997,6 +10997,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           role="dialog"
           aria-label={say("worldWhereThisCameFrom")}
         >
+          <header className="jar-prov-room-top"><SheetBack label={say("worldBack")} onBack={() => setProv(null)} /></header>
           <p className="jar-prov-room-lead">{prov.lead}</p>
           <div className="jar-prov-room-panes">
             <div className="jar-prov-room-list">
@@ -11039,11 +11040,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
               )}
             </div>:null}
           </div>
-          <p className="jar-ask jar-ask--row jar-prov-room-close">
-            <button type="button" onClick={() => setProv(null)}>
-              {say("worldEnough")}
-            </button>
-          </p>
         </DialogSurface>
       ) : null}
 

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DialogSurface } from './DialogSurface';
+import { SheetBack } from './PageBack';
 import { t, type SupportedLocale } from '../lib/locales';
 
 import type { ReadingDetailActions } from './ReadingDetails';
@@ -91,8 +92,7 @@ export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDi
     </>}
     {expanded ? createPortal(<div className="waka-reading-sheet">
       <DialogSurface className="waka-reading-full" aria-label={say('worldNowTitle')} onClose={close}>
-        <header><h2>{say('worldNowTitle')}</h2>
-          <button type="button" disabled={editState.busy} onClick={close}>{say('worldClose')}</button></header>
+        <header><SheetBack label={say('worldBack')} disabled={editState.busy} onBack={close} /><h2>{say('worldNowTitle')}</h2></header>
         <div className="waka-reading-full-body" tabIndex={0}>{confirmDiscard ? <div role="alert"><p>{say('worldReadingDiscardConfirm')}</p><button onClick={() => setConfirmDiscard(false)}>{say('worldReadingKeepEditing')}</button><button onClick={() => setExpanded(null)}>{say('worldReadingDiscard')}</button></div> : null}<p>{expanded.text}</p>{expanded.details ? <Suspense fallback={<p role="status">{say('worldSourceChecking')}</p>}><ReadingDetails text={expanded.text} locale={locale} actions={expanded.details} onEditState={setEditState} onClose={() => setExpanded(null)} /></Suspense> : null}</div>
         {expanded.onShare && !editState.dirty && !editState.busy ? <footer><button type="button" onClick={() => { setExpanded(null); expanded.onShare?.(); }}>{say('worldShare')}</button></footer> : null}
       </DialogSurface>

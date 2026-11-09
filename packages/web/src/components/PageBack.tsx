@@ -81,3 +81,17 @@ export function PageBack({ label, onBack, navigationKey, belowCorners = false, v
     {distance > 0 ? <span className="waka-back-swipe" aria-hidden="true" style={{ opacity: distance / 100, transform: `translateX(${distance / 3}px)` }}>‹</span> : null}
   </>;
 }
+
+/**
+ * THE SAME "<" INSIDE A SHEET (founder, 2026-11-08: one header grammar). A
+ * sheet's way out used to be a text Close top-right, an "×", an "←" or a
+ * word at the foot ("Enough"); every one is this unboxed "<" now, first in
+ * the sheet's own top row, its name said to a screen reader. Escape still
+ * closes the sheet through `DialogSurface`.
+ */
+export function SheetBack({ label, onBack, disabled = false }: { label: string; onBack: () => void; disabled?: boolean }) {
+  return <button type="button" className="waka-sheet-back" disabled={disabled} onClick={onBack}>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg>
+    <span className="sr-only">{label}</span>
+  </button>;
+}

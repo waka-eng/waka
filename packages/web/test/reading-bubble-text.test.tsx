@@ -72,7 +72,7 @@ it('offers a full reading only when clipped, closes by Escape, and returns focus
     await act(async () => { more.focus(); more.click(); });
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Every word remains available.');
-    expect(dialog.querySelector('button')?.textContent).toBe('Close');
+    expect(dialog.querySelector('button')?.textContent).toBe('Back');
     await act(async () => dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(more);

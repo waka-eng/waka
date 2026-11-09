@@ -5566,16 +5566,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   gap: var(--sp-4);
 }
 
-/* Close stays beside the title while the panel body scrolls. */
-.waka-account-close {
-  position: absolute;
-  top: var(--sp-12);
-  right: var(--sp-12);
-  z-index: 1;
-  min-height: var(--sp-44);
-  padding: 0 var(--sp-8);
-}
-
 .waka-account-name {
   color: var(--ink);
 }
@@ -7580,4 +7570,31 @@ body:has(.waka-page-back) .waka-over.waka-over--note { padding-top: calc(var(--s
 /* A principle's removal, asked in place: the question in the row's muted
    voice, then Cancel and Remove. */
 .jar-principle-ask { color: var(--muted); font-family: var(--waka-face); font-size: var(--t-meta); margin-inline-end: var(--sp-8); }
+}
+
+@layer chrome {
+/* A sheet's "<": the page back's glyph, unboxed, first in the sheet's row. */
+.waka-sheet-back {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  min-width: var(--waka-corner); min-height: var(--waka-corner); padding: 0; margin: 0;
+  border: 0; border-radius: var(--r-pill); background: none; box-shadow: none; color: var(--muted); cursor: pointer;
+}
+.waka-sheet-back:hover { background: none; color: var(--muted); }
+.waka-sheet-back:focus-visible { background: none; color: var(--ink); }
+.waka-sheet-back:disabled { opacity: 0.4; cursor: default; }
+header:has(> .waka-sheet-back), .jar-search-heading:has(> .waka-sheet-back) {
+  display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-6);
+}
+}
+
+@layer chrome {
+/* THE ACCOUNT CARD'S "<" (info and settings) stands top-left in the card,
+   where its title begins; a settings sub-page's own "<" (back to Settings)
+   takes that seat while it is open, so there is only ever one. */
+.waka-account > .waka-sheet-back { position: absolute; top: var(--sp-12); left: var(--sp-12); z-index: 1; }
+.waka-account:has(> .waka-sheet-back) .waka-about-title,
+.waka-account:has(> .waka-sheet-back) .waka-settings-heading { padding-inline-start: calc(var(--waka-corner) + var(--sp-4)); }
+.waka-account:has(.waka-settings-heading > .waka-sheet-back) > .waka-sheet-back { display: none; }
+.waka-account:has(.waka-settings-heading > .waka-sheet-back) .waka-settings-heading { padding-inline-start: 0; }
+.jar-prov-room-top { display: flex; align-items: center; }
 }

@@ -41,6 +41,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { CSSProperties } from "react";
 import { DialogSurface } from "./DialogSurface";
+import { SheetBack } from "./PageBack";
 import { fetchAttachmentUrl } from "../lib/api";
 import { ArtifactLayoutError, renderShareCard, type PrincipleArtifactContent, type ShareCardLayout } from "../lib/principle-artifact";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
@@ -348,10 +349,8 @@ export function ShareSheet({ target, locale, onClose }: {
       <button className="jar-review-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={onClose} />
       <DialogSurface className="jar-seek jar-thing-share" aria-label={title} onClose={onClose} data-jar-chrome="1">
         <header>
+          <SheetBack label={say("worldBack")} onBack={onClose} />
           <h2>{title}</h2>
-          <button type="button" className="jar-share-x" aria-label={say("worldClose")} onClick={onClose}>
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-          </button>
         </header>
         <div className="jar-share-body">
           <div className="jar-share-stage" aria-busy={!ready && !renderError}>

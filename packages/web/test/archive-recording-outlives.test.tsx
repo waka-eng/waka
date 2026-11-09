@@ -359,7 +359,7 @@ it("does not let the archive's recorder start while the notepad's is live", asyn
   }
 });
 
-it("lets the failure line go with ×, without attaching anything", async () => {
+it("lets the failure line go with Hide, without attaching anything", async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
   await openArchive();
   await recordOn("own-0");
@@ -367,8 +367,8 @@ it("lets the failure line go with ×, without attaching anything", async () => {
   await closeOverlay(world.container);
   await settle();
   await deliverStops();
-  const close = q<HTMLButtonElement>('.waka-clip-failed button[aria-label="Close"]');
-  expect(close, "the failure line has no ×").toBeTruthy();
+  const close = q<HTMLButtonElement>('.waka-clip-failed .waka-clip-failed-close');
+  expect(close?.textContent, "the failure line has no Hide").toBe("Hide");
   await act(async () => close!.click());
   await settle(2);
   expect(q(".waka-clip-failed")).toBeNull();

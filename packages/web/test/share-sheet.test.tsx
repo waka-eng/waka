@@ -22,7 +22,7 @@
  *
  * Founder, 2026-10-16: one design (the first, dark and square), unsigned,
  * no looks row and no name switch; the words edited in the bubble itself
- * rather than in a box under the card; a plain × to close; two plain icons.
+ * rather than in a box under the card; a quiet "<" to close; two plain icons.
  */
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -96,12 +96,12 @@ it("opens on the one design, unsigned, with the kept words and two icon actions"
   expect(host.querySelector("h2")?.textContent).toBe("Share this note");
 });
 
-it("closes with a plain × in the corner", async () => {
+it("closes with the quiet \"<\" first in its row, like every page", async () => {
   await mount();
   await settle();
-  const x = host.querySelector<HTMLButtonElement>(".jar-share-x")!;
-  expect(x.getAttribute("aria-label")).toBe("Close");
-  expect(x.textContent).toBe("");
+  const x = host.querySelector<HTMLButtonElement>("header .waka-sheet-back")!;
+  expect(x.textContent, "the \"<\" has no screen reader name").toBe("Back");
+  expect(host.querySelector(".jar-share-x"), "the × came back").toBeNull();
   await act(async () => x.click());
   expect(close).toHaveBeenCalledOnce();
 });

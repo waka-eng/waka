@@ -179,7 +179,7 @@ it('waits for a rename on Back, keeps errors and drafts visible, and allows an e
 });
 
 
-it.each(['Close', 'Escape', 'Info', 'Scrim', 'Gear'])('keeps a failed rename visible when leaving via %s', async exit => {
+it.each(['Back', 'Escape', 'Info', 'Scrim', 'Gear'])('keeps a failed rename visible when leaving via %s', async exit => {
   await act(async () => root.render(<Menu locale="en-US" items={[]} settings={{
     name: 'Mobi', onName: () => {}, onLocale: () => {}, nameBusy: false, localeBusy: false,
     failed: false, onDeleteAccount: async () => {},
@@ -193,14 +193,14 @@ it.each(['Close', 'Escape', 'Info', 'Scrim', 'Gear'])('keeps a failed rename vis
   await editName('Pending name');
   await act(async () => {
     if (exit === 'Escape') window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    else if (exit === 'Close') button('Close').click();
+    else if (exit === 'Back') button('Back').click();
     else host.querySelector<HTMLButtonElement>(exit === 'Info' ? '.waka-corner--info' : exit === 'Gear' ? '.waka-corner--settings' : '.waka-menu-scrim')!.click();
   });
   expect(nameInput().value).toBe('Pending name'); expect(renameProfile).toHaveBeenCalledTimes(1);
   await act(async () => reject(new Error('offline')));
   expect(nameInput().value).toBe('Pending name'); expect(host.textContent).toContain('Name not saved');
   vi.mocked(renameProfile).mockImplementationOnce(() => new Promise(done => { resolve = done; }));
-  await act(async () => button('Close').click());
+  await act(async () => button('Back').click());
   expect(nameInput().value).toBe('Pending name');
   await act(async () => resolve(row('agent-1', 'agent', 'Pending name')));
   expect(host.querySelector('.waka-settings')).toBeNull();

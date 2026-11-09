@@ -6,6 +6,7 @@ import {readPrincipleArtifactDrafts,storePrincipleArtifactDraft,clearPrincipleAr
 import {formatMessage,t,type SupportedLocale} from '../lib/locales';
 import {dateStamp} from '../lib/words';
 import {DialogSurface} from './DialogSurface';
+import {SheetBack} from './PageBack';
 import {ShareLooks} from './ShareLooks';
 import {SHARE_NOTICE_KEY,useShareImage} from '../lib/use-share-image';
 
@@ -157,7 +158,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   return <>
     <button className="jar-review-backdrop" type="button" tabIndex={-1} aria-hidden="true" onClick={onClose}/>
     <DialogSurface className="jar-seek jar-principle-share" aria-label={say('worldSharePrinciple')} onClose={onClose} data-jar-chrome="1">
-      <header><h2>{say('worldSharePrinciple')}</h2><button type="button" onClick={onClose}>{say('worldClose')}</button></header>
+      <header><SheetBack label={say('worldBack')} onBack={onClose}/><h2>{say('worldSharePrinciple')}</h2></header>
       <div className="jar-share-body">
       {loadFailed?<p role="alert">{say('worldShareLoadFailed')} <button type="button" onClick={()=>setAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button></p>:
         !rows?<p role="status">{say('worldShareLoading')}</p>:!source?<p role="status">{say('worldShareMissing')}</p>:null}
