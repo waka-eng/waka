@@ -6265,8 +6265,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
      "Kept" bubble is the first place they can be shown: quoted under
      "Kept", or the question when it could not read them. Asked only while
      that bubble is up. */
-  const keptImageId = visibleInspiration?.attachments.find(item => item.type === 'image')?.id ?? null;
-  const keptWords = useImageWords(charSay === say('worldBubbleKept') ? keptImageId : null).words;
+  const keptImage = visibleInspiration?.attachments.find(item => item.type === 'image') ?? null;
+  const keptImageId = keptImage?.id ?? null;
+  /* Seeded from the save's own response (`enrichment.words`), so a read
+     that was already settled is not asked for again. */
+  const keptWords = useImageWords(charSay === say('worldBubbleKept') ? keptImageId : null, keptImage?.words).words;
   /* HOW LONG THE LINE STAYS. Measured from when it began saying it, so a
      word arriving mid-stay re-plans the time left instead of restarting it. */
   const lineSince = useRef<{ said: string; at: number }>({ said: '', at: 0 });

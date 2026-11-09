@@ -17,6 +17,7 @@
 import { useState } from 'react';
 
 import { t, type SupportedLocale } from '../lib/locales';
+import type { ApiImageWordsSummary } from '../lib/api/attachments';
 import { useImageWords, type FixOutcome } from '../lib/use-image-words';
 
 export interface ReadWords { status: 'reading' | 'ready' | 'unreadable' | 'retrying' | 'unknown'; text?: string }
@@ -69,8 +70,10 @@ export function ReadWordsQuote({ words, locale, onFix, disabled, asks = false }:
 }
 
 /** A saved image's words, read from the server and kept current. */
-export function SavedImageWords({ attachmentId, locale, readOnly = false }: { attachmentId: string; locale: SupportedLocale; readOnly?: boolean }) {
-  const { words, fix } = useImageWords(attachmentId);
+export function SavedImageWords({ attachmentId, locale, readOnly = false, inline }: { attachmentId: string; locale: SupportedLocale; readOnly?: boolean;
+  /** The words the inspiration's detail already carried, when it did. */
+  inline?: ApiImageWordsSummary | null }) {
+  const { words, fix } = useImageWords(attachmentId, inline);
   /* Unknown: a reading too old to say which part is words. Nothing to show. */
   if (!words || words.status === 'unknown') return null;
   return <ReadWordsQuote words={{ status: words.status, text: words.text ?? undefined }} locale={locale} asks

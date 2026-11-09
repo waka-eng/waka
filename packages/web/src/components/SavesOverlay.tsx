@@ -1681,7 +1681,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                   quoted with Fix, or "Which line stuck?" when it could not
                   read them. The server says who may edit (`canEdit`). */}
               {open.attachments.filter(item => item.type === "image").map(item => (
-                <SavedImageWords key={item.id} attachmentId={item.id} locale={locale} />
+                <SavedImageWords key={item.id} attachmentId={item.id} locale={locale} inline={item.words} />
               ))}
 
               {/* THE WORDS ARE THE PAGE. No border, no fill, no label — the

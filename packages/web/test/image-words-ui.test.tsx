@@ -98,3 +98,34 @@ it('shows nothing for words it cannot tell apart from the description (a reading
   await mount();
   expect(host.textContent).toBe('');
 });
+
+/* CODE REVIEW, 2026-11-08: the detail already carries the words inline
+   (`enrichment.words`); a settled reading is shown from it without asking. */
+const mountInline = (inline: Parameters<typeof SavedImageWords>[0]['inline']) =>
+  act(async () => root.render(<SavedImageWords attachmentId="a" locale="en-US" inline={inline} />));
+
+it('shows settled words from the detail without asking for them again', async () => {
+  await mountInline({ status: 'ready', text: 'Nobody feels ready.', read: 'Nobody feels ready.', correction: null, revision: '3' });
+  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
+  expect(fetchImageWords, 'it asked for words the detail already carried').not.toHaveBeenCalled();
+  for (const status of ['unknown', 'unreadable'] as const) {
+    await mountInline({ status, text: null, read: null, correction: null, revision: '3' });
+    expect(fetchImageWords).not.toHaveBeenCalled();
+  }
+});
+
+it('asks only while the inline read is still going', async () => {
+  vi.mocked(fetchImageWords).mockResolvedValue(row({}));
+  await mountInline({ status: 'reading', text: null, read: null, correction: null, revision: '0' });
+  expect(fetchImageWords).toHaveBeenCalledTimes(1);
+  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
+});
+
+it('stops asking about a retrying read whose one retry is spent and none of ours is queued', async () => {
+  vi.useFakeTimers();
+  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null }));
+  await mount();
+  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+  expect(fetchImageWords, 'it kept asking about a read nothing will hurry').toHaveBeenCalledTimes(1);
+  expect(retryImageWords).not.toHaveBeenCalled();
+});

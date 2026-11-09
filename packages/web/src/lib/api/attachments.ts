@@ -163,6 +163,10 @@ export interface ApiAttachmentSummary {
   id: string;
   type: AttachmentType;
   label: string;
+  /** An image's words as the inspiration's detail carried them inline
+      (`enrichment.words`), so the screen need not ask again; absent on a
+      list row, which carries no enrichment. */
+  words?: ApiImageWordsSummary | null;
   /** Original link remains usable if preview metadata is temporarily unavailable. */
   url?: string;
 }

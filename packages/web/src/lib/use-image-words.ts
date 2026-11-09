@@ -22,14 +22,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiError } from './api/http';
-import { correctImageWords, fetchImageWords, retryImageWords, type ApiImageWords } from './api/attachments';
+import { correctImageWords, fetchImageWords, retryImageWords, type ApiImageWords, type ApiImageWordsSummary } from './api/attachments';
 
 const MAX_POLLS = 30;
 const MAX_POLL_MS = 120_000;
 
 export type FixOutcome = 'saved' | 'changed' | 'failed';
 
-export function useImageWords(attachmentId: string | null): {
+/** Statuses that will not change by asking: shown as they came. */
+const SETTLED: ReadonlySet<string> = new Set(['ready', 'unknown', 'unreadable']);
+const KNOWN: ReadonlySet<string> = new Set(['reading', 'ready', 'unknown', 'unreadable', 'retrying']);
+
+/** The inline summary, standing in for the full read until one is needed.
+    Fix stays offered (a read-only session's PATCH is refused and said so). */
+function fromInline(attachmentId: string, inline: ApiImageWordsSummary): ApiImageWords {
+  return { ...inline, attachmentId, inspirationId: '', profileId: '', correctedAt: null, canEdit: true, canRetry: false, retryAfter: null };
+}
+
+/**
+ * `inline` is the summary the inspiration's detail already carried
+ * (`enrichment.words`). When it is settled — ready, unknown, unreadable — it
+ * is shown as it is and nothing is asked; only a read still going (reading,
+ * retrying) is asked about (code review, 2026-11-08).
+ */
+export function useImageWords(attachmentId: string | null, inline?: ApiImageWordsSummary | null): {
   words: ApiImageWords | null;
   fix: (text: string) => Promise<FixOutcome>;
 } {
@@ -37,10 +53,15 @@ export function useImageWords(attachmentId: string | null): {
   const retried = useRef(new Set<string>());
   const wordsRef = useRef<ApiImageWords | null>(null);
   wordsRef.current = words;
+  const seed = inline && KNOWN.has(inline.status) ? inline : null;
+  const seedKey = seed ? `${seed.status}:${seed.revision}:${seed.text ?? ''}` : '';
+  const seedRef = useRef(seed);
+  seedRef.current = seed;
 
   useEffect(() => {
-    setWords(null);
-    if (!attachmentId) return;
+    const given = seedRef.current;
+    setWords(attachmentId && given ? fromInline(attachmentId, given) : null);
+    if (!attachmentId || (given && SETTLED.has(given.status))) return;
     const control = new AbortController();
     let timer = 0, polls = 0;
     const began = Date.now();
@@ -67,6 +88,12 @@ export function useImageWords(attachmentId: string | null): {
           timer = window.setTimeout(() => void ask(), Math.max(0, Math.min(reopens, 2_147_000_000)));
           return;
         }
+        /* RETRYING, NO RETRY ALLOWED, AND NONE OF OURS QUEUED: its one
+           allowed retry is spent and nothing this screen asked for is on its
+           way, so asking again only reads the same answer. Stop; the next
+           opening asks afresh. A retry WE queued this sitting is still
+           followed until it lands. */
+        if (row.status === 'retrying' && !row.canRetry && !retried.current.has(attachmentId)) return;
       } catch (reason) {
         if (control.signal.aborted) return;
         /* A PERMANENT REFUSAL ENDS THE ASKING: gone (404), not yours (403),
@@ -79,7 +106,7 @@ export function useImageWords(attachmentId: string | null): {
     };
     void ask();
     return () => { control.abort(); window.clearTimeout(timer); };
-  }, [attachmentId]);
+  }, [attachmentId, seedKey]);
 
   const fix = useCallback(async (text: string): Promise<FixOutcome> => {
     const current = wordsRef.current;
