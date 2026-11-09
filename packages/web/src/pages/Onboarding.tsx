@@ -12,6 +12,13 @@
  * form, on the one surface where it is reached by accident rather than on
  * purpose.
  *
+ * ═══ AND SINCE 2026-11 IT IS THE FIRST OF FIVE STEPS ════════════════════
+ *
+ * The name and language, then four intro frames, then three questions whose
+ * answers are ordinary saves, then the first read across them, then home.
+ * Mandatory, resumable (`lib/onboarding-progress.ts`), and stamped complete
+ * only after the third save. The flow lives in `components/onboarding/`.
+ *
  * The exit says two different true things depending on who is standing here,
  * and that is the whole reason it is not one button:
  *
@@ -40,13 +47,20 @@
  * page's own subtitle has been promising this field the whole time — "Choose
  * the name and language WAKA should use with you."
  */
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
-import { ApiError } from "../lib/api";
+import { createConversation } from "../lib/api/conversations";
+import { ApiError, fetchInspirationPage, fetchInspirationSnapshot, type ApiInspiration } from "../lib/api";
 import { Companion } from "../components/Companion";
+import { CreatureStage } from "../components/onboarding/CreatureStage";
+import { OnboardingIntro } from "../components/onboarding/OnboardingIntro";
+import { OnboardingQuestion } from "../components/onboarding/OnboardingQuestion";
+import { OnboardingReading, OnboardingReveal } from "../components/onboarding/OnboardingRead";
+import { attachmentLabel } from "../lib/attachment-label";
 import { useAuth } from "../lib/auth-context";
+import { requestFirstRead, withinBudget } from "../lib/first-read";
 import {
   normalizeSupportedLocale,
   readStoredLocale,
@@ -55,17 +69,204 @@ import {
   writeStoredLocale,
 } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
+import {
+  clearOnboardingMarker,
+  leaveOnboardingFor,
+  ONBOARDING_QUESTIONS,
+  takeOnboardingExit,
+  onboardingStep,
+  readOnboardingMarker,
+  writeOnboardingMarker,
+  type OnboardingStep,
+} from "../lib/onboarding-progress";
+import { onboardingPreviewRequested } from "../lib/onboarding-preview";
 import { safeInAppPath } from '../lib/sign-in-destination';
+import "../styles/onboarding.css";
 
 function safeRedirect(from: unknown): string {
   return safeInAppPath(from) ?? '/';
 }
 
+/** How long the reading screen waits before letting the person in anyway. */
+export const FIRST_READ_PATIENCE_MS = 20_000;
+/** The fade from the last onboarding screen into home. */
+const LEAVE_FADE_MS = 250;
+
+/** One line per answer, for "Why?": its words, else what it is. */
+function lineOf(locale: SupportedLocale, words: string, attachment?: "image" | "audio" | "file" | "link" | null): string {
+  const first = words.trim().split("\n")[0]?.trim() ?? "";
+  if (first) return first.length > 140 ? `${first.slice(0, 139)}…` : first;
+  return attachment ? attachmentLabel(locale, attachment) : "";
+}
+
+type Phase =
+  | { kind: "loading" }
+  | { kind: "unreachable" }
+  | OnboardingStep
+  | { kind: "reveal"; reading: string };
+
 export default function OnboardingPage(): JSX.Element {
-  const { account, profile, logout, updateProfile } = useAuth();
+  const { account, profile, updateProfile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as { from?: unknown } | null;
+  const locale = normalizeSupportedLocale(profile?.preferredLocale ?? readStoredLocale());
+  const say = (key: Parameters<typeof t>[1]) => t(locale, key);
+  const [phase, setPhase] = useState<Phase>({ kind: "loading" });
+  const [calling, setCalling] = useState(true);
+  const [answers, setAnswers] = useState<Array<{ id: string; line: string }>>([]);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const accountId = account?.id ?? null;
+  const profileId = profile?.id ?? null;
+  /* DEV ONLY: `?preview=1` walks the flow without saving or stamping anything. */
+  const preview = onboardingPreviewRequested(location.search);
+
+  /* WHERE THIS PERSON IS — the server's count of their saves, and the two
+     marks this browser keeps. See `lib/onboarding-progress.ts`. */
+  useEffect(() => {
+    if (!profileId || !accountId) return;
+    if (preview) { setPhase({ kind: "intro" }); return; }
+    const controller = new AbortController();
+    setPhase({ kind: "loading" });
+    fetchInspirationSnapshot(profileId, controller.signal).then((snapshot) => {
+      if (controller.signal.aborted) return;
+      setPhase(onboardingStep({ saved: snapshot.total, marker: readOnboardingMarker(accountId), hasName: Boolean(profile?.name.trim()) }));
+    }, () => { if (!controller.signal.aborted) setPhase({ kind: "unreachable" }); });
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileId, accountId, attempt]);
+
+  /* LEAVING, and the one place onboarding is stamped done. The stamp and the
+     move happen together, so the route guard never sees a finished account
+     standing on /onboarding. */
+  /* INTO HOME, A FADE. Home's creature is drawn by the world at a place this
+     page cannot know in advance, so the creature does not try to hop there;
+     the whole scene fades and home is simply under it. */
+  const [fading, setFading] = useState(false);
+  const fadeOut = () => new Promise<void>((resolve) => {
+    setFading(true);
+    window.setTimeout(resolve, LEAVE_FADE_MS);
+  });
+
+  const finish = useCallback(async (destination: string) => {
+    if (!profile) return;
+    /* A preview stamps nothing: it returns home exactly as it found the account. */
+    if (preview) { await fadeOut(); navigate("/", { replace: true }); return; }
+    setLeaving(true); setLeaveError("");
+    /* The fade comes FIRST: the moment onboarding is stamped, the route guard
+       sends a finished account away from /onboarding, so the stamp and the
+       move have to land together. A stamp that fails brings the scene back. */
+    await fadeOut();
+    leaveOnboardingFor(destination);
+    try {
+      await updateProfile({ name: profile.name, preferredLocale: normalizeSupportedLocale(profile.preferredLocale), completeOnboarding: true });
+      clearOnboardingMarker(accountId);
+      navigate(destination, { replace: true });
+    } catch (reason) {
+      takeOnboardingExit();
+      setFading(false);
+      setLeaveError(reason instanceof ApiError ? reason.message : say("profileSaveError"));
+      setLeaving(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, accountId, navigate, updateProfile, locale, preview]);
+
+  /* THE READ. Asked once the three are in, raced against the screen's
+     patience; past it, the person goes in and home shows the read when it
+     lands (founder decision, onboarding canvas question 2). */
+  useEffect(() => {
+    if (phase.kind !== "reading" || !profileId) return;
+    let live = true;
+    if (preview) {
+      const timer = window.setTimeout(() => { if (live) setPhase({ kind: "reveal", reading: say("onboardingPreviewRead") }); }, 2500);
+      return () => { live = false; window.clearTimeout(timer); };
+    }
+    void (async () => {
+      let known = answers;
+      if (known.length < ONBOARDING_QUESTIONS) {
+        try {
+          const page = await fetchInspirationPage({ profile: profileId, limit: ONBOARDING_QUESTIONS });
+          known = page.inspirations.slice(0, ONBOARDING_QUESTIONS).reverse().map((row) => ({
+            id: row.id, line: lineOf(locale, row.textPreview, row.attachmentSummary?.[0]?.type ?? null),
+          }));
+          if (live) setAnswers(known);
+        } catch { known = []; }
+      }
+      const reading = await withinBudget(requestFirstRead(profileId, known.map((row) => row.id)), FIRST_READ_PATIENCE_MS);
+      if (!live) return;
+      if (reading) setPhase({ kind: "reveal", reading });
+      else void finish(safeRedirect(state?.from));
+    })();
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase.kind, profileId]);
+
+  const saved = (index: number) => (inspiration: ApiInspiration) => {
+    const attachment = inspiration.attachments?.[0]?.type
+      ?? (inspiration.kind === "image" || inspiration.kind === "audio" ? inspiration.kind : null);
+    setAnswers((rows) => [...rows.filter((row) => row.id !== inspiration.id), { id: inspiration.id, line: lineOf(locale, inspiration.text, attachment) }]);
+    setPhase(index + 1 >= ONBOARDING_QUESTIONS ? { kind: "reading" } : { kind: "question", index: index + 1 });
+  };
+
+  const talk = async (reading: string) => {
+    if (!profileId) return;
+    if (preview) { await fadeOut(); navigate("/", { replace: true }); return; }
+    setLeaving(true); setLeaveError("");
+    const conversationId = crypto.randomUUID();
+    try {
+      await createConversation(profileId, conversationId, undefined, undefined, { id: crypto.randomUUID(), content: reading, requestReply: true });
+    } catch {
+      setLeaveError(say("worldTalkFailed")); setLeaving(false); return;
+    }
+    await finish(`/chat/${encodeURIComponent(conversationId)}`);
+  };
+
+  const marker = preview ? <p className="onb-preview-mark" aria-label={say("onboardingPreviewMarkLabel")}>{say("onboardingPreviewMark")}</p> : null;
+  /* ONE CREATURE FOR EVERY STEP (`CreatureStage`): the stage stays mounted
+     while the steps under it change, so the creature hops from one to the
+     next instead of each step drawing its own. */
+  return <CreatureStage fading={fading}>{renderStep()}{marker}</CreatureStage>;
+
+  function renderStep(): JSX.Element {
+  if (phase.kind === "name") {
+    return <NameStep onNamed={() => setPhase(onboardingStep({ saved: 0, marker: readOnboardingMarker(accountId), hasName: true }))} />;
+  }
+  if (phase.kind === "intro") {
+    return <OnboardingIntro locale={locale} onDone={() => { if (!preview) writeOnboardingMarker(accountId, { introSeen: true }); setPhase({ kind: "question", index: 0 }); }} />;
+  }
+  if (phase.kind === "question" && profileId) {
+    return <OnboardingQuestion locale={locale} index={phase.index} profileId={profileId}
+      calling={calling} onTouched={() => setCalling(false)} onSaved={saved(phase.index)} simulate={preview} />;
+  }
+  if (phase.kind === "reading") {
+    return <OnboardingReading locale={locale} error={leaveError} busy={leaving}
+      onContinue={() => { void finish(safeRedirect(state?.from)); }} />;
+  }
+  if (phase.kind === "reveal") {
+    return <OnboardingReveal locale={locale} reading={phase.reading} behind={answers.map((row) => row.line).filter(Boolean)}
+      busy={leaving} error={leaveError} onTalk={() => { void talk(phase.reading); }}
+      onContinue={() => { void finish(safeRedirect(state?.from)); }} />;
+  }
+  return (
+    <main className="onb">
+      <div className="onb-stage onb-wait">
+        <Companion size={88} />
+        {phase.kind === "unreachable" ? (
+          <>
+            <p className="onb-hint" role="alert">{say("onboardingLoadFailed")}</p>
+            <button type="button" className="onb-go" onClick={() => setAttempt((value) => value + 1)}>{say("worldRetry")}</button>
+          </>
+        ) : null}
+      </div>
+    </main>
+  );
+  }
+}
+
+function NameStep({ onNamed }: { onNamed: () => void }): JSX.Element {
+  const { account, profile, logout, updateProfile } = useAuth();
   const [name, setName] = useState(profile?.name ?? "");
   const [preferredLocale, setPreferredLocale] = useState<SupportedLocale>(() =>
     normalizeSupportedLocale(profile?.preferredLocale ?? readStoredLocale()),
@@ -87,13 +288,12 @@ export default function OnboardingPage(): JSX.Element {
     setSubmitting(true);
     setError(null);
     try {
-      await updateProfile({
-        name: displayName,
-        preferredLocale,
-        completeOnboarding: true,
-      });
+      /* NOT `completeOnboarding` any more: the three answers are still to
+         come, and onboarding is stamped only once they exist. */
+      await updateProfile({ name: displayName, preferredLocale });
       writeStoredLocale(preferredLocale);
-      navigate(safeRedirect(state?.from), { replace: true });
+      writeOnboardingMarker(account?.id, { named: true });
+      onNamed();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t(locale, "profileSaveError"));
     } finally {

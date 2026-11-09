@@ -28,6 +28,9 @@ import { Fragment, useRef, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../lib/auth-context";
+import { onboardingPreviewRequested } from "../lib/onboarding-preview";
+import { takeOnboardingExit } from "../lib/onboarding-progress";
+import { safeInAppPath } from "../lib/sign-in-destination";
 import { LoadingHome } from "./LoadingHome";
 
 export interface RequireAuthProps {
@@ -70,8 +73,14 @@ export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps
     return <Navigate to="/onboarding" replace state={{ from }} />;
   }
 
-  if (account?.onboardingCompletedAt && location.pathname === "/onboarding") {
-    return <Navigate to="/" replace />;
+  /* A dev server's `?preview=1` lets an onboarded account walk the flow; it
+     saves nothing and stamps nothing (`lib/onboarding-preview.ts`). */
+  if (account?.onboardingCompletedAt && location.pathname === "/onboarding" && !onboardingPreviewRequested(location.search)) {
+    /* Onboarding names where it is going before it stamps itself done (Talk
+       about this opens a chat), so the stamp lands the person there rather
+       than racing a second navigation to it. */
+    const leavingTo = safeInAppPath(takeOnboardingExit()) ?? "/";
+    return <Navigate to={leavingTo} replace />;
   }
 
   if (requireAdmin && !account?.isAdmin) {

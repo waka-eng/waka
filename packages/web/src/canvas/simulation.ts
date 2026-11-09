@@ -93,7 +93,8 @@ import { bakeBeing, buildPalette, MACHINE_CELLS, type BeingSprites, type Palette
 import { onZoomChange, renderScale } from "./scale";
 import { VIGNETTE, mix, rgbCss } from "./sprites";
 import type { Measured } from "./measured";
-import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, FACE_R, GLASS_GLINT, GLASS_MAGNIFY, GLASS_R, GLASS_RIM_ALPHA, GLASS_TINT, GLASS_W, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
+import { ANTICIPATE_MS, ANTICIPATE_SQ, HOP_MS, hopLift } from "../character/hop";
+import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, EYE_SHUT, FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, FACE_R, GLASS_GLINT, GLASS_MAGNIFY, GLASS_R, GLASS_RIM_ALPHA, GLASS_TINT, GLASS_W, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, bodyPath } from "../character/raster";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import {
@@ -403,11 +404,8 @@ export const UNWIND_MS = 650;
  * seeing it and answering, which is why nothing about the keep is delayed to
  * pay for them.
  */
-const ANTICIPATE_MS = 130;
-/** The keep's hop: two bounces over this long, the second lower. */
-const HOP_MS = 720;
-/** How far it compresses at the bottom of the gather. Squash, so positive. */
-const ANTICIPATE_SQ = 0.03;
+/* `ANTICIPATE_MS`, `HOP_MS` and `ANTICIPATE_SQ` — the gather and the keep's
+   hop — live in `character/hop.ts`, read here and by onboarding's creature. */
 /** And how long the body takes to come back up out of it, once released. */
 const ANTICIPATE_EASE = 4.6e-4;
 /**
@@ -2580,7 +2578,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
      */
     const wallSaving = new Map<string, number>();
     /** The aura's reach right now: the eased saving reading, plus the flare. */
-    const auraLit = () => clamp01(companion.savingNow + companion.flare * 0.5);
+    const auraLit = () => clamp01(companion.savingNow + companion.flare * FLARE_REACH);
     /** The same reach without the flare: what the saving says, not the
         beat of light an event just added to it. See `sayLine`. */
     const savingLit = () => clamp01(companion.savingNow);
@@ -4172,9 +4170,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            the ground, and the decay makes the second one lower — a creature
            that is delighted, not one that is bouncing on a spring. */
         const hopT = companion.hopAt > 0 ? clamp01((performance.now() - companion.hopAt) / HOP_MS) : 0;
-        const hop = hopT > 0 && hopT < 1
-          ? -Math.abs(Math.sin(Math.PI * 2 * hopT)) * companion.size * 0.14 * (1 - hopT * 0.45)
-          : 0;
+        const hop = hopLift(hopT, companion.size);
         const cyC = companion.y + bob + companion.lift + hop + companion.asideNow;
         /* THE TRAVELER'S PLACE. The companion is screen-anchored — it is the
            one who travels, so the layout slides under it — and during a
@@ -4272,7 +4268,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            here rather than in a document because the next person to put
            the two screenshots side by side will reach for exactly this
            number. */
-        const auraR = companion.size * lerp(1.25, 2.1, lit) * (1 + companion.flare * 0.25);
+        const auraR = companion.size * lerp(1.25, 2.1, lit) * (1 + companion.flare * FLARE_SPREAD);
         for (let i = 0; i < 4; i++) {
           const ph = t * (0.16 + i * 0.05) + i * 1.9;
           const off = view.reduced ? 0 : companion.size * 0.08;
@@ -4546,7 +4542,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           const ca = Math.cos(a);
           if (ca <= 0) continue;
           /* at the edge a blink is a flicker, so it is suppressed there */
-          const eh = (ca < 0.3 ? 1 : Math.max(0.12, 1 - companion.blink)) * lerp(1, THINK_SQUINT, companion.thinkNow);
+          const eh = (ca < 0.3 ? 1 : Math.max(EYE_SHUT, 1 - companion.blink)) * lerp(1, THINK_SQUINT, companion.thinkNow);
           ctx!.globalAlpha = clamp01(ca / Math.sin(0.25));
           const ex = Math.sin(a) * bw * FACE_R * cosLat + companion.eyeX * ca;
           if (formMachine) {
@@ -4985,7 +4981,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
         companion.ant = 0;
       }
       if (companion.flare > 0) {
-        companion.flare = Math.max(0, companion.flare - dt / 0.7);
+        companion.flare = Math.max(0, companion.flare - dt / FLARE_SECONDS);
         easing = true;
       }
       if (companion.hopAt > 0) {

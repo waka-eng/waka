@@ -56,6 +56,9 @@ const ANATOMY = [
   "FACE_R",
   "EYE_R",
   "EYE_INK",
+  /* The blink's floor, which the rest pose's shut eyes share (2026-11,
+     onboarding's reading creature): one number for "a closed eye". */
+  "EYE_SHUT",
   "NUB_LON",
   "NUB_X",
   "NUB_Y",
@@ -66,6 +69,14 @@ const ANATOMY = [
 ] as const;
 
 describe("the creature is drawn from one anatomy", () => {
+  it("closes its eyes at rest the way the loop's blink does, from the same floor", () => {
+    const raster = readFileSync(RASTER, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const loop = readFileSync(LOOP, "utf8");
+    expect(raster, "the rest pose's shut eye must squash by EYE_SHUT, not a number of its own").toMatch(/shut \? EYE_SHUT : 1/);
+    expect(loop, "the loop's blink must stop at EYE_SHUT, not a literal").toMatch(/Math\.max\(EYE_SHUT, 1 - companion\.blink\)/);
+    expect(loop).not.toMatch(/Math\.max\(0\.12, 1 - companion\.blink\)/);
+  });
+
   it("declares every part of it in raster.ts", () => {
     const raster = readFileSync(RASTER, "utf8");
     const missing = ANATOMY.filter((name) => !new RegExp(`export const ${name}\\b`).test(raster));
