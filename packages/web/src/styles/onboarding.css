@@ -313,8 +313,11 @@
   font-weight: 400;
   line-height: 1.35;
   letter-spacing: -0.01em;
+  /* PRETTY, NOT BALANCE. Balance evens the lines but leaves the bubble at
+     its full width around them, so a two-line question sat in a box wider
+     than either line. Pretty fills the lines to the bubble's width and still
+     never strands one word on the last line. */
   text-wrap: pretty;
-  text-wrap: balance;
 }
 /* The bubble's own quieter voice, not form help: the same ink, softened
    toward the bubble's fill. */
@@ -327,7 +330,6 @@
   letter-spacing: -0.005em;
   color: color-mix(in srgb, var(--waka-on-light) 66%, var(--bubble-fill));
   text-wrap: pretty;
-  text-wrap: balance;
 }
 .onb-tail-gap { height: 22px; flex-shrink: 0; }
 .onb-grow { flex: 1 1 auto; min-height: var(--sp-16); }
