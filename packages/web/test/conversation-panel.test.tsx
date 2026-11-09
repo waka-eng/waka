@@ -109,6 +109,11 @@ it('does not mistake a transient 429 for a definite chat-limit refusal',async()=
   vi.mocked(createConversation).mockRejectedValueOnce(new ApiError({status:429,message:'Try later'}));
   await mount(null);await type('An uncertain send');await click('Send');
   expect(named()).toContain('Send again');
+  /* WHAT IT SAYS IS WHAT IT IS CALLED (WCAG 2.5.3, review 2026-11-09): the
+     word on the bar reads "Send again" too, not "Send" over a hidden name. */
+  const send=host.querySelector<HTMLButtonElement>('button.chat-send')!;
+  expect(send.textContent,'the bar shows Send while its name is Send again').toBe('Send again');
+  expect(send.getAttribute('aria-label')??send.textContent).toBe(send.textContent);
   expect(named()).not.toContain('Past chats');
   expect(readConversationDrafts(scope,'new:general')[0]?.value.pending).toBe(true);
 });

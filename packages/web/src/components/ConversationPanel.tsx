@@ -958,10 +958,13 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             :<button type="button" className="chat-send waka-note-bar-action"
                /* THE SAME CONTROL RETRIES AN UNCERTAIN SAVE: a message whose
                   response was lost is sent again by the press that sends. */
-               aria-label={say(draft?.pending?'worldConversationRetry':'worldConversationSend')}
+               /* ITS WORD IS ITS NAME (WCAG 2.5.3): "Send again" shows on
+                  the bar when that is what the press does, and the name
+                  is the same word. */
+               aria-label={say(draft?.pending?'worldConversationRetry':'worldConversationSendWord')}
                title={say(whyNoSend??(draft?.pending?'worldConversationRetry':'worldConversationSend'))}
                disabled={Boolean(whyNoSend)}
-               onClick={()=>void save()}>{say('worldConversationSendWord')}</button>}>
+               onClick={()=>void save()}>{say(draft?.pending?'worldConversationRetry':'worldConversationSendWord')}</button>}>
           <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.pending?'':draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
         </NoteBar>}
         {/* A SAVE THAT WAS NOT CONFIRMED KEEPS ITS ONE WAY OUT. This reads
