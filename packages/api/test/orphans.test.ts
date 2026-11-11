@@ -71,6 +71,8 @@ const ENTRY = [
   "lambda.ts",
   "background-worker.ts",
   "attachment-object-events.ts",
+  "monitoring/relay.ts",
+  "monitoring/uptime.ts",
   "principle-refresh.ts",
   "server.ts",
   "nightly-local.ts",

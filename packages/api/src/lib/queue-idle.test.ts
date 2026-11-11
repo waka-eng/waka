@@ -36,7 +36,7 @@ it('sets one wake for actual pending work and stops once that work is gone', asy
   await vi.advanceTimersByTimeAsync(3_600_000);
   expect(db.execute).toHaveBeenCalledOnce(); expect(db.select).toHaveBeenCalledTimes(2);
 });
-it('keeps local maintenance one-shot and infrastructure limited to the existing daily clocks', () => {
+it('keeps memory maintenance one-shot/daily while allowing the isolated public uptime clock', () => {
   const read = (path: string) => readFileSync(new URL(`../../../../${path}`, import.meta.url), 'utf8');
   const local = read('scripts/dev-local.sh');
   expect(local).not.toMatch(/nightly\s+--watch/);
@@ -45,9 +45,13 @@ it('keeps local maintenance one-shot and infrastructure limited to the existing 
   }
   const schedules = [...read('sst.config.ts').matchAll(/new sst\.aws\.Cron\("([^"]+)",\s*\{\s*schedule:\s*"([^"]+)"/g)]
     .map(([, name, schedule]) => ({ name, schedule }));
+  // The owner authorized public monitoring, not another memory-DB poller.
+  // Its role/key isolation and full health-route no-DB behavior have separate
+  // runtime-contract tests; preserve this exact list and all timer refusals.
   expect(schedules).toEqual([
     { name: 'PrincipleRefresh', schedule: 'cron(0 8 * * ? *)' },
     { name: 'BackgroundJobDrain', schedule: 'rate(1 day)' },
+    { name: 'PublicAvailability', schedule: 'rate(5 minutes)' },
   ]);
 });
 it.each(['tools/dev-stack/drain.ts', 'packages/api/src/nightly-local.ts'])('refuses %s watch mode before opening a database', path => {

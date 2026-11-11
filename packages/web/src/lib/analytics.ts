@@ -29,6 +29,8 @@ export function sanitizeAnalytics(event: CaptureResult | null, id = anonymousId,
 export function privacyOptions(host: string, token: string): Partial<PostHogConfig> {
   return { api_host:host, autocapture:false,capture_pageview:false,capture_pageleave:false,capture_dead_clicks:false,rageclick:false,
     capture_exceptions:false,capture_performance:false,disable_session_recording:true,enable_recording_console_log:false,
+    capture_webmcp:false,tracing_headers:[],advanced_disable_toolbar_metrics:true,
+    logs:{captureConsoleLogs:false,beforeSend:()=>null},metrics:{network:false,flags:false,beforeSend:()=>null},
     disable_surveys:true,disable_conversations:true,disable_product_tours:true,disable_web_experiments:true,
     disable_external_dependency_loading:true,advanced_disable_flags:true,advanced_disable_feature_flags:true,
     person_profiles:'never',persistence:'memory',disable_persistence:true,save_referrer:false,save_campaign_params:false,
