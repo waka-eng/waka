@@ -170,3 +170,10 @@ Lambda logs/tracing. The new consumer's trust is Lambda-only (SST's generic
 same-account root trust is not needed). Existing API/worker roles are untouched.
 Confirmed cancelled run43005773164 has a production job with zero steps, so no
 production secrets, migrations or infrastructure were mutated by that attempt.
+
+The0085 journal timestamp was corrected before any production application from
+Nov12 midnight (future relative to the Nov11 release) to Nov11 10:00UTC,
+1794391200000, still strictly after0084. Drizzle uses this as a high-water mark;
+a future value would skip migrations generated later on the release day. SQL and
+schema are unchanged; the85→86 replay and subsequent same-day migration selection
+are rehearsed separately. No production ledger is rewritten.

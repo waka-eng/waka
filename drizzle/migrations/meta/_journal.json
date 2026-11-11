@@ -600,7 +600,7 @@
     {
       "idx": 85,
       "version": "7",
-      "when": 1794441600000,
+      "when": 1794391200000,
       "tag": "0085_account_chat_limits",
       "breakpoints": true
     }
