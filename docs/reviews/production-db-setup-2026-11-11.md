@@ -1,5 +1,7 @@
 # Production DB setup — 2026-11-11
 
+> **2026-11-11 outcome:** the application was subsequently deployed and accepted at `b04d1da3`. Read the [portable release handoff](production-deploy-receipt-2026-11-11.md) and [current real-user launch checklist](production-launch-2026-11-11.md). The dated observations and pending steps below are historical; they are not the latest runtime status.
+
 Target: actual `waka.im` production, established by Main's authenticated current
 Console reads. No new DB, app deployment, provider call, IAM change, object wipe,
 worker configuration or recurring schedule was introduced. **Production forward

@@ -2,7 +2,7 @@
 
 ## The model
 
-WAKA is a memory system built in three layers. Every layer is owned by a
+WAKA is a memory system built in four layers. Every layer is owned by a
 **profile**, and the whole vocabulary is defined in
 [`docs/data-model.md`](docs/data-model.md) — that document is the source of
 truth, and this section is its summary.
@@ -20,6 +20,8 @@ truth, and this section is its summary.
   group; a share exposes the statement, never the evidence.
 - **top of mind** (layer 3) — one versioned artifact per profile and per group,
   made of typed entries that cite signals.
+- **principle** (layer 4) — a reusable guide derived from supported signals and
+  meaningful top-of-mind history, with its sources and human wording preserved.
 - **feedback** — a reader's verdict on a signal or an entry. Pin, dismiss, and
   lock are *not* feedback; they are columns on the entry.
 
@@ -108,3 +110,12 @@ A full pass of all four is well under a dollar.
 - **Composite foreign keys carry the tenant.** Child rows reference
   `(profile_id, parent_id)`, so a cross-profile link is refused by Postgres
   rather than by a query someone remembered to scope.
+
+
+## Agent team
+
+The owner approved an ongoing Main + Dev engineering team, separate from the
+single WAKA companion in the application. Read [docs/agent-team.md](docs/agent-team.md)
+for roles, routing, file ownership and review. Reuse established sessions; optional
+local session/queue files are ignored and not required for a clean clone. No
+extra agents or recurring wakeups are configured by these instructions.

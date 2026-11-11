@@ -1,5 +1,7 @@
 # Security/performance implementation — 2026-11-10
 
+> **2026-11-11 outcome:** the application was subsequently deployed and accepted at `b04d1da3`. Read the [portable release handoff](production-deploy-receipt-2026-11-11.md) and [current real-user launch checklist](production-launch-2026-11-11.md). The dated observations and pending steps below are historical; they are not the latest runtime status.
+
 Owner scope: skip legacy-key inventory; implement durable cleanup, issued-upload
 reconciliation, citation batching after a fresh real-SQL baseline, and the
 compatible parser patch. No production changes, paid providers or new recurring

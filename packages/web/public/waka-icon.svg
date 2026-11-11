@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="WAKA">
+  <defs>
+    <radialGradient id="night" cx="44%" cy="38%" r="76%">
+      <stop stop-color="#202633"/>
+      <stop offset="1" stop-color="#06080d"/>
+    </radialGradient>
+    <radialGradient id="halo">
+      <stop stop-color="#eee0ba" stop-opacity=".25"/>
+      <stop offset=".55" stop-color="#eee0ba" stop-opacity=".09"/>
+      <stop offset="1" stop-color="#eee0ba" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ivory" cx="36%" cy="20%" r="90%">
+      <stop stop-color="#fff7e5"/>
+      <stop offset=".58" stop-color="#e9dfc8"/>
+      <stop offset="1" stop-color="#c5baa4"/>
+    </radialGradient>
+    <linearGradient id="hands" x2="0" y2="1">
+      <stop stop-color="#eee5d0"/>
+      <stop offset="1" stop-color="#c9bea7"/>
+    </linearGradient>
+  </defs>
+  <g id="background">
+    <path fill="url(#night)" d="M0 0h1024v1024H0z"/>
+    <circle cx="512" cy="540" r="420" fill="url(#halo)"/>
+  </g>
+  <g id="mark">
+    <ellipse cx="280" cy="642" rx="46" ry="49" transform="rotate(24 280 642)" fill="url(#hands)"/>
+    <ellipse cx="744" cy="642" rx="46" ry="49" transform="rotate(-24 744 642)" fill="url(#hands)"/>
+    <path d="M280 620C280 443 380 310 512 310S744 443 744 620C744 763 280 763 280 620Z" fill="url(#ivory)"/>
+    <ellipse cx="432" cy="508" rx="19" ry="25" fill="#252621"/>
+    <ellipse cx="592" cy="508" rx="19" ry="25" fill="#252621"/>
+  </g>
+</svg>

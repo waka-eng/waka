@@ -1,5 +1,7 @@
 # Security and performance priorities — 2026-11-10
 
+> **2026-11-11 outcome:** the application was subsequently deployed and accepted at `b04d1da3`. Read the [portable release handoff](production-deploy-receipt-2026-11-11.md) and [current real-user launch checklist](production-launch-2026-11-11.md). The dated observations and pending steps below are historical; they are not the latest runtime status.
+
 Scope: current worktree at `3992dc33ee09580b7b4562bd5aab04f8779dfdc4`, including the uncommitted single-companion changes. This is a recommendation, not an implementation or production audit. Owner data, the running 3010 stack, dependencies and schema were left unchanged. No suites, model calls or cloud operations were run for this review.
 
 Read the goal index, relevant goals' own statuses/gates, October security/correctness/dependency reviews and focused known-issue leads. Historical measurements below remain historical. Fresh evidence consists of source inspection, a production dependency audit, a synthetic reader call-count probe without a database, and static analysis of the existing built web assets.

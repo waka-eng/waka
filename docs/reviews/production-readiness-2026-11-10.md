@@ -1,5 +1,7 @@
 # Production readiness — 2026-11-10
 
+> **2026-11-11 outcome:** the application was subsequently deployed and accepted at `b04d1da3`. Read the [portable release handoff](production-deploy-receipt-2026-11-11.md) and [current real-user launch checklist](production-launch-2026-11-11.md). The dated observations and pending steps below are historical; they are not the latest runtime status.
+
 Assumption: the next release is the first externally used **web** release,
 initially a controlled beta unless the owner chooses public registration.
 Available evidence does **not yet support release approval**. This is a focused

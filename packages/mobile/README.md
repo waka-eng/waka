@@ -36,6 +36,16 @@ produces an unsigned release APK. The identities are proposed local identities;
 store registration, archives/App Bundles and production signing remain M6.
 Different IDs allow side-by-side installation and separate protected storage.
 
+Launcher icons use the shared vector `packages/web/public/waka-icon.svg`.
+After editing it, run `node tools/app-icons.mjs` from the repository root
+to regenerate the iOS, Android and web touch icons. First install the committed
+lockfile dependencies with `pnpm install --frozen-lockfile` and install Google
+Chrome (`channel: "chrome"`). The generator uses the PNG codec bundled with the
+locked Playwright version; check regeneration after upgrading that dependency.
+iOS and web touch outputs are opaque RGB; Android adaptive foreground and round
+outputs keep transparency. This asset change does not resume native capture or
+store/signing work.
+
 ## Assets and configuration
 
 The app loads packaged assets. Mobile Vite builds disable dotenv loading and

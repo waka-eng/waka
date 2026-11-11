@@ -1,5 +1,7 @@
 # Production release candidate — 2026-11-11
 
+> **2026-11-11 outcome:** the application was subsequently deployed and accepted at `b04d1da3`. Read the [portable release handoff](production-deploy-receipt-2026-11-11.md) and [current real-user launch checklist](production-launch-2026-11-11.md). The dated observations and pending steps below are historical; they are not the latest runtime status.
+
 Status: candidate preparation; production dispatch requires Main's review of the
 immutable checked commit and actual SST preview. No goal's acceptance bar changes.
 

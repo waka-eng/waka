@@ -80,3 +80,7 @@ packages/*/scratch2/
 # The API suite writes a junit report here when CI=true (vitest.config.ts);
 # it is run output, not source.
 packages/api/test-results/
+
+# Optional local engineering coordination; never commit runtime identities/queue.
+/.paseo/team-session.json
+/.paseo/team-queue.md

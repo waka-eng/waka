@@ -1,5 +1,7 @@
 # Production release/environment increment — 2026-11-10
 
+> **2026-11-11 outcome:** the application was subsequently deployed and accepted at `b04d1da3`. Read the [portable release handoff](production-deploy-receipt-2026-11-11.md) and [current real-user launch checklist](production-launch-2026-11-11.md). The dated observations and pending steps below are historical; they are not the latest runtime status.
+
 **2026-11-11 continuation:** authenticated current Console receipts now prove
 both domains' LIVE routing → API URLs, API → worker pointers, and API/worker
 DB equality with their same-stage files. Production PrincipleRefresh is also

@@ -289,3 +289,17 @@ pnpm dev:admin                                          # terminal B, port 5174
 ```
 
 Sign into WAKA normally first so the admin app can send the session cookie.
+
+
+## Engineering handoff and launch
+
+Start with the [accepted release handoff](docs/reviews/production-deploy-receipt-2026-11-11.md)
+and [current real-user launch checklist](docs/reviews/production-launch-2026-11-11.md).
+They separate deployed evidence from remaining security, operations and human
+acceptance gates. [Engineering coordination](docs/agent-team.md) works with a clean
+clone; optional local agent state and private backup/evidence material stay local.
+The bilingual [memory guide](docs/waka-models-and-core-logic.html) explains the
+single companion and four layers; [the canonical model](docs/data-model.md) and
+[checked generation rules](docs/generation.md) remain authoritative. The mobile
+[asset instructions](packages/mobile/README.md#assets-and-configuration) describe
+launcher/touch icons generated from the shared vector.
