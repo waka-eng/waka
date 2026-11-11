@@ -53,7 +53,6 @@ jobs:
       DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      WAKA_DISCORD_WEBHOOK_URL: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
       VITE_POSTHOG_PROJECT_TOKEN: ${{ vars.VITE_POSTHOG_PROJECT_TOKEN_PRODUCTION }}
       VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST_PRODUCTION }}
       WAKA_OPENROUTER_DATA_COLLECTION: ${{ vars.WAKA_OPENROUTER_DATA_COLLECTION_PRODUCTION }}
@@ -91,6 +90,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Validate deployment environment
+        env:
+          WAKA_DISCORD_WEBHOOK_URL: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
         shell: bash
         run: |
           set -euo pipefail
@@ -182,6 +183,8 @@ jobs:
 
       - name: Set SST production secrets
         if: ${{ !inputs.preview_only }}
+        env:
+          WAKA_DISCORD_WEBHOOK_URL: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
         shell: bash
         run: |
           set -euo pipefail
@@ -276,6 +279,8 @@ jobs:
 
       - name: Verify production monitoring isolation and delivery wiring
         if: ${{ !inputs.preview_only }}
+        env:
+          WAKA_DISCORD_WEBHOOK_URL: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
         run: node scripts/monitoring-audit.mjs > production-monitoring-audit.json
 
       - name: Save sanitized production acceptance

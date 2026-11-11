@@ -65,4 +65,10 @@ it('keeps monitoring production-only and secret outside the shared application l
   expect(block).toContain('`arn:aws:cloudwatch:${AWS_REGION}:${account}:alarm:${alarmName}`');
   expect(block).toContain('{ dependsOn: [permission] }');
   expect(block).toContain('link: [discord]');expect(block).toContain('reservedConcurrentExecutions: 1');
+  const workflow=readFileSync(resolve(__dirname,'../../../.github/workflows/deploy.yml'),'utf8');
+  const job=workflow.slice(workflow.indexOf('  deploy:'));
+  expect(job.slice(0,job.indexOf('    steps:'))).not.toContain('WAKA_DISCORD_WEBHOOK_URL');
+  const install=job.slice(job.indexOf('      - name: Install dependencies'),job.indexOf('      - name: Validate deployment environment'));
+  expect(install).not.toContain('WAKA_DISCORD_WEBHOOK_URL');
+  expect(workflow).toContain('SST_SECRET_DiscordWebhookUrl: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}');
 });
