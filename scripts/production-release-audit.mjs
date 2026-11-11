@@ -65,11 +65,23 @@ export function auditProductionRelease({outputs,expected,read}){
   const mappings=read(['lambda','list-event-source-mappings','--event-source-arn',arn]).EventSourceMappings??[];
   checks.cleanupMapping=mappings.length===1&&mappings[0].State==='Enabled'&&mappings[0].BatchSize===1&&mappings[0].FunctionResponseTypes?.includes('ReportBatchItemFailures')===true;
   if(mappings.length===1){
-   const fn=mappings[0].FunctionArn.split(':').at(-1),consumer=read(['lambda','get-function-configuration','--function-name',fn]);
-   const env=consumer.Environment?.Variables??{};resources.cleanupConsumer=fn;
+   const mapping=mappings[0],functionArn=mapping.FunctionArn,consumer=read(['lambda','get-function-configuration','--function-name',functionArn]);
+   const env=consumer.Environment?.Variables??{};resources.cleanupConsumer=functionArn.split(':function:').at(-1);resources.cleanupFunctionArn=functionArn;
    checks.cleanupIamIsolated=isolatedCleanupRole({roleArn:consumer.Role,queueArn:arn,bucket:expected.attachments,read});
    resources.cleanupRole=consumer.Role?.split('/').at(-1);
-   checks.cleanupIsolated=fn.startsWith('waka-production-')&&consumer.Timeout===30&&env.DB_CONNECTION_URL===expected.database&&env.ATTACHMENTS_BUCKET===expected.attachments&&!env.OPENROUTER_API_KEY&&!env.GEMINI_API_KEY;
+   // Generated nested-function names need not contain the app/stage prefix.
+   // Bind identity to the exact queue mapping, function ARN and SST stack,
+   // then attest each runtime boundary separately for useful diagnostics.
+   let app;try{app=JSON.parse(env.SST_RESOURCE_App??'{}');}catch{app={};}
+   checks.cleanupFunctionBinding=mapping.EventSourceArn===arn&&consumer.FunctionArn===functionArn&&
+    functionArn.startsWith(`arn:aws:lambda:us-west-2:${account}:function:`);
+   checks.cleanupStackIdentity=app.name==='waka'&&app.stage==='production';
+   checks.cleanupTimeout=consumer.Timeout===30;
+   checks.cleanupDatabaseMatches=!!expected.database&&env.DB_CONNECTION_URL===expected.database;
+   checks.cleanupBucketMatches=env.ATTACHMENTS_BUCKET===expected.attachments;
+   checks.cleanupRegionMatches=env.ATTACHMENTS_REGION==='us-west-2';
+   checks.cleanupNoModelKeys=!env.OPENROUTER_API_KEY&&!env.GEMINI_API_KEY;
+   checks.cleanupIsolated=['cleanupFunctionBinding','cleanupStackIdentity','cleanupTimeout','cleanupDatabaseMatches','cleanupBucketMatches','cleanupRegionMatches','cleanupNoModelKeys'].every(key=>checks[key]===true);
   }
   if(checks.redrive){
    const dlqName=redrive.deadLetterTargetArn.split(':').at(-1),dlqUrl=read(['sqs','get-queue-url','--queue-name',dlqName,'--queue-owner-aws-account-id',account]).QueueUrl;
