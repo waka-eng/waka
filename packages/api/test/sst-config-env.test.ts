@@ -263,3 +263,26 @@ describe('owner-approved production Chat',()=>{
   expect(sstConfig).toMatch(/"Api", \{[\s\S]*?\.\.\.runtimeEnvironment/);
  });
 });
+
+describe('attachment event delivery authority',()=>{
+ it('binds S3-only sends to the same bucket/account and creates notifications after the policy',()=>{
+  expect(sstConfig).not.toContain('attachmentsBucket.subscribeQueue(');
+  expect(sstConfig).toContain('new aws.sqs.QueuePolicy("AttachmentObjectEventsSendPolicy"');
+  expect(sstConfig).toContain('identifiers: ["s3.amazonaws.com"]');
+  expect(sstConfig).toContain('variable: "aws:SourceArn", values: [attachmentsBucket.arn]');
+  expect(sstConfig).toContain('variable: "aws:SourceAccount", values: [aws.getCallerIdentityOutput().accountId]');
+  expect(sstConfig).toContain('new aws.s3.BucketNotification("AttachmentObjectEventsNotification"');
+  expect(sstConfig).toContain('{ dependsOn: [objectEventsSendPolicy] }');
+ });
+ it('gives the cleanup handler only object deletion, scoped queue polling and no bucket CRUD link',()=>{
+  const subscriber=sstConfig.slice(sstConfig.indexOf('    objectEvents.subscribe({')).split('}, { batch:')[0];
+  expect(subscriber).toContain('link: [dbConnectionUrl]');
+  expect(subscriber).not.toContain('link: [dbConnectionUrl, attachmentsBucket]');
+  expect(subscriber).toContain('actions: ["s3:DeleteObject"]');
+  expect(subscriber).toContain('resources: [attachmentsBucket.arn.apply(arn => `${arn}/*`)]');
+  expect(subscriber).toContain('ATTACHMENTS_BUCKET: attachmentsBucket.name');
+  expect(subscriber).not.toMatch(/s3:\*|s3:GetObject|s3:PutObject/);
+  expect(subscriber).toContain('transform: { role: { assumeRolePolicy: JSON.stringify({');
+  expect(subscriber).toContain('Principal: { Service: "lambda.amazonaws.com" }');
+ });
+});

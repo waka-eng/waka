@@ -473,11 +473,36 @@ export default $config({
       // An absent destination is an OPEN delivery gate, never a delivered alert.
       alarmActions: process.env.WAKA_OPERATIONS_ALERT_TOPIC_ARN ? [process.env.WAKA_OPERATIONS_ALERT_TOPIC_ARN] : [],
     });
-    attachmentsBucket.subscribeQueue(objectEvents.arn, { events: ["s3:ObjectCreated:*"] });
+    // The legacy Bucket.subscribeQueue helper's shared policy also permits SNS
+    // and EventBridge, without source conditions. Bind this new receiver only
+    // to this bucket/account to prevent cross-account event/cost injection.
+    const objectEventsSendPolicy = new aws.sqs.QueuePolicy("AttachmentObjectEventsSendPolicy", {
+      queueUrl: objectEvents.url,
+      policy: aws.iam.getPolicyDocumentOutput({ statements: [{
+        effect: "Allow", actions: ["sqs:SendMessage"], resources: [objectEvents.arn],
+        principals: [{ type: "Service", identifiers: ["s3.amazonaws.com"] }],
+        conditions: [
+          { test: "ArnEquals", variable: "aws:SourceArn", values: [attachmentsBucket.arn] },
+          { test: "StringEquals", variable: "aws:SourceAccount", values: [aws.getCallerIdentityOutput().accountId] },
+        ],
+      }] }).json,
+    });
+    new aws.s3.BucketNotification("AttachmentObjectEventsNotification", {
+      bucket: attachmentsBucket.name,
+      queues: [{ queueArn: objectEvents.arn, events: ["s3:ObjectCreated:*"] }],
+    }, { dependsOn: [objectEventsSendPolicy] });
     objectEvents.subscribe({
       handler: "packages/api/src/attachment-object-events.handler",
       timeout: "30 seconds",
-      link: [dbConnectionUrl, attachmentsBucket],
+      // DeleteObjects authorizes s3:DeleteObject on object ARNs only.
+      // The event handler performs its reference/closure checks in SQL.
+      link: [dbConnectionUrl],
+      permissions: [{ actions: ["s3:DeleteObject"], resources: [attachmentsBucket.arn.apply(arn => `${arn}/*`)] }],
+      // This consumer is assumed by Lambda only; no human/account-root trust.
+      transform: { role: { assumeRolePolicy: JSON.stringify({
+        Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "sts:AssumeRole",
+          Principal: { Service: "lambda.amazonaws.com" } }],
+      }) } },
       environment: { DB_CONNECTION_URL: dbConnectionUrl.value, ATTACHMENTS_BUCKET: attachmentsBucket.name, ATTACHMENTS_REGION: AWS_REGION },
     }, { batch: { size: 1, partialResponses: true } });
 

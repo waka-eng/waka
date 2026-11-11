@@ -145,3 +145,28 @@ The subsequent explicit automatic-release workflow/tests/docs change is the only
 new source change after that ancestry merge; final SHA/tree are recorded in the
 sanitized release receipt. No force push, ours merge, rebase or original-worktree
 branch change is used. Main must still be an ancestor before publication.
+
+
+## Forward correction before first production mutation
+
+The first automatic run43005773164 was cancelled before its production job
+mutated secrets/schema/resources. A focused SDK-source verification found
+SST3.19.3 Queue.createPolicy permits S3/SNS/EventBridge SendMessage without a
+source condition. Handler tenancy/inventory fences prevent arbitrary erasure,
+but unsolicited service delivery can still consume Lambda/database resources.
+The forward correction replaces the legacy Bucket.subscribeQueue helper with
+an explicit S3-only queue policy conditioned on this bucket ARN and current AWS
+account, plus a notification resource dependent on that policy. No live IAM
+policy was changed outside the reviewed deployment. The new preview exposes
+these two resources directly; Lambda subscriber children remain deferred until
+the queue ARN is known. The redacted postdeploy audit now verifies actual SQS
+policy conditions, Lambda trust/inline/managed-policy isolation and existing
+runtime/queue contracts. No model, quota, DB migration or provider-key change.
+
+The cleanup handler calls drainAttachmentObjects and therefore needs S3 object
+deletes. Its broad bucket link is replaced with s3:DeleteObject on only this
+bucket's object ARNs; SQS polling remains scoped to its queue, with ordinary
+Lambda logs/tracing. The new consumer's trust is Lambda-only (SST's generic
+same-account root trust is not needed). Existing API/worker roles are untouched.
+Confirmed cancelled run43005773164 has a production job with zero steps, so no
+production secrets, migrations or infrastructure were mutated by that attempt.

@@ -276,6 +276,15 @@ the answer uses lexical context rather than exceeding the limit. Answers have
 at most 1,200 output tokens. Dispatch timestamps survive
 conversation deletion until profile erasure so deletion cannot reset the budget.
 
+The deployed completion queue accepts SendMessage only from the S3 service for
+the exact attachment bucket ARN and its AWS account. This is an explicit queue
+resource policy; SST3.19.3's legacy subscription helper permits additional service
+principals without a source condition and is not used for this boundary. Bucket
+notification creation depends on that policy and retains AWS destination
+validation. The cleanup consumer's IAM role is limited to its queue, attachment
+bucket's object deletion and ordinary Lambda logging/tracing; it receives no
+model-provider keys. No bucket CRUD link is granted to this consumer.
+
 Request admission is separate from provider spending. `account_chat_limits`
 (migration 0085) holds one durable row per account, cascading on account deletion.
 New chat creation, new user messages and newly accepted explicit reply/retry

@@ -3,6 +3,37 @@ import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+const list=value=>Array.isArray(value)?value:[value];
+const document=value=>typeof value==='string'?JSON.parse(decodeURIComponent(value)):value;
+export function scopedS3SendPolicy(value,queueArn,bucket,account){
+ const statements=list(document(value)?.Statement??[]),allow=statements.filter(s=>s.Effect==='Allow');
+ return allow.length===1&&allow.every(s=>!s.NotAction&&!s.NotResource&&Object.keys(s.Principal??{}).join()==='Service'&&
+  list(s.Principal.Service).join()==='s3.amazonaws.com'&&list(s.Action).join()==='sqs:SendMessage'&&list(s.Resource).join()===queueArn&&
+  list(s.Condition?.ArnEquals?.['aws:SourceArn']).join()===`arn:aws:s3:::${bucket}`&&list(s.Condition?.StringEquals?.['aws:SourceAccount']).join()===account);
+}
+export function isolatedCleanupRole({roleArn,queueArn,bucket,read}){
+ const roleName=roleArn.split('/').at(-1),role=read(['iam','get-role','--role-name',roleName]).Role;
+ const trust=list(document(role?.AssumeRolePolicyDocument)?.Statement??[]).filter(s=>s.Effect==='Allow');
+ if(role?.Arn!==roleArn||trust.length!==1||Object.keys(trust[0].Principal??{}).join()!=='Service'||list(trust[0].Principal.Service).join()!=='lambda.amazonaws.com'||list(trust[0].Action).join()!=='sts:AssumeRole')return false;
+ const managed=read(['iam','list-attached-role-policies','--role-name',roleName]).AttachedPolicies??[];
+ const approvedManaged=new Set(['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole','arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess']);
+ if(managed.some(p=>!approvedManaged.has(p.PolicyArn)))return false;
+ const names=read(['iam','list-role-policies','--role-name',roleName]).PolicyNames??[],allowedResources=new Set([queueArn,`arn:aws:s3:::${bucket}/*`]);
+ const poll=new Set(['sqs:ChangeMessageVisibility','sqs:DeleteMessage','sqs:GetQueueAttributes','sqs:GetQueueUrl','sqs:ReceiveMessage']);
+ let hasQueue=false,hasBucket=false;
+ for(const name of names){
+  const p=read(['iam','get-role-policy','--role-name',roleName,'--policy-name',name]);
+  for(const s of list(document(p.PolicyDocument)?.Statement??[])){
+   if(s.Effect!=='Allow')continue;if(s.NotAction||s.NotResource)return false;
+   const actions=list(s.Action),resources=list(s.Resource);
+   if(actions.every(a=>['logs:CreateLogGroup','logs:CreateLogStream','logs:PutLogEvents','logs:DescribeLogStreams','xray:PutTraceSegments','xray:PutTelemetryRecords'].includes(a)))continue;
+   if(!actions.length||!resources.length||resources.some(r=>!allowedResources.has(r))||actions.some(a=>!poll.has(a)&&a!=='s3:DeleteObject'))return false;
+   if(actions.some(a=>poll.has(a))&&resources.includes(queueArn))hasQueue=true;
+   if(actions.includes('s3:DeleteObject')&&resources.includes(`arn:aws:s3:::${bucket}/*`))hasBucket=true;
+  }
+ }
+ return hasQueue&&hasBucket;
+}
 export function auditProductionRelease({outputs,expected,read}){
  const checks={},resources={};
  const api=read(['lambda','get-function-configuration','--function-name',outputs.apiFunctionName]);
@@ -29,12 +60,15 @@ export function auditProductionRelease({outputs,expected,read}){
   const url=read(['sqs','get-queue-url','--queue-name',name,'--queue-owner-aws-account-id',account]).QueueUrl;
   const attrs=read(['sqs','get-queue-attributes','--queue-url',url,'--attribute-names','All']).Attributes??{};
   const redrive=JSON.parse(attrs.RedrivePolicy??'{}');
+  checks.sendPolicyScoped=scopedS3SendPolicy(attrs.Policy,arn,expected.attachments,account);
   checks.queueVisibility=attrs.VisibilityTimeout==='180';checks.queueRetention=attrs.MessageRetentionPeriod==='1209600';checks.redrive=String(redrive.maxReceiveCount)==='5'&&/^arn:aws:sqs:us-west-2:\d+:waka-production-/.test(redrive.deadLetterTargetArn??'');
   const mappings=read(['lambda','list-event-source-mappings','--event-source-arn',arn]).EventSourceMappings??[];
   checks.cleanupMapping=mappings.length===1&&mappings[0].State==='Enabled'&&mappings[0].BatchSize===1&&mappings[0].FunctionResponseTypes?.includes('ReportBatchItemFailures')===true;
   if(mappings.length===1){
    const fn=mappings[0].FunctionArn.split(':').at(-1),consumer=read(['lambda','get-function-configuration','--function-name',fn]);
    const env=consumer.Environment?.Variables??{};resources.cleanupConsumer=fn;
+   checks.cleanupIamIsolated=isolatedCleanupRole({roleArn:consumer.Role,queueArn:arn,bucket:expected.attachments,read});
+   resources.cleanupRole=consumer.Role?.split('/').at(-1);
    checks.cleanupIsolated=fn.startsWith('waka-production-')&&consumer.Timeout===30&&env.DB_CONNECTION_URL===expected.database&&env.ATTACHMENTS_BUCKET===expected.attachments&&!env.OPENROUTER_API_KEY&&!env.GEMINI_API_KEY;
   }
   if(checks.redrive){
