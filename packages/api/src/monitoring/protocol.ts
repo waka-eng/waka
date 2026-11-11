@@ -5,7 +5,7 @@ export const alarmLabels = {
   Availability: 'Public web/API liveness', ApplicationFault: 'Application processing failure',
   LambdaErrors: 'Lambda execution errors', LambdaThrottles: 'Lambda capacity throttling',
   AttachmentDlq: 'Attachment events need recovery', DeliveryDlq: 'Alert delivery needs recovery',
-  ScheduleDelivery: 'Scheduled invocation delivery failed', WorkerTimeout: 'Worker near its execution deadline',
+  ScheduleDelivery: 'Scheduled invocation delivery failed',
 } as const;
 export type AlarmCode = keyof typeof alarmLabels;
 export interface AlarmTransition { id: string; alarm: string; code: AlarmCode; state: 'ALARM' | 'OK'; timestamp: number }

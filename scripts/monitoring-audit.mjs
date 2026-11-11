@@ -60,13 +60,15 @@ export function auditMonitoring({outputs,webhook,read}) {
   const simple=(code,namespace,metric,dimension,value)=>{const a=byCode[code];return a?.Namespace===namespace&&a.MetricName===metric&&a.Dimensions?.length===1&&a.Dimensions[0].Name===dimension&&a.Dimensions[0].Value===value;};
   checks.alarmMetrics=simple('Availability','AWS/Lambda','Errors','FunctionName',probe.FunctionName)&&simple('ProbeMissing','AWS/Lambda','Invocations','FunctionName',probe.FunctionName)&&
     simple('ApplicationFault','WAKA/Operations','Faults','Stage','production')&&
-    simple('DeliveryDlq','AWS/SQS','ApproximateNumberOfMessagesVisible','QueueName',queue.QueueArn?.split(':').at(-1))&&simple('AttachmentDlq','AWS/SQS','ApproximateNumberOfMessagesVisible','QueueName',outputs.monitorAttachmentDlqName)&&simple('WorkerTimeout','AWS/Lambda','Duration','FunctionName',outputs.backgroundWorkerFunctionName);
-  const functions=[outputs.apiFunctionName,outputs.monitorPrincipleFunctionName,outputs.monitorCleanupFunctionName,relay.FunctionName];
+    simple('DeliveryDlq','AWS/SQS','ApproximateNumberOfMessagesVisible','QueueName',queue.QueueArn?.split(':').at(-1))&&simple('AttachmentDlq','AWS/SQS','ApproximateNumberOfMessagesVisible','QueueName',outputs.monitorAttachmentDlqName);
+  const functions=[outputs.apiFunctionName,outputs.backgroundWorkerFunctionName,outputs.monitorPrincipleFunctionName,outputs.monitorCleanupFunctionName];
   checks.nativeFailureMetrics=['LambdaErrors','LambdaThrottles'].every(code=>{
-    const metrics=byCode[code]?.Metrics??[],expected=code==='LambdaThrottles'?[...functions,outputs.backgroundWorkerFunctionName]:functions;
+    const metrics=byCode[code]?.Metrics??[],expected=functions;
     const raw=metrics.filter(m=>m.MetricStat);return metrics.length===expected.length+1&&raw.length===expected.length&&expected.every(name=>raw.some(m=>m.ReturnData===false&&m.MetricStat.Period===300&&m.MetricStat.Stat==='Sum'&&m.MetricStat.Metric.Namespace==='AWS/Lambda'&&m.MetricStat.Metric.MetricName===(code==='LambdaErrors'?'Errors':'Throttles')&&m.MetricStat.Metric.Dimensions?.length===1&&m.MetricStat.Metric.Dimensions[0].Name==='FunctionName'&&m.MetricStat.Metric.Dimensions[0].Value===name))&&metrics.some(m=>m.ReturnData===true&&m.Expression==='SUM(METRICS())');
   });
-  checks.noisyRetryExcluded=!byCode.LambdaErrors?.Metrics?.some(m=>m.MetricStat?.Metric?.Dimensions?.some(d=>d.Value===outputs.backgroundWorkerFunctionName))&&byCode.WorkerTimeout?.Threshold===839000;
+  checks.noDeliveryFeedback=['LambdaErrors','LambdaThrottles'].every(code=>!byCode[code]?.Metrics?.some(m=>m.MetricStat?.Metric?.Dimensions?.some(d=>d.Value===relay.FunctionName)));
+  const workerEnv=fn(outputs.backgroundWorkerFunctionName).Environment?.Variables??{};
+  checks.preciseWorkerWakes=!!outputs.monitorWakeGroup&&workerEnv.WAKA_BACKGROUND_JOB_WAKE_GROUP===outputs.monitorWakeGroup&&!!outputs.monitorWakeRole&&workerEnv.WAKA_BACKGROUND_JOB_WAKE_ROLE===outputs.monitorWakeRole&&outputs.monitorWakeRole.startsWith(`arn:aws:iam::${account}:role/`);
   const schedules=byCode.ScheduleDelivery?.Metrics??[];
   checks.scheduleFailures=schedules.length===3&&[outputs.monitorDailyRuleName,outputs.monitorPrincipleRuleName].every(name=>schedules.some(m=>m.ReturnData===false&&m.MetricStat?.Metric.Namespace==='AWS/Events'&&m.MetricStat.Metric.MetricName==='FailedInvocations'&&m.MetricStat.Metric.Dimensions?.length===1&&m.MetricStat.Metric.Dimensions[0].Name==='RuleName'&&m.MetricStat.Metric.Dimensions[0].Value===name));
   checks.probeAlarmsBounded=byCode.ProbeMissing?.EvaluationPeriods===3&&byCode.ProbeMissing?.Period===300&&byCode.ProbeMissing?.Threshold===1&&byCode.ProbeMissing?.ComparisonOperator==='LessThanThreshold'&&byCode.ProbeMissing?.TreatMissingData==='breaching'&&byCode.Availability?.EvaluationPeriods===2&&byCode.Availability?.Period===300&&byCode.Availability?.TreatMissingData==='notBreaching';

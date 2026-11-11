@@ -127,6 +127,9 @@ jobs:
           PRODUCTION_DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
         run: node scripts/check-deployment-databases.mjs
 
+      - name: Preserve current heartbeat action state before infrastructure update
+        run: node scripts/monitoring-state.mjs >> "$GITHUB_ENV"
+
       - name: Preview checked production infrastructure
         if: ${{ inputs.preview_only }}
         env:
@@ -284,4 +287,5 @@ jobs:
             production-release-audit.json
             production-monitoring-audit.json
             production-monitoring-baseline.json
+            production-monitoring-before.json
           if-no-files-found: ignore

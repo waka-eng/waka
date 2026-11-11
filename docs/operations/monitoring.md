@@ -37,8 +37,8 @@ if Discord itself is unavailable; this is not a second notification channel.
 | Public web/API availability | Fixed unauthenticated GETs to `https://waka.im/` and `/api/health` every five minutes, redirect refused, 4-second HTTP deadlines, 64 KiB response limit. Two failed five-minute probe periods alert. | No WAKA/Neon/provider call; a small Dynamo operational state bounds failed API attempts. Successful liveness does not prove authenticated journeys, Neon readiness or model quality. Native probe errors avoid another custom metric. |
 | Missing availability probe | Native Invocations below one for three five-minute periods; missing data breaches. Actions are armed only after a natural healthy/OK baseline. | No forced invocation, state change or setup message. Initialization failure reports the actual action state; an already armed alarm is never disabled by the initializer. |
 | API handled 5xx | Production-only `WAKA/Operations Faults`, any fault in five minutes. | Closed `api_5xx` code; no route/URL/account/body/error text. 4xx and normal quota refusals do not page. |
-| Worker terminal/wake/scheduling failures | Same fault series; terminal metric only after the fenced SQL update actually returns `failed`. Wake/scheduler failures and unexpected worker execution errors have fixed codes. | Expected `BackgroundJobRetryScheduled`, cadence/account-budget holds and successful stale settlements are excluded. Runtime timeout uses native Duration >=839 seconds; throttles have native coverage. |
-| Lambda errors/throttles | Sum of fixed function metrics over five minutes. | Expected worker retry signals are excluded from Errors; worker terminal/execution/timeout/throttle signals cover genuine failures. |
+| Worker terminal/wake/scheduling failures | Same fault series; terminal metric only after the fenced SQL update actually returns `failed`. Wake/scheduler failures and unexpected worker execution errors have fixed codes. | Expected `BackgroundJobRetryScheduled`, cadence/account-budget holds and successful stale settlements are excluded. Native Lambda Errors cover timeouts and platform failures; throttles have native coverage. |
+| Lambda errors/throttles | Sum of fixed function metrics over five minutes. | Current production precise-wake group/role binding is required by the audit. AWS supplies invokedFunctionArn, so the legacy expected retry-signal fallback is unreachable in that configuration; real worker Errors/Throttles remain covered. Relay errors are console-only to avoid a feedback loop. |
 | Attachments | Cleanup errors, storage-scope holds, or ten full existing daily cleanup batches emit a fault; completion DLQ visible count >0 alerts. | Backlog is sampled during existing work, not continuously queried. Safe quarantine can require operator binding; no orphan sweep or owner-data repair is implied. |
 | Overdue jobs/exhausted leases | An explicit recovery inspection with overdue/exhausted work emits the same fixed Faults series; the historical recovery metrics remain available. | No new poll or wake of Neon. Missing samples are not proof of health. Timely silent-stall detection and recovery exercise remain open. |
 | Scheduled work | Native EventBridge failed-invocation metrics for the daily worker/Principle schedules; daily maintenance completion is a production log/metric. | Native delivery failures are not proof every job completed. Absence of daily completion is an operator inspection lead, not a continuously queried DB heartbeat. |
@@ -105,7 +105,7 @@ If delivery fails:
    a synthetic test. A later end-to-end failure/delivery/recovery exercise needs
    concrete approval. Discord HTTP acceptance is not human acknowledgement.
 
-The failure-queue alarm itself can produce one failed transition, not an
+The relay is excluded from actioned Lambda Errors/Throttles aggregates: its own failing notification must not create a new alert about itself. Its native metrics remain available in the console. The failure-queue alarm itself can produce one failed transition, not an
 unbounded recursive consumer loop: the queue has **no automatic consumer** and
 an alarm acts on state changes. A broken Discord endpoint cannot notify through
 itself; cloud-console inspection and a named operator remain necessary.
@@ -147,30 +147,30 @@ enabled by this source.
 
 Prices checked against official us-west-2 AWS price-list data and product docs
 on 2026-11-11. No AWS free tier or credits are subtracted. Counts below include
-existing production **and development** monitoring, not only this increment.
+existing production **and development** monitoring, not only this increment. General hosting, memory-database/storage and AI/provider spending are separate.
 
 | Item | Conservative monthly assumption | USD |
 | --- | --- | ---: |
 | Existing custom series | 5 model usage +4 recovery per stage, 18 total, all active all month ×$0.30. Gemini has no CostUsd series. | 5.40 |
 | New custom series | Production-only Faults +DailySweeps, 2 ×$0.30. Codes are fields, not dimensions; zero new dev series. | 0.60 |
-| Alarms | 9 production alarms referencing 17 billed metrics +3 existing dev alarm metrics ×$0.10. No composite/high-resolution/Insights alarms. | 2.00 |
+| Alarms | 8 production alarms referencing 15 billed metrics +3 existing dev alarm metrics ×$0.10. No composite/high-resolution/Insights alarms. | 1.80 |
 | Logs | 1 GB total monitoring/app operational ingestion allowance ×$0.50 +1 GB-month ×$0.03. New relay/probe retention 14 days; existing app retention unchanged. | 0.53 |
 | Compute and requests | Up to 8,928 five-minute probes/month at the entire 12s/128MB limit, their DB-free health calls at 2s/1GB, plus 3,000 relay attempts at 20s/128MB; request fees included, rounded up. | 0.68 |
 | Operator metrics/inspection | 4,800 GetMetricData metrics ×$0.00001 +1,000 other requests; 1 GB Logs Insights scan. EMF makes zero new PutMetricData calls. | 0.07 |
 | Delivery/storage/transfer | <=1,000 transitions, <=20k delivery operations plus <=27k five-minute probe Dynamo operations and <=10k SQS requests, tiny retained metadata, schedule/S3/HTTP transfer allowance. No NAT gateway, KMS key or Secrets Manager subscription. | 0.10 |
 | Custom dashboard/SNS/vendor ops plan | Native console links above; no custom dashboard or SNS resource. | 0.00 |
-| **Conservative AWS envelope** | Existing $5.80 baseline (custom series, dev alarms and old production DLQ) +incremental/usage allowances. | **9.38** |
+| **Conservative AWS envelope** | Existing $5.80 baseline (custom series, dev alarms and old production DLQ) +incremental/usage allowances. | **9.18** |
 
 The table is a conservative **normal-traffic envelope**, not a timeout stress
 bound. The actual API source timeout is **60 seconds at 1024 MB**; the 30-second
 function is the cleanup consumer. The table assumes this synchronous DB/network-
 free health route, including cold import, completes within two seconds. A probe's
 four-second HTTP abort does **not** stop or cap the server Lambda's billing. Without the durable cooldown, every five-minute health invocation consuming all
-60 seconds could reach about $18.01/month. **That is not the implemented policy.**
+60 seconds could reach about $17.81/month. **That is not the implemented policy.**
 The two-hour persisted deadline limits full-timeout failing attempts to at most
 373 over 31 days, including restart/chatter tests. Conservatively add all 373
 60s/1GB attempts ($0.373) on top of the table's entire normal healthy API allowance:
-**$9.76/month stress envelope**, rounded up. The existing delivery/storage allowance
+**$9.56/month stress envelope**, rounded up. The existing delivery/storage allowance
 covers the additional small probe operations. Relay assumes up to 3,000 attempts
 at its full 20s/128MB bound, HTTP5s, two native async retries/max age1h. Probe assumes
 all 8,928 invocations at its full12s/128MB bound, HTTP4s, no event/async retries.
@@ -179,7 +179,7 @@ other application traffic and operator queries can exceed assumptions; this is
 not an AWS hard billing cap. Observe actual native API/probe duration after rollout.
 
 Routine sparse-metric/low-traffic cost should be lower; the incremental fixed
-baseline is $2.20/month (two series +16 additional alarm metrics; the existing production DLQ alarm is replaced). These are assumptions,
+baseline is $2.00/month (two series +14 additional alarm metrics; the existing production DLQ alarm is replaced). These are assumptions,
 not an enforced cap. Additional stages/providers/dimensions, high log volume,
 more console refreshes or incidents can exceed the envelope. Review actual AWS
 charges after rollout; preserve signals rather than silently dropping incidents.
@@ -245,7 +245,7 @@ rewrite is required. Preserve the existing additive schema/cleanup fence on any
 forward fix. To pause noisy actions, use a reviewed alarm-action configuration;
 do not disable the durable issuer/cleanup consumer or remove pending deliveries.
 
-The missing-probe alarm is created with actions disabled. A bounded initializer
+A read-only pre-apply snapshot binds the existing alarm/probe to the exact production account/stack and exports only its actual armed boolean. IaC preserves a previously armed alarm; a new alarm is created with actions disabled. A bounded initializer
 (up to eight minutes of native CloudWatch reads, no SQL/model/forced probe) checks
 exact function/alarm identity, recent Invocations, zero observed Errors and OK
 state before enabling only that alarm. It reads actual ActionsEnabled: an unchanged

@@ -591,11 +591,16 @@ export default $config({
       };
       metricAlarm("Availability", { namespace: "AWS/Lambda", metricName: "Errors", dimensions: { FunctionName: probe.name }, evaluationPeriods: 2 });
       metricAlarm("ApplicationFault", { namespace: "WAKA/Operations", metricName: "Faults", dimensions: { Stage: "production" } });
-      const monitoredFunctions = [api.name, principleRefresh.nodes.function.name, objectEventSubscriber.nodes.function.name, relay.name];
+      // Relay errors/throttles stay console-visible. Actioning them through
+      // the relay itself would create an ALARM/OK feedback loop on outage.
+      // Its retained failure queue is the single state-change alert boundary.
+      // Production precise wakes make BackgroundJobRetryScheduled unreachable
+      // in Lambda; the runtime audit requires that exact group/role binding.
+      const monitoredFunctions = [api.name, backgroundWorker.name, principleRefresh.nodes.function.name, objectEventSubscriber.nodes.function.name];
       for (const [code, metricName] of [["LambdaErrors", "Errors"], ["LambdaThrottles", "Throttles"]] as const) {
         metricAlarm(code, { period: undefined, statistic: undefined,
           metricQueries: [
-            ...(code === "LambdaThrottles" ? [...monitoredFunctions, backgroundWorker.name] : monitoredFunctions).map((name, index) => ({ id: `m${index}`, returnData: false,
+            ...monitoredFunctions.map((name, index) => ({ id: `m${index}`, returnData: false,
               metric: { namespace: "AWS/Lambda", metricName, dimensions: { FunctionName: name }, period: 300, stat: "Sum" } })),
             { id: "total", expression: "SUM(METRICS())", returnData: true },
           ],
@@ -607,8 +612,7 @@ export default $config({
       // Missing data cannot page during bootstrap. The post-deploy initializer
       // arms this exact alarm only after a natural healthy invocation + OK.
       metricAlarm("ProbeMissing", { namespace: "AWS/Lambda", metricName: "Invocations", dimensions: { FunctionName: probe.name },
-        threshold: 1, comparisonOperator: "LessThanThreshold", evaluationPeriods: 3, treatMissingData: "breaching", actionsEnabled: false });
-      metricAlarm("WorkerTimeout", { namespace: "AWS/Lambda", metricName: "Duration", dimensions: { FunctionName: backgroundWorker.name }, statistic: "Maximum", threshold: 839000 });
+        threshold: 1, comparisonOperator: "LessThanThreshold", evaluationPeriods: 3, treatMissingData: "breaching", actionsEnabled: process.env.WAKA_MONITOR_HEARTBEAT_ARMED === "1" });
       metricAlarm("ScheduleDelivery", { period: undefined, statistic: undefined, metricQueries: [
         ...[dailyDrain.nodes.rule.name, principleRefresh.nodes.rule.name].map((name,index) => ({id:`s${index}`,returnData:false,metric:{namespace:"AWS/Events",metricName:"FailedInvocations",dimensions:{RuleName:name},period:300,stat:"Sum"}})),
         {id:"total",expression:"SUM(METRICS())",returnData:true},
@@ -616,7 +620,8 @@ export default $config({
       monitoringOutputs = { monitorRelayFunctionName: relay.name, monitorProbeFunctionName: probe.name,
         monitorDeliveryTable: deliveryTable.name, monitorDeliveryDlqUrl: deliveryDlq.url, monitorProbeRuleName: probeCron.nodes.rule.name,
         monitorPrincipleFunctionName: principleRefresh.nodes.function.name, monitorCleanupFunctionName: objectEventSubscriber.nodes.function.name, monitorAttachmentDlqName: objectEventDlq.nodes.queue.name,
-        monitorDailyRuleName: dailyDrain.nodes.rule.name, monitorPrincipleRuleName: principleRefresh.nodes.rule.name };
+        monitorDailyRuleName: dailyDrain.nodes.rule.name, monitorPrincipleRuleName: principleRefresh.nodes.rule.name,
+        monitorWakeGroup: jobWakeGroup.name, monitorWakeRole: jobWakeRole.arn };
     }
 
     // -----------------------------------------------------------------------
