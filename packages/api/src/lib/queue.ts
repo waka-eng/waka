@@ -154,6 +154,7 @@ import { getDb } from "./db.js";
 import {recordPerformanceStage} from './performance-stages.js';
 import { z } from 'zod';
 import { BackgroundJobHeldError } from './background-job-hold.js';
+import { recordOperationalFault } from './operational-fault.js';
 import {QUEUE_RECOVERY_LIMITS,type QueueRecoveryState} from './queue-recovery.js';
 import { loadPendingSignalSupportSources } from './signal-support-state.js';
 import { reviewSignalSupport, SUPPORT_REVIEW_BATCH_SIZE } from './signal-support-review.js';
@@ -775,6 +776,7 @@ async function wakeBackgroundWorker(wakes: BackgroundJobWakeReference[] = []): P
       new InvokeCommand({ FunctionName: functionName, InvocationType: "Event", Payload: new TextEncoder().encode(JSON.stringify({ mode: 'enqueue', ...(wakes.length?{wakes}: {}) })) }),
     );
   } catch (err) {
+    recordOperationalFault('worker_wake');
     console.warn("[background-jobs] could not wake the worker; the sweep will catch it", {
       error: sanitizeError(err),
     });
@@ -1838,7 +1840,7 @@ async function markJobFailedOrPending(
   const runAfter = (
     exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now)
   ).toISOString();
-  await getDb().execute(sql`
+  const settled = await getDb().execute(sql`
     UPDATE background_jobs
     SET status = CASE WHEN rerun_requested THEN 'pending'::background_job_status ELSE ${status}::background_job_status END,
         locked_at = CASE WHEN rerun_requested THEN NULL ELSE ${lockedAt}::timestamptz END,
@@ -1856,7 +1858,9 @@ async function markJobFailedOrPending(
     WHERE id = ${job.id}::uuid AND status = 'running'
       AND locked_at = ${coerceNullableDate(job.lockedAt)?.toISOString() ?? null}::timestamptz
       AND attempts = ${job.attempts}
+    RETURNING status
   `);
+  if (settled.some(row => row.status === 'failed')) recordOperationalFault('job_terminal');
 }
 
 /** Only failures from this drain can request a near-term async wake. A later

@@ -1,4 +1,5 @@
 import {emitOperationalMetric} from './operational-metrics.js';
+import {recordOperationalFault} from './operational-fault.js';
 const operations:Record<string,string>={
   'conversation reply':'conversation','signal extraction':'signal_extraction','signal match judgement':'signal_match',
   'signal support assessment':'signal_support','top-of-mind synthesis':'top_of_mind','top-of-mind review':'top_of_mind_review','principle distillation':'principles',
@@ -13,6 +14,7 @@ const numeric=(n:unknown)=>typeof n==='number'&&Number.isFinite(n)&&n>=0?n:null;
  * Stage/provider dimensions remain low-cardinality; no IDs, model output,
  * prompt, arbitrary label, error body or credential is accepted into logs. */
 export function recordModelUsage(provider:'openrouter'|'gemini',label:string,body:unknown,durationMs:number,outcome:'received'|'http_error'|'unknown'){
+  if (outcome !== 'received') recordOperationalFault('provider_failure');
   const stage=['development','dev','production','local','test'].includes(process.env.WAKA_STAGE??'')?process.env.WAKA_STAGE!:'other';
   const data=body&&typeof body==='object'?body as Record<string,unknown>:{};
   const raw=provider==='openrouter'?data.usage:data.usageMetadata;

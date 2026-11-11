@@ -78,6 +78,7 @@ import type { ErrorInfo, ReactNode } from "react";
 
 import { readStoredLocale, t } from "../lib/locales";
 import { SurfaceHeader } from "./SurfaceHeader";
+import { recordBrowserFailure } from '../lib/analytics';
 
 export interface SurfaceBoundaryProps {
   children: ReactNode;
@@ -163,6 +164,7 @@ export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoun
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
+    recordBrowserFailure('render');
     /* ONCE, AND ONLY FOR A FAILURE A RELOAD CAN CHANGE. Written before the
        reload so the attempt is recorded even though nothing after this line
        survives. */
@@ -180,9 +182,8 @@ export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoun
         return;
       }
     }
-    /* The console is the only reporting channel this app has. Keep the
-       surface name in the line: "the world failed" and "the account screen
-       failed" arrive here as the same stack otherwise. */
+    /* Full diagnostics remain local. Optional central reporting above sends
+       only the fixed render category, never this error or component stack. */
     console.error(`[waka] ${this.props.surface} failed to render`, error, info.componentStack);
   }
 

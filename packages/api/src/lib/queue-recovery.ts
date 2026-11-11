@@ -1,8 +1,10 @@
 /** Operational counts only. Recovery uses the existing claim/budget path. */
+import {recordOperationalFault} from './operational-fault.js';
 import {emitOperationalMetric} from './operational-metrics.js';
 export const QUEUE_RECOVERY_LIMITS={overdueMs:5*60*1000,claims:5} as const;
 export interface QueueRecoveryState{overdue:number;oldestOverdueMs:number;exhaustedLeases:number}
 export function recordQueueRecovery(state:QueueRecoveryState){
+  if(state.overdue>0||state.exhaustedLeases>0)recordOperationalFault('queue_recovery');
   const stage=['development','dev','production','local','test'].includes(process.env.WAKA_STAGE??'')?process.env.WAKA_STAGE!:'other';
   const value=(n:number)=>Number.isFinite(n)?Math.max(0,Math.floor(n)):0;
   emitOperationalMetric({

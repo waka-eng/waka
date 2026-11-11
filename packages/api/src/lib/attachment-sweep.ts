@@ -6,6 +6,7 @@ import { and, asc, eq, inArray, isNotNull, lte, or, sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import { attachmentObjects } from '../db/index.js';
 import { getDb } from './db.js';
+import { recordOperationalFault } from './operational-fault.js';
 import { unreferencedAttachmentKeys } from './conversation-attachments.js';
 
 export type DeleteAttachmentObjects = (keys: string[]) => Promise<void>;
@@ -117,6 +118,7 @@ export async function drainAttachmentObjects(db: Db, options: AttachmentCleanupO
     } catch { failed=claim.deleting.map(row=>row.key!); }
   }
   const deleted=await settleAttachmentObjectCleanup(db,claim.deleting,failed,now);
+  if (failed.length + claim.scopeFailures > 0) recordOperationalFault('attachment_cleanup');
   return {selected:claim.selected,deleted,retained:claim.retained,failed:failed.length+claim.scopeFailures};
 }
 

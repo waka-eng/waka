@@ -4,6 +4,7 @@ import type { CreateScheduleCommandInput } from '@aws-sdk/client-scheduler';
 import { backgroundJobTypeValues, type BackgroundJob } from '../db/index.js';
 import { getDb } from './db.js';
 import { STALE_LOCK_SECONDS } from './queue.js';
+import { recordOperationalFault } from './operational-fault.js';
 import { BackgroundJobHeldError } from './background-job-hold.js';
 
 export type BackgroundJobWake =
@@ -50,7 +51,7 @@ async function createWake(wake: BackgroundJobWake, targetArn: string) {
   const { sdk, client } = await scheduler();
   try { await client.send(new sdk.CreateScheduleCommand(backgroundJobWakeInput(wake, targetArn,
     process.env.WAKA_BACKGROUND_JOB_WAKE_ROLE!, process.env.WAKA_BACKGROUND_JOB_WAKE_GROUP!)), { abortSignal: AbortSignal.timeout(5000) }); }
-  catch (error) { if ((error as { name?: string }).name !== 'ConflictException') throw error; }
+  catch (error) { if ((error as { name?: string }).name !== 'ConflictException') { recordOperationalFault('wake_schedule'); throw error; } }
 }
 async function deleteWake(wake: BackgroundJobWake): Promise<boolean> {
   if (!process.env.WAKA_BACKGROUND_JOB_WAKE_GROUP) return false;
@@ -90,6 +91,7 @@ export async function armBackgroundJobLease(job: BackgroundJob, targetArn?: stri
     if (previous?.kind === 'lease' && previous.id === wake.id && previous.profileId === wake.profileId && wakeName(previous) !== wakeName(wake)) await deleteWake(previous);
     return true;
   } catch (error) {
+    recordOperationalFault('wake_schedule');
     console.warn('[background-job-wake] lease scheduling failed', { jobId: job.id, error: (error as { name?: string }).name ?? 'unknown' });
     throw new BackgroundJobHeldError(new Date(Date.now() + 30_000), 'Recovery scheduling unavailable', 'support');
   }
@@ -231,5 +233,5 @@ export async function recoverBackgroundJobWakes(targetArn?: string, profileId?: 
     ScheduleExpressionTimezone: 'UTC', FlexibleTimeWindow: { Mode: 'OFF' }, ActionAfterCompletion: 'DELETE',
     Target: { Arn: targetArn!, RoleArn: process.env.WAKA_BACKGROUND_JOB_WAKE_ROLE!, Input: JSON.stringify({ mode: 'wake_recovery' }),
       RetryPolicy: { MaximumEventAgeInSeconds: 3600, MaximumRetryAttempts: 5 } } }), { abortSignal: AbortSignal.timeout(5000) }); }
-  catch (error) { if ((error as { name?: string }).name !== 'ConflictException') throw error; }
+  catch (error) { if ((error as { name?: string }).name !== 'ConflictException') { recordOperationalFault('wake_schedule'); throw error; } }
 }

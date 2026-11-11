@@ -21,6 +21,15 @@ whose numbers are machine-checked against the implementation in CI.
 
 ## Accounts and profiles
 
+Operational telemetry is separate from the memory model. Monitoring delivery
+intents contain only a fixed production alarm name, state, timestamp and delivery
+lease/status. A separate fixed probe key holds availability/cooldown timestamps
+and a lease, with no account identifiers; neither owns or copies profile memory. Browser analytics may send
+only allowlisted anonymous screen/error categories. Account/profile identifiers,
+capture/chat text, link/page URLs, arbitrary exceptions and stacks are excluded.
+These records cannot become evidence for any memory layer or cross a legacy
+profile boundary. See [the monitoring privacy boundary](operations/monitoring.md).
+
 An **account** is the auth identity: one login (email/Google), one person.
 
 A **profile** is the unit that owns memory. Every profile — human or

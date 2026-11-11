@@ -14,6 +14,17 @@ owner-paused. [Beta readiness](../goals/beta-readiness.md#milestone-4-performanc
 and gates; this checklist neither completes nor weakens them. No model, database
 or live cloud exercise was run to write it.
 
+## Monitoring increment in review
+
+The owner selected Discord delivery and a separate $10/month monitoring budget,
+then requested PostHog. A direct sample was accepted on 2026-11-11; it is not an
+AWS alarm-path exercise. [The monitoring runbook](../operations/monitoring.md)
+records the candidate's source/privacy boundaries, cost counts and unclosed
+acceptance. CloudWatch→Lambda relay wiring and sanitized browser categories are
+being prepared; PostHog remains disabled without an owner-supplied public project
+and host plus verified plan/cap. No live alarm/recovery, browser project receipt
+or overall operational gate is marked passed from this code.
+
 ## Already passed; do not repeat without a reason
 
 - Exact-SHA reusable CI before production mutations; automatic main release,
@@ -108,11 +119,13 @@ Unknown keys are not authority for orphan sweeps; historical unbound stores stay
 quarantined until authoritatively bound. Closure must preserve live/retained
 references and newer completion events.
 
-The [production cleanup alarm](../../sst.config.ts#L468) has no destination when
-`WAKA_OPERATIONS_ALERT_TOPIC_ARN` is absent. Existing
-[`WAKA_ALERT_SNS_TOPIC_ARN` recovery alarms](../../sst.config.ts#L515) are dev-only;
-filling that variable alone does not add production signal coverage. Browser
-exceptions still reaching a local console are not a delivered operator incident.
+At the accepted baseline, the production cleanup alarm had no delivery action
+without `WAKA_OPERATIONS_ALERT_TOPIC_ARN`; the legacy SNS recovery alarms were
+dev-only. The monitoring candidate replaces production delivery with a strict
+CloudWatch→Lambda→Discord path, independent of those blank SNS settings. Browser
+categories go to PostHog only after approved project configuration. Actual live
+wiring, delivery/recovery and project receipt must still be verified; see the
+[monitoring runbook](../operations/monitoring.md).
 
 **Must show:** synthetic completion event → durable inventory → bounded failure/
 retry/restart → eventual unreferenced-byte deletion, including a PUT begun while
@@ -188,7 +201,7 @@ beta readiness before the goal's human/operational evidence exists.
 | --- | --- | --- |
 | `WAKA_OPENROUTER_DATA_COLLECTION` | No extra request restriction when blank. | Confirm actual account/provider policy; set `deny` only if it implements the approved policy. |
 | `WAKA_OPENROUTER_REQUIRE_ZDR` | No extra ZDR request preference when blank. | Decide retention policy and provider compatibility; ZDR is not automatically mandatory and does not cover Gemini. |
-| `WAKA_OPERATIONS_ALERT_TOPIC_ARN` | Production DLQ alarm has no delivery action when blank. | Supply an approved destination or another verified delivery mechanism covering the required production signals. |
+| `WAKA_OPERATIONS_ALERT_TOPIC_ARN` | Legacy production DLQ action at the accepted baseline; replaced by the Discord relay candidate. | Verify the new direct alarm-action path; a separate SNS topic is not required for that design. |
 | `WAKA_ALERT_SNS_TOPIC_ARN` | Legacy recovery alarms are development-only. | Not a standalone production requirement; verify production coverage rather than filling a dev setting blindly. |
 | `WAKA_TRUSTED_PROXY_HOPS` | Deliberately refuses to guess a source address. | Keep blank until topology attested; admission/abuse protection must not depend on untrusted forwarded headers. |
 

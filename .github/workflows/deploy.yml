@@ -53,6 +53,9 @@ jobs:
       DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      WAKA_DISCORD_WEBHOOK_URL: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
+      VITE_POSTHOG_PROJECT_TOKEN: ${{ vars.VITE_POSTHOG_PROJECT_TOKEN_PRODUCTION }}
+      VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST_PRODUCTION }}
       WAKA_OPENROUTER_DATA_COLLECTION: ${{ vars.WAKA_OPENROUTER_DATA_COLLECTION_PRODUCTION }}
       WAKA_OPENROUTER_REQUIRE_ZDR: ${{ vars.WAKA_OPENROUTER_REQUIRE_ZDR_PRODUCTION }}
       WAKA_OPERATIONS_ALERT_TOPIC_ARN: ${{ vars.WAKA_OPERATIONS_ALERT_TOPIC_ARN_PRODUCTION }}
@@ -102,6 +105,7 @@ jobs:
             DB_CONNECTION_URL
             GEMINI_API_KEY
             OPENROUTER_API_KEY
+            WAKA_DISCORD_WEBHOOK_URL
           )
           missing=()
           for name in "${required[@]}"; do
@@ -127,6 +131,7 @@ jobs:
         if: ${{ inputs.preview_only }}
         env:
           SST_SECRET_OpenRouterApiKey: ${{ secrets.OPENROUTER_API_KEY }}
+          SST_SECRET_DiscordWebhookUrl: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
         run: node scripts/preview-production.mjs
 
       - name: Save sanitized infrastructure preview
@@ -184,6 +189,7 @@ jobs:
           pnpm sst secret set DbConnectionUrl "$DB_CONNECTION_URL" --stage "$SST_STAGE"
           pnpm sst secret set GeminiApiKey "$GEMINI_API_KEY" --stage "$SST_STAGE"
           pnpm sst secret set OpenRouterApiKey "$OPENROUTER_API_KEY" --stage "$SST_STAGE"
+          printf '%s' "$WAKA_DISCORD_WEBHOOK_URL" | pnpm sst secret set DiscordWebhookUrl --stage "$SST_STAGE"
 
       - name: Apply production database migrations
         if: ${{ !inputs.preview_only }}
@@ -261,10 +267,21 @@ jobs:
         if: ${{ !inputs.preview_only }}
         run: node scripts/production-release-audit.mjs > production-release-audit.json
 
+      - name: Arm missing-probe detection after natural healthy baseline
+        if: ${{ !inputs.preview_only }}
+        run: node scripts/initialize-monitoring.mjs > production-monitoring-baseline.json
+
+      - name: Verify production monitoring isolation and delivery wiring
+        if: ${{ !inputs.preview_only }}
+        run: node scripts/monitoring-audit.mjs > production-monitoring-audit.json
+
       - name: Save sanitized production acceptance
         if: ${{ !inputs.preview_only && always() }}
         uses: actions/upload-artifact@v4
         with:
           name: production-release-audit
-          path: production-release-audit.json
+          path: |
+            production-release-audit.json
+            production-monitoring-audit.json
+            production-monitoring-baseline.json
           if-no-files-found: ignore

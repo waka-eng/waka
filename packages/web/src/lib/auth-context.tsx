@@ -62,6 +62,7 @@ import type {
 import { normalizeSupportedLocale, writeStoredLocale } from "./locales";
 import type { SupportedLocale } from "./locales";
 import { isMobileBuild } from './platform';
+import { resetAnalyticsIdentity } from './analytics';
 
 // ---------------------------------------------------------------------------
 // Storage helpers
@@ -258,6 +259,7 @@ export interface AuthProviderProps {
  */
 export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [viewer, setViewer] = useState<ApiViewer | null>(() => readCachedViewer());
+  useEffect(() => { resetAnalyticsIdentity(); }, [viewer?.account.id]);
   const viewerRef = useRef(viewer);
   viewerRef.current = viewer;
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -443,6 +445,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
    * one open — see that module's header for the reasoning on both halves.
    */
   const logout = useCallback(async (): Promise<void> => {
+    resetAnalyticsIdentity();
     const leaving = viewer
       ? { accountId: viewer.account.id, profileId: viewer.profile.id }
       : null;

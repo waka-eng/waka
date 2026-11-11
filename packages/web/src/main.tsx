@@ -37,6 +37,8 @@ import { installPreloadRecovery } from "./lib/preload-recovery";
 import { LoadingHome } from "./components/LoadingHome";
 import LoginPage from "./pages/Login";
 import { MobileShell } from './components/MobileShell';
+import { AnalyticsNavigation } from './components/AnalyticsNavigation';
+import { startAnalytics } from './lib/analytics';
 if (import.meta.env.VITE_BUILD_TARGET === 'mobile') void import('./styles/mobile-fonts.css');
 // FIRST, ALWAYS: declares the layer order every other stylesheet relies on.
 // A @layer statement must precede the rules it orders, so this import cannot
@@ -134,6 +136,7 @@ function ProtectedHome() {
    screen that needed it. See lib/preload-recovery.ts for why this is narrow
    rather than a blanket ignore. */
 installPreloadRecovery();
+startAnalytics();
 
 const root = document.getElementById("root");
 if (!root) {
@@ -145,6 +148,7 @@ if (!root) {
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <BrowserRouter>
+      <AnalyticsNavigation />
       {/*
         AuthProvider wraps the router so every route — public or private —
         can call useAuth() without prop drilling. It hydrates from

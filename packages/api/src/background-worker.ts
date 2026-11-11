@@ -26,6 +26,7 @@ import {sweepDeletedShelf} from './lib/deleted-shelf.js';
 import {sweepStaleStagedAttachments} from './lib/conversation-attachments.js';
 import {sweepAttachmentObjects,drainAttachmentObjects} from './lib/attachment-sweep.js';
 import {getDb} from './lib/db.js';
+import {recordOperationalFault,recordDailySweep} from './lib/operational-fault.js';
 
 const DEFAULT_CRON_LIMIT = 5;
 const MAX_CRON_LIMIT = 25;
@@ -60,23 +61,32 @@ export function isScheduledEvent(event:unknown):boolean{
  */
 async function runScheduledSweeps(now=new Date()){
   try{await sweepBackgroundJobRuns(getDb(),now);}
-  catch(error){console.warn('[background-job-runs-sweep] failed',error instanceof Error?error.message:String(error));}
+  catch(error){recordOperationalFault('maintenance');console.warn('[background-job-runs-sweep] failed',error instanceof Error?error.message:String(error));}
   try{const settled=await settleAbandonedExhaustedLeases(getDb(),now);if(settled)console.info('[abandoned-lease-sweep]',JSON.stringify({settled}));}
-  catch(error){console.warn('[abandoned-lease-sweep] failed',error instanceof Error?error.message:String(error));}
+  catch(error){recordOperationalFault('maintenance');console.warn('[abandoned-lease-sweep] failed',error instanceof Error?error.message:String(error));}
   try{const swept=await sweepDeletedShelf(getDb(),now);if(swept)console.info('[deleted-shelf-sweep]',JSON.stringify({swept}));}
-  catch(error){console.warn('[deleted-shelf-sweep] failed',error instanceof Error?error.message:String(error));}
+  catch(error){recordOperationalFault('maintenance');console.warn('[deleted-shelf-sweep] failed',error instanceof Error?error.message:String(error));}
   try{const swept=await sweepStaleStagedAttachments(getDb(),now,sweepAttachmentObjects);if(swept)console.info('[staged-attachment-sweep]',JSON.stringify({swept}));}
-  catch(error){console.warn('[staged-attachment-sweep] failed',error instanceof Error?error.message:String(error));}
+  catch(error){recordOperationalFault('maintenance');console.warn('[staged-attachment-sweep] failed',error instanceof Error?error.message:String(error));}
   try {
     for (let pass=0;pass<10;pass++) {
       const result=await drainAttachmentObjects(getDb());
       if(result.selected) console.info('[attachment-object-cleanup]',JSON.stringify(result));
       if(result.selected<100) break;
+      if(pass===9) recordOperationalFault('attachment_backlog');
     }
-  } catch { console.warn('[attachment-object-cleanup] deferred'); }
+  } catch { recordOperationalFault('attachment_cleanup'); console.warn('[attachment-object-cleanup] deferred'); }
+  recordDailySweep();
 }
 
 export async function handler(event?:unknown, context?: { invokedFunctionArn?: string }) {
+  try { return await runHandler(event, context); }
+  catch (error) {
+    if (!(error instanceof Error && error.message === 'BackgroundJobRetryScheduled')) recordOperationalFault('worker_execution');
+    throw error;
+  }
+}
+async function runHandler(event?:unknown, context?: { invokedFunctionArn?: string }) {
   const mode = event && typeof event === 'object' ? (event as { mode?: unknown }).mode : undefined;
   const empty = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0, passes: 0, exhaustedPasses: false };
   if (mode === 'wake_recovery') { await recoverBackgroundJobWakes(context?.invokedFunctionArn); return empty; }

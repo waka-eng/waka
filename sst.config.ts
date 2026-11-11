@@ -423,7 +423,7 @@ export default $config({
      * The owner's decision: nothing else may trigger generation, and a
      * source-scan test pins the enqueue to this handler.
      */
-    new sst.aws.Cron("PrincipleRefresh", {
+    const principleRefresh = new sst.aws.Cron("PrincipleRefresh", {
       schedule: "cron(0 8 * * ? *)",
       enabled: true,
       function: {
@@ -449,7 +449,7 @@ export default $config({
      * poll was also *slower* than pushing: it added up to a minute before a
      * capture began deriving.
      */
-    new sst.aws.Cron("BackgroundJobDrain", {
+    const dailyDrain = new sst.aws.Cron("BackgroundJobDrain", {
       schedule: "rate(1 day)",
       enabled: true,
       function: backgroundWorker.arn,
@@ -465,7 +465,7 @@ export default $config({
       dlq: { queue: objectEventDlq.arn, retry: 5 },
       transform: { queue: { messageRetentionSeconds: 1209600 } },
     });
-    new aws.cloudwatch.MetricAlarm("AttachmentObjectEventsDlqAlarm", {
+    if ($app.stage !== "production") new aws.cloudwatch.MetricAlarm("AttachmentObjectEventsDlqAlarm", {
       namespace: "AWS/SQS", metricName: "ApproximateNumberOfMessagesVisible",
       dimensions: { QueueName: objectEventDlq.nodes.queue.name },
       statistic: "Maximum", period: 300, evaluationPeriods: 1, threshold: 0,
@@ -491,7 +491,7 @@ export default $config({
       bucket: attachmentsBucket.name,
       queues: [{ queueArn: objectEvents.arn, events: ["s3:ObjectCreated:*"] }],
     }, { dependsOn: [objectEventsSendPolicy] });
-    objectEvents.subscribe({
+    const objectEventSubscriber = objectEvents.subscribe({
       handler: "packages/api/src/attachment-object-events.handler",
       timeout: "30 seconds",
       // DeleteObjects authorizes s3:DeleteObject on object ARNs only.
@@ -503,7 +503,7 @@ export default $config({
         Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "sts:AssumeRole",
           Principal: { Service: "lambda.amazonaws.com" } }],
       }) } },
-      environment: { DB_CONNECTION_URL: dbConnectionUrl.value, ATTACHMENTS_BUCKET: attachmentsBucket.name, ATTACHMENTS_REGION: AWS_REGION },
+      environment: { DB_CONNECTION_URL: dbConnectionUrl.value, ATTACHMENTS_BUCKET: attachmentsBucket.name, ATTACHMENTS_REGION: AWS_REGION, WAKA_STAGE: $app.stage },
     }, { batch: { size: 1, partialResponses: true } });
 
     // No idle queue polling: the former 15-minute recovery cron woke the
@@ -530,6 +530,93 @@ export default $config({
       }
     }
 
+    // Production-only monitoring. These functions have no runtimeLinks: no
+    // memory database, model, account/auth, or attachment-store credentials.
+    let monitoringOutputs = {};
+    if ($app.stage === "production") {
+      const { alarmLabels } = await import("./packages/api/src/monitoring/protocol");
+      const caller = aws.getCallerIdentityOutput();
+      const discord = new sst.Secret("DiscordWebhookUrl");
+      const deliveryTable = new aws.dynamodb.Table("MonitorDelivery", {
+        billingMode: "PAY_PER_REQUEST", hashKey: "id", attributes: [{ name: "id", type: "S" }],
+        ttl: { attributeName: "expires", enabled: true },
+      });
+      const deliveryDlq = new aws.sqs.Queue("MonitorDeliveryDlq", { messageRetentionSeconds: 1209600, sqsManagedSseEnabled: true });
+      const relay = new sst.aws.Function("MonitorRelay", {
+        handler: "packages/api/src/monitoring/relay.handler", timeout: "20 seconds", memory: "128 MB",
+        logging: { retention: "2 weeks" }, retries: 2,
+        link: [discord],
+        environment: { WAKA_STAGE: "production", MONITOR_ACCOUNT: caller.accountId, MONITOR_TABLE: deliveryTable.name, WAKA_DISCORD_WEBHOOK_URL: discord.value },
+        permissions: [
+          { actions: ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem"], resources: [deliveryTable.arn], conditions: [
+            { test: "ForAllValues:StringLike", variable: "dynamodb:LeadingKeys", values: ["event:*", "head:waka-production-*"] },
+            { test: "Null", variable: "dynamodb:LeadingKeys", values: ["false"] },
+          ] },
+          { actions: ["sqs:SendMessage"], resources: [deliveryDlq.arn] },
+        ],
+        // Serial delivery limits external pressure; DynamoDB is the durable
+        // dedup/lease authority across crashes and Lambda replacements.
+        transform: { function: { reservedConcurrentExecutions: 1 }, eventInvokeConfig: {
+          maximumEventAgeInSeconds: 3600, destinationConfig: { onFailure: { destination: deliveryDlq.arn } },
+        } },
+      });
+      const probe = new sst.aws.Function("AvailabilityProbe", {
+        handler: "packages/api/src/monitoring/uptime.handler", timeout: "12 seconds", memory: "128 MB",
+        logging: { retention: "2 weeks" }, retries: 0,
+        environment: { MONITOR_TABLE: deliveryTable.name },
+        permissions: [{ actions: ["dynamodb:GetItem", "dynamodb:UpdateItem"], resources: [deliveryTable.arn], conditions: [
+          { test: "ForAllValues:StringEquals", variable: "dynamodb:LeadingKeys", values: ["probe:availability"] },
+          { test: "Null", variable: "dynamodb:LeadingKeys", values: ["false"] },
+        ] }],
+      });
+      const probeCron = new sst.aws.Cron("PublicAvailability", { schedule: "rate(5 minutes)", function: probe.arn,
+        transform: { target: { retryPolicy: { maximumRetryAttempts: 0, maximumEventAgeInSeconds: 60 } } },
+      });
+      const action = [relay.arn];
+      const metricAlarm = (code: keyof typeof alarmLabels, args: Omit<aws.cloudwatch.MetricAlarmArgs, "comparisonOperator" | "evaluationPeriods"> & Partial<Pick<aws.cloudwatch.MetricAlarmArgs, "comparisonOperator" | "evaluationPeriods">>) => {
+        const alarmName = `waka-production-${code}`;
+        const permission = new aws.lambda.Permission(`Monitor${code}Invoke`, {
+          action: "lambda:InvokeFunction", function: relay.name,
+          principal: "lambda.alarms.cloudwatch.amazonaws.com", sourceAccount: caller.accountId,
+          sourceArn: caller.accountId.apply(account => `arn:aws:cloudwatch:${AWS_REGION}:${account}:alarm:${alarmName}`),
+        });
+        const alarm = new aws.cloudwatch.MetricAlarm(`Monitor${code}`, {
+          alarmName, comparisonOperator: "GreaterThanThreshold", threshold: 0, evaluationPeriods: 1,
+          period: 300, statistic: "Sum", treatMissingData: "notBreaching",
+          alarmActions: action, okActions: action, ...args,
+        }, { dependsOn: [permission] });
+        return alarm;
+      };
+      metricAlarm("Availability", { namespace: "AWS/Lambda", metricName: "Errors", dimensions: { FunctionName: probe.name }, evaluationPeriods: 2 });
+      metricAlarm("ApplicationFault", { namespace: "WAKA/Operations", metricName: "Faults", dimensions: { Stage: "production" } });
+      const monitoredFunctions = [api.name, principleRefresh.nodes.function.name, objectEventSubscriber.nodes.function.name, relay.name];
+      for (const [code, metricName] of [["LambdaErrors", "Errors"], ["LambdaThrottles", "Throttles"]] as const) {
+        metricAlarm(code, { period: undefined, statistic: undefined,
+          metricQueries: [
+            ...(code === "LambdaThrottles" ? [...monitoredFunctions, backgroundWorker.name] : monitoredFunctions).map((name, index) => ({ id: `m${index}`, returnData: false,
+              metric: { namespace: "AWS/Lambda", metricName, dimensions: { FunctionName: name }, period: 300, stat: "Sum" } })),
+            { id: "total", expression: "SUM(METRICS())", returnData: true },
+          ],
+        });
+      }
+      for (const [code, queue] of [["AttachmentDlq", objectEventDlq.nodes.queue], ["DeliveryDlq", deliveryDlq]] as const) {
+        metricAlarm(code, { namespace: "AWS/SQS", metricName: "ApproximateNumberOfMessagesVisible", dimensions: { QueueName: queue.name }, statistic: "Maximum" });
+      }
+      // Missing data cannot page during bootstrap. The post-deploy initializer
+      // arms this exact alarm only after a natural healthy invocation + OK.
+      metricAlarm("ProbeMissing", { namespace: "AWS/Lambda", metricName: "Invocations", dimensions: { FunctionName: probe.name },
+        threshold: 1, comparisonOperator: "LessThanThreshold", evaluationPeriods: 3, treatMissingData: "breaching", actionsEnabled: false });
+      metricAlarm("WorkerTimeout", { namespace: "AWS/Lambda", metricName: "Duration", dimensions: { FunctionName: backgroundWorker.name }, statistic: "Maximum", threshold: 839000 });
+      metricAlarm("ScheduleDelivery", { period: undefined, statistic: undefined, metricQueries: [
+        ...[dailyDrain.nodes.rule.name, principleRefresh.nodes.rule.name].map((name,index) => ({id:`s${index}`,returnData:false,metric:{namespace:"AWS/Events",metricName:"FailedInvocations",dimensions:{RuleName:name},period:300,stat:"Sum"}})),
+        {id:"total",expression:"SUM(METRICS())",returnData:true},
+      ] });
+      monitoringOutputs = { monitorRelayFunctionName: relay.name, monitorProbeFunctionName: probe.name,
+        monitorDeliveryTable: deliveryTable.name, monitorDeliveryDlqUrl: deliveryDlq.url, monitorProbeRuleName: probeCron.nodes.rule.name,
+        monitorPrincipleFunctionName: principleRefresh.nodes.function.name, monitorCleanupFunctionName: objectEventSubscriber.nodes.function.name, monitorAttachmentDlqName: objectEventDlq.nodes.queue.name,
+        monitorDailyRuleName: dailyDrain.nodes.rule.name, monitorPrincipleRuleName: principleRefresh.nodes.rule.name };
+    }
+
     // -----------------------------------------------------------------------
     // Frontend (Vite + React)
     // -----------------------------------------------------------------------
@@ -552,6 +639,11 @@ export default $config({
         // the API URL — never any secret — so the SPA can talk to the
         // Function URL without hard-coding a value.
         VITE_API_URL: publicDomain ? "" : api.url,
+        // Public project token only. Disabled until both approved settings exist.
+        ...($app.stage === "production" ? {
+          VITE_POSTHOG_PROJECT_TOKEN: process.env.VITE_POSTHOG_PROJECT_TOKEN ?? "",
+          VITE_POSTHOG_HOST: process.env.VITE_POSTHOG_HOST ?? "",
+        } : {}),
       },
       dev: {
         command: "pnpm --filter @waka/web dev",
@@ -559,6 +651,7 @@ export default $config({
     });
 
     return {
+      ...monitoringOutputs,
       apiFunctionName: api.name,
       backgroundWorkerFunctionName: backgroundWorker.name,
       apiUrl: api.url,

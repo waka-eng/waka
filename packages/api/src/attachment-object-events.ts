@@ -1,3 +1,4 @@
+import { recordOperationalFault } from './lib/operational-fault.js';
 import { getDb } from './lib/db.js';
 import { getAttachmentsBucket } from './lib/attachment-storage.js';
 import { attachmentsRegion, attachmentsEndpoint } from './lib/s3-client.js';
@@ -27,6 +28,7 @@ export async function handler(event: QueueEvent) {
       }
     } catch {
       // Do not emit object keys, event bodies, credentials or owner metadata.
+      recordOperationalFault('attachment_cleanup');
       console.warn('[attachment-object-event] retry');
       batchItemFailures.push({itemIdentifier:message.messageId});
     }

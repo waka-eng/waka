@@ -28,6 +28,7 @@ import { createSignalDuplicatesRoutes } from "./routes/signal-duplicates.js";
 import { Hono } from "hono";
 import { handle } from "hono/aws-lambda";
 import { mobileCors } from './lib/mobile-cors.js';
+import { recordOperationalFault } from './lib/operational-fault.js';
 
 import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
 import { attachmentsRoutes } from "./routes/attachments.js";
@@ -76,6 +77,7 @@ export const app = new Hono();
  */
 app.use("*", async (c, next) => {
   await next();
+  if (c.res.status >= 500) recordOperationalFault('api_5xx');
   c.header("Cache-Control", "no-store, private");
   c.header("Vary", "Authorization, Cookie, Origin");
 });

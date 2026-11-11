@@ -275,7 +275,7 @@ describe('attachment event delivery authority',()=>{
   expect(sstConfig).toContain('{ dependsOn: [objectEventsSendPolicy] }');
  });
  it('gives the cleanup handler only object deletion, scoped queue polling and no bucket CRUD link',()=>{
-  const subscriber=sstConfig.slice(sstConfig.indexOf('    objectEvents.subscribe({')).split('}, { batch:')[0];
+  const subscriber=sstConfig.slice(sstConfig.indexOf('    const objectEventSubscriber = objectEvents.subscribe({')).split('}, { batch:')[0];
   expect(subscriber).toContain('link: [dbConnectionUrl]');
   expect(subscriber).not.toContain('link: [dbConnectionUrl, attachmentsBucket]');
   expect(subscriber).toContain('actions: ["s3:DeleteObject"]');
