@@ -268,9 +268,10 @@ export default $config({
       WAKA_MODEL_TOP_OF_MIND_REVIEW: "openai/gpt-6.1-terra",
       ...(process.env.WAKA_OPENROUTER_DATA_COLLECTION ? { WAKA_OPENROUTER_DATA_COLLECTION: process.env.WAKA_OPENROUTER_DATA_COLLECTION } : {}),
       ...(process.env.WAKA_OPENROUTER_REQUIRE_ZDR ? { WAKA_OPENROUTER_REQUIRE_ZDR: process.env.WAKA_OPENROUTER_REQUIRE_ZDR } : {}),
-      // Chat enablement is dev-only and shared by API/worker. A manual dev
-      // deploy can disable new requests without reverting the additive schema.
-      WAKA_CONVERSATION_REPLIES: isDevelopmentDomain && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0",
+      // Owner-approved Chat on production and development, shared by API/worker.
+      // An explicit deployment override can pause new replies without dropping data.
+      WAKA_CONVERSATION_REPLIES: (isDevelopmentDomain || $app.stage === "production") && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0",
+      WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash-1017",
       ATTACHMENTS_BUCKET: attachmentsBucket.name,
       ATTACHMENTS_REGION: AWS_REGION,
       WAKA_VAULT_BUCKET: vaultBucket.name,
@@ -282,7 +283,6 @@ export default $config({
       ...(publicWebUrl ? { PUBLIC_WEB_URL: publicWebUrl } : {}),
       ...(isDevelopmentDomain
         ? {
-            WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash-1017",
             WAKA_ENABLE_ADMIN_ROUTES: "true",
             WAKA_SHOW_INTERNAL_STATUS: "true",
             WAKA_ENABLE_BACKGROUND_JOBS_ADMIN: "true",
@@ -454,6 +454,32 @@ export default $config({
       enabled: true,
       function: backgroundWorker.arn,
     });
+
+    // Completed PUTs can arrive after URL expiry and an earlier DELETE.
+    // Event-driven, with a durable DLQ; no new idle database polling cron.
+    const objectEventDlq = new sst.aws.Queue("AttachmentObjectEventsDlq", {
+      transform: { queue: { messageRetentionSeconds: 1209600 } },
+    });
+    const objectEvents = new sst.aws.Queue("AttachmentObjectEvents", {
+      visibilityTimeout: "3 minutes",
+      dlq: { queue: objectEventDlq.arn, retry: 5 },
+      transform: { queue: { messageRetentionSeconds: 1209600 } },
+    });
+    new aws.cloudwatch.MetricAlarm("AttachmentObjectEventsDlqAlarm", {
+      namespace: "AWS/SQS", metricName: "ApproximateNumberOfMessagesVisible",
+      dimensions: { QueueName: objectEventDlq.nodes.queue.name },
+      statistic: "Maximum", period: 300, evaluationPeriods: 1, threshold: 0,
+      comparisonOperator: "GreaterThanThreshold", treatMissingData: "notBreaching",
+      // An absent destination is an OPEN delivery gate, never a delivered alert.
+      alarmActions: process.env.WAKA_OPERATIONS_ALERT_TOPIC_ARN ? [process.env.WAKA_OPERATIONS_ALERT_TOPIC_ARN] : [],
+    });
+    attachmentsBucket.subscribeQueue(objectEvents.arn, { events: ["s3:ObjectCreated:*"] });
+    objectEvents.subscribe({
+      handler: "packages/api/src/attachment-object-events.handler",
+      timeout: "30 seconds",
+      link: [dbConnectionUrl, attachmentsBucket],
+      environment: { DB_CONNECTION_URL: dbConnectionUrl.value, ATTACHMENTS_BUCKET: attachmentsBucket.name, ATTACHMENTS_REGION: AWS_REGION },
+    }, { batch: { size: 1, partialResponses: true } });
 
     // No idle queue polling: the former 15-minute recovery cron woke the
     // serverless database 96 times/day. Enqueue wakes and the daily sweep

@@ -44,10 +44,12 @@ import { DeleteObjectsCommand, type ObjectIdentifier } from "@aws-sdk/client-s3"
 
 import { makeAttachmentsS3Client } from "./s3-client.js";
 import { unreferencedAttachmentKeys } from "./conversation-attachments.js";
+import { attachmentKeyHash, attachmentStorageScope } from './attachment-sweep.js';
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 
 import {
   accounts,
+  attachmentObjects,
   backgroundJobs,
   deletedInspirations,
   attachments,
@@ -128,7 +130,14 @@ export async function eraseAccount(
       .flatMap(row => row.s3Key ? [row.s3Key] : []))];
     return unreferencedAttachmentKeys(reader, keys, profileIds);
   };
-  const deleteObjects = deps.deleteAttachmentObjects ?? deleteAttachmentObjectsFromS3;
+  const deleteObjects = deps.deleteAttachmentObjects ?? (async (keys: string[]) => {
+    if (!keys.length) return;
+    const scope = attachmentStorageScope();
+    const bound = await db.select({ hash: attachmentObjects.keyHash }).from(attachmentObjects)
+      .where(and(inArray(attachmentObjects.keyHash, keys.map(attachmentKeyHash)),eq(attachmentObjects.storageScope,scope)));
+    if (bound.length !== new Set(keys).size) throw new Error('Attachment storage scope must be verified before account erasure');
+    await deleteAttachmentObjectsFromS3(keys);
+  });
   const initialProfiles = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.accountId, accountId));
   const deletedKeys = new Set(await readAttachmentKeys(db, initialProfiles.map(row => row.id)));
   await deleteObjects([...deletedKeys]);

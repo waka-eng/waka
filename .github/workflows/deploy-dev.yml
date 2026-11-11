@@ -56,6 +56,10 @@ env:
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_APP }}
   DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL_DEV }}
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  WAKA_OPENROUTER_DATA_COLLECTION: ${{ vars.WAKA_OPENROUTER_DATA_COLLECTION_DEVELOPMENT }}
+  WAKA_OPENROUTER_REQUIRE_ZDR: ${{ vars.WAKA_OPENROUTER_REQUIRE_ZDR_DEVELOPMENT }}
+  WAKA_OPERATIONS_ALERT_TOPIC_ARN: ${{ vars.WAKA_OPERATIONS_ALERT_TOPIC_ARN_DEVELOPMENT }}
+  WAKA_ALERT_SNS_TOPIC_ARN: ${{ vars.WAKA_ALERT_SNS_TOPIC_ARN_DEVELOPMENT }}
   DEV_DOMAIN: dev.waka.im
   WAKA_CONVERSATION_REPLIES: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_conversation_replies == false && '0' || '1' }}
 
@@ -138,6 +142,9 @@ jobs:
             printf 'Set repository secrets AWS_ACCESS_KEY_ID_APP and AWS_SECRET_ACCESS_KEY_APP.\n' >&2
             exit 1
           fi
+
+      - name: Validate explicit stage options
+        run: node scripts/validate-stage-options.mjs
 
       - name: Verify separate configured database targets
         env:

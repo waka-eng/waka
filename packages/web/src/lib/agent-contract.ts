@@ -1,35 +1,8 @@
 /**
- * WHAT THE AGENT ENDPOINTS WILL HAND OVER — declared before they exist.
- *
- * The backend for agent profiles is not built yet: agent ids and the MCP
- * tools are still being made, and the founder's instruction is that the
- * DESIGN can and should be done now. So the shapes are written here first,
- * `lib/fixture/agent-walls.ts` produces them, and the surface renders them.
- * When the four endpoints land, they are checked against this file, the
- * fixture is deleted, and nothing that reads these types changes:
- *
- *   GET /api/agents                  → ApiAgentSummary[]
- *   GET /api/agents/:id/direction    → ApiAgentDirection   (current + history[])
- *   GET /api/agents/:id/top-of-mind  → ApiAgentTopOfMind   (its sky)
- *   GET /api/agents/:id/inspirations → ApiAgentSignal[]    (origin, producedBy)
- *
- * THESE ARE SHAPES, AND SHAPES ARE NOT FIXTURE. Nothing in this file invents
- * a value. It is as real as any other declaration of a payload — the only
- * unusual thing about it is that the server which will send that payload has
- * not been written, so for now the only thing producing these is a fixture.
- *
- * They lived inside the fixture until now, on the reasoning that keeping the
- * shapes beside the invented rows made the whole thing self-contained and
- * deletable in one go. That stopped being true the moment product code needed
- * them: `space/inspiration/orb.ts` and `space-kinds/agent.ts` both import
- * from here, and while this was `lib/fixture` those two files read as though
- * the product depended on made-up data. It never did. The dependency runs
- * fixture → contract, which is also the order the two will be deleted in.
- *
- * When the endpoints exist this file's contents belong in `lib/api.ts`, which
- * `docs/architecture.md` names as the only place HTTP happens. It is separate
- * today because `api.ts` is where things that are FETCHED are described, and
- * none of this is fetched yet.
+ * Legacy profile shapes shared by the canvas and source provenance renderer.
+ * The application supplies one personal Home and no agent roster. These are
+ * retained rendering types, not endpoints or a promise of selectable agents;
+ * the former agent-wall fixture and its loader have been removed.
  */
 export interface ApiAgentSummary {
   id: string;

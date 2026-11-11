@@ -1,0 +1,917 @@
+{
+  "scope": "Key names and source mentions only; no values or live-wiring attestation",
+  "productionFileIgnored": true,
+  "developmentFileIgnored": true,
+  "keys": [
+    {
+      "key": "API_URL",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/google-oauth.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "ATTACHMENTS_BUCKET",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/account-erasure.ts",
+        "packages/api/src/lib/attachment-storage.ts",
+        "packages/api/src/lib/signal-enrichment.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "ATTACHMENTS_ENDPOINT",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/s3-client.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "ATTACHMENTS_REGION",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/s3-client.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "AUTH_GOOGLE_ID",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "AUTH_GOOGLE_SECRET",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "AUTH_SECRET",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/auth.ts",
+        "packages/api/src/lib/login-throttle.ts",
+        "packages/api/src/lib/mobile-handoff.ts",
+        "packages/api/src/routes/auth-cli.ts",
+        "packages/api/src/routes/harvest.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "AWS_ACCESS_KEY_ID",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "AWS_ACCESS_KEY_ID_APP",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "AWS_DEFAULT_REGION",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/s3-client.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "AWS_LAMBDA_FUNCTION_NAME",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/background-worker.ts",
+        "packages/api/src/lib/db.ts",
+        "packages/api/src/lib/queue.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "AWS_REGION",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/s3-client.ts",
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "AWS_REGION_APP",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "AWS_SECRET_ACCESS_KEY",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "AWS_SECRET_ACCESS_KEY_APP",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "DB_CONNECTION_URL",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/db.ts",
+        "packages/api/src/lib/mobile-cors.ts",
+        "packages/api/src/routes/auth-mobile.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "GEMINI_API_KEY",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/audio-transcription.ts",
+        "packages/api/src/lib/conversation-replies.ts",
+        "packages/api/src/lib/image-description.ts",
+        "packages/api/src/lib/inspiration-embeddings.ts",
+        "packages/api/src/queue/gemini.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "GOOGLE_CLIENT_ID",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/google-oauth.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "JWT_SECRET",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/auth.ts",
+        "packages/api/src/lib/login-throttle.ts",
+        "packages/api/src/lib/mobile-handoff.ts",
+        "packages/api/src/routes/auth-cli.ts",
+        "packages/api/src/routes/harvest.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "NEXTAUTH_SECRET",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "NEXTAUTH_URL",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "NODE_ENV",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/auth.ts",
+        "packages/api/src/lib/queue.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "OPENROUTER_API_KEY",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/model-provider.ts",
+        "packages/api/src/lib/openrouter-http.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "OPENROUTER_GENERATION_MODEL",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-http.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "PORT",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "PUBLIC_API_URL",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/google-oauth.ts",
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "PUBLIC_WEB_URL",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/routes/auth-google.ts",
+        "packages/api/src/routes/auth-mobile.ts",
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "S3_AWS_BUCKET_NAME",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "SES_EMAIL_SENDER",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "VITE_API_URL",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/google-oauth.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "VITE_WEB_URL",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/routes/auth-google.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_ADMIN_ALLOWLIST",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/admin-auth.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_ADMIN_EMAILS",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/admin-auth.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_ALERT_SNS_TOPIC_ARN",
+      "productionFile": "explicitly-empty",
+      "developmentFile": "explicitly-empty",
+      "apiSourceFiles": [],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_API_DOTENV_PATH",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/nightly-local.ts",
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_BACKGROUND_JOB_AUTODRAIN",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/queue.ts",
+        "packages/api/src/nightly-local.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_BACKGROUND_JOB_CRON_LIMIT",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/background-worker.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_BACKGROUND_JOB_WAKE_GROUP",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/background-job-wake.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "WAKA_BACKGROUND_JOB_WAKE_ROLE",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/background-job-wake.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_BACKGROUND_WORKER_FUNCTION",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/queue.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "WAKA_CONVERSATION_REPLIES",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/conversation-context.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "WAKA_DB_POOL_MAX",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/db.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_ENABLE_ADMIN_ROUTES",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/routes/admin-background-jobs.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "WAKA_ENABLE_BACKGROUND_JOBS_ADMIN",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/routes/admin-background-jobs.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "WAKA_ENABLE_PRINCIPLES_TEST_TRIGGER",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/routes/principles.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_ENRICHMENT_ALLOWED_HOSTS",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/signal-enrichment.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_INSECURE_COOKIES",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/auth.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_MOBILE_FIXTURE_RUN",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/mobile-cors.ts",
+        "packages/api/src/routes/auth-mobile.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_MODEL_CHAT",
+      "productionFile": "absent",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-model-provider.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "WAKA_MODEL_EXCHANGE_TIMEOUT_MS",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/gemini-http.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_MODEL_EXTRACT",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-model-provider.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_MODEL_JUDGE",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-model-provider.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_MODEL_PRINCIPLES",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-model-provider.ts",
+        "packages/api/src/lib/principle-generation.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_MODEL_PRINCIPLE_JUDGE",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-model-provider.ts",
+        "packages/api/src/lib/principle-generation.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_MODEL_REFLECT",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-model-provider.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_MODEL_ROUTE",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-model-provider.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_MODEL_SUPPORT",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-model-provider.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_MODEL_SYNTHESIZE",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-model-provider.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "WAKA_MODEL_TIMEOUT_MS",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/lib/gemini-http.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_MODEL_TOP_OF_MIND_REVIEW",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-model-provider.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "WAKA_OPENROUTER_DATA_COLLECTION",
+      "productionFile": "explicitly-empty",
+      "developmentFile": "explicitly-empty",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-http.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_OPENROUTER_REQUIRE_ZDR",
+      "productionFile": "explicitly-empty",
+      "developmentFile": "explicitly-empty",
+      "apiSourceFiles": [
+        "packages/api/src/lib/openrouter-http.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_OPERATIONS_ALERT_TOPIC_ARN",
+      "productionFile": "explicitly-empty",
+      "developmentFile": "explicitly-empty",
+      "apiSourceFiles": [],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": true,
+      "developmentWorkflowMentions": true,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_SERVE_WEB_DIST",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_STAGE",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [
+        "packages/api/src/lib/model-usage.ts",
+        "packages/api/src/lib/queue-recovery.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "WAKA_TRUSTED_PROXY_HOPS",
+      "productionFile": "explicitly-empty",
+      "developmentFile": "explicitly-empty",
+      "apiSourceFiles": [
+        "packages/api/src/lib/login-throttle.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WAKA_VAULT_BUCKET",
+      "productionFile": "set/value-not-exported",
+      "developmentFile": "set/value-not-exported",
+      "apiSourceFiles": [],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": true,
+      "currentDevelopmentApiKeyPresent": true
+    },
+    {
+      "key": "WAKA_WEB_DIST_DIR",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/server.ts"
+      ],
+      "sstSourceMentions": false,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    },
+    {
+      "key": "WEB_URL",
+      "productionFile": "absent",
+      "developmentFile": "absent",
+      "apiSourceFiles": [
+        "packages/api/src/routes/auth-google.ts"
+      ],
+      "sstSourceMentions": true,
+      "productionWorkflowMentions": false,
+      "developmentWorkflowMentions": false,
+      "currentProductionApiKeyPresent": false,
+      "currentDevelopmentApiKeyPresent": false
+    }
+  ],
+  "consoleBindingUpdate": "2026-11-11; key presence only; actual values never exported"
+}

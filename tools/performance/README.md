@@ -72,6 +72,19 @@ separately by closing and reopening it without completing the session.
 Performance/browser/paid gates are manual. This runner does not add a GitHub
 workflow, schedule model requests or modify CI Browser gates.
 
+## Citation reader comparison — 2026-11-10
+
+Run `tools/performance/citation-readers.ts --label=baseline` before reader edits
+and again with `--label=candidate` afterward, using an explicit disposable
+loopback `DB_CONNECTION_URL`. It uses pool one, deterministic IDs/proofs, twenty
+samples by default, and successful/missing/mixed-kind/retained-scope/repeated
+cases. Receipts in `work/performance/citations-*.json` separate real SELECT and
+whole-transaction counts, output digests and actual local timing. There is no
+artificial SQL delay, provider traffic or cloud latency claim. Compare matching
+case digests before accepting a speedup; a ninety-identity case must reduce
+citation SELECTs by at least fifty percent. Full-length sources guard against
+batch excerpt truncation.
+
 ## Search comparisons
 
 Set `WAKA_PERFORMANCE_SEARCH_CORPUS=1` to add the bilingual/material fixture.

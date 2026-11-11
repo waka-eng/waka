@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { EMPTY_VIEW, readViewLocation, viewHref, type ViewLocation } from './view-location';
+import { EMPTY_VIEW, personalView, readViewLocation, viewHref, type ViewLocation } from './view-location';
 
 interface StoredView { scope: string; query: string; composerFrom?: string;shareFrom?:string;conversationFrom?:string;openFrom?:string;noteFrom?:string }
 /** How long a traversal may take to land before a close stops waiting on it. */
@@ -10,7 +10,11 @@ type WriteOptions = { replace?: boolean; query?: string; observed?: boolean };
 export function useViewNavigation(scope: string | null) {
   const location = useLocation(), navigate = useNavigate();
   const href = location.pathname + location.search;
-  const view = useMemo(() => readViewLocation(location.pathname, location.search), [href]);
+  const view = useMemo(() => personalView(readViewLocation(location.pathname, location.search), scope?.split(':').at(-1)), [href, scope]);
+  useEffect(() => {
+    const raw = readViewLocation(location.pathname, location.search);
+    if (raw?.wallId && view && viewHref(raw) !== viewHref(view)) navigate(viewHref(view), { replace: true });
+  }, [href, scope]);
   const own = useRef<string | null>(null);
   const latest = useRef({ location, navigate, scope }); latest.current = { location, navigate, scope };
   /* THE ENTRY BEING LEFT (a traversal, or the archive's closing replace), until the router lands elsewhere.
@@ -37,6 +41,7 @@ export function useViewNavigation(scope: string | null) {
   const write = useCallback((next: ViewLocation, options: WriteOptions = {}) => {
     const current = latest.current;
     if (!current.scope) return;
+    next = personalView(next, current.scope?.split(':').at(-1)) ?? EMPTY_VIEW;
     const to = viewHref(next);
     const previous = current.location.pathname + current.location.search;
     if (to === previous && options.query === undefined) return;

@@ -4,6 +4,12 @@ name: CI
 # Browser and live-model gates remain deliberate manual runs.
 on:
   workflow_call:
+    inputs:
+      checkout_sha:
+        description: "Immutable commit checked by a calling release workflow"
+        required: false
+        default: ""
+        type: string
   pull_request:
   push:
     branches:
@@ -77,6 +83,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_sha || github.sha }}
+
+      - name: Verify checked commit
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.checkout_sha || github.sha }}
+        run: node scripts/verify-release-commit.mjs --checkout-only
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -175,6 +188,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_sha || github.sha }}
+      - name: Verify checked commit
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.checkout_sha || github.sha }}
+        run: node scripts/verify-release-commit.mjs --checkout-only
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -283,6 +302,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_sha || github.sha }}
+
+      - name: Verify checked commit
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.checkout_sha || github.sha }}
+        run: node scripts/verify-release-commit.mjs --checkout-only
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

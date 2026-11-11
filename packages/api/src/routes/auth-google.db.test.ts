@@ -34,7 +34,7 @@ async function owner() {
   const key = await (await request('/api/keeper-keys', token, { label: 'Before Google' })).json() as any;
   const agents: Array<{ profileId: string; secret: string }> = [];
   for (const name of ['noah', 'anotherone']) {
-    const { profile } = await (await request('/api/profiles', token, { name })).json() as any;
+    const [profile] = await t.sql`INSERT INTO profiles(account_id,type,name) SELECT p.account_id,'agent',${name} FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.email=${email} AND p.type='human' RETURNING id`;
     const { key } = await (await request('/api/agent-keys', token, { profileId: profile.id })).json() as any;
     agents.push({ profileId: profile.id, secret: key.secret });
   }

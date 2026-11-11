@@ -260,17 +260,17 @@ it("attaches the clip when a cold link's archive is closed mid-recording (the re
   expect(S.finalized, "the clip was lost with the archive").toEqual(["own-0"]);
 });
 
-it("attaches the clip to the original note under the original profile when a wall switch remounts the archive", async () => {
+it("attaches the clip to its original personal note when a retired profile link closes the archive", async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
   await openArchive();
   await recordOn("own-1");
   /* The faces are hidden while a saved note is open, so the switch comes
      from outside the page (an address, the simulation's own command) — the
      path that remounts the archive by its key with no Close and no popstate. */
-  await world.travelTo(new RegExp(AGENT_ID));
+  await act(async () => go(`/w/${AGENT_ID}`));
   await settle();
-  expect(world.audit().wallKind, "the switch did not reach the agent").toBe("agent");
-  expect(archiveOpen(), "the archive did not stay open across the switch").toBe(true);
+  expect(world.audit().wallKind).toBe('self');
+  expect(archiveOpen()).toBe(false);
   await deliverStops();
   expect(S.finalized, "the clip was lost in the remount, or went to another note").toEqual(["own-1"]);
   expect(S.presigned, "the clip was attached under the agent instead of its owner").toEqual([VIEWER_ID]);
@@ -495,29 +495,7 @@ it("says a clip's note was deleted here, and keeps the clip for its restore", as
    from Home's line could still send the clip — to land and be deleted with
    the note, silently. It is held instead; Undo brings the plain line back,
    and Try again then lands. */
-it("keeps the clip recoverable when its note is deleted on an agent's archive", async () => {
-  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-  await openArchive();
-  await world.travelTo(new RegExp(AGENT_ID));
-  await settle();
-  expect(world.audit().wallKind).toBe("agent");
-  expect(archiveOpen(), "the agent's archive is not open").toBe(true);
-  await recordOn("own-1");
-  S.failFinalize = 1;
-  await act(async () => q<HTMLButtonElement>('.waka-dock-tool--live[aria-label="Done"]')!.click());
-  await deliverStops();
-  expect(S.presigned, "the clip was not sent under the agent").toEqual([AGENT_ID]);
-  expect(tryAgainOn(q(".waka-clip-failed")), "the failed clip offered no Try again").toBe(true);
-  /* Owned agent archives use the same Undo and deleted shelf. */
-  await openNoteActions();
-  await act(async () => q<HTMLButtonElement>('[aria-label="Delete"]')!.click());
-  await act(async () => { await vi.advanceTimersByTimeAsync(7000); });
-  await settle(4);
-  expect(S.deleted).toEqual(["own-1"]);
-  const line = q(".waka-clip-failed");
-  expect(line?.textContent).toContain("The note was deleted. Restore it to attach the recording.");
-  expect(tryAgainOn(line), "restoring the agent's note should allow its recording to land").toBe(true);
-});
+
 
 it("does not send a clip to a note whose delete is pending, and lets Undo bring it back", async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();

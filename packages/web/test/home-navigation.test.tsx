@@ -481,36 +481,11 @@ it('discards a late detail when the person navigates elsewhere', async () => {
   expect(location.search).toContain('view=field');
   expect(world.container.textContent).not.toContain(detail.text);
 });
-it('shows an unavailable link without silently opening another room and can return home', async () => {
-  world = await mountWorld(FACTS, { initialEntries: ['/w/missing-id/old-name'], routerTools: <RouterTools /> }); await settle();
-  expect(world.container.querySelector('[role="alert"]')?.textContent).toContain('isn’t available to this account');
-  expect(world.container.querySelector('[role="alert"]')?.textContent).not.toContain('Try again');
-  /* ONE WAY HOME, IN THE NOTICE'S OWN ROW (code review, 2026-11-09): the
-     corner "Home" laid over the message is gone; the row under it holds it. */
-  const homes = [...world.container.querySelectorAll<HTMLButtonElement>('.jar-navigation-notice button')].filter(button => button.textContent === 'Home');
-  expect(homes, 'the notice should offer Home once').toHaveLength(1);
-  expect(world.container.querySelector('.jar-navigation-notice-close'), 'a corner close came back over the message').toBeNull();
-  expect(homes[0]!.closest('.jar-navigation-notice-acts'), 'Home is not in the notice row').not.toBeNull();
-  await act(async () => homes[0]!.click()); await settle();
-  expect(world.container.querySelector('.jar-navigation-notice')).toBeNull(); expect(world.audit().wallKind).toBe('self');
-});
+
 /* The notice's Escape is the notice's only while it is the topmost layer:
    with the settings/info card (or the notepad, review, an overlay) up, that
    Escape is theirs, and the notice stays. */
-it("leaves the unavailable-link notice alone on Escape while another layer is open, and closes it otherwise", async () => {
-  world = await mountWorld(FACTS, { initialEntries: ['/w/missing-id/old-name'], routerTools: <RouterTools /> }); await settle();
-  expect(world.container.querySelector('.jar-navigation-notice')).not.toBeNull();
-  /* on window itself, as a key with nothing focused arrives: every window listener hears it */
-  const escape = () => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
-  const info = world.container.querySelector<HTMLButtonElement>('.waka-corner--info')!;
-  await act(async () => info.click()); await settle();
-  expect(info.getAttribute('aria-expanded'), 'the info card did not open').toBe('true');
-  await escape(); await settle();
-  expect(world.container.querySelector('.jar-navigation-notice'), "the card's Escape also dismissed the notice under it").not.toBeNull();
-  if (info.getAttribute('aria-expanded') === 'true') { await act(async () => info.click()); await settle(); }
-  await escape(); await settle();
-  expect(world.container.querySelector('.jar-navigation-notice'), 'Escape on the notice alone left it up').toBeNull();
-});
+
 
 /**
  * THE CREATURE CHANGES FORM WHERE IT STANDS.
@@ -534,36 +509,7 @@ it("leaves the unavailable-link notice alone on Escape while another layer is op
  * it is invisible in a screenshot — a glide that still happens would look
  * identical one frame before and one frame after.
  */
-it('changes form in place instead of travelling to the agent', async () => {
-  vi.mocked(fetchProfiles).mockResolvedValue([
-    { id: 'ouroboros-maintainer', type: 'agent', name: 'Ouroboros maintainer', createdAt: '2026-08-01T00:00:00Z' },
-    { id: 'course-marketing', type: 'agent', name: 'Course marketing', createdAt: '2026-08-01T00:00:00Z' },
-  ] as never);
 
-  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
-  expect(world.audit().wallKind).toBe('self');
-
-  const face = (label: string) =>
-    [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-face')]
-      .find(button => button.textContent?.trim() === label);
-  const toAgent = face('Ouroboros maintainer');
-  expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
-
-  /* ONE FRAME. `step(0)` advances the world without letting a crossing run,
-     so arriving here means there was never a crossing to run. A glide would
-     still be mid-flight on the column it started from. */
-  await act(async () => toAgent!.click());
-  await world.step(0);
-  expect(world.audit().wallKind, 'the form switch is still flying the camera').toBe('agent');
-
-  /* AND BACK, in the same single frame — the complaint was asymmetric
-     ("no way to get back to my top of mind"), so the return is checked too. */
-  const toMe = face('Me');
-  expect(toMe).toBeTruthy();
-  await act(async () => toMe!.click());
-  await world.step(0);
-  expect(world.audit().wallKind).toBe('self');
-});
 
 /**
  * AND ON THE SURFACE THAT HAS NO OWNER, NEITHER FACE IS LIT.

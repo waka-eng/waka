@@ -80,12 +80,11 @@ import { startJourney, startReplyTiming, observeReplyTiming, cancelReplyTiming }
  * left; a reply that fails, stops or is rate-limited still prints a sentence
  * saying which. A quiet surface is not the same as a quiet failure.
  */
-import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
+import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
 import {useConversationReply} from '../lib/use-conversation-reply';
 import {Companion} from './Companion';
-import {agentBeing} from '../character/body';
 import {ConversationText} from './ConversationText';
 import {HomeActionIcon} from './HomeActionIcon';
 import {timeOf} from '../lib/words';
@@ -148,21 +147,10 @@ const offlineNow=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
 const refusalOf=(reason:unknown):MessageKey=>reason instanceof PhotoRefused?reason.reason
   :reason instanceof FileRefused?(reason.reason==='too_large'?'worldAttachTooLarge':reason.reason==='empty'?'worldPhotoEmpty':'worldAttachUnsupported'):'worldAttachFailed';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory,agent=null,profile=null}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
-  profile?:{name:string;type:'human'|'agent'}|null;
-  /** The account's agent, when it has one: a new chat may talk with it, or with both. */
-  agent?:{id:string;name:string}|null}){
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
+}){
   /* THE MIC AND THE ATTACH TOOLS LIVE IN THIS PANEL'S OWN NOTE BAR (`NoteBar`,
      2026-11-08): the page's bar no longer lends them a slot. */
-  /* ═══ WHO YOU ARE TALKING WITH ═══════════════════════════════════════
-     Founder, 2026-10-15: "new chat should also let you select if you want
-     to chat with me vs my agent or both perspectives." Chosen before the
-     first message and fixed after it — the chat is still yours and sits in
-     your one list; what changes is the memory the reply stands on. */
-  const [talkWith,setTalkWith]=useState<'mine'|'agent'|'both'>('mine');
-  /* One object per agent, so the creature is not re-drawn on every keystroke. */
-  const agentForm=useMemo(()=>agent?agentBeing(agent.id):null,[agent?.id]);
-  const profileForm=useMemo(()=>profile?.type==='agent'?agentBeing(scope.profileId):undefined,[scope.profileId,profile?.type]);
   const journal=id??`new:${initialPrincipleId??'general'}`;
   const initial=initialConversation?.id===id&&initialConversation.profileId===scope.profileId?initialConversation:null;
   const bootstrap=useRef(initial);
@@ -298,7 +286,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      the reply unconfirmed — `reply.state` stays null — so Send stays off. */
   const awaitingReply=!reply.terminal&&(reply.busy||replyPending||replyUnconfirmed);
   // The send guards as they stand now, for code that resumes after an await.
-  const guards=useRef({loading,awaitingReply,storageFailed,focusFailed,conversation,talkWith,agent,focusPrinciple});guards.current={loading,awaitingReply,storageFailed,focusFailed,conversation,talkWith,agent,focusPrinciple};
+  const guards=useRef({loading,awaitingReply,storageFailed,focusFailed,conversation,focusPrinciple});guards.current={loading,awaitingReply,storageFailed,focusFailed,conversation,focusPrinciple};
   useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
     if(prependScroll.current){const previous=prependScroll.current;node.scrollTop=previous.top+node.scrollHeight-previous.height;prependScroll.current=null;return;}
     if(saved){nearBottom.current=saved.nearBottom;node.scrollTop=saved.nearBottom?node.scrollHeight:saved.top;restoredScroll.current=null;}
@@ -399,15 +387,13 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        their own draft and both are still on disk; what went is the `<select>`
        that offered them to you by their first fifty characters, which is a
        revision list wearing a label. */
-    try{const saved=readConversationDrafts(scope,journal);if(saved[0]){receipt.current=saved[0];draftRef.current=saved[0].value;setDraft(saved[0].value);if(saved[0].value.talkWith)setTalkWith(saved[0].value.talkWith);}}catch{setStorageFailed(true);}
+    try{const saved=readConversationDrafts(scope,journal);if(saved[0]){receipt.current=saved[0];draftRef.current=saved[0].value;setDraft(saved[0].value);}}catch{setStorageFailed(true);}
     try{const saved=JSON.parse(sessionStorage.getItem(scrollKey)??'null');if(saved&&Number.isFinite(saved.top)&&saved.top>=0&&typeof saved.nearBottom==='boolean'&&(saved.messageWindowStart===undefined||Number.isSafeInteger(saved.messageWindowStart)&&saved.messageWindowStart>=1&&saved.messageWindowStart<=200))restoredScroll.current={...saved,messageWindowStart:saved.messageWindowStart??1};}catch{/* Scrolling is recoverable without a stored position. */}
     void refresh();return()=>lifecycle.current.abort();
   },[scope.accountId,scope.profileId,id,initialPrincipleId]);
   const save=async()=>{
     if(working.current||loading||limitReached||(generationEnabled===null&&!error)||awaitingReply||reply.terminal||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
-    /* A draft kept before its agent was recorded waits for the agent to load,
-       rather than starting a chat on your own memory instead. */
-    if(!id&&draftRef.current.talkWith&&!draftRef.current.agentId&&!agent)return;
+
     /* REPLIES UNKNOWN BECAUSE THE SERVER WAS UNREACHABLE: ask again first.
        Send used to be dead here — disabled as "loading" forever after a
        failed first read — so words typed offline could not be sent even
@@ -415,7 +401,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        words never left: the draft is NOT marked pending, so it stays
        editable, and the notice says it was not sent and offers to retry. */
     let replies=generationEnabled;
-    const pressed=draftRef.current,pressedWith={talkWith,agent:agent?.id};
+    const pressed=draftRef.current;
     /* THE PRE-FLIGHT, for what a failed first read left unknown: whether
        replies are on, and — for a chat opened from a principle — the
        principle itself (review: without it, Send would open the chat with
@@ -452,28 +438,48 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       setError(current=>current===say('worldConversationUnreachable')?null:current);
       const g=guards.current,now=draftRef.current;
       if(now!==pressed||!now||!now.content.trim()&&!now.attachments?.length||uploadsRef.current.length||working.current||
-        g.loading||g.awaitingReply||g.storageFailed||g.focusFailed||(id&&!g.conversation)||
-        g.talkWith!==pressedWith.talkWith||(pressedWith.talkWith!=='mine'&&g.agent?.id!==pressedWith.agent))return;
+        g.loading||g.awaitingReply||g.storageFailed||g.focusFailed||(id&&!g.conversation))return;
     }
     if(!draftRef.current)return;
     // Who the chat is with, as it stands now (equal to the press, by the check above).
-    const withNow=guards.current;
-    const current=draftRef.current,intent:Draft={...current,revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),...(!id?{conversationId:current.conversationId??crypto.randomUUID(),...(current.talkWith?{}:withNow.agent&&withNow.talkWith!=='mine'?{talkWith:withNow.talkWith,agentId:withNow.agent.id}:{})}:{})};
+    const current=draftRef.current;
+    const {talkWith: oldPerspective, agentId: oldAgent, ...words} = current;
+    const intent: Draft = { ...words, ...(current.pending ? {talkWith: oldPerspective, agentId: oldAgent} : {}),
+      revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),
+      ...(!id ? {conversationId:current.conversationId??crypto.randomUUID()} : {}) };
+
     if(!keep(intent))return;const owner=lifecycle.current;working.current=true;setBusy(true);
     const acknowledge = startJourney('chat_acknowledged');
     if (replies === true) startReplyTiming(scope.profileId, id ?? intent.conversationId!, intent.revision + 1);
     // The notice clears only now, with the send actually begun (review): a pre-flight that bails keeps it, and its Retry.
     setError(null);setUnsent(false);nearBottom.current=true;
     try{
-      /* The agent the draft was started with; a draft kept before that was recorded falls back to the one shown. */
-      const talkAgent=intent.agentId??agent?.id;
+      // Preserve an already-pending legacy request's exact identity on replay.
+      let talkAgent=intent.agentId;
+      let legacyPerspective=intent.talkWith;
+      if (!id && legacyPerspective) {
+        // A lost first response may already have committed the old binding.
+        // Only an authoritative 404 permits a new personal conversation under
+        // the SAME chat/message IDs. Retain the original journal on failures:
+        // a late old commit then remains discoverable on the next retry.
+        try {
+          const existing = await run(signal => fetchConversation(scope.profileId, intent.conversationId!, signal));
+          if (!mine(owner)) return;
+          if (existing.messages.some(message => message.id === intent.id)) {
+            acknowledge(); observe(existing); return;
+          }
+        } catch (reason) {
+          if (!(reason instanceof ApiError) || reason.status !== 404) throw reason;
+          legacyPerspective=undefined; talkAgent=undefined;
+        }
+      }
       /* THE IDS OF WHAT IS ON THE CHIPS, and only those: the server links
          them to this message in the same write and drops anything else it
          staged under this id. */
       const attachmentIds=intent.attachments?.length?{attachmentIds:intent.attachments.map(item=>item.id)}:{};
       const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(replies?{requestReply:true}:{}),...attachmentIds},from=conversationRef.current?.messageWindowStart;
         return from!==undefined?saveConversationMessage(scope.profileId,id,input,signal,from):saveConversationMessage(scope.profileId,id,input,signal);})
-        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:replies===true,...attachmentIds},intent.talkWith&&talkAgent?{perspective:intent.talkWith,agentId:talkAgent}:undefined));
+        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:replies===true,...attachmentIds},legacyPerspective&&talkAgent?{perspective:legacyPerspective,agentId:talkAgent}:undefined));
       acknowledge();
       if(mine(owner)){observe(next);setError(null);setUnsent(false);setAttachNote(null);if(id)reply.check();}
     }catch(reason){
@@ -742,31 +748,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               view below, so the opening steps aside: one creature, not two. */}
           {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening?
             <div className="chat-opening">
-              {/* The one you are about to talk with is the one on screen:
-                  yours, your agent in its own pixel form, or the two of
-                  you side by side. */}
-              <span className="chat-opening-beings">
-                 {talkWith!=='agent'?<Companion size={64} being={profileForm} cool={profile?.type==='agent'} pixel={profile?.type==='agent'} label={profile?.name??'WAKA'}/>:null}
-                {agent&&agentForm&&talkWith!=='mine'?<Companion size={talkWith==='both'?52:64} being={agentForm} cool pixel label={agent.name}/>:null}
-              </span>
-               <p>{profile?formatMessage(locale,'worldProfileConversationOpening',{name:profile.name}):say(talkWith==='agent'?'worldConversationOpeningAgent':talkWith==='both'?'worldConversationOpeningBoth':'worldConversationOpening')}</p>
-              {agent&&!id&&!initialPrincipleId?(
-                <div className="chat-with" role="group" aria-label={say('worldChatWithLabel')}>
-                  {(['mine','agent','both'] as const).map(choice=>(
-                    <button key={choice} type="button" aria-pressed={talkWith===choice}
-                      className={`chat-with-choice${talkWith===choice?' chat-with-choice--on':''}`}
-                      onClick={()=>setTalkWith(choice)}>
-                      {choice==='agent'?agent.name:say(choice==='mine'?'worldChatWithMe':'worldChatWithBoth')}
-                    </button>
-                  ))}
-                </div>
-              ):null}
+              <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
+              <p>{say('worldConversationOpening')}</p>
             </div>:null}
           {/* AND ONCE IT HAS STARTED, A CHAT THAT IS NOT ONLY YOURS SAYS SO,
               in one quiet line, so an answer from the agent's memory is
               never read as one from yours. */}
           {conversation?.messages.length&&conversation.perspective&&conversation.perspective!=='mine'?
-            <p className="chat-with-note">{say(conversation.perspective==='agent'?'worldChatWithAgentNote':'worldChatWithBothNote')}</p>:null}
+            <p className="chat-with-note">{say('worldConversationEarlierMemory')}</p>:null}
           {/* ═══ THE TRANSCRIPT, ON THE REFERENCE'S MESSAGE ANATOMY ═════
               Founder: "make the chat message list and the chat message
               thing also follow what you see on this AI chat conversation."

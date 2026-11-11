@@ -1123,7 +1123,7 @@ export interface SimulationOptions {
   /** Say the next thing out loud. Called when the companion is pressed. */
   creatureSpeaksRef: MutableRefObject<() => void>;
   /** Warm whatever kind of wall this is. Called as travel toward it begins. */
-  loadWallRef: MutableRefObject<(wall: Space) => void>;
+  loadWallRef?: MutableRefObject<(wall: Space) => void>;
   /** Open the search. Called from the loop's own keyboard handler. */
   openSeekRef: MutableRefObject<() => void>;
   /** Offer an arrow key to the open reading panel first; true if it took it. */
@@ -1141,7 +1141,7 @@ export interface SimulationOptions {
    * wall the LOOP is resting on: `atWallRef` is React's echo of an arrival
    * and is a render behind the frame that fires this.
    */
-  pushRestedRef: MutableRefObject<(wall: Space, from: SimApi) => void>;
+  pushRestedRef?: MutableRefObject<(wall: Space, from: SimApi) => void>;
   /* THREE OF THE NINE THINGS THE LOOP ASKED SOMEBODY ELSE TO DO WERE ABOUT
      ROOMS, AND ALL THREE ARE GONE. `loadGroupRef` fetched a room's board and
      ground as travel toward it began; `openGroupMemberRef` opened one
@@ -5119,7 +5119,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       if (!resting()) movedSinceRest = true;
       else if (movedSinceRest) {
         movedSinceRest = false;
-        pushRestedRef.current(curWall(), api);
+        pushRestedRef?.current(curWall(), api);
       }
 
       // Route restoration and profile travel still need to reach their rest
@@ -6393,7 +6393,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
           /* every wall the glide passes is warmed, not just the destination:
              they are all about to be on screen */
           for (let c = trip.col + dir; dir > 0 ? c <= dest : c >= dest; c += dir) {
-            loadWallRef.current(wallAt(c));
+            loadWallRef?.current(wallAt(c));
           }
           trip.awaitingWake = false;
           trip.dest = dest;

@@ -136,56 +136,21 @@ describe("GET /api/profiles", () => {
 });
 
 describe("POST /api/profiles", () => {
-  it("creates an agent profile for the account owner", async () => {
-    mockState.db = makeDb({ selects: [[{ preferredLocale: "ko-KR" }], [{ count: 0 }]], returning: [[profileRow()]] });
-
-    const res = await jsonRequest("/api/profiles", "POST", { name: "Scout" });
-
-    expect(res.status).toBe(201);
-    const created = mockState.db.insertValues.mock.calls[0]![0] as {
-      type: string;
-      accountId: string;
-    };
-    expect(created.type).toBe("agent");
-    expect(created.accountId).toBe("account-1");
-    expect(mockState.db.insertValues.mock.calls[0][0].preferredLocale).toBe("ko-KR");
-  });
-
-  /**
-   * An agent that could mint itself new memories would be administering the
-   * account rather than working inside it.
-   */
-  it("refuses an agent session", async () => {
-    mockState.session = AGENT_SESSION;
-
+  it.each([0, 1, 3])("retires creation without touching an account with %i legacy agent stacks", async (count) => {
+    mockState.db = makeDb({ selects: [[{ count }]] });
     const res = await jsonRequest("/api/profiles", "POST", { name: "Another" });
-
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(410);
+    expect(await res.json()).toMatchObject({code:'agent_profiles_retired'});
+    expect(mockState.db.transaction).not.toHaveBeenCalled();
+    expect(mockState.db.select).not.toHaveBeenCalled();
     expect(mockState.db.insert).not.toHaveBeenCalled();
+    expect(mockState.db.update).not.toHaveBeenCalled();
+    expect(mockState.db.delete).not.toHaveBeenCalled();
   });
-
-  it("refuses once the account is at its agent-profile cap", async () => {
-    mockState.db = makeDb({ selects: [[{ preferredLocale: "en-US" }], [{ count: 8 }]] });
-
-    const res = await jsonRequest("/api/profiles", "POST", { name: "Nine" });
-
-    expect(res.status).toBe(409);
+  it("still refuses an agent session before the retired route", async () => {
+    mockState.session = AGENT_SESSION;
+    expect((await jsonRequest('/api/profiles', 'POST', {name:'Another'})).status).toBe(403);
     expect(mockState.db.insert).not.toHaveBeenCalled();
-  });
-
-  it("rejects an empty or unnamed profile", async () => {
-    const res = await jsonRequest("/api/profiles", "POST", { name: "   " });
-
-    expect(res.status).toBe(400);
-  });
-
-  it("rejects unknown fields rather than silently dropping them", async () => {
-    const res = await jsonRequest("/api/profiles", "POST", {
-      name: "Scout",
-      type: "human",
-    });
-
-    expect(res.status).toBe(400);
   });
 });
 

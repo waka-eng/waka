@@ -274,9 +274,6 @@ const REGISTER: Record<string, string> = {
      the product offers none that reaches it. If the panel comes back, so
      does the entry — its ruling was that the same call with `null` is its
      own way back. */
-  createProfile: "deleteProfile",
-  deleteProfile: "createProfile",
-  renameProfile: "RULED: an edit is its own inverse",
 
   /* THE KEEPER'S KEYS AND THE SIBLING GRANTS left the register together
      (2026-10-11). Both were tables of credentials on the settings page — a

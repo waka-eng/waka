@@ -103,14 +103,10 @@ it('ignores a share left behind long ago', async () => {
   expect(field()?.value ?? '').not.toContain('stale');
 });
 
-it('waits, untouched, while home opens on an agent wall, and is offered back on your own', async () => {
-  AGENTS.rows = [{ id: 'agent-noah', accountId: 'account-1', name: 'noah', type: 'agent', avatarUrl: null, preferredLocale: 'en-US', createdAt: '2026-08-01T00:00:00Z' }];
-  share('words for me, not for my agent');
+it('offers a waiting share on human Home after a retired profile link, without putting it in a draft', async () => {
+  share('words for my memory');
   world = await mountWorld(FACTS, { initialEntries: ['/w/agent-noah'] }); await settle();
-  expect(bubbleText()).not.toContain('words for me');
-  expect([...world.container.querySelectorAll('button')].some(node => node.textContent?.trim() === 'Add a note')).toBe(false);
-  expect(sessionStorage.getItem(SHARED_KEY), 'the share was used up on an agent wall').not.toBeNull();
-  world.unmount();
-  world = await mountWorld(FACTS); await settle();
-  expect(bubbleText()).toContain('words for me, not for my agent');
+  expect(bubbleText()).toContain('words for my memory');
+  expect(field()?.value ?? '').not.toContain('words for my memory');
+  expect([...world.container.querySelectorAll('button')].some(node => node.textContent?.trim() === 'Add a note')).toBe(true);
 });

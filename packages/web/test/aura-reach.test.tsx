@@ -106,41 +106,7 @@ it('sends motes up off a bright aura, on the same reach that draws them', async 
   expect(rising, 'a bright aura sent nothing up').toBeGreaterThan(0);
 });
 
-it("reads the agent's own saving on its wall, after the rebuild its bundle causes", async () => {
-  world = await mountWorld(FACTS); await settle();
-  const toAgent = face('Busy agent');
-  expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
-  await act(async () => { toAgent!.click(); });
-  await settle(20);
-  // Agent fields now load on entry, independently of their reading.
-  await world.toField(); await settle();
-  const { aura, wallKind, present } = world.audit();
-  expect(wallKind).toBe('agent');
-  expect(present, "the agent's saves never landed on its wall").toBeGreaterThan(0);
-  expect(aura.reading, "the agent wall's reading went dark with its saves loaded").toBeGreaterThanOrEqual(0.6);
-  expect(aura.lit, 'the drawn reach on the agent wall never eased up to the reading').toBeGreaterThanOrEqual(0.55);
 
-  /* COMING BACK AFTER A WHILE refreshes the agent's bundle in place, which
-     rebuilds the loop while you stand on its wall — and nothing re-wakes a
-     wall you never left. The light must survive that. */
-  let visibility: DocumentVisibilityState = 'hidden';
-  const spy = vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
-  const clock = Date.now;
-  try {
-    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
-    Date.now = () => clock() + 60_000;
-    visibility = 'visible';
-    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
-    await settle(20);
-  } finally {
-    Date.now = clock;
-    spy.mockRestore();
-  }
-  const after = world.audit();
-  expect(after.wallKind).toBe('agent');
-  expect(after.aura.reading).toBeGreaterThanOrEqual(0.6);
-  expect(after.aura.lit, 'the rebuild on the agent wall put its light out').toBeGreaterThanOrEqual(0.55);
-});
 
 it('never calls a bright companion quiet: its words read the same light as its glow', async () => {
   world = await mountWorld(FACTS); await settle();
@@ -161,50 +127,9 @@ it('says it has been quiet when nothing has been saved in weeks', async () => {
   expect([...QUIET, ...WARM, ...FRONTIER], `a dim aura said "${said}"`).toContain(said);
 });
 
-it('lets motes already in the air finish their rise when the reach drops', async () => {
-  /* Drawing was gated on the reach too, so the frame the aura dipped under
-     the threshold every mote in flight vanished at once. */
-  AGENT.empty = true;
-  world = await mountWorld(FACTS); await settle();
-  let rising = 0;
-  for (let turn = 0; turn < 40 && rising < 2; turn += 1) {
-    await world.step(10);
-    rising = world.audit().aura.rising;
-  }
-  expect(rising, 'a bright aura sent nothing up').toBeGreaterThan(0);
-  await act(async () => { face('Busy agent')!.click(); });
-  /* frame by frame until the reach is under the line, then look */
-  let dipped: ReturnType<MountedWorld['audit']>['aura'] | null = null;
-  for (let frame = 0; frame < 400 && !dipped; frame += 1) {
-    await world.step(1);
-    const { aura } = world.audit();
-    if (aura.lit <= 0.55) dipped = aura;
-  }
-  expect(dipped, 'the reach never dropped on an empty wall').not.toBeNull();
-  expect(dipped!.rising, 'every mote had already gone before the reach dropped').toBeGreaterThan(0);
-  expect(dipped!.risingDrawn, 'motes in flight vanished the frame the reach dropped').toBe(dipped!.rising);
-  /* and they do go: nothing new leaves under a dim aura */
-  await settle(10);
-  expect(world.audit().aura.rising).toBe(0);
-});
 
-it("already knows the agent wall's reading before you walk onto it", async () => {
-  /* Its memories are only switched on once you arrive, and the reading used
-     to count only switched-on ones — so every wall but yours read dark until
-     the crossing ended, and the light eased up from nothing each time. */
-  world = await mountWorld(FACTS); await settle();
-  const toAgent = face('Busy agent');
-  await act(async () => { toAgent!.click(); });
-  await settle(20);
-  await world.toField(); await settle();
-  const back = face('Me');
-  expect(back, 'the creature offers no way back to your form').toBeTruthy();
-  await act(async () => { back!.click(); });
-  await settle(20);
-  const { wallKind, aura } = world.audit();
-  expect(wallKind).toBe('self');
-  expect(aura.byWall['agent-busy'], "the agent wall read dark while you stood on your own").toBeGreaterThanOrEqual(0.6);
-});
+
+
 
 /* ═══ A PRESS ON THE CREATURE LIGHTS THE CREATURE ═══════════════════════════
    Founder: "debug why no light when clicking on the character." The canvas

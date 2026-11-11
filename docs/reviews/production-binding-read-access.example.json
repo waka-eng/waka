@@ -1,0 +1,43 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadKnownStageRouting",
+      "Effect": "Allow",
+      "Action": "cloudfront:GetDistribution",
+      "Resource": [
+        "arn:aws:cloudfront::182498323408:distribution/E294H8J9AJZ2TE",
+        "arn:aws:cloudfront::182498323408:distribution/EV7C0K60ZB0UD"
+      ]
+    },
+    {
+      "Sid": "ReadKnownLiveRouterCode",
+      "Effect": "Allow",
+      "Action": "cloudfront:GetFunction",
+      "Resource": [
+        "arn:aws:cloudfront::182498323408:function/waka-production-RouterCloudfrontFunctionRequest-kvwstnfr",
+        "arn:aws:cloudfront::182498323408:function/waka-development-RouterCloudfrontFunctionRequest-fdsmrhxu"
+      ]
+    },
+    {
+      "Sid": "CompareKnownRuntimeBindingsPrivately",
+      "Effect": "Allow",
+      "Action": "lambda:GetFunctionConfiguration",
+      "Resource": [
+        "arn:aws:lambda:us-west-2:182498323408:function:waka-production-ApiFunction-cdmoxatc",
+        "arn:aws:lambda:us-west-2:182498323408:function:waka-production-BackgroundWorkerFunction-bantheuk",
+        "arn:aws:lambda:us-west-2:182498323408:function:waka-development-ApiFunction-efwcwxdn",
+        "arn:aws:lambda:us-west-2:182498323408:function:waka-development-BackgroundWorkerFunction-xxbrbmcx"
+      ]
+    },
+    {
+      "Sid": "ReadKnownApiUrlMapping",
+      "Effect": "Allow",
+      "Action": "lambda:GetFunctionUrlConfig",
+      "Resource": [
+        "arn:aws:lambda:us-west-2:182498323408:function:waka-production-ApiFunction-cdmoxatc",
+        "arn:aws:lambda:us-west-2:182498323408:function:waka-development-ApiFunction-efwcwxdn"
+      ]
+    }
+  ]
+}

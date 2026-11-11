@@ -81,6 +81,7 @@
   },
   "pnpm": {
     "overrides": {
+      "@aws-sdk/xml-builder>fast-xml-parser": "5.12.0",
       "esbuild": "^0.25.12",
       "opencontrol>hono": "4.13.14",
       "opencontrol>@modelcontextprotocol/sdk": "1.32.2",

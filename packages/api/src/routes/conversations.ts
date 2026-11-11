@@ -1,3 +1,4 @@
+import {chargeChatRequest,ChatRateLimitError} from '../lib/chat-rate-limit.js';
 import {Hono} from 'hono';
 import {z} from 'zod';
 import {and,asc,desc,eq,gte,isNotNull,isNull,sql} from 'drizzle-orm';
@@ -6,7 +7,7 @@ import {getDb} from '../lib/db.js';
 import {requireAuth,humanSessionsOnly,type AuthEnv} from '../lib/middleware.js';
 import {resolveTargetProfile} from './inspirations-tenancy.js';
 import {profileQuerySchema} from './inspirations-validation.js';
-import {CONVERSATION_LIMITS,accountAgent,conversationCapabilities,conversationMemory,conversationRepliesEnabled,currentConversationReferences,readPerspectiveContext,type ConversationSource} from '../lib/conversation-context.js';
+import {CONVERSATION_LIMITS,conversationCapabilities,conversationMemory,conversationRepliesEnabled,currentConversationReferences,readPerspectiveContext,type ConversationSource} from '../lib/conversation-context.js';
 import {CONVERSATION_STARTERS,conversationPreview} from '../lib/conversation-preview.js';
 import {ConversationReplyError,conversationReplyWindow,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
 import {wakeCommittedBackgroundJobs} from '../lib/queue.js';
@@ -105,6 +106,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
   routes.use('*',async(c,next)=>{c.header('Cache-Control','private, no-store');await next();});
   routes.use('*',deps.authMiddleware??requireAuth,humanSessionsOnly);
   routes.onError((error,c)=>{
+    if(error instanceof ChatRateLimitError){c.header('Retry-After',String(error.retryAfterSeconds));return c.json({error:error.message,code:error.code,retryAfterSeconds:error.retryAfterSeconds},429);}
     if(error instanceof ConversationError)return c.json({error:error.message,...(error.code?{code:error.code}:{})},error.status);
     if(error instanceof ConversationReplyError)return c.json({error:error.message},error.status);
     if(error instanceof ConversationAttachmentError)return c.json(error.body(),error.status);
@@ -183,27 +185,20 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       if(input.data.principleId){const [source]=await tx.select({id:principles.id}).from(principles).where(and(eq(principles.profileId,profileId),eq(principles.id,input.data.principleId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)));if(!source)throw new ConversationError('This principle is not available.',404);}
       if(input.data.inspirationId)await requireOwnedInspiration(tx,profileId,input.data.inspirationId);
       const first=input.data.firstMessage;
-      /* WHOSE MEMORY IT READS, chosen once, at the start. An agent of this
-         account, or nothing: a stranger's profile or a person's is refused
-         rather than quietly read as yours. */
-      const perspective=input.data.perspective??'mine';
-      /* A pin is one of the person's own keeps; a chat on the agent's memory
-         alone never reads the person's, so a pin there would be shown and
-         never seen by the reply. */
-      if(perspective==='agent'&&(input.data.principleId||input.data.inspirationId))throw new ConversationError('A chat with your agent alone cannot start from your own keep.',400);
-      let agentProfileId:string|null=null;
-      if(perspective!=='mine'){
-        if(!input.data.agentId)throw new ConversationError('Choose which agent to talk with.',400);
-        agentProfileId=await accountAgent(tx,profileId,input.data.agentId);
-        if(!agentProfileId)throw new ConversationError('That agent is not yours to talk with.',404);
-      }
+      // Existing conversations above retain their original binding and idempotent replay.
+      // A new conversation always uses its owning profile's memory.
+      if ((input.data.perspective && input.data.perspective !== 'mine') || input.data.agentId)
+        throw new ConversationError('New conversations use your own memory with WAKA.', 400);
+      const perspective = 'mine' as const, agentProfileId = null;
       await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null,initialInspirationId:input.data.inspirationId??null,perspective,agentProfileId,revision:first?1:0});
       if(first){
         await tx.insert(conversationMessages).values({id:first.id,profileId,conversationId:input.data.id,position:1,role:'user',content:storedContent(first.content)});
         dropped=await linkMessageAttachments(tx,{profileId,conversationId:input.data.id,messageId:first.id,attachmentIds:first.attachmentIds??[]});
         if(first.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,input.data.id,{messageId:first.id,afterRequestId:null});
       }
-      return windowedConversation(await readConversation(tx,profileId,input.data.id),window,input.data.firstMessage?.id);
+      const accepted=windowedConversation(await readConversation(tx,profileId,input.data.id),window,input.data.firstMessage?.id);
+      await chargeChatRequest(tx,c.get('session').account.id);
+      return accepted;
     });
     await sweep(dropped);
     if(input.data.firstMessage?.requestReply&&conversationRepliesEnabled())await wakeCommittedBackgroundJobs();
@@ -310,14 +305,16 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       dropped=await linkMessageAttachments(tx,{profileId,conversationId:id,messageId:input.data.id,attachmentIds:input.data.attachmentIds??[]});
       await tx.update(conversations).set({revision:current.revision+1,updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
       if(input.data.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,id,{messageId:input.data.id,afterRequestId:null});
-      return windowedConversation(await readConversation(tx,profileId,id),window,input.data.id);
+      const accepted=windowedConversation(await readConversation(tx,profileId,id),window,input.data.id);
+      await chargeChatRequest(tx,c.get('session').account.id);
+      return accepted;
     });await sweep(dropped);if(input.data.requestReply&&conversationRepliesEnabled())await wakeCommittedBackgroundJobs();return c.json({conversation:row,...conversationCapabilities()});
   });
   routes.get('/:id/reply',async c=>c.json(await readConversationReplyState(database(),c.get('conversationProfileId'),c.req.param('id'))));
   routes.post('/:id/replies',async c=>{
     const input=z.object({messageId:uuid,afterRequestId:uuid.nullable()}).strict().safeParse(await c.req.json().catch(()=>null));
     if(!input.success)return c.json({error:'Invalid reply request'},400);
-    return c.json(await requestConversationReply(database(),c.get('conversationProfileId'),c.req.param('id'),input.data));
+    return c.json(await requestConversationReply(database(),c.get('conversationProfileId'),c.req.param('id'),input.data,c.get('session').account.id));
   });
   routes.post('/:id/replies/:requestId/stop',async c=>{
     const requestId=uuid.safeParse(c.req.param('requestId'));if(!requestId.success)return c.json({error:'Invalid reply request'},400);

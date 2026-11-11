@@ -127,3 +127,10 @@ export function resolveViewWall<T extends { id: string; name: string; kind: stri
   if (exact || view.label !== undefined || /^[a-f0-9]{8}-[a-f0-9-]{27}$/i.test(view.wallId)) return exact;
   return walls.find((wall) => encodeURIComponent(wall.name.trim().toLowerCase().replace(/\s+/g, '-')) === encodeURIComponent(view.wallId!.toLowerCase()));
 }
+
+/** Old profile links return to the person's Home, without reusing foreign entity IDs or drafts. */
+export function personalView(view: ViewLocation | null, profileId?: string): ViewLocation | null {
+  if (!view?.wallId) return view;
+  if (view.wallId.toLowerCase() === 'me' || view.wallId === profileId) return { ...view, wallId: null, label: undefined };
+  return { ...EMPTY_VIEW };
+}

@@ -1,3 +1,4 @@
+import {chargeChatRequest} from './chat-rate-limit.js';
 import {randomUUID} from 'node:crypto';
 import {and,asc,desc,eq,gte,inArray,sql} from 'drizzle-orm';
 import {backgroundJobs,conversationMessages,conversationReplyRequests,conversations,generationRevisions,inspirationEmbeddings,inspirationRevisions,profiles,type BackgroundJob,type ConversationReference} from '../db/index.js';
@@ -159,11 +160,11 @@ async function replyState(db:Reader,profileId:string,id:string){
     failureCode:row?.failureCode??null,retryAfter,canRetry:conversationRepliesEnabled()&&Boolean(message)&&conversation.revision<200&&!retryAfter&&['idle','failed','stopped','stale'].includes(phase),generationEnabled:conversationRepliesEnabled()};
 }
 export async function readConversationReplyState(db:Db,profileId:string,id:string){return db.transaction(tx=>replyState(tx,profileId,id),{isolationLevel:'repeatable read',accessMode:'read only'});}
-export async function requestConversationReply(db:Db,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null}){
-  const result=await db.transaction(tx=>requestConversationReplyInTransaction(tx,profileId,id,input));await wakeCommittedBackgroundJobs();return result;
+export async function requestConversationReply(db:Db,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null},quotaAccountId?:string){
+  const result=await db.transaction(tx=>requestConversationReplyInTransaction(tx,profileId,id,input,quotaAccountId));await wakeCommittedBackgroundJobs();return result;
 }
 /** Also used by Send's transaction: the message and its reply intent commit together. */
-export async function requestConversationReplyInTransaction(tx:Tx,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null}){
+export async function requestConversationReplyInTransaction(tx:Tx,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null},quotaAccountId?:string){
   if(!conversationRepliesEnabled())throw new ConversationReplyError(503,'Replies are not enabled here yet. Your messages are saved.');
     const conversation=await lockConversation(tx,profileId,id),rows=await requestsFor(tx,profileId,id),latest=rows.find(row=>row.userMessageId===input.messageId);
     // The predecessor is a compare-and-swap token. Replaying a lost retry
@@ -179,7 +180,9 @@ export async function requestConversationReplyInTransaction(tx:Tx,profileId:stri
     const requestId=randomUUID();await tx.insert(conversationReplyRequests).values({id:requestId,profileId,conversationId:id,userMessageId:input.messageId,conversationRevision:work.revision,contextHash:work.hash,contextSources:work.sources.map(({kind,id,hash})=>({kind,id,hash}))});
     const job=await enqueueConversationReply(profileId,id,requestId,tx);
     await tx.update(conversationReplyRequests).set({jobId:job.jobId}).where(eq(conversationReplyRequests.id,requestId));
-    return replyState(tx,profileId,id);
+    const accepted=await replyState(tx,profileId,id);
+    if(quotaAccountId)await chargeChatRequest(tx,quotaAccountId);
+    return accepted;
 }
 export async function stopConversationReply(db:Db,profileId:string,id:string,requestId:string){
   return db.transaction(async tx=>{

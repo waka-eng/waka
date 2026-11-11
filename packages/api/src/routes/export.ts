@@ -21,6 +21,8 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { getDb } from "../lib/db.js";
 import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { assembleProfileExport } from "../lib/profile-export.js";
+import { resolveTargetProfile } from './inspirations-tenancy.js';
+import { profileQuerySchema } from './inspirations-validation.js';
 
 export interface ExportRouteDependencies {
   getDatabase?: typeof getDb;
@@ -50,9 +52,13 @@ export function createExportRoute(deps: ExportRouteDependencies = {}): Hono<Auth
   routes.get("/", async (c) => {
     const session = c.get("session");
     const db = getDatabase();
-    const bundle = await assembleProfileExport(db, session.profile.id);
+    const query = profileQuerySchema.safeParse(c.req.query());
+    if (!query.success) return c.json({ error: 'Invalid profile' }, 400);
+    const target = await resolveTargetProfile(db, session, query.data.profile, 'read');
+    if (!target.ok) return c.json(target.body, target.status);
+    const bundle = await assembleProfileExport(db, target.profileId);
     await recordConsultation(db, {
-      profileId: session.profile.id,
+      profileId: target.profileId,
       session,
       surface: "export",
     });

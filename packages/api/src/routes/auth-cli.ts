@@ -245,7 +245,7 @@ function renderConsentPage(input: {
       const label = profile.name.trim() || (profile.type === "human" ? "You" : "Agent");
       const hint =
         profile.type === "human"
-          ? "Personal profile: your personal memory. This connection has full account access, including all your profiles and settings."
+          ? "Your personal memory. This connection has full account access and settings."
           : "Agent profile: read and write only this profile’s memory. No access to your personal memory or other agents’ memory.";
       return `
         <label class="choice">
@@ -301,8 +301,8 @@ function renderConsentPage(input: {
     <input type="hidden" name="consent" value="${escapeHtml(input.consentToken)}" />
 
     <fieldset>
-      <legend>Which profile should this connection act as?</legend>
-      <p>Each profile owns its own memory. Choose your personal profile or a named agent profile.</p>
+      <legend>Connect your memory</legend>
+      <p>Each profile owns its own memory. This connection uses your personal memory.</p>
       ${options}
     </fieldset>
 
@@ -313,7 +313,7 @@ function renderConsentPage(input: {
   </form>
 
   <p class="note">
-    The connection lasts 30 days. End agent access in Settings → Agent profiles, or personal access in Account connections, without affecting this browser.
+    The connection lasts 30 days. End access in Settings → Signed-in devices, without affecting this browser.
     Disconnecting preserves the profile and its memory.
   </p>
 </body>
@@ -358,30 +358,9 @@ cliAuthRoutes.post("/verify", requireAuth, async (c) => {
   return c.json({ profile: { id: session.profile.id, name: session.profile.name, type: session.profile.type }, verifiedAt: verifiedAt.toISOString() });
 });
 
-/**
- * The profiles a session may issue a credential for.
- *
- * Candidates come from the account, never from the request: a caller may
- * name a profile, but only ever one of its own. That is the property this
- * function is here for, and it is the one both routes lean on.
- *
- * The `write` filter is a second, narrower rule — an agent-bound session may
- * only act as its own profile.
- * Both routes now refuse an agent session at the door, so no request that
- * reaches this helper can exercise that filter any more. It stays rather
- * than being deleted because it is keyed off the access matrix instead of a
- * profile type spelled out here, so it cannot fall behind the matrix, and
- * because the next route to reach for this helper should not have to know
- * that its own middleware is what makes the filter redundant.
- *
- * Keeping it costs a test, and that cost is the point. No route-level
- * assertion in auth-cli.test.ts can reach the filter now — the gate answers
- * first — so deleting the filter outright leaves the whole suite green,
- * which is precisely how a defence decays into a comment claiming a
- * guarantee nothing enforces. Hence the export: the filter is held up by its
- * own tests in auth-cli.test.ts rather than by routes that can no longer
- * see it.
- */
+/** New consent offers only owned human memory. Existing agent credentials keep
+ * their exact legacy binding; none can issue a successor or gain human access.
+ * Keep the access-matrix check as well as the product policy filter. */
 export async function bindableProfiles(
   session: AuthenticatedSession,
 ): Promise<Array<{ id: string; accountId: string; name: string; type: ProfileType }>> {
@@ -401,7 +380,7 @@ export async function bindableProfiles(
      types. The access matrix alone decides which profile may be bound. */
   return rows.flatMap((row) => {
     const held = asAccountProfile(row);
-    if (!held) return [];
+    if (!held || held.type !== "human") return [];
     return resolveProfileAccess(session, held, "write") === "allowed" ? [held] : [];
   });
 }

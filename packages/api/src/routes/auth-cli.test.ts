@@ -183,12 +183,12 @@ beforeEach(() => {
  * the gate by the two route tests below, the filter here.
  */
 describe("bindableProfiles", () => {
-  it("offers an agent session only its own profile, never the human's", async () => {
+  it("never mints a successor for an existing agent session", async () => {
     mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
 
     const candidates = await bindableProfiles(AGENT_SESSION);
 
-    expect(candidates.map((row) => row.id)).toEqual(["profile-agent"]);
+    expect(candidates).toEqual([]);
   });
 
   /**
@@ -204,15 +204,12 @@ describe("bindableProfiles", () => {
    * at all. A defence nothing fails for is a defence that will be deleted by
    * someone who cannot tell it is load-bearing.
    */
-  it("offers a human session every profile the account owns", async () => {
+  it("offers only human memory even when legacy agent profiles exist", async () => {
     mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
 
     const candidates = await bindableProfiles(HUMAN_SESSION);
 
-    expect(candidates.map((row) => row.id)).toEqual([
-      "profile-human",
-      "profile-agent",
-    ]);
+    expect(candidates.map((row) => row.id)).toEqual(["profile-human"]);
   });
 });
 
@@ -280,18 +277,11 @@ describe("GET /api/auth/cli/start", () => {
     expect(html).toContain("user@example.com");
   });
 
-  it("locks a requested profile instead of offering a different identity", async () => {
+  it("refuses a retired agent selection instead of silently binding personal memory", async () => {
     mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
-
-    const res = await createApp().request(
-      startUrl({ callback: CALLBACK, state: "s", profile: "Scout" }),
-      { redirect: "manual" },
-    );
-    const html = await res.text();
-
-    expect(html).not.toContain('name="profileId" value="profile-human"');
-    expect(html).toContain('value="profile-agent"');
-    expect(html).toMatch(/value="profile-agent"\s+checked/);
+    const res = await createApp().request(startUrl({ callback: CALLBACK, state: 's', profile: 'Scout' }));
+    expect(res.status).toBe(400);
+    expect(mockState.db.insertValues).not.toHaveBeenCalled();
   });
 
   /**
@@ -381,15 +371,12 @@ describe("POST /api/auth/cli/consent", () => {
     expect(stored.codeHash).not.toBe(code);
   });
 
-  it("binds the code to the chosen profile", async () => {
+  it("refuses a forged retained-agent selection without minting a code", async () => {
     const fields = await renderThenFields();
-    const db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
-    mockState.db = db;
-
-    await postConsent({ ...fields, profileId: "profile-agent" });
-
-    const stored = db.insertValues.mock.calls[0]![0] as { profileId: string };
-    expect(stored.profileId).toBe("profile-agent");
+    const db = makeDb([[HUMAN_ROW, AGENT_ROW]]); mockState.db = db;
+    const response = await postConsent({...fields,profileId:'profile-agent'});
+    expect(response.status).toBe(400);
+    expect(db.insertValues).not.toHaveBeenCalled();
   });
 
   it("refuses without a consent token", async () => {
@@ -651,12 +638,9 @@ it('refuses an unknown requested profile rather than silently connecting the hum
   expect(response.status).toBe(400);
   expect(mockState.db.insertValues).not.toHaveBeenCalled();
 });
-it('cannot change the requested profile or remove its signed binding at consent', async () => {
-  mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW],[HUMAN_ROW, AGENT_ROW]]);
+it('refuses exact retired agent IDs without silently widening them to human access', async () => {
+  mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
   const response = await createApp().request(startUrl({callback:CALLBACK,state:'strict',profile:'profile-agent'}));
-  const fields = readFormFields(await response.text());
-  expect(fields.requestedProfileId).toBe('profile-agent');
-  expect((await postConsent({...fields,profileId:'profile-human'})).status).toBe(400);
-  expect((await postConsent({...fields,requestedProfileId:'',profileId:'profile-human'})).status).toBe(400);
+  expect(response.status).toBe(400);
   expect(mockState.db.insertValues).not.toHaveBeenCalled();
 });

@@ -12,10 +12,10 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {useAuth} from '../src/lib/auth-context';
 import {useRef} from 'react';
 import {ConversationPanel} from '../src/components/ConversationPanel';
+import {ApiError} from '../src/lib/api';
 import {storeConversationDraft} from '../src/lib/conversation-drafts';
 import {createConversation,fetchConversation,fetchConversationReply,listConversations,type ApiConversation} from '../src/lib/api/conversations';
 const owner=vi.hoisted(()=>({account:'owner',profile:'profile'}));
-const withAgent=vi.hoisted(()=>({value:null as {id:string;name:string}|null}));
 vi.mock('../src/lib/auth-context',()=>({useAuth:()=>({status:'authenticated',account:{id:owner.account},profile:{id:owner.profile,preferredLocale:'en-US'}})}));
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),listConversations:vi.fn()}));
 let host:HTMLDivElement,root:Root,row:ApiConversation|null;
@@ -46,7 +46,7 @@ function TalkHost(){
   const owner=`${scope.accountId}:${scope.profileId}`;
   const committed=useRef<{owner:string;row:ApiConversation}|null>(null);
   if(committed.current&&(committed.current.owner!==owner||committed.current.row.id!==id))committed.current=null;
-  return <ConversationPanel key={`${owner}:${id??'new'}`} scope={scope} id={id} locale="en-US" agent={withAgent.value}
+  return <ConversationPanel key={`${owner}:${id??'new'}`} scope={scope} id={id} locale="en-US"
     initialConversation={committed.current?.row}
     onCreated={row=>{if(row.profileId===scope.profileId)committed.current={owner,row};}}
     /* THE NEW-TO-ID HOP, which is the whole point of the first case: a
@@ -59,7 +59,7 @@ function TalkHost(){
 }
 const render=()=>act(async()=>root.render(<MemoryRouter initialEntries={['/chat/new']}><Routes><Route path="/chat/:conversationId" element={<TalkHost/>}/></Routes></MemoryRouter>));
 beforeEach(()=>{
-  vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});localStorage.clear();sessionStorage.clear();owner.account='owner';owner.profile='profile';row=null;withAgent.value=null;
+  vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});localStorage.clear();sessionStorage.clear();owner.account='owner';owner.profile='profile';row=null;
   (globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
   vi.mocked(listConversations).mockImplementation(async profile=>({profileId:profile,conversations:[],generationEnabled:true}));
   vi.mocked(createConversation).mockImplementation(async(profile,id,_signal,_principle,first)=>{
@@ -114,18 +114,12 @@ it('clears the bootstrap on a profile switch instead of showing another owner’
   expect(host.querySelector('.chat-messages')?.textContent).not.toContain('What has changed in how I think?');
 });
 
-/* WHO YOU ARE TALKING WITH (2026-10-15): "new chat should also let you
-   select if you want to chat with me vs my agent or both perspectives." */
-it('offers me, my agent or both before the first message, and starts the chat with that choice', async()=>{
-  /* A real profile id: the draft keeps it, and a draft holds only UUIDs. */
-  const agentId='3f6c1a52-8d0e-4b7a-9c21-5e4f7a8b9c0d';
-  withAgent.value={id:agentId,name:'Demo Agent'};
+it('shows one WAKA opening and starts conversations on personal memory', async()=>{
   await render();
-  const choices=[...host.querySelectorAll('.chat-with-choice')].map(node=>node.textContent);
-  expect(choices).toEqual(['Me','Demo Agent','Both']);
-  await act(async()=>([...host.querySelectorAll<HTMLButtonElement>('.chat-with-choice')].find(node=>node.textContent==='Both'))!.click());
-  await ask('What do we each think?');
-  expect(vi.mocked(createConversation).mock.calls[0]![5]).toEqual({perspective:'both',agentId});
+  expect(host.querySelector('.chat-with')).toBeNull();
+  expect(host.textContent).not.toContain('Demo Agent');
+  await ask('What should I think about?');
+  expect(vi.mocked(createConversation).mock.calls[0]![5]).toBeUndefined();
 });
 
 it('asks nobody to choose when there is no agent, and starts an ordinary chat', async()=>{
@@ -135,48 +129,44 @@ it('asks nobody to choose when there is no agent, and starts an ordinary chat', 
   expect(vi.mocked(createConversation).mock.calls[0]![5]).toBeUndefined();
 });
 
-/* Review: Send after a failed first read waits for the list. For a chat with
-   "Me" the agent plays no part, so its arriving meanwhile holds nothing: the
-   words go, and the read's "can't be reached" notice goes with them. */
-it('sends a "Me" chat even when the agent changed during the pre-flight read, and drops the stale notice', async()=>{
+/* A recovered pre-flight read keeps the original press and clears its stale notice. */
+it('sends after a failed pre-flight read recovers and drops the stale notice', async()=>{
   vi.mocked(listConversations).mockRejectedValueOnce(new Error('Offline'));
   await render();
   expect(host.textContent).toContain('WAKA can’t be reached right now.');
   let answer!:(value:Awaited<ReturnType<typeof listConversations>>)=>void;
   vi.mocked(listConversations).mockImplementationOnce(()=>new Promise(resolve=>{answer=resolve;}));
   await ask('Just me');                                         // pre-flight in flight
-  withAgent.value={id:'3f6c1a52-8d0e-4b7a-9c21-5e4f7a8b9c0d',name:'Demo Agent'};
-  await render();                                               // the agent arrives meanwhile
+  await render();
   await act(async()=>{answer({profileId:'profile',conversations:[],generationEnabled:true});});
   expect(createConversation).toHaveBeenCalledOnce();
   expect(vi.mocked(createConversation).mock.calls[0]![5]).toBeUndefined();
   expect(host.textContent).not.toContain('WAKA can’t be reached right now.');
 });
 
-/* Review: for a chat with "Both", a different agent mid-flight is a different
-   company — the press holds, quietly: the words stay, Send stays on, and no
-   stale "can't be reached" is left saying the wrong thing. The next press
-   goes with the agent there now. */
-it('holds a "Both" send when the agent changed during the pre-flight read, keeping the words and Send', async()=>{
-  const first='3f6c1a52-8d0e-4b7a-9c21-5e4f7a8b9c0d',second='7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
-  withAgent.value={id:first,name:'Demo Agent'};
-  /* "Both" was picked last visit and is still in the draft: the choices hide
-     while the first read is out, so a restored draft is how a "Both" chat
-     meets a failed first read. */
+it('preserves an unsent older draft’s words while starting only on personal memory', async()=>{
   storeConversationDraft({accountId:'owner',profileId:'profile'},'new:general',{id:'5b0c9d8e-7f6a-4b5c-9d8e-7f6a5b4c3d2e',writer:'6c1d0e9f-8a7b-4c6d-8e9f-0a1b2c3d4e5f',updatedAt:1,content:'What do we each think?',revision:0,pending:false,talkWith:'both'});
-  vi.mocked(listConversations).mockRejectedValueOnce(new Error('Offline'));
   await render();
-  expect(host.textContent).toContain('WAKA can’t be reached right now.');
-  let answer!:(value:Awaited<ReturnType<typeof listConversations>>)=>void;
-  vi.mocked(listConversations).mockImplementationOnce(()=>new Promise(resolve=>{answer=resolve;}));
-  await send();                                                 // pre-flight in flight
-  withAgent.value={id:second,name:'Other Agent'};
-  await render();                                               // a different agent meanwhile
-  await act(async()=>{answer({profileId:'profile',conversations:[],generationEnabled:true});});
-  expect(createConversation).not.toHaveBeenCalled();
-  expect(host.textContent).not.toContain('WAKA can’t be reached right now.');
   expect(host.querySelector('textarea')!.value).toBe('What do we each think?');
-  expect(host.querySelector<HTMLButtonElement>('.chat-send')!.disabled).toBe(false);
   await send();
-  expect(vi.mocked(createConversation).mock.calls[0]![5]).toEqual({perspective:'both',agentId:second});
+  expect(createConversation).toHaveBeenCalledOnce();
+  expect(vi.mocked(createConversation).mock.calls[0]![5]).toBeUndefined();
+});
+
+const pendingChat='77777777-7777-4777-8777-777777777777',pendingMessage='88888888-8888-4888-8888-888888888888',legacyAgent='99999999-9999-4999-8999-999999999999';
+function legacyPending(){storeConversationDraft({accountId:'owner',profileId:'profile'},'new:general',{id:pendingMessage,writer:'66666666-6666-4666-8666-666666666666',conversationId:pendingChat,updatedAt:1,content:'My retained words',revision:0,pending:true,talkWith:'both',agentId:legacyAgent,attachments:[{id:'55555555-5555-4555-8555-555555555555',type:'image',name:'kept.png',contentType:'image/png',size:42}]});}
+it('reconciles a committed legacy first send without duplicating or rebinding it',async()=>{
+ legacyPending();
+ vi.mocked(fetchConversation).mockImplementation(async()=>({id:pendingChat,profileId:'profile',revision:1,perspective:'both',agentProfileId:legacyAgent,generationEnabled:false,createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-01T00:00:00Z',messages:[{id:pendingMessage,profileId:'profile',conversationId:pendingChat,position:1,role:'user',content:'My retained words',createdAt:'2026-10-01T00:00:00Z'}]}));
+ await render();await send();expect(createConversation).not.toHaveBeenCalled();expect(host.textContent).toContain('My retained words');expect(host.textContent).toContain('earlier conversation');
+});
+it('recovers a never-committed legacy send after 404 with the same message and attachment IDs',async()=>{
+ legacyPending();vi.mocked(fetchConversation).mockRejectedValue(new ApiError({status:404,code:'not_found',message:'Missing'}));
+ await render();await send();expect(createConversation).toHaveBeenCalledOnce();const args=vi.mocked(createConversation).mock.calls[0]!;expect(args[1]).toBe(pendingChat);expect(args[4]).toMatchObject({id:pendingMessage,content:'My retained words',attachmentIds:['55555555-5555-4555-8555-555555555555']});expect(args[5]).toBeUndefined();
+});
+it('retains the exact legacy journal if a 404 races a late commit, then reconciles it on retry',async()=>{
+ legacyPending();vi.mocked(fetchConversation).mockRejectedValue(new ApiError({status:404,code:'not_found',message:'Missing'}));vi.mocked(createConversation).mockRejectedValueOnce(new ApiError({status:409,code:'conversation_conflict',message:'Already created'}));
+ await render();await send();const saved=Object.keys(localStorage).map(key=>localStorage.getItem(key)??'').find(text=>text.includes(pendingMessage));expect(saved).toContain(legacyAgent);expect(saved).toContain('kept.png');
+ vi.mocked(fetchConversation).mockResolvedValue({id:pendingChat,profileId:'profile',revision:1,perspective:'both',agentProfileId:legacyAgent,generationEnabled:false,createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-01T00:00:00Z',messages:[{id:pendingMessage,profileId:'profile',conversationId:pendingChat,position:1,role:'user',content:'My retained words',createdAt:'2026-10-01T00:00:00Z'}]});
+ await send();expect(createConversation).toHaveBeenCalledOnce();expect(host.textContent).toContain('earlier conversation');
 });

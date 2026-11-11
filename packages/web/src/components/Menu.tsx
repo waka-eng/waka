@@ -134,7 +134,6 @@ export interface MenuProps {
   settings?: Omit<SettingsPanelProps, "locale" | "email" | "onSignOut" | "onClose"> | null;
   /** Leaving. Absent on a surface that cannot sign out. */
   onSignOut?: () => void;
-  agentSetup?: { id: string; sequence: number } | null;
   /**
    * WHOSE GROUND YOU ARE STANDING ON — the top-left corner's whole job.
    *
@@ -155,7 +154,7 @@ export interface MenuProps {
   hidden?: boolean;
 }
 
-export function Menu({ locale, items, current, left, actions, account, settings, onSignOut, hidden, agentSetup }: MenuProps): JSX.Element | null {
+export function Menu({ locale, items, current, left, actions, account, settings, onSignOut, hidden }: MenuProps): JSX.Element | null {
   /* THE SWITCHER'S OWN OPEN STATE IS GONE WITH THE SHEET IT OPENED. The
      three rungs are laid out rather than listed (see `.waka-rungs`), so there
      is nothing to expand, nothing to focus into, nothing to close on Escape
@@ -175,8 +174,6 @@ export function Menu({ locale, items, current, left, actions, account, settings,
    * apart.
    */
   const [corner, setCorner] = useState<null | "settings" | "info">(null);
-  const [setupId, setSetupId] = useState<string | undefined>();
-  useEffect(() => { if (agentSetup) { setSetupId(agentSetup.id); setCorner('settings'); } }, [agentSetup]);
   const account_open = corner === "settings";
   useEffect(() => {
     if (hidden) setCorner(null);
@@ -398,7 +395,7 @@ export function Menu({ locale, items, current, left, actions, account, settings,
           className="waka-corner waka-corner--settings"
           aria-label={t(locale, "worldSettingsOpen")}
           aria-expanded={account_open}
-          onClick={() => { setSetupId(undefined); void changeCorner(corner === "settings" ? null : "settings"); }}
+          onClick={() => { void changeCorner(corner === "settings" ? null : "settings"); }}
         >
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
             <path
@@ -459,7 +456,7 @@ export function Menu({ locale, items, current, left, actions, account, settings,
             <span className="waka-account waka-account--settings">
               {/* THE PANEL OWNS ITS ONE HEADER: Close at its root, Back on a
                   sub-page (one level up). Escape calls the same handler. */}
-              <SettingsPanel {...settings} locale={locale} initialAgentId={setupId}
+              <SettingsPanel {...settings} locale={locale}
                 onBeforeLeave={guard => { settingsLeave.current = guard; }}
                 onBackHandler={handler => { settingsBack.current = handler; }}
                 email={account?.email ?? null}

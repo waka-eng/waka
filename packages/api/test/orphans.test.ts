@@ -55,7 +55,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "../src");
 
 /**
- * Where the API starts, all five of them.
+ * Where the API starts, including the cleanup-only object-event subscriber.
  *
  * `lambda.ts` and `background-worker.ts` are the deployed Lambda handlers and
  * `principle-refresh.ts` the nightly cron — all three named as `handler:`
@@ -70,6 +70,7 @@ const SRC = resolve(HERE, "../src");
 const ENTRY = [
   "lambda.ts",
   "background-worker.ts",
+  "attachment-object-events.ts",
   "principle-refresh.ts",
   "server.ts",
   "nightly-local.ts",

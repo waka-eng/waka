@@ -143,14 +143,12 @@ describe("invented data cannot reach a production build", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("keeps the two known fixture entry points on the narrow gate", async () => {
+  it("keeps the remaining fixture entry point on the narrow gate", async () => {
     /* Named explicitly as well as scanned, so that deleting a gate outright —
        which the scan above would read as clean — still fails. */
     const { readFileSync } = await import("node:fs");
-    const agents = readFileSync(new URL("agent-walls.ts", fixtureDir), "utf8");
     const offline = readFileSync(new URL("offline-home.ts", fixtureDir), "utf8");
 
-    expect(agents).toMatch(new RegExp(`MOCK_AGENTS\\s*=\\s*${ALLOWED_GATE}\\(\\)`));
     expect(offline).toMatch(new RegExp(`if\\s*\\(!${ALLOWED_GATE}\\(\\)\\)\\s*return null`));
   });
 

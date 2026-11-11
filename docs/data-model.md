@@ -29,16 +29,35 @@ mind → principles. There is exactly one top of mind **per profile**;
 principles are a growing set per profile.
 
 - Each account has one **human profile**: the person's own memory.
-- Each account can have **agent profiles**: separate stacks that agents
-  use as *their own* memory (observations, lessons, working knowledge).
-  The schema supports N agent profiles per account (each typed and named);
-  the UI lists each named agent profile separately.
+- Existing accounts can retain **agent profiles**: separate stacks that
+  external agents used as their own memory. These are retained records, not
+  additional companions available in the application. New agent-profile
+  creation is retired; no existing profile is deleted or merged.
 - The human is admin of every profile in their account: they can see and
   edit everything, including an agent profile's memory.
 
 Agent separation is **structural, not a lens**: an agent's own memory
 lives in its own profile, not as filtered views over the human's data.
 (The earlier lens-board design is superseded by this.)
+
+### One WAKA companion (owner ruling, 2026-11-10)
+
+The application has one companion, **WAKA**. The companion is the interface
+that helps the person keep, revisit and discuss their memory; it is not the
+human profile and does not acquire ownership of that memory. New application
+conversations use the human profile's memory. There is no agent roster,
+profile switcher, agent management page or choice of agent memory in the app.
+
+Compatibility is deterministic and preserves ownership: an old application
+link naming any agent profile opens the signed-in person's own Home instead.
+It never selects the first agent, moves captures or adopts an agent's draft.
+Existing agent profiles, their four-layer stacks, locked wording, conversations,
+keys and sessions remain intact under their original profile IDs. Explicit
+legacy API access remains subject to the existing access matrix; owner-authorized export can name an owned legacy profile with `?profile=<id>`;
+the default export still contains only the human profile. Previously created conversations keep
+their original memory bindings and messages. No automatic migration or merge
+is performed. New connection consent offers the human memory only; existing
+profile-bound credentials retain their original isolation and can be revoked.
 
 Browser drafts and the remembered capture visibility choice are scoped to
 both account and profile. Changing identity discards the previous identity's
@@ -138,10 +157,9 @@ sign-in; the mobile handoff does not use the CLI's profile-selection flow.
 Every session acts *as* exactly one profile:
 
 - The browser session acts as the human profile (admin over the account).
-- A CLI/MCP credential is minted **bound to one profile**, chosen during
-  the loopback login's consent step. An agent using WAKA as its own memory
-  logs in bound to its agent profile; audit and revocation are
-  per-profile.
+- New CLI/MCP login consent binds to the **human profile**. Existing
+  agent-bound credentials retain their exact profile binding; they are never
+  silently changed into human credentials. Audit and revocation stay per-profile.
 
 ### What an agent session may do
 
@@ -227,8 +245,13 @@ does not request a reply.
 `conversations.perspective` (migration 0075) says whose memory the replies
 stand on: `mine` (the owning profile's saves, and every chat before the column),
 `agent`, or `both`, each source labelled with whose it is. `agent_profile_id`
-names which agent and is set only when the chat is started by the account's
-human profile with one of that account's agents; anything else is refused.
+names the retained agent memory of an older human-owned conversation. New
+conversations accept only `mine`; new `agent`/`both` requests are refused.
+An identical retry of an already-created legacy conversation retains its
+original binding and message IDs. A pending browser draft first checks its
+original conversation ID; only a confirmed 404 permits a personal-memory
+create under the same conversation/message/attachment IDs. Failed lookups or
+late-commit conflicts retain the original journal for reconciliation.
 The ownership is checked again on every read, and if the agent is gone
 (`ON DELETE SET NULL`) or no longer the account's, the chat quietly reads the
 person's own memory. This explicit perspective mechanism is retained for
@@ -252,6 +275,25 @@ or failed lookup does not refund that reservation. With only one slot left,
 the answer uses lexical context rather than exceeding the limit. Answers have
 at most 1,200 output tokens. Dispatch timestamps survive
 conversation deletion until profile erasure so deletion cannot reset the budget.
+
+Request admission is separate from provider spending. `account_chat_limits`
+(migration 0085) holds one durable row per account, cascading on account deletion.
+New chat creation, new user messages and newly accepted explicit reply/retry
+requests share 20 accepted mutations per minute and 120 per hour, across every
+owned profile and signed-in device. A create or Send with its inline reply is
+one mutation. Each counter uses a fixed window anchored at its first accepted
+mutation; a window restarts at or after 60 seconds / 3,600 seconds. Adjacent
+windows can admit two bursts around the boundary; this is not a sliding window.
+
+Both counters and the product mutation commit in the same transaction under the
+counter row lock. Validation, tenancy, revision conflicts and idempotent replay
+precede charging; a refused transaction saves neither counter increments nor
+partial messages/reply jobs. Stop/delete/read/recovery remain available at quota.
+429 uses `chat_rate_limited`, a positive integer `Retry-After` (at most 3,600
+seconds), and the same `retryAfterSeconds` JSON field. Storage failure fails
+closed before commit or worker wake. No source-IP claim or forwarded-header
+trust is used. These code-pinned defaults are request-abuse controls, not a
+whole-app dollar cap; existing provider reservations and worker budgets remain.
 
 Stop is a publication fence, not a promise to undo provider billing. New messages,
 memory changes, deletion and lost worker ownership prevent late publication.
@@ -312,8 +354,10 @@ a database migration. Historical date labels and selected-source messages use
 the UTC record date, matching the supplied model dates across device timezones.
 
 Conversation reads validate unique source identities once per read rather than
-once per assistant message. Three-identity chunks preserve the original excerpt
-allowances; each citation still checks its own current or legacy proof. Legacy
+once per assistant message. Batches group by owner and source kind, skipping
+empty kinds: at most ten principles, five reading entries or six inspirations
+per query. These sizes fit the original per-kind excerpt allowances even when
+every source is full length; each citation still checks its current or legacy proof. Legacy
 inspiration references retain both original-text and enriched projections where
 needed. No source cache survives the request, and per-message historical/stale
 status is preserved. At most 200 message groups and three citations per group
@@ -536,6 +580,42 @@ when it has attachments; presentation labels must not be stored as invented
 human prose. A bundle save identifies one immutable intent and commits its
 inspiration, attachment rows and processing request atomically after uploads.
 Replaying it returns current owned data without creating another attachment.
+
+`attachment_objects` is the durable lifecycle ledger for uploaded bytes, not
+another memory owner. Its primary identity is the SHA-256 of the storage key.
+It has no cascading profile/account foreign key: deletion must not erase the
+last cleanup inventory. Attachment and retained-copy removal records cleanup
+in the source transaction, including cascades and key replacement. Cleanup
+rechecks all live rows and retained copies under the same storage-key lock as
+finalization/restoration. A closed object cannot be rebound by a stale finalize.
+The reference check and closed decision commit before any external DELETE.
+Physical deletion and SQL settlement are separate phases; a worker dying in
+either phase leaves the committed closed fence and retry inventory intact.
+Every cleanup/completion request increments a monotonic `generation`; success
+settles only its claimed generation, so an event during I/O cannot be erased by
+an older attempt. A five-minute claim deadline permits restart recovery without
+holding a transaction/second connection during network I/O.
+Transport failures and individual S3 errors retain retry state across workers.
+Successful deletion retains only the opaque hash/closure receipt; the raw key
+and issuance owner metadata are cleared. The existing account-erasure path
+still refuses to erase its SQL inventory until deletion of recorded bytes
+succeeds; the ledger supplements that guarantee.
+The ledger pins normalized bucket, region and endpoint identity at issuance.
+Cleanup refuses a different configured store. Historical keys without an
+authoritative store binding retain pending inventory for explicit operator
+binding; a URL alone cannot establish which custom endpoint held the bytes.
+
+Presign persists issuance before releasing the URL, without creating an
+attachment. An unreferenced issuance becomes eligible for reconciliation after
+24 hours; profile/account erasure requests it immediately. That grace period
+is a finalization allowance, not a claim about maximum upload duration. A PUT
+started while a URL is valid may finish after expiry and after a deletion pass.
+Completed-object events therefore re-arm cleanup even for a closed hash.
+Events are duplicate/out-of-order safe and never reopen a closed object for
+finalization. Durable retries and the existing daily safety sweep reconcile
+abandoned uploads; no new idle database polling timer is added. Cloud event
+delivery, dead-letter monitoring, lifecycle configuration and actual erasure
+latency remain operational acceptance gates, not consequences of SQL alone.
 
 Audio is an attachment kind. Its original bytes remain separate from
 `audio_transcription` enrichment, stored as the attachment's machine-derived

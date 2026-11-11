@@ -10,8 +10,9 @@ truth, and this section is its summary.
 - **account** — the auth identity: one login, one person. Owns profiles, owns
   no memory of its own.
 - **profile** — the unit that owns memory. Each account has one **human**
-  profile and any number of **agent** profiles. An agent's observations live in
-  the agent's own stack, not as a filter over the person's.
+  profile for the person's memory. The application has one WAKA companion,
+  using that memory. Existing agent-profile stacks remain isolated and retained;
+  new agent-profile creation and product selection/management are retired.
 - **inspiration** (layer 1) — a raw capture: text, a link, an image. Editable,
   deletable, and never distilled in place. Never leaves its account.
 - **signal** (layer 2) — an evidence-backed pattern WAKA derives, citing

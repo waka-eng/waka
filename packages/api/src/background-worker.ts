@@ -24,7 +24,7 @@ import { runBackgroundJobWorker,readBackgroundJobRecoveryState,settleAbandonedEx
 import {QUEUE_RECOVERY_LIMITS,recordQueueRecovery} from './lib/queue-recovery.js';
 import {sweepDeletedShelf} from './lib/deleted-shelf.js';
 import {sweepStaleStagedAttachments} from './lib/conversation-attachments.js';
-import {sweepAttachmentObjects} from './lib/attachment-sweep.js';
+import {sweepAttachmentObjects,drainAttachmentObjects} from './lib/attachment-sweep.js';
 import {getDb} from './lib/db.js';
 
 const DEFAULT_CRON_LIMIT = 5;
@@ -67,6 +67,13 @@ async function runScheduledSweeps(now=new Date()){
   catch(error){console.warn('[deleted-shelf-sweep] failed',error instanceof Error?error.message:String(error));}
   try{const swept=await sweepStaleStagedAttachments(getDb(),now,sweepAttachmentObjects);if(swept)console.info('[staged-attachment-sweep]',JSON.stringify({swept}));}
   catch(error){console.warn('[staged-attachment-sweep] failed',error instanceof Error?error.message:String(error));}
+  try {
+    for (let pass=0;pass<10;pass++) {
+      const result=await drainAttachmentObjects(getDb());
+      if(result.selected) console.info('[attachment-object-cleanup]',JSON.stringify(result));
+      if(result.selected<100) break;
+    }
+  } catch { console.warn('[attachment-object-cleanup] deferred'); }
 }
 
 export async function handler(event?:unknown, context?: { invokedFunctionArn?: string }) {

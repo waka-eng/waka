@@ -1790,3 +1790,24 @@ What the checks cannot catch is prose that mis-describes control flow, so the
 change protocol is: **a PR touching derivation or synthesis behavior updates
 this doc in the same diff**, and reviewers treat a mechanics change with no
 doc diff the way they would treat one with no test diff.
+
+### Uploaded-byte cleanup (2026-11-10)
+
+Chat citation validation uses `CONVERSATION_REFERENCE_BATCH_LIMITS` grouped by
+kind and isolated owner. Empty kinds do not issue reads. Ten principles, five
+reading entries and six inspirations fit their original source/excerpt limits;
+each citation still proves its current or legacy hash/revision, lock/support
+state and source ownership. No cross-request proof cache is introduced.
+
+`drainAttachmentObjects` is model-free operational work. Transactional source
+triggers retain cleanup intent across live-row/copy/profile deletion; the
+existing daily maintenance invokes bounded batches. `recordAttachmentUpload`
+commits store-bound issuance before a presign response. The separate
+`attachment-object-events` handler accepts completed S3 events through a
+durable SQS queue and never enters the generation/nightly processing path.
+Fresh completion preserves `UPLOAD_FINALIZATION_GRACE_MS`; late completion
+re-arms cleanup without reopening a closed key. The grace is eligibility,
+not dispatch latency: daily batch limits, retries and backlog can delay work.
+No new polling clock, provider call or generation policy is introduced.
+Actual bucket notifications, queue/DLQ monitoring, operator notification and
+production erasure bounds remain unverified deployment gates.

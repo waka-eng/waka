@@ -177,28 +177,3 @@ it('shows an error instead of invented memories when a signed-in archive fails',
   expect(layout.container.querySelector('[role="alert"]')).not.toBeNull();
   expect(layout.container.textContent).not.toMatch(/Ouroboros maintainer|Course marketing/);
 });
-
-
-it('offers Retry on a failed initial agent load and loads real profiles when it succeeds',async()=>{
-  signedIn=true; rosterFails=true;
-  layout=await mountWorld(FACTS);
-  expect(layout.container.textContent).toContain('Couldn’t load your agents.');
-  rosterFails=false; roster=[{id:'noah',name:'Noah',type:'agent',createdAt:new Date().toISOString(),hasInspirations:false}];
-  await act(async()=>layout!.container.querySelector<HTMLButtonElement>('.waka-profile-error button')!.click());
-  await layout.step(5);
-  expect(layout.container.querySelector('.waka-profile-error')).toBeNull();
-  expect(layout.container.textContent).toContain('Noah');
-});
-it('keeps known agents visible when a background roster refresh fails',async()=>{
-  signedIn=true; roster=[{id:'noah',name:'Noah',type:'agent',createdAt:new Date().toISOString(),hasInspirations:false}];
-  layout=await mountWorld(FACTS);
-  const visibility=vi.spyOn(document,'visibilityState','get');
-  visibility.mockReturnValue('hidden');
-  await act(async()=>document.dispatchEvent(new Event('visibilitychange')));
-  await layout.step(2000); rosterFails=true;
-  visibility.mockReturnValue('visible');
-  await act(async()=>document.dispatchEvent(new Event('visibilitychange')));
-  await layout.step(5);
-  expect(layout.container.textContent).toContain('Noah');
-  expect(layout.container.textContent).toContain('Couldn’t load your agents.');
-});

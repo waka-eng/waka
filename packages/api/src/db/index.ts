@@ -36,6 +36,7 @@ export * from "./schema-inspirations";
 export * from "./schema-inspiration-processing";
 export * from "./schema-inspiration-save-requests";
 export * from "./schema-attachments";
+export * from './schema-attachment-objects';
 export * from "./schema-reflections";
 export * from "./schema-reviews";
 export * from "./schema-conversations";
@@ -54,3 +55,5 @@ export * from "./schema-background-jobs";
 export * from "./schema-feedback";
 
 export * from "./schema-background-job-runs";
+
+export * from './schema-account-chat-limits.js';

@@ -27,13 +27,6 @@ import { getDb } from "../lib/db.js";
 import { type AuthEnv, humanSessionsOnly, requireAuth } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
 
-/**
- * How many agent profiles one account may hold. The schema supports any
- * number; the product offers a handful. The cap exists so a loop that
- * creates profiles cannot quietly fill a table.
- */
-const MAX_AGENT_PROFILES = 8;
-
 const MAX_NAME_LENGTH = 80;
 
 /**
@@ -42,12 +35,6 @@ const MAX_NAME_LENGTH = 80;
  * Validate the shape first so it answers 400.
  */
 const profileIdSchema = z.string().uuid();
-
-const createProfileSchema = z
-  .object({
-    name: z.string().trim().min(1).max(MAX_NAME_LENGTH),
-  })
-  .strict();
 
 const updateProfileSchema = z
   .object({
@@ -95,55 +82,10 @@ profilesRoutes.get("/", async (c) => {
  *
  * GET stays open to an agent session, scoped to that session’s own profile.
  */
-profilesRoutes.post("/", humanSessionsOnly, async (c) => {
-  const session = c.get("session");
-  let rawBody: unknown;
-  try {
-    rawBody = await c.req.json();
-  } catch {
-    return c.json({ error: "Request body must be valid JSON" }, 400);
-  }
-
-  const parsed = createProfileSchema.safeParse(rawBody);
-  if (!parsed.success) {
-    return c.json(
-      { error: "Invalid profile payload", details: validationDetails(parsed.error) },
-      400,
-    );
-  }
-
-  const db = getDb();
-  const created = await db.transaction(async tx => {
-    // Serialize with language changes and other creations. A stale auth snapshot
-    // must not give a new agent the owner's previous language.
-    const [owner] = await tx.select({ preferredLocale: profiles.preferredLocale }).from(profiles)
-      .where(eq(profiles.id, session.profile.id)).for('update');
-    const [{ count }] = await tx
-      .select({ count: sql<number>`count(*)::int` })
-      .from(profiles)
-      .where(and(eq(profiles.accountId, session.profile.accountId), eq(profiles.type, "agent")));
-
-    if (count >= MAX_AGENT_PROFILES) {
-      return null;
-    }
-
-    const [created] = await tx
-      .insert(profiles)
-      .values({
-        accountId: session.profile.accountId,
-        type: "agent",
-        name: parsed.data.name,
-        // An agent writes in the language its owner reads.
-        preferredLocale: owner.preferredLocale,
-      })
-      .returning();
-    return created;
-  });
-
-  if (!created) return c.json({ error: `An account may hold ${MAX_AGENT_PROFILES} agent profiles` }, 409);
-
-  return c.json({ profile: serializeProfile(created!) }, 201);
-});
+profilesRoutes.post("/", humanSessionsOnly, (c) => c.json({
+  error: "WAKA has one companion. New agent profiles are no longer available.",
+  code: "agent_profiles_retired",
+}, 410));
 
 profilesRoutes.patch("/:profileId", humanSessionsOnly, async (c) => {
   const session = c.get("session");

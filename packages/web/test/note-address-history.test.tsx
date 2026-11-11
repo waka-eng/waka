@@ -146,12 +146,12 @@ it('a cold note link has no list beneath, so closing the note rewrites the addre
 });
 
 it.each([
-  ['/w/noah/noah?compose=1', '/w/noah/noah'],
-  ['/w/noah/noah?open=saves&note=kept', '/w/noah/noah'],
-  ['/w/anotherone?open=conversations', '/w/anotherone'],
-  ['/chat/new?profile=noah', '/w/noah'],
-  ['/chat/existing?profile=anotherone', '/w/anotherone'],
-])('Close returns %s to its own profile even without prior history', async (path, home) => {
+  ['/w/noah/noah?compose=1', '/'],
+  ['/w/noah/noah?open=saves&note=kept', '/'],
+  ['/w/anotherone?open=conversations', '/'],
+  ['/chat/new?profile=noah', '/'],
+  ['/chat/existing?profile=anotherone', '/'],
+])('Retired link %s returns to human Home without prior history', async (path, home) => {
   await mount([path]);
   await run(() => nav.closeToHome());
   expect(here).toBe(home);

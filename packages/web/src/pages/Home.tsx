@@ -1,5 +1,4 @@
 import { startJourney } from '../lib/journey-performance';
-import { ProfileSwitcher } from '../components/ProfileSwitcher';
 import { ReadingBubbleText } from '../components/ReadingBubbleText';
 /**
  * WAKA — the world. Home, at `/`.
@@ -106,7 +105,7 @@ import { ReviewEvidence } from '../components/ReviewEvidence';
 import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
-import type { ApiOwnedProfile, CreateInspirationRequest } from '../lib/api';
+import type { CreateInspirationRequest } from '../lib/api';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
 import { wordsCanStand } from '../lib/note-words';
 import { inspirationPreview } from '../lib/inspiration-preview';
@@ -192,7 +191,6 @@ import type { AgentBundle } from "../lib/agent-contract";
    there. If a third of these ever appears, the question to ask is not whether
    it compiles but which screen is now capable of showing a person a memory
    they never had. */
-import { MOCK_AGENTS, MOCK_AGENT_BUNDLES } from "../lib/fixture/agent-walls";
 import { offlineHome, type OfflineHome } from "../lib/fixture/offline-home";
 import {
   agoWords,
@@ -222,7 +220,6 @@ import {
      editor (which sent `text`) and `togglePublic` (which sent `visibility`).
      Its one caller here now is the harvest keep, which corrects the words of
      a save it already made rather than making a second (`keepCandidate`). */
-  fetchProfiles,
   /* `ApiGroupMember` and `ApiGroupSummary` STOOD HERE and were the last two
      room shapes this file named; `ApiGroupFieldInspiration` was the third,
      below. All three were imported solely to TYPE EMPTY REFS the simulation
@@ -256,7 +253,6 @@ import {
   type Evidence,
   type Signal,
   type TopOfMind,
-  type FieldLoad,
 } from "../lib/data";
 import { RECEIPTS } from "../lib/receipts";
 import { useOptionalAuth } from "../lib/auth-context";
@@ -455,137 +451,6 @@ function markPassages(
  * in an unsigned local preview. Signed-in accounts always show their real
  * profiles, including an empty roster or a failed read.
  */
-interface AgentRosterEntry {
-  hasInspirations?: boolean;
-  id: string;
-  name: string;
-  createdAt: string;
-}
-
-/**
- * IDENTITY IS EAGER; MEMORY IS ON APPROACH. The roster — which agent walls
- * exist, their names, their columns — is one cheap profiles call at mount.
- * Each wall's actual memory (its own inspirations, signals, top of mind)
- * loads the moment travel toward it begins, the way a room's field always
- * has. The old shape fetched EVERY agent's full stack before first paint —
- * potentially thousands of rows for walls nobody visits that day (founder,
- * 2026-08-30: "separate pages to make this more efficient").
- */
-async function loadAgentRoster(allowFixture: boolean, signal?: AbortSignal): Promise<{
-  roster: AgentRosterEntry[];
-  /** dev fixture only: mock walls arrive with their bundles pre-loaded */
-  mockBundles: AgentBundle[] | null;
-}> {
-  const real = await fetchProfiles(signal)
-    .then((rows) => rows.filter((p) => p.type === "agent"))
-    .catch(error => { if (allowFixture && MOCK_AGENTS) return []; throw error; });
-  if (real.length > 0) {
-    return {
-      roster: real.map((p) => ({ id: p.id, name: p.name, createdAt: p.createdAt, hasInspirations: p.hasInspirations })),
-      mockBundles: null,
-    };
-  }
-  // Signed-in accounts must never acquire sample agents, even in local dev.
-  if (!allowFixture || !MOCK_AGENTS) return { roster: [], mockBundles: null };
-  return {
-    roster: MOCK_AGENT_BUNDLES.map((b) => ({
-      id: b.agent.id,
-      name: b.agent.name,
-      createdAt: b.agent.createdAt,
-    })),
-    mockBundles: MOCK_AGENT_BUNDLES,
-  };
-}
-
-/**
- * One agent's reading and patterns. Its archive is read separately, only
- * when the person opens the archive or enters the canvas field.
- */
-async function loadAgentBundle(
-  p: {
-    id: string;
-    name: string;
-    createdAt: string;
-  },
-  opts: { strict?: boolean; onReadingFailed?: () => void } = {},
-): Promise<AgentBundle> {
-        /* TWO POSTURES, BY WHAT THE CALLER HOLDS. At first load there is
-           nothing yet, so a failed fetch degrades to an honest empty wall.
-           A REFRESH holds the last good ground, and replacing it with a
-           failure's emptiness is how the founder's wall kept vanishing —
-           one aborted request during a server restart and "6 inspirations"
-           became no foot at all until a minute and another travel lined up.
-           Strict mode lets the failure THROW, so the refresher keeps what
-           it has and retries on the next approach instead. */
-        const [signals, tom] = opts.strict
-          ? await Promise.all([loadSignals(p.id), loadTopOfMind(p.id)])
-          : await Promise.all([
-              loadSignals(p.id).catch(() => [] as Signal[]),
-              /* forgiving, but not silent: the caller must be able to
-                 tell "formed nothing" from "could not ask" */
-              loadTopOfMind(p.id).catch(() => { opts.onReadingFailed?.(); return null; }),
-            ]);
-        const entries = (tom?.entries ?? []).slice().sort((a, b) => a.createdMs - b.createdMs);
-        const lead = tom?.entries.find((e) => e.pinned) ?? tom?.entries[0] ?? null;
-        const iso = (ms: number) => new Date(ms).toISOString();
-        const reading = (e: Entry) => ({
-          ambition: e.body,
-          awayFrom: null,
-          /* what the claim rests on: the signals it cites, which is what an
-             entry cites under the canon — never straight down at raw memories */
-          groundedIn: e.citedSignals.map((c) => c.id),
-          createdAt: iso(e.createdMs),
-        });
-        return {
-          agent: {
-            id: p.id,
-            name: p.name,
-            kind: "agent" as const,
-            createdAt: p.createdAt,
-          },
-          /* THE DIAL NEEDS REAL DATES OR IT SCRUBS NOTHING. Each entry of the
-             board is a moment this agent said something about itself, so the
-             board's entries ARE its history. */
-          direction: { current: lead ? reading(lead) : null, history: entries.map(reading) },
-          /* its sky: what it is still forming and has not adopted */
-          topOfMind: {
-            notes: signals
-              .filter((s) => s.status === "emerging")
-              .map((s) => ({
-                id: s.id,
-                title: s.statement,
-                isProvisional: true,
-                createdAt: iso(s.createdMs),
-                evidenceSignalIds: [],
-              })),
-          },
-          // Visiting the reading does not walk the archive. The archive
-          // overlay owns its read; the canvas loads its field on entry.
-          inspirations: [],
-        };
-}
-
-function agentField(profileId: string, field: FieldLoad): Pick<AgentBundle, 'inspirations' | 'inspirationTotal'> {
-  const iso = (ms: number) => new Date(ms).toISOString();
-  return {
-    inspirations: field.inspirations.map((c) => ({
-      id: c.id,
-      agentId: profileId,
-      origin: c.source === "agent" ? "agent" : "human",
-      textPreview: c.preview,
-      // Quotes belong to evidence, which this summary does not fetch.
-      quote: null,
-      kind: c.kind,
-      capturedAt: iso(c.capturedMs),
-      updatedAt: iso(c.updatedMs),
-      producedBy: null,
-    })),
-    inspirationTotal: field.total,
-  };
-}
-
-
-// ---------------------------------------------------------------------------
 // Palette + sprites (rastered once at load and on DPR change, never per frame)
 // ---------------------------------------------------------------------------
 
@@ -749,9 +614,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const restoringViewRef = useRef(true), requestedViewRef = useRef(viewNavigation.view);
   requestedViewRef.current = viewNavigation.view;
   const [atWall, setAtWall] = useState<Space>({ kind: "self", id: "", name: SELF_WALL_NAME, col: 0 });
-  const requestedProfileId = viewNavigation.view?.wallId;
-  const memoryProfileId = restoringViewRef.current && requestedProfileId && requestedProfileId.toLowerCase() !== 'me'
-    ? requestedProfileId : atWall.kind === 'agent' ? atWall.id : storageScope?.profileId;
+  const memoryProfileId = storageScope?.profileId;
   const memoryScope = useMemo(() => storageScope && memoryProfileId ? {
     accountId: storageScope.accountId, profileId: memoryProfileId,
   } : null, [storageScope, memoryProfileId]);
@@ -1509,30 +1372,8 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
    * Null until the answer is in — the field is built from the owner's inspirations
    * AND the agents' kept memories together, and it is built once, whole.
    */
-  const [agents, setAgents] = useState<AgentBundle[] | null>(null);
+  const agents = useMemo<AgentBundle[]>(() => [], []);
   /** The axis of agent walls — identities only; memories load on approach. */
-  const [agentRoster, setAgentRoster] = useState<AgentRosterEntry[] | null>(null);
-  const [agentRosterFailed, setAgentRosterFailed] = useState(false), [agentRosterBusy, setAgentRosterBusy] = useState(false);
-  const rosterRequest = useRef(0), rosterMounted = useRef(true), rosterAbort = useRef<AbortController | null>(null);
-  useEffect(() => { rosterMounted.current = true; return () => { rosterMounted.current = false; rosterRequest.current += 1; rosterAbort.current?.abort(); }; }, []);
-  const refreshAgentRoster = useCallback(async () => {
-    const request = ++rosterRequest.current;
-    rosterAbort.current?.abort();
-    const controller = new AbortController(); rosterAbort.current = controller;
-    const deadline = window.setTimeout(() => controller.abort(), 20000);
-    setAgentRosterBusy(true);
-    try {
-      const { roster, mockBundles } = await loadAgentRoster(!storageScope, controller.signal);
-      if (!rosterMounted.current || request !== rosterRequest.current) return;
-      setAgentRoster(roster); setAgentRosterFailed(false);
-      setAgents(previous => mockBundles ?? previous ?? []);
-    } catch {
-      if (rosterMounted.current && request === rosterRequest.current) setAgentRosterFailed(true);
-    } finally {
-      window.clearTimeout(deadline);
-      if (rosterMounted.current && request === rosterRequest.current) setAgentRosterBusy(false);
-    }
-  }, [storageScope]);
   /* `wokenGroups`, `groupFieldTick` and `failedGroups` are gone: the three
      pieces of state a room's asynchronous arrival needed — its words exist
      now, its ground just landed, its data could not be fetched. `setMembersRef`
@@ -2583,22 +2424,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     updateLocale: next => auth ? auth.updatePreferredLocale(next) : Promise.resolve(),
     settleMs: NAME_SETTLE_MS,
   });
-  const onAgentProfilesChange = useCallback((profiles: ApiOwnedProfile[]) => {
-    rosterRequest.current += 1; rosterAbort.current?.abort(); setAgentRosterFailed(false); setAgentRosterBusy(false);
-    const roster = profiles.filter(profile => profile.type === 'agent');
-    setAgentRoster(previous => previous?.length === roster.length && previous.every((profile, i) =>
-      profile.id === roster[i].id && profile.name === roster[i].name && profile.hasInspirations === roster[i].hasInspirations && profile.createdAt === roster[i].createdAt
-    ) ? previous : roster);
-    setAgents(previous => {
-      if (!previous) return previous;
-      const next = previous.flatMap(bundle => {
-        const profile = roster.find(profile => profile.id === bundle.agent.id);
-        return profile ? [profile.name === bundle.agent.name ? bundle : { ...bundle, agent: { ...bundle.agent, name: profile.name } }] : [];
-      });
-      return next.length === previous.length && next.every((bundle, i) => bundle === previous[i]) ? previous : next;
-    });
-  }, []);
-  const [agentSetup, setAgentSetup] = useState<{ id: string; sequence: number } | null>(null);
   const settingsCard = auth ? {
     name: settingsWrites.name,
     nameBusy: settingsWrites.nameBusy,
@@ -2606,7 +2431,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     failed: settingsWrites.failed,
     onName: settingsWrites.onName,
     onLocale: settingsWrites.onLocale,
-    onAgentProfilesChange,
     activeProfileId: memoryScope?.profileId,
     /* ═══ THE PUBLIC PAGE IS NO LONGER OFFERED ════════════════════════
        Founder: "everything regarding public and private should also not be
@@ -2722,30 +2546,11 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
    * `walls.length === 1` and `canvas/simulation.ts` refuses lateral travel
    * outright, which is the honest answer for a world with one place in it.
    */
-  const walls = useMemo<Space[]>(() => {
-    const out: Space[] = [];
-    (agentRoster ?? []).forEach((a, i) => {
-      out.push({ kind: "agent", id: a.id, name: a.name, col: -(i + 1) });
-    });
-    out.reverse(); /* leftmost first, so the array is the axis in order */
-    out.push({ kind: "self", id: "", name: SELF_WALL_NAME, col: 0 });
-    return out;
-  }, [agentRoster]);
-  /* List profiles in creation order; chat follows the selected agent. */
-  const agentWalls = walls.filter(w => w.kind === 'agent').reverse();
-  const agentWall = agentWalls.find(w => w.id === atWall.id) ?? agentWalls[0] ?? null;
-  const conversationScope = useMemo(() => storageScope ? {
-    accountId: storageScope.accountId,
-    profileId: viewNavigation.view?.wallId ?? storageScope.profileId,
-  } : null, [storageScope, viewNavigation.view?.wallId]);
+  const walls = useMemo<Space[]>(() => [{ kind: 'self', id: '', name: SELF_WALL_NAME, col: 0 }], []);
+  const conversationScope = storageScope;
   const listViews = useProfileListViews(conversationScope);
-  const conversationAgent = agentRoster?.find(profile => profile.id === conversationScope?.profileId);
-  const conversationProfile = conversationScope?.profileId === storageScope?.profileId
-    ? { name: auth?.profile?.name ?? say('worldWallMe'), type: 'human' as const }
-    : conversationAgent ? { name: conversationAgent.name, type: 'agent' as const } : null;
-  /** Whether this wall takes a new note: yours, or an agent profile your account owns. */
-  const canWriteHere = atWall.kind === 'self' ? true
-    : Boolean(agentRoster?.some(profile => profile.id === atWall.id) && conversationAgent?.id === atWall.id);
+  const conversationProfile = { name: auth?.profile?.name ?? say('worldWallMe'), type: 'human' as const };
+  const canWriteHere = true;
   const wallsRef = useRef<Space[]>([]);
   wallsRef.current = walls;
   const agentsRef = useRef<AgentBundle[]>([]);
@@ -2908,244 +2713,11 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
    * per agent; a failed refresh keeps the last good ground rather than
    * blanking a wall that was honest a second ago.
    */
-  const agentRefreshBusyRef = useRef<Set<string>>(new Set());
-  /** When each agent's ground last refreshed. The refetch answers a TRAVEL,
-      but the loop re-announces an in-flight travel after every rebuild — and
-      the refetch's own setAgents IS a rebuild, so an unthrottled refresh
-      became a storm that restarted the trip forever: stuck mid-flight,
-      refetching both agents five times a second, no arrival, dark ground.
-      One refresh per approach is the meaning; the window is how it's said. */
-  const agentRefreshedAtRef = useRef<Map<string, number>>(new Map());
-  /** Fetched bundles wait here until the world is AT REST. Applying one
-      mid-travel rebuilds the whole simulation in flight, and everything
-      edge-triggered — the trip, the arrival, the pour — shears across that
-      boundary (observed as a wall that says six and lights none). Travel is
-      when the refresh is ASKED for; arrival is when it may land. */
-  const pendingAgentBundlesRef = useRef<Map<string, AgentBundle>>(new Map());
-  const pendingAgentFieldsRef = useRef(new Map<string, FieldLoad>());
-  // Explicit active-profile reading refreshes may also land at rest.
-  const agentLandOnRestRef = useRef(new Set<string>());
-  const agentFieldReadAtRef = useRef(new Map<string, number>());
-  const [agentFieldRevision, setAgentFieldRevision] = useState(0);
-  /** Which agents' last landed bundle could not read their top of mind. The
-      first load is forgiving — a failed read becomes an empty board rather
-      than no wall — so an empty bundle alone cannot tell "has formed nothing"
-      from "we could not ask". This is the difference, set as a bundle lands
-      and cleared when one lands with its reading (final review, 2026-10-16). */
-  const [agentReadingFailed, setAgentReadingFailed] = useState<ReadonlySet<string>>(() => new Set());
-  /** Per pending bundle: whether its top-of-mind read failed. Lands with it. */
-  const pendingReadingFailedRef = useRef<Map<string, boolean>>(new Map());
-  /** False once the page has gone: a fetch that settles after unmount, or a
-      rest the last loop reports on its way out, must not set state. */
-  const homeMountedRef = useRef(true);
-  useEffect(() => {
-    homeMountedRef.current = true;
-    return () => { homeMountedRef.current = false; };
-  }, []);
-  /** Put fetched bundles on their walls, and their reading's standing with them. */
-  const applyAgentBundles = useCallback((fresh: Map<string, AgentBundle>) => {
-    if (!homeMountedRef.current) return;
-    const failed = new Map<string, boolean>();
-    for (const id of fresh.keys()) {
-      agentLandOnRestRef.current.delete(id);
-      failed.set(id, pendingReadingFailedRef.current.get(id) === true);
-      pendingReadingFailedRef.current.delete(id);
-    }
-    const left = new Map(fresh);
-    setAgents((prev) => {
-      const replaced = (prev ?? []).map((a) => {
-        const f = left.get(a.agent.id);
-        left.delete(a.agent.id);
-        // Reading refreshes carry no archive. Keep a previously loaded field.
-        return f ? (f.inspirationTotal === undefined
-          ? { ...f, inspirations: a.inspirations, inspirationTotal: a.inspirationTotal }
-          : f) : a;
-      });
-      /* anything left is a FIRST load — the wall's memory arriving at all */
-      return [...replaced, ...left.values()];
-    });
-    setAgentReadingFailed((prev) => {
-      const next = new Set(prev);
-      for (const [id, f] of failed) if (f) next.add(id); else next.delete(id);
-      return next.size === prev.size && [...next].every((id) => prev.has(id)) ? prev : next;
-    });
-  }, []);
-  /* A FIRST LOAD THAT FINISHES AFTER ARRIVAL LANDS NOW. Arrival is the only
-     moment a pending bundle was applied, so the first visit to an agent whose
-     fetch finished after the camera settled drew its empty wall and said "I
-     haven't formed anything yet" over a reading the server had already
-     returned (screenshot check, 2026-10-16).
-     ONLY A FIRST LOAD, ONLY ON ITS OWN WALL, AND ONLY AT REST. Any
-     `setAgents` rebuilds the whole simulation (the pour depends on
-     `agents`), so landing is safe only while nothing moves — and
-     `atWallRef` cannot say that: it updates on ARRIVAL, so it still names
-     this agent once you are crossing away or aiming up. The loop's own
-     `navigationState()` can; while it is moving, or before there is a loop,
-     the bundle stays pending and lands at the next REST (below). Only that agent's bundle lands. A REFRESH — an agent already in
-     `agents` — still lands only at arrival, as it always has. A polled
-     at-rest version of this was tried and caused more than it fixed (final
-     review, 2026-10-16).
-     THE NEXT ARRIVAL IS NOT ALWAYS COMING. Aiming down to the ground and
-     back up ends on the same wall, so `atWall` never changes and the arrival
-     effect never runs: the bundle sat pending under an empty wall (retro
-     review of #436, 2026-10-17). So the loop also says when it came to rest
-     — `pushRested`, below — and this is asked again then. Not a poll: one
-     call per stop, and it does nothing unless a first load is waiting for
-     the wall the loop is standing on.
-     REST AND THE WALL BOTH COME FROM THE LOOP, and this trusts what it is
-     handed. Its two callers each hold the loop's own answer: the rest edge
-     passes the wall it stopped on, and a fetch that finishes asks the
-     running loop's `isResting()` — the same predicate that edge fires on —
-     and `navigationState().wall`. Never `atWallRef`, which is React's echo
-     of the last arrival and a render behind it. A FIRST load is a pending
-     bundle whose agent is not in `agents` yet — a refresh has a wall to
-     stand on until the next arrival; a first load has nothing.
-     Explicit tab-return refreshes and requested fields may also land here;
-     both still wait for the loop's own rest edge. */
-  const landFirstLoadOn = useCallback((wall: Space) => {
-    if (!homeMountedRef.current || wall.kind !== "agent") return;
-    const field = pendingAgentFieldsRef.current.get(wall.id);
-    if (field) {
-      pendingAgentFieldsRef.current.delete(wall.id);
-      setAgents(previous => (previous ?? []).map(agent => agent.agent.id === wall.id
-        ? { ...agent, ...agentField(wall.id, field) } : agent));
-    }
-    if (agentsRef.current.some((a) => a.agent.id === wall.id) && !agentLandOnRestRef.current.has(wall.id)) return;
-    const fresh = pendingAgentBundlesRef.current.get(wall.id);
-    if (!fresh) return;
-    pendingAgentBundlesRef.current.delete(wall.id);
-    applyAgentBundles(new Map([[wall.id, fresh]]));
-  }, [applyAgentBundles]);
-  /** Whether an agent wall's FIRST load is underway or has failed. Success
-      needs no entry here — the bundle's presence in `agents` is readiness. */
-  const agentFirstLoadRef = useRef<Map<string, "pending" | "failed">>(new Map());
-  const loadAgentWall = useCallback(
-    (agentId: string, refreshActive = false) => {
-      const entry = (agentRoster ?? []).find((r) => r.id === agentId);
-      if (!entry) return;
-      if (refreshActive) agentLandOnRestRef.current.add(agentId);
-      if (agentRefreshBusyRef.current.has(agentId)) return;
-      if (pendingAgentBundlesRef.current.has(agentId)) {
-        if (refreshActive) {
-          const sim = simApiRef.current;
-          const here = sim?.isResting() ? sim.navigationState().wall : null;
-          if (here?.kind === 'agent' && here.id === agentId) landFirstLoadOn(here);
-        }
-        return;
-      }
-      const loaded = (agents ?? []).some((a) => a.agent.id === agentId);
-      if (loaded) {
-        /* REFRESH posture: strict, throttled, keep-last-good on failure. */
-        const last = agentRefreshedAtRef.current.get(agentId) ?? 0;
-        if (!refreshActive && Date.now() - last < 60_000) return;
-        agentRefreshedAtRef.current.set(agentId, Date.now());
-        agentRefreshBusyRef.current.add(agentId);
-        void loadAgentBundle(entry, { strict: true })
-          .then((fresh) => {
-            pendingAgentBundlesRef.current.set(agentId, fresh);
-            pendingReadingFailedRef.current.set(agentId, false);
-            if (agentLandOnRestRef.current.has(agentId)) {
-              const sim = simApiRef.current;
-              const here = sim?.isResting() ? sim.navigationState().wall : null;
-              if (here?.kind === 'agent' && here.id === agentId) landFirstLoadOn(here);
-            }
-          })
-          .catch(() => {
-            /* keep the last good ground, and let the very next approach
-               retry rather than waiting out the throttle window */
-            agentRefreshedAtRef.current.delete(agentId);
-          })
-          .finally(() => {
-            agentRefreshBusyRef.current.delete(agentId);
-          });
-        return;
-      }
-      /* FIRST-LOAD posture: nothing is held yet, so failure degrades to an
-         honestly blank wall (wake-gated, like a room's) and the next
-         approach tries again. */
-      if (agentFirstLoadRef.current.get(agentId) === "pending") return;
-      agentFirstLoadRef.current.set(agentId, "pending");
-      agentRefreshBusyRef.current.add(agentId);
-      let readingFailed = false;
-      void loadAgentBundle(entry, { onReadingFailed: () => { readingFailed = true; } })
-        .then((fresh) => {
-          agentFirstLoadRef.current.delete(agentId);
-          agentRefreshedAtRef.current.set(agentId, Date.now());
-          pendingAgentBundlesRef.current.set(agentId, fresh);
-          pendingReadingFailedRef.current.set(agentId, readingFailed);
-          /* landed only if the loop is at rest ON THIS AGENT right now */
-          const sim = simApiRef.current;
-          const here = sim?.isResting() ? sim.navigationState().wall : null;
-          if (here?.kind === "agent" && here.id === agentId) landFirstLoadOn(here);
-        })
-        .catch(() => {
-          agentFirstLoadRef.current.set(agentId, "failed");
-        })
-        .finally(() => {
-          agentRefreshBusyRef.current.delete(agentId);
-        });
-    },
-    [agentRoster, agents, landFirstLoadOn],
-  );
-  const loadAgentWallRef = useRef(loadAgentWall);
-  loadAgentWallRef.current = loadAgentWall;
-
   const personalFieldDemand = useRef(false);
   personalFieldDemand.current = inField && atWall.kind === 'self' && !viewNavigation.view?.open;
   useEffect(() => {
     if (personalFieldDemand.current && fieldLoading && !fieldFailed && !offlineRef.current) retryFieldRef.current?.();
   }, [inField, atWall.kind, viewNavigation.view?.open, fieldLoading, fieldFailed]);
-
-  const agentFieldOwner = inField && atWall.kind === 'agent' && !viewNavigation.view?.open
-    ? atWall.id : null;
-  const agentFieldReady = Boolean(agentFieldOwner && agents?.some(a => a.agent.id === agentFieldOwner));
-  useEffect(() => {
-    if (!agentFieldOwner || !agentFieldReady || offlineRef.current) return;
-    if (Date.now() - (agentFieldReadAtRef.current.get(agentFieldOwner) ?? 0) < 60_000) return;
-    const controller = new AbortController();
-    const mutation = sourceListMutationRef.current;
-    void loadInspirations(agentFieldOwner, { signal: controller.signal }).then(field => {
-      if (controller.signal.aborted || !homeMountedRef.current || mutation !== sourceListMutationRef.current) return;
-      pendingAgentFieldsRef.current.set(agentFieldOwner, field);
-      agentFieldReadAtRef.current.set(agentFieldOwner, Date.now());
-      const sim = simApiRef.current;
-      const here = sim?.isResting() ? sim.navigationState().wall : null;
-      if (here?.kind === 'agent' && here.id === agentFieldOwner) landFirstLoadOn(here);
-    }).catch(() => { /* Keep the previous field; another entry retries. */ });
-    return () => controller.abort();
-  }, [agentFieldOwner, agentFieldReady, agentFieldRevision, landFirstLoadOn]);
-
-  /**
-   * Warm a wall, whatever kind it is. An agent refetches its own layers; your
-   * own wall has nothing to warm. The loop calls this the moment travel
-   * toward a wall begins, so arrival usually finds it ready — and current.
-   *
-   * A ROOM WAS THE THIRD ARM and it fetched its pooled field here. Gone with
-   * rooms (founder, 2026-10-12: "방 없애").
-   */
-  const loadWall = useCallback(
-    (w: Space) => {
-      if (w.kind === "agent") loadAgentWall(w.id);
-    },
-    [loadAgentWall],
-  );
-  const loadWallRef = useRef(loadWall);
-  loadWallRef.current = loadWall;
-
-  /** The camera came to rest on a wall. Discrete, pushed from the loop. */
-  /* THE PENDING BUNDLE LANDS AT ARRIVAL — the one moment the world is
-     provably at rest and freshly laid out. The rebuild this causes runs its
-     rest-convergence with the right wall under it, so the refreshed ground
-     settles in place instead of shearing a travel apart. */
-  useEffect(() => {
-    const pending = pendingAgentBundlesRef.current;
-    if (pending.size > 0) {
-      const fresh = new Map(pending);
-      pending.clear();
-      applyAgentBundles(fresh);
-    }
-    landFirstLoadOn(atWall);
-  }, [atWall, applyAgentBundles, landFirstLoadOn]);
 
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id && prev.name === w.name && prev.col === w.col ? prev : w));
@@ -3155,13 +2727,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /** The world came to rest on `wall`, wherever it stopped: its first load,
       if one is waiting, lands. Only from the loop that is running — a loop
       being torn down for a rebuild is not the world any more. */
-  const pushRested = useCallback((wall: Space, from: SimApi) => {
-    if (from !== simApiRef.current) return;
-    landFirstLoadOn(wall);
-  }, [landFirstLoadOn]);
-  const pushRestedRef = useRef(pushRested);
-  pushRestedRef.current = pushRested;
-
   // The route-restoration bridge below handles initial links and every POP,
   // not a one-shot latch tied to the first wall name.
 
@@ -3347,7 +2912,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     };
     retryReadingLoadRef.current = readInitialReading;
     readInitialReading();
-    void refreshAgentRoster();
     /* THE ROOMS WERE THE COLUMNS TO THE RIGHT, and `GET /groups` filled
        them, newest first. Gone, with the route (founder, 2026-10-12: "방
        없애"). The canon's privacy line is the thing to carry forward out of
@@ -3468,13 +3032,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
       /* the fixture has no server to ask, and a signed-out visitor has no
          business making three requests that will all 401 */
       if (offlineRef.current) return;
-      const activeProfile = memoryScopeRef.current?.profileId;
-      if (activeProfile && activeProfile !== storageScope?.profileId) {
-        agentFieldReadAtRef.current.delete(activeProfile);
-        setAgentFieldRevision(value => value + 1);
-        loadAgentWallRef.current(activeProfile, true);
-        return;
-      }
       /* THE SAME GUARD AS THE FIRST READ AND THE RECOVERED-SAVE READ. A save
          or a delete made while this list was in flight is not in it, and
          writing it over the field would drop the new memory or bring back the
@@ -3487,7 +3044,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
           setInspirations(field.inspirations);
           setFieldBeyond(beyondOf(field));
         }),
-        refreshAgentRoster(),
         readSkyRef.current(),
       ]);
       // Recheck the displayed artifact, not a newer headline behind an open
@@ -4033,12 +3589,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
      lands as an empty board, which would say "I haven't formed anything yet"
      over a reading that exists (final review, 2026-10-16). */
   const agentBundleMissing = standingAsAgent &&
-    (standingBundle === null || agentReadingFailed.has(atWall.id));
+    standingBundle === null;
   /* AND THE RESTING LINE IS THE AGENT'S AT NOW, from `wallChromeNow`, for the
      same reason `agentSays` is not `chrome`: `chrome.formingAlt` is written
      an effect late and at the dial's T. */
   const agentIsEmpty = standingAsAgent && !agentBundleMissing && !agentSays && !standingBundle?.topOfMind.notes.length &&
-    (standingBundle?.inspirationTotal === 0 || (standingBundle?.inspirationTotal === undefined && agentRoster?.find(profile => profile.id === atWall.id)?.hasInspirations === false));
+    standingBundle?.inspirationTotal === 0;
   const restingWord = standingAsAgent
     ? agentIsEmpty ? say("worldAgentNoMemories") : wallChromeNow.get(spaceKey(atWall))?.formingAlt ?? say("worldFormingNothingAdopted")
     : say(inspirations?.length || fieldBeyond ? "worldPersonalReadingNotReady" : "worldPersonalReadingEmpty");
@@ -4148,14 +3704,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
         headingRef,
         inspirationsRef,
         lastGoRef,
-        loadWallRef,
         localeRef,
         openSeekRef,
         paletteRef,
         panelArrowRef,
         parkedRef,
         pushArrivedRef,
-        pushRestedRef,
         sayLineRef,
         sayLineKeyRef,
         pressFlareRef,
@@ -4920,7 +4474,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
       standingAway(nav.view) ? { replace: true } : {},
     );
   }, []);
-  const menu = usePageMenu(locale, auth?.account?.id, agentWall ? { id: agentWall.id, name: agentWall.name } : null, openOverHome);
+  const menu = usePageMenu(locale, auth?.account?.id, null, openOverHome);
 
   /**
    * THE REACH — the ground, addressable without a pointer.
@@ -5442,21 +4996,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
           if (!readingMountedRef.current || sourceListMutationRef.current !== revision) return;
           setInspirations(field.inspirations); setFieldBeyond(beyondOf(field));
         }).catch(() => undefined);
-      } else {
-        const profile = agentRoster?.find(profile => profile.id === intent.profileId);
-        sourceListMutationRef.current += 1;
-        agentFieldReadAtRef.current.delete(intent.profileId);
-        pendingAgentFieldsRef.current.delete(intent.profileId);
-        if (profile) {
-          void loadAgentBundle(profile).then(bundle => {
-            if (intent.profileId === memoryScopeRef.current?.profileId) applyAgentBundles(new Map([[profile.id, bundle]]));
-          }).catch(() => undefined);
-        }
       }
       if (result.processing) sourceProcessing.track(made.id, result.processing);
       // Legacy text-only intents may still be in the journal. New bundle
       // intents have already committed all requested attachment rows.
-      setAgentRoster(previous => previous?.map(profile => profile.id === intent.profileId ? { ...profile, hasInspirations: true } : profile) ?? null);
       const links = Array.from(new Set(made.text.match(/https?:\/\/[^\s<>"')]+/g) ?? []));
       for (const url of intent.input.attachments ? [] : links) {
         const linkKey = `${made.id}:${url}`;
@@ -7675,7 +7218,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
       appliedViewKey.current = viewNavigation.key; appliedViewHref.current = hrefAt; restoringViewRef.current = false; return;
     }
     const target = desired && (desired.wallId === storageScope?.profileId ? walls.find((wall) => wall.kind === 'self') : resolveViewWall(desired, walls));
-    if (!target && desired?.wallId && agentRoster === null) return;
     if (!target || !desired) { setNavigationProblem('unavailable'); appliedViewKey.current = viewNavigation.key; appliedViewHref.current = null; restoringViewRef.current = false; return; }
     /* A PASS IS UNDER WAY, so nothing is applied until it finishes: an entry
        that differs from the last applied one only by `note=` must not skip a
@@ -7737,7 +7279,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     };
     void run();
     return () => { canceled = true; controller.abort(); window.clearTimeout(timer); };
-  }, [viewNavigation.key, phase, walls, agentRoster]);
+  }, [viewNavigation.key, phase, walls]);
   useEffect(() => {
     const linked = linkedReflectionRef.current;
     if (!linked || linked.panelId !== panelId) return;
@@ -8038,7 +7580,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
                    roster with it, and the reading; one Try again asks for
                    all four. */
                 void readSkyRef.current().catch(() => undefined);
-                void refreshAgentRoster().catch(() => undefined);
                 retryReadingLoadRef.current();
               } },
               ...(auth?.isAuthenticated ? [{ label: say("signOut"), onClick: () => {
@@ -10045,7 +9586,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                           <span className="jar-char-bubble-of">{say('worldBubbleActAgentMine')}</span>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={agentSays} locale={locale}
                             details={!offline && atWall.kind === 'agent' ? { profileId: atWall.id,
-                              onUpdated: () => loadAgentWallRef.current(atWall.id, true),
+                              onUpdated: () => verifyReadingRef.current(true),
                               onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.id, open: 'saves', note: id }) } : undefined} />
                         </>
                       ) : (
@@ -10106,7 +9647,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
                             <>
                               <span className="jar-char-bubble-of">{say('worldAgentEmptyHelp')}</span>
                               <span className="jar-char-bubble-acts">
-                                <button type="button" className="jar-char-bubble-act" onClick={() => setAgentSetup({ id: atWall.id, sequence: Date.now() })}>{say('worldAgentConnect')}</button>
                               </span>
                             </>
                           ) : null}
@@ -11878,18 +11418,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
            are a history rather than a depth of your own material, which is
            why they never sat among the three and why this corner is where
            they belong. */
-        left={<>{agentWall ? (
-              <ProfileSwitcher label={say('worldProfileSwitcher')}
-                options={[{ id: null, name: say('worldWallMe'), selected: atWall.kind !== 'agent' },
-                  ...agentWalls.map(wall => ({ id: wall.id, name: wall.name, selected: atWall.kind === 'agent' && atWall.id === wall.id }))]}
-                onSelect={id => { const wall = agentWalls.find(wall => wall.id === id); simApiRef.current?.goToWall(wall ? wall.col : 0, true); }} />
-            ) : null}
-          {agentRosterFailed ? <span className="waka-profile-error" role="alert">{say('worldAgentProfilesFailed')}
-            <button type="button" disabled={agentRosterBusy} onClick={() => void refreshAgentRoster()}>{say('worldRetry')}</button>
-          </span> : null}</>}
         account={auth?.account ? { name: auth.profile?.name, email: auth.account.email } : null}
         settings={settingsCard}
-        agentSetup={agentSetup}
         onSignOut={auth ? () => { void auth.logout(); } : undefined}
         /* AND HIDDEN WHILE A SAVED NOTE IS OPEN, which `mouthOpen` already
            does for a new one. Founder: "it should go to the same exact UI
@@ -11967,7 +11497,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         viewState={savesFocus ? undefined : listViews.inspirations}
         scope={conversationScope} ownerName={conversationProfile.name}
         locale={locale} profileId={conversationScope.profileId}
-        title={conversationProfile.type==='agent'?formatMessage(locale,'worldProfileInspirations',{name:conversationProfile.name}):say('worldMenuField')}
+        title={say('worldMenuField')}
         focus={savesFocus} onClearFocus={() => setSavesFocus(null)}
         /* THE SWITCH IS IN THE CORNER, AND IT ALWAYS WAS. Founder: "if the
            user changes it in the modal, then the page behind it should also
@@ -12014,7 +11544,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         key={`${conversationScope.accountId}:${conversationScope.profileId}:talks`}
         viewState={listViews.chats}
         locale={locale} profileId={conversationScope.profileId}
-        title={conversationProfile.type==='agent'?formatMessage(locale, 'worldProfileChats', { name: conversationProfile.name }):say('worldPastChats')}
+        title={say('worldPastChats')}
         onBack={backPage} backKind={listOrigin.current ? 'back' : 'close'} gesture={viewNavigation.href}
         onOpen={id=>{ openTalk(id); setChatFromList(id ?? 'new'); }}/>:null}
 
@@ -12071,7 +11601,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               scope={conversationScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
-              profile={conversationProfile}
+
               onHistory={()=>{listOrigin.current={kind:'chat',id:talkId??'new',principleId:viewNavigation.view?.principleId};openOverHome('conversations');}}
               /* The bar's middle group, lent for the mic and the ＋. */
               onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};}}

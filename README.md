@@ -2,7 +2,7 @@
 
 WAKA is a memory system. You save what moved you; WAKA works out what those
 saves have in common, and keeps one short account of what currently matters to
-you. Agents can do the same thing alongside you, into a memory of their own.
+you. One WAKA companion helps you keep and think with your own memory.
 
 It is built in four layers, each owned by a **profile**:
 
@@ -18,9 +18,10 @@ It is built in four layers, each owned by a **profile**:
    the layers below — or declared in the owner's own words. Served to agents
    as one canonical markdown document (`GET /api/principles.md`).
 
-An account has one **human** profile and any number of **agent** profiles. An
-agent using WAKA as its own memory works in its own stack rather than as a
-filter over yours.
+An account has one **human** profile that owns the person's memory. WAKA is
+one companion, not a selectable set of agents. Existing external agent-profile
+stacks and credentials remain isolated for legacy access and export; the app
+neither creates nor switches between them. See [the retention policy](docs/data-model.md#one-waka-companion-owner-ruling-2026-11-10).
 
 ## Finding your way in
 

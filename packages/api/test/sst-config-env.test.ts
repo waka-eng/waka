@@ -248,3 +248,18 @@ describe("the attachments bucket stays private, which is what makes its CORS rul
     expect(sstConfig).not.toMatch(/Principal:\s*"\*"/);
   });
 });
+
+describe('owner-approved production Chat',()=>{
+ it('shares the verified development model, enablement and key across API/worker while admin gates remain dev-only',()=>{
+  const shared=sstConfig.match(/const runtimeEnvironment = \{([\s\S]*?)\n    \};/)?.[1];
+  expect(shared).toContain('WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash-1017"');
+  expect(shared).toContain('WAKA_CONVERSATION_REPLIES: (isDevelopmentDomain || $app.stage === "production") && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0"');
+  expect(shared).toContain('OPENROUTER_API_KEY: openRouterApiKey.value');
+  const development=shared?.match(/\.\.\.\(isDevelopmentDomain[\s\S]*?\n        : \{\}\)/)?.[0];
+  expect(development).toContain('WAKA_ENABLE_ADMIN_ROUTES: "true"');
+  expect(development).toContain('WAKA_ENABLE_BACKGROUND_JOBS_ADMIN: "true"');
+  expect(development).not.toContain('WAKA_MODEL_CHAT');
+  expect(sstConfig).toMatch(/"BackgroundWorker", \{[\s\S]*?\.\.\.runtimeEnvironment/);
+  expect(sstConfig).toMatch(/"Api", \{[\s\S]*?\.\.\.runtimeEnvironment/);
+ });
+});

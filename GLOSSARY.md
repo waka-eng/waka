@@ -35,7 +35,8 @@ before it gets a name anywhere else.
 | Shared space | `space`, `membership` | **campfire** | a memory you tend together | Governed shared spaces | reserved |
 | Access control | `permissions` | **door** | you decide whose door opens | Access control | reserved |
 | A person's memory owner | `profiles.type = human` | Personal profile | your profile owns your personal memory | Human profile | **today** |
-| An agent's memory owner | `profiles.type = agent` | Agent profile | each agent profile owns one separate agent memory | Agent profile | **today** |
+| The application's single companion | No separate memory owner | WAKA | helps you keep and think with your own memory | WAKA companion | **today** |
+| A retained external agent's memory owner | `profiles.type = agent` | No selection or management surface | retained separately; never merged into your memory | Legacy agent profile | retained; new creation retired |
 | A device or MCP client's access | `sessions.profile_id` | Connection | a connection acting as one profile; disconnecting preserves its memory | Profile-bound session | **today** |
 | An agent's standing credential | `agent_keys` | API key | access to one agent's memory until you revoke it | Agent API key | **today** |
 | A person's limited standing credential | `keeper_keys` | Personal API key | read your memory and add inspirations to My profile until you revoke it | Personal API key | **today** |

@@ -499,7 +499,7 @@ it("opens review from a cold ?open=claims link once the claims arrive, and keeps
   world = await mountWorld(FACTS, { routerTools: <Where />, initialEntries: ["/w/me?open=claims"] });
   await world.step(4);
   expect(card(), "the old claims link did not open review").toBeTruthy();
-  expect(where.pathname, "the wall the link named was dropped").toBe("/w/me");
+  expect(where.pathname, "the own-memory link is canonical Home").toBe("/");
   expect(new URLSearchParams(where.search).get("open")).toBeNull();
 });
 

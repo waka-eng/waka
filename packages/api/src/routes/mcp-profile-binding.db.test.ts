@@ -22,7 +22,7 @@ let t: TestDatabase;
 beforeAll(async () => { t = await createTestDatabase(); state.db = t.db; });
 afterAll(async () => { await t?.cleanup(); });
 
-it('binds Noah and anotherone tokens to their exact profiles and refuses every cross-profile memory request', async () => {
+it('retains old exact profile bindings and refuses every cross-profile memory request', async () => {
   const email = `mcp-${randomUUID()}@example.test`;
   const [account] = await t.sql`INSERT INTO accounts(email) VALUES(${email}) RETURNING id`;
   const owners = await t.sql<{id:string;name:string;type:'human'|'agent'}[]>`INSERT INTO profiles(account_id,type,name)
@@ -42,17 +42,12 @@ it('binds Noah and anotherone tokens to their exact profiles and refuses every c
   const tokens = new Map<string,string>();
   for (const agent of owners.filter(row => row.type === 'agent')) {
     const start = await app.request(`/api/auth/cli/start?${new URLSearchParams({profile:agent.id,state:randomUUID(),callback:'http://127.0.0.1:9191/callback',device:agent.name})}`,{headers:headers(ownerToken)});
-    expect(start.status).toBe(200);
-    const fields:Record<string,string> = {};
-    for (const field of (await start.text()).matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g)) fields[field[1]!] = field[2]!.replace(/&amp;/g,'&');
-    const consent = await app.request('/api/auth/cli/consent',{method:'POST',headers:{Authorization:`Bearer ${ownerToken}`,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({...fields,profileId:agent.id}).toString()});
-    expect(consent.status).toBe(302);
-    const code = new URL(consent.headers.get('location')!).searchParams.get('code');
-    const exchange = await app.request('/api/auth/cli/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
-    expect(exchange.status).toBe(200);
-    const credential = await exchange.json() as {token:string;profile:{id:string;name:string;type:string}};
-    expect(credential.profile).toEqual({id:agent.id,name:agent.name,type:'agent'});
-    tokens.set(agent.id,credential.token);
+    expect(start.status).toBe(400); // no new legacy bindings are offered
+    // Existing pre-policy sessions retain their exact original authority.
+    const token=await signSessionToken({profileId:agent.id,email});
+    await createSessionRow({profileId:agent.id,token,deviceLabel:agent.name});
+    const credential={token,profile:{id:agent.id,name:agent.name,type:'agent'}};
+    tokens.set(agent.id,token);
     const identity = await (await app.request('/api/auth/me',{headers:headers(credential.token)})).json() as any;
     expect(identity.profile.id).toBe(agent.id);
     const roster = await (await app.request('/api/profiles',{headers:headers(credential.token)})).json() as any;

@@ -102,36 +102,7 @@ const press = () => world.container.querySelector<HTMLButtonElement>('.jar-char-
  * "every run", which is the same trick the browser reproduction used with
  * `page.route`.
  */
-it('drops a weather answer that was asked for on the wall you just left', async () => {
-  let answer!: (w: ApiWeather) => void;
-  vi.mocked(fetchTheWeather).mockImplementation(() => new Promise<ApiWeather>(resolve => { answer = resolve; }));
 
-  world = await mountWorld(FACTS); await settle();
-  expect(world.audit().wallKind).toBe('self');
-
-  /* ASK, ON YOUR OWN WALL. The press target is only rendered while nothing
-     is being said, so its presence is also the assertion that the creature
-     starts quiet. */
-  expect(press(), 'the creature has nothing to press').toBeTruthy();
-  await act(async () => { press()!.click(); });
-  await world.step(0);
-  expect(speech(), 'a prompt appears immediately while activity is loading').toBe('Want to chat about what’s on your mind?');
-
-  /* SWITCH FORM WHILE THE ANSWER IS STILL IN FLIGHT. */
-  const toAgent = face('Ouroboros maintainer');
-  expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
-  await act(async () => { toAgent!.click(); });
-  await world.step(0);
-  expect(world.audit().wallKind).toBe('agent');
-
-  /* NOW LET THE STALE ANSWER LAND. Before the fix this wrote straight into
-     the bubble and the founder's sentence about their own day appeared over
-     their agent — on the one wall where the companion is not even allowed to
-     offer a save. */
-  await act(async () => { answer(WEATHER); });
-  await settle();
-  expect(speech(), 'the wall you left is still talking on the wall you arrived at').toBeNull();
-});
 
 /**
  * THE OTHER HALF, AND IT NEEDS NO RACE AT ALL.
@@ -142,19 +113,7 @@ it('drops a weather answer that was asked for on the wall you just left', async 
  * gone" — so this is checked separately from the race: a fix that only bumped
  * the epoch would invalidate the NEXT write and leave this one on screen.
  */
-it('clears a sentence already on screen when the form changes', async () => {
-  vi.mocked(fetchTheWeather).mockResolvedValue(WEATHER);
-  world = await mountWorld(FACTS); await settle();
 
-  await act(async () => { press()!.click(); });
-  await settle();
-  expect(speech(), 'the creature never spoke, so there is nothing to clear').toBeTruthy();
-
-  await act(async () => { face('Ouroboros maintainer')!.click(); });
-  await world.step(0);
-  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-  expect(speech(), 'the bubble stayed on through the turn').toBeNull();
-});
 
 /**
  * AND THE CREATURE STILL TALKS AFTERWARDS.
@@ -164,27 +123,7 @@ it('clears a sentence already on screen when the form changes', async () => {
  * the answer must arrive as normal. The seal a switch puts on speech is for
  * sentences asked for BEFORE it; a press is a question asked here and now.
  */
-it('still answers a press made after the switch', async () => {
-  vi.mocked(fetchTheWeather).mockResolvedValue(WEATHER);
-  world = await mountWorld(FACTS); await settle();
 
-  await act(async () => { face('Ouroboros maintainer')!.click(); });
-  await world.step(0);
-  await settle();
-  /* BACK TO YOUR OWN FORM, because the press target is deliberately absent on
-     an agent's wall ("I shouldn't be saving it for my agent"). */
-  await act(async () => { face('Me')!.click(); });
-  await world.step(0);
-  await settle();
-  expect(world.audit().wallKind).toBe('self');
-
-  expect(press(), 'the creature has nothing to press after the switch').toBeTruthy();
-  await act(async () => { press()!.click(); });
-  await settle();
-  /* `asSentence` capitalises a clause the creature says alone — see
-     `capitalized.test.ts` — so the assertion is on the words, not the case. */
-  expect(speech()).toBe('You kept one memory today.');
-});
 
 /**
  * ═══ AND THE THIRD SPEAKER, WHICH NEITHER GUARD WAS WIRED TO ══════════════
@@ -243,23 +182,7 @@ it('keeps the reading first instead of announcing an away-window line', async ()
   expect(fetchTheWeather).not.toHaveBeenCalled();
 });
 
-it('drops the away-window line when the form changed before it spoke', async () => {
-  camePastAnHourAgo();
-  vi.mocked(fetchTheWeather).mockResolvedValue(TOLD);
-  world = await mountWorld(FACTS);
 
-  /* SWITCH FORM INSIDE THE GREETING'S OWN BEAT. No held promise is needed
-     here, which is the difference from the press race above: the delay is a
-     timer this product set itself, so the window is open on every run. */
-  const toAgent = face('Ouroboros maintainer');
-  expect(toAgent, 'the creature offers no way to take its agent form').toBeTruthy();
-  await act(async () => { toAgent!.click(); });
-  await world.step(0);
-  expect(world.audit().wallKind).toBe('agent');
-
-  await pastTheGreeting();
-  expect(speech(), 'a sentence about YOUR day is being said on your agent\'s wall').toBeNull();
-});
 
 /**
  * ═══ A PRESS THAT IS NEVER ANSWERED STILL SAYS SOMETHING ══════════════════
@@ -347,20 +270,4 @@ it('drops a pending activity response after another tap selects principles', asy
   expect(speech()).toBe('Which principles are guiding you lately?');
   await act(async () => { answer(WEATHER); await vi.advanceTimersByTimeAsync(400); });
   expect(speech()).toBe('Which principles are guiding you lately?');
-});
-
-it('starts with the reading when returning to a profile that had another prompt selected', async () => {
-  vi.mocked(fetchTheWeather).mockResolvedValue(WEATHER);
-  world = await mountWorld(FACTS); await settle();
-  const initialReading = world.container.querySelector('.jar-char-bubble')?.textContent;
-  expect(initialReading).toBeTruthy();
-  await act(async () => { press()!.click(); press()!.click(); });
-  await settle();
-  expect(speech()).toBe('Which principles are guiding you lately?');
-  await act(async () => { face('Ouroboros maintainer')!.click(); });
-  await world.step(0); await settle();
-  await act(async () => { face('Me')!.click(); });
-  await world.step(0); await settle();
-  expect(world.container.querySelector('.jar-char-bubble')?.textContent).toBe(initialReading);
-  expect(speech()).toBeNull();
 });

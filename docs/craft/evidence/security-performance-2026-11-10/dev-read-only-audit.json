@@ -1,0 +1,63 @@
+{
+  "stage": "development",
+  "observedAt": "2026-11-11T06:15:43.689Z",
+  "workflowRunId": 42971165948,
+  "workflowUrl": "https://github.com/waka-eng/waka/actions/runs/42971165948",
+  "headSha": "3992dc33ee09580b7b4562bd5aab04f8779dfdc4",
+  "verifyOnly": true,
+  "alarmExercises": false,
+  "deployment": "skipped",
+  "migrations": "skipped",
+  "secretUpdates": "skipped",
+  "sourcePolicy": {
+    "stage": "development",
+    "reads": [
+      {
+        "kind": "url_configuration",
+        "read": true
+      },
+      {
+        "kind": "resource_policy",
+        "read": true
+      }
+    ],
+    "urlAuthType": "NONE",
+    "publicPrincipalPresent": true,
+    "cloudFrontServiceGrantPresent": false,
+    "cloudFrontOnlyVerified": false,
+    "forwardedHeaderTrustVerified": false
+  },
+  "operations": {
+    "failures": [],
+    "logPagesComplete": true,
+    "controlledConcurrentMeasurement": false,
+    "alertDeliveryVerified": false
+  },
+  "alerts": {
+    "readOnly": true,
+    "complete": true,
+    "failures": [],
+    "externalDeliveryVerified": false
+  },
+  "queueSchedule": {
+    "stage": "development",
+    "readOnly": true,
+    "complete": true,
+    "verified": true,
+    "failures": [],
+    "rules": [
+      {
+        "scheduled": true,
+        "state": "ENABLED",
+        "dailySweep": true,
+        "retiredRecovery": false
+      }
+    ]
+  },
+  "limitations": [
+    "Development observations only; new cleanup infrastructure was not deployed.",
+    "Principal presence and URL auth type do not attest policy conditions, exclusive ingress or header rewriting.",
+    "No live trusted-proxy hop setting was changed.",
+    "Event delivery, dead-letter/notification delivery and production erasure timing remain open gates."
+  ]
+}

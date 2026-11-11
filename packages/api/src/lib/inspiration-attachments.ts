@@ -88,6 +88,10 @@ export async function verifyUploadedAttachment(input: { key: string; contentType
 export async function assertAttachmentKeysUnused(db: Pick<ReturnType<typeof getDb>, 'select' | 'execute'>, keys: string[]): Promise<void> {
   if (!keys.length) return;
   await lockAttachmentKeys(db, keys);
+  const closed = await db.execute(sql`SELECT 1 FROM attachment_objects
+    WHERE key_hash IN (${sql.join(keys.map(key => sql`encode(sha256(convert_to(${key},'UTF8')),'hex')`),sql`, `)})
+      AND closed_at IS NOT NULL LIMIT 1`);
+  if (closed.length) throw new InspirationAttachmentError(409, 'attachment_erased', 'This upload was removed. Upload it again.');
   const unused = await unreferencedAttachmentKeys(db, keys);
   if (unused.length !== new Set(keys).size) throw new InspirationAttachmentError(409, 'attachment_already_attached', 'This upload is already attached. Upload it again.');
 }

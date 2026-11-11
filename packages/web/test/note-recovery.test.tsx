@@ -12,7 +12,7 @@ import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { updateInspiration } from '../src/lib/api';
 import { readNoteEdit, writeNoteEdit, clearNoteEdit } from '../src/lib/note-edit-drafts';
 
-const S = vi.hoisted(() => ({ agent: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', text: 'Original saved text.',
+const S = vi.hoisted(() => ({ agent: 'profile-viewer', text: 'Original saved text.',
   holdRoster: false, release: null as null | (() => void), reads: [] as string[] }));
 const FACTS = { inspirations: [], groups: [] };
 vi.mock('../src/lib/api/principles', async original => ({ ...await original<typeof import('../src/lib/api/principles')>(),
@@ -20,10 +20,10 @@ vi.mock('../src/lib/api/principles', async original => ({ ...await original<type
 }));
 vi.mock('../src/lib/data', async original => ({ ...await original<typeof import('../src/lib/data')>(),
   ...dataMockFrom({ inspirations: [], groups: [] }),
-  loadInspirations: async (profile?: string) => dataMockFrom({inspirations:profile===S.agent?[{id:'agent-note',text:S.text,daysAgo:1}]:[],groups:[]}).loadInspirations(),
+  loadInspirations: async (profile?: string) => dataMockFrom({inspirations:(profile??VIEWER_ID)===S.agent?[{id:'agent-note',text:S.text,daysAgo:1}]:[],groups:[]}).loadInspirations(),
   loadInspiration: async (id: string, profile?: string) => {
-    S.reads.push(profile ?? 'human');
-    if(profile !== S.agent) throw new Error('Wrong owner');
+    S.reads.push(profile ?? VIEWER_ID);
+    if((profile??VIEWER_ID) !== S.agent) throw new Error('Wrong owner');
     return dataMockFrom({inspirations:[{id:'agent-note',text:S.text,daysAgo:1}],groups:[]}).loadInspiration(id);
   },
 }));
@@ -39,7 +39,7 @@ vi.mock('../src/lib/auth-context', async original => {
 let world: MountedWorld, location: ReturnType<typeof useLocation>;
 function RouterProbe(){location=useLocation();return null;}
 const scope={accountId:'owner',profileId:S.agent};
-const url=()=>`/w/${S.agent}/noah?open=saves&note=agent-note`;
+const url=()=>`/?open=saves&note=agent-note`;
 const page=()=>world.container.querySelector<HTMLTextAreaElement>('textarea.waka-note-page');
 async function settle(){for(let i=0;i<8;i++){await world.step(100);await act(async()=>{await vi.advanceTimersByTimeAsync(100);});}}
 async function boot(){world=await mountWorld(FACTS,{initialEntries:[url()],routerTools:<RouterProbe/>});await settle();}
@@ -47,11 +47,9 @@ async function edit(text:string){await act(async()=>{Object.getOwnPropertyDescri
 beforeAll(()=>{installCanvasStub();setViewport(1280,900);(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;});
 beforeEach(()=>{localStorage.clear();S.text='Original saved text.';S.holdRoster=false;S.release=null;S.reads=[];vi.mocked(updateInspiration).mockClear();vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});});
 afterEach(()=>{world?.unmount();vi.useRealTimers();});
-it('keeps the agent note URL while its roster loads, then recovers edited words after reload',async()=>{
-  S.holdRoster=true;await boot();
+it('recovers personal note edits after reload without moving their memory owner',async()=>{
+  await boot();
   expect(new URLSearchParams(location.search).get('note')).toBe('agent-note');
-  expect(page()).toBeNull();
-  S.holdRoster=false;await act(async()=>S.release?.());await settle();
   expect(page()?.value).toBe(S.text);expect(S.reads).toEqual([S.agent]);
   await edit('Edited words survive refresh.');
   expect(readNoteEdit(scope,'agent-note')?.text).toBe('Edited words survive refresh.');
@@ -65,7 +63,7 @@ it('keeps the agent note URL while its roster loads, then recovers edited words 
   expect(readNoteEdit(scope,'agent-note')).toBeNull();
   expect(world.container.textContent).toContain('Saved');
 });
-it('does not recover sibling or other-account drafts and warns about changed server text',async()=>{
+it('does not recover another profile or other-account drafts and warns about changed server text',async()=>{
   writeNoteEdit({accountId:'other',profileId:S.agent},'agent-note',S.text,'PRIVATE',null);
   writeNoteEdit({accountId:'owner',profileId:'anotherone'},'agent-note',S.text,'SIBLING',null);
   await boot();expect(page()?.value).toBe(S.text);world.unmount();
@@ -75,13 +73,9 @@ it('does not recover sibling or other-account drafts and warns about changed ser
   await act(async()=>page()!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));await settle();
   expect(vi.mocked(updateInspiration)).not.toHaveBeenCalled();
 });
-it('names the URL’s agent as the capture destination after a cold load',async()=>{
-  S.holdRoster=true;
-  world=await mountWorld(FACTS,{initialEntries:[`/w/${S.agent}/noah?compose=1`],routerTools:<RouterProbe/>});
-  await settle();
-  expect(world.container.querySelector('.jar-inspiration-composer .waka-surface-title')?.textContent ?? '').not.toContain('Me');
-  S.holdRoster=false;await act(async()=>S.release?.());await settle();
-  expect(world.container.querySelector('.jar-inspiration-composer .waka-surface-title')?.textContent).toMatch(/^Saving to Noah · /);
+it('names the human memory as the capture destination after a cold load',async()=>{
+  world=await mountWorld(FACTS,{initialEntries:['/?compose=1'],routerTools:<RouterProbe/>});await settle();
+  expect(world.container.querySelector('.jar-inspiration-composer .waka-surface-title')?.textContent).toMatch(/^Saving to Me · /);
   expect(new URLSearchParams(location.search).get('compose')).toBe('1');
 });
 it('refuses another tab’s overwrite and preserves newer words when an older save finishes',()=>{

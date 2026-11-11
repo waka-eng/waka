@@ -44,7 +44,7 @@ import { fetchProfiles } from "../src/lib/api";
 
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 
-it("re-reads the field, the sky and the agent roster on one Try again", async () => {
+it("re-reads personal memory on Try again without loading an agent roster", async () => {
   const { default: HomePage } = await import("../src/pages/Home");
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
@@ -54,13 +54,12 @@ it("re-reads the field, the sky and the agent roster on one Try again", async ()
     for (let i = 0; i < 5; i += 1) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(host.textContent).toContain("Couldn’t load your home.");
     const sky = vi.mocked(loadSignals).mock.calls.length;
-    const roster = vi.mocked(fetchProfiles).mock.calls.length;
     const reading = vi.mocked(loadTopOfMind).mock.calls.length;
     state.archiveDown = false;
     const retry = [...host.querySelectorAll("button")].find((button) => button.textContent === "Try again")!;
     await act(async () => retry.click());
     expect(vi.mocked(loadSignals).mock.calls.length, "Try again left the sky as the failure left it").toBeGreaterThan(sky);
-    expect(vi.mocked(fetchProfiles).mock.calls.length, "Try again left the agent roster as the failure left it").toBeGreaterThan(roster);
+    expect(fetchProfiles).not.toHaveBeenCalled();
     expect(vi.mocked(loadTopOfMind).mock.calls.length, "Try again left the reading as the failure left it").toBeGreaterThan(reading);
   } finally {
     act(() => root.unmount()); host.remove(); error.mockRestore();

@@ -2,7 +2,7 @@
  * Client for `/api/profiles` — mirrors `packages/api/src/routes/profiles.ts`.
  *
  * The memories one account owns: the person's own, plus a profile for each of
- * their agents. This is ownership, not session — who the caller currently acts
+ * retained legacy profiles. This is ownership, not session — who the caller currently acts
  * AS is `auth.ts`'s business.
  *
  * A NOTE ON THE TYPE BELOW, because it has already caused one collision.
@@ -17,9 +17,6 @@
 import {
   apiPath,
   getJson,
-  patchJson,
-  postJson,
-  requestVoid,
   type ApiProfileType,
 } from "./http";
 import type { SupportedLocale } from "../locales";
@@ -50,50 +47,4 @@ export async function fetchProfiles(signal?: AbortSignal): Promise<ApiOwnedProfi
   );
   if (!Array.isArray(body.profiles)) throw new Error("Invalid profiles response");
   return body.profiles;
-}
-
-/**
- * POST /profiles — mint an agent profile.
- *
- * Only a human-bound session may call this; the server refuses an agent
- * trying to give itself siblings. It also caps how many an account may hold,
- * and answers 409 at the ceiling — a message worth showing verbatim rather
- * than flattening into "could not create".
- */
-export async function createProfile(name: string): Promise<ApiOwnedProfile> {
-  const body = await postJson<{ profile: ApiOwnedProfile }>(
-    apiPath("/profiles"),
-    { name },
-    "That profile could not be created",
-  );
-  return body.profile;
-}
-
-/** PATCH /profiles/:id — rename a profile the account owns. */
-export async function renameProfile(
-  profileId: string,
-  name: string,
-): Promise<ApiOwnedProfile> {
-  const body = await patchJson<{ profile: ApiOwnedProfile }>(
-    apiPath(`/profiles/${encodeURIComponent(profileId)}`),
-    { name },
-    "That profile could not be renamed",
-  );
-  return body.profile;
-}
-
-/**
- * DELETE /profiles/:id — remove an agent profile and everything it remembers.
- *
- * The whole stack goes by cascade: its inspirations, its signals, every
- * version of its top of mind. The human profile cannot be deleted here — it
- * is the account's own memory and outlives everything but the account.
- */
-export async function deleteProfile(profileId: string): Promise<void> {
-  await requestVoid(
-    apiPath(`/profiles/${encodeURIComponent(profileId)}`),
-    "DELETE",
-    undefined,
-    "That profile could not be removed",
-  );
 }

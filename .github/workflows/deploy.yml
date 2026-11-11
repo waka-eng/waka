@@ -3,6 +3,11 @@ name: Deploy production
 on:
   workflow_dispatch:
     inputs:
+      preview_only:
+        description: "Review the checked production SST diff without secrets, migrations, deploy or DNS changes"
+        required: false
+        default: false
+        type: boolean
       release_legacy_alias:
         description: "Remove waka.im from the existing CloudFront distribution before deploying"
         required: false
@@ -11,33 +16,44 @@ on:
 
 concurrency:
   group: deploy-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 env:
-  # Avoid GitHub's 2026 Node 20 actions-runtime deprecation warning while still
-  # building the app itself with Node 20 below.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   PNPM_VERSION: "9.12.0"
-  NODE_VERSION: "20"
-  SST_STAGE: production
-  AWS_REGION: us-west-2
-  AWS_DEFAULT_REGION: us-west-2
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_APP }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_APP }}
-  PRODUCTION_DOMAIN: waka.im
-  AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
-  AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
-  AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
-  JWT_SECRET: ${{ secrets.JWT_SECRET }}
-  DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
-  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  NODE_VERSION: "24"
 
 jobs:
+  check:
+    uses: ./.github/workflows/ci.yml
+    with:
+      checkout_sha: ${{ github.sha }}
+
   deploy:
+    needs: check
+    if: ${{ needs.check.result == 'success' }}
+    environment: production
+    env:
+      SST_STAGE: production
+      AWS_REGION: us-west-2
+      AWS_DEFAULT_REGION: us-west-2
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_APP }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_APP }}
+      PRODUCTION_DOMAIN: waka.im
+      AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
+      AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
+      AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      WAKA_OPENROUTER_DATA_COLLECTION: ${{ vars.WAKA_OPENROUTER_DATA_COLLECTION_PRODUCTION }}
+      WAKA_OPENROUTER_REQUIRE_ZDR: ${{ vars.WAKA_OPENROUTER_REQUIRE_ZDR_PRODUCTION }}
+      WAKA_OPERATIONS_ALERT_TOPIC_ARN: ${{ vars.WAKA_OPERATIONS_ALERT_TOPIC_ARN_PRODUCTION }}
+      WAKA_ALERT_SNS_TOPIC_ARN: ${{ vars.WAKA_ALERT_SNS_TOPIC_ARN_PRODUCTION }}
     name: SST deploy waka.im
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -45,6 +61,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify checked release commit before production operations
+        env:
+          EXPECTED_RELEASE_SHA: ${{ github.sha }}
+          RELEASE_CHECK_RESULT: ${{ needs.check.result }}
+        run: node scripts/verify-release-commit.mjs
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -87,8 +111,23 @@ jobs:
             exit 1
           fi
 
+      - name: Validate explicit stage options
+        run: node scripts/validate-stage-options.mjs
+
+      - name: Verify separate configured database targets
+        env:
+          DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL_DEV }}
+          PRODUCTION_DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
+        run: node scripts/check-deployment-databases.mjs
+
+      - name: Preview checked production infrastructure
+        if: ${{ inputs.preview_only }}
+        env:
+          SST_SECRET_OpenRouterApiKey: ${{ secrets.OPENROUTER_API_KEY }}
+        run: node scripts/preview-production.mjs
+
       - name: Release legacy CloudFront alias
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_legacy_alias }}
+        if: ${{ !inputs.preview_only && github.event_name == 'workflow_dispatch' && inputs.release_legacy_alias }}
         shell: bash
         run: |
           set -euo pipefail
@@ -123,6 +162,7 @@ jobs:
           done
 
       - name: Set SST production secrets
+        if: ${{ !inputs.preview_only }}
         shell: bash
         run: |
           set -euo pipefail
@@ -135,12 +175,15 @@ jobs:
           pnpm sst secret set OpenRouterApiKey "$OPENROUTER_API_KEY" --stage "$SST_STAGE"
 
       - name: Apply production database migrations
+        if: ${{ !inputs.preview_only }}
         run: pnpm db:migrate
 
       - name: Deploy SST production stage
+        if: ${{ !inputs.preview_only }}
         run: pnpm sst deploy --stage "$SST_STAGE"
 
       - name: Connect Route53 production domain
+        if: ${{ !inputs.preview_only }}
         shell: bash
         run: |
           set -euo pipefail

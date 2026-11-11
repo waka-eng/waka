@@ -11,6 +11,7 @@ import {rankConversationCandidates,readSemanticConversationCandidates,type Conve
 import {measurePerformanceStage} from './performance-stages.js';
 import {readConversationReadings} from './conversation-readings.js';
 export const CONVERSATION_LIMITS={conversations:100,messages:200,inputCharacters:4000,contextCharacters:16000,modelCalls:20,attemptsPerMessage:3,outputTokens:CONVERSATION_REPLY_OUTPUT_TOKENS} as const;
+export const CONVERSATION_REFERENCE_BATCH_LIMITS={principle:10,top_of_mind_entry:5,inspiration:6} as const;
 export const conversationRepliesEnabled=()=>process.env.WAKA_CONVERSATION_REPLIES==='1';
 export const conversationCapabilities=()=>({generationEnabled:conversationRepliesEnabled(),limits:{...CONVERSATION_LIMITS,modelCalls:conversationRepliesEnabled()?CONVERSATION_LIMITS.modelCalls:0}});
 type Reader=Pick<ReturnType<typeof getDb>,'select'>;
@@ -38,9 +39,9 @@ export async function readConversationContext(db:Reader,profileId:string,questio
   return measurePerformanceStage('context_read','conversation',async()=>{
   const byKind=(kind:ConversationReference['kind'])=>referenceIds?.filter(row=>row.kind===kind).map(row=>row.id);
   const pIds=byKind('principle'),rIds=byKind('top_of_mind_entry'),iIds=byKind('inspiration');
-  const p=await db.select({id:principles.id,text:principles.statement,revision:sql<string>`${principles.statementRevision}::text`,rank:principles.rank,state:principles.state,locked:sql<boolean>`${principles.lockedAt} IS NOT NULL`,supportCurrent:sql<boolean>`${principles.unsupportedAt} IS NULL AND ${personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)}`})
+  const p=pIds?.length===0?[]:await db.select({id:principles.id,text:principles.statement,revision:sql<string>`${principles.statementRevision}::text`,rank:principles.rank,state:principles.state,locked:sql<boolean>`${principles.lockedAt} IS NOT NULL`,supportCurrent:sql<boolean>`${principles.unsupportedAt} IS NULL AND ${personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)}`})
     .from(principles).where(and(eq(principles.profileId,profileId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS),pIds?inArray(principles.id,pIds):undefined)).orderBy(...(initialPrincipleId?[desc(sql`${principles.id}=${initialPrincipleId}::uuid`)]:[]),asc(principles.rank),asc(principles.id)).limit(10);
-  const r=(await readConversationReadings(db,profileId,question,rIds)).map(row=>{
+  const r=(rIds?.length===0?[]:await readConversationReadings(db,profileId,question,rIds)).map(row=>{
     const {historical,...proof}=row;
     return {...row,hash:'reading-v2:'+conversationHash(proof),legacyHash:conversationHash({id:row.id,text:row.text,revision:row.revision,locked:row.locked,supportCurrent:row.supportCurrent})};
   });
@@ -124,8 +125,8 @@ export async function currentConversationReferences(db:Reader,scope:Conversation
   const available=await referenceSourcesIn(db,scope,references);
   return references.map(reference=>available.find(source=>matchesReference(source,reference))??null);
 }
-/** Per-read batching, never a cross-request source cache. Three identities per
- * chunk fit every existing excerpt allowance, even with full-length sources. */
+/** Per-read, per-kind batches fit both the SQL row cap and excerpt allowance
+ * (10*1600 principles, 5*1600 readings, 6*1600 material). No proof cache. */
 export async function currentConversationReferenceGroups(db:Reader,scope:ConversationScope,groups:ConversationReference[][]):Promise<Array<Array<ConversationSource|null>>>{
   if(groups.length>CONVERSATION_LIMITS.messages||groups.some(group=>group.length>3))throw new Error('Conversation reference bounds');
   const key=(source:{kind:string;id:string})=>`${source.kind}:${source.id}`;
@@ -135,10 +136,13 @@ export async function currentConversationReferenceGroups(db:Reader,scope:Convers
     // enriched one. Prefer that representative if either proof is requested.
     if(!identities.has(key(reference))||reference.kind==='inspiration'&&/^[a-f0-9]{64}$/.test(reference.hash))identities.set(key(reference),reference);
   }
-  const selected=[...identities.values()],available=new Map<string,ConversationSource[]>();
-  for(let offset=0;offset<selected.length;offset+=3){
-    for(const source of await referenceSourcesIn(db,scope,selected.slice(offset,offset+3))){
-      const rows=available.get(key(source))??[];rows.push(source);available.set(key(source),rows);
+  const available=new Map<string,ConversationSource[]>();
+  for(const kind of ['principle','top_of_mind_entry','inspiration'] as const){
+    const selected=[...identities.values()].filter(reference=>reference.kind===kind),limit=CONVERSATION_REFERENCE_BATCH_LIMITS[kind];
+    for(let offset=0;offset<selected.length;offset+=limit){
+      for(const source of await referenceSourcesIn(db,scope,selected.slice(offset,offset+limit))){
+        const rows=available.get(key(source))??[];rows.push(source);available.set(key(source),rows);
+      }
     }
   }
   return groups.map(group=>group.map(reference=>available.get(key(reference))?.find(source=>matchesReference(source,reference))??null));

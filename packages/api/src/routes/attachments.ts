@@ -60,6 +60,7 @@ import { ALLOWED_ATTACHMENT_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES, isAllowed
 import { InspirationAttachmentError, assertAttachmentKeysUnused, lockAttachmentKeys, verifyUploadedAttachment, type AttachmentHead } from '../lib/inspiration-attachments.js';
 import { ConversationAttachmentError, MAX_MESSAGE_ATTACHMENTS, MAX_STAGED_MESSAGE_ATTACHMENTS, discardStagedAttachment, messageAttachmentSelection, serializeMessageAttachment, stagedCapCutoff, unreferencedAttachmentKeys } from '../lib/conversation-attachments.js';
 import { sweepAttachmentObjects, type DeleteAttachmentObjects } from '../lib/attachment-sweep.js';
+import { recordAttachmentUpload } from '../lib/attachment-uploads.js';
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { validationDetails } from "../lib/validation.js";
 import { profileQuerySchema } from './inspirations-validation.js';
@@ -877,8 +878,8 @@ attachmentsRoutes.post("/", async (c) => {
  * POST /api/attachments/presign
  *
  * Returns a presigned PUT URL for a direct-to-S3 upload. It deliberately does
- * NOT create the row — that happens after the upload succeeds, so a failed
- * upload never leaves a row pointing at a missing object.
+ * NOT create an attachment — that happens after the upload succeeds. It does
+ * commit independent issuance inventory so an abandoned/late PUT is tracked.
  */
 attachmentsRoutes.post("/presign", async (c) => {
   let rawBody: unknown;
@@ -946,6 +947,8 @@ attachmentsRoutes.post("/presign", async (c) => {
   }
 
   const expiresAt = new Date(Date.now() + PRESIGN_TTL_SECONDS * 1000).toISOString();
+  const recorded = await recordAttachmentUpload(getDatabase(), { key, profileId: targetProfileId, expiresAt: new Date(expiresAt) });
+  if (!recorded) return c.json({ error: 'Upload destination was removed' }, 404);
 
   return c.json(
     {
