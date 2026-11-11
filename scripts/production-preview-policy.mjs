@@ -8,3 +8,18 @@ export function verifyExistingProductionBootstrap(read){
  if(!(state.ContentLength>0))throw Error('Existing production state required');
  return {sstVersion:'3.19.3',bootstrapVersion:5,existingState:true,existingPassphrase:true,bootstrapUpgradeAllowed:false,updateHistoryMetadataWriteExpected:true};
 }
+
+/** Select structural Pulumi metadata only. No inputs, outputs, IDs or values. */
+export function summarizePreviewEvents(raw){
+ const operations=[];
+ const allowed=new Set(['create','update','delete','replace','create-replacement','delete-replaced','import','import-replacement']);
+ for(const line of raw.split('\n')){
+  if(!line.trim())continue;
+  const event=JSON.parse(line),m=event.resourcePreEvent?.metadata;
+  if(!m||!allowed.has(m.op))continue;
+  const resource=m.urn?.split('::').at(-1);
+  if(!/^[A-Za-z][A-Za-z0-9_.:-]*$/.test(resource??'')||!/^[A-Za-z][A-Za-z0-9_:./-]*$/.test(m.type??''))throw Error('Unexpected resource identifier');
+  operations.push({operation:m.op,resource,type:m.type,changedProperties:Object.keys(m.detailedDiff??{}).filter(k=>/^[A-Za-z0-9_.\[\]"'-]+$/.test(k))});
+ }
+ return operations;
+}

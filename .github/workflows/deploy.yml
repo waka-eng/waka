@@ -126,6 +126,14 @@ jobs:
           SST_SECRET_OpenRouterApiKey: ${{ secrets.OPENROUTER_API_KEY }}
         run: node scripts/preview-production.mjs
 
+      - name: Save sanitized infrastructure preview
+        if: ${{ inputs.preview_only && always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-preview
+          path: production-preview.json
+          if-no-files-found: ignore
+
       - name: Release legacy CloudFront alias
         if: ${{ !inputs.preview_only && github.event_name == 'workflow_dispatch' && inputs.release_legacy_alias }}
         shell: bash
