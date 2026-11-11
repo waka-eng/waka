@@ -79,7 +79,11 @@ DDL/deploy/DNS steps) → Main review → dispatch same immutable candidate with
 preview_only=false and release_legacy_alias=false → observe deploy → read-only
 runtime/queue/bindings/health/assets checks plus one synthetic chat answer.
 Preview supplies the proposed OpenRouter secret in memory without persisting SST
-secrets. SST's documented Secret component marks values secret; our preview emits
+secrets. SST3.19.3 diff is NOT a strict no-write command: upstream run.go
+uses `command != "diff "` with a trailing space and writes an update-history
+record. Main reviews this bounded metadata effect separately. An explicit
+preflight refuses missing/old/new bootstrap versions, missing state and missing
+passphrase before CLI initialization; no bootstrap upgrade is permitted. SST's documented Secret component marks values secret; our preview emits
 only typed resource-operation identifiers, never raw state/diagnostics/artifacts.
 See [SST Secret](https://sst.dev/docs/component/secret/) and its versioned
 [implementation](https://github.com/sst/sst/blob/v3.19.3/platform/src/components/secret.ts).
@@ -108,8 +112,8 @@ Postdeploy: verify API/worker key equality privately, replies/model/admin flags,
 production DB/storage bindings, cleanup queue/redrive/notification consumer and
 current built assets/health. Create a unique synthetic account with no saved
 memory, send one bounded question with requestReply, wait with bounded backoff
-for its answer (at most one normal embedding+answer attempt,1200output-token
-ceiling), then delete only that synthetic account via the authorized API. No
+for its answer (one normal user request,1200output-token ceiling; existing worker transient
+retry policy can add attempts, so record actual attempts/usage), then delete only that synthetic account via the authorized API. No
 owner content, broad evaluations or provider batch. Report actual result/limits.
 
 External alert delivery, live late-PUT reconciliation/crash/retry exercise and a

@@ -100,7 +100,8 @@ it('rejects new explicit reply atomically at quota but preserves Stop and read p
  expect((await f.post(`/${chat}/replies/${randomUUID()}/stop`,{})).status).toBe(200);
 });
 it('rolls back on storage failure before dispatch and recovers after storage returns, with no partial charge',async()=>{
- const a=await owner(),f=client(a),body={id:randomUUID(),firstMessage:{id:randomUUID(),content:'Keep words on storage failure'}};
+ vi.stubEnv('WAKA_CONVERSATION_REPLIES','1');
+ const a=await owner(),f=client(a),body={id:randomUUID(),firstMessage:{id:randomUUID(),content:'Keep words on storage failure',requestReply:true}};
  await t.sql`ALTER TABLE account_chat_limits RENAME TO account_chat_limits_unavailable`;
  try {expect((await f.post('',body)).status).toBe(500);expect(await t.sql`SELECT id FROM conversations`).toHaveLength(0);expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);}
  finally {await t.sql`ALTER TABLE account_chat_limits_unavailable RENAME TO account_chat_limits`;}

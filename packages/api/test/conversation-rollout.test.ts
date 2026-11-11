@@ -1,14 +1,14 @@
 /** WHAT THIS MOCKS, AND WHY: nothing. Read deployment sources to prevent
- * accidental production enablement or a split API/worker configuration. */
+ * unapproved stage enablement or a split API/worker configuration. */
 import {readFileSync} from 'node:fs';
 import {expect,it} from 'vitest';
 const sst=readFileSync(new URL('../../../sst.config.ts',import.meta.url),'utf8');
 const workflow=readFileSync(new URL('../../../.github/workflows/deploy-dev.yml',import.meta.url),'utf8');
 const ci=readFileSync(new URL('../../../.github/workflows/ci.yml',import.meta.url),'utf8');
-it('gates enablement by the existing dev-stage predicate and an operator off switch',()=>{
+it('gates enablement to approved production/dev stages and retains an operator off switch',()=>{
   expect(sst).toContain('const isDevelopmentDomain = $app.stage === "development" || $app.stage === "dev"');
-  expect(sst).toContain('WAKA_CONVERSATION_REPLIES: isDevelopmentDomain && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0"');
-  expect(sst).toContain('...(isDevelopmentDomain\n        ? {\n            WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash-1017"');
+  expect(sst).toContain('WAKA_CONVERSATION_REPLIES: (isDevelopmentDomain || $app.stage === "production") && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0"');
+  expect(sst).toContain('WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash-1017"');
 });
 it('pins the deployed and evaluated chat model to the same DeepSeek version',()=>{
   expect(workflow).toContain('.chatModel == "deepseek/deepseek-v4.1-flash-1017"');

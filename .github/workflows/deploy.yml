@@ -245,3 +245,15 @@ jobs:
           aws route53 change-resource-record-sets \
             --hosted-zone-id "$hosted_zone_id" \
             --change-batch file://route53-change-batch.json
+
+      - name: Verify production runtime and cleanup wiring without secrets
+        if: ${{ !inputs.preview_only }}
+        run: node scripts/production-release-audit.mjs > production-release-audit.json
+
+      - name: Save sanitized production acceptance
+        if: ${{ !inputs.preview_only && always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-release-audit
+          path: production-release-audit.json
+          if-no-files-found: ignore
