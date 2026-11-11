@@ -210,9 +210,30 @@ Pinned SST3.19.3 serializes a Cron target as `JSON.stringify(args.event || {})`.
 The existing daily worker Cron supplies no event, while the worker only enters
 maintenance for `source:"aws.events"` and `detail-type:"Scheduled Event"`.
 Consequently the current source drains ordinary jobs but does not reach the
-maintenance branch. `DailySweeps` is **not verified current coverage**. A separate
-minimal target-payload repair and real worker-path regression are being prepared
-for review; no live activation or catch-up invocation is authorized by this note.
+maintenance branch. `DailySweeps` is **not verified current coverage**. The separate
+repair sets that existing contract from `infra/background-worker-event.json`.
+The regression serializes the actual configured JSON, passes it through the real
+worker guard/handler with I/O stubbed, proves `{}` misses all five maintenance
+functions, and proves the corrected payload reaches each while an idle normal
+drain still claims nothing. No live activation or catch-up invocation is
+authorized by this note.
+
+Activation changes the existing **daily** branch in both deployed stages; it
+does not add a schedule, manual catch-up, migration, historical-store binding or
+memory-regeneration command. The newly reachable maintenance is:
+
+| Function/data category | Existing eligibility and protections | Model/enqueue implications |
+| --- | --- | --- |
+| `sweepBackgroundJobRuns` | Removes operational claim-history rows started more than two days ago. Active worker lifetime is bounded to 14 minutes; the one-hour model/account budget window is retained. | No model/enqueue call. |
+| `settleAbandonedExhaustedLeases` | At most 100 running final-attempt leases locked more than 24 hours ago, row locking/SKIP LOCKED and repeated status/attempt predicates. Marks failed; an already requested newer rerun becomes pending with its existing bumped request version. | No model call itself. Newly pending pre-existing rerun work can be processed by the following ordinary bounded drain and existing account/model budgets. This is a real runtime activation to review. |
+| `sweepDeletedShelf` | Deletes only deleted-inspiration copies older than the existing 30-day shelf policy, never live inspiration rows. Its eligible-row SQL is not batch-limited. Surviving live/retained attachment references are checked before durable object cleanup. | No model/enqueue call. The first natural daily run can remove previously unswept expired shelf copies; no manual sweep is proposed. |
+| `sweepStaleStagedAttachments` | Seven-day-old staged rows with neither message nor inspiration reference; SKIP LOCKED, repeated eligibility predicate, up to 20×500 rows. Rechecks surviving attachment references before cleanup. | No model/enqueue call. Active send/finalize rows are not treated as abandoned. |
+| `drainAttachmentObjects` | Up to ten existing batches of 100 authoritative inventory rows. Common key lock/reference checks, durable closed fence before external I/O, exact generation settlement and intended store-scope match remain unchanged. Live/retained copies win; unbound historical stores remain quarantined. | No model/enqueue call; may physically delete eligible unreferenced bytes. No arbitrary bucket/orphan sweep, key rebinding or shortened grace. |
+
+All five functions and their underlying retention/fencing logic already exist;
+the correction changes reachability, not their criteria. The normal worker drain
+still follows with its existing claim/backoff/account/provider controls. Live
+late-PUT/deletion/restart/DLQ acceptance and an erasure SLA remain separate gates.
 
 ## Rollout and remaining gates
 

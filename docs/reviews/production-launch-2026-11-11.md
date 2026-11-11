@@ -25,6 +25,12 @@ being prepared; PostHog remains disabled without an owner-supplied public projec
 and host plus verified plan/cap. No live alarm/recovery, browser project receipt
 or overall operational gate is marked passed from this code.
 
+Source inspection also found the daily Cron's default `{}` target misses the
+worker's scheduled-maintenance guard. A separate explicit target-payload repair
+has a real worker-path regression with safely stubbed I/O. Its retention/cleanup
+and potential pre-existing-rerun effects are enumerated in the monitoring runbook;
+live activation is held for concrete source/infra review. No catch-up was run.
+
 ## Already passed; do not repeat without a reason
 
 - Exact-SHA reusable CI before production mutations; automatic main release,

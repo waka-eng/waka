@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {drainAttachmentObjects} from './lib/attachment-sweep.js';
 
 import * as jobWakes from './lib/background-job-wake.js';
 import { handler, isScheduledEvent } from "./background-worker.js";
@@ -43,8 +46,13 @@ vi.mock("./lib/db.js", async original => ({
   ...await original<typeof import('./lib/db.js')>(),
   getDb: vi.fn(() => ({})),
 }));
+vi.mock('./lib/attachment-sweep.js',async original=>({
+  ...await original<typeof import('./lib/attachment-sweep.js')>(),
+  drainAttachmentObjects:vi.fn(),
+}));
 
 beforeEach(() => {
+  vi.mocked(drainAttachmentObjects).mockReset().mockResolvedValue({selected:0,deleted:0,retained:0,failed:0});
   vi.mocked(jobWakes.armBackgroundJobLease).mockReset().mockResolvedValue(true);
   vi.mocked(jobWakes.cancelBackgroundJobLease).mockReset().mockResolvedValue(undefined);
   vi.mocked(jobWakes.cancelBackgroundJobWakes).mockReset().mockResolvedValue(undefined);
@@ -205,6 +213,24 @@ describe("background worker cron handler", () => {
    copies and chat uploads staged for a message never sent. */
 describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads", () => {
   const scheduled = { source: "aws.events", "detail-type": "Scheduled Event" };
+  it('connects the configured serialized Cron input to the real maintenance branch; old empty input misses it',async()=>{
+    const root=resolve(__dirname,'../../..');
+    const config=readFileSync(resolve(root,'sst.config.ts'),'utf8');
+    expect(config).toContain("import scheduledWorkerEvent from './infra/background-worker-event.json'");
+    expect(config.slice(config.indexOf('const dailyDrain ='),config.indexOf('// Completed PUTs'))).toContain('event: scheduledWorkerEvent');
+    const configured=JSON.parse(readFileSync(resolve(root,'infra/background-worker-event.json'),'utf8'));
+    expect(configured).toEqual(scheduled);
+    // SST3.19.3 Cron.createTarget uses JSON.stringify(args.event || {}).
+    const oldInput=JSON.parse(JSON.stringify({}));
+    await handler(oldInput);expect(isScheduledEvent(oldInput)).toBe(false);
+    for(const sweep of [sweepBackgroundJobRuns,settleAbandonedExhaustedLeases,sweepDeletedShelf,sweepStaleStagedAttachments,drainAttachmentObjects])expect(sweep).not.toHaveBeenCalled();
+    const targetInput=JSON.parse(JSON.stringify(configured));
+    await handler(targetInput);expect(isScheduledEvent(targetInput)).toBe(true);
+    for(const sweep of [sweepBackgroundJobRuns,settleAbandonedExhaustedLeases,sweepDeletedShelf,sweepStaleStagedAttachments,drainAttachmentObjects])expect(sweep).toHaveBeenCalledTimes(1);
+    // Ordinary drain eligibility/model budgets are unchanged; idle fixtures
+    // claim nothing and no storage/provider/Scheduler operation is real.
+    expect(runBackgroundJobWorker).toHaveBeenCalledTimes(2);
+  });
   it("are the scheduled cron's alone, never an enqueue or a local wake", async () => {
     expect(isScheduledEvent(scheduled)).toBe(true);
     expect(isScheduledEvent({ mode: "enqueue" })).toBe(false);

@@ -1,4 +1,5 @@
 /// <reference path="./.sst/platform/config.d.ts" />
+import scheduledWorkerEvent from './infra/background-worker-event.json';
 
 /**
  * SST v3 (Ion) application config.
@@ -451,6 +452,7 @@ export default $config({
      */
     const dailyDrain = new sst.aws.Cron("BackgroundJobDrain", {
       schedule: "rate(1 day)",
+      event: scheduledWorkerEvent,
       enabled: true,
       function: backgroundWorker.arn,
     });
