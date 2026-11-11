@@ -75,8 +75,8 @@ The private recoverable pre-setup PG17 archive is retained (see DB setup report)
 No reset, object sweep or new development/local-owner migration is authorized.
 
 Sequence: exact candidate CI → checked preview-only workflow (no alias/secrets/
-DDL/deploy/DNS steps) → Main review → dispatch same immutable candidate with
-preview_only=false and release_legacy_alias=false → observe deploy → read-only
+DDL/deploy/DNS steps) → Main review → non-force fast-forward main to the exact
+reviewed candidate → observe the automatic main-push release → read-only
 runtime/queue/bindings/health/assets checks plus one synthetic chat answer.
 Preview supplies the proposed OpenRouter secret in memory without persisting SST
 secrets. SST3.19.3 diff is NOT a strict no-write command: upstream run.go
@@ -123,3 +123,25 @@ provider whole-app spending/privacy choices, real deployed latency and first-tim
 human comprehension remain open; legacy-key UI was explicitly skipped. Native
 capture and later UX remain owner-paused. A successful deploy is not full beta
 or production-readiness acceptance.
+
+
+## Automatic production release — owner steering
+
+Push/merge to main triggers production. Every run checks and deploys its exact
+immutable event SHA through the reusable CI success gate before all production
+mutations. Release branches/PRs cannot automatically deploy. Manual preview and
+explicit manual release remain available; automatic pushes have no preview/alias
+input and take the ordinary deploy path, leaving legacy-alias release disabled.
+Production runs remain serialized without cancelling in-flight migrations.
+Direct CI main-push trigger is removed to avoid duplicate checks; PR, reusable
+and manual CI remain. Only the production workflow is enabled persistently,
+as explicitly requested; no unrelated workflow, schedule or team wake is enabled.
+Main publication is itself the deployment trigger and must wait for Main review.
+
+Historical main has16 unique merge commits and no unique non-merge commits.
+The ordinary ort merge into the release branch preserved both histories with
+exactly identical source tree ce86f4b278cbb5a02575c6bde522606426f8902a.
+The subsequent explicit automatic-release workflow/tests/docs change is the only
+new source change after that ancestry merge; final SHA/tree are recorded in the
+sanitized release receipt. No force push, ours merge, rebase or original-worktree
+branch change is used. Main must still be an ancestor before publication.

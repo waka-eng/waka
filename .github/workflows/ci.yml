@@ -1,6 +1,7 @@
 name: CI
 
-# Dev calls this workflow before deployment; PRs and main run it directly.
+# Development and production call this workflow at their exact event SHA.
+# PRs and manual diagnostics run it directly; main uses the production caller.
 # Browser and live-model gates remain deliberate manual runs.
 on:
   workflow_call:
@@ -11,9 +12,6 @@ on:
         default: ""
         type: string
   pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       run_browser_gates:

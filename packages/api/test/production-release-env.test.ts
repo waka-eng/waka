@@ -73,3 +73,20 @@ it('preview has no route into any production mutation and supplies only the miss
  expect(preview.env.SST_SECRET_OpenRouterApiKey).toBe('${{ secrets.OPENROUTER_API_KEY }}');
  expect(readFileSync(resolve(root,'scripts/preview-production.mjs'),'utf8')).not.toMatch(/secret set|db:migrate|sst deploy|change-resource-record-sets/);
 });
+
+it('auto-releases only main pushes, with exact-event CI and no duplicate direct main CI trigger',()=>{
+ expect(production.on.push.branches).toEqual(['main']);
+ expect(production.on.pull_request).toBeUndefined();
+ expect(production.on.workflow_dispatch.inputs.preview_only.default).toBe(false);
+ expect(production.on.workflow_dispatch.inputs.release_legacy_alias.default).toBe(false);
+ expect(ci.on).toHaveProperty('pull_request');expect(ci.on.push).toBeUndefined();
+ const steps=production.jobs.deploy.steps;
+ const alias=steps.find((s:any)=>s.name==='Release legacy CloudFront alias');
+ expect(alias.if).toContain("github.event_name == 'workflow_dispatch'");
+ expect(alias.if).toContain('inputs.release_legacy_alias');
+ for(const s of steps.filter((s:any)=>/secret set|db:migrate|sst deploy|change-resource-record-sets/.test(s.run??'')))expect(s.if).toBe('${{ !inputs.preview_only }}');
+ // Absent inputs on push take the actual-deploy path; preview remains explicit.
+ const deployFor=(event:string,branch:string,preview=false)=>event==='push'?branch==='main':event==='workflow_dispatch'&&!preview;
+ expect(deployFor('push','main')).toBe(true);expect(deployFor('push','dev')).toBe(false);expect(deployFor('push','release/candidate')).toBe(false);
+ expect(deployFor('pull_request','main')).toBe(false);expect(deployFor('workflow_dispatch','release/candidate',true)).toBe(false);
+});
