@@ -2,7 +2,7 @@
  * diagnostics private to the ephemeral runner; publish only operation + typed
  * resource identifiers. Never upload raw output/state as an artifact. */
 import {spawn,execFileSync} from 'node:child_process';
-import {verifyExistingProductionBootstrap,summarizePreviewEvents} from './production-preview-policy.mjs';
+import {verifyExistingProductionBootstrap,summarizePreviewEvents,verifyMonitorAlarmIdentities} from './production-preview-policy.mjs';
 import {mkdtempSync,writeFileSync,rmSync,readdirSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -24,17 +24,19 @@ child.on('error',()=>{console.error('Could not start production preview');proces
 child.on('close',code=>{
  writeFileSync(join(dir,'raw.log'),output,{mode:0o600});
  const clean=output.replace(/\x1b\[[0-9;]*[A-Za-z]/g,'');
- let operations=[];
+ let operations=[],monitorAlarmIdentity=verifyMonitorAlarmIdentities('');
  try {
   const dirs=readdirSync('.sst/pulumi',{withFileTypes:true}).filter(d=>d.isDirectory());
   if(dirs.length!==1)throw Error('Expected one fresh preview directory');
-  operations=summarizePreviewEvents(readFileSync(join('.sst/pulumi',dirs[0].name,'eventlog.json'),'utf8'));
+  const events=readFileSync(join('.sst/pulumi',dirs[0].name,'eventlog.json'),'utf8');
+  monitorAlarmIdentity=verifyMonitorAlarmIdentities(events);
+  operations=summarizePreviewEvents(events);
  } catch { /* Missing/invalid event receipt fails below; raw output stays private. */ }
  const errorCodes=[...new Set(clean.match(/\b(?:AccessDenied(?:Exception)?|UnauthorizedOperation|SecretMissingError|InvalidArgument|NoSuchBucket|ConflictException|ENOTFOUND|ETIMEDOUT)\b/g)??[])];
- const receipt={stage:'production',exitCode:code,bootstrap,operations,errorCodes,rawOutputPublished:false};
+ const receipt={stage:'production',exitCode:code,bootstrap,operations,monitorAlarmIdentity,errorCodes,rawOutputPublished:false};
  writeFileSync('production-preview.json',JSON.stringify(receipt,null,2)+'\n',{mode:0o600});
  console.log(JSON.stringify(receipt));
- if(code!==0||!operations.length){console.error('Preview needs review: no successful resource operation receipt. Raw diagnostics withheld.');process.exitCode=1;}
+ if(code!==0||!operations.length||!monitorAlarmIdentity.passed){console.error('Preview needs review: resource operations or exact monitor alarm identities not verified. Raw diagnostics withheld.');process.exitCode=1;}
  rmSync(dir,{recursive:true,force:true});
  rmSync('.sst/pulumi',{recursive:true,force:true});
 });

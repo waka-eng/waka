@@ -575,7 +575,7 @@ export default $config({
         transform: { target: { retryPolicy: { maximumRetryAttempts: 0, maximumEventAgeInSeconds: 60 } } },
       });
       const action = [relay.arn];
-      const metricAlarm = (code: keyof typeof alarmLabels, args: Omit<aws.cloudwatch.MetricAlarmArgs, "comparisonOperator" | "evaluationPeriods"> & Partial<Pick<aws.cloudwatch.MetricAlarmArgs, "comparisonOperator" | "evaluationPeriods">>) => {
+      const metricAlarm = (code: keyof typeof alarmLabels, args: Omit<aws.cloudwatch.MetricAlarmArgs, "name" | "comparisonOperator" | "evaluationPeriods"> & Partial<Pick<aws.cloudwatch.MetricAlarmArgs, "comparisonOperator" | "evaluationPeriods">>) => {
         const alarmName = `waka-production-${code}`;
         const permission = new aws.lambda.Permission(`Monitor${code}Invoke`, {
           action: "lambda:InvokeFunction", function: relay.name,
@@ -583,9 +583,9 @@ export default $config({
           sourceArn: caller.accountId.apply(account => `arn:aws:cloudwatch:${AWS_REGION}:${account}:alarm:${alarmName}`),
         });
         const alarm = new aws.cloudwatch.MetricAlarm(`Monitor${code}`, {
-          alarmName, comparisonOperator: "GreaterThanThreshold", threshold: 0, evaluationPeriods: 1,
+          comparisonOperator: "GreaterThanThreshold", threshold: 0, evaluationPeriods: 1,
           period: 300, statistic: "Sum", treatMissingData: "notBreaching",
-          alarmActions: action, okActions: action, ...args,
+          alarmActions: action, okActions: action, ...args, name: alarmName,
         }, { dependsOn: [permission] });
         return alarm;
       };

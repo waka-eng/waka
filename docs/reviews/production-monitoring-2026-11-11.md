@@ -101,3 +101,30 @@ mock boundary in its required G6 header. No runtime behavior, test assertion,
 selector, exclusion or gate is changed. The real full web command subsequently
 passed vocabulary, seams and **1,582 tests across 209 suites**. A fresh exact-SHA
 CI/preview is still required; the failed attempt is not preview acceptance.
+
+## Alarm identity correction before preview
+
+The preceding source review missed a provider argument: pinned
+[@pulumi/aws 6.66.2 MetricAlarm](https://github.com/pulumi/pulumi-aws/blob/v6.66.2/sdk/nodejs/cloudwatch/metricAlarm.ts)
+uses `name` for the physical alarm name. The helper supplied `alarmName`, which
+would leave generated names inconsistent with its exact invocation permission
+ARNs and the relay's allowlist. The correction supplies `name: alarmName` after
+caller options and excludes name overrides from the helper's typed options.
+Runtime payloads, IAM scope, cost and the separately held maintenance activation
+are otherwise unchanged.
+
+Superseded [run 43126009764](https://github.com/waka-eng/waka/actions/runs/43126009764)
+at `e96d3c78` is **completed/cancelled**. Its production job executed **zero
+steps**; the request's acceptance alone was not used as that evidence. No preview
+or resource apply occurred in this attempt.
+
+The preview now privately verifies all eight desired physical alarm identities
+from the versioned
+[Pulumi 3.210.0 engine-event contract](https://github.com/pulumi/pulumi/blob/v3.210.0/sdk/nodejs/automation/events.ts),
+specifically `resourcePreEvent.metadata.new.inputs.name`, before accepting the
+sanitized receipt. Missing, unknown, foreign, wrong or duplicate identities fail
+closed; only counts and booleans are published. General operation redaction is
+unchanged. Targeted checks execute the actual SST helper with provider
+constructors stubbed, verify permission/name alignment and refusal cases, and
+retain the existing isolation audit tests: **36 passed**. A new exact-SHA CI and
+actual preview are still required; local fixtures do not establish cloud wiring.
