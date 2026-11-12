@@ -59,6 +59,14 @@ const FORBIDDEN = [
  * renamed, and "it would be a lot of work" is not a reason that appears here.
  */
 const ALLOWED = new Map([
+  ["CaptureResult", "PostHog SDK's immutable exported event type, not WAKA's memory model"],
+  ["capture_pageview", "PostHog SDK's immutable privacy option; false disables automatic pageview collection"],
+  ["capture_pageleave", "PostHog SDK's immutable privacy option; false disables automatic pageleave collection"],
+  ["capture_dead_clicks", "PostHog SDK's immutable privacy option; false disables automatic dead-click collection"],
+  ["capture_exceptions", "PostHog SDK's immutable privacy option; false prevents raw automatic exception collection"],
+  ["capture_performance", "PostHog SDK's immutable privacy option; false disables automatic performance collection"],
+  ["capture_webmcp", "PostHog SDK's immutable privacy option; false disables automatic WebMCP collection"],
+  ["captureConsoleLogs", "PostHog SDK's immutable privacy option; false disables console-log collection"],
   ["capture", "DOM AddEventListenerOptions.capture selects the event phase, not a memory concept"],
   ["onClickCapture", "React's standard capture-phase click event prop, not a memory concept"],
   [

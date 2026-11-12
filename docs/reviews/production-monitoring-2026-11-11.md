@@ -85,3 +85,19 @@ delivery/recovery remains unexercised; no extra synthetic message is authorized.
 Erasure, provider/privacy/spending, deployed performance, human comprehension and
 owner-paused goals keep their existing gates/statuses. Original owner work and
 local memory/services are untouched.
+
+## First CI attempt and narrow vocabulary correction
+
+[Run 43122863429](https://github.com/waka-eng/waka/actions/runs/43122863429)
+at `eb49b20f` passed API units (1,191; 24 skipped) and the hermetic API suite
+(2,207; 25 skipped), then failed web vocabulary preflight on eight immutable
+PostHog SDK/API names. The production job was skipped with **zero steps**:
+no infrastructure preview, SST initialization/history write, resource apply,
+secret update, live DB operation or DNS change occurred in that attempt.
+
+The follow-up adds only those exact names to the gate's existing ALLOWED map,
+with external-API reasons, and documents the analytics test's actual `fetch`
+mock boundary in its required G6 header. No runtime behavior, test assertion,
+selector, exclusion or gate is changed. The real full web command subsequently
+passed vocabulary, seams and **1,582 tests across 209 suites**. A fresh exact-SHA
+CI/preview is still required; the failed attempt is not preview acceptance.

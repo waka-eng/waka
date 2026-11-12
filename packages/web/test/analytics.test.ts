@@ -1,4 +1,10 @@
 // @vitest-environment jsdom
+/** WHAT THIS MOCKS, AND WHY (gate G6): only the browser HTTP transport is
+ * replaced with fake `fetch`, so tests cannot write to a live analytics project.
+ * The installed PostHog SDK, its automatic-property expansion/serialization and
+ * WAKA's final privacy boundary stay real; inspecting a mocked SDK method would
+ * miss fields the SDK adds after a caller supplies its event. jsdom supplies the
+ * browser environment. Actual cloud ingestion remains a separate live gate. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { analyticsConfig, privacyOptions, sanitizeAnalytics, resetAnalyticsIdentity, startAnalytics, recordScreen } from '../src/lib/analytics';
 import type { CaptureResult } from 'posthog-js';
