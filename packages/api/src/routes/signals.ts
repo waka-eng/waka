@@ -675,6 +675,15 @@ export async function getProfileSignal(
   const enriched = enrichedIds.length ? await db.select({ inspirationId: attachments.inspirationId, text: effectiveAttachmentText })
     .from(attachments).where(and(eq(attachments.profileId, input.profileId), inArray(attachments.inspirationId, enrichedIds),
       eq(effectiveAttachmentStatus, "ready"), isNotNull(effectiveAttachmentText))) : [];
+  // Request-local only: preserve attachment order/first matching quote while
+  // avoiding a full attachment-array scan for every evidence row.
+  const enrichedByInspiration = new Map<string, string[]>();
+  for (const { inspirationId, text } of enriched) {
+    if (inspirationId === null) continue;
+    const texts = enrichedByInspiration.get(inspirationId) ?? [];
+    texts.push(text ?? "");
+    enrichedByInspiration.set(inspirationId, texts);
+  }
   const reviewEvidence=await db.select({answerId:reviewAnswers.id,sessionId:reviewAnswers.sessionId,answer:reviewAnswers.answer,createdAt:reviewAnswers.createdAt})
     .from(signalReviewEvidence).innerJoin(signals,and(eq(signals.profileId,signalReviewEvidence.profileId),eq(signals.id,signalReviewEvidence.signalId)))
     .innerJoin(reviewAnswers,and(eq(reviewAnswers.profileId,signalReviewEvidence.profileId),eq(reviewAnswers.sessionId,signalReviewEvidence.sessionId),eq(reviewAnswers.id,signalReviewEvidence.answerId)))
@@ -686,7 +695,7 @@ export async function getProfileSignal(
     reviewEvidence:reviewEvidence.map(item=>({answerId:item.answerId,sessionId:item.sessionId,preview:truncatePreview(item.answer??''),createdAt:item.createdAt.toISOString()})),
     evidence: evidenceRows.map((evidence) => {
       const sources = evidence.quoteSource === "enrichment"
-        ? enriched.filter((row) => row.inspirationId === evidence.inspirationId).map((row) => row.text ?? "")
+        ? enrichedByInspiration.get(evidence.inspirationId) ?? []
         : evidence.quoteReflectionId ? [answersById.get(evidence.quoteReflectionId) ?? ""] : [evidence.text];
       const quote = evidence.current === true ? sources.map((text) => quoteForEvidence(evidence.quote, { text, enrichment: null }, 500)).find(Boolean) ?? null : null;
       return {

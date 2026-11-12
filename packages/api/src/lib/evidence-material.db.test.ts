@@ -29,6 +29,35 @@ function stubs(quote: string) {
 }
 
 describe("evidence uses the material that was actually read", () => {
+  it("reads retained enrichment quotes without matching foreign material or reviving stale quotes", async () => {
+    const f=await fixture(),foreign=await fixture(),quote="A verified page sentence about careful decisions.";
+    const own=[];
+    for(const text of ['An unrelated ready page.',`First page: ${quote}`,`Second page: ${quote}`]){
+      const [row]=await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,enrichment_status,enrichment_text)
+        VALUES(${f.profileId},${f.inspirationId},'link','https://example.test/source','ready',${text}) RETURNING id`;
+      own.push(row.id);
+    }
+    await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,enrichment_status,enrichment_text)
+      VALUES(${foreign.profileId},${foreign.inspirationId},'link','https://example.test/foreign','ready','FOREIGN_ATTACHMENT_SENTINEL has unrelated private words')`;
+    const result=await deriveSignalsForInspiration({inspirationId:f.inspirationId,reason:'created'},{db:t.db as never,...stubs(quote)});
+    const signalId=result.mintedSignalIds[0]!;
+    // New derivation quotes only personal passages. Seed the retained
+    // enrichment-source variant on a real current material receipt; the
+    // existing reader deliberately still supports that stored variant.
+    await t.sql`UPDATE signal_evidence SET quote=${quote},quote_source='enrichment',quote_reflection_id=NULL
+      WHERE signal_id=${signalId}`;
+    await t.sql`UPDATE signals SET locked_at=now() WHERE id=${signalId}`;
+    const read=()=>getProfileSignal(t.db as never,{profileId:f.profileId,signalId});
+    const detail=await read();expect(detail?.evidence[0]).toMatchObject({quote,quoteSource:'enrichment'});
+    expect(detail).toMatchObject({statement:'Quiet helps before a decision.',locked:true});
+    expect(JSON.stringify(detail)).not.toContain('FOREIGN_ATTACHMENT_SENTINEL');
+    expect(await getProfileSignal(t.db as never,{profileId:foreign.profileId,signalId})).toBeNull();
+    await expect(t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,enrichment_status,enrichment_text)
+      VALUES(${foreign.profileId},${f.inspirationId},'link','https://example.test/refused','ready',${quote})`).rejects.toThrow();
+    await t.sql`UPDATE attachments SET enrichment_text='Changed ready material' WHERE id IN(${own[1]},${own[2]})`;
+    expect((await read())?.evidence[0]).toMatchObject({quote:null,quoteSource:null,reason:null});
+    expect(await read()).toMatchObject({statement:'Quiet helps before a decision.',locked:true});
+  });
   it("deletes a reflected inspiration without rechecking orphaned quote or attachment references", async () => {
     const f = await fixture();
     await deriveSignalsForInspiration({ inspirationId: f.inspirationId, reason: "created" }, {
