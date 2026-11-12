@@ -35,7 +35,7 @@ it('does not schedule an idle local drain for work this worker cannot process', 
   await t.sql`INSERT INTO background_jobs(profile_id,type,payload,attempts,max_attempts)
     SELECT profile_id,'reembed_signal','{}',3,3 FROM background_jobs LIMIT 1`;
   vi.stubEnv('WAKA_BACKGROUND_JOB_AUTODRAIN', '1');
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
   const timers = vi.spyOn(globalThis, 'setTimeout');
   await drainBackgroundJobs({ limit: 0 });
   expect(timers.mock.calls.filter(([, delay]) => Number(delay) <= 1000)).toHaveLength(0);
