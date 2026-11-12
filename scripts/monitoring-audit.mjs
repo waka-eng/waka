@@ -7,6 +7,9 @@ const list = v => Array.isArray(v) ? v : [v];
 const doc = v => typeof v === 'string' ? JSON.parse(decodeURIComponent(v)) : v;
 const logs = new Set(['logs:CreateLogGroup','logs:CreateLogStream','logs:PutLogEvents','logs:DescribeLogStreams','xray:PutTraceSegments','xray:PutTelemetryRecords']);
 const standardManaged = new Set(['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole','arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess']);
+// SST3.19.3 always injects its 32-byte resource-bundle encryption key/file.
+// Recognize exactly that SDK contract, never a general SST_* exemption.
+const sdkEnvironment=env=>typeof env.SST_KEY==='string'&&Buffer.from(env.SST_KEY,'base64').length===32&&Buffer.from(env.SST_KEY,'base64').toString('base64')===env.SST_KEY&&env.SST_KEY_FILE==='resource.enc';
 export function isolatedMonitorRole(roleArn, allowed, read, leadingKeys) {
   const seen=new Set();
   const roleName=roleArn.split('/').at(-1),role=read(['iam','get-role','--role-name',roleName]).Role;
@@ -35,9 +38,9 @@ export function auditMonitoring({outputs,webhook,read}) {
   const app=e=>{try{return JSON.parse(e.SST_RESOURCE_App??'{}');}catch{return {};}};
   checks.relayIdentity=relay.FunctionName===outputs.monitorRelayFunctionName&&relay.FunctionArn===`arn:aws:lambda:${region}:${account}:function:${relay.FunctionName}`&&app(env).name==='waka'&&app(env).stage==='production';
   checks.probeIdentity=probe.FunctionName===outputs.monitorProbeFunctionName&&probe.FunctionArn===`arn:aws:lambda:${region}:${account}:function:${probe.FunctionName}`&&app(probeEnv).name==='waka'&&app(probeEnv).stage==='production';
-  const relayKeys=new Set(['WAKA_STAGE','MONITOR_ACCOUNT','MONITOR_TABLE','MONITOR_SEND_GATE','WAKA_DISCORD_WEBHOOK_URL','SST_RESOURCE_App','SST_RESOURCE_DiscordWebhookUrl','NODE_OPTIONS']);
-  checks.relayEnvironment=Object.keys(env).every(k=>relayKeys.has(k))&&env.WAKA_STAGE==='production'&&env.MONITOR_ACCOUNT===account&&env.MONITOR_TABLE===outputs.monitorDeliveryTable&&!!webhook&&env.WAKA_DISCORD_WEBHOOK_URL===webhook;
-  checks.probeEnvironment=Object.keys(probeEnv).every(k=>['SST_RESOURCE_App','NODE_OPTIONS','MONITOR_TABLE'].includes(k))&&probeEnv.MONITOR_TABLE===outputs.monitorDeliveryTable;
+  const relayKeys=new Set(['WAKA_STAGE','MONITOR_ACCOUNT','MONITOR_TABLE','MONITOR_SEND_GATE','WAKA_DISCORD_WEBHOOK_URL','SST_RESOURCE_App','SST_RESOURCE_DiscordWebhookUrl','NODE_OPTIONS','SST_KEY','SST_KEY_FILE']);
+  checks.relayEnvironment=Object.keys(env).every(k=>relayKeys.has(k))&&sdkEnvironment(env)&&env.WAKA_STAGE==='production'&&env.MONITOR_ACCOUNT===account&&env.MONITOR_TABLE===outputs.monitorDeliveryTable&&!!webhook&&env.WAKA_DISCORD_WEBHOOK_URL===webhook;
+  checks.probeEnvironment=Object.keys(probeEnv).every(k=>['SST_RESOURCE_App','NODE_OPTIONS','MONITOR_TABLE','SST_KEY','SST_KEY_FILE'].includes(k))&&sdkEnvironment(probeEnv)&&probeEnv.MONITOR_TABLE===outputs.monitorDeliveryTable;
   checks.boundedFunctions=relay.Timeout===20&&relay.MemorySize===128&&probe.Timeout===12&&probe.MemorySize===128;
   checks.relayConcurrency=!Object.hasOwn(read(['lambda','get-function-concurrency','--function-name',relay.FunctionName]),'ReservedConcurrentExecutions');
   checks.relaySendGate=env.MONITOR_SEND_GATE==='alarm-head-v1'&&relay.Timeout===20&&relay.Timeout*1000<30000;
@@ -75,7 +78,15 @@ export function auditMonitoring({outputs,webhook,read}) {
   const statements=list(doc(read(['lambda','get-policy','--function-name',relay.FunctionName]).Policy)?.Statement??[]).filter(s=>s.Effect==='Allow');
   checks.alarmInvocationPolicy=statements.length===names.length&&names.every(n=>statements.some(s=>list(s.Action).join()==='lambda:InvokeFunction'&&list(s.Resource).join()===relay.FunctionArn&&Object.keys(s.Principal??{}).join()==='Service'&&s.Principal.Service==='lambda.alarms.cloudwatch.amazonaws.com'&&s.Condition?.StringEquals?.['AWS:SourceAccount']===account&&(s.Condition?.ArnLike?.['AWS:SourceArn']??s.Condition?.ArnEquals?.['AWS:SourceArn'])===`arn:aws:cloudwatch:${region}:${account}:alarm:${n}`));
   checks.noRelaySecretInApp=[outputs.apiFunctionName,outputs.backgroundWorkerFunctionName,outputs.monitorPrincipleFunctionName,outputs.monitorCleanupFunctionName].every(name=>!Object.entries(fn(name).Environment?.Variables??{}).some(([key,value])=>key.includes('Discord')||key==='WAKA_DISCORD_WEBHOOK_URL'||(webhook&&value.includes(webhook))));
-  checks.logRetention=[relay,probe].every(f=>read(['logs','describe-log-groups','--log-group-name-prefix',`/aws/lambda/${f.FunctionName}`]).logGroups?.some(g=>g.logGroupName===`/aws/lambda/${f.FunctionName}`&&g.retentionInDays===14));
+  checks.logRetention=[relay,probe].every(f=>{
+    // SST assigns an independent physical group; the attested function's
+    // actual LoggingConfig binds it. Do not invent a function-derived path.
+    const name=f.LoggingConfig?.LogGroup;
+    if(typeof name!=='string'||!name.startsWith('/aws/lambda/'))return false;
+    const groups=read(['logs','describe-log-groups','--log-group-name-prefix',name]).logGroups??[];
+    const exact=groups.filter(g=>g.logGroupName===name),arn=`arn:aws:logs:${region}:${account}:log-group:${name}`;
+    return exact.length===1&&exact[0].arn===arn+':*'&&exact[0].logGroupArn===arn&&exact[0].retentionInDays===14;
+  });
   const rule=read(['events','describe-rule','--name',outputs.monitorProbeRuleName]);
   checks.probeSchedule=rule.State==='ENABLED'&&rule.ScheduleExpression==='rate(5 minutes)'&&(read(['events','list-targets-by-rule','--rule',outputs.monitorProbeRuleName]).Targets??[]).some(t=>t.Arn===probe.FunctionArn);
   const probeStatements=list(doc(read(['lambda','get-policy','--function-name',probe.FunctionName]).Policy)?.Statement??[]).filter(s=>s.Effect==='Allow');

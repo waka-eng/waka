@@ -310,6 +310,17 @@ proof. These receipts omit raw AWS/child output, argument/environment values,
 credential URLs, message bodies and stacks. Preserve failed attempts; do not
 weaken the gate, alter state or redeploy merely to obtain a different outcome.
 
+SST's resource-bundle `SST_KEY`/`SST_KEY_FILE` are expected SDK fields, not a
+general exemption for `SST_*` variables. The audit checks the canonical 32-byte
+base64 key shape and exact `resource.enc` filename without publishing values.
+It binds retention to each attested function's actual `LoggingConfig.LogGroup`
+and exact same-account/region group ARNs, rather than assuming the function name
+is the log-group name. Both groups must retain logs for 14 days. The relay and
+probe explicitly request Lambda-only role trust; a combined AWS/account-root
+and Lambda principal still fails acceptance. These corrections address observed
+audit failures; only a subsequent actual successful audit establishes live
+acceptance, not source or fixture results.
+
 Review exact source/CI and sanitized SST preview before production apply. Keep
 main/dev aligned through their existing exact-SHA pipelines; dev has no Discord
 resources/actions and no production PostHog settings. New operational Dynamo/SQS

@@ -2,13 +2,16 @@ import { expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import {executeAuditCli} from './helpers/audit-cli';
+import {runInNewContext} from 'node:vm';
+import {createSourceFile,ScriptTarget,ScriptKind,isNewExpression,isStringLiteral,isObjectLiteralExpression,isPropertyAssignment,forEachChild,transpileModule,ModuleKind} from 'typescript';
 const load=()=>import(/* @vite-ignore */resolve(__dirname,'../../../scripts/monitoring-audit.mjs'));
 function fixture(){
   const account='111122223333',prefix=`arn:aws:lambda:us-west-2:${account}:function:`,webhook='PRIVATE_WEBHOOK_NEVER_PUBLISH';
   const outputs={apiFunctionName:'api',backgroundWorkerFunctionName:'worker',monitorPrincipleFunctionName:'principle',monitorCleanupFunctionName:'cleanup',monitorRelayFunctionName:'NestedRelay-generated',monitorProbeFunctionName:'probe',monitorDeliveryTable:'delivery',monitorDeliveryDlqUrl:'https://sqs.us-west-2.amazonaws.com/111122223333/delivery-dlq',monitorAttachmentDlqName:'attachment-dlq',monitorProbeRuleName:'probe-rule',monitorDailyRuleName:'daily-rule',monitorPrincipleRuleName:'principle-rule',monitorWakeGroup:'wake-group',monitorWakeRole:`arn:aws:iam::${account}:role/wakes`};
   const app=JSON.stringify({name:'waka',stage:'production'}),tableArn=`arn:aws:dynamodb:us-west-2:${account}:table/delivery`,queueArn=`arn:aws:sqs:us-west-2:${account}:delivery-dlq`;
-  const relay={FunctionName:outputs.monitorRelayFunctionName,FunctionArn:prefix+outputs.monitorRelayFunctionName,Role:`arn:aws:iam::${account}:role/relay`,Timeout:20,MemorySize:128,Environment:{Variables:{SST_RESOURCE_App:app,WAKA_STAGE:'production',MONITOR_ACCOUNT:account,MONITOR_TABLE:'delivery',MONITOR_SEND_GATE:'alarm-head-v1',WAKA_DISCORD_WEBHOOK_URL:webhook}}};
-  const probe={FunctionName:'probe',FunctionArn:prefix+'probe',Role:`arn:aws:iam::${account}:role/probe`,Timeout:12,MemorySize:128,Environment:{Variables:{SST_RESOURCE_App:app,MONITOR_TABLE:'delivery'}}};
+  const sdk={SST_KEY:Buffer.alloc(32,7).toString('base64'),SST_KEY_FILE:'resource.enc'};
+  const relay={FunctionName:outputs.monitorRelayFunctionName,FunctionArn:prefix+outputs.monitorRelayFunctionName,Role:`arn:aws:iam::${account}:role/relay`,Timeout:20,MemorySize:128,LoggingConfig:{LogGroup:'/aws/lambda/waka-production-MonitorRelayFunction-custom01'},Environment:{Variables:{...sdk,SST_RESOURCE_App:app,WAKA_STAGE:'production',MONITOR_ACCOUNT:account,MONITOR_TABLE:'delivery',MONITOR_SEND_GATE:'alarm-head-v1',WAKA_DISCORD_WEBHOOK_URL:webhook}}};
+  const probe={FunctionName:'probe',FunctionArn:prefix+'probe',Role:`arn:aws:iam::${account}:role/probe`,Timeout:12,MemorySize:128,LoggingConfig:{LogGroup:'/aws/lambda/waka-production-AvailabilityProbeFunction-custom02'},Environment:{Variables:{...sdk,SST_RESOURCE_App:app,MONITOR_TABLE:'delivery'}}};
   const trust={Statement:[{Effect:'Allow',Action:'sts:AssumeRole',Principal:{Service:'lambda.amazonaws.com'}}]};
   const policy={Statement:[{Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:GetItem','dynamodb:UpdateItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['event:*','head:waka-production-*']},Null:{'dynamodb:LeadingKeys':'false'}}},{Effect:'Allow',Action:'sqs:SendMessage',Resource:queueArn}]};
   const probePolicy={Statement:[{Effect:'Allow',Action:['dynamodb:GetItem','dynamodb:UpdateItem'],Resource:tableArn,Condition:{'ForAllValues:StringEquals':{'dynamodb:LeadingKeys':['probe:availability']},Null:{'dynamodb:LeadingKeys':'false'}}}]};
@@ -33,7 +36,7 @@ function fixture(){
     if(args[1]==='get-role-policy')return {PolicyDocument:args.includes('relay')?policy:probePolicy};
     if(args[1]==='describe-alarms')return {MetricAlarms:alarms};
     if(args[1]==='get-policy')return {Policy:JSON.stringify(args.at(-1)==='probe'?{Statement:[{Effect:'Allow',Action:'lambda:InvokeFunction',Principal:{Service:'events.amazonaws.com'},Condition:{ArnLike:{'AWS:SourceArn':`arn:aws:events:us-west-2:${account}:rule/probe-rule`}}}]}:invocation)};
-    if(args[1]==='describe-log-groups')return {logGroups:[{logGroupName:args.at(-1),retentionInDays:14}]};
+    if(args[1]==='describe-log-groups')return {logGroups:[{logGroupName:args.at(-1),arn:`arn:aws:logs:us-west-2:${account}:log-group:${args.at(-1)}:*`,logGroupArn:`arn:aws:logs:us-west-2:${account}:log-group:${args.at(-1)}`,retentionInDays:14}]};
     if(args[1]==='describe-rule')return {State:'ENABLED',ScheduleExpression:'rate(5 minutes)'};
     if(args[1]==='list-targets-by-rule')return {Targets:[{Arn:probe.FunctionArn}]};
     throw Error('Unexpected metadata read');
@@ -57,6 +60,61 @@ it.each(['foreignAccount','extraDatabase','extraModel','foreignAlarm','broadIam'
   if(kind==='relayProbeKey')f.policy.Statement[0].Condition!['ForAllValues:StringLike']['dynamodb:LeadingKeys']=['*'];
   const read=(args:string[])=>{if(kind==='unboundedRetry'&&args[1]==='get-function-event-invoke-config')return {MaximumRetryAttempts:99};if(kind==='missingPreciseWakes'&&args[1]==='get-function-configuration'&&args.at(-1)==='worker')return {Environment:{Variables:{}}};return f.read(args);};
   expect(auditMonitoring({...f,read}).passed).toBe(false);
+});
+it.each(['relay','probe'] as const)('validates only exact SDK encryption fields on %s without disclosing them',async role=>{
+ const {auditMonitoring}=await load();
+ for(const patch of [
+  {SST_KEY:undefined},{SST_KEY:'private invalid key'},{SST_KEY:Buffer.alloc(31).toString('base64')},
+  {SST_KEY:Buffer.alloc(32).toString('base64')+'\n'},{SST_KEY_FILE:'private-path'},
+  {SST_UNEXPECTED:'PRIVATE_SECRET'},{DB_CONNECTION_URL:'PRIVATE_DB'},{OPENROUTER_API_KEY:'PRIVATE_MODEL'},
+ ]){
+  const f=fixture();Object.assign(f[role].Environment.Variables,patch);
+  const r=auditMonitoring(f);expect(r.checks[role+'Environment']).toBe(false);expect(r.passed).toBe(false);
+  expect(JSON.stringify(r)).not.toContain('PRIVATE_');expect(JSON.stringify(r)).not.toContain('private-path');expect(JSON.stringify(r)).not.toContain(f.probe.Environment.Variables.SST_KEY??'PRIVATE_ABSENT');
+ }
+});
+it.each(['missingConfig','wrongName','foreignArn','foreignGroupArn','missingArn','wrongRetention','missingGroup','duplicateGroup'])('refuses incorrect actual log binding: %s',async kind=>{
+ const {auditMonitoring}=await load(),f=fixture();
+ if(kind==='missingConfig')delete (f.relay as any).LoggingConfig;
+ const read=(args:string[])=>{
+  const response:any=f.read(args);
+  if(args[1]!=='describe-log-groups')return response;
+  const group=response.logGroups[0];
+  if(kind==='wrongName')group.logGroupName='/aws/lambda/other';
+  if(kind==='foreignArn')group.arn=group.arn.replace('111122223333','999988887777');
+  if(kind==='foreignGroupArn')group.logGroupArn=group.logGroupArn.replace('us-west-2','us-east-1');
+  if(kind==='missingArn')delete group.arn;
+  if(kind==='wrongRetention')group.retentionInDays=30;
+  if(kind==='missingGroup')response.logGroups=[];
+  if(kind==='duplicateGroup')response.logGroups.push({...group});
+  return response;
+ };
+ const r=auditMonitoring({...f,read});expect(r.checks.logRetention).toBe(false);expect(r.passed).toBe(false);
+});
+it('keeps rejecting the actual observed combined account-root and Lambda trust',async()=>{
+ const {auditMonitoring}=await load(),f=fixture();
+ f.trust.Statement[0].Principal={Service:'lambda.amazonaws.com',AWS:'arn:aws:iam::111122223333:root'} as any;
+ const r=auditMonitoring(f);expect(r.checks.relayRole).toBe(false);expect(r.checks.probeRole).toBe(false);expect(r.passed).toBe(false);
+});
+it('executes the actual two configured trust transforms and preserves relay retry destination',async()=>{
+ const {auditMonitoring}=await load(),source=readFileSync(resolve(__dirname,'../../../sst.config.ts'),'utf8');
+ const file=createSourceFile('sst.config.ts',source,ScriptTarget.ESNext,true,ScriptKind.TS),expressions=new Map<string,string>();
+ const visit=(node:any)=>{
+  if(isNewExpression(node)&&node.expression.getText(file)==='sst.aws.Function'&&node.arguments?.length===2&&isStringLiteral(node.arguments[0])&&['MonitorRelay','AvailabilityProbe'].includes(node.arguments[0].text)){
+   const args=node.arguments[1];expect(isObjectLiteralExpression(args)).toBe(true);
+   const property=(args as any).properties.find((p:any)=>isPropertyAssignment(p)&&p.name.getText(file)==='transform');
+   expressions.set(node.arguments[0].text,property.initializer.getText(file));
+  }
+  forEachChild(node,visit);
+ };visit(file);expect([...expressions.keys()].sort()).toEqual(['AvailabilityProbe','MonitorRelay']);
+ for(const [name,expression]of expressions){
+  const context:any={deliveryDlq:{arn:'arn:aws:sqs:us-west-2:111122223333:delivery-dlq'}};
+  runInNewContext(transpileModule('globalThis.actual = '+expression,{compilerOptions:{target:ScriptTarget.ES2022,module:ModuleKind.CommonJS}}).outputText,context);
+  const trust=JSON.parse(context.actual.role.assumeRolePolicy);
+  expect(trust.Statement).toEqual([{Effect:'Allow',Action:'sts:AssumeRole',Principal:{Service:'lambda.amazonaws.com'}}]);
+  const f=fixture();Object.assign(f.trust,trust);expect(auditMonitoring(f).passed).toBe(true);
+  if(name==='MonitorRelay')expect(context.actual.eventInvokeConfig).toMatchObject({maximumEventAgeInSeconds:3600,destinationConfig:{onFailure:{destination:context.deliveryDlq.arn}}});
+ }
 });
 it('keeps monitoring production-only and secret outside the shared application links',()=>{
   const source=readFileSync(resolve(__dirname,'../../../sst.config.ts'),'utf8');

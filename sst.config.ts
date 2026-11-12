@@ -558,13 +558,20 @@ export default $config({
         ],
         // Per-alarm DynamoDB leases serialize competing states; no account-level
         // concurrency reservation or cross-alarm bottleneck is required.
-        transform: { eventInvokeConfig: {
+        transform: { role: { assumeRolePolicy: JSON.stringify({
+          Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "sts:AssumeRole",
+            Principal: { Service: "lambda.amazonaws.com" } }],
+        }) }, eventInvokeConfig: {
           maximumEventAgeInSeconds: 3600, destinationConfig: { onFailure: { destination: deliveryDlq.arn } },
         } },
       });
       const probe = new sst.aws.Function("AvailabilityProbe", {
         handler: "packages/api/src/monitoring/uptime.handler", timeout: "12 seconds", memory: "128 MB",
         logging: { retention: "2 weeks" }, retries: 0,
+        transform: { role: { assumeRolePolicy: JSON.stringify({
+          Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "sts:AssumeRole",
+            Principal: { Service: "lambda.amazonaws.com" } }],
+        }) } },
         environment: { MONITOR_TABLE: deliveryTable.name },
         permissions: [{ actions: ["dynamodb:GetItem", "dynamodb:UpdateItem"], resources: [deliveryTable.arn], conditions: [
           { test: "ForAllValues:StringEquals", variable: "dynamodb:LeadingKeys", values: ["probe:availability"] },
