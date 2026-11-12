@@ -283,6 +283,12 @@ jobs:
           WAKA_DISCORD_WEBHOOK_URL: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
         run: node scripts/monitoring-audit.mjs > production-monitoring-audit.json
 
+      - name: Verify account budget and isolated SNS delivery wiring
+        if: ${{ !inputs.preview_only }}
+        env:
+          WAKA_DISCORD_WEBHOOK_URL: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
+        run: node scripts/budget-alert-audit.mjs > production-budget-alert-audit.json
+
       - name: Save sanitized production acceptance
         if: ${{ !inputs.preview_only && always() }}
         uses: actions/upload-artifact@v4
@@ -293,4 +299,5 @@ jobs:
             production-monitoring-audit.json
             production-monitoring-baseline.json
             production-monitoring-before.json
+            production-budget-alert-audit.json
           if-no-files-found: ignore

@@ -10,14 +10,18 @@ const operations=new Set([
   'iam:get-role','iam:list-attached-role-policies','iam:list-role-policies','iam:get-role-policy',
   'cloudwatch:describe-alarms','cloudwatch:get-metric-statistics','cloudwatch:enable-alarm-actions',
   'logs:describe-log-groups','events:describe-rule','events:list-targets-by-rule',
+  'sns:get-topic-attributes','sns:get-subscription-attributes','lambda:list-function-url-configs',
+  'budgets:describe-budget','budgets:describe-notifications-for-budget',
+  'budgets:describe-subscribers-for-notification','budgets:describe-budget-actions-for-budget',
+  'billing:get-billing-view',
 ]);
 const kinds=new Set(['empty_unexpected','invalid_json','aws_read_failed','aws_command_failed',
   'outputs_read_failed','outputs_invalid_json','outputs_invalid_shape','artifact_write_failed',
-  'binding_mismatch','cli_version_failed','cli_version_mismatch','bootstrap_refused','private_log_reset_failed']);
+  'binding_mismatch','cli_version_failed','cli_version_mismatch','bootstrap_refused','private_log_reset_failed','region_refused']);
 const codes=new Set(['AccessDenied','AccessDeniedException','UnauthorizedOperation','ExpiredToken',
   'ExpiredTokenException','InvalidClientTokenId','UnrecognizedClientException','ResourceNotFoundException',
   'ValidationException','Throttling','ThrottlingException','TooManyRequestsException',
-  'ServiceUnavailableException','InternalFailure','InternalServerError','NoSuchBucket']);
+  'ServiceUnavailableException','InternalFailure','InternalServerError','NoSuchBucket','NotFoundException','InvalidParameterException','InternalErrorException']);
 const bindingChecks=new Set(['monitor_initialization_identity','monitor_initialization_alarm_binding',
   'monitor_initialization_version_time','monitor_initialization_not_armed','monitor_arm_identity',
   'monitor_arm_binding','monitor_arm_stack','bootstrapVersionStore','existingPassphrase','existingState']);
@@ -30,11 +34,12 @@ export class AuditDiagnosticError extends Error {
     if(bindingChecks.has(check))this.diagnostic.check=check;
   }
 }
-export function callAuditAws(args,execute=execFileSync,{env,json=true}={}){
+export function callAuditAws(args,execute=execFileSync,{env,json=true,region='us-west-2'}={}){
   const operation=Array.isArray(args)?`${args[0]}:${args[1]}`:'other';
   if(!operations.has(operation))throw new AuditDiagnosticError('aws_read_failed',{operation:'other'});
+  if(region!=='us-west-2'&&!(['budgets','billing'].includes(args[0])&&region==='us-east-1'))throw new AuditDiagnosticError('region_refused',{operation});
   let output;
-  try{output=execute('aws',[...args,'--region','us-west-2','--output','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe'],...(env?{env}:{})});}
+  try{output=execute('aws',[...args,'--region',region,'--output','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe'],...(env?{env}:{})});}
   catch(error){
     // execFileSync.message contains argument values. Inspect only the bounded
     // stderr channel for a closed AWS exception code; never forward its text.

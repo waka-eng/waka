@@ -176,6 +176,10 @@ enabled by this source.
 
 ## Monthly cost envelope
 
+The separate [AWS account $5 budget-alert candidate](aws-budget-alert.md) is a
+notify-only billing threshold, not a new operational alarm or spending cap. Its
+source, cost allowance and acceptance are separate from this deployed baseline.
+
 Prices checked against official us-west-2 AWS price-list data and product docs
 on 2026-11-11. No AWS free tier or credits are subtracted. Counts below include
 existing production **and development** monitoring, not only this increment. General hosting, memory-database/storage and AI/provider spending are separate.

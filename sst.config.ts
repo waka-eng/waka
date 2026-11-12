@@ -633,6 +633,67 @@ export default $config({
         monitorPrincipleFunctionName: principleRefresh.nodes.function.name, monitorCleanupFunctionName: objectEventSubscriber.nodes.function.name, monitorAttachmentDlqName: objectEventDlq.nodes.queue.name,
         monitorDailyRuleName: dailyDrain.nodes.rule.name, monitorPrincipleRuleName: principleRefresh.nodes.rule.name,
         monitorWakeGroup: jobWakeGroup.name, monitorWakeRole: jobWakeRole.arn };
+
+      // Account-wide billing notice, separate from the eight operational alarms.
+      const { AWS_BUDGET_NAME, budgetCostTypes } = await import('./packages/api/src/monitoring/budget-protocol');
+      const budgetTopic = new aws.sns.Topic("BudgetAlertTopic", {});
+      const budgetArn = caller.accountId.apply(account => `arn:aws:budgets::${account}:budget/${AWS_BUDGET_NAME}`);
+      const budgetTopicPolicy = new aws.sns.TopicPolicy("BudgetAlertPublishPolicy", {
+        arn: budgetTopic.arn,
+        policy: $util.all([budgetTopic.arn, caller.accountId, budgetArn]).apply(([topic, account, source]) => JSON.stringify({
+          Version: "2012-10-17", Statement: [{ Effect: "Allow", Principal: { Service: "budgets.amazonaws.com" },
+            Action: "sns:Publish", Resource: topic,
+            Condition: { StringEquals: { "aws:SourceAccount": account }, ArnEquals: { "aws:SourceArn": source } } }],
+        })),
+      });
+      const budgetAlert = new sst.aws.Function("BudgetAlert", {
+        handler: "packages/api/src/monitoring/budget-alert.handler", timeout: "20 seconds", memory: "128 MB",
+        logging: { retention: "2 weeks" }, retries: 2, link: [discord],
+        environment: { WAKA_STAGE: "production", BUDGET_ACCOUNT: caller.accountId, BUDGET_TOPIC_ARN: budgetTopic.arn,
+          MONITOR_TABLE: deliveryTable.name, WAKA_DISCORD_WEBHOOK_URL: discord.value },
+        permissions: [
+          { actions: ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem"], resources: [deliveryTable.arn], conditions: [
+            { test: "ForAllValues:StringLike", variable: "dynamodb:LeadingKeys", values: ["budget:*"] },
+            { test: "Null", variable: "dynamodb:LeadingKeys", values: ["false"] },
+          ] },
+          { actions: ["sqs:SendMessage"], resources: [deliveryDlq.arn] },
+        ],
+        transform: { role: { assumeRolePolicy: JSON.stringify({ Version: "2012-10-17", Statement: [
+          { Effect: "Allow", Action: "sts:AssumeRole", Principal: { Service: "lambda.amazonaws.com" } },
+        ] }) }, eventInvokeConfig: { maximumEventAgeInSeconds: 3600,
+          destinationConfig: { onFailure: { destination: deliveryDlq.arn } } } },
+      });
+      const budgetTargetArn = $util.all([caller.accountId, budgetAlert.name]).apply(([account, name]) => {
+        if (!/^\d{12}$/.test(account) || !/^waka-production-BudgetAlertFunction-[a-z0-9]+$/.test(name)) throw new Error("budget_function_identity_invalid");
+        return `arn:aws:lambda:${AWS_REGION}:${account}:function:${name}`;
+      });
+      const budgetInvoke = new aws.lambda.Permission("BudgetAlertSnsInvoke", {
+        action: "lambda:InvokeFunction", function: budgetAlert.name, principal: "sns.amazonaws.com",
+        sourceAccount: caller.accountId, sourceArn: budgetTopic.arn,
+      });
+      const budgetSubscription = new aws.sns.TopicSubscription("BudgetAlertSubscription", {
+        topic: budgetTopic.arn, protocol: "lambda", endpoint: budgetTargetArn,
+      }, { dependsOn: [budgetAlert.nodes.function, budgetInvoke] });
+      const readyBudgetTopic = $util.all([budgetSubscription.arn, budgetTopic.arn]).apply(([subscription, topic]) => {
+        if (typeof subscription !== "string" || !subscription.startsWith(topic + ":") ||
+          !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(subscription.slice(topic.length + 1))) throw new Error("budget_subscription_unconfirmed");
+        return topic;
+      });
+      const budgetAsync = budgetAlert.nodes.eventInvokeConfig;
+      if (!budgetAsync) throw new Error("budget_async_config_missing");
+      // Budgets is global; SNS/Lambda stay in the existing us-west-2 stack.
+      const budgetProvider = new aws.Provider("BudgetGlobalProvider", { region: "us-east-1" });
+      const accountBudget = new aws.budgets.Budget("AwsAccountMonthlyFive", {
+        accountId: caller.accountId, name: AWS_BUDGET_NAME, budgetType: "COST",
+        limitAmount: "5.00", limitUnit: "USD", timeUnit: "MONTHLY", costFilters: [], costTypes: budgetCostTypes,
+        notifications: [{ comparisonOperator: "GREATER_THAN", notificationType: "ACTUAL", threshold: 100,
+          thresholdType: "PERCENTAGE", subscriberSnsTopicArns: [readyBudgetTopic] }],
+        // Omitted start/end: current monthly period, recurring, no chosen expiry.
+      }, { provider: budgetProvider, retainOnDelete: true,
+        dependsOn: [budgetTopicPolicy, budgetInvoke, budgetSubscription, budgetAlert.nodes.function, budgetAsync] });
+      monitoringOutputs = { ...monitoringOutputs, awsBudgetName: accountBudget.name,
+        budgetAlertFunctionName: budgetAlert.name, budgetAlertTopicArn: budgetTopic.arn,
+        budgetAlertSubscriptionArn: budgetSubscription.arn };
     }
 
     // -----------------------------------------------------------------------
