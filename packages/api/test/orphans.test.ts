@@ -55,8 +55,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "../src");
 
 /**
- * Where the API starts, including the cleanup-only object-event subscriber
- * and the isolated SNS budget-notice handler.
+ * Where the API starts, including the cleanup-only object-event subscriber.
  *
  * `lambda.ts` and `background-worker.ts` are the deployed Lambda handlers and
  * `principle-refresh.ts` the nightly cron — all three named as `handler:`
@@ -73,8 +72,8 @@ const ENTRY = [
   "background-worker.ts",
   "attachment-object-events.ts",
   "monitoring/relay.ts",
-  "monitoring/budget-alert.ts",
   "monitoring/uptime.ts",
+  "monitoring/budget-alert.ts",
   "principle-refresh.ts",
   "server.ts",
   "nightly-local.ts",
