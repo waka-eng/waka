@@ -12,6 +12,7 @@ const canaries=['PRIVATE_CAPTURE_WORDS','person@example.test','https://private.e
 // from v3.19.3 secret.ts, aws/cron.ts and aws/helpers/function-builder.ts;
 // Node/Pulumi/provider cases exercise representative error signatures only.
 it.each([
+ ['config_top_level_import','time=2026-11-12T01:00:00Z level=ERROR msg="exited with error" err=ErrTopLevelImport'],
  ['secret_missing','Set a value for DiscordWebhookUrl with `sst secret set DiscordWebhookUrl <value>`'],
  ['secret_missing','SecretMissingError: PRIVATE_CAPTURE_WORDS'],
  ['sdk_visible_error','Cannot access the created function because it is referenced as an ARN.'],

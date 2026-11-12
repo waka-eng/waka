@@ -197,3 +197,41 @@ syntax/diff checks passed. The diagnostic method is the only new behavior; all
 app/IaC/dependency/workflow bytes remain unchanged. One new exact-SHA CI/preview
 is authorized for this method. If it still fails or remains unknown, further
 executions stop pending concrete review; apply and live exercises stay held.
+
+## Proven startup cause and local correction
+
+The failure is in the candidate's initial SST config load, before resource
+planning. The module-level JSON import added for the shared scheduled-event
+payload violated SST 3.19.3's startup contract. Its
+[DisallowImports plugin](https://github.com/sst/sst/blob/v3.19.3/pkg/js/js.go)
+rejects static imports from `sst.config.ts` during the initial
+[Project.New app evaluation](https://github.com/sst/sst/blob/v3.19.3/pkg/project/project.go)
+without injected globals, returning the exact `ErrTopLevelImport` sentinel.
+Main's inspection of the pinned official Go module archive confirms that contract. Zero observed
+alarms were a downstream symptom; they did not establish an IAM/name failure.
+
+An authentic local reproduction used the installed **SST 3.19.3 binary**,
+copies of the actual config/shared JSON/protocol, a credential-free environment
+and HOME, disabled dependency downloads/telemetry and macOS network denial.
+Both variants deliberately stop in `app()` before provider/home/run execution.
+The original static import exits 1 with **ErrTopLevelImport**, without reaching
+that stop. Moving only the import inside `async run()` removes that error and
+reaches the deliberate app stop. Neither variant enters provider loading. The
+local stderr byte counts differ from the CI wrapper; the deleted original
+697-byte stream is not claimed recovered.
+
+The fix moves the same JSON import into `async run()`; its payload is unchanged
+(SHA-256 `97b673552cc5f81df14168f7fcb38c3b2f704a49b74a8a9e1ad96eb785e5ae3f`).
+A real-CLI startup regression now exercises both variants, rather than mocking
+the import plugin. The scheduled-event regression still sends the serialized
+shared JSON through the real worker guard with all I/O stubbed; its source
+assertion now reflects the dynamic import. The classifier additionally recognizes
+only the exact typed sentinel. No provider policy, dependency, secret, payload,
+alarm, retention or maintenance eligibility is changed.
+
+**78 targeted tests passed**, including real CLI startup, classifier/preview and
+worker dispatch cases. API typecheck and script syntax/diff checks passed. The
+local correction is held for Main's review before any new CI/cloud execution;
+no new dispatch, apply, release, live maintenance, provider or Discord exercise
+was performed to diagnose this source defect. The last failed cloud attempt
+remains [43132825056](https://github.com/waka-eng/waka/actions/runs/43132825056).

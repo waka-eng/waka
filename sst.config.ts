@@ -1,5 +1,4 @@
 /// <reference path="./.sst/platform/config.d.ts" />
-import scheduledWorkerEvent from './infra/background-worker-event.json';
 
 /**
  * SST v3 (Ion) application config.
@@ -89,6 +88,7 @@ export default $config({
   },
 
   async run() {
+    const { default: scheduledWorkerEvent } = await import('./infra/background-worker-event.json');
     // -----------------------------------------------------------------------
     // Secrets
     //

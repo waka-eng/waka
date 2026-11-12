@@ -3,6 +3,7 @@
  * Categories describe observed diagnostics, not a proven root cause.
  */
 const signatures = [
+ ['config_top_level_import', /\bErrTopLevelImport\b/],
  ['secret_missing', /\bSecretMissingError\b|\bSet a value for [A-Za-z][A-Za-z0-9]* with `sst secret set [A-Za-z][A-Za-z0-9]* <value>`/i],
  ['sdk_visible_error', /\bVisibleError\b|Cannot access the created function because it is referenced as an ARN\.|No function created for the "[^"\r\n]{1,200}" cron job\.|You cannot provide both "job" and "function"/],
  ['config_import', /\bERR_MODULE_NOT_FOUND\b|\bCannot find (?:module|package)\b|\bCould not resolve ["']/i],

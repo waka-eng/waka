@@ -216,7 +216,7 @@ describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads"
   it('connects the configured serialized Cron input to the real maintenance branch; old empty input misses it',async()=>{
     const root=resolve(__dirname,'../../..');
     const config=readFileSync(resolve(root,'sst.config.ts'),'utf8');
-    expect(config).toContain("import scheduledWorkerEvent from './infra/background-worker-event.json'");
+    expect(config.slice(config.indexOf('  async run() {'))).toContain("const { default: scheduledWorkerEvent } = await import('./infra/background-worker-event.json')");
     expect(config.slice(config.indexOf('const dailyDrain ='),config.indexOf('// Completed PUTs'))).toContain('event: scheduledWorkerEvent');
     const configured=JSON.parse(readFileSync(resolve(root,'infra/background-worker-event.json'),'utf8'));
     expect(configured).toEqual(scheduled);
