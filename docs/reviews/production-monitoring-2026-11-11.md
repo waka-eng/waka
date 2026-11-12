@@ -162,3 +162,38 @@ syntax and diff checks passed. No repeated local full suite was needed for this
 driver-only change. A fresh exact-SHA normal CI/preview is required; resource
 apply, main/dev publication, daily maintenance activation and additional
 synthetic Discord/model/data exercises remain held.
+
+## Pinned SST log channel
+
+[Run 43130461325](https://github.com/waka-eng/waka/actions/runs/43130461325)
+at `5a788d23` again passed full CI, then failed the preview child with exit 1,
+zero operations and zero observed alarms. Artifact `13904489155` reports a
+successfully parsed but **unknown** diagnostic, without safe source locations.
+All apply steps were skipped; no infrastructure acceptance is claimed.
+
+Main identified a concrete missing channel in
+[SST 3.19.3's CLI](https://github.com/sst/sst/blob/v3.19.3/cmd/sst/main.go):
+the underlying unexpected error goes to `slog`, while default output can carry
+only a generic wrapper. The CLI explicitly supports `SST_PRINT_LOGS=1`. This
+explains why default output can be insufficient; it does not establish the
+underlying app/IaC cause.
+
+The driver now enables that flag **only on the captured preview child**, strips
+it from preflight subprocesses, and never assigns it to the parent environment
+or inherits the child's raw console. It removes the old fixed SST log before
+spawn. On failure, it may read only a fresh regular, non-symlink log: at most the
+last 2 MiB, in memory, through a bounded read. Captured output remains bounded
+to 20 million characters. The existing closed classifier and exact source
+allowlist are unchanged. Safe channel-presence flags and byte counts accompany
+the original child exit/operation/identity receipt. The ephemeral SST log is
+deleted after the receipt is written; only sanitized JSON is published.
+
+The actual-driver tests cover generic output plus underlying pinned-style log
+diagnostics, child-only logging, preflight/parent isolation, credential canaries,
+stale/non-file/unreadable logs, bounded tails, malformed/unknown content,
+cleanup ordering and unchanged failure/identity guards: **62 targeted tests
+passed**, including the retained policy and monitoring-isolation cases. Script
+syntax/diff checks passed. The diagnostic method is the only new behavior; all
+app/IaC/dependency/workflow bytes remain unchanged. One new exact-SHA CI/preview
+is authorized for this method. If it still fails or remains unknown, further
+executions stop pending concrete review; apply and live exercises stay held.
