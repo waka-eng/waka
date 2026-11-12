@@ -1,9 +1,8 @@
 /** Read-only production monitoring acceptance; never sends a notification. */
-import {execFileSync} from 'node:child_process';
-import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {alarmLabels} from '../packages/api/src/monitoring/protocol.ts';
+import {readAuditAwsJson,readAuditOutputs,auditFailure,printAuditReport} from './audit-diagnostics.mjs';
 const list = v => Array.isArray(v) ? v : [v];
 const doc = v => typeof v === 'string' ? JSON.parse(decodeURIComponent(v)) : v;
 const logs = new Set(['logs:CreateLogGroup','logs:CreateLogStream','logs:PutLogEvents','logs:DescribeLogStreams','xray:PutTraceSegments','xray:PutTelemetryRecords']);
@@ -85,7 +84,7 @@ export function auditMonitoring({outputs,webhook,read}) {
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   try{
-    const report=auditMonitoring({outputs:JSON.parse(readFileSync('.sst/outputs.json','utf8')),webhook:process.env.WAKA_DISCORD_WEBHOOK_URL,read:args=>JSON.parse(execFileSync('aws',[...args,'--region','us-west-2','--output','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']}))});
-    console.log(JSON.stringify(report));if(!report.passed)process.exitCode=1;
-  }catch{console.error('Production monitoring acceptance unavailable; private diagnostics withheld.');process.exitCode=1;}
+    const report=auditMonitoring({outputs:readAuditOutputs(),webhook:process.env.WAKA_DISCORD_WEBHOOK_URL,read:readAuditAwsJson});
+    printAuditReport(report,'production-monitoring-audit.json');
+  }catch(error){printAuditReport(auditFailure('monitoring_audit',error,{notificationSent:false,alarmPathDeliveryVerified:false}),'production-monitoring-audit.json');}
 }

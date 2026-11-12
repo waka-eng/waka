@@ -1,13 +1,15 @@
 /** Version-pinned checks before invoking SST, whose init may bootstrap AWS. */
 import {alarmLabels} from '../packages/api/src/monitoring/protocol.ts';
+import {AuditDiagnosticError} from './audit-diagnostics.mjs';
 
 export function verifyExistingProductionBootstrap(read){
- const bootstrap=JSON.parse(read(['ssm','get-parameter','--name','/sst/bootstrap','--query','Parameter.Value']).value);
- if(bootstrap.version!==5||bootstrap.state!=='sst-state-veustfdskvrh')throw Error('Existing bootstrap version/store differs from reviewed SST3.19.3');
+ const value=read(['ssm','get-parameter','--name','/sst/bootstrap','--query','Parameter.Value']).value;
+ let bootstrap;try{bootstrap=JSON.parse(value);}catch{throw new AuditDiagnosticError('invalid_json',{operation:'ssm:get-parameter'});}
+ if(bootstrap.version!==5||bootstrap.state!=='sst-state-veustfdskvrh')throw new AuditDiagnosticError('bootstrap_refused',{check:'bootstrapVersionStore'});
  const passphrase=read(['ssm','get-parameter','--name','/sst/passphrase/waka/production','--query','Parameter.Type']);
- if(passphrase.value!=='SecureString')throw Error('Existing production passphrase required');
+ if(passphrase.value!=='SecureString')throw new AuditDiagnosticError('bootstrap_refused',{check:'existingPassphrase'});
  const state=read(['s3api','head-object','--bucket',bootstrap.state,'--key','app/waka/production.json']);
- if(!(state.ContentLength>0))throw Error('Existing production state required');
+ if(!(state.ContentLength>0))throw new AuditDiagnosticError('bootstrap_refused',{check:'existingState'});
  return {sstVersion:'3.19.3',bootstrapVersion:5,existingState:true,existingPassphrase:true,bootstrapUpgradeAllowed:false,updateHistoryMetadataWriteExpected:true};
 }
 

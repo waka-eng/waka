@@ -74,6 +74,7 @@ it('bounds locations and keeps unrecognized or malformed input explicitly unknow
 async function runDriver(options:{stdout?:string;stderr?:string;freshLog?:string;staleLog?:string;oldTimestamp?:boolean;notRegular?:boolean;readError?:boolean;parserThrows?:boolean;parentPrintLogs?:string}={}){
  const policy=await import(/* @vite-ignore */resolve(__dirname,'../../../scripts/production-preview-policy.mjs'));
  const diagnostic=await load();
+ const auditDiagnostic=await import(/* @vite-ignore */resolve(__dirname,'../../../scripts/audit-diagnostics.mjs'));
  const source=readFileSync(resolve(__dirname,'../../../scripts/preview-production.mjs'),'utf8');
  const child:any=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>{};
  const writes=new Map<string,string>(),messages:string[]=[],order:string[]=[],files=new Map<string,string>(),preflights:any[]=[];
@@ -95,7 +96,8 @@ async function runDriver(options:{stdout?:string;stderr?:string;freshLog?:string
    return JSON.stringify({ContentLength:100});
   }},
   './production-preview-policy.mjs':policy,
-  './production-preview-diagnostics.mjs':options.parserThrows?{classifyPreviewFailure:()=>{throw Error('PRIVATE_CAPTURE_WORDS');}}:diagnostic,
+  './production-preview-diagnostics.mjs':options.parserThrows?{...diagnostic,classifyPreviewFailure:()=>{throw Error('PRIVATE_CAPTURE_WORDS');}}:diagnostic,
+  './audit-diagnostics.mjs':auditDiagnostic,
   'node:fs':{
    writeFileSync:(path:string,value:string)=>{writes.set(path,value);order.push('write:'+path);},
    rmSync:(path:string)=>{files.delete(path);order.push('remove:'+path);},
@@ -126,12 +128,13 @@ async function runDriver(options:{stdout?:string;stderr?:string;freshLog?:string
  expect(files.has(logPath)).toBe(false);expect(receipt.diagnosticChannels.logDeleted).toBe(true);
  expect(order.indexOf('remove:'+logPath)).toBeLessThan(order.indexOf('spawn'));
  expect(order.lastIndexOf('remove:'+logPath)).toBeGreaterThan(order.indexOf('write:production-preview.json'));
- return {receipt,order};
+ return {receipt,order,messages};
 }
 
 it('preserves actual child exit, operations and identities when diagnostic parsing itself throws',async()=>{
- const {receipt}=await runDriver({stderr:'TypeError: '+canaries.join(' '),parserThrows:true});
+ const {receipt,messages}=await runDriver({stderr:'TypeError: '+canaries.join(' '),parserThrows:true});
  expect(receipt.diagnostics).toEqual({parsed:false,categories:['unknown'],sourceLocations:[]});
+ expect(messages.at(-1)).toContain('child exit=1; operations=8; alarms=8/8');expect(messages.at(-1)).toContain('failed guards=childSucceeded');expect(messages.at(-1)).toContain('cause remains unknown');
 });
 
 // SST 3.19.3 cmd/sst/main.go prints this generic wrapper while slog records

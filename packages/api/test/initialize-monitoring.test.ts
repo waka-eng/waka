@@ -18,4 +18,12 @@ function fixture(armed=false,healthy=true){
 it('arms only after natural healthy native metrics and OK; no forced probe/state/message',async()=>{const {initializeMonitoring}=await load(),f=fixture(),r=await initializeMonitoring(f);expect(r.passed).toBe(true);expect(r.initialActionsEnabled).toBe(false);expect(r.heartbeatActionsEnabled).toBe(true);expect(f.enable).toHaveBeenCalledTimes(1);});
 it('already armed redeploy preserves actual state without assuming Pulumi disabled it',async()=>{const {initializeMonitoring}=await load(),f=fixture(true),r=await initializeMonitoring(f);expect(r.initialActionsEnabled).toBe(true);expect(r.heartbeatActionsEnabled).toBe(true);expect(f.enable).not.toHaveBeenCalled();});
 it.each([true,false])('baseline failure leaves actual prior action state %s unchanged',async armed=>{const {initializeMonitoring}=await load(),f=fixture(armed,false),r=await initializeMonitoring(f);expect(r.passed).toBe(false);expect(r.heartbeatActionsEnabled).toBe(armed);expect(f.alarm.ActionsEnabled).toBe(armed);expect(f.enable).not.toHaveBeenCalled();expect(f.wait).toHaveBeenCalledTimes(1);});
+it('baseline timeout records the missing/error/state signals and false check names',async()=>{
+ const {initializeMonitoring}=await load(),f=fixture(true,false),r=await initializeMonitoring(f);
+ expect(r.baseline).toEqual({invocationObserved:false,errorsObserved:false,alarmState:'ALARM',attempts:2});
+ expect(r.checks).toEqual({naturalInvocation:false,noProbeErrors:true,heartbeatAlarmOk:false});
+ const {explainAuditFailure}=await import(/* @vite-ignore */resolve(__dirname,'../../../scripts/audit-diagnostics.mjs'));
+ const summary=explainAuditFailure(r,'production-monitoring-baseline.json');
+ expect(summary).toContain('failed checks=naturalInvocation,heartbeatAlarmOk');expect(summary).toContain('"alarmState":"ALARM"');expect(summary).toContain('do not force a probe');expect(f.enable).not.toHaveBeenCalled();
+});
 it('refuses foreign bindings before any action mutation',async()=>{const {initializeMonitoring}=await load(),f=fixture();f.alarm.Dimensions[0].Value='dev-probe';await expect(initializeMonitoring(f)).rejects.toThrow('monitor_initialization_alarm_binding');expect(f.enable).not.toHaveBeenCalled();});

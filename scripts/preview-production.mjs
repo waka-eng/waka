@@ -3,24 +3,32 @@
  * resource identifiers. Never upload raw output/state as an artifact. */
 import {spawn,execFileSync} from 'node:child_process';
 import {verifyExistingProductionBootstrap,summarizePreviewEvents,verifyMonitorAlarmIdentities} from './production-preview-policy.mjs';
-import {classifyPreviewFailure} from './production-preview-diagnostics.mjs';
+import {classifyPreviewFailure,explainPreviewFailure} from './production-preview-diagnostics.mjs';
+import {AuditDiagnosticError,readAuditAwsJson,auditFailure,explainAuditFailure} from './audit-diagnostics.mjs';
 import {writeFileSync,rmSync,readdirSync,readFileSync,openSync,fstatSync,readSync,closeSync,constants} from 'node:fs';
 import {join} from 'node:path';
 const preflightEnv={...process.env};delete preflightEnv.SST_PRINT_LOGS;
 let bootstrap;
+const refuse=(phase,error)=>{
+ const receipt=auditFailure(phase,error,{exitCode:null,operations:[],monitorAlarmIdentity:verifyMonitorAlarmIdentities(''),rawOutputPublished:false});
+ try{writeFileSync('production-preview.json',JSON.stringify(receipt)+'\n',{mode:0o600});console.error(explainAuditFailure(receipt,'production-preview.json'));}
+ catch{console.error(`Production preview failed: ${phase} artifact_write_failed. Next: verify the safe artifact destination is writable.`);console.error(JSON.stringify(receipt));}
+ process.exit(1);
+};
 try {
- const version=execFileSync('pnpm',['sst','version'],{env:preflightEnv,encoding:'utf8',stdio:['ignore','pipe','pipe']});
- if(!/sst 3\.19\.3\b/.test(version))throw Error('Unexpected CLI');
+ let version;
+ try{version=execFileSync('pnpm',['sst','version'],{env:preflightEnv,encoding:'utf8',stdio:['ignore','pipe','pipe']});}catch{throw new AuditDiagnosticError('cli_version_failed');}
+ if(!/sst 3\.19\.3\b/.test(version))throw new AuditDiagnosticError('cli_version_mismatch');
  bootstrap=verifyExistingProductionBootstrap(args=>{
-  const value=JSON.parse(execFileSync('aws',[...args,'--region','us-west-2','--output','json'],{env:preflightEnv,encoding:'utf8',stdio:['ignore','pipe','pipe']}));
+  const value=readAuditAwsJson(args,execFileSync,{env:preflightEnv});
   return typeof value==='string'?{value}:value;
  });
  console.log(JSON.stringify({productionPreviewPreflight:bootstrap}));
-} catch {console.error('Production preview refused before SST initialization: current bootstrap/state/passphrase attestation missing.');process.exit(1);}
+} catch(error) {refuse('preview_preflight',error);}
 process.umask(0o077);
 const sstLog='.sst/log/sst.log';
 try {rmSync(sstLog,{force:true});}
-catch {console.error('Preview refused: could not reset the private child log.');process.exit(1);}
+catch {refuse('preview_log_reset',new AuditDiagnosticError('private_log_reset_failed'));}
 const startedAt=Date.now();
 const channels={childPrintLogs:true,stdoutBytes:0,stderrBytes:0,capturedOutputBytes:0,outputTruncated:false,freshLogReset:true,freshLogPresent:false,freshLogBytesConsumed:0,freshLogTruncated:false,freshLogRejected:false,logReadFailed:false,logDeleted:false};
 const child=spawn('pnpm',['sst','diff','--stage','production'],{env:{...process.env,NO_COLOR:'1',SST_TELEMETRY_DISABLED:'1',SST_NO_CLEANUP:'1',SST_PRINT_LOGS:'1'},stdio:['ignore','pipe','pipe']});
@@ -29,7 +37,7 @@ let output='';for(const [name,stream] of [['stdoutBytes',child.stdout],['stderrB
  const text=data.toString(),room=Math.max(0,20_000_000-output.length);output+=text.slice(0,room);
  if(text.length>room){channels.outputTruncated=true;child.kill('SIGTERM');}
 });
-child.on('error',()=>{console.error('Could not start production preview');process.exitCode=1;});
+child.on('error',()=>{console.error('Production preview child could not start; await the safe production-preview.json exit receipt.');process.exitCode=1;});
 child.on('close',code=>{
  channels.capturedOutputBytes=Buffer.byteLength(output);
  let log='';
@@ -64,9 +72,9 @@ child.on('close',code=>{
  const receipt={stage:'production',exitCode:code,bootstrap,operations,monitorAlarmIdentity,errorCodes,diagnostics,diagnosticChannels:channels,rawOutputPublished:false};
  writeFileSync('production-preview.json',JSON.stringify(receipt,null,2)+'\n',{mode:0o600});
  try {rmSync(sstLog,{force:true});channels.logDeleted=true;}
- catch {console.error('Private child log cleanup failed.');process.exitCode=1;}
+ catch {console.error('Production preview failed: private_log_cleanup; privateLogDeleted=false. Next: inspect runner file permissions; retain production-preview.json.');process.exitCode=1;}
  writeFileSync('production-preview.json',JSON.stringify(receipt,null,2)+'\n',{mode:0o600});
  console.log(JSON.stringify(receipt));
- if(code!==0||!operations.length||!monitorAlarmIdentity.passed){console.error('Preview needs review: resource operations or exact monitor alarm identities not verified. Raw diagnostics withheld.');process.exitCode=1;}
+ if(code!==0||!operations.length||!monitorAlarmIdentity.passed||!channels.logDeleted){console.error(explainPreviewFailure(receipt));process.exitCode=1;}
  rmSync('.sst/pulumi',{recursive:true,force:true});
 });

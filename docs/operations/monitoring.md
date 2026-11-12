@@ -280,6 +280,36 @@ late-PUT/deletion/restart/DLQ acceptance and an erasure SLA remain separate gate
 
 ## Rollout and remaining gates
 
+### Reading failed acceptance checks
+
+Each audit writes safe JSON even when metadata reading fails, and prints a short
+stderr explanation naming the phase and `service:operation`, or the exact failed
+boolean checks. For example:
+
+```text
+Production acceptance failed: monitoring_audit: lambda:get-function-concurrency aws_read_failed (AccessDeniedException). Safe JSON: production-monitoring-audit.json. Next: verify this exact operation and its scoped access/response contract.
+Production acceptance failed: boolean gate failed; failed checks=relayRole,alarmActions. Safe JSON: production-monitoring-audit.json. Next: inspect the named checks and their retained expected bindings before retrying.
+```
+
+The AWS CLI emits zero bytes for a successful empty object. Only the exact
+unreserved `lambda:get-function-concurrency` read accepts that as `{}`; reserved
+values (including zero), failed commands, malformed JSON and other empty reads
+still fail. Local outputs-file read/JSON/shape failures have separate codes.
+Action-state failures retain `production-monitoring-before.json` without emitting
+an invalid `GITHUB_ENV` assignment. If a destination is unwritable, stderr names
+that failure and includes only the safe JSON receipt.
+
+Baseline timeout receipts state whether a recent invocation/error was observed
+and the closed heartbeat alarm state. A missing baseline never forces a probe or
+disables an already armed alarm. Preview failures report actual child exit,
+resource count, observed/expected alarm counts, false identity guard keys and
+classified categories/allowlisted source locations in `production-preview.json`.
+An `unknown` cause remains unknown. Inspect the retained safe artifact and the
+named boundary before retrying; a classified signal alone is not a root-cause
+proof. These receipts omit raw AWS/child output, argument/environment values,
+credential URLs, message bodies and stacks. Preserve failed attempts; do not
+weaken the gate, alter state or redeploy merely to obtain a different outcome.
+
 Review exact source/CI and sanitized SST preview before production apply. Keep
 main/dev aligned through their existing exact-SHA pipelines; dev has no Discord
 resources/actions and no production PostHog settings. New operational Dynamo/SQS

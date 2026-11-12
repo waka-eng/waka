@@ -57,3 +57,11 @@ export function classifyPreviewFailure(raw) {
  }
  return {parsed:true, categories:categories.length ? categories : ['unknown'], sourceLocations:[...locations.values()]};
 }
+
+/** Receives only the already projected receipt, never the child stream. */
+export function explainPreviewFailure(receipt){
+ const identity=receipt.monitorAlarmIdentity;
+ const failed=[...(receipt.exitCode!==0?['childSucceeded']:[]),...(!receipt.operations.length?['operationsPresent']:[]),...Object.entries(identity.checks).filter(([,value])=>value!==true).map(([key])=>key),...(!identity.passed?['alarmIdentityPassed']:[]),...(receipt.diagnosticChannels.logDeleted!==true?['privateLogDeleted']:[])];
+ const locations=receipt.diagnostics.sourceLocations.map(p=>`${p.source}:${p.line}${p.column?':'+p.column:''}`).join(',')||'none';
+ return `Production preview failed: child exit=${receipt.exitCode??'unknown'}; operations=${receipt.operations.length}; alarms=${identity.observedCount}/${identity.expectedCount}; failed guards=${failed.join(',')||'none'}; categories=${receipt.diagnostics.categories.join(',')||'unknown'}; locations=${locations}. Safe JSON: production-preview.json. Next: inspect these guards and safe candidate evidence before retrying; classified signals do not establish a root cause${receipt.diagnostics.categories.includes('unknown')?' (cause remains unknown)':''}.`;
+}

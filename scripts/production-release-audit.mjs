@@ -1,8 +1,7 @@
 /** Read-only deployment acceptance. Secrets never leave the in-memory reader. */
-import {readFileSync} from 'node:fs';
-import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {readAuditAwsJson,readAuditOutputs,auditFailure,printAuditReport} from './audit-diagnostics.mjs';
 const list=value=>Array.isArray(value)?value:[value];
 const document=value=>typeof value==='string'?JSON.parse(decodeURIComponent(value)):value;
 export function scopedS3SendPolicy(value,queueArn,bucket,account){
@@ -93,8 +92,8 @@ export function auditProductionRelease({outputs,expected,read}){
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
-  const outputs=JSON.parse(readFileSync('.sst/outputs.json','utf8'));
-  const report=auditProductionRelease({outputs,expected:{database:process.env.DB_CONNECTION_URL,openRouter:process.env.OPENROUTER_API_KEY,attachments:'waka-production-attachmentsbucket-rceuztkc',vault:'waka-production-vaultbucket-baskzfwm'},read:args=>JSON.parse(execFileSync('aws',[...args,'--region','us-west-2','--output','json'],{encoding:'utf8',stdio:['ignore','pipe','pipe']}))});
-  console.log(JSON.stringify(report));if(!report.passed)process.exitCode=1;
- }catch{console.error('Production read-only acceptance unavailable; no secret diagnostics printed.');process.exitCode=1;}
+  const outputs=readAuditOutputs();
+  const report=auditProductionRelease({outputs,expected:{database:process.env.DB_CONNECTION_URL,openRouter:process.env.OPENROUTER_API_KEY,attachments:'waka-production-attachmentsbucket-rceuztkc',vault:'waka-production-vaultbucket-baskzfwm'},read:readAuditAwsJson});
+  printAuditReport(report,'production-release-audit.json');
+ }catch(error){printAuditReport(auditFailure('release_audit',error,{actualLatePutExercise:false,externalAlertDeliveryVerified:false,finiteErasureSlaEstablished:false}),'production-release-audit.json');}
 }

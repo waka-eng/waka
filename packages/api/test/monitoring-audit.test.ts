@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
+import {executeAuditCli} from './helpers/audit-cli';
 const load=()=>import(/* @vite-ignore */resolve(__dirname,'../../../scripts/monitoring-audit.mjs'));
 function fixture(){
   const account='111122223333',prefix=`arn:aws:lambda:us-west-2:${account}:function:`,webhook='PRIVATE_WEBHOOK_NEVER_PUBLISH';
@@ -86,4 +87,40 @@ it.each([undefined,'wrong-mode'])('refuses missing/wrong mandatory send-gate mar
 it.each([19,21,30])('refuses relay timeout %s despite a correct marker',async timeout=>{
   const {auditMonitoring}=await load(),f=fixture();f.relay.Timeout=timeout;const r=auditMonitoring(f);
   expect(r.checks.relaySendGate).toBe(false);expect(r.passed).toBe(false);
+});
+
+it('passes the full real audit through CLI serialization that omits stdout for {}',async()=>{
+  const {auditMonitoring}=await load(),{readAuditAwsJson}=await import(/* @vite-ignore */resolve(__dirname,'../../../scripts/audit-diagnostics.mjs')),f=fixture();
+  const execute=(_program:string,argv:string[])=>{
+    const response=f.read(argv.slice(0,-4));
+    // Executed official AWS CLI JSONFormatter proof: {} produces zero bytes.
+    return Object.keys(response).length===0?'':JSON.stringify(response);
+  };
+  const r=auditMonitoring({...f,read:(args:string[])=>readAuditAwsJson(args,execute)});
+  expect(r.passed).toBe(true);expect(r.checks.relayConcurrency).toBe(true);expect(JSON.stringify(r)).not.toContain('PRIVATE_');
+});
+it.each([0,1])('actual CLI parse boundary still refuses reserved concurrency %s',async value=>{
+  const {auditMonitoring}=await load(),{readAuditAwsJson}=await import(/* @vite-ignore */resolve(__dirname,'../../../scripts/audit-diagnostics.mjs')),f=fixture();
+  const execute=(_program:string,argv:string[])=>JSON.stringify(argv[1]==='get-function-concurrency'?{ReservedConcurrentExecutions:value}:f.read(argv.slice(0,-4)));
+  const r=auditMonitoring({...f,read:(args:string[])=>readAuditAwsJson(args,execute)});
+  expect(r.passed).toBe(false);expect(r.checks.relayConcurrency).toBe(false);
+});
+
+it.each([undefined,0,1])('executed monitoring audit handles actual CLI empty or reserved=%s without weakening the gate',async reserved=>{
+ const {auditMonitoring}=await load(),f=fixture(),responses:Record<string,any>={};
+ auditMonitoring({...f,read:(args:string[])=>{const value=f.read(args);responses[JSON.stringify(args)]={json:value};return value;}});
+ responses[JSON.stringify(['lambda','get-function-concurrency','--function-name',f.relay.FunctionName])]=reserved===undefined?{stdout:''}:{json:{ReservedConcurrentExecutions:reserved}};
+ const r=executeAuditCli('monitoring-audit.mjs',{outputs:f.outputs,responses,env:{WAKA_DISCORD_WEBHOOK_URL:f.webhook}}),report=JSON.parse(r.stdout);
+ expect(r.status).toBe(reserved===undefined?0:1);expect(report.passed).toBe(reserved===undefined);expect(report.checks.relayConcurrency).toBe(reserved===undefined);
+ if(reserved!==undefined)expect(r.stderr).toContain('failed checks=relayConcurrency');
+ expect(r.stdout+r.stderr).not.toContain('PRIVATE');
+});
+it('executed monitoring gate names each failed check while preserving the full safe report',async()=>{
+ const {auditMonitoring}=await load(),f=fixture(),responses:Record<string,any>={};
+ f.policy.Statement[0].Resource='*';f.alarms[0].ActionsEnabled=false;
+ auditMonitoring({...f,read:(args:string[])=>{const value=f.read(args);responses[JSON.stringify(args)]={json:value};return value;}});
+ const r=executeAuditCli('monitoring-audit.mjs',{outputs:f.outputs,responses,env:{WAKA_DISCORD_WEBHOOK_URL:f.webhook}}),report=JSON.parse(r.stdout);
+ expect(r.status).toBe(1);expect(report.checks.relayRole).toBe(false);expect(report.checks.alarmActions).toBe(false);
+ expect(r.stderr).toContain('failed checks=relayRole,alarmActions');expect(r.stderr).toContain('production-monitoring-audit.json');
+ expect(r.stderr).not.toContain('arn:');expect(r.stdout+r.stderr).not.toContain(f.webhook);
 });

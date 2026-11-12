@@ -1,5 +1,6 @@
 import {expect,it} from 'vitest';
 import {resolve} from 'node:path';
+import {executeAuditCli} from './helpers/audit-cli';
 const load=()=>import(/* @vite-ignore */resolve(__dirname,'../../../scripts/production-release-audit.mjs'));
 function fixture(){
  const expected={database:'PRIVATE_DB_DO_NOT_PRINT',openRouter:'PRIVATE_KEY_DO_NOT_PRINT',attachments:'bucket',vault:'vault'};
@@ -31,6 +32,15 @@ it('accepts stage-scoped runtime and durable event wiring without returning cred
  expect(r.passed).toBe(true);expect(JSON.stringify(r)).not.toMatch(/PRIVATE_DB|PRIVATE_KEY/);
  expect(r.checks.sendPolicyScoped).toBe(true);expect(r.checks.cleanupIamIsolated).toBe(true);
  expect(r.actualLatePutExercise).toBe(false);expect(r.externalAlertDeliveryVerified).toBe(false);
+});
+it('executed release audit preserves detailed gates and names actual failures in stderr',async()=>{
+ const {auditProductionRelease}=await load(),f=fixture(),responses:Record<string,any>={};
+ f.expected.attachments='waka-production-attachmentsbucket-rceuztkc';f.expected.vault='waka-production-vaultbucket-baskzfwm';
+ auditProductionRelease({...f,read:(args:string[])=>{const value=f.read(args);responses[JSON.stringify(args)]={json:value};return value;}});
+ const r=executeAuditCli('production-release-audit.mjs',{outputs:f.outputs,responses}),report=JSON.parse(r.stdout);
+ expect(r.status).toBe(1);expect(report.checks.apiDatabaseMatches).toBe(false);expect(r.stderr).toContain('apiDatabaseMatches');
+ expect(r.stderr).toContain('production-release-audit.json');expect(r.stderr).toContain('Next:');expect(r.stderr).not.toContain('arn:');
+ expect(r.stdout+r.stderr).not.toContain('PRIVATE_');
 });
 it('fails mismatched provider/DB, leaked admin flags, missing notifications and event mapping readiness',async()=>{
  const {auditProductionRelease}=await load();
