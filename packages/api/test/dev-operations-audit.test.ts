@@ -102,7 +102,7 @@ it('drops malformed, foreign-stage and nonnumeric events',()=>{
 it('keeps manual verification out of push/deployment jobs and never invokes models or workers',()=>{
   const workflow=readFileSync(new URL('../../../.github/workflows/deploy-dev.yml',import.meta.url),'utf8');
   expect(workflow).toContain("if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_only == true }}");
-  expect(workflow).toContain("if: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_only != true }}");
+  expect(workflow).toContain("if: ${{ needs.check.result == 'success' && (github.event_name != 'workflow_dispatch' || inputs.verify_only != true) }}");
   const verification=workflow.slice(workflow.indexOf('  verify:'),workflow.indexOf('  deploy:'));
   expect(verification).toContain('timeout-minutes: 5');expect(verification).not.toMatch(/sst deploy|db:migrate|secret set|pnpm install/);
   const script=readFileSync(new URL('../../../scripts/dev-operations-audit.mjs',import.meta.url),'utf8');
