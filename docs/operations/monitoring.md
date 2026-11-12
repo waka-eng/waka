@@ -1,8 +1,16 @@
 # Production monitoring
 
-Status: implementation candidate, not deployed acceptance. Production-only encrypted delivery secret and public build variables are prepared; the live site is unchanged. The accepted app
-baseline is `19f8193135b66937d31867315a08a06e8959c935`. No model calls,
-owner database changes or new synthetic Discord message are part of this work.
+Status: production **partially applied**, not accepted. The monitoring rollout at
+`8276e328449df9b72d05d656c36f0b52087aeb53` passed CI, then AWS rejected the
+relay's concurrency reservation; [production run 43143029442](https://github.com/waka-eng/waka/actions/runs/43143029442) failed before runtime/monitoring audits and heartbeat arming.
+The saved checkpoint contains the probe/table/failure queue and enabled probe
+schedule, but the relay is incomplete and none of the eight new alarms is in the
+checkpoint. Direct live alarm state/actions are not attested. Development
+[run 43143029539](https://github.com/waka-eng/waka/actions/runs/43143029539) passed.
+Production static assets contain the approved PostHog configuration; actual
+browser ingestion/dashboard acceptance is separate and pending. The repair below
+is a local candidate, not deployed behavior. No model calls, owner database
+changes or new synthetic Discord message are part of this repair.
 
 The owner chose Discord and authorized up to **US$10/month for monitoring**,
 separate from AI spending. A direct, mention-free sample was accepted by Discord
@@ -74,12 +82,35 @@ per-account budget/accounting framework. Probe retries are zero, EventBridge
 redelivery is zero with a 60-second max event age, and its Lambda timeout/memory
 remain 12 seconds/128 MB.
 
-Before a POST, a conditional durable intent is stored and a 30-second lease is
-claimed. Reserved relay concurrency is one; the table fences duplicate delivery
-across invocations/replacements. A delivered head timestamp suppresses strictly older
-ALARM/OK events. Distinct states with tied timestamps retain their separate intents. Successful settlement is separate from the external POST.
-**A crash after Discord accepts but before durable settlement can duplicate the
-message. At-least-once recovery is intended; exactly once is not claimed.**
+Before a POST, durable event intent and a per-event claim are stored, then a
+**per-alarm** head row is conditionally claimed for 30 seconds. The same atomic
+write returns the delivered timestamp/event ID; no separate read-to-send race
+exists. The head lease exceeds the relay's entire 20-second Lambda runtime and
+five-second HTTP deadline. Its token and unexpired deadline admit the send;
+head checkpoint/release and event settlement use exact-token, unexpired CAS.
+Competing ALARM/OK states for the same alarm wait for native retry; the eight
+different alarms can progress independently without a global lock. No reserved
+concurrency is required. A mandatory `MONITOR_SEND_GATE=alarm-head-v1` fails
+closed when missing/wrong; the live audit requires it and actual absence of the
+AWS reservation field, plus unchanged IAM/isolation/retry/action checks. The
+marker is configuration evidence; race/fault/adapter tests and the checked SHA's
+actual deployment are required to establish the implementation.
+
+A delivered head suppresses strictly older events. Tied timestamps retain their
+separate intents. A successful POST first checkpoints the delivered event under
+the head claim, then settles the event, then releases the head. A retry after a
+checkpoint/settlement crash repairs that exact event without reposting. An old
+claim cannot checkpoint or release a replacement claim after expiry. Transport,
+5xx and uncertain settlement failures retain the head claim until expiry; 429
+persists its bounded event defer before releasing the head. Storage failures
+before admission prevent network I/O.
+
+**Discord cannot be committed atomically with DynamoDB. A crash after acceptance
+but before durable checkpoint can duplicate a message; an aborted request may
+have unknown remote timing.** Same-alarm application attempts are serialized,
+not an exactly-once or absolute remote-order guarantee. Cross-alarm order is not
+required, and a burst may still receive Discord 429. Recoverable intent and the
+retained failure queue remain the boundary when native retries are exhausted.
 
 Each invocation makes one POST with a five-second timeout. Discord 429 defers
 the lease according to bounded Retry-After (60 seconds to one hour); no busy wait.
@@ -157,9 +188,21 @@ existing production **and development** monitoring, not only this increment. Gen
 | Logs | 1 GB total monitoring/app operational ingestion allowance ×$0.50 +1 GB-month ×$0.03. New relay/probe retention 14 days; existing app retention unchanged. | 0.53 |
 | Compute and requests | Up to 8,928 five-minute probes/month at the entire 12s/128MB limit, their DB-free health calls at 2s/1GB, plus 3,000 relay attempts at 20s/128MB; request fees included, rounded up. | 0.68 |
 | Operator metrics/inspection | 4,800 GetMetricData metrics ×$0.00001 +1,000 other requests; 1 GB Logs Insights scan. EMF makes zero new PutMetricData calls. | 0.07 |
-| Delivery/storage/transfer | <=1,000 transitions, <=20k delivery operations plus <=27k five-minute probe Dynamo operations and <=10k SQS requests, tiny retained metadata, schedule/S3/HTTP transfer allowance. No NAT gateway, KMS key or Secrets Manager subscription. | 0.10 |
+| Delivery/storage/transfer | <=1,000 transitions, <=3,000 delivery attempts/18k Dynamo requests (20k allowance) plus <=27k five-minute probe Dynamo operations and <=10k SQS requests, tiny retained metadata, schedule/S3/HTTP transfer allowance. No NAT gateway, KMS key or Secrets Manager subscription. | 0.10 |
 | Custom dashboard/SNS/vendor ops plan | Native console links above; no custom dashboard or SNS resource. | 0.00 |
 | **Conservative AWS envelope** | Existing $5.80 baseline (custom series, dev alarms and old production DLQ) +incremental/usage allowances. | **9.18** |
+
+The relay adapter uses at most **six Dynamo SDK requests per handler attempt**:
+intent, event claim, atomic head claim, head checkpoint, event settlement, head
+release. Replay/busy event uses three; busy head/HTTP 5xx uses three; 429, stale
+suppression and checkpoint repair use five. Boundary failures stop there. SDK
+request retries are disabled for this relay client (`maxAttempts: 1`); the existing
+two native Lambda retries remain, already counted in the 3,000-attempt allowance.
+Thus 3,000 attempts use at most 18,000 requests within the existing 20k allowance;
+this is a stated traffic bound, not an enforced monthly cap. Table/key IAM,
+resources, metric series, fixed $2.00 increment and other cost assumptions do not
+change. Deterministic actual-adapter transport tests count these requests without
+sending a Discord notification.
 
 The table is a conservative **normal-traffic envelope**, not a timeout stress
 bound. The actual API source timeout is **60 seconds at 1024 MB**; the 30-second

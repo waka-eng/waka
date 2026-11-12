@@ -548,7 +548,7 @@ export default $config({
         handler: "packages/api/src/monitoring/relay.handler", timeout: "20 seconds", memory: "128 MB",
         logging: { retention: "2 weeks" }, retries: 2,
         link: [discord],
-        environment: { WAKA_STAGE: "production", MONITOR_ACCOUNT: caller.accountId, MONITOR_TABLE: deliveryTable.name, WAKA_DISCORD_WEBHOOK_URL: discord.value },
+        environment: { WAKA_STAGE: "production", MONITOR_ACCOUNT: caller.accountId, MONITOR_TABLE: deliveryTable.name, MONITOR_SEND_GATE: "alarm-head-v1", WAKA_DISCORD_WEBHOOK_URL: discord.value },
         permissions: [
           { actions: ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem"], resources: [deliveryTable.arn], conditions: [
             { test: "ForAllValues:StringLike", variable: "dynamodb:LeadingKeys", values: ["event:*", "head:waka-production-*"] },
@@ -556,9 +556,9 @@ export default $config({
           ] },
           { actions: ["sqs:SendMessage"], resources: [deliveryDlq.arn] },
         ],
-        // Serial delivery limits external pressure; DynamoDB is the durable
-        // dedup/lease authority across crashes and Lambda replacements.
-        transform: { function: { reservedConcurrentExecutions: 1 }, eventInvokeConfig: {
+        // Per-alarm DynamoDB leases serialize competing states; no account-level
+        // concurrency reservation or cross-alarm bottleneck is required.
+        transform: { eventInvokeConfig: {
           maximumEventAgeInSeconds: 3600, destinationConfig: { onFailure: { destination: deliveryDlq.arn } },
         } },
       });

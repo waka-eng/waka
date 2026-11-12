@@ -36,11 +36,12 @@ export function auditMonitoring({outputs,webhook,read}) {
   const app=e=>{try{return JSON.parse(e.SST_RESOURCE_App??'{}');}catch{return {};}};
   checks.relayIdentity=relay.FunctionName===outputs.monitorRelayFunctionName&&relay.FunctionArn===`arn:aws:lambda:${region}:${account}:function:${relay.FunctionName}`&&app(env).name==='waka'&&app(env).stage==='production';
   checks.probeIdentity=probe.FunctionName===outputs.monitorProbeFunctionName&&probe.FunctionArn===`arn:aws:lambda:${region}:${account}:function:${probe.FunctionName}`&&app(probeEnv).name==='waka'&&app(probeEnv).stage==='production';
-  const relayKeys=new Set(['WAKA_STAGE','MONITOR_ACCOUNT','MONITOR_TABLE','WAKA_DISCORD_WEBHOOK_URL','SST_RESOURCE_App','SST_RESOURCE_DiscordWebhookUrl','NODE_OPTIONS']);
+  const relayKeys=new Set(['WAKA_STAGE','MONITOR_ACCOUNT','MONITOR_TABLE','MONITOR_SEND_GATE','WAKA_DISCORD_WEBHOOK_URL','SST_RESOURCE_App','SST_RESOURCE_DiscordWebhookUrl','NODE_OPTIONS']);
   checks.relayEnvironment=Object.keys(env).every(k=>relayKeys.has(k))&&env.WAKA_STAGE==='production'&&env.MONITOR_ACCOUNT===account&&env.MONITOR_TABLE===outputs.monitorDeliveryTable&&!!webhook&&env.WAKA_DISCORD_WEBHOOK_URL===webhook;
   checks.probeEnvironment=Object.keys(probeEnv).every(k=>['SST_RESOURCE_App','NODE_OPTIONS','MONITOR_TABLE'].includes(k))&&probeEnv.MONITOR_TABLE===outputs.monitorDeliveryTable;
   checks.boundedFunctions=relay.Timeout===20&&relay.MemorySize===128&&probe.Timeout===12&&probe.MemorySize===128;
-  checks.relayConcurrency=read(['lambda','get-function-concurrency','--function-name',relay.FunctionName]).ReservedConcurrentExecutions===1;
+  checks.relayConcurrency=!Object.hasOwn(read(['lambda','get-function-concurrency','--function-name',relay.FunctionName]),'ReservedConcurrentExecutions');
+  checks.relaySendGate=env.MONITOR_SEND_GATE==='alarm-head-v1'&&relay.Timeout===20&&relay.Timeout*1000<30000;
   const table=read(['dynamodb','describe-table','--table-name',outputs.monitorDeliveryTable]).Table;
   checks.intentTable=table?.TableStatus==='ACTIVE'&&table.TableArn===`arn:aws:dynamodb:${region}:${account}:table/${outputs.monitorDeliveryTable}`&&table?.BillingModeSummary?.BillingMode==='PAY_PER_REQUEST'&&table?.KeySchema?.length===1&&table.KeySchema[0].AttributeName==='id'&&table.KeySchema[0].KeyType==='HASH';
   const ttl=read(['dynamodb','describe-time-to-live','--table-name',outputs.monitorDeliveryTable]).TimeToLiveDescription;

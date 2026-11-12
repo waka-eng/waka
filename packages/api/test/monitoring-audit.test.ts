@@ -6,7 +6,7 @@ function fixture(){
   const account='111122223333',prefix=`arn:aws:lambda:us-west-2:${account}:function:`,webhook='PRIVATE_WEBHOOK_NEVER_PUBLISH';
   const outputs={apiFunctionName:'api',backgroundWorkerFunctionName:'worker',monitorPrincipleFunctionName:'principle',monitorCleanupFunctionName:'cleanup',monitorRelayFunctionName:'NestedRelay-generated',monitorProbeFunctionName:'probe',monitorDeliveryTable:'delivery',monitorDeliveryDlqUrl:'https://sqs.us-west-2.amazonaws.com/111122223333/delivery-dlq',monitorAttachmentDlqName:'attachment-dlq',monitorProbeRuleName:'probe-rule',monitorDailyRuleName:'daily-rule',monitorPrincipleRuleName:'principle-rule',monitorWakeGroup:'wake-group',monitorWakeRole:`arn:aws:iam::${account}:role/wakes`};
   const app=JSON.stringify({name:'waka',stage:'production'}),tableArn=`arn:aws:dynamodb:us-west-2:${account}:table/delivery`,queueArn=`arn:aws:sqs:us-west-2:${account}:delivery-dlq`;
-  const relay={FunctionName:outputs.monitorRelayFunctionName,FunctionArn:prefix+outputs.monitorRelayFunctionName,Role:`arn:aws:iam::${account}:role/relay`,Timeout:20,MemorySize:128,Environment:{Variables:{SST_RESOURCE_App:app,WAKA_STAGE:'production',MONITOR_ACCOUNT:account,MONITOR_TABLE:'delivery',WAKA_DISCORD_WEBHOOK_URL:webhook}}};
+  const relay={FunctionName:outputs.monitorRelayFunctionName,FunctionArn:prefix+outputs.monitorRelayFunctionName,Role:`arn:aws:iam::${account}:role/relay`,Timeout:20,MemorySize:128,Environment:{Variables:{SST_RESOURCE_App:app,WAKA_STAGE:'production',MONITOR_ACCOUNT:account,MONITOR_TABLE:'delivery',MONITOR_SEND_GATE:'alarm-head-v1',WAKA_DISCORD_WEBHOOK_URL:webhook}}};
   const probe={FunctionName:'probe',FunctionArn:prefix+'probe',Role:`arn:aws:iam::${account}:role/probe`,Timeout:12,MemorySize:128,Environment:{Variables:{SST_RESOURCE_App:app,MONITOR_TABLE:'delivery'}}};
   const trust={Statement:[{Effect:'Allow',Action:'sts:AssumeRole',Principal:{Service:'lambda.amazonaws.com'}}]};
   const policy={Statement:[{Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:GetItem','dynamodb:UpdateItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['event:*','head:waka-production-*']},Null:{'dynamodb:LeadingKeys':'false'}}},{Effect:'Allow',Action:'sqs:SendMessage',Resource:queueArn}]};
@@ -21,7 +21,7 @@ function fixture(){
   const read=(args:string[])=>{
     if(args[1]==='get-caller-identity')return {Account:account};
     if(args[1]==='get-function-configuration')return args.at(-1)===relay.FunctionName?relay:args.at(-1)==='probe'?probe:{Timeout:60,MemorySize:1024,Environment:{Variables:{SST_RESOURCE_App:app,...(args.at(-1)==='worker'?{WAKA_BACKGROUND_JOB_WAKE_GROUP:'wake-group',WAKA_BACKGROUND_JOB_WAKE_ROLE:outputs.monitorWakeRole}:{})}}};
-    if(args[1]==='get-function-concurrency')return {ReservedConcurrentExecutions:1};
+    if(args[1]==='get-function-concurrency')return {};
     if(args[1]==='describe-table')return {Table:{TableStatus:'ACTIVE',TableArn:tableArn,BillingModeSummary:{BillingMode:'PAY_PER_REQUEST'},KeySchema:[{AttributeName:'id',KeyType:'HASH'}]}};
     if(args[1]==='describe-time-to-live')return {TimeToLiveDescription:{AttributeName:'expires',TimeToLiveStatus:'ENABLED'}};
     if(args[1]==='get-queue-attributes')return {Attributes:{QueueArn:queueArn,MessageRetentionPeriod:'1209600',SqsManagedSseEnabled:'true'}};
@@ -64,11 +64,26 @@ it('keeps monitoring production-only and secret outside the shared application l
   expect(block).toContain('principal: "lambda.alarms.cloudwatch.amazonaws.com", sourceAccount: caller.accountId');
   expect(block).toContain('`arn:aws:cloudwatch:${AWS_REGION}:${account}:alarm:${alarmName}`');
   expect(block).toContain('{ dependsOn: [permission] }');
-  expect(block).toContain('link: [discord]');expect(block).toContain('reservedConcurrentExecutions: 1');
+  expect(block).toContain('link: [discord]');expect(block).not.toContain('reservedConcurrentExecutions');expect(block).toContain('MONITOR_SEND_GATE: "alarm-head-v1"');
   const workflow=readFileSync(resolve(__dirname,'../../../.github/workflows/deploy.yml'),'utf8');
   const job=workflow.slice(workflow.indexOf('  deploy:'));
   expect(job.slice(0,job.indexOf('    steps:'))).not.toContain('WAKA_DISCORD_WEBHOOK_URL');
   const install=job.slice(job.indexOf('      - name: Install dependencies'),job.indexOf('      - name: Validate deployment environment'));
   expect(install).not.toContain('WAKA_DISCORD_WEBHOOK_URL');
   expect(workflow).toContain('SST_SECRET_DiscordWebhookUrl: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}');
+});
+
+it.each([0,1,7,null,undefined])('refuses any actual reservation field, including %s',async value=>{
+  const {auditMonitoring}=await load(),f=fixture();
+  const r=auditMonitoring({...f,read:(args:string[])=>args[1]==='get-function-concurrency'?{ReservedConcurrentExecutions:value}:f.read(args)});
+  expect(r.checks.relayConcurrency).toBe(false);expect(r.passed).toBe(false);
+});
+it.each([undefined,'wrong-mode'])('refuses missing/wrong mandatory send-gate marker %s',async value=>{
+  const {auditMonitoring}=await load(),f=fixture();
+  if(value===undefined)delete (f.relay.Environment.Variables as any).MONITOR_SEND_GATE;else f.relay.Environment.Variables.MONITOR_SEND_GATE=value;
+  const r=auditMonitoring(f);expect(r.checks.relaySendGate).toBe(false);expect(r.passed).toBe(false);
+});
+it.each([19,21,30])('refuses relay timeout %s despite a correct marker',async timeout=>{
+  const {auditMonitoring}=await load(),f=fixture();f.relay.Timeout=timeout;const r=auditMonitoring(f);
+  expect(r.checks.relaySendGate).toBe(false);expect(r.passed).toBe(false);
 });
