@@ -128,3 +128,37 @@ unchanged. Targeted checks execute the actual SST helper with provider
 constructors stubbed, verify permission/name alignment and refusal cases, and
 retain the existing isolation audit tests: **36 passed**. A new exact-SHA CI and
 actual preview are still required; local fixtures do not establish cloud wiring.
+
+## Child-failure visibility correction
+
+[Run 43128006311](https://github.com/waka-eng/waka/actions/runs/43128006311)
+at `c359d8fc` passed the complete reusable CI job. SST's preview child then exited
+1 before producing resource operations. Sanitized artifact `13904406551`
+verified the strict bootstrap/state/passphrase preflight but contained zero
+operations and zero observed alarm identities. It **does not verify the alarm
+names or infrastructure**. All alias, secret, migration, deploy, DNS and live
+acceptance steps were skipped. Existing-stage update-history bookkeeping remains
+a permitted preview effect; zero operations alone does not prove zero such writes.
+
+The child error's exact cause remains unknown. Inspection of the original job
+logs in memory found only the wrapper's generic failure; its captured diagnostic
+text had already been deleted. Existing update metadata offered no new error.
+Pinned SDK inspection did not establish another application/IaC defect.
+
+The bounded correction changes the driver and a small diagnostic classifier,
+tests and this receipt only. All application, IaC, dependencies and credential
+values remain identical to `c359d8fc`. The driver classifies captured child output
+in memory before deletion, publishing closed diagnostic categories and at most
+eight exact public-repo/versioned-SDK source locations with bounded line/column
+numbers. It publishes no message, snippet, stack, arbitrary path or value, and no
+longer creates its own temporary raw log. Unknown stays unknown; observed
+categories alone are not a root-cause claim. Classifier failure cannot replace
+the original child exit, operation or eight-alarm identity receipt. The existing
+strict bootstrap, name and redaction gates remain unchanged.
+
+Targeted classifier/privacy/location and actual-driver fault-injection checks,
+plus the retained preview and monitoring-isolation cases: **58 passed**. Script
+syntax and diff checks passed. No repeated local full suite was needed for this
+driver-only change. A fresh exact-SHA normal CI/preview is required; resource
+apply, main/dev publication, daily maintenance activation and additional
+synthetic Discord/model/data exercises remain held.
