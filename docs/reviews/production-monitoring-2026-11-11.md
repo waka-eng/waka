@@ -235,3 +235,55 @@ local correction is held for Main's review before any new CI/cloud execution;
 no new dispatch, apply, release, live maintenance, provider or Discord exercise
 was performed to diagnose this source defect. The last failed cloud attempt
 remains [43132825056](https://github.com/waka-eng/waka/actions/runs/43132825056).
+
+## Typed alarm identity correction
+
+[Run 43135438509](https://github.com/waka-eng/waka/actions/runs/43135438509)
+at `40bbdebc` passed full CI, including the authentic startup regression. SST
+exited **0**, producing **69 operations**: 34 creates, seven updates, nine
+replacement families and one deletion. Artifact `13907627281` shows eight
+expected logical monitor-alarm creates and removal of the old attachment DLQ
+alarm. Startup is fixed. The strict identity guard failed with nine candidates;
+it did not establish the physical alarm names.
+
+The existing safe artifact identifies the ninth candidate without another
+execution: **MonitorDeliveryDlq** has both an `aws:sqs/queue:Queue` CREATE and an
+`aws:cloudwatch/metricAlarm:MetricAlarm` CREATE. The source declares both. The
+guard's `expected.has(logical)` selected the queue regardless of type, explaining
+the extra candidate, mismatched binding/name and duplicate logical key. This is
+an actual mutating queue event, not a proven omitted `same` or replay event.
+[Pulumi 3.210.0's URN constructor](https://github.com/pulumi/pulumi/blob/v3.210.0/sdk/go/common/resource/urn/urn.go)
+includes qualified resource type; distinct typed resources may share a logical
+name.
+
+The harness-only correction excludes a wholly non-alarm typed peer from the
+alarm count. Any alarm type signal in metadata or new-state type/URN still
+enters the exact checks, so inconsistent types cannot hide a malformed alarm.
+The expected count remains **eight**, with unchanged exact physical-name,
+production stage/project and typed-URN checks. Correct `same` observations still
+count; repeated desired alarm observations and conflicting bindings remain
+refused. Replacement-wrapper handling is unchanged. The [versioned event schema](https://github.com/pulumi/pulumi/blob/v3.210.0/sdk/nodejs/automation/events.ts)
+requires unique event sequences, but no actual evidence here justifies accepting
+duplicate alarm observations.
+
+At most 64 per-candidate evidence records expose only fixed expected code,
+operation/known-type enums, count/exclusion flags and booleans for metadata/new
+typed URNs, stage/project, name presence/type/match and repeated/conflicting
+identity projections. Sequence presence/reuse is a boolean, never an ID. Raw
+names, URNs, inputs and private values are not emitted; a capped receipt fails
+closed. General operation redaction is unchanged.
+
+The original eventlog was deleted. No local Pulumi engine/SDK is installed, and
+none was installed for this task. Tests use explicitly labeled contract-shaped
+replays: the observed structural queue/alarm pair with synthetic new-state
+values, legal other types, identical/conflicting alarm observations, foreign
+project/type corruption, arbitrary-value canaries and bounds. **59 targeted
+preview/driver-diagnostic checks passed**, plus syntax/diff checks. These tests
+do not claim to verify the discarded actual physical names. App/IaC/dependency,
+cost, secret and maintenance behavior remain unchanged from `40bbdebc`.
+
+Main review is required before one corrected exact-SHA CI/preview observation.
+That receipt must show eight actual alarms with every name/stage/typed-URN
+check true and the queue separately excluded. No new dispatch, apply, live
+maintenance, PostHog event, model or Discord exercise occurred during this
+harness investigation.
