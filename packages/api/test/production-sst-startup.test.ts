@@ -34,7 +34,7 @@ it('uses the real pinned CLI: static config import fails; dynamic import reaches
   const previous="import scheduledWorkerEvent from './infra/background-worker-event.json';\n"+guarded.replace(dynamic,'');
   for(const [kind,config] of [['static',previous],['dynamic',guarded]]){
    const cwd=join(folder,kind);mkdirSync(cwd,{mode:0o700});writeFileSync(join(cwd,'sst.config.ts'),config);
-   for(const file of ['infra/background-worker-event.json','infra/monitoring-relay-arn.mjs','packages/api/src/monitoring/protocol.ts']){
+   for(const file of ['infra/background-worker-event.json','infra/monitoring-relay-arn.mjs','packages/api/src/monitoring/protocol.ts','packages/api/src/monitoring/budget-protocol.ts']){
     const target=join(cwd,file);mkdirSync(dirname(target),{recursive:true});writeFileSync(target,readFileSync(join(root,file)));
    }
    const result=invoke(['diff','--stage','offline-startup'],cwd),output=result.stdout+result.stderr;
