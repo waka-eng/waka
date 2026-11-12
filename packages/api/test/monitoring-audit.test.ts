@@ -63,7 +63,7 @@ it('keeps monitoring production-only and secret outside the shared application l
   expect(block).toContain('if ($app.stage === "production")');expect(block).not.toContain('link: runtimeLinks');expect(block).not.toContain('...runtimeEnvironment');
   expect(block).toContain('principal: "lambda.alarms.cloudwatch.amazonaws.com", sourceAccount: caller.accountId');
   expect(block).toContain('`arn:aws:cloudwatch:${AWS_REGION}:${account}:alarm:${alarmName}`');
-  expect(block).toContain('{ dependsOn: [permission] }');
+  expect(block).toContain('{ dependsOn: [relay.nodes.function, permission] }');
   expect(block).toContain('link: [discord]');expect(block).not.toContain('reservedConcurrentExecutions');expect(block).toContain('MONITOR_SEND_GATE: "alarm-head-v1"');
   const workflow=readFileSync(resolve(__dirname,'../../../.github/workflows/deploy.yml'),'utf8');
   const job=workflow.slice(workflow.indexOf('  deploy:'));

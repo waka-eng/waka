@@ -574,7 +574,11 @@ export default $config({
       const probeCron = new sst.aws.Cron("PublicAvailability", { schedule: "rate(5 minutes)", function: probe.arn,
         transform: { target: { retryPolicy: { maximumRetryAttempts: 0, maximumEventAgeInSeconds: 60 } } },
       });
-      const action = [relay.arn];
+      // A failed Lambda create can persist arn=null. Use its known physical
+      // name; all().apply() retains dependencies and defers unknown inputs.
+      const { monitorRelayAlarmActions } = await import('./infra/monitoring-relay-arn.mjs');
+      const action = $util.all([caller.accountId, relay.name]).apply(([account, name]) =>
+        monitorRelayAlarmActions(AWS_REGION, account, name));
       const metricAlarm = (code: keyof typeof alarmLabels, args: Omit<aws.cloudwatch.MetricAlarmArgs, "name" | "comparisonOperator" | "evaluationPeriods"> & Partial<Pick<aws.cloudwatch.MetricAlarmArgs, "comparisonOperator" | "evaluationPeriods">>) => {
         const alarmName = `waka-production-${code}`;
         const permission = new aws.lambda.Permission(`Monitor${code}Invoke`, {
@@ -586,7 +590,7 @@ export default $config({
           comparisonOperator: "GreaterThanThreshold", threshold: 0, evaluationPeriods: 1,
           period: 300, statistic: "Sum", treatMissingData: "notBreaching",
           alarmActions: action, okActions: action, ...args, name: alarmName,
-        }, { dependsOn: [permission] });
+        }, { dependsOn: [relay.nodes.function, permission] });
         return alarm;
       };
       metricAlarm("Availability", { namespace: "AWS/Lambda", metricName: "Errors", dimensions: { FunctionName: probe.name }, evaluationPeriods: 2 });
