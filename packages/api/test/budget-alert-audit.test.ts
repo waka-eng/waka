@@ -37,6 +37,28 @@ it('accepts account-wide recurring actual5/strict SNS isolation without exposing
  const {auditBudgetAlert}=await load(),f=fixture(),r=auditBudgetAlert(f);expect(r.passed).toBe(true);expect(r.notificationSent).toBe(false);expect(r.billingThresholdDeliveryVerified).toBe(false);expect(r.snsPreAdmissionFailureQueue).toBe(false);expect(JSON.stringify(r)).not.toContain('PRIVATE');
  f.budget.BillingViewArn='arn:aws:billing::111122223333:billingview/primary';expect(auditBudgetAlert(f).checks.accountScope).toBe(true);
 });
+it('accepts the actual AWS omitted percentage default and still verifies the exact SNS subscriber',async()=>{
+ const {auditBudgetAlert}=await load();
+ for(const omitted of [true,false]){
+  const f=fixture(),seen:string[][]=[];
+  if(omitted)delete(f.notification as any).ThresholdType;else(f.notification as any).ThresholdType=undefined;
+  const r=auditBudgetAlert({...f,read:(args:string[])=>{seen.push(args);return f.read(args);}});
+  expect(r.passed).toBe(true);expect(r.checks.oneActualThreshold).toBe(true);expect(r.checks.oneSnsSubscriber).toBe(true);
+  const subscriber=seen.find(args=>args[1]==='describe-subscribers-for-notification');expect(subscriber).toBeDefined();
+  expect(JSON.parse(subscriber![subscriber!.indexOf('--notification')+1])).toEqual({NotificationType:'ACTUAL',ComparisonOperator:'GREATER_THAN',Threshold:100,ThresholdType:'PERCENTAGE'});
+ }
+});
+it.each(['ABSOLUTE_VALUE',null,'','unknown',100])('refuses explicit non-percentage or malformed threshold type %j',async value=>{
+ const {auditBudgetAlert}=await load(),f=fixture();(f.notification as any).ThresholdType=value;
+ const r=auditBudgetAlert(f);expect(r.passed).toBe(false);expect(r.checks.oneActualThreshold).toBe(false);expect(r.checks.oneSnsSubscriber).toBe(false);
+});
+it('executed audit CLI accepts the omitted wire field without fabricating billing delivery proof',async()=>{
+ const {auditBudgetAlert}=await load(),f=fixture(),responses:Record<string,any>={};delete(f.notification as any).ThresholdType;
+ auditBudgetAlert({...f,read:(args:string[])=>{const value=f.read(args);responses[JSON.stringify(args)]={json:value};return value;}});
+ const r=executeAuditCli('budget-alert-audit.mjs',{outputs:f.outputs,responses,env:{WAKA_DISCORD_WEBHOOK_URL:f.webhook}}),report=JSON.parse(r.stdout);
+ expect(r.status).toBe(0);expect(report.passed).toBe(true);expect(Object.keys(report.checks)).toHaveLength(19);expect(report.checks.oneSnsSubscriber).toBe(true);
+ expect(report.notificationSent).toBe(false);expect(report.billingThresholdDeliveryVerified).toBe(false);expect(r.stdout+r.stderr).not.toContain('PRIVATE');
+});
 it.each(['wrongLimit','forecast','prodFilter','creditExcluded','expiring','extraModel','rootTrust','foreignKey','wildcardPublish','foreignSource','foreignInvoke','pendingSubscription','filteredSubscription','publicEndpoint','reserved','actions','customView','fifoTopic'])('refuses unsafe budget setup %s',async kind=>{
  const {auditBudgetAlert}=await load(),f=fixture();
  if(kind==='wrongLimit')f.budget.BudgetLimit.Amount='50';if(kind==='forecast')f.notification.NotificationType='FORECASTED';

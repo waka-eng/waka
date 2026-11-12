@@ -49,7 +49,10 @@ export function auditBudgetAlert({outputs,webhook,read,now=Date.now()}){
   const start=time(budget.TimePeriod?.Start),end=time(budget.TimePeriod?.End),month=new Date(start);
   checks.recurringNoChosenExpiry=Number.isFinite(start)&&start<=now&&month.getUTCDate()===1&&month.getUTCHours()===0&&month.getUTCMinutes()===0&&month.getUTCSeconds()===0&&end===Date.UTC(2087,5,15);
   const notifications=read(['budgets','describe-notifications-for-budget',...budgetArgs]).Notifications??[],notice=notifications[0];
-  checks.oneActualThreshold=notifications.length===1&&notice.NotificationType==='ACTUAL'&&notice.ComparisonOperator==='GREATER_THAN'&&notice.ThresholdType==='PERCENTAGE'&&notice.Threshold===100;
+  // AWS omits the percentage default in DescribeNotificationsForBudget;
+  // the pinned provider normalizes it too. Explicit null/empty/other types fail.
+  const thresholdType=notice?.ThresholdType===undefined?'PERCENTAGE':notice.ThresholdType;
+  checks.oneActualThreshold=notifications.length===1&&notice.NotificationType==='ACTUAL'&&notice.ComparisonOperator==='GREATER_THAN'&&thresholdType==='PERCENTAGE'&&notice.Threshold===100;
   if(checks.oneActualThreshold){
     const subscribers=read(['budgets','describe-subscribers-for-notification',...budgetArgs,'--notification',JSON.stringify({NotificationType:'ACTUAL',ComparisonOperator:'GREATER_THAN',Threshold:100,ThresholdType:'PERCENTAGE'})]).Subscribers??[];
     checks.oneSnsSubscriber=subscribers.length===1&&subscribers[0].SubscriptionType==='SNS'&&subscribers[0].Address===topic;
