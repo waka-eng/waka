@@ -162,12 +162,12 @@ it('executes the actual SST helper with provider constructors stubbed and binds 
  const {verifyMonitorAlarmIdentities}=await load();
  const source=readFileSync(resolve(__dirname,'../../../sst.config.ts'),'utf8');
  const helper=source.slice(source.indexOf('      const metricAlarm ='),source.indexOf('      metricAlarm("Availability"'));
- const alarms:any[]=[],permissions:any[]=[];
+ const alarms:any[]=[],permissions:any[]=[],relayFunction={id:'exact-relay-function-fixture'};
  const metricAlarm=runInNewContext(transpileModule(helper+'\nmetricAlarm;',{
   compilerOptions:{target:ScriptTarget.ES2022},
  }).outputText,{
   aws:{lambda:{Permission:class{constructor(public logical:string,public args:any){permissions.push(this);}}},cloudwatch:{MetricAlarm:class{constructor(public logical:string,public args:any,public options:any){alarms.push(this);}}}},
-  caller:{accountId:{apply:(f:(a:string)=>unknown)=>f('111122223333')}},AWS_REGION:'us-west-2',relay:{name:'relay'},action:['relay-arn'],
+  caller:{accountId:{apply:(f:(a:string)=>unknown)=>f('111122223333')}},AWS_REGION:'us-west-2',relay:{name:'relay',nodes:{function:relayFunction}},action:['relay-arn'],
  });
  for(const code of Object.keys(alarmLabels))metricAlarm(code,{name:'caller-must-not-override-identity'});
  for(const [i,alarm] of alarms.entries()){
@@ -175,7 +175,7 @@ it('executes the actual SST helper with provider constructors stubbed and binds 
   expect(alarm.args.name).toBe(`waka-production-${code}`);
   expect(alarm.args).not.toHaveProperty('alarmName');
   expect(permissions[i].args.sourceArn).toBe(`arn:aws:cloudwatch:us-west-2:111122223333:alarm:${alarm.args.name}`);
-  expect(alarm.options.dependsOn).toEqual([permissions[i]]);
+  expect(alarm.options.dependsOn).toEqual([relayFunction,permissions[i]]);
  }
  const events=alarmEvents();
  for(const [i,e] of events.entries())e.resourcePreEvent.metadata.new.inputs=alarms[i].args;
