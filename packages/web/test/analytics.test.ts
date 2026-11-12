@@ -39,7 +39,7 @@ describe('metadata-only PostHog boundary',()=>{
     sdk.init('phc_public_local_test',{...options,logs:{...options.logs,flushIntervalMs:10},metrics:{...options.metrics,flushIntervalMs:10},opt_out_useragent_filter:true});
     sdk.register({$current_url:canary,$referrer:canary,email:canary,account_id:canary});
     sdk.capture('WAKA/production/screen_opened',{screen:'chat',chat:canary},{transport:'fetch'});
-    sdk.capture('$exception',{failure:'rejection',$exception_list:[{value:canary,stack:canary}],$exception_steps:[canary]},{transport:'fetch'});
+    sdk.capture('$exception',{failure:'rejection',$exception_fingerprint:[canary],$exception_list:[{value:canary,stack:canary}],$exception_steps:[canary]},{transport:'fetch'});
     // Even accidental remote-preference-like opt-ins cannot cross the final
     // event allowlist. Remote configuration itself is disabled before load.
     sdk.capture('$snapshot',{data:canary},{transport:'fetch'});sdk.identify(canary,{email:canary});
@@ -54,6 +54,13 @@ describe('metadata-only PostHog boundary',()=>{
       expect(['WAKA/production/screen_opened','$exception']).toContain(data.event);expect(data.properties.distinct_id).not.toBe(canary);
       const keys=Object.keys(data.properties).filter(k=>k!=='token').sort();
       expect(keys).toEqual((data.event==='$exception'?['$exception_fingerprint','$exception_list','$geoip_disable','$process_person_profile','distinct_id','failure','namespace']:['$geoip_disable','$process_person_profile','distinct_id','namespace','screen']).sort());
+      if(data.event==='$exception'){
+        // PostHog's issue processor requires a String; ingestion 200 alone
+        // accepts an array that later fails server-side issue processing.
+        expect(typeof data.properties.$exception_fingerprint).toBe('string');
+        expect(data.properties.$exception_fingerprint).toBe('waka_rejection');
+        expect(data.properties.$exception_fingerprint).not.toContain(canary);
+      }
       expect(parsed.api_key).toBe('phc_public_local_test');
     }
     sdk.opt_out_capturing();

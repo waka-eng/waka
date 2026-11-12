@@ -23,7 +23,7 @@ export function sanitizeAnalytics(event: CaptureResult | null, id = anonymousId,
   if (event.event === 'WAKA/production/screen_opened' && screens.has(p.screen)) return { uuid:crypto.randomUUID(),event:'WAKA/production/screen_opened',properties:{...base,screen:p.screen} };
   if (event.event === '$exception' && failures.has(p.failure)) return { uuid:crypto.randomUUID(),event:'$exception',properties:{...base,
     $exception_list:[{type:'WakaBrowserError',value:p.failure,mechanism:{type:'generic',handled:p.failure==='render'}}],
-    $exception_fingerprint:[`waka_${p.failure}`],failure:p.failure } };
+    $exception_fingerprint:`waka_${p.failure}`,failure:p.failure } };
   return null;
 }
 export function privacyOptions(host: string, token: string): Partial<PostHogConfig> {
