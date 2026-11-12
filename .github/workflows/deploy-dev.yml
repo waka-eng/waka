@@ -39,7 +39,8 @@ on:
 
 concurrency:
   group: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_only == true && 'verify-dev' || 'deploy-dev' }}
-  cancel-in-progress: true
+  # Read-only audits may supersede each other; mutable stage runs must finish.
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_only == true }}
 
 permissions:
   contents: read
@@ -67,6 +68,8 @@ jobs:
   check:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_only != true }}
     uses: ./.github/workflows/ci.yml
+    with:
+      checkout_sha: ${{ github.sha }}
 
   verify:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_only == true }}
@@ -103,7 +106,7 @@ jobs:
           retention-days: 7
   deploy:
     needs: check
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_only != true }}
+    if: ${{ needs.check.result == 'success' && (github.event_name != 'workflow_dispatch' || inputs.verify_only != true) }}
     name: SST deploy dev.waka.im
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -111,6 +114,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -185,9 +190,6 @@ jobs:
               --distribution-config file://distribution-config.json >/dev/null
             aws cloudfront wait distribution-deployed --id "$distribution_id"
           done
-
-      - name: Clear stale SST development lock
-        run: pnpm sst unlock --stage "$SST_STAGE"
 
       # SST secrets are stage-scoped. Keep the development key in step with the
       # repository secret before automatic and manually started deployments.

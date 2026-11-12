@@ -24,6 +24,15 @@ limits. Ask only when a material ambiguity cannot be resolved within the
 assignment; routine reversible choices do not need repeated owner approval.
 External messages and deployment still require applicable authorization.
 
+## Delivery policy
+
+Create scoped branches from `origin/dev` and open pull requests targeting `dev`.
+Required checks and Main's source/merge review must pass before merging. A dev
+merge triggers the existing development deployment; a PR branch push does not.
+Do not publish or merge to `main`, synchronize main with dev, or deploy production
+without a **new explicit owner instruction**. Historical release/sync approvals
+do not authorize later work. Keep main unchanged during ordinary dev delivery.
+
 Work in the designated clean checkout. Preserve unrelated dirty work and private
 files; do not blanket-stage another contributor's files or revive older source
 from a preserved snapshot. A portable handoff belongs in tracked documentation;
@@ -38,7 +47,7 @@ mutable tests use fresh explicit disposable loopback databases.
 
 See the [accepted release handoff](reviews/production-deploy-receipt-2026-11-11.md)
 and [current real-user launch checklist](reviews/production-launch-2026-11-11.md).
-Those distinguish a successful deployment from full launch readiness. Main pushes
-trigger production CI/deployment; dev pushes trigger their independent stage
+Those distinguish a successful deployment from full launch readiness. `main` pushes
+trigger production CI/deployment; `dev` pushes trigger their independent stage
 pipeline. Keep each checked/deployed immutable SHA intact, and account for those
 side effects before publishing docs or static assets too.

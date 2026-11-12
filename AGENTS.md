@@ -119,3 +119,6 @@ single WAKA companion in the application. Read [docs/agent-team.md](docs/agent-t
 for roles, routing, file ownership and review. Reuse established sessions; optional
 local session/queue files are ignored and not required for a clean clone. No
 extra agents or recurring wakeups are configured by these instructions.
+Engineering changes go through PRs targeting `dev`, with required checks and
+Main review before merge. Publishing to `main` or production requires a new
+explicit owner instruction; see the linked delivery policy.
