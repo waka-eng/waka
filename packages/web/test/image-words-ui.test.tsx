@@ -11,6 +11,7 @@ vi.mock('../src/lib/api/attachments', async original => ({ ...await original<typ
 import { correctImageWords, fetchImageWords, retryImageWords, type ApiImageWords } from '../src/lib/api/attachments';
 import { ApiError } from '../src/lib/api/http';
 import { SavedImageWords } from '../src/components/ImageWords';
+import { useImageWords } from '../src/lib/use-image-words';
 
 const row = (over: Partial<ApiImageWords>): ApiImageWords => ({ attachmentId: 'a', inspirationId: 'i', profileId: 'p', status: 'ready',
   text: 'Nobody feels ready.', read: 'Nobody feels ready.', correction: null, revision: 'r1', correctedAt: null, canEdit: true, canRetry: false, retryAfter: null, ...over });
@@ -146,4 +147,46 @@ it('draws nothing for words it could not read, whether or not a read is queued',
     expect(host.querySelector('.waka-note-read'), `${status} still drew a words line`).toBeNull();
     expect(host.textContent).not.toContain('Which line stuck?');
   }
+});
+
+/* THE RACES STILL SHIP IN THE HOOK. The screen no longer offers a line for an
+   unreadable picture (founder, 2026-11-12), but `useImageWords` still owns
+   what a fix does when a read that left before it answers after it, and the
+   two cases that pressed "Type the line" now drive the hook directly (code
+   review, 2026-11-12). */
+let hook: ReturnType<typeof useImageWords>;
+function Probe() { hook = useImageWords('a'); return <output>{hook.words?.text ?? ''}</output>; }
+const probe = () => act(async () => root.render(<Probe />));
+
+it('keeps a fix when a read that left before it answers after it (hook)', async () => {
+  vi.useFakeTimers();
+  const queued = row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null });
+  let late!: (value: ApiImageWords) => void;
+  vi.mocked(fetchImageWords).mockResolvedValueOnce(queued)
+    .mockImplementationOnce(() => new Promise(resolve => { late = resolve; }));
+  vi.mocked(correctImageWords).mockResolvedValue(row({ text: 'My line.', correction: 'My line.', revision: '2' }));
+  await probe();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_600); });
+  expect(late, 'the second read never left').toBeTypeOf('function');
+  await act(async () => { await hook.fix('My line.'); });
+  expect(host.querySelector('output')?.textContent).toBe('My line.');
+  await act(async () => { late(queued); });
+  expect(host.querySelector('output')?.textContent, 'an older read overwrote the fix').toBe('My line.');
+});
+
+it('keeps following a queued read when a write it raced with fails (hook)', async () => {
+  vi.useFakeTimers();
+  const queued = row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null });
+  let late!: (value: ApiImageWords) => void;
+  vi.mocked(fetchImageWords).mockResolvedValueOnce(queued)
+    .mockImplementationOnce(() => new Promise(resolve => { late = resolve; }))
+    .mockResolvedValue(queued);
+  vi.mocked(correctImageWords).mockRejectedValue(new ApiError({ status: 500, code: 'server', message: 'Down' }));
+  await probe();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_600); });
+  await act(async () => { await hook.fix('My line.'); });
+  await act(async () => { late(queued); });
+  const asked = vi.mocked(fetchImageWords).mock.calls.length;
+  await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+  expect(vi.mocked(fetchImageWords).mock.calls.length, 'the asking stopped after a stale answer').toBeGreaterThan(asked);
 });

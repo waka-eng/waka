@@ -7085,11 +7085,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* ═══ "WHY?" — BECAUSE YOU KEPT THESE (design F2) ═══════════════════════════
    One quoted save per row, left-aligned, hairlines between, in the
    bubble's own ink: the person's words, not the machine's. */
-.waka-says-why { display: flex; flex-direction: column; align-self: stretch; max-height: 40dvh; overflow-y: auto; }
-.waka-says-why-row {
-  display: block; padding: var(--sp-8) 0; border-top: 1px solid color-mix(in srgb, var(--waka-on-light) 11%, transparent);
-  font-size: var(--t-body); line-height: 1.4; text-align: start; overflow-wrap: anywhere;
-}
 
 /* ═══ SAVES → PATTERNS → PRINCIPLES (design F4) ═════════════════════════════
    Pulled up over the home, under the corners and behind the home bar, on
@@ -7229,7 +7224,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   border-radius: 18px; overflow: hidden; background: var(--waka-raised);
 }
 .waka-note-hero img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.waka-note-hero[data-blurred] img { filter: blur(1.5px); }
 .jar-inspiration-composer .waka-note-hero-x {
   position: absolute; right: var(--sp-4); top: var(--sp-4); display: grid; place-items: center;
   width: var(--sp-44); height: var(--sp-44); padding: 0; border: 0; border-radius: 50%;
@@ -7242,12 +7236,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-note-read-body { flex: 1; min-width: 0; }
 .waka-note-read-label { margin: 0 0 var(--sp-4); color: var(--muted); font-size: var(--t-meta); }
 .waka-note-read-text { margin: 0; font-size: var(--t-input); line-height: 1.45; overflow-wrap: anywhere; }
-.waka-note-read .waka-note-retry { margin-top: var(--sp-4); padding-left: 0; }
-.waka-note-read-ask { margin: 0 0 var(--sp-4); font-size: var(--t-input); line-height: 1.45; }
-.waka-note-read-quiet { margin: 0; color: var(--muted); font-size: var(--t-ui); }
+.waka-note-read .waka-note-read-quiet { margin: 0; color: var(--muted); font-size: var(--t-ui); }
 .waka-note-read-fix { width: 100%; min-height: var(--sp-64); box-sizing: border-box; padding: var(--sp-8); border: 1px solid var(--line); border-radius: var(--sp-12); background: none; color: var(--ink); font: inherit; font-size: var(--t-input); }
 .jar-inspiration-composer .waka-note-read-act { flex: none; min-height: var(--sp-44); padding: 0 var(--sp-10); border: 0; background: none; color: var(--muted); font-size: var(--t-ui); }
-.waka-note-retry { margin: var(--sp-12) 0 0; padding-left: var(--sp-14); color: var(--muted); font-size: var(--t-meta); line-height: 1.5; }
 }
 
 @layer chrome {
@@ -7703,10 +7694,6 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   border-radius: var(--sp-12); background: var(--waka-raised);
 }
 .waka-saved-photo > img { display: block; width: 100%; height: 100%; object-fit: cover; }
-/* In "Because you saved these": the picture leads its row, words beside it. */
-.waka-says-why-row[data-photo] { display: flex; align-items: center; gap: var(--sp-12); }
-.waka-says-why-words { min-width: 0; }
-.waka-says-why-row .waka-saved-photo { background: color-mix(in srgb, var(--waka-on-light) 10%, transparent); }
 /* In Inspirations: the words on the left, the picture at the row's end. */
 .waka-list-row:has(> .waka-list-photo) {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-16); align-items: center;
