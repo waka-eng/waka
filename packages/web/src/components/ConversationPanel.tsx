@@ -935,7 +935,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
             Enter still sends; the send path, the chips and the retry are
             this panel's own, unchanged. */}
         {dictation.listening?<ListeningView locale={locale} words={draft?.content??''}
-          notice={dictation.firstTime?say('worldComposerDictateCloud'):undefined} onDone={()=>dictation.stop()}/>:<NoteBar
+          onDone={()=>dictation.stop()}/>:<NoteBar
           above={!draft?.pending&&(draft?.attachments?.length||uploads.length)?<ul className="chat-chips" aria-label={say('worldAttachList')}>
             {(draft?.attachments??[]).map(item=><Chip key={item.id} type={item.type} name={attachmentLabel(locale,item.type,item.name)} size={item.size}
               file={localFiles.current.get(item.id)} attachmentId={item.id} state="ready" locale={locale} onRemove={()=>unattach(item.id)}/>)}

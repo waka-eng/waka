@@ -22,7 +22,7 @@ it('labels human review words, preserves negation and quotes one saved thought o
 });
 it('shows review-only principle support without pretending it was an inspiration',()=>{
   const html=renderToStaticMarkup(<PrincipleEvidence signals={[{id:'signal-1',statement:'A pattern',examples:[],reviewExamples:[row]},{id:'signal-2',statement:'Another pattern',reviewExamples:[row]}]} locale="en-US"/>);
-  expect(html.match(/From your answers/g)).toHaveLength(1);expect(html).not.toContain('A note you kept');expect(html).toContain(row.preview);
+  expect(html.match(/From your answers/g)).toHaveLength(1);expect(html).not.toContain('An inspiration you saved');expect(html).toContain(row.preview);
 });
 it('escapes authored text and marks long excerpts without exposing raw ids as prose',()=>{
   const html=renderToStaticMarkup(<ReviewEvidence rows={[{...row,preview:'<script>alert(1)</script> '+ 'Words '.repeat(60)}]} locale="en-US"/>);

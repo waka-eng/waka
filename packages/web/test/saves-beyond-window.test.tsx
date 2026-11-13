@@ -17,7 +17,6 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, type MountedWorld } from './helpers/render-home';
-import { HomeStream } from '../src/components/HomeStream';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [{ id: 'near', text: 'A save in the window', daysAgo: 1 }] }));
 const ASKED = vi.hoisted(() => ({ far: 0, further: 0 }));
@@ -66,32 +65,13 @@ it('reads each cited save outside the window once, however the answers land', as
   expect(ASKED, 'a read was asked for again while another was in flight').toEqual({ far: 1, further: 1 });
 });
 
-it('offers the rest from the Saves page when the archive holds more than was loaded', async () => {
+it('counts the whole archive on the handle, and opens the archive that pages it in', async () => {
   world = await mountWorld(FACTS); await settle();
-  /* "{n} kept" counts the whole archive, not the loaded window (founder:
-     "should be x kept"). */
-  expect(world.container.querySelector('.waka-home-bar-pull')?.textContent?.trim(), 'the pull counts only what was loaded').toBe('200 kept');
+  expect(world.container.querySelector('.waka-home-bar-pull')?.textContent?.trim(), 'the pull counts only what was loaded').toBe('200 inspirations');
   await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-home-bar-pull')!.click()); await settle();
-  const more = world.container.querySelector<HTMLButtonElement>('.waka-stream-more');
-  expect(more, 'the Saves page hides that there are more').toBeTruthy();
-  await act(async () => more!.click());
-  expect(world.container.querySelector('.waka-stream'), 'the Saves page stayed up').toBeNull();
-  await settle();
-  /* The archive's own page: its labelled way home is up and the home bar is
-     gone. (This mount has no signed-in scope, so the archive draws nothing
-     inside; that it is the place is what is asked here.) */
+  /* One Saved page (founder, 2026-11-10): the handle goes straight to the
+     archive, its labelled way home up and the home bar gone. */
+  expect(world.container.querySelector('.waka-stream'), 'a second Saved sheet came up').toBeNull();
   expect(world.container.querySelector('.waka-surface-back')?.getAttribute('aria-label'), 'it did not open the archive').toBe('Close');
   expect(world.container.querySelector('.waka-home-bar')).toBeNull();
-});
-
-it('says there are more saves than the list holds, and goes to the archive that pages them in', async () => {
-  const host = document.createElement('div'); document.body.append(host); const root = createRoot(host);
-  const seeAll = vi.fn();
-  const saves = [{ id: 'a', preview: 'One', isPublic: false, kind: 'note' as const, source: 'app' as const, capturedMs: Date.now(), updatedMs: Date.now(), attachments: [], reflectionCount: 0 }];
-  await act(async () => root.render(<HomeStream locale="en-US" inspirations={saves} signals={[]} principles={[]} onOpenSave={() => {}} onClose={() => {}} query="" onQueryChange={() => {}} more={{ onSeeAll: seeAll }} />));
-  const more = document.querySelector<HTMLButtonElement>('.waka-stream-more');
-  expect(more?.textContent).toBe('See all');
-  await act(async () => more!.click());
-  expect(seeAll).toHaveBeenCalledOnce();
-  await act(async () => root.unmount()); host.remove();
 });

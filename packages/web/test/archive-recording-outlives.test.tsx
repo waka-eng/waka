@@ -319,7 +319,7 @@ it("does not let the notepad record while the archive's recording is still finis
   await closeOverlay(world.container);
   await settle();
   expect(archiveOpen()).toBe(false);
-  await pressDockRow(world.container, "Keep a thought");
+  await pressDockRow(world.container, "Save an inspiration");
   await settle();
   const notepadRecord = () => q<HTMLButtonElement>('.waka-note-bar .waka-dock-tool[aria-label="Your voice"]');
   expect(notepadRecord(), "the notepad under the archive is not on screen").toBeTruthy();
@@ -444,7 +444,7 @@ it("keeps the clip for a restore when the server no longer has its note", async 
   await deliverStops();
   const line = q(".waka-clip-failed");
   expect(line, "the lost clip was said nowhere").toBeTruthy();
-  expect(line!.textContent).toContain("The note was deleted. Restore it to attach the recording.");
+  expect(line!.textContent).toContain("The inspiration was deleted. Restore it to attach the recording.");
   expect(tryAgainOn(line), "the clip was dropped, though the note can be restored").toBe(true);
   /* the note is restored; Try again lands the same clip on it */
   S.noteGone = false;
@@ -487,7 +487,7 @@ it("says a clip's note was deleted here, and keeps the clip for its restore", as
   await settle(4);
   expect(S.deleted).toEqual(["own-1"]);
   const line = q(".waka-clip-failed");
-  expect(line?.textContent).toContain("The note was deleted. Restore it to attach the recording.");
+  expect(line?.textContent).toContain("The inspiration was deleted. Restore it to attach the recording.");
   expect(tryAgainOn(line), "the clip was dropped with its note, though a restore can bring the note back").toBe(true);
 });
 
@@ -509,12 +509,12 @@ it("does not send a clip to a note whose delete is pending, and lets Undo bring 
   await act(async () => q<HTMLButtonElement>('[aria-label="Delete"]')!.click());
   await settle(2);
   const line = () => q(".waka-clip-failed");
-  expect(line()?.textContent, "the line did not say the note was deleted").toContain("The note was deleted. Restore it to attach the recording.");
+  expect(line()?.textContent, "the line did not say the note was deleted").toContain("The inspiration was deleted. Restore it to attach the recording.");
   const retry = () => [...(line()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find((button) => button.textContent === "Try again");
   await act(async () => retry()!.click());
   await settle(2);
   expect(S.presigned.length, "Try again sent the clip to a note whose delete is pending").toBe(presignedBefore);
-  expect(line()?.textContent).toContain("The note was deleted. Restore it to attach the recording.");
+  expect(line()?.textContent).toContain("The inspiration was deleted. Restore it to attach the recording.");
   /* Undo: the note is back, and so is the plain line */
   const undo = [...document.querySelectorAll<HTMLButtonElement>(".waka-dock-undo")].find((button) => button.textContent === "Undo");
   expect(undo, "no Undo").toBeTruthy();

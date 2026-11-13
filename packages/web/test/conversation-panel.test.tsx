@@ -613,7 +613,7 @@ it('on a 401 reply read stops asking but says it could not check, with Check aga
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status:401,message:'Signed out'}));await mount();await tick(0);
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
   await tick(15000);await tick(15000);
-  expect(vi.mocked(fetchConversationReply).mock.calls.length,'a 401 kept being polled').toBe(calls);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length,'a 401 saved being polled').toBe(calls);
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
   expect(host.textContent,'a 401 left the reply silently unconfirmed').toContain('Couldn’t get a reply');
   expect(host.textContent,'it claims to be retrying while it has stopped').not.toContain('Trying again');
@@ -626,7 +626,7 @@ it.each([404,410])('stops on a %i reply read, says it is gone, keeps Send off an
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status,message:'Gone'}));await mount();await tick(1000);
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
   await tick(15000);await tick(15000);
-  expect(vi.mocked(fetchConversationReply).mock.calls.length,'a 404 kept being polled').toBe(calls);
+  expect(vi.mocked(fetchConversationReply).mock.calls.length,'a 404 saved being polled').toBe(calls);
   expect(host.textContent).toContain('This reply can’t be found anymore.');
   expect(host.textContent).not.toContain('Trying again');
   await type('Still there?');
@@ -830,7 +830,7 @@ it('shows the save a chat was opened from on top, without repeating it as your t
     {id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:2,role:'assistant',content:'What are you waiting to feel ready for?',createdAt:'2026-10-03T01:00:01Z'}]};
   await mount();
   const topic=host.querySelector('.chat-topic[data-about="save"]');
-  expect(topic?.textContent).toContain('You kept this');
+  expect(topic?.textContent).toContain('You saved this');
   expect(topic?.querySelector('blockquote')?.textContent).toBe('Nobody feels ready.');
   expect([...host.querySelectorAll('.chat-message')].map(node=>node.getAttribute('data-role'))).toEqual(['assistant']);
 });

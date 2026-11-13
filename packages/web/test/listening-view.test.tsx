@@ -31,8 +31,8 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
 
-const show = (words: string, notice?: string) =>
-  act(async () => root.render(<ListeningView locale="en-US" words={words} notice={notice} onDone={() => {}} />));
+const show = (words: string) =>
+  act(async () => root.render(<ListeningView locale="en-US" words={words} onDone={() => {}} />));
 const page = () => host.querySelector<HTMLDivElement>('.waka-listening-page')!;
 const words = () => host.querySelector<HTMLElement>('.waka-listening-words')!;
 /** jsdom lays nothing out; give the page a height and a scroll height. */
@@ -109,10 +109,11 @@ it('finds where a new result stops matching the last, at a word\'s start', () =>
   expect(settledLength('one tw', 'one two')).toBe('one '.length);
 });
 
-it('says where speech goes in one quiet line, with Done as a word', async () => {
-  await show('', 'Your browser sends speech to its own service to turn it into text.');
+/* The line about where speech goes is gone (founder, 2026-11-10: "remove"). */
+it('has Done as a word and nothing else in its foot', async () => {
+  await show('');
   const foot = host.querySelector('.waka-listening-foot')!;
-  expect(foot.querySelector('.waka-listening-notice')?.textContent).toBe('Your browser sends speech to its own service to turn it into text.');
+  expect(foot.querySelector('.waka-listening-notice')).toBeNull();
   expect(foot.querySelector('.waka-listening-done')?.textContent).toBe('Done');
   expect(document.activeElement).toBe(foot.querySelector('.waka-listening-done'));
 });

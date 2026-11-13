@@ -3,7 +3,7 @@
  * THE HANDOFF AFTER A SAVE, AND THE ONE CREATURE ACROSS EVERY STEP.
  *
  * After each Save: the answer is received (inputs locked), the bubble says
- * "Kept" as the next dot fills, then the next question is asked. A failed
+ * "Saved" as the next dot fills, then the next question is asked. A failed
  * save says why and keeps the answer. And however many screens onboarding
  * passes through, there is one creature, the same element, never two.
  *
@@ -119,9 +119,9 @@ async function settle(ms: number): Promise<void> {
 }
 
 async function answer(words: string): Promise<void> {
-  press("Keep a thought");
+  press("Save an inspiration");
   type(words);
-  press("Keep");
+  press("Save");
   await flush();
   await settle(1700);
 }
@@ -162,9 +162,9 @@ afterEach(() => {
 });
 
 async function writeAndSave(words: string): Promise<void> {
-  press("Keep a thought");
+  press("Save an inspiration");
   type(words);
-  press("Keep");
+  press("Save");
   await flush();
 }
 
@@ -184,7 +184,7 @@ describe("the handoff after a save", () => {
 
     /* kept */
     await tick(500);
-    expect(bubble()).toBe("Kept");
+    expect(bubble()).toBe("Saved");
     expect(dots()).toBe(2);
     expect(ways().every((way) => way.disabled)).toBe(true);
 
@@ -207,11 +207,11 @@ describe("the handoff after a save", () => {
     vi.useFakeTimers();
     await writeAndSave("Kept words");
     await tick(1500);
-    expect(bubble()).not.toContain("Kept");
+    expect(bubble()).not.toContain("Saved");
     expect(bubble()).toContain("Tell me one thing");
     expect(container!.querySelector("[role=alert]")?.textContent).toBeTruthy();
     expect(container!.querySelector("textarea")!.value).toBe("Kept words");
-    press("Keep");
+    press("Save");
     await flush();
     const ids = vi.mocked(createInspiration).mock.calls.map(([, options]) => options?.requestId);
     expect(ids).toHaveLength(2);
@@ -224,7 +224,7 @@ describe("the handoff after a save", () => {
     vi.useFakeTimers();
     await writeAndSave("One");
     await tick(0);
-    expect(bubble()).toBe("Kept");
+    expect(bubble()).toBe("Saved");
     await tick(700);
     expect(bubble()).toContain("Tell me about a conversation");
   });

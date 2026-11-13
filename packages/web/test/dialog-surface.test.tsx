@@ -114,7 +114,7 @@ describe("dialog input ownership", () => {
    */
   it("lets Tab out of a page, and says it is a region rather than a dialog", async () => {
     const close = vi.fn();
-    await act(async () => root.render(<DialogSurface modal={false} aria-label="Kept" onClose={close}>
+    await act(async () => root.render(<DialogSurface modal={false} aria-label="Saved" onClose={close}>
       <input aria-label="Find" />
       <button>A memory</button>
     </DialogSurface>));

@@ -91,8 +91,11 @@ const NOTE_READ_LIMIT_MS = 20_000;
    it is the moment just after the press and not a pending state. */
 const UNDO_MS = 6000;
 
-export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest }: {
+export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, onNew }: {
   canReview?:boolean; onRelevanceChanged?:()=>void;
+  /** "New note", the header's right word, as Past chats has New chat
+      (founder, 2026-11-10). Absent where nothing may be written. */
+  onNew?: () => void;
   topRequest?: number;
   viewState?: ListViewState;
   /**
@@ -180,7 +183,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
   onClearFocus?: () => void;
   /** THE "<" AND ESCAPE, ONE HANDLER (nav system R3): on the list it closes
       to home, or goes back to the chat it was opened from; on an open note
-      it goes back to the list or the sheet. */
+      it goes back to the list. */
   onBack: () => void;
   /** What the list's "<" does; an open note's is always Back. */
   backKind?: BackKind;
@@ -1293,9 +1296,13 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
             ) : null}</>}</>}
           /* THE WAY OUT OF THE FILTER, WHICH IS NOT THE WAY OUT OF THE PAGE:
              "See all" is the header's one right-hand word while a claim's
-             filter is on. Writing a new note is the home bar's pill. */
+             filter is on; otherwise "New note", as Past chats has "New chat"
+             (founder, 2026-11-10: "let's have Save new or something like
+             that on top right"). */
           right={focus && onClearFocus ? (
             <button type="button" className="waka-over-unfocus" onClick={onClearFocus}>{say("worldBubbleSeeAll")}</button>
+          ) : onNew ? (
+            <button type="button" className="waka-over-new" onClick={onNew}>{say("worldNoteNew")}</button>
           ) : undefined} />}
         {/* THE TWO FACTS A GRID NEEDS BEFORE IT CAN BE SEARCHED: how much is
             behind it, and a way to narrow it. Both were in the page's header
@@ -1582,7 +1589,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                   in the listening view the notepad and a chat use, and Done
                   drops them into the page as text. */}
               {dictation.listening ? <ListeningView locale={locale} words={draft}
-                notice={dictation.firstTime ? say("worldComposerDictateCloud") : undefined} onDone={() => dictation.stop()} /> : <textarea
+                onDone={() => dictation.stop()} /> : <textarea
                 className="jar-panel-text waka-note-page"
                 /* UNTIL THE FULL TEXT ARRIVES the list's preview stands in,
                    read-only, so the page does not open blank — and nothing

@@ -65,7 +65,7 @@ afterEach(() => { world?.unmount(); vi.clearAllMocks(); });
 const button = (label: string) => {
   /* A reason row carries its explaining line too, so a row is found by its
      own label; every other button by its whole text. */
-  /* THE CARD'S OWN PRESSES FIRST: "Keep" is also the composer's word now. */
+  /* THE CARD'S OWN PRESSES FIRST: "Save" is also the composer's word now. */
   const named = (root: ParentNode) => [...root.querySelectorAll<HTMLButtonElement>("button")].find((node) =>
     (node.querySelector(".jar-harvest-row-label")?.textContent ?? node.textContent)?.trim() === label);
   const card = world.container.querySelector(".jar-pick");
@@ -94,8 +94,8 @@ it('offers at most five reviews total, with agent picks before readings',async()
   await withBasket([CANDIDATE,SECOND],claims);
   // Two picks leave three reading slots; the sixth queued item stays out.
   expect(listClaims).toHaveBeenCalledWith({limit:5});
-  await act(async()=>button('Keep').click());await leaves();
-  await act(async()=>button('Keep').click());await leaves();
+  await act(async()=>button('Save').click());await leaves();
+  await act(async()=>button('Save').click());await leaves();
   for(const claim of claims.slice(0,3)){
     expect(statement()).toContain(claim.statement);
     await act(async()=>button('Yes').click());await leaves();
@@ -126,7 +126,7 @@ it("keeps it when the slip is dragged to the right, the pick's own gesture", asy
 
 it("keeps it as an ordinary save, keyed to the candidate so a retry cannot make two", async () => {
   await withBasket([CANDIDATE], [CLAIM]);
-  await act(async () => button("Keep").click());
+  await act(async () => button("Save").click());
   expect(createInspiration).toHaveBeenCalledWith({ text: CANDIDATE.text }, expect.objectContaining({ requestId: CANDIDATE.id, profile: VIEWER_ID }));
   expect(keepHarvest).toHaveBeenCalledWith(CANDIDATE.id, "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
   await leaves();
@@ -184,7 +184,7 @@ it("treats a bad cut as a good thought: fix the words and keep them", async () =
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(area, "Ship the ugly version first.");
     area.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await act(async () => button("Keep").click());
+  await act(async () => button("Save").click());
   /* Corrected words are a new save, so they get their own request id: the
      candidate's would be refused as a conflicting replay of the original.
      The id is a digest, so the save is waited for, not assumed. */
@@ -210,7 +210,7 @@ it("corrects the same save after a failed link, and says what it was first saved
       area.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const tries = vi.mocked(keepHarvest).mock.calls.length;
-    await act(async () => button("Keep").click());
+    await act(async () => button("Save").click());
     /* The save's request id is a digest, so each keep is waited for until
        it has actually been tried, and its failure has settled on screen. */
     await act(async () => { await vi.waitFor(() => expect(vi.mocked(keepHarvest).mock.calls.length).toBe(tries + 1)); });
@@ -237,10 +237,10 @@ it("a bad cut can still be let go, and says why", async () => {
 it("puts a candidate back and says so when keeping it fails", async () => {
   await withBasket([CANDIDATE, SECOND]);
   vi.mocked(keepHarvest).mockRejectedValueOnce(new Error("offline"));
-  await act(async () => button("Keep").click());
+  await act(async () => button("Save").click());
   await leaves();
   expect(statement(), "the one that failed is back in front").toBe(CANDIDATE.text);
-  expect(world.container.textContent).toContain("Couldn’t keep it.");
+  expect(world.container.textContent).toContain("Couldn’t save it.");
 });
 
 it("keeps the question open with its reason when letting go fails", async () => {

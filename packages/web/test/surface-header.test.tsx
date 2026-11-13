@@ -42,7 +42,7 @@ function seen(node: Element): string {
 
 describe('the "<" is one glyph, named by what it does', () => {
   it.each([['back', 'Back'], ['close', 'Close']] as const)('a %s "<" is named %s and shows no word', async (kind, name) => {
-    await act(async () => root.render(<SurfaceHeader locale="en-US" back={{ kind, onBack: back }} title="Kept" />));
+    await act(async () => root.render(<SurfaceHeader locale="en-US" back={{ kind, onBack: back }} title="Saved" />));
     const head = host.querySelector('header.waka-surface-head')!;
     const presses = head.querySelectorAll('button');
     expect(presses, 'the header holds more than its "<"').toHaveLength(1);
@@ -94,8 +94,8 @@ describe('the "<" is one glyph, named by what it does', () => {
 
 describe('Escape is the "<"', () => {
   it('calls the same handler from inside a surface that passes its back as onClose', async () => {
-    await act(async () => root.render(<DialogSurface modal={false} onClose={back} aria-label="Kept">
-      <SurfaceHeader locale="en-US" back={{ kind: 'close', onBack: back }} title="Kept" /><input aria-label="field" />
+    await act(async () => root.render(<DialogSurface modal={false} onClose={back} aria-label="Saved">
+      <SurfaceHeader locale="en-US" back={{ kind: 'close', onBack: back }} title="Saved" /><input aria-label="field" />
     </DialogSurface>));
     await act(async () => host.querySelector('input')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     await act(async () => host.querySelector<HTMLButtonElement>('.waka-surface-back')!.click());
@@ -111,7 +111,7 @@ describe('Escape never hides a page that is not leaving', () => {
 
   it('calls a page\'s "<" handler at once, with no drop-out, when Escape is its "<"', async () => {
     const stays = vi.fn();
-    await act(async () => root.render(<DialogSurface modal={false} motion="modal" escapeLeavesAsModal={false} onClose={stays} aria-label="Note">
+    await act(async () => root.render(<DialogSurface modal={false} motion="modal" escapeLeavesAsModal={false} onClose={stays} aria-label="Inspiration">
       <SurfaceHeader locale="en-US" back={{ kind: 'back', onBack: stays }} /><input aria-label="field" />
     </DialogSurface>));
     const surface = host.querySelector<HTMLElement>('[data-jar-surface]')!;
@@ -122,7 +122,7 @@ describe('Escape never hides a page that is not leaving', () => {
 
   it('still drops a sheet that always leaves', async () => {
     const leaves = vi.fn();
-    await act(async () => root.render(<DialogSurface modal={false} motion="modal" onClose={leaves} aria-label="Kept"><input aria-label="field" /></DialogSurface>));
+    await act(async () => root.render(<DialogSurface modal={false} motion="modal" onClose={leaves} aria-label="Saved"><input aria-label="field" /></DialogSurface>));
     await act(async () => host.querySelector('input')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     expect(host.querySelector<HTMLElement>('[data-jar-surface]')!.dataset.leaving).toBe('1');
   });
@@ -231,7 +231,7 @@ describe('listening is a full-screen layer', () => {
   it('makes everything behind it inert while open, Escape is Done, and the page under it never hears it', async () => {
     const outside = document.createElement('button'); outside.textContent = 'behind'; document.body.append(outside);
     const done = vi.fn(), leave = vi.fn();
-    const mount = (listening: boolean) => act(async () => root.render(<DialogSurface modal={false} onClose={leave} aria-label="Note">
+    const mount = (listening: boolean) => act(async () => root.render(<DialogSurface modal={false} onClose={leave} aria-label="Inspiration">
       <SurfaceHeader locale="en-US" back={{ kind: 'close', onBack: leave }} />
       <p className="page-words">words</p>
       {listening ? <ListeningView locale="en-US" words="hello" onDone={done} /> : null}

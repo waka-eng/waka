@@ -10,7 +10,7 @@ export type ListViewState = {
   archivePages?: number;
 };
 
-export const createListViewState = (): ListViewState => ({ query: '', category: null, onShelf: false, scrollTop: 0 });
+const createListViewState = (): ListViewState => ({ query: '', category: null, onShelf: false, scrollTop: 0 });
 
 /** Only UI preferences, held for this mounted account. No records or drafts. */
 export function useProfileListViews(scope: ProfileStorageScope | null) {

@@ -132,7 +132,7 @@ function startsLower(value: string): boolean {
 const EXEMPT: Record<string, string> = {
   /* THE HOME BAR'S DOORS LEFT THIS LIST (2026-11-09) with the words they
      excused ("a thought", "a screenshot", "your voice"): the pill reads
-     "Keep a thought…" now, a whole capitalised phrase, and its other two
+     "Save an inspiration…" now, a whole capitalised phrase, and its other two
      doors are glyphs with no words beside them. */
   /* THREE EXEMPTIONS WENT WITH `Profile.tsx` (2026-10-11), and the gate
      found them the same run — which is what the companion case below it

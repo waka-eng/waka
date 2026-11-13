@@ -69,7 +69,7 @@ it('does not recover another profile or other-account drafts and warns about cha
   await boot();expect(page()?.value).toBe(S.text);world.unmount();
   writeNoteEdit(scope,'agent-note',S.text,'Recovered local edit',null);S.text='Changed elsewhere';
   await boot();expect(page()?.value).toBe('Recovered local edit');
-  expect(world.container.textContent).toContain('This note changed elsewhere');
+  expect(world.container.textContent).toContain('This inspiration changed elsewhere');
   await act(async()=>page()!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));await settle();
   expect(vi.mocked(updateInspiration)).not.toHaveBeenCalled();
 });

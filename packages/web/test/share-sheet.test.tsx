@@ -93,7 +93,7 @@ it("opens on the one design, unsigned, with the kept words and two icon actions"
   expect(host.querySelector(".jar-share-look"), "one design: no looks row").toBeNull();
   expect(host.querySelector(".jar-share-name"), "always signed: no name switch").toBeNull();
   expect(button("Edit"), "the words are edited in the bubble").toBeUndefined();
-  expect(host.querySelector("h2")?.textContent).toBe("Share this note");
+  expect(host.querySelector("h2")?.textContent).toBe("Share this inspiration");
 });
 
 it("closes with the quiet \"<\" first in its row, like every page", async () => {

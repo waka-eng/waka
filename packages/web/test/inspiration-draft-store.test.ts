@@ -34,7 +34,7 @@ it('recovers actual draft bytes and text for their account/profile only', async 
 it('refuses a stale tab overwriting a newer revision, preserving the newer attachment', async () => {
   const initial = { ...newInspirationDraft('First thought'), revision: 1 };
   await writeInspirationDraft(scope, initial, 0);
-  await writeInspirationDraft(scope, { ...initial, revision: 2, text: 'Newer thought', media: [{ id: 'link', type: 'link', name: 'Kept', url: 'https://example.test' }] }, 1);
+  await writeInspirationDraft(scope, { ...initial, revision: 2, text: 'Newer thought', media: [{ id: 'link', type: 'link', name: 'Saved', url: 'https://example.test' }] }, 1);
   await expect(writeInspirationDraft(scope, { ...initial, revision: 2, text: 'Stale thought' }, 1)).rejects.toBeInstanceOf(InspirationDraftConflict);
   expect(await loadInspirationDraft(scope, initial.id)).toMatchObject({ text: 'Newer thought', media: [{ id: 'link' }] });
 });
@@ -46,7 +46,7 @@ it('a completed older save cannot clear words or bytes added during its request'
   expect((await loadInspirationDraft(scope, initial.id))?.text).toBe('Written while saving');
 });
 it('clears a confirmed draft once and prevents an old tab from reviving it', async () => {
-  const initial = { ...newInspirationDraft('Kept'), revision: 1, media: [{ id: 'image', type: 'image' as const, name: 'Photo.png', blob: new Blob(['private bytes']) }] };
+  const initial = { ...newInspirationDraft('Saved'), revision: 1, media: [{ id: 'image', type: 'image' as const, name: 'Photo.png', blob: new Blob(['private bytes']) }] };
   await writeInspirationDraft(scope, initial, 0);
   expect(await settleInspirationMediaDraft(scope, initial.id, 1, 'saved-id')).toBe(true);
   expect(await loadInspirationDraft(scope, initial.id)).toBeNull();

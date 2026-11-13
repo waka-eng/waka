@@ -558,7 +558,7 @@ async function main(): Promise<void> {
       /* THE BAR'S ROW, NOT ANY WORD THAT HAPPENS TO SAY `Inspirations`.
          `focused()` hands back the className, the text and the aria-label of
          whatever is focused, all in one string, and the archive's own surface
-         is labelled "Kept" — so a bare /Inspirations/ would be a
+         is labelled "Saved" — so a bare /Inspirations/ would be a
          bet on which of them Tab met first. Both halves are required, over
          newlines, because the className comes first. */
       if (await tabTo(/waka-dock-item[\s\S]*Inspirations/)) {

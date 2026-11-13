@@ -67,7 +67,7 @@ it("explains principles with a labeled example instead of empty placeholders", a
   expect(host.querySelector(".waka-ground-example")?.textContent).toContain("Make room for small experiments.");
   expect(host.querySelector(".waka-ground-how")?.textContent).toContain("WAKA turns them into principles");
   expect(host.querySelectorAll(".waka-ground-seat--held")).toHaveLength(0);
-  expect(line()).toContain("Keep a few more things. Your first principle comes from patterns in them.");
+  expect(line()).toContain("Save a few more things. Your first principle comes from patterns in them.");
 });
 
 it("puts each holding pattern's own words in a seat and says what is left, in words", async () => {
@@ -76,7 +76,7 @@ it("puts each holding pattern's own words in a seat and says what is left, in wo
   const held = [...host.querySelectorAll(".waka-ground-seat--held")].map((node) => node.textContent);
   /* Longest-held first: it is the likeliest ground for the first principle. */
   expect(held).toEqual(["You keep reversible doors open.", "You choose small first moves."]);
-  expect(line()).toBe("I’ve found patterns that could shape your first principle. Keep more to help it form.");
+  expect(line()).toBe("I’ve found patterns that could shape your first principle. Save more to help it form.");
   expect(line(), "states render, numerals never").not.toMatch(/\d/);
 });
 
@@ -223,7 +223,7 @@ it("on an agent's wall, the waiting ground and the first-principle greeting spea
   vi.mocked(fetchSignals).mockResolvedValue([]);
   vi.mocked(fetchPrinciples).mockResolvedValue([]);
   await agentPage();
-  expect(line()).toBe("Your agent’s first principle comes from patterns in what it keeps.");
+  expect(line()).toBe("Your agent’s first principle comes from patterns in what it saves.");
   expect(host.querySelector(".waka-ground-foot")?.textContent).toBe("Your agent’s first principle");
   expect(host.querySelector(".waka-ground")?.getAttribute("aria-label")).toBe("What your agent’s first principle will grow from");
 
@@ -232,7 +232,7 @@ it("on an agent's wall, the waiting ground and the first-principle greeting spea
   root = createRoot(host);
   await agentPage();
   expect(host.querySelector(".waka-held-first")?.textContent).toBe("Here it is. Your agent’s first principle.");
-  expect(host.querySelector(".waka-held-proof")?.textContent).toContain("From what it kept");
+  expect(host.querySelector(".waka-held-proof")?.textContent).toContain("From what it saved");
   expect(host.textContent).not.toMatch(/your (first )?principle|you kept/i);
 });
 

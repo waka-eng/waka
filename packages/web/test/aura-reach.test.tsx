@@ -73,7 +73,7 @@ const speech = () => world.container
 const press = () => world.container.querySelector<HTMLButtonElement>('.jar-char-press');
 const QUIET = ['Quiet lately', 'It has been quiet', 'Nothing new in a while'];
 const WARM = ['Last week is still on your mind.', 'Something from last week keeps coming back.'];
-const FRONTIER = ['Some of what you kept isn’t part of a pattern yet.', 'A few things you kept don’t fit a pattern yet.'];
+const FRONTIER = ['Some of what you saved isn’t part of a pattern yet.', 'A few things you saved don’t fit a pattern yet.'];
 async function ask(): Promise<string | null> {
   expect(press(), 'the creature has nothing to press').toBeTruthy();
   await act(async () => { press()!.click(); });

@@ -261,7 +261,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
     ? dictation.error === "dictation-denied" ? say("worldComposerDictateDenied") : dictation.error === "dictation-failed" ? say("worldComposerDictateFailed") : ""
     : recording.error ? say(recording.error) : "";
   const hint = error || voiceProblem
-    || (listening ? (canDictate && dictation.firstTime ? say("worldComposerDictateCloud") : say("onboardingVoiceHintListening")) : "");
+    || (listening ? say("onboardingVoiceHintListening") : "");
 
   const fileField = (
     <input ref={fileInput} type="file" accept={PHOTO_ACCEPT} hidden onChange={(event) => { void pickPhoto(event); }}

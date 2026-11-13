@@ -1414,6 +1414,11 @@ body textarea {
   body .waka-note-page:not(.waka-over--note .waka-note-page) {
     font-size: var(--t-lead) !important;
   }
+  /* Writing is set at the size it was spoken (`--t-writing`, system.css). */
+  body .waka-over--note .waka-note-page,
+  body .jar-seek.jar-inspiration-composer .jar-composer-body > .jar-composer-text {
+    font-size: var(--t-writing) !important;
+  }
 }
 @media (pointer: coarse) and (max-width: 600px) {
   body .jar-attachment-transcript textarea { font-size: var(--t-lead) !important; }
