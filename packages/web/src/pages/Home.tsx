@@ -1,5 +1,6 @@
 import { startJourney } from '../lib/journey-performance';
 import { ReadingBubbleText } from '../components/ReadingBubbleText';
+import { firstPhoto, onlyAttachments } from '../components/SavedPhoto';
 /**
  * WAKA — the world. Home, at `/`.
  *
@@ -7332,8 +7333,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
      review, 2026-11-08): the field loads the newest saves, and a read can
      rest on an older one. Its words are fetched once and kept here. */
   const [whyFetched, setWhyFetched] = useState<ReadonlyMap<string, string>>(new Map());
-  const whyFor = (entry: Entry | null): Array<{ id: string; preview: string }> => whyIds(entry)
-    .map(id => ({ id, preview: inspirations?.find(row => row.id === id)?.preview ?? whyFetched.get(id) ?? '' }))
+  const whyFor = (entry: Entry | null): Array<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }> => whyIds(entry)
+    .map(id => {
+      const row = inspirations?.find(item => item.id === id);
+      return row
+        ? { id, preview: row.preview, photoId: firstPhoto(row.attachments), wordless: onlyAttachments(row.preview, row.attachments) }
+        : { id, preview: whyFetched.get(id) ?? '' };
+    })
     .filter(row => row.preview);
   const whyMissing = whyIds(lead && !standingAsAgent ? lead : null)
     .filter(id => !inspirations?.some(row => row.id === id) && !whyFetched.has(id)).join(',');

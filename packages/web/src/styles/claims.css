@@ -7682,3 +7682,23 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 .waka-review-reader-foot { width: min(40rem, 100%); margin: var(--sp-16) auto 0; text-align: center; }
 .waka-review-reader-ask { margin: 0 0 var(--sp-8); color: var(--muted); font-size: var(--t-ui); }
 }
+
+@layer chrome {
+/* ═══ A SAVED PICTURE, SMALL (founder, 2026-11-12) ══════════════════════════
+   Where a list said "Photo", it shows the picture: a soft square tile, the
+   picture covering it, a quiet raised ground until it lands. */
+.waka-saved-photo {
+  display: inline-block; flex: none; overflow: hidden; width: var(--sp-48); height: var(--sp-48);
+  border-radius: var(--sp-12); background: var(--waka-raised);
+}
+.waka-saved-photo > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* In "Because you saved these": the picture leads its row, words beside it. */
+.waka-says-why-row[data-photo] { display: flex; align-items: center; gap: var(--sp-12); }
+.waka-says-why-words { min-width: 0; }
+.waka-says-why-row .waka-saved-photo { background: color-mix(in srgb, var(--waka-on-light) 10%, transparent); }
+/* In Inspirations: the words on the left, the picture at the row's end. */
+.waka-list-row:has(> .waka-list-photo) {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-16); align-items: center;
+}
+.waka-list-row > .waka-list-photo { grid-column: 2; grid-row: 1 / span 3; }
+}

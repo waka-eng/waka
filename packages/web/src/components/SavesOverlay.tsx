@@ -45,6 +45,7 @@ import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
 import { SurfaceHeader, type BackKind } from "./SurfaceHeader";
+import { firstPhoto, onlyAttachments, SavedPhoto } from "./SavedPhoto";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { InspirationAttachments } from "./InspirationAttachments";
 import { SavedImageWords } from "./ImageWords";
@@ -1802,11 +1803,18 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                     const breakAt = words.indexOf("\n");
                     const lead = (breakAt > 0 ? words.slice(0, breakAt) : words).trim();
                     const rest = (breakAt > 0 ? words.slice(breakAt + 1) : "").trim();
+                    /* A PICTURE SHOWS AS THE PICTURE (founder, 2026-11-12:
+                       rows reading "Photo", "Photo", "Photo"). Its first
+                       picture sits at the row's end; a save that is only
+                       pictures has no lead line to print, and its name stays
+                       for a screen reader. */
+                    const photo = firstPhoto(row.attachments);
+                    const wordless = onlyAttachments(row.preview, row.attachments);
                     return (
                       <li key={row.id}>
                         <button type="button" className="waka-list-row"
                           onClick={() => pressNote(row)}>
-                          <span className="waka-list-lead">{lead}</span>
+                          {wordless ? <span className="sr-only">{lead}</span> : <span className="waka-list-lead">{lead}</span>}
                           <span className="waka-list-meta">
                             {/* WHICH ONE THIS IS, AND IT IS A NAME RATHER THAN
                                 A MEASUREMENT. Founder, on the reference's
@@ -1840,6 +1848,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                             <span className="waka-list-date">{dateWords(row.capturedMs, now, locale)}</span>
                             {rest ? <span className="waka-list-rest">{rest}</span> : null}
                           </span>
+                          {photo ? <SavedPhoto id={photo} className="waka-list-photo" /> : null}
                         </button>
                       </li>
                     );
