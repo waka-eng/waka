@@ -2319,6 +2319,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-ground-card {
   display: flex;
   flex-direction: column;
+  /* CENTRED UNDER THE CREATURE, ALWAYS (founder, 2026-11-12: "center this
+     thing always"): the card itself on the page's axis, and every line in
+     it, label to foot, on the same axis as the bubble above it. */
+  align-self: center;
+  margin-inline: auto;
+  text-align: center;
   gap: var(--sp-16);
   box-sizing: border-box;
   width: min(24rem, 100%);
@@ -7092,18 +7098,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    desk. Saves are raised cards; a pattern or principle wears the bubble's
    paper (it is something said about you); one still forming is dashed and
    says so. */
-/* THE PATTERNS UNDER THE PRINCIPLES (2026-11-10): the Saved sheet they stood
-   on went; they keep its look, on the Principles page's column. */
-.waka-stream-patterns { width: min(36rem, 100%); box-sizing: border-box; margin: var(--sp-24) auto 0; padding: 0 var(--sp-16) var(--sp-32); }
-.waka-stream-label { margin: var(--sp-14) 0 var(--sp-8); font-size: var(--t-ui); font-weight: 400; color: var(--muted); }
-.waka-stream-list { display: flex; flex-direction: column; gap: var(--sp-8); margin: 0; padding: 0; list-style: none; }
-.waka-stream-meta { font-size: var(--t-ui); color: var(--muted); }
-.waka-stream-words { font-size: var(--t-input); line-height: 1.4; overflow-wrap: anywhere; }
-.waka-stream-statement {
-  display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-12) var(--sp-16); border-radius: var(--sp-16);
-  background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep)); color: var(--waka-on-light);
-}
-.waka-stream-statement[data-forming] { background: none; color: var(--ink); border: 1px dashed var(--muted); }
 }
 
 @layer chrome {

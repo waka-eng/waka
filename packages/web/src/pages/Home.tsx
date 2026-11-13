@@ -11467,8 +11467,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
         name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
         title={atWall.kind==='agent'?formatMessage(locale,'worldProfilePrinciples',{name:atWall.name}):say('worldPrinciplesShortcut')}
         whose={atWall.kind==='agent'?'agent':'own'}
-        patterns={atWall.kind==='agent'?undefined:(signals??[]).filter(row=>row.status==='active'||row.status==='emerging')
-          .sort((a,b)=>b.lastEvidenceMs-a.lastEvidenceMs).map(row=>({id:row.id,statement:row.statement,forming:row.status==='emerging'}))}
         onNewSave={atWall.kind==='agent'?undefined:startNewInspiration}
         newSaveLabel={say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}
         onClose={closePage} gesture={principlesCrossing ? null : viewNavigation.href}
