@@ -18,12 +18,21 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
   onChat:(question:string,text:string)=>void;
 }) {
   const [item,setItem]=useState(initial),[busy,setBusy]=useState(false),[changed,setChanged]=useState(false),[failed,setFailed]=useState(false);
-  /* ═══ OPEN READS IT WHOLE, OVER THE REVIEW (founder, 2026-11-12) ═══════
+  /* ═══ A TAP READS IT WHOLE, OVER THE REVIEW (founder, 2026-11-12) ═══════
      "It needs to open without disturbing the workflow and be easily
-     closeable." Open used to leave the review for the archive. Now it lays
-     the whole inspiration on a page over the card; "<" (or Escape) puts it
-     away onto the same card, and its own foot answers Not really or Yes. */
+     closeable." A tap on the card lays the whole inspiration on a page over
+     it; "<" (or Escape) puts it away onto the same card, and its own foot
+     answers Not really or Yes. */
   const [reading,setReading]=useState(false);
+  /* ESCAPE PUTS IT AWAY WHEREVER FOCUS IS (code review, 2026-11-12): Home
+     steps aside while the reader is up, so the reader answers Escape itself,
+     not only from inside its own page. */
+  useEffect(()=>{
+    if(!reading)return;
+    const away=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!event.defaultPrevented){event.preventDefault();setReading(false);}};
+    document.addEventListener('keydown',away);
+    return()=>document.removeEventListener('keydown',away);
+  },[reading]);
   const stopSlip=(event:{stopPropagation:()=>void})=>event.stopPropagation();
   const saving=useRef(false),intent=useRef<{choice:RelevanceChoice;id:string}|null>(null);
   const alive=useRef(true);

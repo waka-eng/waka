@@ -6600,7 +6600,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
       if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Escape') return;
       if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       if (isEditableTarget(event.target) || (event.target instanceof Element && event.target.closest('[aria-modal="true"]'))) return;
-      /* The review card's Open lays a page over the review whose own Escape
+      /* A tap on the review card lays a page over the review whose own Escape
          puts it back onto the card (code review, 2026-11-12): while it is up,
          Escape is not this listener's to end the sitting with. */
       if (document.querySelector('.waka-review-reader')) return;

@@ -6983,7 +6983,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 
 @layer chrome {
-/* A bounded preview leaves all choices visible; Open inspiration shows the full original. */
+/* A bounded preview leaves all choices visible; a tap on the card reads the full original. */
 .waka-inspiration-review-text { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--t-body); line-height: 1.55; margin: var(--sp-12) 0; }
 .waka-inspiration-relevance { font-size: var(--t-meta); line-height: 1.5; opacity: .85; margin-bottom: var(--sp-16); }
 .waka-inspiration-relevance button { font: inherit; text-decoration: underline; text-underline-offset: 3px; min-height: var(--sp-44); }
@@ -7001,7 +7001,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
      "this shouldn't cover the character"): lifting it to 100dvh - 140px let
      the card climb over the creature on a 700-740px laptop window. */
   @media (max-height: 740px) {
-    .jar-pick--reading .jar-pick-slip .waka-inspiration-review-text, .waka-inspiration-review-text { -webkit-line-clamp: 3; }
+    .waka-inspiration-review-text { -webkit-line-clamp: 3; }
   }
 }
 
@@ -7661,6 +7661,13 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 .jar-pick--reading .jar-pick-slip .jar-pick-statement { color: var(--waka-on-light); font-size: var(--t-writing); line-height: 1.55; text-align: start; text-wrap: pretty; }
 .jar-pick--reading .jar-pick-slip .waka-inspiration-review-text { -webkit-line-clamp: 5; margin: 0; }
+/* Three lines on a short window. Here, after the five-line rule it narrows,
+   because two equal selectors in one layer go to the later one (code
+   review, 2026-11-12: the earlier copy never won). MEASURED 320×568 in the
+   rule this replaces. */
+@media (max-height: 740px) {
+  .jar-pick--reading .jar-pick-slip .waka-inspiration-review-text { -webkit-line-clamp: 3; }
+}
 .jar-pick--reading .jar-pick-slip .jar-pick-source { margin: 0; color: color-mix(in srgb, var(--waka-on-light) 62%, transparent); }
 .jar-pick--reading .jar-pick-slip .waka-inspiration-review-action { align-self: flex-start; color: var(--waka-on-light); }
 .waka-review-hint { margin: 0; padding-top: var(--sp-4); font-size: var(--t-ui); color: color-mix(in srgb, var(--waka-on-light) 62%, transparent); }
