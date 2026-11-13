@@ -6996,11 +6996,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 @layer chrome {
   /* MEASURED 390×844: long originals clipped the answer controls at the old
-     46dvh cap. At 320×568, three preview lines and the remaining viewport
-     keep both answers and Exit review visible. */
+     46dvh cap. At 320×568, three preview lines keep both answers visible.
+     The cap itself now holds on a short window too (founder, 2026-11-12:
+     "this shouldn't cover the character"): lifting it to 100dvh - 140px let
+     the card climb over the creature on a 700-740px laptop window. */
   @media (max-height: 740px) {
-    .waka-inspiration-review-text { -webkit-line-clamp: 3; }
-    .jar-char-say:has(.waka-inspiration-review-text) { max-height: calc(100dvh - 140px); }
+    .jar-pick--reading .jar-pick-slip .waka-inspiration-review-text, .waka-inspiration-review-text { -webkit-line-clamp: 3; }
   }
 }
 
@@ -7639,20 +7640,30 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
    inspiration itself on the bubble's paper, big enough to read, the next
    card a darker sheet behind it. Dragged, it tilts toward its answer and a
    dark tag names it. A tap reads it all over the review. */
-.waka-review-ask { margin: 0 0 var(--sp-16); text-align: center; font-size: var(--t-lead); font-weight: 500; line-height: 1.35; color: var(--ink); }
+.waka-review-ask { margin: 0 0 var(--sp-8); text-align: center; font-size: var(--t-lead); font-weight: 500; line-height: 1.35; color: var(--ink); }
 .jar-pick--reading .jar-pick-slip {
-  --bubble-fill: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep));
-  display: flex; flex-direction: column; gap: var(--sp-10); min-height: min(26rem, 52dvh);
-  padding: var(--sp-24) var(--sp-24) var(--sp-20);
+  /* ONE PAPER, FIXED (founder, 2026-11-12: "this color is good, but the
+     bright white is horrible"): the bubble's warm paper from the two root
+     tokens, so nothing scoped to the world can lift it toward white. */
+  --bubble-fill: color-mix(in srgb, var(--moon-warm) 84%, var(--moon-ground));
+  background-color: var(--bubble-fill);
+  /* IT FITS UNDER THE CREATURE (founder, 2026-11-12: "this shouldn't cover
+     the character ... the bottom of this card is not even showing"). The
+     answers hang in `.jar-char-say`, which stops at 46% of the window so it
+     never reaches the creature; the card was taller than that, so the block
+     scrolled and hid its own answer row. It sizes to its words now, five
+     lines at most, and Tap to read all opens the rest. */
+  display: flex; flex-direction: column; gap: var(--sp-8);
+  padding: var(--sp-20) var(--sp-20) var(--sp-16);
   border: 0; border-radius: 22px; text-align: start;
   background: var(--bubble-fill); color: var(--waka-on-light);
   box-shadow: 0 18px 40px color-mix(in srgb, var(--jar-deep) 70%, transparent);
 }
 .jar-pick--reading .jar-pick-slip .jar-pick-statement { color: var(--waka-on-light); font-size: var(--t-writing); line-height: 1.55; text-align: start; text-wrap: pretty; }
-.jar-pick--reading .jar-pick-slip .waka-inspiration-review-text { -webkit-line-clamp: 9; margin: 0; }
+.jar-pick--reading .jar-pick-slip .waka-inspiration-review-text { -webkit-line-clamp: 5; margin: 0; }
 .jar-pick--reading .jar-pick-slip .jar-pick-source { margin: 0; color: color-mix(in srgb, var(--waka-on-light) 62%, transparent); }
 .jar-pick--reading .jar-pick-slip .waka-inspiration-review-action { align-self: flex-start; color: var(--waka-on-light); }
-.waka-review-hint { margin: auto 0 0; padding-top: var(--sp-12); font-size: var(--t-ui); color: color-mix(in srgb, var(--waka-on-light) 62%, transparent); }
+.waka-review-hint { margin: 0; padding-top: var(--sp-4); font-size: var(--t-ui); color: color-mix(in srgb, var(--waka-on-light) 62%, transparent); }
 .jar-pick--reading .jar-pick-behind {
   inset: var(--sp-16) var(--sp-14) 0; border: 0; border-radius: 22px;
   background: color-mix(in srgb, var(--jar-live) 16%, var(--jar-deep));
