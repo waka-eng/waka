@@ -2054,7 +2054,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /** The question a chat was opened to answer, and which chat that is: `null`
       while it is still new, its id once it is saved. Any other chat (one
       opened from Past chats) never shows it. See `ConversationPanel.opener`. */
-  const chatOpener = useRef<{ ask?: string; quote?: string; turn?: boolean; inspirationId?: string; id: string | null } | null>(null);
+  const chatOpener = useRef<{ ask?: string; quote?: string; turn?: boolean; inspirationId?: string; sources?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>; id: string | null } | null>(null);
   const chatOrList = Boolean(viewNavigation.view?.conversationId) || viewNavigation.view?.open === 'conversations';
   useEffect(() => { if (!chatOrList) { chatSwap.current = false; chatOpener.current = null; } }, [chatOrList]);
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
@@ -5843,7 +5843,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
      place with that on WAKA's side; you reply. A save is held up as a card
      and pinned to the chat (its id goes with the first send, so the reply
      reads it); a line is WAKA's first turn. */
-  const chatOn = useCallback((opener: { ask?: string; quote?: string; turn?: boolean; inspirationId?: string }) => {
+  const chatOn = useCallback((opener: { ask?: string; quote?: string; turn?: boolean; inspirationId?: string; sources?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }> }) => {
     chatOpener.current = { ...opener, id: null }; chatSwap.current = true;
     setRecentInspiration(null);
     viewNavigationRef.current.write({ ...EMPTY_VIEW, wallId: atWallRef.current.kind === 'agent' ? atWallRef.current.id : null, conversationId: 'new' });
@@ -9499,6 +9499,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
                             label={say('worldBubbleOnYourMind')}
                             why={whyFor(lead)} onSeeAll={openSheet}
+                            onWhy={() => chatOn({ ask: lead.body, turn: true, sources: whyFor(lead) })}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true),
                               onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
@@ -11559,7 +11560,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               scope={conversationScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
-              opener={chatOpener.current && chatOpener.current.id === talkId ? { ask: chatOpener.current.ask, quote: chatOpener.current.quote, turn: chatOpener.current.turn, inspirationId: chatOpener.current.inspirationId } : undefined}
+              opener={chatOpener.current && chatOpener.current.id === talkId ? { ask: chatOpener.current.ask, quote: chatOpener.current.quote, turn: chatOpener.current.turn, inspirationId: chatOpener.current.inspirationId, sources: chatOpener.current.sources } : undefined}
               onHistory={()=>{chatSwap.current=true;openOverHome('conversations');}}
               /* The bar's middle group, lent for the mic and the ＋. */
               onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};if(chatOpener.current&&chatOpener.current.id===null&&talkId===null)chatOpener.current={...chatOpener.current,id:row.id};}}

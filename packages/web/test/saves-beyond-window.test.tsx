@@ -13,6 +13,7 @@
  * does. The page itself is the shipped one.
  */
 import { act } from 'react';
+import { useLocation } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
@@ -48,14 +49,18 @@ beforeEach(() => { localStorage.clear(); });
 afterEach(() => { world?.unmount(); world = undefined; });
 async function settle() { for (let turn = 0; turn < 6; turn += 1) { await world!.step(20); await act(async () => { await Promise.resolve(); }); } }
 
-it('answers Why? with a cited save the field had not loaded', async () => {
-  world = await mountWorld(FACTS); await settle();
+/* Why? is answered in a chat now (founder, 2026-11-12): WAKA says the read,
+   then each save it came from, the ones outside the loaded window included. */
+it('answers Why? in a chat, with a cited save the field had not loaded', async () => {
+  let here = '';
+  function Where() { here = useLocation().pathname; return null; }
+  world = await mountWorld(FACTS, { routerTools: <Where /> }); await settle();
   const why = [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-act')].find(b => b.textContent === 'Why?');
   expect(why, 'the read offers no Why?').toBeTruthy();
   await act(async () => why!.click());
   for (let turn = 0; turn < 6; turn += 1) { await settle(); await act(async () => { await new Promise(resolve => setTimeout(resolve, 15)); }); }
-  expect([...world.container.querySelectorAll('.waka-says-why-row')].map(row => row.textContent))
-    .toEqual(['“A save in the window”', '“An older save, outside the window”', '“Another, older still”']);
+  expect(here, 'Why? did not open a new chat').toBe('/chat/new');
+  expect(world.container.querySelector('.waka-says-why'), 'Why? still opened the list in the bubble').toBeNull();
 });
 
 it('reads each cited save outside the window once, however the answers land', async () => {

@@ -1305,5 +1305,8 @@
   margin: 0; padding: var(--sp-14) var(--sp-16); border-radius: var(--sp-16);
   background: var(--waka-raised); color: var(--ink); max-width: 100%; box-sizing: border-box;
 }
+.chat-message--shared .chat-shared { display: flex; align-items: center; gap: var(--sp-12); }
+.chat-message--shared .chat-shared + .chat-shared { margin-top: var(--sp-8); }
+.chat-message--shared .chat-shared:has(figcaption) { display: block; }
 .chat-message--shared .chat-shared figcaption { margin: 0 0 var(--sp-6); font-size: var(--t-meta); color: var(--muted); }
 }

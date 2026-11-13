@@ -87,6 +87,7 @@ import {useConversationReply} from '../lib/use-conversation-reply';
 import {Companion} from './Companion';
 import {ConversationText} from './ConversationText';
 import {HomeActionIcon} from './HomeActionIcon';
+import {SavedPhoto} from './SavedPhoto';
 import {timeOf} from '../lib/words';
 import {dictationAvailable,useDictation} from '../lib/use-dictation';
 import {ApiError,fetchPrinciples,type ApiPrinciple} from '../lib/api';
@@ -151,7 +152,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   /** The creature's question the chat was opened from ("Chat about this"
       under it on home): it asks it again here, in its own bubble, so the
       first message is an answer to it (founder, 2026-11-12). */
-  opener?:{ask?:string;quote?:string;turn?:boolean;inspirationId?:string};
+  opener?:{ask?:string;quote?:string;turn?:boolean;inspirationId?:string;sources?:ReadonlyArray<{id:string;preview:string;photoId?:string|null;wordless?:boolean}>};
 }){
   /* THE MIC AND THE ATTACH TOOLS LIVE IN THIS PANEL'S OWN NOTE BAR (`NoteBar`,
      2026-11-08): the page's bar no longer lends them a slot. */
@@ -822,9 +823,21 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               <p className="chat-said">{say('worldConversationWaka')}</p>
               <figure className="chat-shared"><figcaption>{say('worldInspirationReviewOriginal')}</figcaption><ConversationText text={opener.quote}/></figure>
             </article>:null}
-            {opener?.ask&&(opener.quote||opener.turn||conversation?.messages.length||sending)?<article className="chat-message" data-role="assistant" data-run={opener.quote?'ml':'fl'}>
+            {opener?.ask&&(opener.quote||opener.turn||conversation?.messages.length||sending)?<article className="chat-message" data-role="assistant" data-run={opener.quote?'ml':opener.sources?.length?'fm':'fl'}>
               <p className="chat-said">{say('worldConversationWaka')}</p>
               <div className="chat-bubble"><ConversationText text={opener.ask}/></div>
+            </article>:null}
+            {/* ═══ WHY?, TOLD IN THE CHAT (founder, 2026-11-12) ═══════════
+                After WAKA says the read, it says where it came from: each
+                save it rests on, as a card (its picture when it is one),
+                and you can ask about any of it. */}
+            {opener?.sources?.length?<article className="chat-message chat-message--shared" data-role="assistant" data-run="ml">
+              <p className="chat-said">{say('worldConversationWaka')}</p>
+              <div className="chat-bubble"><p>{say('worldReadingWhyLabel')}:</p></div>
+              {opener.sources.map(row=><figure key={row.id} className="chat-shared">
+                {row.photoId?<SavedPhoto id={row.photoId}/>:null}
+                {row.wordless?<span className="sr-only">{row.preview}</span>:<ConversationText text={row.preview}/>}
+              </figure>)}
             </article>:null}
             {(conversation?.messages??[]).map((message,at,all)=>{
               if(at===0&&originRepeated)return null;

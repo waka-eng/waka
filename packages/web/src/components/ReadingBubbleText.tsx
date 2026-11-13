@@ -26,13 +26,17 @@ const ReadingDetails = lazy(() => import('./ReadingDetails'));
  * evidence (`whyFor` in `Home.tsx`); with none to show, "Why?" is not
  * offered, because a question with no answer behind it is a dead control.
  */
-export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDisabled, details, why, onSeeAll }: {
+export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDisabled, details, why, onSeeAll, onWhy }: {
   text: string; locale: SupportedLocale;
   /** The small line over the read ("On your mind lately"). */
   label?: string;
   onShare?: () => void; onChat?: () => void; chatDisabled?: boolean; details?: ReadingDetailActions;
   /** The saves the read rests on, by their own words. */
   why?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>;
+  /** Why?, answered in a chat: WAKA says the read and the saves it came
+      from (founder, 2026-11-12: "when clicking on why, open chat and tell
+      user how this was formed"). Absent: Why? opens the list in the bubble. */
+  onWhy?: () => void;
   /** "See all saves" — the saves, patterns and principles in one scroll. */
   onSeeAll?: () => void;
 }) {
@@ -91,7 +95,7 @@ export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDi
       </span>
       {hasWhy || onChat ? <span className="jar-char-bubble-acts">
         {/* NO "READ IN FULL": the sentence is its own way in (above). */}
-        {hasWhy ? <button type="button" className="jar-char-bubble-act" aria-expanded={false} onClick={() => setWhyOpen(true)}>{say('worldReadingWhy')}</button> : null}
+        {hasWhy ? <button type="button" className="jar-char-bubble-act" aria-expanded={false} onClick={() => { if (onWhy) onWhy(); else setWhyOpen(true); }}>{say('worldReadingWhy')}</button> : null}
         {onChat ? <button type="button" className="jar-char-bubble-act" disabled={chatDisabled} onClick={onChat}>
           {say('worldTalkAboutThis')}
         </button> : null}
