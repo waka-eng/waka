@@ -53,8 +53,11 @@ it('cancels the archive continuation on leaving Home and ignores its late comple
 });
 /* The one line a GENUINELY empty archive gets, and nothing else may borrow
    it. While the walk is still coming back there is no honest way to say
-   "nothing here" — the remainder already says there are two thousand. */
-const FIRST_CAPTURE_HINT='A thought, a link, or something you noticed.';
+   "nothing here" — the remainder already says there are two thousand. The
+   example line that used to sit under it went on 2026-11-12 (founder: "strip
+   all unnecessary descriptive text across the experience"); the reading's own
+   empty line is what remains to guard. */
+const EMPTY_LINE='Nothing saved yet.';
 it('labels loading on a cold field link instead of presenting the unfinished field as empty',async()=>{
   /* A COLD LINK LANDS IN THE FIELD BEFORE THE FIELD EXISTS, which is the one
      arrival where "not painted yet" and "nothing was ever kept" look
@@ -85,7 +88,7 @@ it('labels loading on a cold field link instead of presenting the unfinished fie
   expect(Math.abs(waiting.camY-waiting.fieldRest)).toBeLessThan(1);
   expect(waiting.present).toBe(0);expect(waiting.drawn.active).toBe(0);
   expect(world.container.querySelector('.jar-first-capture-hint')).toBeNull();
-  expect(world.container.textContent).not.toContain(FIRST_CAPTURE_HINT);
+  expect(world.container.textContent).not.toContain(EMPTY_LINE);
   /* AND IT RESOLVES INTO THE FIELD, rather than into a world that has to be
      re-entered: the complete geometry paints under a camera that never left. */
   await act(async()=>progress.finish!({inspirations:[source],total:1,short:false}));
@@ -93,7 +96,7 @@ it('labels loading on a cold field link instead of presenting the unfinished fie
   const arrived=world.audit();
   expect(arrived.present).toBe(1);
   expect(Math.abs(arrived.camY-arrived.fieldRest)).toBeLessThan(1);
-  expect(world.container.querySelector('.jar-first-capture-hint')).toBeNull();
+  expect(world.container.textContent).not.toContain(EMPTY_LINE);
   /* THE ABSENCE ABOVE HAS TO BE WORTH SOMETHING. An assertion that a line is
      missing passes just as well against a line that was deleted, a selector
      that was renamed, or a hint that never renders on this screen at all — so
@@ -106,7 +109,8 @@ it('labels loading on a cold field link instead of presenting the unfinished fie
   await act(async()=>progress.first!({inspirations:[],total:0,short:false}));
   for(let n=0;n<6;n++)await world.step(100);
   expect(world.audit().present).toBe(0);
-  expect(world.container.querySelector('.jar-first-capture-hint')?.textContent).toBe(FIRST_CAPTURE_HINT);
+  expect(world.container.textContent).toContain(EMPTY_LINE);
+  expect(world.container.querySelector('.jar-first-capture-hint'),'the example line came back').toBeNull();
 });
 
 /* ═══ A REBUILD UNDER A PRESS SETTLES WHAT THE PRESS OWED ══════════════════

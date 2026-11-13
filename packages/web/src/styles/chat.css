@@ -647,15 +647,9 @@
   text-align: center;
 }
 
-.chat-opening p {
-  /* The glow box is four times the body, so without pulling the line back
-     up through its lower falloff the sentence sits a creature and a half
-     below the creature. */
-  margin: calc(var(--sp-20) - 96px) 0 0;
-  max-width: 44ch;
-  color: var(--muted);
-  line-height: 1.6;
-}
+/* `.chat-opening p` went with the line it set: the empty chat shows the
+   creature alone (founder, 2026-11-12: "strip all unnecessary descriptive
+   text across the experience"). */
 
 /* A THIRD COPY OF THE GUTTER, AND A THIRD COPY OF THE MEASURE — both gone.
    This carried `max-width: 680px` and its own `clamp(20px, 6vw, 28px)` while

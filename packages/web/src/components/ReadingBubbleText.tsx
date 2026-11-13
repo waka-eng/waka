@@ -25,10 +25,8 @@ const ReadingDetails = lazy(() => import('./ReadingDetails'));
  * evidence (`whyFor` in `Home.tsx`); with none to show, "Why?" is not
  * offered, because a question with no answer behind it is a dead control.
  */
-export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDisabled, details, why, onWhy }: {
+export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled, details, why, onWhy }: {
   text: string; locale: SupportedLocale;
-  /** The small line over the read ("On your mind lately"). */
-  label?: string;
   onShare?: () => void; onChat?: () => void; chatDisabled?: boolean; details?: ReadingDetailActions;
   /** The saves the read rests on, by their own words. */
   why?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>;
@@ -65,7 +63,9 @@ export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDi
     {/* WHY? IS ANSWERED IN A CHAT (founder, 2026-11-12), so the bubble no
         longer folds into a list of saves. */}
     <>
-      {label ? <span className="jar-char-bubble-of">{label}</span> : null}
+      {/* STRIPPED: the small "On your mind lately" line over the read; the
+          full sheet's title already says it. Founder, 2026-11-12:
+          "strip all unnecessary descriptive text across the experience". */}
       <span className="waka-reading-preview">
         {opensInFull
           /* THE SENTENCE IS ITS OWN "READ IN FULL": three lines are all the

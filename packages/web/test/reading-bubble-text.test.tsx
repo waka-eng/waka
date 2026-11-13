@@ -91,7 +91,7 @@ it('hands Why? to Home rather than folding into a list', async () => {
   const root = createRoot(host);
   const why = [{ id: 'a', preview: 'Small rituals hold a day together.' }];
   try {
-    await act(async () => root.render(<ReadingBubbleText text="You keep returning to small rituals." label="On your mind lately" locale="en-US" why={why} onWhy={onWhy} onChat={chat} />));
+    await act(async () => root.render(<ReadingBubbleText text="You keep returning to small rituals." locale="en-US" why={why} onWhy={onWhy} onChat={chat} />));
     const acts = () => [...host.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-acts button')];
     expect(acts().map(button => button.textContent)).toEqual(['Why?', 'Chat about this']);
     await act(async () => acts()[0]!.click());

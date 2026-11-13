@@ -63,12 +63,14 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
     onOpen={changed?undefined:()=>setReading(true)}
     middle={<button type="button" className="jar-pick-act jar-pick-act--chat" disabled={busy} aria-label={say('worldTalkAboutThis')} title={say('worldTalkAboutThis')}
       onClick={()=>onChat(say('worldInspirationReviewQuestion'),words)}><HomeActionIcon kind="bubble"/></button>}>
-    <p className="jar-pick-source">{say('worldInspirationReviewOriginal')} · {when}</p>
+    {/* STRIPPED: "Your inspiration ·" before the date, and the "Tap to read
+        all" hint below. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
+    <p className="jar-pick-source">{when}</p>
     <blockquote className="jar-pick-statement waka-inspiration-review-text">{words}</blockquote>
     {item.text&&item.attachmentLabel?<p className="jar-pick-source">{item.attachmentLabel}</p>:null}
     {changed?<button type="button" className="waka-inspiration-review-action" disabled={busy} onClick={()=>{
       setBusy(true);void readInspirationRelevance(item.id,profileId).then(fresh=>{if(!alive.current)return;setItem(fresh);setChanged(false);setFailed(false);intent.current=null;}).catch(()=>{if(alive.current)setFailed(true);}).finally(()=>{if(alive.current)setBusy(false);});
-    }}>{say('worldInspirationReviewReload')}</button>:<p className="waka-review-hint">{say('worldReviewTapToRead')}</p>}
+    }}>{say('worldInspirationReviewReload')}</button>:null}
     {reading?createPortal(<DialogSurface className="waka-review-reader" modal={false} aria-label={say('worldInspirationReviewQuestion')} onClose={()=>setReading(false)}
       /* Portalled, but still the slip's React child: a drag or a text
          selection here must never reach the slip and answer the card (code

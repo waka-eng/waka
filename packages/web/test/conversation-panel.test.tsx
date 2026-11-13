@@ -740,7 +740,7 @@ it('uses an immediately committed first-message response without another convers
   await act(async()=>root.render(<ConversationPanel scope={scope} id={id} initialConversation={structuredClone(stored)} locale="en-US" onChoose={choose}/>));
   expect(host.textContent).toContain('The committed first question');expect(fetchConversation).not.toHaveBeenCalled();expect(host.textContent).toContain('Thinking…');
 });
-it('bounds automatic progress reads and then says to come back later',async()=>{
+it('bounds automatic progress reads and then says it is still working',async()=>{
   /* The explicit "Check reply" button this used to end on was regeneration's
      third name and went with it. The bound is still a bound: polling stops,
      and the sentence tells you the work continues without you watching it.
@@ -749,7 +749,7 @@ it('bounds automatic progress reads and then says to come back later',async()=>{
   stored.generationEnabled=true;await mount();await type('A longer question');await click('Send');
   const initialCalls=vi.mocked(fetchConversationReply).mock.calls.length;await tick(70000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length-initialCalls).toBeLessThanOrEqual(35);
-  expect(host.textContent).toContain('Still working. You can come back later.');
+  expect(host.textContent).toContain('Still working…');
 });
 
 /**

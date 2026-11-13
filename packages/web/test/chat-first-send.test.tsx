@@ -158,7 +158,7 @@ function legacyPending(){storeConversationDraft({accountId:'owner',profileId:'pr
 it('reconciles a committed legacy first send without duplicating or rebinding it',async()=>{
  legacyPending();
  vi.mocked(fetchConversation).mockImplementation(async()=>({id:pendingChat,profileId:'profile',revision:1,perspective:'both',agentProfileId:legacyAgent,generationEnabled:false,createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-01T00:00:00Z',messages:[{id:pendingMessage,profileId:'profile',conversationId:pendingChat,position:1,role:'user',content:'My retained words',createdAt:'2026-10-01T00:00:00Z'}]}));
- await render();await send();expect(createConversation).not.toHaveBeenCalled();expect(host.textContent).toContain('My retained words');expect(host.textContent).toContain('earlier conversation');
+ await render();await send();expect(createConversation).not.toHaveBeenCalled();expect(host.textContent).toContain('My retained words');expect(host.textContent).toContain('Answers from your agent’s memory.');
 });
 it('recovers a never-committed legacy send after 404 with the same message and attachment IDs',async()=>{
  legacyPending();vi.mocked(fetchConversation).mockRejectedValue(new ApiError({status:404,code:'not_found',message:'Missing'}));
@@ -168,5 +168,5 @@ it('retains the exact legacy journal if a 404 races a late commit, then reconcil
  legacyPending();vi.mocked(fetchConversation).mockRejectedValue(new ApiError({status:404,code:'not_found',message:'Missing'}));vi.mocked(createConversation).mockRejectedValueOnce(new ApiError({status:409,code:'conversation_conflict',message:'Already created'}));
  await render();await send();const saved=Object.keys(localStorage).map(key=>localStorage.getItem(key)??'').find(text=>text.includes(pendingMessage));expect(saved).toContain(legacyAgent);expect(saved).toContain('kept.png');
  vi.mocked(fetchConversation).mockResolvedValue({id:pendingChat,profileId:'profile',revision:1,perspective:'both',agentProfileId:legacyAgent,generationEnabled:false,createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-01T00:00:00Z',messages:[{id:pendingMessage,profileId:'profile',conversationId:pendingChat,position:1,role:'user',content:'My retained words',createdAt:'2026-10-01T00:00:00Z'}]});
- await send();expect(createConversation).toHaveBeenCalledOnce();expect(host.textContent).toContain('earlier conversation');
+ await send();expect(createConversation).toHaveBeenCalledOnce();expect(host.textContent).toContain('Answers from your agent’s memory.');
 });

@@ -277,7 +277,7 @@ it('says a stored file problem and a failed upload in the reader’s language', 
 it('restores the separate link draft and includes it through the single Save action',async()=>{
   props.text='My note';props.linkText='https://example.test/unfinished';await mount();
   expect(host.querySelector<HTMLInputElement>('input[type=url]')?.value).toBe(props.linkText);
-  expect(host.textContent).toContain('This link will be saved with the inspiration.');
+  expect(host.textContent, 'the link note came back (stripped 2026-11-12)').not.toContain('This link will be saved with the inspiration.');
   /* THROUGH ENTER IN THE FIELD, which is the composer's one remaining way to
      commit now that Save is in the bar — and the only one that was ever
      reachable without lifting your hands off the keyboard. It is the same
@@ -446,7 +446,7 @@ it('makes a photo the page\'s picture, and draws the words it read only when the
 /* F5: a share from another app is asked about, and still waits for Save. */
 it('asks why about a shared link, with Add a note and That\'s all, and That\'s all saves', async () => {
   props.media = []; props.text = 'https://example.com/a'; props.arrival = true; await mount();
-  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('Got the link you shared. Want to say why?');
+  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('Want to say why?');
   const acts = [...host.querySelectorAll<HTMLButtonElement>('.waka-note-arrival-act')];
   expect(acts.map(act => act.textContent)).toEqual(['Add words', 'Just save it']);
   expect(props.onSubmit).not.toHaveBeenCalled();

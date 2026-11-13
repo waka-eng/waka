@@ -38,10 +38,13 @@ import { CreatureSlot, useCreatureStage } from "./CreatureStage";
 import { SayBubble } from "./SayBubble";
 import { prefersStillness } from "../../lib/motion";
 
-const QUESTIONS: Array<{ ask: MessageKey; hint: MessageKey }> = [
-  { ask: "onboardingAskStuck", hint: "onboardingAskStuckHint" },
-  { ask: "onboardingAskConversation", hint: "onboardingAskConversationHint" },
-  { ask: "onboardingAskMore", hint: "onboardingAskMoreHint" },
+/* STRIPPED: each question's softer second line ("Write it, snap it, or say
+   it."); the choices beneath show the ways. Founder, 2026-11-12:
+   "strip all unnecessary descriptive text across the experience". */
+const QUESTIONS: Array<{ ask: MessageKey }> = [
+  { ask: "onboardingAskStuck" },
+  { ask: "onboardingAskConversation" },
+  { ask: "onboardingAskMore" },
 ];
 
 type Mode = "choose" | "write" | "photo" | "voice";
@@ -260,8 +263,9 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
   const voiceProblem = canDictate
     ? dictation.error === "dictation-denied" ? say("worldComposerDictateDenied") : dictation.error === "dictation-failed" ? say("worldComposerDictateFailed") : ""
     : recording.error ? say(recording.error) : "";
-  const hint = error || voiceProblem
-    || (listening ? say("onboardingVoiceHintListening") : "");
+  /* STRIPPED: "Tap Done when you're finished…" while listening; Done is on
+     screen. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */
+  const hint = error || voiceProblem;
 
   const fileField = (
     <input ref={fileInput} type="file" accept={PHOTO_ACCEPT} hidden onChange={(event) => { void pickPhoto(event); }}
@@ -290,12 +294,12 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
 
   const said = text.trim() || listening ? (
     <div className="onb-said">
-      <p className="onb-said-label">{say("onboardingYourNote")}</p>
+      {/* STRIPPED: the "Your inspiration" label over your own words.
+          Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
       <p className="onb-said-words">{text}{listening ? <span className="onb-caret" aria-hidden="true" /> : null}</p>
     </div>
   ) : audio ? (
     <div className="onb-said">
-      <p className="onb-said-label">{say("onboardingYourVoiceNote")}</p>
       <p className="onb-said-words">{say("onboardingVoiceRecorded")}</p>
     </div>
   ) : null;
@@ -319,12 +323,15 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
           <div className="onb-grow" />
           {voiceOn ? (
             <>
-              {hint ? <p className={error || voiceProblem ? "onb-error" : "onb-hint"} role="status">{hint}</p> : null}
+              {hint ? <p className="onb-error" role="status">{hint}</p> : null}
               {listenBar}
             </>
           ) : (
             <>
-              <p className={error || voiceProblem ? "onb-error" : "onb-hint"} role="status">{error || voiceProblem || say("onboardingNoteHint")}</p>
+              {/* STRIPPED: "A few words is plenty. Or just Save." Only a
+                  problem speaks here now. Founder, 2026-11-12:
+                  "strip all unnecessary descriptive text across the experience". */}
+              {error || voiceProblem ? <p className="onb-error" role="status">{error || voiceProblem}</p> : null}
               <form className="onb-note" onSubmit={(event) => { event.preventDefault(); void save(); }}>
                 <textarea ref={area} rows={1} value={text} placeholder={say("onboardingNotePlaceholder")} aria-label={say("onboardingNotePlaceholder")}
                   disabled={saving} onChange={(event) => setText(event.currentTarget.value)} />
@@ -365,10 +372,7 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
                 {handoff === "kept" ? (
                   <p role="status">{say("worldBubbleKept")}</p>
                 ) : (
-                  <>
-                    <h1>{say(question.ask)}</h1>
-                    <p className="onb-say-soft">{say(question.hint)}</p>
-                  </>
+                  <h1>{say(question.ask)}</h1>
                 )}
               </SayBubble>
             </div>
@@ -382,7 +386,8 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
           <>
             {error ? <p className="onb-error" role="alert">{error}</p> : (
               <span className={`onb-share-cue${locked ? " onb-share-cue--quiet" : ""}`}>
-                <p className="onb-share-here">{say("onboardingShareHere")}</p>
+                {/* STRIPPED: "Choose one" over the choices. Founder,
+                    2026-11-12: "strip all unnecessary descriptive text across the experience". */}
                 <span className="onb-nudge"><Glyph kind="down" size={16} /></span>
               </span>
             )}

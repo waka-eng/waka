@@ -347,11 +347,10 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           ) : (
             /* THE CREATURE COMES WITH YOU, and stays above what it holds.
                Founder: "the character should be a big part of it" — it is the
-               one who walked here, so the page keeps it in view. */
+               one who walked here, so the page keeps it in view. STRIPPED:
+               its bubble explaining what principles are; the page's title
+               says it. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */
             <div className="waka-ground-hero waka-ground-hero--ready waka-held-hero" style={{ ["--charge" as string]: 1 }}>
-              <div className="jar-char-bubble-body waka-ground-bubble waka-held-says">
-                <span className="jar-char-bubble-reading">{say(agent ? "worldPrinciplesWhatIsAgent" : "worldPrinciplesWhatIs")}</span>
-              </div>
               <span className="waka-ground-being" data-crossing-target="88" style={{ ["--being" as string]: "90px" }}><Companion size={88} /></span>
             </div>
           )}
