@@ -48,7 +48,7 @@ export const RECEIPTS = {
    */
   verdictKept: {
     messageKey: "worldReceiptVerdictKept",
-    text: "This now shapes what’s on your mind.",
+    text: "Saved.",
     enforcedBy: "packages/api/src/lib/top-of-mind-affirmation.test.ts",
   },
   /** not true: dampened in the choosing, never removed */
@@ -65,7 +65,7 @@ export const RECEIPTS = {
   /** Keep this one up */
   pinned: {
     messageKey: "worldReceiptPinned",
-    text: "Pinned. It stays when WAKA writes a new one.",
+    text: "Pinned.",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /** Not this — rides beside the undo, because reversible is part of the law */
@@ -86,7 +86,7 @@ export const RECEIPTS = {
   /** the star's standing line, already on screen — documented here */
   starHeld: {
     messageKey: "worldReceiptStarHeld",
-    text: "Your own words. WAKA won’t change them.",
+    text: "Your own words.",
     enforcedBy: "packages/api/src/lib/signal-lock-contract.db.test.ts",
   },
   /** the release confirm, already on screen — documented here */

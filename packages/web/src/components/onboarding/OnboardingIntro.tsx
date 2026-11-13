@@ -124,11 +124,14 @@ function prop(index: number, beat: number): CSSProperties {
     ["--dx" as string]: light.dx ?? "0px", ["--d" as string]: light.d ?? "0px" };
 }
 
-const TEXT: Array<{ top: number; title: MessageKey; body: MessageKey }> = [
-  { top: 540, title: "onboardingPileTitle", body: "onboardingPileBody" },
+/* STRIPPED: the pile and people beats lost their body lines and the tap
+   beat's was cut to its last plain fact. Founder, 2026-11-12:
+   "strip all unnecessary descriptive text across the experience". */
+const TEXT: Array<{ top: number; title: MessageKey; body?: MessageKey }> = [
+  { top: 540, title: "onboardingPileTitle" },
   { top: 300, title: "onboardingTapTitle", body: "onboardingTapBody" },
   { top: 470, title: "onboardingReadTitle", body: "onboardingReadBody" },
-  { top: 470, title: "onboardingPeopleTitle", body: "onboardingPeopleBody" },
+  { top: 470, title: "onboardingPeopleTitle" },
 ];
 const CARD_WORDS: MessageKey[] = ["onboardingPileNotes", "onboardingPileScreenshot", "onboardingPileReadLater", "onboardingPileVoiceMemo", "onboardingPileSavedPost"];
 
@@ -213,7 +216,7 @@ export function OnboardingIntro({ locale, onDone }: { locale: SupportedLocale; o
               <div key={index} className="onb-words onb-beat-words" data-on={index === beat ? "" : undefined}
                 aria-hidden={index === beat ? undefined : true} style={{ top: words.top }}>
                 {index === beat ? <h1 className="onb-title">{say(words.title)}</h1> : <p className="onb-title">{say(words.title)}</p>}
-                <p className="onb-sub">{say(words.body)}</p>
+                {words.body ? <p className="onb-sub">{say(words.body)}</p> : null}
               </div>
             ))}
           </div>

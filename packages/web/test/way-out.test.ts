@@ -473,7 +473,8 @@ describe("every surface has a way out you can see", () => {
        and Esc ends the sitting too. */
     expect(code(home), "the questions lost their \"<\"").toMatch(/reviewing && !making[^\n]*\? <div className="waka-surface-strip">\s*<SurfaceHeader[\s\S]{0,160}kind: 'close', onBack: \(\) => setReviewing\(false\)/);
     expect(code(home), "Esc no longer ends the review").toMatch(
-      /if \(event\.key === 'Escape'\) \{\s*if \(reviewing && atNowView && nothingOpen && !harvestWhy\) \{[^}]*setReviewing\(false\); \}/);
+      /* The stand-in page's own "<" may answer first (code review, 2026-11-13). */
+      /if \(event\.key === 'Escape'\) \{[\s\S]{0,400}?if \(reviewing && atNowView && nothingOpen && !harvestWhy\) \{[^}]*setReviewing\(false\); \}/);
 
     /* The labeled page control owns Back; the dock keeps tools and Close.
        Behavioral navigation tests cover edit commits and origin restoration. */

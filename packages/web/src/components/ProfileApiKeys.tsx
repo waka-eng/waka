@@ -75,7 +75,8 @@ export function ProfileApiKeys({ profile, locale }: {
     </div>
     <p className="waka-settings-note">{say(personal ? 'profilePersonalMcpHint' : 'profileApiKeysHint')}</p>
     <h4 className="waka-mcp-instruction-title">{say('profileApiKeysCreateStep')}</h4>
-    <p className="waka-settings-note">{say('profileApiKeysCreateHint')}</p>
+    {/* STRIPPED: "Name the app or device using this key."; the field's
+        placeholder already says it. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
     {error ? <p className="waka-account-failed" role="alert">{error}</p> : null}
     {loading ? <p className="waka-settings-note" role="status">{say('worldInspirationsLoad')}</p> : null}
     {fresh ? <div className="waka-session-confirm">

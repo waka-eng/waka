@@ -559,7 +559,8 @@ export function InspirationComposer(props: {
         onKeyDown={event=>{if(event.key==='Enter'&&!event.nativeEvent.isComposing&&!event.repeat){event.preventDefault();event.stopPropagation();submit();}}} />
       <button type="button" disabled={blocked} onClick={()=>{props.onLinkText('');setAddingLink(false);}}>{say('worldComposerCancelLink')}</button>
     </div> : null}
-    {link.trim() ? <p className="jar-composer-storage-note">{say('worldComposerLinkReady')}</p> : null}
+    {/* STRIPPED: "This link will be saved with the inspiration." under the
+        link field. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
     {/* ═══ THE SHELF ═══════════════════════════════════════════════════
         Founder: "when a user drops an image, can we just show the image at
         the bottom as a grid rather than like this?"

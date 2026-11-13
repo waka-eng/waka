@@ -61,7 +61,7 @@ async function press(label: string) {
 it('offers the share in the bubble and leaves the notepad alone until asked', async () => {
   share('a line someone sent me', 'https://example.com/post');
   world = await mountWorld(FACTS); await settle();
-  expect(bubbleText()).toContain('Got the link you shared. Want to say why?');
+  expect(bubbleText()).toContain('Want to say why?');
   expect(bubbleText()).toContain('a line someone sent me');
   expect(field(), 'the notepad opened with the share before any press').toBeNull();
   expect(sessionStorage.getItem(SHARED_KEY), 'the share was left to be taken twice').toBeNull();
@@ -74,7 +74,7 @@ it('offers the share in the bubble and leaves the notepad alone until asked', as
 it('drops the share on Not this, and the draft never sees it', async () => {
   share('words from a page I did not choose');
   world = await mountWorld(FACTS); await settle();
-  expect(bubbleText()).toContain('Got what you shared.');
+  expect(bubbleText()).toContain('Want to say why?');
   await press('Not this');
   expect(bubbleText()).not.toContain('words from a page');
   expect(field()).toBeNull();

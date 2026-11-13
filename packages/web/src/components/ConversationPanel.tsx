@@ -779,12 +779,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
             </div>:<div className="chat-opening">
               <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
-              <p>{say('worldConversationOpening')}</p>
+              {/* STRIPPED: "WAKA answers from what you saved." under the
+                  creature; the creature and the field say enough. Founder,
+                  2026-11-12: "strip all unnecessary descriptive text across the experience". */}
             </div>:null}
           {/* AND ONCE IT HAS STARTED, A CHAT THAT IS NOT ONLY YOURS SAYS SO,
               in one quiet line, so an answer from the agent's memory is
               never read as one from yours. */}
-          {conversation?.messages.length&&conversation.perspective&&conversation.perspective!=='mine'?
+          {conversation?.messages.length&&conversation.perspective==='agent'?
             <p className="chat-with-note">{say('worldConversationEarlierMemory')}</p>:null}
           {/* ═══ THE TRANSCRIPT, ON THE REFERENCE'S MESSAGE ANATOMY ═════
               Founder: "make the chat message list and the chat message

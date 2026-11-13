@@ -51,7 +51,7 @@ const decl = (body: string, prop: string): string | undefined =>
 /** Every element a creature's words sit in, by role. */
 const BOX = [".jar-char-bubble-body", ".waka-note-says"];
 const TEXT = [".jar-char-bubble-reading", ".jar-char-bubble-body :is(p, h1)", ".waka-note-says"];
-const LABEL = [".jar-char-bubble-of", ".jar-char-bubble-body .onb-say-soft"];
+const LABEL = [".jar-char-bubble-of"];
 
 /** The rule that carries exactly this selector, in claims.css. */
 const ruleFor = (selector: string, prop: string): Rule | undefined =>

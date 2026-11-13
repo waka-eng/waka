@@ -1,7 +1,6 @@
 /**
- * Principles before the first one exists. Explain the idea and show a
- * labeled example, then replace the example with this profile’s own patterns
- * as evidence arrives. An available pattern is a starting point, not a
+ * Principles before the first one exists. The creature says where things
+ * stand; this profile’s own patterns appear on a card as evidence arrives. An available pattern is a starting point, not a
  * guarantee that a principle is ready or will arrive at a particular time.
  *
  * Keep the shared companion and bubble. A person without patterns can add
@@ -152,34 +151,32 @@ export function PrinciplesGround({ locale, profileId, whose = "own", onChat, onN
           <Companion size={104} />
         </span>
       </div>
-      <div className={`waka-ground-card${count >= GROUND_SEATS ? " waka-ground-card--full" : ""}`}>
-        <p className="waka-ground-definition">{say("worldGroundDefinition")}</p>
-        {/* NO EXAMPLE PRINCIPLE (founder, 2026-11-12: "dont show example
-            principles"): with nothing forming yet, the card is the
-            definition and how principles come. */}
-        {count === 0 ? null : (
-          <>
-            <p className="waka-ground-label">{say("worldGroundPatterns")}</p>
-            <ol className="waka-ground-seats">
-              {Array.from({ length: GROUND_SEATS }, (_, index) => {
-                const signal = holding[index];
-                const fresh = signal && seenBefore !== null && index >= seenBefore;
-                return (
-                  <li
-                    key={signal?.id ?? `empty-${index}`}
-                    className={`waka-ground-seat${signal ? " waka-ground-seat--held" : ""}${fresh ? " waka-ground-seat--new" : ""}`}
-                    aria-hidden={signal ? undefined : true}
-                  >
-                    {signal ? <span className="waka-ground-words">{signal.statement}</span> : <span className="waka-ground-empty" />}
-                  </li>
-                );
-              })}
-            </ol>
-          </>
-        )}
-        <p className="waka-ground-how">{say(agent ? "worldGroundHowAgent" : "worldGroundHow")}</p>
-        <p className="waka-ground-foot">{say(agent ? "worldGroundFootAgent" : "worldGroundFoot")}</p>
-      </div>
+      {/* STRIPPED: the card's definition ("A principle is a guide…"), the
+          how line ("When patterns repeat…") and the foot ("Your first
+          principle"). The bubble already says it. Founder, 2026-11-12:
+          "strip all unnecessary descriptive text across the experience". With
+          nothing forming yet there is no card at all (founder, 2026-11-12:
+          "dont show example principles"). */}
+      {count === 0 ? null : (
+        <div className={`waka-ground-card${count >= GROUND_SEATS ? " waka-ground-card--full" : ""}`}>
+          <p className="waka-ground-label">{say("worldGroundPatterns")}</p>
+          <ol className="waka-ground-seats">
+            {Array.from({ length: GROUND_SEATS }, (_, index) => {
+              const signal = holding[index];
+              const fresh = signal && seenBefore !== null && index >= seenBefore;
+              return (
+                <li
+                  key={signal?.id ?? `empty-${index}`}
+                  className={`waka-ground-seat${signal ? " waka-ground-seat--held" : ""}${fresh ? " waka-ground-seat--new" : ""}`}
+                  aria-hidden={signal ? undefined : true}
+                >
+                  {signal ? <span className="waka-ground-words">{signal.statement}</span> : <span className="waka-ground-empty" />}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
     </section>
   );
 }

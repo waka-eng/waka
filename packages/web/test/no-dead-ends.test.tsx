@@ -71,14 +71,14 @@ describe("the chat list", () => {
     expect(host.textContent).not.toContain("Couldn’t load past chats.");
   });
 
-  it("makes the empty list's question a door into a new chat", async () => {
+  it("puts a door into a new chat beside the empty list", async () => {
     vi.mocked(listConversations).mockResolvedValue({ conversations: [] } as never);
     const open = vi.fn();
     await show(
       <ConversationsOverlay locale="en-US" profileId="profile-1" title="Chats"
         onClose={() => undefined} onOpen={open} />,
     );
-    expect(host.textContent).toContain("What’s on your mind?");
+    expect(host.textContent).toContain("No chats yet.");
     await press("New chat");
     expect(open).toHaveBeenCalledWith(null);
   });
