@@ -2043,14 +2043,9 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     : viewNavigation.view?.conversationId ? 'talk' : null;
   /** On one of the two lists (reached from a new note or chat): the bar is ↩ │ Close. */
   const listing = !making && (viewNavigation.view?.open === 'saves' || viewNavigation.view?.open === 'conversations');
-  /** Where a list was opened from by the bar's "All …", so ↩ can go back there (see the dock). */
-  const listOrigin = useRef<{ kind: 'chat'; id: string; principleId?: string | null } | null>(null);
-  /* A CHAT OPENED FROM PAST CHATS closes back to Past chats by its "<", as a
-     note opened from the list does. HELD AS THE CONVERSATION'S ID and honoured
-     only while that same conversation is open (`chatBackToList`), so no other
-     way into a chat — the bubble's or a principle's "Talk about this", a
-     browser Back — can inherit it (code review, 2026-11-09). */
-  const [chatFromList, setChatFromList] = useState<string | null>(null);
+  /* "<" IS ALWAYS HOME between a chat and Past chats, and between the
+     notepad and Inspirations (founder, 2026-11-12): neither page records the
+     other as where it came from, so there is no list origin to return to. */
   /* A CHAT AND PAST CHATS SWAP IN PLACE (founder, 2026-11-10: "I don't like
      the transition between new chat and past chat"). True while the move is
      between the two, so the page arriving does not fade: their header and
@@ -2062,19 +2057,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const chatOpener = useRef<{ text: string; id: string | null } | null>(null);
   const chatOrList = Boolean(viewNavigation.view?.conversationId) || viewNavigation.view?.open === 'conversations';
   useEffect(() => { if (!chatOrList) { chatSwap.current = false; chatOpener.current = null; } }, [chatOrList]);
-  const chatHere = viewNavigation.view?.conversationId ?? null;
-  const chatBackToList = making === 'talk' && chatFromList !== null && chatFromList === chatHere;
-  /* AND FORGOTTEN THE MOMENT THE PERSON STANDS ANYWHERE ELSE: the list itself
-     and that chat are the only two places it means anything. A new chat
-     begun from the list keeps it when its first message gives it an id. */
-  const chatBefore = useRef<string | null>(null);
-  useEffect(() => {
-    const before = chatBefore.current; chatBefore.current = chatHere;
-    if (chatFromList === null) return;
-    if (!chatHere && viewNavigation.view?.open === 'conversations') return;
-    if (chatHere === chatFromList) return;
-    setChatFromList(chatFromList === 'new' && before === 'new' && chatHere && chatHere !== 'new' ? chatHere : null);
-  }, [chatFromList, chatHere, viewNavigation.view?.open]);
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
   const [principlesCrossing, setPrinciplesCrossing] = useState<{ going: 'in' | 'out'; home: CreatureSpot | null } | null>(null);
   if (crossSeen.open !== principlesOpen || crossSeen.now !== atNowView) {
@@ -4492,7 +4474,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
    * not an exit."
    */
   const openTalk = useCallback((id: string | null, principleId: string | null = null) => {
-    setChatFromList(null);
     const nav = viewNavigationRef.current;
     nav.write(
       { ...EMPTY_VIEW, wallId: atWallRef.current.kind === 'agent' ? atWallRef.current.id : null, conversationId: id ?? 'new', principleId: id ? null : principleId },
@@ -4904,7 +4885,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
   }, [recording.stop]);
 
   const closePage = () => {
-    listOrigin.current = null; setChatFromList(null);
     if (viewNavigationRef.current.view?.compose) { saveAsDraft(); return; }
     commitOpenNote();
     viewNavigationRef.current.closeToHome();
@@ -4935,23 +4915,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
       if (something && mouthOpen) { setLeaveAsking(true); return; }
       saveAsDraft(); return;
     }
-    /* A CHAT'S "<" CLOSES IT (founder, 2026-11-08: "< on top left should be
-       closing this like how it does for the saving"): to home, unless the
-       chat was opened from Past chats, which it closes back to, as the
-       notepad's "<" does for a note opened from the list. Past chats is its
-       own word, top-right. */
-    if (making === 'talk') {
-      if (chatBackToList) { chatSwap.current = true; setChatFromList(null); listOrigin.current = null; openOverHome('conversations'); return; }
-      closePage(); return;
-    }
-    const origin = listOrigin.current;
-    listOrigin.current = null;
-    if (origin?.kind === 'chat') { chatSwap.current = true; openTalk(origin.id === 'new' ? null : origin.id, origin.principleId); }
-    /* "HOME" GOES HOME. This stepped back through history, which was right
-       while the bar's Home tab was the way home and wrong now the labelled
-       Back is (design E1): two archive entries in a row landed the press on
-       the earlier archive. */
-    else closePage();
+    /* EVERY OTHER "<" GOES HOME: a chat, Past chats, Inspirations (founder,
+       2026-11-12: "regardless how many times you do that the back button
+       should always go back to home"). */
+    closePage();
   };
   backPageRef.current = backPage;
 
@@ -6633,6 +6600,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
       if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Escape') return;
       if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       if (isEditableTarget(event.target) || (event.target instanceof Element && event.target.closest('[aria-modal="true"]'))) return;
+      /* The review card's Open lays a page over the review whose own Escape
+         puts it back onto the card (code review, 2026-11-12): while it is up,
+         Escape is not this listener's to end the sitting with. */
+      if (document.querySelector('.waka-review-reader')) return;
       /* `prov` too: the claim's roots open as a sheet OVER review, and its own
          Escape must close it rather than end the sitting under it. */
       const nothingOpen = !panelOpen && !mouthOpen && !savedNoteOpen && seek === null && !thingShare && !prov;
@@ -7332,13 +7303,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
   /* A CITED SAVE OUTSIDE THE LOADED WINDOW IS READ, NOT DROPPED (code
      review, 2026-11-08): the field loads the newest saves, and a read can
      rest on an older one. Its words are fetched once and kept here. */
-  const [whyFetched, setWhyFetched] = useState<ReadonlyMap<string, string>>(new Map());
+  const [whyFetched, setWhyFetched] = useState<ReadonlyMap<string, { preview: string; photoId: string | null; wordless: boolean }>>(new Map());
   const whyFor = (entry: Entry | null): Array<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }> => whyIds(entry)
     .map(id => {
       const row = inspirations?.find(item => item.id === id);
       return row
         ? { id, preview: row.preview, photoId: firstPhoto(row.attachments), wordless: onlyAttachments(row.preview, row.attachments) }
-        : { id, preview: whyFetched.get(id) ?? '' };
+        : { id, preview: whyFetched.get(id)?.preview ?? '', photoId: whyFetched.get(id)?.photoId ?? null, wordless: whyFetched.get(id)?.wordless ?? false };
     })
     .filter(row => row.preview);
   const whyMissing = whyIds(lead && !standingAsAgent ? lead : null)
@@ -7355,7 +7326,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
       if (whyAsked.current.has(id)) continue;
       whyAsked.current.add(id);
       void loadInspiration(id, memoryProfileId ?? undefined)
-        .then(detail => { setWhyFetched(known => new Map(known).set(id, detail.preview || detail.text)); })
+        /* A save read here shows as its picture too (code review,
+           2026-11-12), not as "Photo". */
+        .then(detail => { setWhyFetched(known => new Map(known).set(id, {
+          preview: detail.preview || detail.text, photoId: firstPhoto(detail.attachments), wordless: onlyAttachments(detail.preview, detail.attachments) })); })
         .catch(() => undefined);
     }
   }, [whyMissing, offline, Boolean(inspirations), memoryProfileId]);
@@ -7410,7 +7384,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const [savesAsSheet, setSavesAsSheet] = useState(false);
   const savesOpen = viewNavigation.view?.open === 'saves';
   useEffect(() => { if (!savesOpen) setSavesAsSheet(false); }, [savesOpen]);
-  const openSheet = useCallback(() => { listOrigin.current = null; setSavesAsSheet(true); openOverHome('saves'); }, [openOverHome]);
+  const openSheet = useCallback(() => { setSavesAsSheet(true); openOverHome('saves'); }, [openOverHome]);
   /* ═══ THE NOTE BAR'S PARTS (design E3, Writing, PhotoNote) ═══════════════
      They stood in the dock's middle group; the notepad draws them now, in a
      slim row UNDER its words so the words get the whole width — mic on the
@@ -10111,7 +10085,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           }}
           asking={leaveAsking} onStay={() => setLeaveAsking(false)}
           onClose={() => saveAsDraft()} onSubmit={() => { void keepIt(); }}
-          onPast={!inspirations || inspirations.length + fieldBeyond === 0 ? undefined : () => saveAsDraft(() => { listOrigin.current = null; openOverHome('saves'); })}
+          onPast={!inspirations || inspirations.length + fieldBeyond === 0 ? undefined : () => saveAsDraft(() => openOverHome('saves'))}
           onBack={backPage} gesture={viewNavigation.href}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
@@ -11331,7 +11305,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             canSay: composerDraft.available && (dictationAvailable() || Boolean(supportedRecordingType())),
             photoDisabled: !composerDraft.available,
           }}
-          onChat={() => { listOrigin.current = null; openTalk(null); }}
+          onChat={() => openTalk(null)}
           saved={barSaved}
           /* ON AN AGENT'S WALL THE PULL OPENS ITS ARCHIVE. The sheet reads
              your own field, so it is yours alone; the agent's saves are its
@@ -11473,7 +11447,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            otherwise (home). */
         onNew={canWriteHere ? startNewInspiration : undefined}
         sheet={savesAsSheet}
-        onBack={backPage} backKind={listOrigin.current ? 'back' : 'close'} gesture={viewNavigation.href}/>:null}
+        onBack={backPage} backKind="close" gesture={viewNavigation.href}/>:null}
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
@@ -11510,7 +11484,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         viewState={listViews.chats}
         locale={locale} profileId={conversationScope.profileId}
         title={say('worldPastChats')}
-        onBack={backPage} backKind={listOrigin.current ? 'back' : 'close'} gesture={viewNavigation.href}
+        onBack={backPage} backKind="close" gesture={viewNavigation.href}
         still={chatSwap.current}
         onOpen={id=>{ chatSwap.current = true; chatOpener.current = null; openTalk(id); }}/>:null}
 
@@ -11558,7 +11532,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 one word on the right (founder). The
                 "<" and Escape are the same handler, `backPage`. */}
             <SurfaceHeader locale={locale} gesture={viewNavigation.href}
-              back={{ kind: chatBackToList ? 'back' : 'close', onBack: backPage }}
+              back={{ kind: 'close', onBack: backPage }}
               srTitle={say('worldConversationTitle')}
               right={viewNavigation.view?.sharePrinciple || !hasOtherChats(talkId) ? undefined : <button type="button" className="waka-surface-act"
                 onClick={() => {

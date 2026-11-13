@@ -46,6 +46,7 @@ import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
 import { SurfaceHeader, type BackKind } from "./SurfaceHeader";
 import { firstPhoto, onlyAttachments, SavedPhoto } from "./SavedPhoto";
+import { prefersStillness } from "../lib/motion";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { InspirationAttachments } from "./InspirationAttachments";
 import { SavedImageWords } from "./ImageWords";
@@ -202,14 +203,19 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
      (`waka-sheet-down`, `SHEET_DROP_MS`) and only then leave. Under reduced
      motion, or with no layout to animate, it leaves at once. */
   const sheetPage = useRef<HTMLDivElement>(null);
+  /* The drop's timer is cleared if the sheet goes some other way first, and
+     it calls the `onBack` of the moment it fires, never one captured before
+     (code review, 2026-11-12: a press on the bar under a falling sheet). */
+  const onBackNow = useRef(onBack); onBackNow.current = onBack;
+  const dropTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(dropTimer.current), []);
   const backOut = useCallback(() => {
     const node = sheetPage.current;
-    const still = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!sheet || !node || still || typeof node.getAnimations !== "function") { onBack(); return; }
+    if (!sheet || !node || prefersStillness() || typeof node.getAnimations !== "function") { onBackNow.current(); return; }
     if (node.dataset.leaving) return;
     node.dataset.leaving = "1";
-    window.setTimeout(onBack, SHEET_DROP_MS);
-  }, [sheet, onBack]);
+    dropTimer.current = window.setTimeout(() => onBackNow.current(), SHEET_DROP_MS);
+  }, [sheet]);
   /* THE ARCHIVE'S RECORDER, OWNED BY THE CALLER (L12), read from the
      provider `Home` mounts around its world (`ArchiveRecorderProvider`). It
      outlives this surface, so a clip still finishing when the archive closes

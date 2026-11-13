@@ -480,9 +480,9 @@ describe("every surface has a way out you can see", () => {
     const back = code(home.slice(home.indexOf("const backPage ="), home.indexOf("const whyFailed =")));
     expect(back, "Back commits an open note before returning to its list").toMatch(
       /const close = closeSavedNote\.current;\s*if \(close\) \{ close\(\); return; \}/);
-    expect(back, "Back consumes the list origin once").toMatch(
-      /const origin = listOrigin\.current;\s*listOrigin\.current = null;/);
-    expect(back, "Home on a list or Principles goes home, not one history step").toContain("else closePage();");
+    /* No list origin any more (founder, 2026-11-12): every other "<" goes home. */
+    expect(back, "a list origin came back to the \"<\"").not.toMatch(/listOrigin/);
+    expect(back, "Home on a list or Principles goes home, not one history step").toContain("closePage();");
     /* THE LISTS AND THE CHAT LEAVE BY THAT ONE HANDLER, "<" AND ESCAPE ALIKE. */
     expect(code(home)).toMatch(/onBack=\{backPage\} backKind=/);
     expect(code(home), "the chat's Escape is not its \"<\"").toMatch(/data-way-out="talk"[\s\S]{0,120}onClose=\{backPage\}/);
@@ -491,9 +491,8 @@ describe("every surface has a way out you can see", () => {
        `NoteBar` the notepad and a chat do. */
     expect(code(home), "the dock came back").not.toMatch(/<nav className="waka-dock"|DOCK_SLOT/);
 
-    /* A chat's "<" closes it: to Past chats when it was opened from there,
-       else home (2026-11-09). */
-    expect(code(home), "a chat's \"<\" no longer closes it").toMatch(/if \(making === 'talk'\) \{[\s\S]{0,200}openOverHome\('conversations'\); return; \}\s*closePage\(\); return;/);
+    /* A chat's "<" closes it, home, however it was reached (2026-11-12). */
+    expect(code(home), "a chat's \"<\" goes back to Past chats again").not.toMatch(/openOverHome\('conversations'\); return; \}\s*closePage\(\); return;/);
     expect(code(home), "a chat lost its Past chats, top-right").toMatch(/right=\{[^}]*<button type="button" className="waka-surface-act"/);
 
     /* A CHAT LENDS NOTHING TO THE BAR: it writes into the notepad's own

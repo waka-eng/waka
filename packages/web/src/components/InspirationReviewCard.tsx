@@ -23,6 +23,7 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
      the whole inspiration on a page over the card; "<" (or Escape) puts it
      away onto the same card, and its own foot answers Not really or Yes. */
   const [reading,setReading]=useState(false);
+  const stopSlip=(event:{stopPropagation:()=>void})=>event.stopPropagation();
   const saving=useRef(false),intent=useRef<{choice:RelevanceChoice;id:string}|null>(null);
   const alive=useRef(true);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
@@ -54,7 +55,11 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
     {changed?<button type="button" className="waka-inspiration-review-action" disabled={busy} onClick={()=>{
       setBusy(true);void readInspirationRelevance(item.id,profileId).then(fresh=>{if(!alive.current)return;setItem(fresh);setChanged(false);setFailed(false);intent.current=null;}).catch(()=>{if(alive.current)setFailed(true);}).finally(()=>{if(alive.current)setBusy(false);});
     }}>{say('worldInspirationReviewReload')}</button>:<button type="button" className="waka-inspiration-review-action" onClick={()=>setReading(true)}>{say('worldInspirationReviewOpen')}</button>}
-    {reading?createPortal(<DialogSurface className="waka-review-reader" modal={false} aria-label={say('worldInspirationReviewQuestion')} onClose={()=>setReading(false)}>
+    {reading?createPortal(<DialogSurface className="waka-review-reader" modal={false} aria-label={say('worldInspirationReviewQuestion')} onClose={()=>setReading(false)}
+      /* Portalled, but still the slip's React child: a drag or a text
+         selection here must never reach the slip and answer the card (code
+         review, 2026-11-12). */
+      onPointerDown={stopSlip} onPointerMove={stopSlip} onPointerUp={stopSlip} onPointerCancel={stopSlip}>
       <SurfaceHeader locale={locale} back={{kind:'back',onBack:()=>setReading(false)}} title={`${say('worldInspirationReviewOriginal')} · ${dateStamp(new Date(item.createdAt).getTime(),locale)}`}/>
       <div className="waka-review-reader-page">
         <p className="waka-review-reader-text">{item.text || item.attachmentLabel || say('worldSavedWord')}</p>

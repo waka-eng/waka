@@ -381,13 +381,17 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      back into view; a confirmed message clears `pending` and stops it. */
   const pendingId=draft?.pending?draft.id:null;
   const refreshRef=useRef(refresh);refreshRef.current=refresh;
+  /* NOT WHILE THE SEND IS STILL OUT (code review, 2026-11-12): a draft is
+     `pending` from the moment Send is pressed, and a read racing the write
+     on a new chat finds no chat yet and says the save failed. Only once the
+     send has come back still unconfirmed (`busy` false) does it check. */
   useEffect(()=>{
-    if(!pendingId)return;
-    const timer=window.setTimeout(()=>{void refreshRef.current();},1500);
-    const again=()=>{if(document.visibilityState==='visible')void refreshRef.current();};
+    if(!pendingId||busy)return;
+    const timer=window.setTimeout(()=>{if(!working.current)void refreshRef.current();},1500);
+    const again=()=>{if(document.visibilityState==='visible'&&!working.current)void refreshRef.current();};
     document.addEventListener('visibilitychange',again);
     return()=>{window.clearTimeout(timer);document.removeEventListener('visibilitychange',again);};
-  },[pendingId]);
+  },[pendingId,busy]);
   const loadEarlier=async()=>{
     if(!id||earlierBusy||busy||loading||!conversation?.messageWindowStart||conversation.messageWindowStart<=1)return;
     const owner=lifecycle.current;
