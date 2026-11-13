@@ -2055,8 +2055,12 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      between the two, so the page arriving does not fade: their header and
      bar are the same and stand still. Home clears it. */
   const chatSwap = useRef(false);
+  /** The question a chat was opened to answer, and which chat that is: `null`
+      while it is still new, its id once it is saved. Any other chat (one
+      opened from Past chats) never shows it. See `ConversationPanel.opener`. */
+  const chatOpener = useRef<{ text: string; id: string | null } | null>(null);
   const chatOrList = Boolean(viewNavigation.view?.conversationId) || viewNavigation.view?.open === 'conversations';
-  useEffect(() => { if (!chatOrList) chatSwap.current = false; }, [chatOrList]);
+  useEffect(() => { if (!chatOrList) { chatSwap.current = false; chatOpener.current = null; } }, [chatOrList]);
   const chatHere = viewNavigation.view?.conversationId ?? null;
   const chatBackToList = making === 'talk' && chatFromList !== null && chatFromList === chatHere;
   /* AND FORGOTTEN THE MOMENT THE PERSON STANDS ANYWHERE ELSE: the list itself
@@ -9704,8 +9708,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     <button type="button" className="jar-char-bubble-act"
                       disabled={talking}
                       onClick={() => {
-                        if (charSay) void talkAbout({ id: '', text: charSay });
-                        else viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.kind === 'agent' ? atWall.id : null, conversationId: 'new' });
+                        if (charSay) { void talkAbout({ id: '', text: charSay }); return; }
+                        /* The chat asks the same question the bubble did, and
+                           opens in place, not with a fade (founder,
+                           2026-11-12). */
+                        chatOpener.current = { text: say('worldCompanionChatPrompt'), id: null }; chatSwap.current = true;
+                        viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.kind === 'agent' ? atWall.id : null, conversationId: 'new' });
                       }}>
                       {say('worldTalkAboutThis')}
                     </button>
@@ -11480,7 +11488,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         title={say('worldPastChats')}
         onBack={backPage} backKind={listOrigin.current ? 'back' : 'close'} gesture={viewNavigation.href}
         still={chatSwap.current}
-        onOpen={id=>{ chatSwap.current = true; openTalk(id); setChatFromList(id ?? 'new'); }}/>:null}
+        onOpen={id=>{ chatSwap.current = true; chatOpener.current = null; openTalk(id); setChatFromList(id ?? 'new'); }}/>:null}
 
       {/* THE CONVERSATION ITSELF, ALSO OVER THE WORLD.
           Founder: "also dont move talk to waka in a new page. find better
@@ -11538,9 +11546,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
               scope={conversationScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
+              opener={chatOpener.current && chatOpener.current.id === talkId ? chatOpener.current.text : undefined}
               onHistory={()=>{chatSwap.current=true;listOrigin.current={kind:'chat',id:talkId??'new',principleId:viewNavigation.view?.principleId};openOverHome('conversations');}}
               /* The bar's middle group, lent for the mic and the ＋. */
-              onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};}}
+              onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};if(chatOpener.current&&chatOpener.current.id===null&&talkId===null)chatOpener.current={...chatOpener.current,id:row.id};}}
               /* `replace` on the new-to-id hop so dismissing does not land
                  back on the blank conversation you just started. */
               onChoose={next=>{if(next!==talkId)viewNavigation.write({...EMPTY_VIEW,wallId:viewNavigation.view?.wallId??null,conversationId:next??'new'},{replace:!talkId&&Boolean(next)});}}/>

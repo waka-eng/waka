@@ -1282,3 +1282,16 @@
   line-height: 1;
 }
 }
+
+@layer chrome {
+/* ═══ THE OPENING THAT ASKS (founder, 2026-11-12) ═══════════════════════════
+   Opened from a bubble's "Chat about this", the creature stands under the
+   same question in home's own bubble, its tail pointing down at it, so the
+   chat reads as the question carried over rather than a page that blinked
+   open. */
+.chat-opening--asks { gap: var(--sp-16); }
+.chat-opening--asks .chat-opening-ask { max-width: min(32ch, 100%); }
+/* The creature's box is four times its body (its glow), so it is drawn back
+   up under the tail rather than standing a body and a half below it. */
+.chat-opening--asks .chat-opening-beings { margin-top: calc(var(--sp-8) - 96px); }
+}

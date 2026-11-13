@@ -844,3 +844,19 @@ it('does not hide your first message under a save that has no words of its own',
   expect(host.querySelector('.chat-topic[data-about="save"]')).toBeNull();
   expect([...host.querySelectorAll('.chat-message')].map(node=>node.textContent)).toEqual([expect.stringContaining('What did that screenshot mean to me?')]);
 });
+
+/* ═══ IT ASKS THE QUESTION IT ASKED ON HOME (founder, 2026-11-12) ═══════════
+   Opened from a bubble's "Chat about this", the empty chat shows the
+   creature under that same question instead of the general line, and once
+   you answer, the question stays above your answer as WAKA's first turn. */
+it('opens with the home bubble\'s question and keeps it above the first answer',async()=>{
+  const opener='Want to chat about what’s on your mind?';
+  await act(async()=>root.render(<ConversationPanel scope={scope} id={id} locale="en-US" onChoose={choose} opener={opener}/>));
+  expect(host.querySelector('.chat-opening--asks .chat-opening-ask')?.textContent).toBe(opener);
+  expect(host.textContent).not.toContain('WAKA answers from what you saved.');
+  await type('The move, mostly');await click('Send');
+  const turns=[...host.querySelectorAll('.chat-message')];
+  expect(turns[0]?.getAttribute('data-role')).toBe('assistant');
+  expect(turns[0]?.textContent).toContain(opener);
+  expect(turns[1]?.textContent).toContain('The move, mostly');
+});

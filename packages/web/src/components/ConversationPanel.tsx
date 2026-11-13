@@ -147,7 +147,11 @@ const offlineNow=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
 const refusalOf=(reason:unknown):MessageKey=>reason instanceof PhotoRefused?reason.reason
   :reason instanceof FileRefused?(reason.reason==='too_large'?'worldAttachTooLarge':reason.reason==='empty'?'worldPhotoEmpty':'worldAttachUnsupported'):'worldAttachFailed';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory,opener}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
+  /** The creature's question the chat was opened from ("Chat about this"
+      under it on home): it asks it again here, in its own bubble, so the
+      first message is an answer to it (founder, 2026-11-12). */
+  opener?:string;
 }){
   /* THE MIC AND THE ATTACH TOOLS LIVE IN THIS PANEL'S OWN NOTE BAR (`NoteBar`,
      2026-11-08): the page's bar no longer lends them a slot. */
@@ -746,8 +750,16 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               leaves when the first message is actually on its way. */}
           {/* While the microphone is open the creature stands in the listening
               view below, so the opening steps aside: one creature, not two. */}
+          {/* ═══ IT ASKS THE QUESTION IT ASKED ON HOME (founder, 2026-11-12:
+              "it should be like the character is asking you that same exact
+              question so you respond") ═══ Opened from a bubble's "Chat about
+              this", the creature stands with that same question over it, in
+              home's bubble, instead of the general line. */}
           {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening?
-            <div className="chat-opening">
+            opener?<div className="chat-opening chat-opening--asks">
+              <div className="jar-char-bubble-body chat-opening-ask"><span className="jar-char-bubble-reading">{opener}</span></div>
+              <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
+            </div>:<div className="chat-opening">
               <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
               <p>{say('worldConversationOpening')}</p>
             </div>:null}
@@ -781,6 +793,12 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               corners so a run reads as one person continuing rather than
               as two separate sayings. */}
           <div className="chat-messages" role="log" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
+            {/* And once you answer, the question stays above your answer as
+                WAKA's first turn, so the reply reads as a reply. */}
+            {opener&&(conversation?.messages.length||sending)?<article className="chat-message" data-role="assistant" data-run="fl">
+              <p className="chat-said">{say('worldConversationWaka')}</p>
+              <div className="chat-bubble"><ConversationText text={opener}/></div>
+            </article>:null}
             {(conversation?.messages??[]).map((message,at,all)=>{
               if(at===0&&originRepeated)return null;
               /* AND THE ONE BEING SENT IS A NEIGHBOUR LIKE ANY OTHER. The
