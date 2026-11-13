@@ -323,7 +323,7 @@ async function countInArchive(page: Page, base: string): Promise<number> {
       await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(6_000);
     }
-    /* THE ARCHIVE IS REACHED FROM THE BAR'S "Kept" (2026-11-08): on an
+    /* THE ARCHIVE IS REACHED FROM THE BAR'S "Saved" (2026-11-08): on an
        agent's wall it opens the archive itself; on your own it pulls up the
        Kept sheet, whose "Saves ›" heading is the door to the archive. */
     if (!(await page.locator(".waka-over").count())) {
@@ -486,13 +486,13 @@ const JOURNEYS: Journey[] = [
         path: window.location.pathname,
         canvases: document.querySelectorAll("canvas").length,
         text: document.body.innerText.trim(),
-        /* The bar's first door reads "a thought" after a quiet "Keep"; its
+        /* The bar's first door reads "a thought" after a quiet "Save"; its
            name, read out loud, is the whole act. */
-        door: !!document.querySelector('.waka-home-bar-door[aria-label="Keep a thought"]'),
+        door: !!document.querySelector('.waka-home-bar-door[aria-label="Save an inspiration"]'),
       }));
       /* An empty world must still SAY something — #262 exists because it used
          to say nothing at all, which reads as broken rather than as new. */
-      const speaks = /Nothing kept yet/i.test(state.text) && state.door;
+      const speaks = /Nothing saved yet/i.test(state.text) && state.door;
       const ok = state.path === "/" && state.canvases > 0 && speaks;
       return {
         ok,
@@ -645,7 +645,7 @@ const JOURNEYS: Journey[] = [
          this does the same and PRINTS HOW LONG the world took to answer. A
          window that reopens shows up in the log as a growing number instead
          of coming back as a flake for someone else to chase. */
-      const FIND = 'input[placeholder="Search what you kept"]';
+      const FIND = 'input[placeholder="Search what you saved"]';
       const askedAt = Date.now();
       let answeredMs: number | null = null;
       for (let i = 0; i < 20 && answeredMs === null; i += 1) {
@@ -673,7 +673,7 @@ const JOURNEYS: Journey[] = [
           detail: `pressing "/" opened no find line in 20s — focus was on ${at}`,
         };
       }
-      await page.fill('input[placeholder="Search what you kept"]', needle);
+      await page.fill('input[placeholder="Search what you saved"]', needle);
       await page.waitForTimeout(3_500);
       const found = await page.locator(".jar-search-results button").filter({ hasText: needle }).count() > 0;
       return {

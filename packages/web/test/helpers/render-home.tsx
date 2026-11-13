@@ -545,9 +545,9 @@ function dockRows(container: HTMLElement): HTMLButtonElement[] {
 
 /**
  * THE NAMES THE OLD BAR USED, AND WHERE THEIR DOORS ARE NOW. "New
- * inspiration" is the home bar's "Keep a thought". "Inspirations" was a tab,
+ * inspiration" is the home bar's "Save an inspiration". "Inspirations" was a tab,
  * then Actions → Search, and since the Actions menu went (2026-11-08) it is
- * the Saves sheet's "Saves ›" heading. "Chats" is the bar's Chat, then the
+ * the handle over the home bar. "Chats" is the bar's Chat, then the
  * chat page's All chats. Suites keep saying what they mean; this is the one
  * place the route moved.
  */
@@ -559,52 +559,38 @@ async function pressPastChatsAside(container: HTMLElement): Promise<boolean> {
   await act(async () => aside.click());
   return true;
 }
-const RENAMED: Record<string, string> = { "Keep a thought": "Keep a thought" };
+const RENAMED: Record<string, string> = { "Save an inspiration": "Save an inspiration" };
 
-/** Pull the Saves sheet up from home ("Saves ⌃" above the bar). */
+/** Open the Saved page from home by its handle ("{n} saved" above the bar).
+    There is one Saved page now, the archive (founder, 2026-11-10). */
 export async function openSavesSheet(container: HTMLElement): Promise<HTMLElement> {
-  if (!container.querySelector(".waka-home-bar") && !container.querySelector(".waka-stream")) await closeOverlay(container);
+  if (!container.querySelector(".waka-home-bar")) await closeOverlay(container);
   for (let turn = 0; turn < 40; turn += 1) {
-    const sheet = container.querySelector<HTMLElement>(".waka-stream");
-    if (sheet) return sheet;
+    const page = container.querySelector<HTMLElement>(".waka-over:has(.waka-over-search)");
+    if (page) return page;
     const pull = container.querySelector<HTMLButtonElement>(".waka-home-bar-pull");
     if (pull) await act(async () => pull.click());
     else await act(async () => { await Promise.resolve(); });
   }
-  throw new Error("the Saves sheet never came up (is there a Saves ⌃ above the home bar?)");
-}
-
-/** Press a heading door in the Saves sheet: "Kept" or "Principles". */
-export async function pressSheetDoor(container: HTMLElement, label: string): Promise<void> {
-  const sheet = await openSavesSheet(container);
-  for (let turn = 0; turn < 40; turn += 1) {
-    const door = [...sheet.querySelectorAll<HTMLButtonElement>(".waka-stream-door")]
-      .find((node) => node.textContent?.replace("›", "").trim() === label);
-    if (door) { await act(async () => door.click()); return; }
-    await act(async () => { await Promise.resolve(); });
-  }
-  throw new Error(`the Saves sheet has no ${label} › heading`);
+  throw new Error("the Saved page never came up (is there a handle above the home bar?)");
 }
 
 /** The whole archive, the way a person reaches it from home now: the
-    sheet's "Saves ›" on your own wall; on an agent's, the pull itself. */
+    handle over the home bar, on your own wall and an agent's alike. */
 async function openArchive(container: HTMLElement): Promise<void> {
-  if (!container.querySelector(".waka-home-bar") && !container.querySelector(".waka-stream")) await closeOverlay(container);
-  /* The pull: your own wall raises the Kept sheet (then its "Kept ›"); an
-     agent's wall opens the agent's archive itself. Both walls draw the pill. */
+  if (!container.querySelector(".waka-home-bar")) await closeOverlay(container);
   for (let turn = 0; turn < 40; turn += 1) {
     if (container.querySelector(".waka-over--archive")) return;
-    if (container.querySelector(".waka-stream")) { await pressSheetDoor(container, "Kept"); return; }
     const pull = container.querySelector<HTMLButtonElement>(".waka-home-bar-pull");
     if (pull) await act(async () => pull.click());
     else await act(async () => { await Promise.resolve(); });
   }
-  throw new Error("the home bar's pull opened neither the Kept sheet nor an archive");
+  throw new Error("the home bar's handle did not open the archive");
 }
 /* BY ACCESSIBLE NAME, which is what a person navigating by voice or by
    screen reader would say out loud. */
 /* AN aria-label IS the accessible name when there is one: the home bar's
-   doors read "a thought" and are named "Keep a thought". */
+   doors read "a thought" and are named "Save an inspiration". */
 const accessibleName = (node: HTMLElement) =>
   (node.getAttribute("aria-label")?.trim() || node.textContent?.trim()) ?? "";
 

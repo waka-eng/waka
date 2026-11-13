@@ -130,7 +130,7 @@ const PULL_HOME = 56;
  */
 const MAX_HELD = 3;
 
-export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own", onClose, onOpen, onShare, onChat, onNewSave, newSaveLabel, crossing = null, onCrossed, gesture = null }: {
+export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own", patterns = [], onClose, onOpen, onShare, onChat, onNewSave, newSaveLabel, crossing = null, onCrossed, gesture = null }: {
   locale: SupportedLocale;
   profileId?: string | null;
   /** Whose name goes on the card. The attribution is half of why a card is
@@ -141,6 +141,11 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
   /** Whose principles these are — the bubble must not call an agent's
       principles yours. Chosen by Home the same way it chooses `title`. */
   whose?: "own" | "agent";
+  /** Patterns in what was saved, newest first: forming ones say so. They
+      stood on the Saved sheet until it went (founder, 2026-11-10: "why are
+      there 2 views of this"); what keeps coming back belongs beside what it
+      becomes. */
+  patterns?: readonly { id: string; statement: string; forming: boolean }[];
   /** The "<", Escape and the pull left: one handler, Close to home. */
   onClose: () => void;
   /** The page's address, for the native back gestures. */
@@ -436,6 +441,17 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           </ul>
           </>
         )}
+        {patterns.length ? <section className="waka-stream-patterns" aria-labelledby="waka-principles-patterns">
+          <h2 id="waka-principles-patterns" className="waka-stream-label">{say("worldStreamPatterns")}</h2>
+          <ul className="waka-stream-list">
+            {patterns.map((row) => (
+              <li key={row.id} className="waka-stream-statement" data-forming={row.forming ? "1" : undefined}>
+                {row.forming ? <span className="waka-stream-meta">{say("worldStreamForming")}</span> : null}
+                <span className="waka-stream-words">{row.statement}</span>
+              </li>
+            ))}
+          </ul>
+        </section> : null}
       </DialogSurface>
     </div>
   );

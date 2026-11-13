@@ -130,7 +130,7 @@ it('opens straight into the words, under the moment and the way back',async()=>{
      it is the clock — but it must be a real stamp rather than an empty node,
      which is what a missing `noteStamp` would leave behind. */
   expect(host.querySelector('.waka-surface-title')?.textContent).toMatch(/\d{1,2}:\d{2}/);
-  expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('Keep a thought');
+  expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('Save an inspiration');
   expect(document.activeElement).toBe(host.querySelector('textarea'));
   expect(props.onSubmit).not.toHaveBeenCalled();
 });
@@ -277,7 +277,7 @@ it('says a stored file problem and a failed upload in the reader’s language', 
 it('restores the separate link draft and includes it through the single Save action',async()=>{
   props.text='My note';props.linkText='https://example.test/unfinished';await mount();
   expect(host.querySelector<HTMLInputElement>('input[type=url]')?.value).toBe(props.linkText);
-  expect(host.textContent).toContain('This link will be kept with the note.');
+  expect(host.textContent).toContain('This link will be saved with the inspiration.');
   /* THROUGH ENTER IN THE FIELD, which is the composer's one remaining way to
      commit now that Save is in the bar — and the only one that was ever
      reachable without lifting your hands off the keyboard. It is the same
@@ -344,7 +344,7 @@ it('renders exactly one of each corner, never two', async () => {
 
 /* ═══ "<" ASKS, IN THE CREATURE'S BUBBLE (founder, 2026-11-09) ═══════════
    "it's weird < is saving draft while ... = discard draft." The "⋯" and its
-   one item went; the "<" asks Keep as draft or Discard, and that ask IS the
+   one item went; the "<" asks Save as draft or Discard, and that ask IS the
    confirm. Home decides WHEN to ask (an empty note just leaves); this page
    draws the question and answers it. */
 it('has no "⋯" in the notepad header, only the moment', async () => {
@@ -355,40 +355,49 @@ it('has no "⋯" in the notepad header, only the moment', async () => {
   expect(host.textContent).not.toContain('Discard');
 });
 
-it('asks Keep as draft or Discard in the bubble, focuses the first act, and Discard needs no second confirm', async () => {
+it('asks Save as draft or Discard in the bar\'s place, focuses the first act, and Discard needs no second confirm', async () => {
   {
     props.onDiscard = vi.fn().mockResolvedValue(true); props.onStay = vi.fn(); props.text = 'Keep me'; props.asking = true; await mount();
     const ask = host.querySelector<HTMLElement>('.waka-note-ask')!;
-    expect(ask.querySelector('.waka-note-says')?.textContent).toContain('Leave this note?');
-    const acts = [...ask.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-act')];
-    expect(acts.map(node => node.textContent)).toEqual(['Keep as draft', 'Discard']);
-    expect(document.activeElement, 'focus did not move to the first act').toBe(acts[0]);
-    await act(async () => acts[0]!.click());
-    expect(props.onClose, 'Keep as draft did not keep and leave').toHaveBeenCalledTimes(1);
-    expect(props.onDiscard).not.toHaveBeenCalled();
+    expect(ask.querySelector('.waka-note-ask-q')?.textContent).toContain('Leave this inspiration?');
+    /* A modal over the page (founder, 2026-11-10), not a creature's bubble. */
+    expect(ask.getAttribute('role')).toBe('alertdialog');
+    expect(ask.querySelector('.waka-note-creature'), 'the question is still a creature\'s bubble').toBeNull();
+    const acts = [...ask.querySelectorAll<HTMLButtonElement>('.waka-note-ask-act')];
+    expect(acts.map(node => node.textContent)).toEqual(['Discard', 'Save as draft']);
+    expect(document.activeElement, 'focus did not move to the first act').toBe(acts[1]);
     await act(async () => acts[1]!.click());
+    expect(props.onClose, 'Save as draft did not keep and leave').toHaveBeenCalledTimes(1);
+    expect(props.onDiscard).not.toHaveBeenCalled();
+    await act(async () => acts[0]!.click());
     expect(props.onDiscard, 'Discard asked again or did nothing').toHaveBeenCalledTimes(1);
     expect(host.textContent).not.toContain('Its text and attachments will be removed');
 
     /* Escape is the "<" (nav system R3): the page's one back handler, which
        in Home puts an open question away (a second "<" is "I'm staying").
        Focus goes back to the header's "<" when the question goes. */
-    await act(async () => acts[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await act(async () => acts[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     expect(props.onBack).toHaveBeenCalledTimes(1);
     props.asking = false; await mount();
     expect(host.querySelector('.waka-note-ask')).toBeNull();
     expect(document.activeElement, 'focus did not go back to "<"').toBe(host.querySelector('.waka-surface-back'));
 
-    /* A tap anywhere else is staying too. */
+    /* A tap on the dim is staying too, and Tab never leaves the card. */
     props.asking = true; await mount();
-    await act(async () => host.querySelector('textarea')!.dispatchEvent(new Event('pointerdown', { bubbles: true })));
+    const card = host.querySelector<HTMLElement>('.waka-note-ask-card')!;
+    const [discardAct, keepAct] = [...card.querySelectorAll<HTMLButtonElement>('button')];
+    await act(async () => keepAct!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })));
+    expect(document.activeElement, 'Tab left the card').toBe(discardAct);
+    await act(async () => discardAct!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })));
+    expect(document.activeElement, 'Tab left the card').toBe(keepAct);
+    await act(async () => host.querySelector<HTMLElement>('.waka-note-ask-scrim')!.click());
     expect(props.onStay).toHaveBeenCalledTimes(1);
   }
 });
 
 it('keeps a failed discard on the page, says so, and blocks Discard during a pending save', async () => {
   props.onDiscard = vi.fn().mockResolvedValue(false); props.text = 'Do not lose this'; props.asking = true; await mount();
-  const discard = () => [...host.querySelectorAll<HTMLButtonElement>('.waka-note-ask .jar-char-bubble-act')].find(node => node.textContent === 'Discard')!;
+  const discard = () => [...host.querySelectorAll<HTMLButtonElement>('.waka-note-ask .waka-note-ask-act')].find(node => node.textContent === 'Discard')!;
   await act(async () => discard().click());
   expect(host.querySelector('.waka-note-ask [role="alert"]')?.textContent).toContain('Your draft is still here');
   expect(host.querySelector('textarea')?.value).toBe('Do not lose this');
@@ -406,13 +415,11 @@ it('makes a photo the page\'s picture, and draws the words it read only when the
   props.noteBar = { mic: <button type="button" aria-label="Your voice" />, save: <button type="button" className="waka-dock-save">Save</button>, state: null };
   await mount();
   expect(host.querySelector('.waka-note-hero img')?.getAttribute('alt')).toBe('Screenshot.png');
-  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('What about it stuck with you?');
+  /* No question over the picture (founder, 2026-11-10: "it's a chat that
+     it's asking but my response is a note"): the picture, and a note under it. */
+  expect(host.querySelector('.waka-note-says'), 'the creature still asks over the photo').toBeNull();
   expect(host.textContent).not.toContain('The words I read');
-  /* The hint is the bubble's softer second line (founder, 2026-11-08), not a
-     line floating over the bar. */
-  expect(host.querySelector('.waka-note-says .waka-note-says-softer')?.textContent).toBe('A few words is plenty. Or just Keep.');
-  expect(host.querySelector('.waka-note-hint'), 'the hint still floats over the bar').toBeNull();
-  expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Add a note…');
+  expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Add a few words…');
   /* No box (founder, 2026-11-09): the words are on the page, and the bar is
      a pill of tools under them with no field of its own. */
   expect(host.querySelector('.waka-note-bar textarea'), 'the words went back into a box').toBeNull();
@@ -420,22 +427,22 @@ it('makes a photo the page\'s picture, and draws the words it read only when the
 
   const fix = vi.fn(async () => 'saved' as const);
   props.readWords = { status: 'ready', text: 'Nobody feels ready.' }; props.onFixReadWords = fix; await mount();
-  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('What made this line stick with you?');
+  expect(host.querySelector('.waka-note-says')).toBeNull();
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“Nobody feels ready.”');
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-read-act')!.click());
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-read-act')!.click());
   expect(fix).toHaveBeenCalledWith('Nobody feels ready.');
 
   props.readWords = { status: 'unreadable' }; await mount();
-  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
+  expect(host.querySelector('.waka-note-read-ask')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
   expect(host.querySelector('.waka-note-hero')?.hasAttribute('data-blurred')).toBe(true);
   /* Unreadable promises nothing; only a read queued again says it will retry. */
   expect(host.textContent).not.toContain('Your screenshot is saved either way.');
-  expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Type the line, or just Keep');
+  expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Type the line, or just Save');
   /* Retrying asks the same; "I'll try reading it again" is promised only
      where a read is known to be queued (the saved note), never on a guess. */
   props.readWords = { status: 'retrying' }; await mount();
-  expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
+  expect(host.querySelector('.waka-note-read-ask')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
   expect(host.textContent).not.toContain('Your screenshot is saved either way.');
 });
 
@@ -444,7 +451,7 @@ it('asks why about a shared link, with Add a note and That\'s all, and That\'s a
   props.media = []; props.text = 'https://example.com/a'; props.arrival = true; await mount();
   expect(host.querySelector('.waka-note-says')?.firstChild?.textContent).toBe('Got the link you shared. Want to say why?');
   const acts = [...host.querySelectorAll<HTMLButtonElement>('.waka-note-arrival-act')];
-  expect(acts.map(act => act.textContent)).toEqual(['Add a note', 'Just keep it']);
+  expect(acts.map(act => act.textContent)).toEqual(['Add words', 'Just save it']);
   expect(props.onSubmit).not.toHaveBeenCalled();
   await act(async () => acts[1]!.click());
   expect(props.onSubmit).toHaveBeenCalledOnce();
@@ -454,8 +461,7 @@ it('asks why about a shared link, with Add a note and That\'s all, and That\'s a
    pressable button, so a focusable control sat inside an aria-hidden figure
    — reachable by Tab, named nothing. Beside a line it is a picture. */
 it('keeps the creature beside the question out of the tab order', async () => {
-  props.media = [{ id: 'shot', type: 'image', name: 'Screenshot.png', blob: new Blob(['p'], { type: 'image/png' }) }];
-  await mount();
+  props.media = []; props.text = 'https://example.com/a'; props.arrival = true; await mount();
   const figure = host.querySelector('.waka-note-creature')!;
   expect(figure).toBeTruthy();
   expect(figure.querySelector('button, [tabindex]:not([tabindex="-1"]), a[href]'), 'a focusable control hides inside the aria-hidden figure').toBeNull();

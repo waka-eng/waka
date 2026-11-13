@@ -25,7 +25,7 @@ it('asks in place before starting again, and Cancel leaves the draft alone', asy
   const reset = vi.fn();
   await act(async () => root.render(<AuthoredSaveNotice save={save('invalid', reset)} locale="en-US" />));
   await act(async () => button('Start again')!.click());
-  expect(host.textContent).toContain('Check what you kept first');
+  expect(host.textContent).toContain('Check what you saved first');
   await act(async () => button('Cancel')!.click());
   expect(reset).not.toHaveBeenCalled();
   await act(async () => button('Start again')!.click());
@@ -40,6 +40,6 @@ it('puts the question away when the save moves on to another state', async () =>
   await act(async () => button('Start again')!.click());
   await act(async () => root.render(<AuthoredSaveNotice save={save('saving', reset)} locale="en-US" />));
   await act(async () => root.render(<AuthoredSaveNotice save={save('invalid', reset)} locale="en-US" />));
-  expect(host.textContent, 'an old question came back with a new failure').not.toContain('Check what you kept first');
+  expect(host.textContent, 'an old question came back with a new failure').not.toContain('Check what you saved first');
   expect(button('Cancel')).toBeUndefined();
 });

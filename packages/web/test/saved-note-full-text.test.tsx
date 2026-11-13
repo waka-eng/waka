@@ -119,7 +119,7 @@ type World = { profileId?: string };
     every render, exactly as Home passes them. */
 async function renderArchive(whose: World = {}): Promise<void> {
   await act(async () => root.render(
-    <Archive locale="en-US" title="Kept" onBack={vi.fn()}
+    <Archive locale="en-US" title="Saved" onBack={vi.fn()}
       profileId={whose.profileId}
       onNoteOpen={(close) => { closer = close; }} />,
   ));
@@ -199,7 +199,7 @@ it("stays read-only and never saves when the read fails, and Try again recovers"
   await answer(false);
   expect(page().readOnly).toBe(true);
   expect(save()).toBeNull();
-  expect(bar()).toBe("Couldn’t open this note.");
+  expect(bar()).toBe("Couldn’t open this inspiration.");
   /* The alert holds the sentence only; Try again is its own control beside
      it, and Delete is still offered — it needs nothing but the id. */
   const alert = slot.querySelector('[role="alert"]')!;
@@ -256,7 +256,7 @@ it("will not empty a note that has nothing else on it, and says why on the page"
   await answer(true);
   await type("   ");
   expect(save().disabled).toBe(true);
-  expect(page().placeholder).toBe("Write something, or add a photo or file, to keep this note.");
+  expect(page().placeholder).toBe("Write something, or add a photo or file, to save this inspiration.");
   await act(async () => closer!());
   expect(state.written).toEqual([]);
 });
@@ -296,7 +296,7 @@ it("folds Share and Delete into a More menu with the bar's menu keys", async () 
   expect(more.getAttribute("aria-haspopup")).toBe("menu");
   await act(async () => more.click());
   const rows = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-  expect(rows().map((row) => row.textContent)).toEqual(["Share this note", "Delete"]);
+  expect(rows().map((row) => row.textContent)).toEqual(["Share this inspiration", "Delete"]);
   expect(document.activeElement, "focus moves into the menu").toBe(rows()[0]);
   const key = async (name: string) => act(async () => {
     (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true }));
@@ -395,7 +395,7 @@ it("ends a full-text read that never answers as a failed read with Try again", a
     await openSave(longRow, LONG); // the read is held and never answered
     expect(bar()).toBe("Loading…");
     await act(async () => { vi.advanceTimersByTime(20_001); });
-    expect(bar()).toBe("Couldn’t open this note.");
+    expect(bar()).toBe("Couldn’t open this inspiration.");
     expect(page().readOnly).toBe(true);
     expect([...slot.querySelectorAll("button")].some((b) => b.textContent === "Try again")).toBe(true);
   } finally {

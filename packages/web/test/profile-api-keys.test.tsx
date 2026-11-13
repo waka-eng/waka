@@ -83,7 +83,7 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
   expect(host.textContent).toContain('You · You');
   expect(calls.some(c => c.path.includes('keys'))).toBe(false);
   await click('API keys');
-  expect(host.textContent).toContain('can’t edit or delete notes or manage your account');
+  expect(host.textContent).toContain('can’t edit or delete inspirations or manage your account');
   expect(host.textContent).toContain('Personal laptop');
   for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent name']) expect(host.textContent).not.toContain(hidden);
   expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys']);
@@ -133,7 +133,7 @@ it('revokes a personal key without touching an agent key, session or memory', as
   await openPersonal(); await click('API keys');
   await click('Delete key');
   expect(calls.some(c => c.method === 'DELETE')).toBe(false);
-  expect(host.textContent).toContain('Everything kept stays');
+  expect(host.textContent).toContain('Everything saved stays');
   await click('Delete');
   expect(calls.filter(c => c.method === 'DELETE').map(c => c.path)).toEqual(['/api/keeper-keys/Personal%20laptop']);
   expect(host.textContent).not.toContain('Personal laptop');

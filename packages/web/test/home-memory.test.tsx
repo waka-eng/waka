@@ -922,11 +922,11 @@ describe("stepping between memories", () => {
 
     expect(said(), "opened on the oldest").toBe("something I kept, 5");
     expect(
-      await step(/^Previous note$/),
+      await step(/^Previous inspiration$/),
       "the oldest memory offers no way further back — the end of an archive is real",
     ).toBe(false);
 
-    expect(await step(/^Next note$/), "and it does offer the one after").toBe(true);
+    expect(await step(/^Next inspiration$/), "and it does offer the one after").toBe(true);
     expect(said(), "which is the next one the ground was given").toBe("something I kept, 4");
 
     expect(
@@ -934,16 +934,16 @@ describe("stepping between memories", () => {
       "the card never closed — that is the whole point of stepping from it",
     ).toBe(1);
 
-    await step(/^Previous note$/);
+    await step(/^Previous inspiration$/);
     expect(said(), "and back again lands where it started").toBe("something I kept, 5");
 
     /* walk to the far end and check the other stop */
-    for (let i = 0; i < 5; i += 1) await step(/^Next note$/);
+    for (let i = 0; i < 5; i += 1) await step(/^Next inspiration$/);
     expect(said(), "five steps forward from the oldest reaches the newest").toBe(
       "something I kept, 0",
     );
     expect(
-      await step(/^Next note$/),
+      await step(/^Next inspiration$/),
       "and the newest offers no way further on",
     ).toBe(false);
   });
@@ -994,7 +994,7 @@ describe("stepping between memories", () => {
     /* `Delete`, WHERE THIS ASSERTED `Reflect` (2026-10-10). The marker had to
        change because the verb did: the footer's left cell offered `Reflect` on
        a save with no answers, which opened the writing flow the founder
-       folded — it now offers `Read your note` only when there is an answer to
+       folded — it now offers `Read your inspiration` only when there is an answer to
        read, and this memory has none, so that cell is empty by design.
        `Delete` is the better marker anyway and was the one to reach for first:
        it exists ONLY on the reading footer (the editing footer offers Add a

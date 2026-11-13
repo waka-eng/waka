@@ -139,6 +139,12 @@
   /* Editing needs a readable minimum on desktop and avoids focus zoom on
      phones, without enlarging the surrounding reading/body scale. */
   --t-input: max(16px, var(--t-body));
+  /* ONE SIZE FOR WRITING, TYPED OR SPOKEN (founder, 2026-11-10: "I hate
+     how the text font and size changes once I click done", then, at the
+     listening view's 20-22px on the notepad, "this saving text is too
+     big"). The regular typing size, on the notepad, a saved note and the
+     listening view alike, so Done drops what you said in without a jump. */
+  --t-writing: var(--t-input);
   /**
    * ═══ SIX STEPS BECAME THREE, AND THE DECISION WAS THE FOUNDER'S ═══════
    *

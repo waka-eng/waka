@@ -50,7 +50,7 @@ describe("a paused reading", () => {
     vi.mocked(retryPausedReading).mockResolvedValue(status(false));
     render(createElement(Page));
     await settle();
-    expect(container!.textContent).toContain("WAKA is paused for now. Everything you kept is safe.");
+    expect(container!.textContent).toContain("WAKA is paused for now. Everything you saved is safe.");
     const retry = [...container!.querySelectorAll("button")].find((b) => b.textContent === "Try again")!;
     vi.mocked(fetchPrincipleStatus).mockResolvedValue(status(false));
     vi.useFakeTimers();
@@ -197,7 +197,7 @@ describe("a paused reading", () => {
     }
     render(createElement(AgentPage));
     await settle();
-    expect(container!.textContent).toContain("WAKA is paused for now. Everything you kept is safe.");
+    expect(container!.textContent).toContain("WAKA is paused for now. Everything you saved is safe.");
     expect(container!.querySelector("button"), "an agent session was offered Retry").toBeNull();
   });
 

@@ -82,7 +82,7 @@ it('offers a full reading only when clipped, closes by Escape, and returns focus
 });
 
 /* DESIGN F2: "Why?" turns the bubble over to the saves behind the read —
-   "Because you kept these", each quoted — with Back and See all saves. */
+   "Because you saved these", each quoted — with Back and See all saves. */
 it('answers Why? in place with the saves behind the read, and Back returns to the read', async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   const seeAll = vi.fn(), chat = vi.fn(), host = document.createElement('div'); document.body.append(host);
@@ -94,7 +94,7 @@ it('answers Why? in place with the saves behind the read, and Back returns to th
     expect(acts().map(button => button.textContent)).toEqual(['Why?', 'Chat about this']);
     expect(host.textContent).toContain('On your mind lately');
     await act(async () => acts()[0]!.click());
-    expect(host.textContent).toContain('Because you kept these');
+    expect(host.textContent).toContain('Because you saved these');
     expect([...host.querySelectorAll('.waka-says-why-row')].map(row => row.textContent)).toEqual(['“Small rituals hold a day together.”', '“Walked the long way home.”']);
     expect(host.textContent).not.toContain('You keep returning');
     /* It folds the bubble rather than navigating, so it is Hide, not a second "Back" (nav system). */

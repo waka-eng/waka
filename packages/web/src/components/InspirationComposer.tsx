@@ -239,12 +239,10 @@ export type { ReadWords } from './ImageWords';
     CHARACTER (founder: "all characters should be this app's real
     character") — `Companion`, the grain-textured rest pose the login page
     draws — never a figure drawn in CSS. */
-function CreatureLine({ children, softer }: { children: ReactNode; softer?: ReactNode }) {
+function CreatureLine({ children }: { children: ReactNode }) {
   return <div className="waka-note-line">
     <span className="waka-note-creature" aria-hidden="true"><Companion size={32} label="" pressable={false} /></span>
-    {/* THE HINT IS PART OF WHAT IT SAYS (founder, 2026-11-08): a second,
-        softer line inside the same bubble, not a line floating over the bar. */}
-    <p className="waka-note-says">{children}{softer ? <span className="waka-note-says-softer">{softer}</span> : null}</p>
+    <p className="waka-note-says">{children}</p>
   </div>;
 }
 
@@ -253,37 +251,46 @@ function CreatureLine({ children, softer }: { children: ReactNode; softer?: Reac
  * Founder, 2026-11-09: "it's weird < is saving draft while ... = discard
  * draft." Two exits for one note, in two corners, each doing something
  * different and neither saying which. Now there is one way out, the "<", and
- * on a note with something in it the creature asks in its own bubble: Keep as
- * draft (what "<" always did) or Discard. The ask IS the confirm, so Discard
- * asks nothing more. An empty note just leaves; there is nothing to ask about.
- * Escape, or a tap anywhere else, puts the question away and you stay.
+ * on an inspiration with something in it a small card asks: Save as draft
+ * (what "<" always did) or Discard. The ask IS the confirm, so Discard asks
+ * nothing more. An empty one just leaves; there is nothing to ask about.
+ * Escape, or a tap on the dim, puts the question away and you stay.
  */
 function LeaveAsk({ question, keepLabel, discardLabel, failed, failedLabel, busy, busyLabel, cannotDiscard, onKeep, onDiscard, onStay }: {
   question: string; keepLabel: string; discardLabel: string; failed: boolean; failedLabel: string;
   busy: boolean; busyLabel: string; cannotDiscard: boolean; onKeep: () => void; onDiscard: () => void; onStay: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null), first = useRef<HTMLButtonElement>(null);
-  const stay = useRef(onStay); stay.current = onStay;
   useEffect(() => { first.current?.focus(); }, []);
-  useEffect(() => {
-    /* A TAP ANYWHERE ELSE IS "NO, I'M STAYING". The "<" itself is left to
-       its own press, which puts the question away the same way. */
-    const away = (event: PointerEvent) => {
-      const target = event.target as Element | null;
-      if (!target || box.current?.contains(target) || target.closest?.('.waka-surface-back')) return;
-      stay.current();
-    };
-    document.addEventListener('pointerdown', away, true);
-    return () => document.removeEventListener('pointerdown', away, true);
-  }, []);
-  return <div ref={box} className="waka-note-line waka-note-ask" role="group" aria-labelledby="waka-note-ask-q">
-    <span className="waka-note-creature" aria-hidden="true"><Companion size={32} label="" pressable={false} /></span>
-    <div className="waka-note-says waka-note-says--ask">
+  /* While a discard runs both answers are disabled, which would drop focus
+     onto the page under the dim; the card itself holds it instead. */
+  useEffect(() => { if (busy) box.current?.focus(); }, [busy]);
+  /* FOCUS STAYS IN THE CARD (code review, 2026-11-10): it says it is modal,
+     so Tab walks its two answers and never onto the page under the dim. */
+  const keepFocus = (event: KeyboardEvent) => {
+    if (event.key !== 'Tab') return;
+    const acts = [...(box.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
+    event.preventDefault();
+    if (!acts.length) { box.current?.focus(); return; }
+    const at = acts.indexOf(document.activeElement as HTMLButtonElement);
+    acts[(at + (event.shiftKey ? -1 : 1) + acts.length) % acts.length]!.focus();
+  };
+  /* ═══ IT ASKS IN THE MIDDLE, OVER THE PAGE (founder, 2026-11-10) ═══════
+     First a creature's bubble at the top of the page, then the bar's row at
+     its foot: "I'm pressing the back button on top left but [the question]
+     is at the bottom so it's very confusing. Maybe it should be a modal."
+     A small card in the middle over a dimmed page, so the answer to the
+     "<" is where the eye already is. A press on the dim is staying: on its
+     click, not its pointerdown, so the dim is still there to take the tap
+     and nothing under it is pressed (code review, 2026-11-10). */
+  return <div className="waka-note-ask" role="alertdialog" aria-modal="true" aria-labelledby="waka-note-ask-q" onKeyDown={keepFocus}>
+    <div className="waka-note-ask-scrim" aria-hidden="true" onClick={onStay} />
+    <div ref={box} className="waka-note-ask-card" tabIndex={-1}>
       <p id="waka-note-ask-q" className="waka-note-ask-q">{question}</p>
-      {failed ? <p className="waka-note-says-softer" role="alert">{failedLabel}</p> : null}
-      <div className="jar-char-bubble-acts">
-        <button ref={first} type="button" className="jar-char-bubble-act" disabled={busy} onClick={onKeep}>{keepLabel}</button>
-        <button type="button" className="jar-char-bubble-act jar-char-bubble-act--quiet" disabled={busy || cannotDiscard} onClick={onDiscard}>{busy ? busyLabel : discardLabel}</button>
+      {failed ? <p className="waka-note-ask-failed" role="alert">{failedLabel}</p> : null}
+      <div className="waka-note-ask-acts">
+        <button type="button" className="waka-note-ask-act waka-note-ask-act--quiet" disabled={busy || cannotDiscard} onClick={onDiscard}>{busy ? busyLabel : discardLabel}</button>
+        <button ref={first} type="button" className="waka-note-ask-act" disabled={busy} onClick={onKeep}>{keepLabel}</button>
       </div>
     </div>
   </div>;
@@ -357,6 +364,9 @@ export function InspirationComposer(props: {
       or Discard in the creature's bubble. `onClose` keeps the draft and
       leaves; `onStay` puts the question away. */
   asking?: boolean;
+  /** "Past inspirations" at the header's right, as a chat has "Past chats"
+      (founder, 2026-11-10). Keeps the draft, then opens the Saved list. */
+  onPast?: () => void;
   onStay?: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
   /** True when the draft changed in another tab — the one state the "keep as
@@ -379,7 +389,7 @@ export function InspirationComposer(props: {
       why, with Add a note / That's all. It still waits for Save. */
   arrival?: boolean;
   /** The microphone is open: the bar gives way to the listening view. */
-  listening?: { notice?: string; onDone: () => void };
+  listening?: { onDone: () => void };
 }) {
   const linkInput = useRef<HTMLInputElement>(null);
   const [discarding, setDiscarding] = useState(false), [discardFailed, setDiscardFailed] = useState(false);
@@ -444,9 +454,13 @@ export function InspirationComposer(props: {
     && !item.validationError && !item.uploadError) ?? null;
   const shelf = hero ? props.media.filter(item => item !== hero) : props.media;
   const unreadable = Boolean(hero && (props.readWords?.status === 'unreadable' || props.readWords?.status === 'retrying' || props.readWords?.status === 'failed'));
-  const line = hero
-    ? say(unreadable ? 'worldNoteAskUnreadable' : props.readWords?.status === 'ready' ? 'worldNoteAskLine' : 'worldNoteAskPhoto')
-    : props.arrival ? say('worldShareArrived') : null;
+  /* ═══ NO QUESTION OVER A PICTURE (founder, 2026-11-10) ═══════════════
+     "It's a chat that it's asking but my response is a note." The creature
+     asked "What about it stuck with you?" over every photo, a chat line
+     whose answer was never a chat reply. The page is a note: the picture,
+     and "Add a note…" under it. Only an unreadable picture still says so,
+     in the words-read line under it, because that is news, not a prompt. */
+  const line = !hero && props.arrival ? say('worldShareArrived') : null;
   /* `invalidFiles` AND `empty` WENT WITH THE SAVE BUTTON. Both existed only
      to decide whether that button was there and whether it was pressable;
      the bar asks the same two questions now and asks them of the draft
@@ -513,18 +527,14 @@ export function InspirationComposer(props: {
 
         Nothing trails the moment now: the "⋯" and its one item, Discard,
         became the "<"'s question (see `LeaveAsk`). */}
-    <NotePage locale={props.locale} whenMs={when.current} owner={props.owner} back={{ kind: 'close', onBack: props.onBack }} gesture={props.gesture}>
+    <NotePage locale={props.locale} whenMs={when.current} owner={props.owner} back={{ kind: 'close', onBack: props.onBack }} gesture={props.gesture}
+      trailing={props.onPast ? <button type="button" className="waka-surface-act" onClick={props.onPast}>{say('worldPastInspirations')}</button> : undefined}>
     <div ref={bodyRef} className="jar-composer-body" data-hero={hero ? '1' : undefined}>
     {/* ═══ THE PICTURE IS THE POST (design E3) ═══════════════════════════════
         A screenshot or photo stands large with the creature's question over
         it; the note under it is optional. A share from another app (F5) is
         asked about the same way. */}
-    {asking ? <LeaveAsk question={say('worldLeaveNoteAsk')} keepLabel={say('worldLeaveKeepDraft')}
-      discardLabel={say('worldLeaveDiscard')} busy={discarding} busyLabel={say('worldDiscardingDraft')}
-      cannotDiscard={discardUnavailable || !props.onDiscard}
-      failed={discardFailed} failedLabel={say('worldDiscardInspirationFailed')}
-      onKeep={props.onClose} onDiscard={() => { void discardNow(); }} onStay={stay} />
-    : line ? <CreatureLine softer={hero ? say(unreadable ? 'worldNoteHintSay' : 'worldNoteHint') : undefined}>{line}</CreatureLine> : null}
+    {line ? <CreatureLine>{line}</CreatureLine> : null}
     {props.arrival && !hero ? <div className="waka-note-arrival">
       <button type="button" className="waka-note-arrival-act" onClick={() => bodyRef.current?.querySelector<HTMLTextAreaElement>('.jar-composer-text')?.focus()}>{say('worldShareAddNote')}</button>
       <button type="button" className="waka-note-arrival-act" disabled={blocked} onClick={submit}>{say('worldShareThatsAll')}</button>
@@ -533,7 +543,7 @@ export function InspirationComposer(props: {
       removeLabel={formatMessage(props.locale, 'worldComposerRemoveFile', { name: attachmentLabel(props.locale, hero.type, hero.name) })}
       onRemove={() => props.onRemove(hero.id)}
       onBroken={() => setBroken(previous => new Set(previous).add(hero.id))} /> : null}
-    {hero && props.readWords ? <ReadWordsQuote words={props.readWords} locale={props.locale} onFix={props.onFixReadWords} disabled={blocked} /> : null}
+    {hero && props.readWords ? <ReadWordsQuote words={props.readWords} locale={props.locale} onFix={props.onFixReadWords} disabled={blocked} asks /> : null}
     {/* ═══ THE WORDS ARE WRITTEN ON THE PAGE, NOT IN A BOX ════════════════
         Founder, 2026-11-09: "notepad feels so 답답해." The words sat in a big
         dark card, a box inside the page, with the tools along its foot. The
@@ -646,7 +656,14 @@ export function InspirationComposer(props: {
     {/* ═══ THE NOTE BAR: ONE SMALL PILL, CENTRED UNDER THE WORDS ═════════
         The mic and the attach glyphs at its start, the transient state
         between, Keep at its end. Nothing in it fills. */}
-    {props.listening ? <ListeningView locale={props.locale} words={props.text} notice={props.listening.notice} onDone={props.listening.onDone} /> : <NoteBar
+    {/* The question is a modal over everything, the listening view too: a
+        "<" pressed while listening must be answerable, not hidden under it. */}
+    {asking ? <LeaveAsk question={say('worldLeaveNoteAsk')} keepLabel={say('worldLeaveKeepDraft')}
+      discardLabel={say('worldLeaveDiscard')} busy={discarding} busyLabel={say('worldDiscardingDraft')}
+      cannotDiscard={discardUnavailable || !props.onDiscard}
+      failed={discardFailed} failedLabel={say('worldDiscardInspirationFailed')}
+      onKeep={props.onClose} onDiscard={() => { void discardNow(); }} onStay={stay} /> : null}
+    {props.listening ? <ListeningView locale={props.locale} words={props.text} onDone={props.listening.onDone} /> : <NoteBar
       tools={props.noteBar ? <>
         {props.noteBar.mic}
         <NoteBarAttach photoLabel={say('worldAddPhoto')} fileLabel={say('worldAddFile')} disabled={blocked} multiple

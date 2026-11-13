@@ -117,7 +117,7 @@ it("offers to share the open note", async () => {
   await mount();
   await press(host!.querySelector(".waka-list-row"));
   await openNoteActions();
-  expect(document.querySelector('[aria-label="Share this note"]')).toBeTruthy();
+  expect(document.querySelector('[aria-label="Share this inspiration"]')).toBeTruthy();
 });
 
 

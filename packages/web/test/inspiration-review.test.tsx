@@ -40,7 +40,7 @@ it('asks through the creature, glasses on only while it asks, even without signa
      "this glass mode is only when agent asks u if certain things are still
      true". */
   const think=vi.spyOn(sim(),'think');
-  await pressHomeBar(world.container,'Keep a thought');await settle();
+  await pressHomeBar(world.container,'Save an inspiration');await settle();
   await closeOverlay(world.container);await settle();
   expect(think.mock.calls.some(([on])=>on),'the glasses went on at rest').toBe(false);
   /* The reading still comes first; a tap is the ask. */
@@ -51,7 +51,7 @@ it('asks through the creature, glasses on only while it asks, even without signa
   await diveIntoReview(world.container,world.step);
   expect(world.container.textContent).toContain('Does this still matter to you?');expect(world.container.textContent).toContain(original.text);
   expect(think,'the glasses are not on while it asks').toHaveBeenLastCalledWith(true);
-  expect(world.container.textContent).toContain('Your note');
+  expect(world.container.textContent).toContain('Your inspiration');
   await act(async()=>button('Yes').click());await settle();
   expect(reviewInspiration).toHaveBeenCalledWith(original,VIEWER_ID,'relevant',expect.any(String));
   expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
@@ -71,7 +71,7 @@ it('shows nothing about review, and no glasses, when nothing waits',async()=>{
   vi.mocked(listInspirationReviews).mockResolvedValue([]);
   world=await mountWorld();
   const think=vi.spyOn(sim(),'think');
-  await pressHomeBar(world.container,'Keep a thought');await settle();
+  await pressHomeBar(world.container,'Save an inspiration');await settle();
   await closeOverlay(world.container);await settle();
   expect(think.mock.calls.some(([on])=>on),'the glasses went on with nothing to review').toBe(false);
   for(let tap=0;tap<4;tap+=1){
@@ -98,7 +98,7 @@ it('requires reading changed wording before an explicit new choice',async()=>{
   vi.mocked(reviewInspiration).mockRejectedValueOnce(new ApiError({status:409,message:'changed'}));
   const fresh={...original,text:'Work with a small team.',sourceRevision:'4'};vi.mocked(readInspirationRelevance).mockResolvedValue(fresh);
   await open();await act(async()=>button('Yes').click());await settle();
-  expect(world.container.textContent).toContain('This note changed.');
+  expect(world.container.textContent).toContain('This inspiration changed.');
   await act(async()=>button('Open the new version').click());expect(world.container.textContent).toContain(fresh.text);
   expect(reviewInspiration).toHaveBeenCalledOnce();
   await act(async()=>button('Yes').click());await settle();

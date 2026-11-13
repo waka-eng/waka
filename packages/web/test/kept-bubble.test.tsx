@@ -3,7 +3,7 @@
  * "KEPT" STAYS LONG ENOUGH TO USE (design E4; code review, 2026-11-08).
  *
  * The bubble's longer stay was keyed to "I'm inspired!", a line nothing says
- * any more, so "Kept" — with Talk about it, See all and a screenshot's words —
+ * any more, so "Saved" — with Talk about it, See all and a screenshot's words —
  * went after the four seconds every whisper gets, and the words' read was
  * abandoned before the server could land it.
  *
@@ -52,7 +52,7 @@ async function settle(ms = 100, turns = 8) { for (let turn = 0; turn < turns; tu
 const bubble = () => [...world!.container.querySelectorAll('.jar-char-bubble .jar-char-bubble-reading')].map(n => n.textContent?.trim()).join(' | ');
 
 describe('how long the bubble stays', () => {
-  it('gives a whisper four seconds and "Kept" eight', () => {
+  it('gives a whisper four seconds and "Saved" eight', () => {
     expect(bubbleStayMs({ kept: false, waitingForWords: false, elapsedMs: 0 })).toBe(LINE_STAY_MS);
     expect(bubbleStayMs({ kept: true, waitingForWords: false, elapsedMs: 0 })).toBe(KEPT_STAY_MS);
   });
@@ -63,9 +63,9 @@ describe('how long the bubble stays', () => {
   });
 });
 
-it('keeps "Kept" up past the four seconds a whisper gets, and lets it go after its own stay', async () => {
+it('keeps "Saved" up past the four seconds a whisper gets, and lets it go after its own stay', async () => {
   world = await mountWorld(FACTS); await settle();
-  await pressHomeBar(world.container, 'Keep a thought'); await settle();
+  await pressHomeBar(world.container, 'Save an inspiration'); await settle();
   const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'Glued the chair myself.');
@@ -74,14 +74,14 @@ it('keeps "Kept" up past the four seconds a whisper gets, and lets it go after i
   await settle();
   await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-dock-save')!.click());
   await settle(50, 6);
-  expect(bubble(), 'the save did not answer with Kept').toContain('Kept');
+  expect(bubble(), 'the save did not answer with Kept').toContain('Saved');
   await settle(500, 10); // five seconds on
-  expect(bubble(), '"Kept" went with the whispers, at four seconds').toContain('Kept');
+  expect(bubble(), '"Saved" went with the whispers, at four seconds').toContain('Saved');
   await settle(500, 8); // nine seconds on
-  expect(bubble(), '"Kept" never left').not.toContain('Kept');
+  expect(bubble(), '"Saved" never left').not.toContain('Saved');
 });
 
-/* Code review, 2026-11-08: a second save while "Kept" stood said the same
+/* Code review, 2026-11-08: a second save while "Saved" stood said the same
    word, so its stay was measured from the first save and it left early. */
 it('gives a second save its own stay, though it says the same word', async () => {
   /* The stay is measured with Date.now; the timers here are fake, so the
@@ -94,7 +94,7 @@ it('gives a second save its own stay, though it says the same word', async () =>
   const advance = vi.advanceTimersByTimeAsync.bind(vi);
   vi.spyOn(vi, 'advanceTimersByTimeAsync').mockImplementation(async (ms: number) => { moved += ms; return advance(ms); });
   const saveOne = async (words: string) => {
-    await pressHomeBar(world!.container, 'Keep a thought'); await settle();
+    await pressHomeBar(world!.container, 'Save an inspiration'); await settle();
     const field = world!.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, words);
@@ -105,9 +105,9 @@ it('gives a second save its own stay, though it says the same word', async () =>
     await settle(50, 6);
   };
   await saveOne('The first thing.');
-  await settle(500, 10); // five seconds into the first "Kept"
+  await settle(500, 10); // five seconds into the first "Saved"
   await saveOne('The second thing.');
-  expect(bubble()).toContain('Kept');
+  expect(bubble()).toContain('Saved');
   await settle(500, 10); // five seconds into the second, ten from the first
-  expect(bubble(), 'the second "Kept" left on the first one\'s clock').toContain('Kept');
+  expect(bubble(), 'the second "Saved" left on the first one\'s clock').toContain('Saved');
 });

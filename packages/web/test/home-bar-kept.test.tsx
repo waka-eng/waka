@@ -3,7 +3,7 @@
  * "{n} KEPT ⌃" ABOVE THE HOME BAR (founder, 2026-11-09: "should be x kept").
  *
  * The pull over the bar says how many you have kept once that is known, and
- * only "Kept" before then or at none. The count rides on the catalogue's
+ * only "Saved" before then or at none. The count rides on the catalogue's
  * `worldBarKeptCount`, so Korean says it in its own order.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): nothing. `HomeBar` is rendered alone,
@@ -28,11 +28,11 @@ async function pullFor(locale: SupportedLocale, kept: number | undefined): Promi
   return host.querySelector('.waka-home-bar-pull')?.textContent?.trim() ?? '';
 }
 
-it('says how many are kept, and only "Kept" while that is unknown or none', async () => {
-  expect(await pullFor('en-US', 12)).toBe('12 kept');
-  expect(await pullFor('en-US', 1)).toBe('1 kept');
-  expect(await pullFor('en-US', 0)).toBe('Kept');
-  expect(await pullFor('en-US', undefined)).toBe('Kept');
+/* "x inspirations" (founder, 2026-11-10); Home draws no handle at none. */
+it('says how many inspirations, and only "Inspirations" when it is not told', async () => {
+  expect(await pullFor('en-US', 12)).toBe('12 inspirations');
+  expect(await pullFor('en-US', 1)).toBe('1 inspiration');
+  expect(await pullFor('en-US', undefined)).toBe('Inspirations');
 });
 
 it('says it in Korean order in Korean', async () => {

@@ -112,9 +112,9 @@ async function settle(ms: number): Promise<void> {
 }
 
 async function answer(words: string): Promise<void> {
-  press("Keep a thought");
+  press("Save an inspiration");
   type(words);
-  press("Keep");
+  press("Save");
   await flush();
   await settle(2200);
 }
@@ -167,7 +167,7 @@ describe("the onboarding gate", () => {
     await act(async () => { page.querySelector("form")!.requestSubmit(); });
     await flush();
     expect(vi.mocked(updateAuthProfile).mock.calls[0]![0]).toEqual({ name: "Mina", preferredLocale: "en-US" });
-    expect(page.textContent).toContain("How many notes have you saved and never looked at again?");
+    expect(page.textContent).toContain("How many things have you saved and never looked at again?");
     for (let i = 0; i < 3; i += 1) press("Next");
     press("Start");
     await settle(400);
@@ -230,8 +230,8 @@ describe("three saves, then the first read", () => {
 
   it("does not let Save press with nothing written", async () => {
     const page = await render();
-    press("Keep a thought");
-    const save = [...page.querySelectorAll("button")].find((node) => node.textContent === "Keep")!;
+    press("Save an inspiration");
+    const save = [...page.querySelectorAll("button")].find((node) => node.textContent === "Save")!;
     expect(save.disabled).toBe(true);
   });
 

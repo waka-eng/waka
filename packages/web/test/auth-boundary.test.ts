@@ -261,13 +261,13 @@ describe("auth boundary", () => {
     window.localStorage.removeItem("waka.auth.seenHere");
     let container = await renderAuthRoutes({ initialPath: "/login" });
     expect(container.querySelector("#login-title")?.textContent).toBe("Welcome.");
-    expect(container.textContent).not.toContain("Sign in to return to what you kept.");
+    expect(container.textContent).not.toContain("Sign in to return to what you saved.");
     await act(async () => mountedRoot?.unmount()); mountedRoot = null; container.remove();
 
     window.localStorage.setItem("waka.auth.seenHere", "1");
     container = await renderAuthRoutes({ initialPath: "/login" });
     expect(container.querySelector("#login-title")?.textContent).toBe("Welcome back.");
-    expect(container.textContent).toContain("Sign in to return to what you kept.");
+    expect(container.textContent).toContain("Sign in to return to what you saved.");
   });
 
   it("supports expected keyboard navigation for login and signup tabs", async () => {
@@ -335,7 +335,7 @@ describe("auth boundary", () => {
     });
     await flushReactWork();
 
-    expect(container.textContent).toContain("Start keeping what moves you.");
+    expect(container.textContent).toContain("Start saving what moves you.");
     expect(container.textContent).toContain("Continue with Google");
     const selector = container.querySelector<HTMLSelectElement>(
       'select[name="preferredLocale"]',
@@ -364,7 +364,7 @@ describe("auth boundary", () => {
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
-    expect(container.textContent).toContain("Sign in to return to what you kept.");
+    expect(container.textContent).toContain("Sign in to return to what you saved.");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
@@ -375,7 +375,7 @@ describe("auth boundary", () => {
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
-    expect(container.textContent).toContain("Sign in to return to what you kept.");
+    expect(container.textContent).toContain("Sign in to return to what you saved.");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });

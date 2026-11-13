@@ -594,7 +594,7 @@ async function surfaces(
          image.
 
          SO THE READ STATE IS REACHABLE: attach an image, fill the why, save,
-         then press `Read your note`. That is a cheaper route than the
+         then press `Read your inspiration`. That is a cheaper route than the
          "seed a reflection through the API" this tombstone used to
          prescribe. (`when-it-fails` makes the narrower and accurate claim —
          nothing posts to `POST /api/inspirations/:id/reflections`.)
@@ -605,7 +605,7 @@ async function surfaces(
          run's "never put on screen" list. That list is explicitly NOT a
          deletion list, and this paragraph is why these particular selectors
          are on it. WHAT WOULD RESTORE IT: seed a reflection through the API
-         for the walk's own account, then press `Read your note`. */
+         for the walk's own account, then press `Read your inspiration`. */
       ["letting a memory go", async () => {
         await page.locator(".jar-panel-foot button", { hasText: /delete/i }).first().click({ timeout: 6_000 });
       }],

@@ -123,9 +123,9 @@ async function settle(ms: number): Promise<void> {
 }
 
 async function answer(words: string): Promise<void> {
-  press("Keep a thought");
+  press("Save an inspiration");
   type(words);
-  press("Keep");
+  press("Save");
   await flush();
   await settle(1700);
 }
@@ -176,13 +176,13 @@ describe("a replaced photo", () => {
     await render();
     await choosePhoto(photo("first.png"));
     vi.mocked(createInspiration).mockRejectedValueOnce(new Error("offline"));
-    press("Keep");
+    press("Save");
     await flush();
     expect(container!.querySelector("[role=status].onb-error, .onb-error")).not.toBeNull();
     press("Remove photo");
     await flush();
     await choosePhoto(photo("second.png"));
-    press("Keep");
+    press("Save");
     await flush();
     const calls = vi.mocked(createInspiration).mock.calls;
     expect(calls).toHaveLength(2);
@@ -215,7 +215,7 @@ describe("naming, when this browser keeps nothing", () => {
     await act(async () => { page.querySelector("form")!.requestSubmit(); });
     await flush();
     expect(page.querySelector('input[name="name"]')).toBeNull();
-    expect(page.textContent).toContain("How many notes have you saved and never looked at again?");
+    expect(page.textContent).toContain("How many things have you saved and never looked at again?");
     } finally { blocked.mockRestore(); }
   });
 });

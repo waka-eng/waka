@@ -70,15 +70,15 @@ it("keeps Stop in the bar while a delete is armed during a recording", async () 
 
 it("keeps a recorder failure beside a failed read, and Try again and Delete stay", async () => {
   /* the recorder's error reaches the bar already said, inside `failed` (dev, #443) */
-  const lines = await bar({ readFailed: "Couldn’t open this note.", failed: "The microphone stopped." });
-  expect(lines).toEqual(["Couldn’t open this note.", "The microphone stopped."]);
+  const lines = await bar({ readFailed: "Couldn’t open this inspiration.", failed: "The microphone stopped." });
+  expect(lines).toEqual(["Couldn’t open this inspiration.", "The microphone stopped."]);
   expect(slot.querySelector(".waka-dock-retry")?.textContent).toBe("Try again");
   await openNoteActions();
   expect(document.querySelector('[aria-label="Delete"]')).not.toBeNull();
 });
 
 it('keeps Escape available when the only note action is temporarily disabled', async () => {
-  await bar({ readFailed: 'Couldn’t open this note.', eraseDisabled: true });
+  await bar({ readFailed: 'Couldn’t open this inspiration.', eraseDisabled: true });
   await openNoteActions();
   const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
   expect(document.activeElement).toBe(menu);

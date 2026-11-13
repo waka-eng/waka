@@ -65,7 +65,7 @@ import {
 } from "react";
 import { PrincipleRead } from "../components/PrincipleRead";
 import { publicWebOrigin } from '../lib/public-origins';
-import { createConversation } from "../lib/api/conversations";
+import { createConversation, listConversations } from "../lib/api/conversations";
 import { DialogSurface } from "../components/DialogSurface";
 import { SurfaceHeader } from "../components/SurfaceHeader";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
@@ -93,7 +93,6 @@ import { Menu } from '../components/Menu';
 import { usePageMenu } from '../lib/page-menu';
 import { HomeActionIcon } from '../components/HomeActionIcon';
 import { HomeBar } from '../components/HomeBar';
-import { HomeStream, streamSignals } from '../components/HomeStream';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
 import { SHARED_KEY, SHARED_MAX_AGE_MS, sharedText, type SharedPayload } from '../components/ShareArrival';
@@ -2045,15 +2044,19 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const listing = !making && (viewNavigation.view?.open === 'saves' || viewNavigation.view?.open === 'conversations');
   /** Where a list was opened from by the bar's "All …", so ↩ can go back there (see the dock). */
   const listOrigin = useRef<{ kind: 'chat'; id: string; principleId?: string | null } | null>(null);
-  /* A SAVE OPENED FROM THE SHEET goes back to the sheet by its "<", on the
-     query it was found under; it never lands on a list it did not come from. */
-  const noteFromSheet = useRef<{ query: string } | null>(null);
   /* A CHAT OPENED FROM PAST CHATS closes back to Past chats by its "<", as a
      note opened from the list does. HELD AS THE CONVERSATION'S ID and honoured
      only while that same conversation is open (`chatBackToList`), so no other
      way into a chat — the bubble's or a principle's "Talk about this", a
      browser Back — can inherit it (code review, 2026-11-09). */
   const [chatFromList, setChatFromList] = useState<string | null>(null);
+  /* A CHAT AND PAST CHATS SWAP IN PLACE (founder, 2026-11-10: "I don't like
+     the transition between new chat and past chat"). True while the move is
+     between the two, so the page arriving does not fade: their header and
+     bar are the same and stand still. Home clears it. */
+  const chatSwap = useRef(false);
+  const chatOrList = Boolean(viewNavigation.view?.conversationId) || viewNavigation.view?.open === 'conversations';
+  useEffect(() => { if (!chatOrList) chatSwap.current = false; }, [chatOrList]);
   const chatHere = viewNavigation.view?.conversationId ?? null;
   const chatBackToList = making === 'talk' && chatFromList !== null && chatFromList === chatHere;
   /* AND FORGOTTEN THE MOMENT THE PERSON STANDS ANYWHERE ELSE: the list itself
@@ -2067,7 +2070,6 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     if (chatHere === chatFromList) return;
     setChatFromList(chatFromList === 'new' && before === 'new' && chatHere && chatHere !== 'new' ? chatHere : null);
   }, [chatFromList, chatHere, viewNavigation.view?.open]);
-  const [sheetQuery, setSheetQuery] = useState('');
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
   const [principlesCrossing, setPrinciplesCrossing] = useState<{ going: 'in' | 'out'; home: CreatureSpot | null } | null>(null);
   if (crossSeen.open !== principlesOpen || crossSeen.now !== atNowView) {
@@ -2548,6 +2550,24 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
    */
   const walls = useMemo<Space[]>(() => [{ kind: 'self', id: '', name: SELF_WALL_NAME, col: 0 }], []);
   const conversationScope = storageScope;
+  /* ═══ NO "PAST CHATS" ON A FIRST CHAT (founder, 2026-11-10) ═══════════════
+     The ids of this profile's chats, read when a chat opens, so its header
+     offers Past chats only when there is another chat to go to. Unknown
+     (still reading) draws nothing; a failed read offers it, so a network
+     blip never hides the way to your history. */
+  const chatOpenId = viewNavigation.view?.conversationId ?? null;
+  const chatProfileId = conversationScope?.profileId ?? null;
+  const [chatIds, setChatIds] = useState<{ profile: string; ids: string[] | 'failed' } | null>(null);
+  useEffect(() => {
+    if (!chatOpenId || !chatProfileId) return;
+    const abort = new AbortController();
+    listConversations(chatProfileId, abort.signal)
+      .then(body => setChatIds({ profile: chatProfileId, ids: body.conversations.map(row => row.id) }))
+      .catch(() => { if (!abort.signal.aborted) setChatIds({ profile: chatProfileId, ids: 'failed' }); });
+    return () => abort.abort();
+  }, [chatOpenId, chatProfileId]);
+  const hasOtherChats = (current: string | null) => chatIds?.profile === chatProfileId
+    && (chatIds.ids === 'failed' || chatIds.ids.some(id => id !== current));
   const listViews = useProfileListViews(conversationScope);
   const conversationProfile = { name: auth?.profile?.name ?? say('worldWallMe'), type: 'human' as const };
   const canWriteHere = true;
@@ -4899,9 +4919,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
    */
   const backPageRef = useRef<() => void>(() => undefined);
   const backPage = () => {
-    const fromSheet = noteFromSheet.current;
-    noteFromSheet.current = null;
-    if (fromSheet && savedNoteOpen) { leaveOpen(); setSheetQuery(fromSheet.query); setStreamOpen(true); return; }
     const close = closeSavedNote.current;
     if (close) { close(); return; }
     if (making === 'inspiration') {
@@ -4919,12 +4936,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
        notepad's "<" does for a note opened from the list. Past chats is its
        own word, top-right. */
     if (making === 'talk') {
-      if (chatBackToList) { setChatFromList(null); listOrigin.current = null; openOverHome('conversations'); return; }
+      if (chatBackToList) { chatSwap.current = true; setChatFromList(null); listOrigin.current = null; openOverHome('conversations'); return; }
       closePage(); return;
     }
     const origin = listOrigin.current;
     listOrigin.current = null;
-    if (origin?.kind === 'chat') openTalk(origin.id === 'new' ? null : origin.id, origin.principleId);
+    if (origin?.kind === 'chat') { chatSwap.current = true; openTalk(origin.id === 'new' ? null : origin.id, origin.principleId); }
     /* "HOME" GOES HOME. This stepped back through history, which was right
        while the bar's Home tab was the way home and wrong now the labelled
        Back is (design E1): two archive entries in a row landed the press on
@@ -5260,65 +5277,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
       recorder's clock is not here — it is a control you press to stop, and
       it already stands in the bar as one. */
   const composerState = mouthNote
-    /* ═══ AND THE CLOUD LINE CANNOT BE OUTRANKED OUT OF EXISTENCE ══════
-       SAID ONCE, THE FIRST TIME. Chrome sends speech to its own servers to
-       transcribe it, and a product whose claim is that your material is
-       yours owes that sentence to anybody who presses the microphone. Once
-       per PAGE — not once per utterance and not once per press of the
-       microphone — in the bar, where every other passing line goes, and not
-       in a dialog, because it is a fact rather than a decision and the
-       person is already speaking by the time they can read it. It stands for
-       as long as that first microphone is open and then never again until
-       the page is loaded afresh; `dictation.firstTime` is the half of that
-       sentence this file does not own.
-
-       IT USED TO SIT BELOW `composerDraft.error` AND `recording.error`, in a
-       first-non-empty chain, which made the one line this product is
-       obliged to show the most easily suppressed line on the bar. Drop a
-       file the page cannot read, press the microphone, say nothing: audio
-       streams to a third party and the sentence that says so never appears.
-       There is no browser prompt to fall back on either — the permission
-       was granted on the first visit and is never asked for again — so the
-       disclosure was the ONLY signal, and it was outrankable by a passing
-       error about something else entirely.
-
-       SO IT MOVES ABOVE THE TWO LINES THIS FILE CANNOT CLEAR. Both belong
-       to other hooks: `composerDraft.error` is the draft store's and
-       `recording.error` is the recorder's, and neither has a reset this
-       file may call. A line Home cannot take down is a line that can hide
-       this one for a whole session, which is exactly what happened.
-
-       IT STAYS BELOW `mouthNote`, AND THAT IS NOT AN OVERSIGHT. The press
-       on the microphone clears `mouthNote` itself (see the control in the
-       dock), so nothing that was standing BEFORE the start can outrank the
-       disclosure. What can is a line written AFTER it — "Stop the recording
-       first." when somebody presses `Cmd+Enter` mid-utterance — and that
-       must win: it is the answer to an act taken a moment ago by a person
-       who has already had this sentence on their screen since they opened
-       the microphone.
-
-       AND IT IS GENUINELY ONCE NOW, which this comment used to say was
-       impossible. `firstTime` latched: it went true on the first dictation
-       and was never written false, so `firstTime && listening` was true for
-       EVERY dictation and this line — the one sentence this product is
-       obliged to show — was also the one it showed most often. The note that
-       stood here designed around that instead of fixing it, and said so.
-       `use-dictation.ts` now clears the flag on the second `start()`; its
-       doc comment carries what was weighed, including the real argument that
-       a disclosure about audio leaving the device SHOULD repeat. It loses to
-       Law 4: a notice on its fortieth showing is furniture.
-
-       WHAT WAS REJECTED: putting it first outright, above `mouthNote` as
-       well. The old reason for refusing it is gone — a line that is true for
-       one dictation can no longer swallow a whole session's answers — but
-       the better reason stands and always did: what can outrank the
-       disclosure is a line written AFTER it, "Stop the recording first."
-       when somebody presses `Cmd+Enter` mid-utterance, and that must win. It
-       is the answer to an act taken a moment ago by a person who has had
-       this sentence on their screen since they opened the microphone.
-       Nothing that was standing BEFORE the press can outrank it, because the
-       press on the microphone clears `mouthNote` itself. */
-    || (dictation.firstTime && dictation.listening ? say('worldComposerDictateCloud') : '')
+    /* The line that said Chrome sends speech to its own service stood here,
+       first after `mouthNote`; it went at the founder's word (2026-11-10). */
     /* both are catalogue keys, said here in the reader's language */
     || (composerDraft.error ? say(composerDraft.error) : '') || (recording.error ? say(recording.error) : '')
     || (dictation.error === 'dictation-denied' ? say('worldComposerDictateDenied') : '')
@@ -7417,40 +7377,20 @@ const RETRY_READ_LIMIT_MS = 20_000;
      Pulled up over the home; it goes down again whenever home is left.
      Principles are read for it once per profile, the same GET their own
      page makes. */
-  const [streamOpen, setStreamOpen] = useState(false);
-  /* Left the sheet's save some other way: its "<" is the list's again. */
-  /* AND THE BROWSER'S BACK DOES WHAT ITS "<" DOES (nav system R3): a note
-     opened from the sheet that is left by a history step (browser Back,
-     Android's back through history) and lands on home brings the sheet
-     back up on its query, exactly as the note's "<" does. The "<" itself
-     clears `noteFromSheet` before it leaves, so it never comes through here. */
-  const noteWasOpen = useRef(false);
-  useEffect(() => {
-    const was = noteWasOpen.current; noteWasOpen.current = savedNoteOpen;
-    if (savedNoteOpen || !was) return;
-    const fromSheet = noteFromSheet.current;
-    noteFromSheet.current = null;
-    if (fromSheet && atNowView && !reviewing) { setSheetQuery(fromSheet.query); setStreamOpen(true); }
-  }, [savedNoteOpen, atNowView, reviewing]);
-  const streamShown = streamOpen && phase === 'ready' && atNowView && !reviewing && !mouthOpen && atWall.kind === 'self';
   /* ═══ THE CORNERS ARE HOME'S, AND ONLY HOME'S (nav system R6) ═══════════
      Me / My agent top-left, i and settings top-right, stand on Now and the
      agent wall at rest and nowhere else: every page and sheet owns its top
      row through its header. ONE boolean, read by both corner clusters, so
      the two can never disagree about where they stand again. */
-  const homeChromeShown = atNowView && !reviewing && !streamShown && !panelOpen && !mouthOpen && !savedNoteOpen &&
+  const homeChromeShown = atNowView && !reviewing && !panelOpen && !mouthOpen && !savedNoteOpen &&
     seek === null && !thingShare && !inSky;
-  /* A SHEET PULLED UP IS ALWAYS FRESH, and every way off it drops its query;
-     only a result's "<" brings one back (`backPage`, `noteFromSheet`). */
-  const openSheet = useCallback(() => { noteFromSheet.current = null; setSheetQuery(''); setStreamOpen(true); }, []);
-  const leaveSheet = useCallback(() => { setSheetQuery(''); setStreamOpen(false); }, []);
-  useEffect(() => { if (!atNowView || reviewing) leaveSheet(); }, [atNowView, reviewing, leaveSheet]);
-  useEffect(() => {
-    if (!streamShown || principlesRead || offline || !memoryProfileId) return;
-    let live = true;
-    void fetchPrinciples({ profile: memoryProfileId }).then(rows => { if (live) acceptPrinciples(rows); }).catch(() => undefined);
-    return () => { live = false; };
-  }, [streamShown, principlesRead, offline, memoryProfileId, acceptPrinciples]);
+  /* ═══ ONE SAVED PAGE (founder, 2026-11-10: "why are there 2 views of
+     this") ═══ The handle, a read's See all and a save's See all pulled up
+     a sheet titled Saved with its own search and a "Saved ›" heading that
+     opened the archive, also titled Saved with its own search. Now every
+     one of them opens the archive, the one page that has every save, the
+     search and Deleted. The sheet's patterns went to Principles. */
+  const openSheet = useCallback(() => { listOrigin.current = null; openOverHome('saves'); }, [openOverHome]);
   /* ═══ THE NOTE BAR'S PARTS (design E3, Writing, PhotoNote) ═══════════════
      They stood in the dock's middle group; the notepad draws them now, in a
      slim row UNDER its words so the words get the whole width — mic on the
@@ -10112,7 +10052,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           /* SPEECH HAS ITS OWN VIEW (founder, 2026-11-08): while dictation
              listens, the bar gives way to `ListeningView`; Done stops it and
              the words stand in the note as text. */
-          listening={dictation.listening ? { notice: dictation.firstTime ? say('worldComposerDictateCloud') : undefined, onDone: () => dictation.stop() } : undefined}
+          listening={dictation.listening ? { onDone: () => dictation.stop() } : undefined}
           onRetryFile={id => { void retryDraftFile(id); }}
           onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
@@ -10140,6 +10080,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           }}
           asking={leaveAsking} onStay={() => setLeaveAsking(false)}
           onClose={() => saveAsDraft()} onSubmit={() => { void keepIt(); }}
+          onPast={!inspirations || inspirations.length + fieldBeyond === 0 ? undefined : () => saveAsDraft(() => { listOrigin.current = null; openOverHome('saves'); })}
           onBack={backPage} gesture={viewNavigation.href}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
@@ -11331,28 +11272,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
           is here, and until then this one stands in, Close to home. */}
       {phase === 'ready' && (((listing || making === 'talk') && !(conversationScope && conversationProfile)) || (principlesOpen && !storageScope)) ? <div className="waka-surface-strip">
         <SurfaceHeader locale={locale} back={{ kind: 'close', onBack: closePage }} /></div> : null}
-      {streamShown ? (
-        <HomeStream locale={locale} inspirations={inspirations ?? []} signals={streamSignals(signals)} principles={principles}
-          profileId={conversationScope?.profileId ?? null}
-          onOpenArchive={() => { leaveSheet(); listOrigin.current = null; openOverHome('saves'); }}
-          /* THE SAME CALL "View principles" MADE: the walk from Now. The
-             sheet is not an address, so the page still stands on Now and
-             the creature crosses as it does from the bubble. */
-          onOpenPrinciples={() => { leaveSheet(); toPrinciples(); }}
-          onClose={leaveSheet}
-          query={sheetQuery} onQueryChange={setSheetQuery}
-          /* THE ONE ROUND TRIP THE QUERY OUTLIVES: it rides on the note's
-             "<" (`noteFromSheet`), not on the sheet's own state. */
-          onOpenSave={(id, query) => { leaveSheet(); noteFromSheet.current = { query }; viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }); }}
-          more={fieldBeyond > 0 ? { onSeeAll: () => { leaveSheet(); listOrigin.current = null; openOverHome('saves'); } } : undefined} />
-      ) : null}
       {/* "{n} INSPIRATIONS" LEFT THE NOTEPAD (founder, 2026-11-08: "i also dont
-          like seeing 0 inspirations while im saving sth new"). Saves are
-          reached from home (Kept ⌃, then its "Kept ›" heading), not from a new note. */}
+          like seeing 0 inspirations while im saving sth new"). Inspirations
+          are reached from home by the handle over the bar, and from a new
+          one by its "Past inspirations". */}
       {/* ═══ THE HOME BAR (design E1) ══════════════════════════════════════
           Write · Photo · Say it in one pill, Chat beside it — see
-          `HomeBar`. It stands on home (and under the Kept sheet, which rises
-          from its "{n} kept") and nowhere else (nav system R7): every page
+          `HomeBar`. It stands on home and nowhere else (nav system R7): every page
           leaves by its header's "<", and the notepad, a saved note and a
           chat write into the one `NoteBar`. */}
       {phase === 'ready' && atNowView && !reviewing && !savedNoteOpen && !viewNavigation.view?.sharePrinciple ? (
@@ -11380,8 +11306,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
              your own field, so it is yours alone; the agent's saves are its
              archive's, which leads with the same search. With the Actions
              menu gone this is the agent wall's one door to them. */
-          pull={standingAsAgent ? { onOpen: () => { listOrigin.current = null; openOverHome('saves'); } }
-            : streamShown ? undefined : {
+          /* NO HANDLE AT NONE (founder, 2026-11-10: "only make that
+             inspirations caret clickable if at least 1 exists. dont show it
+             if 0"), and none while the count is still unknown, so it never
+             flashes in and out. */
+          pull={standingAsAgent ? { onOpen: openSheet }
+            : !inspirations || inspirations.length + fieldBeyond === 0 ? undefined : {
               onOpen: openSheet,
               /* "{n} KEPT ⌃" (founder: "should be x kept"). The same count
                  the field keeps true through every keep and removal
@@ -11393,8 +11323,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
         /* NO ACTIONS MENU (2026-11-08). Founder: "i hate this. better
            position these 4 actions in current experience." Search is the
-           field at the top of the Saves sheet; past chats are the chat
-           page's own; View principles is the sheet's "Principles ›"; and
+           field at the top of Inspirations; past chats are the chat page's
+           own; principles are the bubble's "See all"; and
            review is asked by the creature, glasses on, when there is any. */
         /* THE CORNER IS CHAT, AND THE FORM SWITCH IS ON THE CREATURE.
            Founder: "I kind of want to give the feeling of, rather than my
@@ -11510,6 +11440,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         /* ONE HANDLER FOR "<" AND ESCAPE: Back on an open note (to the list
            or the sheet), on a list opened from a chat (to the chat); Close
            otherwise (home). */
+        onNew={canWriteHere ? startNewInspiration : undefined}
         onBack={backPage} backKind={listOrigin.current ? 'back' : 'close'} gesture={viewNavigation.href}/>:null}
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
@@ -11517,6 +11448,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
         name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
         title={atWall.kind==='agent'?formatMessage(locale,'worldProfilePrinciples',{name:atWall.name}):say('worldPrinciplesShortcut')}
         whose={atWall.kind==='agent'?'agent':'own'}
+        patterns={atWall.kind==='agent'?undefined:(signals??[]).filter(row=>row.status==='active'||row.status==='emerging')
+          .sort((a,b)=>b.lastEvidenceMs-a.lastEvidenceMs).map(row=>({id:row.id,statement:row.statement,forming:row.status==='emerging'}))}
         onNewSave={atWall.kind==='agent'?undefined:startNewInspiration}
         newSaveLabel={say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}
         onClose={closePage} gesture={principlesCrossing ? null : viewNavigation.href}
@@ -11546,7 +11479,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
         locale={locale} profileId={conversationScope.profileId}
         title={say('worldPastChats')}
         onBack={backPage} backKind={listOrigin.current ? 'back' : 'close'} gesture={viewNavigation.href}
-        onOpen={id=>{ openTalk(id); setChatFromList(id ?? 'new'); }}/>:null}
+        still={chatSwap.current}
+        onOpen={id=>{ chatSwap.current = true; openTalk(id); setChatFromList(id ?? 'new'); }}/>:null}
 
       {/* THE CONVERSATION ITSELF, ALSO OVER THE WORLD.
           Founder: "also dont move talk to waka in a new page. find better
@@ -11579,21 +11513,24 @@ const RETRY_READ_LIMIT_MS = 20_000;
               header's "<", and Escape calls the same handler. `way-out.test.ts`
               reads `data-way-out`. IT IS A `<section>` AND NOT A `<main>`:
               `ConversationPanel` renders its own `<main className="chat-page">`. */}
-          <DialogSurface className="waka-over waka-over--talk" motion="modal" aria-label={say('worldConversationTitle')}
+          <DialogSurface className="waka-over waka-over--talk" motion={chatSwap.current ? undefined : 'modal'} aria-label={say('worldConversationTitle')}
             data-way-out="talk"
             modal={false}
             focusFirst={false}
             escapeLeavesAsModal={false}
             onClose={backPage}>
             {/* THE SHARED HEADER (nav system): "<" Close to home, or Back to
-                Past chats when the chat was opened from there; "Chat" in the
-                middle; "Past chats" the one word on the right (founder). The
+                Past chats when the chat was opened from there; nothing in the
+                middle (founder, 2026-11-10: "remove the text chat in the
+                middle", a screen reader still hears it); "Past chats" the
+                one word on the right (founder). The
                 "<" and Escape are the same handler, `backPage`. */}
             <SurfaceHeader locale={locale} gesture={viewNavigation.href}
               back={{ kind: chatBackToList ? 'back' : 'close', onBack: backPage }}
-              title={say('worldConversationTitle')}
-              right={viewNavigation.view?.sharePrinciple ? undefined : <button type="button" className="waka-surface-act"
+              srTitle={say('worldConversationTitle')}
+              right={viewNavigation.view?.sharePrinciple || !hasOtherChats(talkId) ? undefined : <button type="button" className="waka-surface-act"
                 onClick={() => {
+                  chatSwap.current = true;
                   listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new', principleId: viewNavigation.view?.principleId };
                   openOverHome('conversations');
                 }}>{say('worldPastChats')}</button>} />
@@ -11601,8 +11538,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               scope={conversationScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
-
-              onHistory={()=>{listOrigin.current={kind:'chat',id:talkId??'new',principleId:viewNavigation.view?.principleId};openOverHome('conversations');}}
+              onHistory={()=>{chatSwap.current=true;listOrigin.current={kind:'chat',id:talkId??'new',principleId:viewNavigation.view?.principleId};openOverHome('conversations');}}
               /* The bar's middle group, lent for the mic and the ＋. */
               onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};}}
               /* `replace` on the new-to-id hop so dismissing does not land

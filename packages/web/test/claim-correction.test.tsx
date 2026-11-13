@@ -445,7 +445,7 @@ it("leaves the questions by the page's \"<\", with no bar while they are up", as
   const bar = () => [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item, .waka-home-bar-row button")]
     .map((n) => n.getAttribute("aria-label") || n.textContent?.trim());
   await mountQueue(CLAIM, SECOND);
-  expect(bar(), "the bar before review").toEqual(["Keep a thought", "Keep a screenshot", "Keep your voice", "Chat"]);
+  expect(bar(), "the bar before review").toEqual(["Save an inspiration", "Save a screenshot", "Save your voice", "Chat"]);
   await diveIntoReview(world.container, world.step);
   expect(bar(), "the bar while reviewing").toEqual([]);
   const back = world.container.querySelector<HTMLButtonElement>(".waka-surface-back")!;
@@ -453,7 +453,7 @@ it("leaves the questions by the page's \"<\", with no bar while they are up", as
   await act(async () => { back.click(); });
   expect(card(), "the \"<\" left the cards up").toBeNull();
   expect(invite(), "the \"<\" should return to the reading").toBeNull();
-  expect(bar(), "the bar after review").toEqual(["Keep a thought", "Keep a screenshot", "Keep your voice", "Chat"]);
+  expect(bar(), "the bar after review").toEqual(["Save an inspiration", "Save a screenshot", "Save your voice", "Chat"]);
 });
 
 it("keeps → for the card while reviewing, and gives it back to Principles when the last card is answered", async () => {

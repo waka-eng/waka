@@ -42,9 +42,15 @@ export function NoteBar(props: {
     <div className={`waka-note-bar${props.className ? ` ${props.className}` : ''}`} data-note-bar="1" data-field={field ? '1' : undefined}>
       {props.above}
       {field && props.state ? <span className="waka-note-bar-state">{props.state}</span> : null}
+      {/* WITH A FIELD, THE WORDS GET THE FIRST LINE AND THE TOOLS THE
+          SECOND (founder, 2026-11-10, showing a composer with its + and mic
+          on a row under the text: "put the logos at the second line"). The
+          field is the whole width; mic, photo and file sit under its start,
+          Send under its end. */}
+      {field ? <span className="waka-note-bar-field">{props.children}</span> : null}
       <div className="waka-note-bar-row">
         <span className="waka-note-bar-tools">{props.tools}</span>
-        {field ? <span className="waka-note-bar-field">{props.children}</span> : <span className="waka-note-bar-state">{props.state}</span>}
+        {field ? null : <span className="waka-note-bar-state">{props.state}</span>}
         {props.action}
       </div>
     </div>

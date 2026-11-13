@@ -16,5 +16,5 @@ export function inspirationPreview(text: string, attachments: Pick<ApiAttachment
   return [counts.image ? `${counts.image === 1 ? 'Photo' : `${counts.image} photos`}` : '',
     counts.audio ? `${counts.audio === 1 ? 'Recording' : `${counts.audio} recordings`}` : '',
     counts.link ? `${counts.link === 1 ? 'Link' : `${counts.link} links`}` : '',
-    counts.file ? `${counts.file === 1 ? 'File' : `${counts.file} files`}` : ''].filter(Boolean).join(' · ') || 'Note';
+    counts.file ? `${counts.file === 1 ? 'File' : `${counts.file} files`}` : ''].filter(Boolean).join(' · ') || 'Inspiration';
 }

@@ -56,7 +56,9 @@ beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { 
 beforeEach(() => {
   localStorage.clear(); sessionStorage.clear(); committed.row = null;
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  vi.mocked(listConversations).mockImplementation(async (profile) => ({ profileId: profile, conversations: [], generationEnabled: true }));
+  /* One earlier chat, so a chat has somewhere for Past chats to go; a first
+     chat has none (see "offers no Past chats on a first chat"). */
+  vi.mocked(listConversations).mockImplementation(async (profile) => ({ profileId: profile, conversations: [{ id: 'earlier', profileId: profile, revision: 1, preview: 'An earlier chat', updatedAt: '2026-11-01T00:00:00Z' } as never], generationEnabled: true }));
   vi.mocked(createConversation).mockImplementation(async (profile, id, _signal, _principle, first) => {
     committed.row = { id, profileId: profile, revision: 1, generationEnabled: true, createdAt: '2026-10-15T00:00:00Z', updatedAt: '2026-10-15T00:00:00Z',
       messages: [{ id: first!.id, profileId: profile, conversationId: id, position: 1, role: 'user', content: first!.content, createdAt: '2026-10-15T00:00:00Z' }] };
@@ -97,15 +99,21 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
      [the notepad's note bar]. use the same code so it looks identical" —
      and "< on top left should be closing this like how it does for the
      saving. put Past Chats in top right corner instead." */
+  it('offers no Past chats on a first chat (founder, 2026-11-10)', async () => {
+    vi.mocked(listConversations).mockImplementation(async (profile) => ({ profileId: profile, conversations: [], generationEnabled: true }));
+    await aNewChat(); await settle();
+    expect(world!.container.querySelector('.waka-surface-right .waka-surface-act'), 'a first chat offers Past chats').toBeNull();
+  });
+
   it('gives a chat the shared note bar: the words, then photo and file on the left and Send on the right, and no dock', async () => {
     await aNewChat();
     const bar = world!.container.querySelector('footer.chat-composer [data-note-bar="1"]');
     expect(bar, 'the chat does not write into the note bar').toBeTruthy();
-    /* ONE PILL (founder, 2026-11-09: "so much wasted space at bottom"): the
-       field sits in the row between the tools and Send, one line at rest. */
-    expect(bar!.querySelector(':scope > .waka-note-bar-row > .waka-note-bar-field > .chat-input-label textarea'), 'the words are not in the pill between the tools and Send').toBeTruthy();
+    /* TWO LINES (founder, 2026-11-10: "put the logos at the second line"):
+       the words across the top, then a row of tools and Send under them. */
+    expect(bar!.querySelector(':scope > .waka-note-bar-field > .chat-input-label textarea'), 'the words are not the first line').toBeTruthy();
     const row = [...bar!.querySelector('.waka-note-bar-row')!.children].map(node => node.className);
-    expect(row, 'the pill is not tools, then the words, then Send').toEqual(['waka-note-bar-tools', 'waka-note-bar-field', expect.stringContaining('waka-note-bar-action')]);
+    expect(row, 'the second line is not tools, then Send').toEqual(['waka-note-bar-tools', expect.stringContaining('waka-note-bar-action')]);
     expect(noteBarShape()).toEqual(['Add photo', 'Add file', 'Send']);
     expect(world!.container.querySelectorAll('.chat-page textarea'), 'more than one message field').toHaveLength(1);
     expect(world!.container.querySelector('nav.waka-dock'), 'a dock stands under the chat').toBeNull();
@@ -174,7 +182,7 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     await act(async () => back!.click()); await settle();
     expect(location.pathname, 'the "<" left the chat up').not.toContain('/chat/');
     expect(open(), 'the "<" on a chat went somewhere other than home').toBeNull();
-    expect(homeBarShape(world!.container), 'home is not back to the home bar').toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
+    expect(homeBarShape(world!.container), 'home is not back to the home bar').toEqual(['Save an inspiration', 'Save a screenshot', 'Save your voice', 'Chat']);
     expect(world!.container.querySelector('.chat-composer'), 'the chat\'s composer outlived the chat').toBeNull();
 
     await pressHomeBar(world!.container, 'Chat'); await settle();
@@ -183,6 +191,15 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     await act(async () => past!.click()); await settle();
     expect(location.pathname, 'Past chats left the chat up').not.toContain('/chat/');
     expect(open(), 'Past chats did not open the chats list').toBe('conversations');
+    /* The same header and the same bar (founder, 2026-11-10): Past chats has
+       the chat's bar at its foot, it does not fade in from the chat, and a
+       press on the bar's field starts a new chat. */
+    const list = world!.container.querySelector<HTMLElement>('.waka-over--chats')!;
+    expect(list.getAttribute('data-motion'), 'Past chats faded in from a chat').toBeNull();
+    const field = list.querySelector<HTMLButtonElement>('.waka-over-foot [data-note-bar] .waka-over-foot-field');
+    expect(field?.textContent).toBe('What’s on your mind?');
+    await act(async () => field!.click()); await settle();
+    expect(location.pathname, 'the bar did not start a new chat').toContain('/chat/new');
   });
 
   it('returns from history to the same principle-started draft', async () => {
@@ -200,22 +217,22 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     expect((await chatField(world.container)).value).toBe('Keep this question with its starting point.');
   });
 
-  /* THE HOME BAR'S PILL (2026-11-09): "Keep a thought…" is words alone,
+  /* THE HOME BAR'S PILL (2026-11-09): "Save an inspiration…" is words alone,
      the picture and the mic are glyphs alone, decorative and hidden, so each
      is named by its whole act (and titled with it, for a pointer). The round
      Chat is a glyph with a name. */
-  it('reads "Keep a thought…" then a hidden picture and mic glyph, and names the round Chat', async () => {
+  it('reads "Save an inspiration" then a hidden picture and mic glyph, and names the round Chat', async () => {
     world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-    expect(homeBarShape(world!.container)).toEqual(['Keep a thought', 'Keep a screenshot', 'Keep your voice', 'Chat']);
+    expect(homeBarShape(world!.container)).toEqual(['Save an inspiration', 'Save a screenshot', 'Save your voice', 'Chat']);
     const named = (name: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-row button')]
       .find(node => (node.getAttribute('aria-label') || node.textContent?.trim()) === name);
     /* The visible words begin with the name, so speech input by the
        visible words still lands. */
-    const thought = named('Keep a thought');
-    expect(thought, 'no home bar button reads Keep a thought').toBeTruthy();
-    expect(thought!.textContent!.trim()).toBe('Keep a thought…');
-    expect(thought!.querySelector('svg'), 'Keep a thought carries a glyph').toBeNull();
-    for (const [name, kind] of [['Keep a screenshot', 'photo'], ['Keep your voice', 'record'], ['Chat', 'bubble']] as const) {
+    const thought = named('Save an inspiration');
+    expect(thought, 'no home bar button reads Save an inspiration').toBeTruthy();
+    expect(thought!.textContent!.trim()).toBe('Save an inspiration');
+    expect(thought!.querySelector('svg'), 'Save an inspiration carries a glyph').toBeNull();
+    for (const [name, kind] of [['Save a screenshot', 'photo'], ['Save your voice', 'record'], ['Chat', 'bubble']] as const) {
       const button = named(name);
       expect(button, `no home bar button reads ${name}`).toBeTruthy();
       const glyphs = button!.querySelectorAll('svg');

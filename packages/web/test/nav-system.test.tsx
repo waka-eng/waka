@@ -15,7 +15,7 @@
  *     Back or Close, no word beside it, at most one right-hand item;
  *   - Escape on every page does exactly what its "<" does;
  *   - the corners (Me / My agent, i, settings) stand on home only, and the
- *     home bar on home only (and under the Kept sheet that rises from it). */
+ *     home bar on home only. */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -117,22 +117,17 @@ async function openPastChatsFromAChat() {
 async function openAt(address: string) {
   world = await mountWorld(FACTS, { initialEntries: [address], routerTools: <RouterTools /> }); await settle();
 }
-async function openKeptSheet() {
-  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
-  await act(async () => c().querySelector<HTMLButtonElement>('.waka-home-bar-pull')!.click()); await settle();
-}
 
 /* EVERY PAGE AND SHEET: [what, how to get there, its "<" name, its title, home bar under it]. */
 const SURFACES: Array<[string, () => Promise<void>, 'Back' | 'Close', RegExp | null, boolean]> = [
-  ['the Kept list', () => openAt('/?open=saves'), 'Close', /^Kept/, false],
+  ['the Kept list', () => openAt('/?open=saves'), 'Close', /^Inspirations/, false],
   ['Past chats', () => openAt('/?open=conversations'), 'Close', /^Past chats$/, false],
-  ['a new chat', () => openAt('/chat/new'), 'Close', /^Chat$/, false],
-  ['a chat from Past chats', openChatFromPastChats, 'Back', /^Chat$/, false],
+  ['a new chat', () => openAt('/chat/new'), 'Close', /^$/, false],
+  ['a chat from Past chats', openChatFromPastChats, 'Back', /^$/, false],
   ['Past chats from a chat', openPastChatsFromAChat, 'Back', /^Past chats$/, false],
   ['the notepad', () => openAt('/?compose=1'), 'Close', /^Saving to You · /, false],
   ['a saved note', openSavedNote, 'Back', /^You · /, false],
   ['Principles', () => openAt('/?open=principles'), 'Close', /^Principles$/, false],
-  ['the Kept sheet', openKeptSheet, 'Close', /^Kept$/, true],
 ];
 
 describe('every page and sheet draws the one header', () => {
@@ -151,15 +146,15 @@ describe('every page and sheet draws the one header', () => {
     expect(c().querySelector('.waka-home-bar'), 'the home bar left home').not.toBeNull();
   });
 
-  it('keeps "Past chats" the one word top right of a chat, and nothing top right of the notepad or the Kept list', async () => {
+  it('keeps one word top right: Past chats on a chat, Past inspirations on the notepad, New inspiration on the list', async () => {
     await openAt('/chat/new');
     expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent).toBe('Past chats');
     world!.unmount();
     await openAt('/?compose=1');
-    expect(headers()[0]!.querySelector('.waka-surface-right')?.children.length ?? 0).toBe(0);
+    expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent).toBe('Past inspirations');
     world!.unmount();
     await openAt('/?open=saves');
-    expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent ?? '', 'Keep a thought came back to the Kept list').toBe('');
+    expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent ?? '', 'the Saved list has no New note, as Past chats has New chat').toBe('New inspiration');
   });
 });
 
@@ -186,27 +181,6 @@ describe('Escape goes exactly where the "<" goes', () => {
     await act(async () => target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))); await settle();
     expect(where(), `${what}: Escape went somewhere the "<" does not`).toBe(byGlyph);
     expect(Boolean(c().querySelector('.waka-stream')), `${what}: Escape and the "<" disagree about the sheet`).toBe(sheetByGlyph);
-  });
-});
-
-/* THE BROWSER'S BACK AGREES WITH THE "<" TOO, where history alone would not:
-   a note opened from the Kept sheet goes back to the sheet, on its query. */
-describe('browser Back does what the "<" does', () => {
-  async function noteFromSheet() {
-    await openKeptSheet();
-    await act(async () => c().querySelector<HTMLButtonElement>('.waka-stream-save')!.click()); await settle();
-    expect(c().querySelector('.waka-over--note'), 'the note did not open from the sheet').not.toBeNull();
-  }
-  it('returns a note opened from the Kept sheet to the sheet, on its query, by "<" and by browser Back alike', async () => {
-    await noteFromSheet();
-    await act(async () => topBack()!.click()); await settle();
-    const byGlyph = { at: where(), sheet: Boolean(c().querySelector('.waka-stream')), query: c().querySelector<HTMLInputElement>('.waka-stream input[type="search"]')?.value };
-    expect(byGlyph.sheet, 'the "<" did not bring the sheet back').toBe(true);
-    world!.unmount(); world = undefined;
-    await noteFromSheet();
-    await act(async () => { go(-1); }); await settle();
-    expect({ at: where(), sheet: Boolean(c().querySelector('.waka-stream')), query: c().querySelector<HTMLInputElement>('.waka-stream input[type="search"]')?.value },
-      'browser Back from a note opened in the sheet did not return to the sheet').toEqual(byGlyph);
   });
 });
 
@@ -244,7 +218,7 @@ describe('the source keeps one system', () => {
 
   it('reads the corners off one boolean, and that boolean means home', () => {
     const home = code(readFileSync(join(SRC, 'pages/Home.tsx'), 'utf8'));
-    expect(home).toMatch(/const homeChromeShown = atNowView && !reviewing && !streamShown/);
+    expect(home).toMatch(/const homeChromeShown = atNowView && !reviewing && !panelOpen/);
     expect(home.match(/hidden=\{!homeChromeShown\}/g), 'a corner cluster has its own hide list again').toHaveLength(2);
   });
 

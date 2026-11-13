@@ -210,7 +210,7 @@ async function press(word: RegExp): Promise<void> {
 describe("the capture remembers where it last went", () => {
   it('retries an uncertain keep with the original request identity', async () => {
     saveControl.loseNext = true;
-    await worldWithTheMouthOpen(); await press(/^keep$/i);
+    await worldWithTheMouthOpen(); await press(/^save$/i);
     expect(saveCalls).toHaveLength(1);
     expect(saveCalls[0]?.requestId).toMatch(/^[0-9a-f-]{36}$/);
     await act(async () => layout!.container.querySelector<HTMLButtonElement>('.jar-source-status button')!.click());
@@ -221,7 +221,7 @@ describe("the capture remembers where it last went", () => {
 
   it('does not replace a newer draft when an earlier keep finishes', async () => {
     saveControl.holdNext = true;
-    await worldWithTheMouthOpen(); await press(/^keep$/i);
+    await worldWithTheMouthOpen(); await press(/^save$/i);
     /* `.jar-mouth-rest` is the keep box now, and a field reopens the composer
        by taking focus rather than by being pressed. */
     await act(async () => layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-rest')!.dispatchEvent(new FocusEvent('focusin',{bubbles:true})));
@@ -238,7 +238,7 @@ describe("the capture remembers where it last went", () => {
 
   it('Escape keeps a newer short draft while an earlier save is uncertain', async () => {
     saveControl.loseNext = true;
-    await worldWithTheMouthOpen(); await press(/^keep$/i);
+    await worldWithTheMouthOpen(); await press(/^save$/i);
     await act(async () => layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-rest')!.dispatchEvent(new FocusEvent('focusin',{bubbles:true})));
     const field = layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-field')!;
     await act(async () => {
