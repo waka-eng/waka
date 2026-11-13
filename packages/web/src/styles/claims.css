@@ -6896,17 +6896,19 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 .waka-reading-preview { flex-shrink: 0; width: 100%; }
 .jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  /* THREE LINES, everywhere (design F1): "Why?" and "Talk about this" carry
-     the rest, and pressing the sentence opens it in full. */
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
+  /* NEVER CUT OFF (founder, 2026-11-12: "on your mind lately should never be
+     cut off like this"). It was three lines and an ellipsis; now the whole
+     read stands in the bubble. A read longer than the screen allows scrolls
+     inside the bubble rather than losing its end, and Why? and Chat about
+     this stay under it. */
+  display: block;
+  max-height: 40dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-/* MEASURED at 874×402: two complete lines leave both actions inside the bubble. */
+/* MEASURED at 874×402: a short window keeps both actions inside the bubble. */
 @media (max-height: 500px) {
-  .jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading { -webkit-line-clamp: 2; line-clamp: 2; }
+  .jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading { max-height: 30dvh; }
 }
 .waka-reading-sheet { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: max(var(--sp-16), env(safe-area-inset-top)) var(--sp-16) max(var(--sp-16), env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--paper) 85%, transparent); }
 .waka-reading-full { display: flex; flex-direction: column; width: min(36rem, 100%); max-height: 100%; overflow: hidden; padding: var(--sp-24); border: 1px solid var(--line); border-radius: var(--sp-24); background: var(--paper); color: var(--ink); font-family: var(--waka-face); }
