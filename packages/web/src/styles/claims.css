@@ -7741,3 +7741,31 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 .waka-note-bar .waka-note-bar-row .waka-note-bar-action { display: inline-flex; align-items: center; justify-content: center; min-width: var(--waka-corner); padding: 0; }
 .waka-note-bar .waka-note-bar-action svg { width: 1.4em; height: 1.4em; }
 }
+
+@layer chrome {
+/* ═══ THE SPARK THAT SAYS PRINCIPLES ARE TO THE RIGHT (founder, 2026-11-12) ═
+   At the right edge on the creature's own line (`--jar-char-mid`, the same
+   value the creature's press sits on), a 44px press holding one small
+   four-point spark. It rests dim and glints every few seconds: light is the
+   only meaning channel, so the hint is a light, not an arrow or a word. */
+.waka-principles-spark {
+  position: absolute; z-index: 3;
+  right: max(var(--sp-6), env(safe-area-inset-right));
+  top: var(--jar-char-mid, 50%); transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: var(--waka-corner); height: var(--waka-corner); padding: 0;
+  border: 0; border-radius: 50%; background: none; color: var(--jar-live);
+  cursor: pointer; pointer-events: auto;
+}
+.waka-principles-spark svg { animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
+@keyframes waka-spark-glint {
+  0%, 70%, 100% { opacity: 0.3; transform: scale(0.7) rotate(0deg); }
+  80% { opacity: 1; transform: scale(1.15) rotate(20deg); }
+  90% { opacity: 0.6; transform: scale(0.9) rotate(35deg); }
+}
+.waka-principles-spark:hover svg, .waka-principles-spark:focus-visible svg { animation-play-state: paused; opacity: 1; transform: scale(1); }
+.waka-principles-spark:focus-visible { outline: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .waka-principles-spark svg { animation: none; opacity: 0.6; }
+}
+}

@@ -1098,3 +1098,16 @@ it('steps a saved note back to its list, then the list home, by its "<"', async 
   expect(location.pathname + location.search).toBe('/');
 });
 
+
+/* A SPARK AT THE RIGHT EDGE (founder, 2026-11-12): home says Principles lie
+   to the right with one small light, level with the creature; a press goes
+   there. It stands on home only. */
+it('shows a spark at the right edge on home that walks to Principles', async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools/> }); await settle();
+  const spark = world.container.querySelector<HTMLButtonElement>('.waka-principles-spark');
+  expect(spark, 'home has no spark toward Principles').not.toBeNull();
+  expect(spark!.getAttribute('aria-label')).toBe('Principles');
+  await act(async () => spark!.click()); await settle();
+  expect(open(), 'the spark did not open Principles').toBe('principles');
+  expect(world.container.querySelector('.waka-principles-spark'), 'the spark stayed off home').toBeNull();
+});
