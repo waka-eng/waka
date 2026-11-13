@@ -851,7 +851,7 @@ describe("deleting a memory", () => {
        loses its ground. A warning that implied the signal went with it would
        be false, and false in the direction that stops people deleting. */
     const said = (ask?.textContent ?? "").toLowerCase();
-    expect(said).toContain("won’t undo the pattern");
+    expect(said).toContain("stay after you delete it");
 
     /* the lit answer is keeping it: this is a door that would rather not be
        walked through */

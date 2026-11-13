@@ -4893,6 +4893,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
   /** A principle's "<" (and its Escape): back to the Principles page. */
   const backToPrinciples = () => viewNavigationRef.current.write({ ...EMPTY_VIEW, wallId: viewNavigationRef.current.view?.wallId ?? null, open: 'principles' });
   const backToPrinciplesRef = useRef(backToPrinciples); backToPrinciplesRef.current = backToPrinciples;
+  /* A PAGE WHOSE OWNER IS NOT KNOWN YET stands in with its own "<"; Escape
+     is that "<" too (nav system R3; back audit, 2026-11-12). */
+  const standingIn = ((listing || making === 'talk') && !(conversationScope && conversationProfile)) || (principlesOpen && !storageScope);
+  const standInRef = useRef({ standingIn, closePage }); standInRef.current = { standingIn, closePage };
 
   /**
    * THE ONE "<" HANDLER FOR EVERY PAGE (nav system R3). The header's "<",
@@ -6634,6 +6638,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
         /* A PRINCIPLE IN THE SKY: Escape is its "<", back to Principles. */
         else if (inSky && viewNavigationRef.current.view?.principleId && !principlesOpen && nothingOpen) {
           event.preventDefault(); event.stopPropagation(); backToPrinciplesRef.current();
+        }
+        else if (phase === 'ready' && standInRef.current.standingIn && nothingOpen) {
+          event.preventDefault(); event.stopPropagation(); standInRef.current.closePage();
         }
         return;
       }
@@ -11302,7 +11309,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {/* A PAGE WHOSE OWNER IS NOT KNOWN YET still has its way out: the
           lists, a chat and Principles draw their own header once their scope
           is here, and until then this one stands in, Close to home. */}
-      {phase === 'ready' && (((listing || making === 'talk') && !(conversationScope && conversationProfile)) || (principlesOpen && !storageScope)) ? <div className="waka-surface-strip">
+      {phase === 'ready' && standingIn ? <div className="waka-surface-strip">
         <SurfaceHeader locale={locale} back={{ kind: 'close', onBack: closePage }} /></div> : null}
       {/* "{n} INSPIRATIONS" LEFT THE NOTEPAD (founder, 2026-11-08: "i also dont
           like seeing 0 inspirations while im saving sth new"). Inspirations

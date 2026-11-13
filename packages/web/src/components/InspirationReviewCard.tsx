@@ -76,7 +76,7 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
          selection here must never reach the slip and answer the card (code
          review, 2026-11-12). */
       onPointerDown={stopSlip} onPointerMove={stopSlip} onPointerUp={stopSlip} onPointerCancel={stopSlip}>
-      <SurfaceHeader locale={locale} back={{kind:'back',onBack:()=>setReading(false)}} title={`${say('worldInspirationReviewOriginal')} · ${when}`}/>
+      <SurfaceHeader locale={locale} back={{kind:'back',onBack:()=>setReading(false)}} title={when}/>
       <div className="waka-review-reader-page">
         <p className="waka-review-reader-text">{words}</p>
         {item.text&&item.attachmentLabel?<p className="jar-pick-source">{item.attachmentLabel}</p>:null}
