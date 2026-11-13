@@ -154,12 +154,10 @@ export function PrinciplesGround({ locale, profileId, whose = "own", onChat, onN
       </div>
       <div className={`waka-ground-card${count >= GROUND_SEATS ? " waka-ground-card--full" : ""}`}>
         <p className="waka-ground-definition">{say("worldGroundDefinition")}</p>
-        {count === 0 ? (
-          <div className="waka-ground-example">
-            <p className="waka-ground-label">{say("worldGroundExampleLabel")}</p>
-            <blockquote>{say("worldGroundExample")}</blockquote>
-          </div>
-        ) : (
+        {/* NO EXAMPLE PRINCIPLE (founder, 2026-11-12: "dont show example
+            principles"): with nothing forming yet, the card is the
+            definition and how principles come. */}
+        {count === 0 ? null : (
           <>
             <p className="waka-ground-label">{say("worldGroundPatterns")}</p>
             <ol className="waka-ground-seats">

@@ -364,8 +364,6 @@
   "worldGroundSome": "I’ve found patterns that could shape your first principle. Save more to help it form.",
   "worldGroundSomeAgent": "I’ve found patterns in what your agent saved.",
   "worldGroundDefinition": "A principle is a guide for making choices.",
-  "worldGroundExampleLabel": "Example principle",
-  "worldGroundExample": "Make room for small experiments.",
   "worldGroundPatterns": "Patterns taking shape",
   "worldGroundHow": "When patterns repeat in what you save, WAKA turns them into principles.",
   "worldGroundHowAgent": "When patterns repeat in what your agent saves, WAKA turns them into its principles.",

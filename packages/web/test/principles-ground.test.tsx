@@ -58,13 +58,13 @@ const remount = async (onChat?: (said: string) => void) => {
 const seats = () => [...host.querySelectorAll(".waka-ground-seat")];
 const line = () => host.querySelector(".waka-ground-bubble .jar-char-bubble-reading")?.textContent ?? "";
 
-it("explains principles with a labeled example instead of empty placeholders", async () => {
+it("explains principles without an example or empty placeholders", async () => {
   vi.mocked(fetchSignals).mockResolvedValue([]);
   await ground();
   expect(seats()).toHaveLength(0);
   expect(host.querySelector(".waka-ground-definition")?.textContent).toBe("A principle is a guide for making choices.");
-  expect(host.querySelector(".waka-ground-example")?.textContent).toContain("Example principle");
-  expect(host.querySelector(".waka-ground-example")?.textContent).toContain("Make room for small experiments.");
+  /* No example principle (founder, 2026-11-12). */
+  expect(host.querySelector(".waka-ground-example"), "an example principle came back").toBeNull();
   expect(host.querySelector(".waka-ground-how")?.textContent).toContain("WAKA turns them into principles");
   expect(host.querySelectorAll(".waka-ground-seat--held")).toHaveLength(0);
   expect(line()).toContain("Save a few more things. Your first principle comes from patterns in them.");
@@ -272,7 +272,7 @@ it("explains an agent’s empty memory in Korean without offering to write into 
   ));
   expect(line()).toBe("에이전트의 첫 원칙은 에이전트가 남긴 것의 패턴에서 나와요.");
   expect(host.querySelector(".waka-ground-how")?.textContent).toContain("에이전트가 남긴 것에서 패턴이 반복되면");
-  expect(host.querySelector(".waka-ground-example")?.textContent).toContain("원칙 예시");
+  expect(host.querySelector(".waka-ground-example")).toBeNull();
   expect(host.querySelector(".waka-ground-bubble button")).toBeNull();
   expect(fetchSignals).toHaveBeenCalledWith({ profile: PROFILE, status: "active", limit: 20 });
   expect(add).not.toHaveBeenCalled();

@@ -364,8 +364,6 @@
   "worldGroundSome": "첫 원칙이 될 수 있는 패턴을 찾았어요. 더 남기면 원칙이 생기는 데 도움이 돼요.",
   "worldGroundSomeAgent": "에이전트가 남긴 것에서 패턴을 찾았어요.",
   "worldGroundDefinition": "원칙은 선택할 때 기준이 되는 생각이에요.",
-  "worldGroundExampleLabel": "원칙 예시",
-  "worldGroundExample": "작은 실험을 시도할 여유를 두자.",
   "worldGroundPatterns": "자리 잡고 있는 패턴",
   "worldGroundHow": "남긴 것에서 패턴이 반복되면 WAKA가 원칙으로 만들어요.",
   "worldGroundHowAgent": "에이전트가 남긴 것에서 패턴이 반복되면 WAKA가 에이전트의 원칙으로 만들어요.",
