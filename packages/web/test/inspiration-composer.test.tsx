@@ -433,17 +433,14 @@ it('makes a photo the page\'s picture, and draws the words it read only when the
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-read-act')!.click());
   expect(fix).toHaveBeenCalledWith('Nobody feels ready.');
 
-  props.readWords = { status: 'unreadable' }; await mount();
-  expect(host.querySelector('.waka-note-read-ask')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
-  expect(host.querySelector('.waka-note-hero')?.hasAttribute('data-blurred')).toBe(true);
-  /* Unreadable promises nothing; only a read queued again says it will retry. */
-  expect(host.textContent).not.toContain('Your screenshot is saved either way.');
-  expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Type the line, or just Save');
-  /* Retrying asks the same; "I'll try reading it again" is promised only
-     where a read is known to be queued (the saved note), never on a guess. */
-  props.readWords = { status: 'retrying' }; await mount();
-  expect(host.querySelector('.waka-note-read-ask')?.textContent).toBe('I couldn\'t make out the words. Which line stuck?');
-  expect(host.textContent).not.toContain('Your screenshot is saved either way.');
+  /* Unreadable or retrying says nothing (founder, 2026-11-12: "don't write
+     this thing"): the photo plain, the plain placeholder, no question. */
+  for (const status of ['unreadable', 'retrying'] as const) {
+    props.readWords = { status }; await mount();
+    expect(host.querySelector('.waka-note-read'), `${status} still drew a words line`).toBeNull();
+    expect(host.querySelector('.waka-note-hero')?.hasAttribute('data-blurred')).toBe(false);
+    expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe('Add a few words…');
+  }
 });
 
 /* F5: a share from another app is asked about, and still waits for Save. */

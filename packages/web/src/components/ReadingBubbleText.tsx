@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DialogSurface } from './DialogSurface';
-import { SavedPhoto } from './SavedPhoto';
 import { SurfaceHeader } from './SurfaceHeader';
 import { t, type SupportedLocale } from '../lib/locales';
 
@@ -26,24 +25,24 @@ const ReadingDetails = lazy(() => import('./ReadingDetails'));
  * evidence (`whyFor` in `Home.tsx`); with none to show, "Why?" is not
  * offered, because a question with no answer behind it is a dead control.
  */
-export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDisabled, details, why, onSeeAll }: {
+export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDisabled, details, why, onWhy }: {
   text: string; locale: SupportedLocale;
   /** The small line over the read ("On your mind lately"). */
   label?: string;
   onShare?: () => void; onChat?: () => void; chatDisabled?: boolean; details?: ReadingDetailActions;
   /** The saves the read rests on, by their own words. */
   why?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>;
-  /** "See all saves" — the saves, patterns and principles in one scroll. */
-  onSeeAll?: () => void;
+  /** Why?, answered in a chat: WAKA says the read and the saves it came
+      from (founder, 2026-11-12: "when clicking on why, open chat and tell
+      user how this was formed"). Absent: Why? opens the list in the bubble. */
+  onWhy?: () => void;
 }) {
   const reading = useRef<HTMLSpanElement>(null);
   const [overflow, setOverflow] = useState(false);
-  const [whyOpen, setWhyOpen] = useState(false);
   const [expanded, setExpanded] = useState<{ text: string; onShare?: () => void; details?: ReadingDetailActions } | null>(null);
   const [editState, setEditState] = useState({ dirty: false, busy: false });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const close = () => { if (editState.busy) return; if (editState.dirty) setConfirmDiscard(true); else setExpanded(null); };
-  useEffect(() => { setWhyOpen(false); }, [text]);
   useEffect(() => {
     const node = reading.current;
     if (!node) return;
@@ -57,28 +56,15 @@ export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDi
     observer?.observe(node);
     window.addEventListener('resize', schedule);
     return () => { observer?.disconnect(); cancelAnimationFrame(frame); window.removeEventListener('resize', schedule); };
-  }, [text, whyOpen]);
+  }, [text]);
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
   const opensInFull = Boolean(details || overflow || onShare);
   const openSheet = () => { setEditState({ dirty: false, busy: false }); setConfirmDiscard(false); setExpanded({ text, onShare, details }); };
-  const hasWhy = Boolean(why && why.length);
+  const hasWhy = Boolean(why && why.length && onWhy);
   return <>
-    {whyOpen && hasWhy ? <>
-      <span className="jar-char-bubble-of">{say('worldReadingWhyLabel')}</span>
-      <span className="waka-says-why" role="list" aria-label={say('worldReadingWhyLabel')}>
-        {/* A picture shows as the picture; a save with words of its own quotes
-            them beside it (founder, 2026-11-12: "Photo" and "Photo" was "so
-            bad"). A picture alone keeps its name for a screen reader. */}
-        {why!.map(row => <span key={row.id} role="listitem" className="waka-says-why-row" data-photo={row.photoId ? '1' : undefined}>
-          {row.photoId ? <SavedPhoto id={row.photoId} /> : null}
-          {row.wordless ? <span className="sr-only">{row.preview}</span> : <span className="waka-says-why-words">“{row.preview}”</span>}
-        </span>)}
-      </span>
-      <span className="jar-char-bubble-acts">
-        <button type="button" className="jar-char-bubble-act" onClick={() => setWhyOpen(false)}>{say('worldSourceDismiss')}</button>
-        {onSeeAll ? <button type="button" className="jar-char-bubble-act" onClick={() => { setWhyOpen(false); onSeeAll(); }}>{say('worldBubbleSeeAll')}</button> : null}
-      </span>
-    </> : <>
+    {/* WHY? IS ANSWERED IN A CHAT (founder, 2026-11-12), so the bubble no
+        longer folds into a list of saves. */}
+    <>
       {label ? <span className="jar-char-bubble-of">{label}</span> : null}
       <span className="waka-reading-preview">
         {opensInFull
@@ -91,12 +77,12 @@ export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDi
       </span>
       {hasWhy || onChat ? <span className="jar-char-bubble-acts">
         {/* NO "READ IN FULL": the sentence is its own way in (above). */}
-        {hasWhy ? <button type="button" className="jar-char-bubble-act" aria-expanded={false} onClick={() => setWhyOpen(true)}>{say('worldReadingWhy')}</button> : null}
+        {hasWhy && onWhy ? <button type="button" className="jar-char-bubble-act" onClick={onWhy}>{say('worldReadingWhy')}</button> : null}
         {onChat ? <button type="button" className="jar-char-bubble-act" disabled={chatDisabled} onClick={onChat}>
           {say('worldTalkAboutThis')}
         </button> : null}
       </span> : null}
-    </>}
+    </>
     {expanded ? createPortal(<div className="waka-reading-sheet">
       <DialogSurface className="waka-reading-full" aria-label={say('worldNowTitle')} onClose={close}>
         <SurfaceHeader locale={locale} back={{ kind: 'close', onBack: close, disabled: editState.busy }} title={say('worldNowTitle')} />

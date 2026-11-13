@@ -83,27 +83,19 @@ it('offers a full reading only when clipped, closes by Escape, and returns focus
 
 /* DESIGN F2: "Why?" turns the bubble over to the saves behind the read —
    "Because you saved these", each quoted — with Back and See all saves. */
-it('answers Why? in place with the saves behind the read, and Back returns to the read', async () => {
+/* WHY? OPENS A CHAT (founder, 2026-11-12): the bubble hands the press to
+   Home, which opens WAKA's account of how the read was formed. */
+it('hands Why? to Home rather than folding into a list', async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  const seeAll = vi.fn(), chat = vi.fn(), host = document.createElement('div'); document.body.append(host);
+  const onWhy = vi.fn(), chat = vi.fn(), host = document.createElement('div'); document.body.append(host);
   const root = createRoot(host);
-  const why = [{ id: 'a', preview: 'Small rituals hold a day together.' }, { id: 'b', preview: 'Walked the long way home.' }];
+  const why = [{ id: 'a', preview: 'Small rituals hold a day together.' }];
   try {
-    await act(async () => root.render(<ReadingBubbleText text="You keep returning to small rituals." label="On your mind lately" locale="en-US" why={why} onSeeAll={seeAll} onChat={chat} />));
+    await act(async () => root.render(<ReadingBubbleText text="You keep returning to small rituals." label="On your mind lately" locale="en-US" why={why} onWhy={onWhy} onChat={chat} />));
     const acts = () => [...host.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-acts button')];
     expect(acts().map(button => button.textContent)).toEqual(['Why?', 'Chat about this']);
-    expect(host.textContent).toContain('On your mind lately');
     await act(async () => acts()[0]!.click());
-    expect(host.textContent).toContain('Because you saved these');
-    expect([...host.querySelectorAll('.waka-says-why-row')].map(row => row.textContent)).toEqual(['“Small rituals hold a day together.”', '“Walked the long way home.”']);
-    expect(host.textContent).not.toContain('You keep returning');
-    /* It folds the bubble rather than navigating, so it is Hide, not a second "Back" (nav system). */
-    expect(acts().map(button => button.textContent)).toEqual(['Hide', 'See all']);
-    await act(async () => acts()[0]!.click());
-    expect(host.textContent).toContain('You keep returning to small rituals.');
-    await act(async () => acts()[0]!.click());
-    await act(async () => acts()[1]!.click());
-    expect(seeAll).toHaveBeenCalledOnce();
-    expect(host.textContent).toContain('You keep returning to small rituals.');
+    expect(onWhy).toHaveBeenCalledOnce();
+    expect(host.textContent, 'the bubble folded into a list').toContain('You keep returning to small rituals.');
   } finally { await act(async () => root.unmount()); host.remove(); }
 });

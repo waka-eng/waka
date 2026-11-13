@@ -861,3 +861,16 @@ it('opens with the home bubble\'s question and keeps it above the first answer',
   expect(turns[0]?.textContent).toContain(opener);
   expect(turns[1]?.textContent).toContain('The move, mostly');
 });
+
+/* WHY?, TOLD IN THE CHAT (founder, 2026-11-12): WAKA says the read, then
+   "Because you saved these:" and each save it came from as a card, before
+   you have said anything. */
+it('opens on WAKA saying the read and then each save it came from', async () => {
+  await act(async()=>root.render(<ConversationPanel scope={scope} id={id} locale="en-US" onChoose={choose}
+    opener={{ask:'You guard your quiet hours.',turn:true,sources:[{id:'a',preview:'Turned off my phone at 9'},{id:'b',preview:'Said no to a dinner'}]}}/>));
+  const turns=[...host.querySelectorAll('.chat-message')];
+  expect(turns.map(turn=>turn.getAttribute('data-role'))).toEqual(['assistant','assistant']);
+  expect(turns[0]?.textContent).toContain('You guard your quiet hours.');
+  expect(turns[1]?.textContent).toContain('Because you saved these');
+  expect([...host.querySelectorAll('.chat-shared')].map(card=>card.textContent)).toEqual(['Turned off my phone at 9','Said no to a dinner']);
+});

@@ -79,3 +79,19 @@ it('closes home from a chat and from Past chats, however many times they were sw
   expect(location.pathname, 'the "<" left the chat up').not.toContain('/chat/');
   expect(open(), 'the "<" went somewhere other than home').toBeNull();
 });
+
+/* WHAT YOU CHAT ABOUT COMES FROM WAKA'S SIDE (founder, 2026-11-12): the
+   read's "Chat about this" opens a chat whose first turn is WAKA saying the
+   read, on the left; nothing is sent as you, and no chat is made until you
+   reply. */
+it('opens a read\'s chat on WAKA saying it, not on you sending it', async () => {
+  world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
+  const talk = [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-act')].find(b => b.textContent?.trim() === 'Chat about this');
+  expect(talk, 'the bubble offers no Chat about this').toBeTruthy();
+  await act(async () => talk!.click()); await settle();
+  expect(location.pathname).toBe('/chat/new');
+  const first = world.container.querySelector('.chat-message');
+  expect(first?.getAttribute('data-role'), 'the read came from your side').toBe('assistant');
+  expect(first?.textContent).toContain('You guard your quiet hours.');
+  expect(createConversation, 'a chat was made before you replied').not.toHaveBeenCalled();
+});

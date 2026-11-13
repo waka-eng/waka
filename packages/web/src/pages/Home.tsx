@@ -2054,7 +2054,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /** The question a chat was opened to answer, and which chat that is: `null`
       while it is still new, its id once it is saved. Any other chat (one
       opened from Past chats) never shows it. See `ConversationPanel.opener`. */
-  const chatOpener = useRef<{ ask: string; quote?: string; id: string | null } | null>(null);
+  const chatOpener = useRef<{ ask?: string; quote?: string; turn?: boolean; inspirationId?: string; sources?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>; whyOf?: Entry; id: string | null } | null>(null);
   const chatOrList = Boolean(viewNavigation.view?.conversationId) || viewNavigation.view?.open === 'conversations';
   useEffect(() => { if (!chatOrList) { chatSwap.current = false; chatOpener.current = null; } }, [chatOrList]);
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
@@ -5836,6 +5836,18 @@ const RETRY_READ_LIMIT_MS = 20_000;
     return () => mq.removeEventListener('change', change);
   }, []);
   const [talking, setTalking] = useState(false);
+  /* ═══ WHAT YOU CHAT ABOUT COMES FROM WAKA'S SIDE (founder, 2026-11-12:
+     "the thing that I wanted to chat about shouldn't come from me, it should
+     come from the other person, the sender, on the left side") ═══ A read,
+     the creature's own line, or a save you just made opens a new chat in
+     place with that on WAKA's side; you reply. A save is held up as a card
+     and pinned to the chat (its id goes with the first send, so the reply
+     reads it); a line is WAKA's first turn. */
+  const chatOn = useCallback((opener: { ask?: string; quote?: string; turn?: boolean; inspirationId?: string; sources?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>; whyOf?: Entry }) => {
+    chatOpener.current = { ...opener, id: null }; chatSwap.current = true;
+    setRecentInspiration(null);
+    viewNavigationRef.current.write({ ...EMPTY_VIEW, wallId: atWallRef.current.kind === 'agent' ? atWallRef.current.id : null, conversationId: 'new' });
+  }, []);
   const talkAbout = useCallback(async (kept: { id: string; text: string }) => {
     const profileId = memoryScope?.profileId;
     if (!profileId || talking) return;
@@ -6274,6 +6286,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const rows = await fetchPrinciples(profileId ? { profile: profileId } : {});
     if (memoryScopeRef.current?.profileId === profileId) setPrincipleMemory({ profileId, rows, read: true });
   }, []);
+  /* HOME KNOWS WHETHER THERE IS A PRINCIPLE, so the spark at the right edge
+     shows only when there is somewhere to go (founder, 2026-11-12: "the spark
+     should only show when a principle exists"). Read once per profile. */
+  const principlesAsked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!memoryProfileId || offline || principlesRead || principlesAsked.current === memoryProfileId) return;
+    principlesAsked.current = memoryProfileId;
+    void reloadPrinciples().catch(() => { principlesAsked.current = null; });
+  }, [memoryProfileId, offline, principlesRead, reloadPrinciples]);
 
   /**
    * CORRECTING ONE — the only writing act left on this band.
@@ -9236,6 +9257,20 @@ const RETRY_READ_LIMIT_MS = 20_000;
               </span>
             </div>
           ) : null}
+          {/* ═══ A SPARK AT THE RIGHT EDGE, LEVEL WITH THE CREATURE (founder,
+              2026-11-12, choosing "A spark" of six) ═══ Principles lie to the
+              right, and nothing on home said so. One small four-point spark
+              rests dim at the edge and glints every few seconds; a press
+              walks there, the same walk the creature's drag takes. Light
+              only, no arrow and no word. */}
+          {homeChromeShown && atWall.kind === 'self' && principles.length > 0 ? (
+            <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
+              data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+                <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
+              </svg>
+            </button>
+          ) : null}
           {/* Taps change the invitation on this profile; dragging right
               still opens Principles. The release click after a drag is ignored. */}
           {!backgroundHidden && !mouthOpen && !reviewing ? (
@@ -9486,11 +9521,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         <>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
                             label={say('worldBubbleOnYourMind')}
-                            why={whyFor(lead)} onSeeAll={openSheet}
+                            why={whyFor(lead)}
+                            onWhy={() => chatOn({ ask: lead.body, turn: true, whyOf: lead })}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true),
                               onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
-                            onChat={() => { void talkAbout({ id: '', text: lead.body }); }} chatDisabled={talking}
+                            onChat={() => chatOn({ ask: lead.body, turn: true })} chatDisabled={talking}
                             onShare={storageScope && !offline ? () => setThingShare({
                               kind: "topOfMind", text: lead.body,
                               proof: formatMessage(locale, "worldShareOnMyMind", { date: dateStamp(Date.now(), locale) }),
@@ -9645,10 +9681,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     speech bubbles should have an action at the end." This
                     is the bubble that reports what has been happening, and
                     it led into a chat on a press nothing advertised. */}
-                {charSay === say('worldBubbleKept') && keptWords && keptWords.status !== 'unknown' ? <>
+                {/* An unreadable picture's words say nothing here either
+                    (founder, 2026-11-12): only words read, or reading. */}
+                {charSay === say('worldBubbleKept') && keptWords && (keptWords.status === 'reading' || (keptWords.status === 'ready' && keptWords.text)) ? <>
                   <span className="jar-char-bubble-of">{say('worldBubbleKept')}</span>
                   <span className="jar-char-bubble-reading" role="status">{keptWords.status === 'ready' && keptWords.text ? `“${keptWords.text}”`
-                    : keptWords.status === 'reading' ? say('worldReadWordsReading') : say('worldNoteAskUnreadable')}</span>
+                    : say('worldReadWordsReading')}</span>
                 </> : <span className="jar-char-bubble-reading" role="status">{companionLine}</span>}
                 {/* ═══ CHAT WHEN THERE IS SOMETHING, SAVE WHEN THERE IS NOT ══
                     Founder, of "Quiet lately — Let's talk about it":
@@ -9672,16 +9710,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                      (E5); See all pulls up the saves. A keep with no words
                      has nothing to talk about yet, so it offers See all. */
                   <span className="jar-char-bubble-acts">
-                    {visibleInspiration && (keptWords?.status === 'unreadable' || keptWords?.status === 'retrying' || keptWords?.status === 'failed') ? (
-                      /* "Which line stuck?" is answered on the saved note,
-                         where the line becomes its words (a Fix). */
-                      <button type="button" className="jar-char-bubble-act"
-                        onClick={() => { setCharSay(''); viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: visibleInspiration.id }); }}>
-                        {say('worldReadWordsTypeLine')}
-                      </button>
-                    ) : visibleInspiration && keptSubject(visibleInspiration).text ? <button type="button" className="jar-char-bubble-act"
+                    {visibleInspiration && keptSubject(visibleInspiration).text ? <button type="button" className="jar-char-bubble-act"
                       disabled={talking}
-                      onClick={() => { void talkAbout(keptSubject(visibleInspiration)); }}>
+                      onClick={() => { const kept = keptSubject(visibleInspiration); chatOn({ quote: kept.text, inspirationId: kept.id || undefined }); }}>
                       {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
                     </button> : null}
                     <button type="button" className="jar-char-bubble-act"
@@ -9701,7 +9732,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     <button type="button" className="jar-char-bubble-act"
                       disabled={talking}
                       onClick={() => {
-                        if (charSay) { void talkAbout({ id: '', text: charSay }); return; }
+                        if (charSay) { chatOn({ ask: charSay, turn: true }); return; }
                         /* The chat asks the same question the bubble did, and
                            opens in place, not with a fade (founder,
                            2026-11-12). */
@@ -11454,8 +11485,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
         name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
         title={atWall.kind==='agent'?formatMessage(locale,'worldProfilePrinciples',{name:atWall.name}):say('worldPrinciplesShortcut')}
         whose={atWall.kind==='agent'?'agent':'own'}
-        patterns={atWall.kind==='agent'?undefined:(signals??[]).filter(row=>row.status==='active'||row.status==='emerging')
-          .sort((a,b)=>b.lastEvidenceMs-a.lastEvidenceMs).map(row=>({id:row.id,statement:row.statement,forming:row.status==='emerging'}))}
         onNewSave={atWall.kind==='agent'?undefined:startNewInspiration}
         newSaveLabel={say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}
         onClose={closePage} gesture={principlesCrossing ? null : viewNavigation.href}
@@ -11475,7 +11504,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            creature's line as YOUR first message, and on an agent's ground that
            line is about the agent — the defect the agent wall fixed by
            removing its own act. */
-        onChat={atWall.kind==='agent'?undefined:said => { void talkAbout({ id: '', text: said }); }}
+        onChat={atWall.kind==='agent'?undefined:said => chatOn({ ask: said, turn: true })}
         crossing={principlesCrossing}
         onCrossed={() => setPrinciplesCrossing(null)}/>:null}
       {/* Chats, their drafts, and their memory all belong to the profile in the address. */}
@@ -11547,7 +11576,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
               scope={conversationScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
-              opener={chatOpener.current && chatOpener.current.id === talkId ? { ask: chatOpener.current.ask, quote: chatOpener.current.quote } : undefined}
+              opener={chatOpener.current && chatOpener.current.id === talkId ? { ask: chatOpener.current.ask, quote: chatOpener.current.quote, turn: chatOpener.current.turn, inspirationId: chatOpener.current.inspirationId,
+                /* Why?'s saves are read as the chat draws, not when Why? was pressed,
+                   so one fetched from outside the loaded window still arrives (code
+                   review, 2026-11-12). */
+                sources: chatOpener.current.whyOf ? whyFor(chatOpener.current.whyOf) : chatOpener.current.sources } : undefined}
               onHistory={()=>{chatSwap.current=true;openOverHome('conversations');}}
               /* The bar's middle group, lent for the mic and the ＋. */
               onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};if(chatOpener.current&&chatOpener.current.id===null&&talkId===null)chatOpener.current={...chatOpener.current,id:row.id};}}
