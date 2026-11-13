@@ -164,7 +164,9 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
       field.dispatchEvent(new Event('input', { bubbles: true }));
     });
     const send = world!.container.querySelector<HTMLButtonElement>('footer.chat-composer button.chat-send');
-    expect(send?.textContent, 'Send is not a word').toBe('Send');
+    /* An icon now (founder, 2026-11-12), named Send for a screen reader. */
+    expect(send?.getAttribute('aria-label'), 'Send is not named Send').toBe('Send');
+    expect(send?.querySelector('svg[data-home-action-icon="send"]'), 'Send is not the send glyph').not.toBeNull();
     expect(send!.classList.contains('waka-note-bar-action'), 'Send is not the bar\'s quiet act').toBe(true);
     expect(send!.disabled, 'Send is dim with words in the field').toBe(false);
     await act(async () => send!.click()); await settle();

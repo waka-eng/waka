@@ -7465,14 +7465,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   )
                 ) : null}
   </>);
-  /* SAVE IS A WORD, AND IT NEVER FILLS (founder, 2026-11-05): full ink when
-     there is something to keep, dim when there is not. It says why it cannot
-     be pressed, as the chat's Send does. */
+  /* SAVE IS AN ICON, AND IT NEVER FILLS (founder, 2026-11-12: "instead of
+     send and stop, use icons ... that goes for save in inspiration as
+     well"): the Save glyph, full ink when there is something to save, dim
+     when there is not, named Save for a screen reader. It says why it
+     cannot be pressed, as the chat's Send does. */
   const noteBarSave = (
     <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save waka-note-bar-action"
-      title={whyNotKeeping ? say(whyNotKeeping) : undefined}
+      aria-label={say('worldKeep')}
+      title={whyNotKeeping ? say(whyNotKeeping) : say('worldKeep')}
       disabled={!composerCanKeep}
-      onClick={() => { void keepIt(); }}>{say('worldKeep')}</button>
+      onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep" /></button>
   );
   const noteBarState = (<>
                 {/* (Dictation has no line here: while it listens the bar is

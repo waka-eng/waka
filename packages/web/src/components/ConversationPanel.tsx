@@ -375,6 +375,19 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       if(mine(owner))setError(say(draftRef.current?.pending?(offlineNow()?'worldConversationNotConfirmed':'worldConversationSaveFailed'):target?'worldConversationReadFailed':'worldConversationUnreachable'));}
     finally{if(mine(owner))setLoading(false);}
   };
+  /* AN UNCONFIRMED SEND IS READ BACK BY THE CHAT, NOT BY A BUTTON (founder,
+     2026-11-12, of "Check if it was sent": "never write that"). Once, a
+     moment after the send went uncertain, and again whenever the page comes
+     back into view; a confirmed message clears `pending` and stops it. */
+  const pendingId=draft?.pending?draft.id:null;
+  const refreshRef=useRef(refresh);refreshRef.current=refresh;
+  useEffect(()=>{
+    if(!pendingId)return;
+    const timer=window.setTimeout(()=>{void refreshRef.current();},1500);
+    const again=()=>{if(document.visibilityState==='visible')void refreshRef.current();};
+    document.addEventListener('visibilitychange',again);
+    return()=>{window.clearTimeout(timer);document.removeEventListener('visibilitychange',again);};
+  },[pendingId]);
   const loadEarlier=async()=>{
     if(!id||earlierBusy||busy||loading||!conversation?.messageWindowStart||conversation.messageWindowStart<=1)return;
     const owner=lifecycle.current;
@@ -962,8 +975,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
           </ul>:null}
           tools={tools()}
           action={replyPending
-            ?<button type="button" className="chat-send chat-send--stop waka-note-bar-action"
-               disabled={reply.busy} onClick={()=>void reply.stop()}>{say('worldConversationStop')}</button>
+            ?<button type="button" className="chat-send chat-send--stop waka-note-bar-action" aria-label={say('worldConversationStop')} title={say('worldConversationStop')}
+               disabled={reply.busy} onClick={()=>void reply.stop()}><HomeActionIcon kind="stop"/></button>
             :<button type="button" className="chat-send waka-note-bar-action"
                /* THE SAME CONTROL RETRIES AN UNCERTAIN SAVE: a message whose
                   response was lost is sent again by the press that sends. */
@@ -973,14 +986,13 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                aria-label={say(draft?.pending?'worldConversationRetry':'worldConversationSendWord')}
                title={say(whyNoSend??(draft?.pending?'worldConversationRetry':'worldConversationSend'))}
                disabled={Boolean(whyNoSend)}
-               onClick={()=>void save()}>{say(draft?.pending?'worldConversationRetry':'worldConversationSendWord')}</button>}>
+               onClick={()=>void save()}><HomeActionIcon kind="send"/></button>}>
           <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.pending?'':draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
         </NoteBar>}
-        {/* A SAVE THAT WAS NOT CONFIRMED KEEPS ITS ONE WAY OUT. This reads
-            the conversation back rather than writing again, which is why it
-            survived the sweep of retry-shaped controls: it is the only way to
-            learn whether words you can still see on screen actually landed. */}
-        {draft?.pending?<button type="button" className="chat-recheck" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldConversationCheck')}</button>:null}
+        {/* "CHECK IF IT WAS SENT" WENT (founder, 2026-11-12: "never write
+            that"). A save that was not confirmed is read back by the chat
+            itself (the effect beside `refresh`), not by a button asking the
+            person to do the checking. */}
       </footer>:null}
     </section>
     {/* ═══ THE SIDE PANEL IS GONE, AND SO IS PINNING ══════════════════

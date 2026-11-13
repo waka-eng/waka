@@ -7723,3 +7723,10 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   .waka-page.waka-page--sheet, .waka-page.waka-page--sheet[data-leaving] { animation: none; }
 }
 }
+
+@layer chrome {
+/* SEND, STOP AND SAVE ARE GLYPHS (founder, 2026-11-12), the tools' size,
+   in a 44px press, full ink or dim, never filled. */
+.waka-note-bar .waka-note-bar-row .waka-note-bar-action { display: inline-flex; align-items: center; justify-content: center; min-width: var(--waka-corner); padding: 0; }
+.waka-note-bar .waka-note-bar-action svg { width: 1.4em; height: 1.4em; }
+}

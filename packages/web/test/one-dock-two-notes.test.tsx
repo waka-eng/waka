@@ -191,7 +191,7 @@ async function notepad(words: string): Promise<ReturnType<typeof dockPresses>> {
   expect(world.container.querySelector(".jar-inspiration-composer"), "the notepad did not open").toBeTruthy();
   const bar = world.container.querySelector(".waka-note-bar-row");
   expect(bar, "the notepad has no note bar").toBeTruthy();
-  expect(bar?.querySelector(".waka-dock-save")?.textContent).toBe("Save");
+  expect(bar?.querySelector(".waka-dock-save")?.getAttribute("aria-label")).toBe("Save");
   expect(world.container.querySelector(".waka-surface-back")?.textContent?.trim(), "the notepad has no Close").toBe("Close");
   return dockPresses();
 }

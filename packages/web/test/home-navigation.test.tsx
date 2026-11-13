@@ -1015,8 +1015,8 @@ it('gives a new note a labeled Save and separate Close, without archive navigati
     expect(close()?.getAttribute('aria-label'), 'the notepad has no Close apart from Save').toBe('Close');
     expect(world.container.querySelector('nav.waka-dock'), 'a dock stands under the note bar').toBeNull();
     const save = world.container.querySelector<HTMLButtonElement>('.waka-dock-save')!;
-    expect(save.textContent).toBe('Save');
-    expect(save.querySelector('svg'), 'Save is a word, not a glyph').toBeNull();
+    expect(save.getAttribute('aria-label')).toBe('Save');
+    expect(save.querySelector('svg[data-home-action-icon="keep"]'), 'Save is not the Save glyph (founder, 2026-11-12)').not.toBeNull();
     expect(save.disabled).toBe(true);
     const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
     await act(async () => {
