@@ -7543,7 +7543,10 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
    The Inspirations list's header is its 650px column less that column's
    24px padding each side (602px, and 88px in from a narrower window); at
    700px and under the column drops its padding and the row is the page's
-   16px gutter. The notepad's row now takes those same two widths. */
+   16px gutter. The notepad's row now takes those same two widths.
+   MEASURED at 390, 738 and 1280 in a browser, against the list's own rules:
+   [16,374], [68,670] and [339,941] for both rows; 700px is where the list's
+   column drops its padding, the same 700 its own rule was measured at. */
 @media (max-width: 700px) {
   .jar-seek.jar-inspiration-composer > .waka-surface-head { width: min(100%, calc(100vw - 32px)); }
 }
