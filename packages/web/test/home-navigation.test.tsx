@@ -1101,8 +1101,13 @@ it('steps a saved note back to its list, then the list home, by its "<"', async 
 
 /* A SPARK AT THE RIGHT EDGE (founder, 2026-11-12): home says Principles lie
    to the right with one small light, level with the creature; a press goes
-   there. It stands on home only. */
-it('shows a spark at the right edge on home that walks to Principles', async () => {
+   there. It stands on home only, and only once there is a principle. */
+it('shows a spark at the right edge on home that walks to Principles, only once a principle exists', async () => {
+  /* None yet: nowhere to go, so no spark (founder, 2026-11-12). */
+  world = await mountWorld(FACTS, { routerTools: <RouterTools/> }); await settle();
+  expect(world.container.querySelector('.waka-principles-spark'), 'a spark with no principle behind it').toBeNull();
+  world.unmount();
+  principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'declared',rank:0,locked:true,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[]}];
   world = await mountWorld(FACTS, { routerTools: <RouterTools/> }); await settle();
   const spark = world.container.querySelector<HTMLButtonElement>('.waka-principles-spark');
   expect(spark, 'home has no spark toward Principles').not.toBeNull();

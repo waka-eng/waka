@@ -6286,6 +6286,15 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const rows = await fetchPrinciples(profileId ? { profile: profileId } : {});
     if (memoryScopeRef.current?.profileId === profileId) setPrincipleMemory({ profileId, rows, read: true });
   }, []);
+  /* HOME KNOWS WHETHER THERE IS A PRINCIPLE, so the spark at the right edge
+     shows only when there is somewhere to go (founder, 2026-11-12: "the spark
+     should only show when a principle exists"). Read once per profile. */
+  const principlesAsked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!memoryProfileId || offline || principlesRead || principlesAsked.current === memoryProfileId) return;
+    principlesAsked.current = memoryProfileId;
+    void reloadPrinciples().catch(() => { principlesAsked.current = null; });
+  }, [memoryProfileId, offline, principlesRead, reloadPrinciples]);
 
   /**
    * CORRECTING ONE — the only writing act left on this band.
@@ -9254,7 +9263,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               rests dim at the edge and glints every few seconds; a press
               walks there, the same walk the creature's drag takes. Light
               only, no arrow and no word. */}
-          {homeChromeShown && atWall.kind === 'self' ? (
+          {homeChromeShown && atWall.kind === 'self' && principles.length > 0 ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
               <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
