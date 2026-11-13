@@ -123,8 +123,8 @@ const SURFACES: Array<[string, () => Promise<void>, 'Back' | 'Close', RegExp | n
   ['the Kept list', () => openAt('/?open=saves'), 'Close', /^Inspirations/, false],
   ['Past chats', () => openAt('/?open=conversations'), 'Close', /^Past chats$/, false],
   ['a new chat', () => openAt('/chat/new'), 'Close', /^$/, false],
-  ['a chat from Past chats', openChatFromPastChats, 'Back', /^$/, false],
-  ['Past chats from a chat', openPastChatsFromAChat, 'Back', /^Past chats$/, false],
+  ['a chat from Past chats', openChatFromPastChats, 'Close', /^$/, false],
+  ['Past chats from a chat', openPastChatsFromAChat, 'Close', /^Past chats$/, false],
   ['the notepad', () => openAt('/?compose=1'), 'Close', /^Saving to You · /, false],
   ['a saved note', openSavedNote, 'Back', /^You · /, false],
   ['Principles', () => openAt('/?open=principles'), 'Close', /^Principles$/, false],
@@ -163,8 +163,8 @@ describe('every page and sheet draws the one header', () => {
 describe('Escape goes exactly where the "<" goes', () => {
   const CASES: Array<[string, () => Promise<void>]> = [
     ['a saved note (to its list)', openSavedNote],
-    ['a chat opened from Past chats (back to them)', openChatFromPastChats],
-    ['Past chats opened from a chat (back to it)', openPastChatsFromAChat],
+    ['a chat opened from Past chats (home)', openChatFromPastChats],
+    ['Past chats opened from a chat (home)', openPastChatsFromAChat],
     ['the Kept list (home)', () => openAt('/?open=saves')],
     ['Principles (home)', () => openAt('/?open=principles')],
     ['an empty notepad (home)', () => openAt('/?compose=1')],

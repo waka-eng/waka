@@ -132,7 +132,7 @@ describe('Escape never hides a page that is not leaving', () => {
     const { resolve, dirname } = await import('node:path');
     const { fileURLToPath } = await import('node:url');
     const src = (path: string) => readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../src', path), 'utf8');
-    for (const [path, handler] of [['components/InspirationComposer.tsx', 'props.onBack'], ['components/SavesOverlay.tsx', 'onBack'],
+    for (const [path, handler] of [['components/InspirationComposer.tsx', 'props.onBack'], ['components/SavesOverlay.tsx', 'open ? onBack : backOut'],
       ['components/ConversationsOverlay.tsx', 'onBack'], ['pages/Home.tsx', 'backPage']] as const) {
       const text = src(path), at = text.indexOf(`onClose={${handler}}`);
       expect(at, `${path}: its surface no longer closes by its "<" handler`).toBeGreaterThan(-1);

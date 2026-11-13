@@ -109,11 +109,11 @@ it('does not mistake a transient 429 for a definite chat-limit refusal',async()=
   vi.mocked(createConversation).mockRejectedValueOnce(new ApiError({status:429,message:'Try later'}));
   await mount(null);await type('An uncertain send');await click('Send');
   expect(named()).toContain('Send again');
-  /* WHAT IT SAYS IS WHAT IT IS CALLED (WCAG 2.5.3, review 2026-11-09): the
-     word on the bar reads "Send again" too, not "Send" over a hidden name. */
+  /* An icon since 2026-11-12, so it carries no visible word for its name to
+     disagree with; its name says what the press does: Send again. */
   const send=host.querySelector<HTMLButtonElement>('button.chat-send')!;
-  expect(send.textContent,'the bar shows Send while its name is Send again').toBe('Send again');
-  expect(send.getAttribute('aria-label')??send.textContent).toBe(send.textContent);
+  expect(send.getAttribute('aria-label'),'the bar\'s Send is not named Send again').toBe('Send again');
+  expect(send.textContent,'a word came back beside the glyph').toBe('');
   expect(named()).not.toContain('Past chats');
   expect(readConversationDrafts(scope,'new:general')[0]?.value.pending).toBe(true);
 });
@@ -198,7 +198,8 @@ it('reconciles a lost save response with a read, without resending',async()=>{
   expect(host.querySelector('textarea')!.value).toBe('');
   expect(host.querySelector('.chat-sending')?.textContent).toContain('Keep my exact thought');
   expect(host.textContent).toContain('Couldn’t confirm it was sent. Your message is still here.');
-  await click('Check if it was sent');expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(stored.messages).toHaveLength(1);expect(host.querySelector('textarea')!.value).toBe('');
+  /* No "Check if it was sent" (founder, 2026-11-12): the chat reads it back on its own. */
+  expect(named()).not.toContain('Check if it was sent');await tick(1600);expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(stored.messages).toHaveLength(1);expect(host.querySelector('textarea')!.value).toBe('');
 });
 /* Review round 6: a failed list read on an open conversation used to be
    swallowed, leaving "are replies on?" unknown and Send "loading" for good. */
@@ -843,4 +844,20 @@ it('does not hide your first message under a save that has no words of its own',
   await mount();
   expect(host.querySelector('.chat-topic[data-about="save"]')).toBeNull();
   expect([...host.querySelectorAll('.chat-message')].map(node=>node.textContent)).toEqual([expect.stringContaining('What did that screenshot mean to me?')]);
+});
+
+/* ═══ IT ASKS THE QUESTION IT ASKED ON HOME (founder, 2026-11-12) ═══════════
+   Opened from a bubble's "Chat about this", the empty chat shows the
+   creature under that same question instead of the general line, and once
+   you answer, the question stays above your answer as WAKA's first turn. */
+it('opens with the home bubble\'s question and keeps it above the first answer',async()=>{
+  const opener='Want to chat about what’s on your mind?';
+  await act(async()=>root.render(<ConversationPanel scope={scope} id={id} locale="en-US" onChoose={choose} opener={{ask:opener}}/>));
+  expect(host.querySelector('.chat-opening--asks .chat-opening-ask')?.textContent).toBe(opener);
+  expect(host.textContent).not.toContain('WAKA answers from what you saved.');
+  await type('The move, mostly');await click('Send');
+  const turns=[...host.querySelectorAll('.chat-message')];
+  expect(turns[0]?.getAttribute('data-role')).toBe('assistant');
+  expect(turns[0]?.textContent).toContain(opener);
+  expect(turns[1]?.textContent).toContain('The move, mostly');
 });

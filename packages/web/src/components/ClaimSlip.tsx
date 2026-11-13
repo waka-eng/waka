@@ -60,7 +60,7 @@ export type PickAnswer = "keep" | "not";
    chat button (founder, 2026-10-15: "remove chat about it under the claim"). */
 interface Drag { pointerId: number; startX: number; startY: number; lastX: number; lastAt: number; velocity: number; moved: boolean }
 
-export function ClaimSlip({ id, tone, label, labelKeep, labelNot, savingLabel, failureLabel, header, more, children, onAnswer, onLeft, onOpen }: {
+export function ClaimSlip({ id, tone, label, labelKeep, labelNot, savingLabel, failureLabel, header, more, children, onAnswer, onLeft, onOpen, middle }: {
   id: string;
   /** A reading WAKA made of you (warm, plain) or a sentence your agent picked (cool, quoted). */
   tone: "reading" | "pick";
@@ -68,6 +68,9 @@ export function ClaimSlip({ id, tone, label, labelKeep, labelNot, savingLabel, f
   label: string;
   labelKeep: string;
   labelNot: string;
+  /** The middle seat of the answer row, between the two answers: the
+      review card's "Chat about this" (founder, 2026-11-12). */
+  middle?: ReactNode;
   savingLabel?:string;
   failureLabel?:string;
   /** Who is presenting it, above the slip. Nothing for a reading: the big
@@ -274,6 +277,7 @@ export function ClaimSlip({ id, tone, label, labelKeep, labelNot, savingLabel, f
           <svg viewBox="0 0 7 12" width="7" height="12" aria-hidden="true"><path d="M6 1 1 6l5 5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
           <span>{labelNot}</span>
         </button>
+        {middle ? <span className="jar-pick-acts-middle">{middle}</span> : null}
         <button type="button" className="jar-pick-act jar-pick-act--keep" disabled={leaving !== null} onClick={() => commit("keep")}>
           <span>{labelKeep}</span>
           <svg viewBox="0 0 7 12" width="7" height="12" aria-hidden="true"><path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>

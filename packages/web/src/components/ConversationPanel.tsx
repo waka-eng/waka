@@ -147,7 +147,11 @@ const offlineNow=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
 const refusalOf=(reason:unknown):MessageKey=>reason instanceof PhotoRefused?reason.reason
   :reason instanceof FileRefused?(reason.reason==='too_large'?'worldAttachTooLarge':reason.reason==='empty'?'worldPhotoEmpty':'worldAttachUnsupported'):'worldAttachFailed';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
+export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory,opener}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
+  /** The creature's question the chat was opened from ("Chat about this"
+      under it on home): it asks it again here, in its own bubble, so the
+      first message is an answer to it (founder, 2026-11-12). */
+  opener?:{ask:string;quote?:string};
 }){
   /* THE MIC AND THE ATTACH TOOLS LIVE IN THIS PANEL'S OWN NOTE BAR (`NoteBar`,
      2026-11-08): the page's bar no longer lends them a slot. */
@@ -371,6 +375,23 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       if(mine(owner))setError(say(draftRef.current?.pending?(offlineNow()?'worldConversationNotConfirmed':'worldConversationSaveFailed'):target?'worldConversationReadFailed':'worldConversationUnreachable'));}
     finally{if(mine(owner))setLoading(false);}
   };
+  /* AN UNCONFIRMED SEND IS READ BACK BY THE CHAT, NOT BY A BUTTON (founder,
+     2026-11-12, of "Check if it was sent": "never write that"). Once, a
+     moment after the send went uncertain, and again whenever the page comes
+     back into view; a confirmed message clears `pending` and stops it. */
+  const pendingId=draft?.pending?draft.id:null;
+  const refreshRef=useRef(refresh);refreshRef.current=refresh;
+  /* NOT WHILE THE SEND IS STILL OUT (code review, 2026-11-12): a draft is
+     `pending` from the moment Send is pressed, and a read racing the write
+     on a new chat finds no chat yet and says the save failed. Only once the
+     send has come back still unconfirmed (`busy` false) does it check. */
+  useEffect(()=>{
+    if(!pendingId||busy)return;
+    const timer=window.setTimeout(()=>{if(!working.current)void refreshRef.current();},1500);
+    const again=()=>{if(document.visibilityState==='visible'&&!working.current)void refreshRef.current();};
+    document.addEventListener('visibilitychange',again);
+    return()=>{window.clearTimeout(timer);document.removeEventListener('visibilitychange',again);};
+  },[pendingId,busy]);
   const loadEarlier=async()=>{
     if(!id||earlierBusy||busy||loading||!conversation?.messageWindowStart||conversation.messageWindowStart<=1)return;
     const owner=lifecycle.current;
@@ -746,8 +767,16 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               leaves when the first message is actually on its way. */}
           {/* While the microphone is open the creature stands in the listening
               view below, so the opening steps aside: one creature, not two. */}
-          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening?
-            <div className="chat-opening">
+          {/* ═══ IT ASKS THE QUESTION IT ASKED ON HOME (founder, 2026-11-12:
+              "it should be like the character is asking you that same exact
+              question so you respond") ═══ Opened from a bubble's "Chat about
+              this", the creature stands with that same question over it, in
+              home's bubble, instead of the general line. */}
+          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening&&!opener?.quote?
+            opener?<div className="chat-opening chat-opening--asks">
+              <div className="jar-char-bubble-body chat-opening-ask"><span className="jar-char-bubble-reading">{opener.ask}</span></div>
+              <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
+            </div>:<div className="chat-opening">
               <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
               <p>{say('worldConversationOpening')}</p>
             </div>:null}
@@ -781,6 +810,22 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               corners so a run reads as one person continuing rather than
               as two separate sayings. */}
           <div className="chat-messages" role="log" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
+            {/* ═══ THE CREATURE SENDS IT, IN FULL (founder, 2026-11-12: "it
+                should be an actual chat that comes from the other side ...
+                because this way it's gonna be cut", then "the inspiration
+                should come from the other side, not as me sending it") ═══
+                Opened from the review card, the chat starts as WAKA's turn:
+                your inspiration, whole, as a card it holds up, then its
+                question; you reply. Opened from home's bubble (no quote),
+                the question stays above your answer once you give one. */}
+            {opener?.quote?<article className="chat-message chat-message--shared" data-role="assistant" data-run="fm">
+              <p className="chat-said">{say('worldConversationWaka')}</p>
+              <figure className="chat-shared"><figcaption>{say('worldInspirationReviewOriginal')}</figcaption><ConversationText text={opener.quote}/></figure>
+            </article>:null}
+            {opener&&(opener.quote||conversation?.messages.length||sending)?<article className="chat-message" data-role="assistant" data-run={opener.quote?'ml':'fl'}>
+              <p className="chat-said">{say('worldConversationWaka')}</p>
+              <div className="chat-bubble"><ConversationText text={opener.ask}/></div>
+            </article>:null}
             {(conversation?.messages??[]).map((message,at,all)=>{
               if(at===0&&originRepeated)return null;
               /* AND THE ONE BEING SENT IS A NEIGHBOUR LIKE ANY OTHER. The
@@ -944,8 +989,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
           </ul>:null}
           tools={tools()}
           action={replyPending
-            ?<button type="button" className="chat-send chat-send--stop waka-note-bar-action"
-               disabled={reply.busy} onClick={()=>void reply.stop()}>{say('worldConversationStop')}</button>
+            ?<button type="button" className="chat-send chat-send--stop waka-note-bar-action" aria-label={say('worldConversationStop')} title={say('worldConversationStop')}
+               disabled={reply.busy} onClick={()=>void reply.stop()}><HomeActionIcon kind="stop"/></button>
             :<button type="button" className="chat-send waka-note-bar-action"
                /* THE SAME CONTROL RETRIES AN UNCERTAIN SAVE: a message whose
                   response was lost is sent again by the press that sends. */
@@ -955,14 +1000,13 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                aria-label={say(draft?.pending?'worldConversationRetry':'worldConversationSendWord')}
                title={say(whyNoSend??(draft?.pending?'worldConversationRetry':'worldConversationSend'))}
                disabled={Boolean(whyNoSend)}
-               onClick={()=>void save()}>{say(draft?.pending?'worldConversationRetry':'worldConversationSendWord')}</button>}>
+               onClick={()=>void save()}><HomeActionIcon kind="send"/></button>}>
           <label className="chat-input-label"><span>{say('worldConversationMessage')}</span><textarea ref={editor} autoFocus={!mobile} maxLength={4000} rows={1} aria-label={say('worldConversationMessage')} placeholder={say('worldConversationFirst')} value={draft?.pending?'':draft?.content??''} disabled={busy||draft?.pending} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.altKey&&(!mobile||event.metaKey||event.ctrlKey)&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229&&!event.repeat){event.preventDefault();void save();}}} onChange={event=>edit(event.target.value)}/></label>
         </NoteBar>}
-        {/* A SAVE THAT WAS NOT CONFIRMED KEEPS ITS ONE WAY OUT. This reads
-            the conversation back rather than writing again, which is why it
-            survived the sweep of retry-shaped controls: it is the only way to
-            learn whether words you can still see on screen actually landed. */}
-        {draft?.pending?<button type="button" className="chat-recheck" disabled={busy||loading} onClick={()=>void refresh()}>{say('worldConversationCheck')}</button>:null}
+        {/* "CHECK IF IT WAS SENT" WENT (founder, 2026-11-12: "never write
+            that"). A save that was not confirmed is read back by the chat
+            itself (the effect beside `refresh`), not by a button asking the
+            person to do the checking. */}
       </footer>:null}
     </section>
     {/* ═══ THE SIDE PANEL IS GONE, AND SO IS PINNING ══════════════════

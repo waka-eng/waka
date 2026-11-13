@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DialogSurface } from './DialogSurface';
+import { SavedPhoto } from './SavedPhoto';
 import { SurfaceHeader } from './SurfaceHeader';
 import { t, type SupportedLocale } from '../lib/locales';
 
@@ -31,7 +32,7 @@ export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDi
   label?: string;
   onShare?: () => void; onChat?: () => void; chatDisabled?: boolean; details?: ReadingDetailActions;
   /** The saves the read rests on, by their own words. */
-  why?: ReadonlyArray<{ id: string; preview: string }>;
+  why?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>;
   /** "See all saves" — the saves, patterns and principles in one scroll. */
   onSeeAll?: () => void;
 }) {
@@ -65,7 +66,13 @@ export function ReadingBubbleText({ text, locale, label, onShare, onChat, chatDi
     {whyOpen && hasWhy ? <>
       <span className="jar-char-bubble-of">{say('worldReadingWhyLabel')}</span>
       <span className="waka-says-why" role="list" aria-label={say('worldReadingWhyLabel')}>
-        {why!.map(row => <span key={row.id} role="listitem" className="waka-says-why-row">“{row.preview}”</span>)}
+        {/* A picture shows as the picture; a save with words of its own quotes
+            them beside it (founder, 2026-11-12: "Photo" and "Photo" was "so
+            bad"). A picture alone keeps its name for a screen reader. */}
+        {why!.map(row => <span key={row.id} role="listitem" className="waka-says-why-row" data-photo={row.photoId ? '1' : undefined}>
+          {row.photoId ? <SavedPhoto id={row.photoId} /> : null}
+          {row.wordless ? <span className="sr-only">{row.preview}</span> : <span className="waka-says-why-words">“{row.preview}”</span>}
+        </span>)}
       </span>
       <span className="jar-char-bubble-acts">
         <button type="button" className="jar-char-bubble-act" onClick={() => setWhyOpen(false)}>{say('worldSourceDismiss')}</button>

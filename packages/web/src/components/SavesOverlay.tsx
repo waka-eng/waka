@@ -45,6 +45,8 @@ import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
 import { SurfaceHeader, type BackKind } from "./SurfaceHeader";
+import { firstPhoto, onlyAttachments, SavedPhoto } from "./SavedPhoto";
+import { prefersStillness } from "../lib/motion";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { InspirationAttachments } from "./InspirationAttachments";
 import { SavedImageWords } from "./ImageWords";
@@ -91,11 +93,17 @@ const NOTE_READ_LIMIT_MS = 20_000;
    it is the moment just after the press and not a pending state. */
 const UNDO_MS = 6000;
 
-export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, onNew }: {
+/** How long a sheet takes to drop back down; `claims.css` `waka-sheet-down` matches. */
+const SHEET_DROP_MS = 220;
+
+export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, onNew, sheet = false }: {
   canReview?:boolean; onRelevanceChanged?:()=>void;
   /** "New note", the header's right word, as Past chats has New chat
       (founder, 2026-11-10). Absent where nothing may be written. */
   onNew?: () => void;
+  /** Pulled up from home's handle: rises over home above the home bar and
+      drops back down on close (see `savesAsSheet` in `Home.tsx`). */
+  sheet?: boolean;
   topRequest?: number;
   viewState?: ListViewState;
   /**
@@ -191,6 +199,23 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
   gesture?: string | null;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
+  /* A SHEET GOES BACK DOWN THE WAY IT CAME UP: its "<" and Escape drop it
+     (`waka-sheet-down`, `SHEET_DROP_MS`) and only then leave. Under reduced
+     motion, or with no layout to animate, it leaves at once. */
+  const sheetPage = useRef<HTMLDivElement>(null);
+  /* The drop's timer is cleared if the sheet goes some other way first, and
+     it calls the `onBack` of the moment it fires, never one captured before
+     (code review, 2026-11-12: a press on the bar under a falling sheet). */
+  const onBackNow = useRef(onBack); onBackNow.current = onBack;
+  const dropTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(dropTimer.current), []);
+  const backOut = useCallback(() => {
+    const node = sheetPage.current;
+    if (!sheet || !node || prefersStillness() || typeof node.getAnimations !== "function") { onBackNow.current(); return; }
+    if (node.dataset.leaving) return;
+    node.dataset.leaving = "1";
+    dropTimer.current = window.setTimeout(() => onBackNow.current(), SHEET_DROP_MS);
+  }, [sheet]);
   /* THE ARCHIVE'S RECORDER, OWNED BY THE CALLER (L12), read from the
      provider `Home` mounts around its world (`ArchiveRecorderProvider`). It
      outlives this surface, so a clip still finishing when the archive closes
@@ -1239,7 +1264,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
        hides them too, and `Home` is told through `onNoteOpen` — so the
        reserve is holding room for nothing, and holding it was the last 60px
        between this page and the one the founder prefers. */
-    <div className={`waka-page${open ? " waka-page--note" : ""}`}>
+    <div ref={sheetPage} className={`waka-page${open ? " waka-page--note" : sheet ? " waka-page--sheet" : ""}`}>
       <DialogSurface
         {...listScroll}
         /* ═══ AN OPEN NOTE IS A PAGE, NOT A COLUMN IN THE ARCHIVE ════════
@@ -1277,13 +1302,13 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
            also the worst place to be held: a search field, a category
            row and a chapter-grouped list of everything you have ever
            kept, and the way out of all of it was a key nobody can see. */
-        motion="modal"
+        motion={sheet && !open ? undefined : "modal"}
         modal={false}
         escapeLeavesAsModal={false}
-        onClose={onBack}
+        onClose={open ? onBack : backOut}
         >
         {open ? null : <SurfaceHeader locale={locale} gesture={gesture}
-          back={{ kind: backKind, onBack }}
+          back={{ kind: backKind, onBack: backOut }}
           /* THE NAME, THEN HOW MANY (nav system R4): "Kept (36)" centred in the
              one header, the count counting what is on screen (`shown`), and
              under a claim's filter the claim's own words. */
@@ -1802,11 +1827,18 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                     const breakAt = words.indexOf("\n");
                     const lead = (breakAt > 0 ? words.slice(0, breakAt) : words).trim();
                     const rest = (breakAt > 0 ? words.slice(breakAt + 1) : "").trim();
+                    /* A PICTURE SHOWS AS THE PICTURE (founder, 2026-11-12:
+                       rows reading "Photo", "Photo", "Photo"). Its first
+                       picture sits at the row's end; a save that is only
+                       pictures has no lead line to print, and its name stays
+                       for a screen reader. */
+                    const photo = firstPhoto(row.attachments);
+                    const wordless = onlyAttachments(row.preview, row.attachments);
                     return (
                       <li key={row.id}>
                         <button type="button" className="waka-list-row"
                           onClick={() => pressNote(row)}>
-                          <span className="waka-list-lead">{lead}</span>
+                          {wordless ? <span className="sr-only">{lead}</span> : <span className="waka-list-lead">{lead}</span>}
                           <span className="waka-list-meta">
                             {/* WHICH ONE THIS IS, AND IT IS A NAME RATHER THAN
                                 A MEASUREMENT. Founder, on the reference's
@@ -1840,6 +1872,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                             <span className="waka-list-date">{dateWords(row.capturedMs, now, locale)}</span>
                             {rest ? <span className="waka-list-rest">{rest}</span> : null}
                           </span>
+                          {photo ? <SavedPhoto id={photo} className="waka-list-photo" /> : null}
                         </button>
                       </li>
                     );

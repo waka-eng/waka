@@ -164,7 +164,9 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
       field.dispatchEvent(new Event('input', { bubbles: true }));
     });
     const send = world!.container.querySelector<HTMLButtonElement>('footer.chat-composer button.chat-send');
-    expect(send?.textContent, 'Send is not a word').toBe('Send');
+    /* An icon now (founder, 2026-11-12), named Send for a screen reader. */
+    expect(send?.getAttribute('aria-label'), 'Send is not named Send').toBe('Send');
+    expect(send?.querySelector('svg[data-home-action-icon="send"]'), 'Send is not the send glyph').not.toBeNull();
     expect(send!.classList.contains('waka-note-bar-action'), 'Send is not the bar\'s quiet act').toBe(true);
     expect(send!.disabled, 'Send is dim with words in the field').toBe(false);
     await act(async () => send!.click()); await settle();
@@ -191,18 +193,19 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     await act(async () => past!.click()); await settle();
     expect(location.pathname, 'Past chats left the chat up').not.toContain('/chat/');
     expect(open(), 'Past chats did not open the chats list').toBe('conversations');
-    /* The same header and the same bar (founder, 2026-11-10): Past chats has
-       the chat's bar at its foot, it does not fade in from the chat, and a
-       press on the bar's field starts a new chat. */
-    const list = world!.container.querySelector<HTMLElement>('.waka-over--chats')!;
+    /* The same header, no fade from the chat, and no chat bar on the list
+       (founder, 2026-11-12: "don't show the chat box when looking at past
+       chat"). Its "<" goes home, however many times the two were swapped. */
+    const list = world!.container.querySelector<HTMLElement>('.waka-over[data-jar-surface]')!;
     expect(list.getAttribute('data-motion'), 'Past chats faded in from a chat').toBeNull();
-    const field = list.querySelector<HTMLButtonElement>('.waka-over-foot [data-note-bar] .waka-over-foot-field');
-    expect(field?.textContent).toBe('What’s on your mind?');
-    await act(async () => field!.click()); await settle();
-    expect(location.pathname, 'the bar did not start a new chat').toContain('/chat/new');
+    expect(list.querySelector('[data-note-bar]'), 'a chat bar stands on Past chats').toBeNull();
+    expect(world!.container.querySelector('.waka-surface-back')?.getAttribute('aria-label')).toBe('Close');
+    await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click()); await settle();
+    expect(open(), 'Past chats\' "<" did not go home').toBeNull();
+    expect(location.pathname).not.toContain('/chat/');
   });
 
-  it('returns from history to the same principle-started draft', async () => {
+  it('keeps a principle-started draft, and goes home from Past chats', async () => {
     const principleId='11111111-1111-4111-8111-111111111111';
     world=await mountWorld(FACTS,{initialEntries:[`/chat/new?principle=${principleId}`],routerTools:<RouterTools/>});await settle();
     const field=await chatField(world.container);
@@ -213,7 +216,9 @@ describe('a chat writes into the notepad\'s note bar, and leaves by its "<"', ()
     await act(async()=>world!.container.querySelector<HTMLButtonElement>('.waka-surface-right .waka-surface-act')!.click());await settle();
     expect(open()).toBe('conversations');
     await act(async()=>world!.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click());await settle();
-    expect(new URLSearchParams(location.search).get('principle')).toBe(principleId);
+    expect(open(),'Past chats\' "<" did not go home').toBeNull();
+    /* The draft is kept: the same principle's chat opens on it again. */
+    world.unmount();world=await mountWorld(FACTS,{initialEntries:[`/chat/new?principle=${principleId}`],routerTools:<RouterTools/>});await settle();
     expect((await chatField(world.container)).value).toBe('Keep this question with its starting point.');
   });
 

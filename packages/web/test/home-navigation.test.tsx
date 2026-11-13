@@ -889,7 +889,9 @@ it('keeps archive navigation outside the composer, and reaches chat history from
   await pressDockRow(world.container, 'Inspirations'); await settle();
   expect(open(), 'Search did not open the archive').toBe('saves');
   /* ON A LIST THE WAY OUT IS THE LABELLED BACK (design E1), and it goes home. */
-  expect(world.container.querySelector('.waka-home-bar'), 'the home bar stands over the archive').toBeNull();
+  /* Pulled up from the handle it is a sheet over home, and the home bar
+     stays under it (founder, 2026-11-12). */
+  expect(world.container.querySelector('.waka-home-bar'), 'the home bar left Inspirations pulled up from the handle').not.toBeNull();
   await act(async () => row('Close').click()); await settle();
   expect(open(), 'Close on the archive did not go home').toBeNull();
 
@@ -923,7 +925,8 @@ it('opens the archive from the Saves sheet with nothing lit, and leaves it by it
   for (const [list, entry] of [['saves', 'Inspirations']] as const) {
     await pressDockRow(world.container, entry); await settle();
     expect(open()).toBe(list);
-    expect(world.container.querySelector('.waka-home-bar'), 'the home bar stands over a list').toBeNull();
+    expect(world.container.querySelector('.waka-home-bar'), 'the home bar left the sheet pulled up from it').not.toBeNull();
+    expect(world.container.querySelector('.waka-page--sheet'), 'Inspirations from the handle is not a sheet').not.toBeNull();
     expect(lit()).toBeNull();
     expect(returnRow()?.getAttribute('aria-label')).toBe('Close');
     await act(async () => returnRow()!.click()); await settle();
@@ -1012,8 +1015,8 @@ it('gives a new note a labeled Save and separate Close, without archive navigati
     expect(close()?.getAttribute('aria-label'), 'the notepad has no Close apart from Save').toBe('Close');
     expect(world.container.querySelector('nav.waka-dock'), 'a dock stands under the note bar').toBeNull();
     const save = world.container.querySelector<HTMLButtonElement>('.waka-dock-save')!;
-    expect(save.textContent).toBe('Save');
-    expect(save.querySelector('svg'), 'Save is a word, not a glyph').toBeNull();
+    expect(save.getAttribute('aria-label')).toBe('Save');
+    expect(save.querySelector('svg[data-home-action-icon="keep"]'), 'Save is not the Save glyph (founder, 2026-11-12)').not.toBeNull();
     expect(save.disabled).toBe(true);
     const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
     await act(async () => {
