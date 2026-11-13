@@ -29,6 +29,7 @@ before it gets a name anywhere else.
 
 | Concept (mechanism) | Data & API (English, boring) | UI (world-language) | UI plain line | Docs & sales (en) | Status |
 |---|---|---|---|---|---|
+| Application-authored conversation context | `conversations.opening` descriptor | Opening | The question or saved material this chat began from | Conversation opening ([contract](docs/data-model.md#application-authored-conversation-opening)) | **today** |
 | User-locked sentence | `locked: boolean`, `locked_at` | **star** | your own words — WAKA will not rewrite them | User-locked immutable statement (immutable override) | **today** |
 | Evidence links | `sources: SourceRef[]` — `record_id`, `excerpt`, `linked_at` | **roots** | the memories this signal grew from | Provenance (evidence links) | **today** |
 | Version keeping | `versions[]` (soft-invalidate, never delete) | **seasons** | who you were last season — kept, never erased | Version history (invalidate-don't-delete) | reserved |

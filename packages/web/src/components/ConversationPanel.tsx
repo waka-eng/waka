@@ -1,3 +1,4 @@
+import {openingJournal,type ConversationOpeningView,type OpeningSelection} from '../lib/conversation-opening';
 import { startJourney, startReplyTiming, observeReplyTiming, cancelReplyTiming } from '../lib/journey-performance';
 /**
  * A TRANSCRIPT, A BOX, AND ONE WAY TO STOP.
@@ -81,7 +82,7 @@ import { startJourney, startReplyTiming, observeReplyTiming, cancelReplyTiming }
  * saying which. A quiet surface is not the same as a quiet failure.
  */
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
-import {createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
+import {prepareConversationOpening,createConversation,fetchConversation,listConversations,saveConversationMessage,type ApiConversation} from '../lib/api/conversations';
 import {profileStorageKey,type ProfileStorageScope} from '../lib/profile-storage';
 import {useConversationReply} from '../lib/use-conversation-reply';
 import {Companion} from './Companion';
@@ -148,15 +149,27 @@ const offlineNow=()=>typeof navigator!=='undefined'&&navigator.onLine===false;
 const refusalOf=(reason:unknown):MessageKey=>reason instanceof PhotoRefused?reason.reason
   :reason instanceof FileRefused?(reason.reason==='too_large'?'worldAttachTooLarge':reason.reason==='empty'?'worldPhotoEmpty':'worldAttachUnsupported'):'worldAttachFailed';
 
-export function ConversationPanel({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory,opener}:{scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
+type ConversationPanelProps={scope:ProfileStorageScope;id:string|null;initialPrincipleId?:string;initialConversation?:ApiConversation;locale:SupportedLocale;onChoose:(id:string|null)=>void;onCreated?:(row:ApiConversation)=>void;onHistory?:()=>void;
   /** The creature's question the chat was opened from ("Chat about this"
       under it on home): it asks it again here, in its own bubble, so the
       first message is an answer to it (founder, 2026-11-12). */
-  opener?:{ask?:string;quote?:string;turn?:boolean;inspirationId?:string;sources?:ReadonlyArray<{id:string;preview:string;photoId?:string|null;wordless?:boolean}>};
-}){
+  opener?:{selection?:OpeningSelection;ask?:string;quote?:string;photoId?:string;wordless?:boolean;turn?:boolean;inspirationId?:string;sources?:ReadonlyArray<{id:string;preview:string;photoId?:string|null;wordless?:boolean}>};
+};
+const selectionFor=(props:ConversationPanelProps)=>props.opener?.selection??(props.opener?.inspirationId?{locale:props.locale,text:props.opener.quote??'',source:{kind:'inspiration' as const,id:props.opener.inspirationId}}:props.opener?.ask?{locale:props.locale,text:props.opener.ask}:undefined);
+export function ConversationPanel(props:ConversationPanelProps){
+  const selection=selectionFor(props),identity=JSON.stringify(selection??null);
+  const [journal,setJournal]=useState<{identity:string;key:string}|null>(null),[journalFailed,setJournalFailed]=useState(false);
+  useEffect(()=>{let active=true;setJournalFailed(false);if(!props.id&&selection)void openingJournal(selection).then(key=>{if(active)setJournal({identity,key});},()=>{if(active)setJournalFailed(true);});return()=>{active=false;};},[props.scope.accountId,props.scope.profileId,props.id,identity]);
+  if(!props.id&&selection&&journal?.identity!==identity)return <section className="chat-page" aria-busy="true"><p role="status">{t(props.locale,journalFailed?'worldConversationOpeningUnavailable':'worldChatLoading')}</p></section>;
+  const key=props.id??(selection?journal!.key:`new:${props.initialPrincipleId??'general'}`);
+  return <ConversationPanelBody {...props} key={`${props.scope.accountId}:${props.scope.profileId}:${key}`} journal={key}/>;
+}
+function ConversationPanelBody({scope,id,initialPrincipleId,initialConversation,locale,onChoose,onCreated,onHistory,opener:requestedOpener,journal:boundJournal}:ConversationPanelProps&{journal:string}){
   /* THE MIC AND THE ATTACH TOOLS LIVE IN THIS PANEL'S OWN NOTE BAR (`NoteBar`,
      2026-11-08): the page's bar no longer lends them a slot. */
-  const journal=id??`new:${initialPrincipleId??'general'}`;
+  const selection=selectionFor({scope,id,locale,onChoose,opener:requestedOpener});
+  const journal=boundJournal;
+  const [openingView,setOpeningView]=useState<ConversationOpeningView|null>(null),[openingBusy,setOpeningBusy]=useState(Boolean(!id&&selection)),[openingFailed,setOpeningFailed]=useState(false),[openingReadFailed,setOpeningReadFailed]=useState(false),[openingAttempt,setOpeningAttempt]=useState(0);
   const initial=initialConversation?.id===id&&initialConversation.profileId===scope.profileId?initialConversation:null;
   const bootstrap=useRef(initial);
   const [conversation,setConversation]=useState<ApiConversation|null>(initial),[draft,setDraft]=useState<Draft|null>(null);
@@ -175,6 +188,31 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   const generationRef=useRef(generationEnabled);generationRef.current=generationEnabled;
   const root=useRef<HTMLElement>(null),body=useRef<HTMLDivElement>(null),editor=useRef<HTMLTextAreaElement>(null),nearBottom=useRef(true);
   const restoredScroll=useRef<{top:number;nearBottom:boolean;messageWindowStart?:number}|null>(null),scrollKey=profileStorageKey(scope,`conversationScroll:${journal}`)!;
+  // Scroll position is navigation metadata, not the durable authored draft.
+  // Capture geometry immediately, persist at most once per frame, and flush
+  // before leave/visibility changes. Each snapshot carries its original owner key.
+  const scrollWrite=useRef<number|null>(null),scrollSnapshot=useRef<{key:string;raw:string}|null>(null);
+  const flushScroll=()=>{
+    if(scrollWrite.current!==null){window.cancelAnimationFrame(scrollWrite.current);scrollWrite.current=null;}
+    const pending=scrollSnapshot.current;scrollSnapshot.current=null;
+    if(pending)try{sessionStorage.setItem(pending.key,pending.raw);}catch{/* Reading remains available. */}
+  };
+  const onScroll=()=>{
+    const node=body.current;if(!node)return;
+    nearBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80;
+    scrollSnapshot.current={key:scrollKey,raw:JSON.stringify({top:node.scrollTop,nearBottom:nearBottom.current,...(conversationRef.current?.messageWindowStart!==undefined?{messageWindowStart:conversationRef.current.messageWindowStart}:{})})};
+    if(scrollWrite.current===null)scrollWrite.current=window.requestAnimationFrame(()=>{scrollWrite.current=null;flushScroll();});
+  };
+  useEffect(()=>{
+    const hidden=()=>{if(document.hidden)flushScroll();};
+    window.addEventListener('pagehide',flushScroll);document.addEventListener('visibilitychange',hidden);
+    return()=>{window.removeEventListener('pagehide',flushScroll);document.removeEventListener('visibilitychange',hidden);flushScroll();};
+  },[scrollKey]);
+  const detached=draft?.opening===null;
+  const resolvedOpening=conversation?.opening??(!detached?openingView:null);
+  const opener=resolvedOpening?resolvedOpening.available?{...resolvedOpening,turn:true}:undefined:!id&&!detached&&!openingFailed&&!(draft?.pending&&!draft.opening)?requestedOpener:undefined;
+  const hasOpeningQuote=opener?.quote!==undefined||Boolean(opener?.photoId);
+  const openingUnavailable=Boolean(conversation?.opening&&!conversation.opening.available||openingFailed);
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
   /* ═══ PHOTOS AND FILES ON THE WAY IN (2026-10-16) ══════════════════════
      Founder: "＋ menu rows: 'Add photos' and 'Add file' … upload
@@ -290,9 +328,12 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      notice offers a reload. An answer older than the screen (`behind`) keeps
      the reply unconfirmed — `reply.state` stays null — so Send stays off. */
   const awaitingReply=!reply.terminal&&(reply.busy||replyPending||replyUnconfirmed);
+  const waitingVisible=Boolean(busy&&sending||awaitingReply&&!reply.error);
+  const [longWait,setLongWait]=useState(false);
+  useEffect(()=>{setLongWait(false);if(!waitingVisible)return;const timer=window.setTimeout(()=>setLongWait(true),8000);return()=>window.clearTimeout(timer);},[waitingVisible]);
   // The send guards as they stand now, for code that resumes after an await.
   const guards=useRef({loading,awaitingReply,storageFailed,focusFailed,conversation,focusPrinciple});guards.current={loading,awaitingReply,storageFailed,focusFailed,conversation,focusPrinciple};
-  useLayoutEffect(()=>{const node=body.current;if(!node||!conversation)return;const saved=restoredScroll.current;
+  useLayoutEffect(()=>{const node=body.current;if(!node||!conversation&&!sending&&!waitingVisible)return;const saved=restoredScroll.current;
     if(prependScroll.current){const previous=prependScroll.current;node.scrollTop=previous.top+node.scrollHeight-previous.height;prependScroll.current=null;return;}
     if(saved){nearBottom.current=saved.nearBottom;node.scrollTop=saved.nearBottom?node.scrollHeight:saved.top;restoredScroll.current=null;}
     /* STILL NO JUMP AWAY FROM WHAT YOU WERE READING. The "New messages ↓"
@@ -300,7 +341,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
        position went with the other controls; the rule it existed to announce
        did not. If you are reading older words, nothing moves. */
     else if(nearBottom.current)node.scrollTop=node.scrollHeight;
-  },[conversation?.messages.length]);
+  },[conversation?.messages.length,sending?.id,waitingVisible]);
   /* THE LIST ITSELF LIVES IN THE CORNER. What this still reads it for is
      `generationEnabled` — whether replies are connected at all, which the
      composer's own state depends on and which this endpoint happens to
@@ -412,9 +453,24 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     try{const saved=readConversationDrafts(scope,journal);if(saved[0]){receipt.current=saved[0];draftRef.current=saved[0].value;setDraft(saved[0].value);}}catch{setStorageFailed(true);}
     try{const saved=JSON.parse(sessionStorage.getItem(scrollKey)??'null');if(saved&&Number.isFinite(saved.top)&&saved.top>=0&&typeof saved.nearBottom==='boolean'&&(saved.messageWindowStart===undefined||Number.isSafeInteger(saved.messageWindowStart)&&saved.messageWindowStart>=1&&saved.messageWindowStart<=200))restoredScroll.current={...saved,messageWindowStart:saved.messageWindowStart??1};}catch{/* Scrolling is recoverable without a stored position. */}
     void refresh();return()=>lifecycle.current.abort();
-  },[scope.accountId,scope.profileId,id,initialPrincipleId]);
+  },[scope.accountId,scope.profileId,id,initialPrincipleId,journal]);
+  useEffect(()=>{
+    if(id){setOpeningBusy(false);return;}
+    const controller=new AbortController(),held=draftRef.current;
+    // A pre-opening journal is replayed byte-for-byte under its existing IDs.
+    if(held?.opening===null||held?.pending&&!held.opening){setOpeningView(null);setOpeningBusy(false);return;}
+    const input=held?.opening?{binding:held.opening}:selection;
+    if(!input){setOpeningBusy(false);return;}
+    setOpeningBusy(true);setOpeningFailed(false);setOpeningReadFailed(false);
+    void prepareConversationOpening(scope.profileId,input,controller.signal).then(view=>{
+      if(controller.signal.aborted)return;setOpeningView(view);
+      const current=draftRef.current;
+      if(current&&!current.pending&&!current.opening&&view.binding)keep({...current,opening:view.binding});
+    }).catch(reason=>{if(!controller.signal.aborted){setOpeningView(null);setOpeningFailed(true);setOpeningReadFailed(!(reason instanceof ApiError&&reason.status===409));}}).finally(()=>{if(!controller.signal.aborted)setOpeningBusy(false);});
+    return()=>controller.abort();
+  },[scope.accountId,scope.profileId,id,journal,openingAttempt]);
   const save=async()=>{
-    if(working.current||loading||limitReached||(generationEnabled===null&&!error)||awaitingReply||reply.terminal||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
+    if(working.current||loading||openingBusy||!draftRef.current?.pending&&openingFailed||limitReached||(generationEnabled===null&&!error)||awaitingReply||reply.terminal||!draftRef.current?.content.trim()&&!draftRef.current?.attachments?.length||uploadsRef.current.length||storageFailed||focusFailed||id&&!conversation)return;
 
     /* REPLIES UNKNOWN BECAUSE THE SERVER WAS UNREACHABLE: ask again first.
        Send used to be dead here — disabled as "loading" forever after a
@@ -468,6 +524,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     const {talkWith: oldPerspective, agentId: oldAgent, ...words} = current;
     const intent: Draft = { ...words, ...(current.pending ? {talkWith: oldPerspective, agentId: oldAgent} : {}),
       revision:conversation?.revision??0,pending:true,updatedAt:Date.now(),
+      ...(!id&&!current.pending&&!detached&&openingView?.binding?{opening:openingView.binding}:{}),
       ...(!id ? {conversationId:current.conversationId??crypto.randomUUID()} : {}) };
 
     if(!keep(intent))return;const owner=lifecycle.current;working.current=true;setBusy(true);
@@ -501,7 +558,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       const attachmentIds=intent.attachments?.length?{attachmentIds:intent.attachments.map(item=>item.id)}:{};
       const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(replies?{requestReply:true}:{}),...attachmentIds},from=conversationRef.current?.messageWindowStart;
         return from!==undefined?saveConversationMessage(scope.profileId,id,input,signal,from):saveConversationMessage(scope.profileId,id,input,signal);})
-        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:replies===true,...attachmentIds},legacyPerspective&&talkAgent?{perspective:legacyPerspective,agentId:talkAgent}:undefined,opener?.inspirationId));
+        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:replies===true,...attachmentIds},legacyPerspective&&talkAgent?{perspective:legacyPerspective,agentId:talkAgent}:undefined,intent.opening===null?undefined:intent.opening?.kind==='source'&&intent.opening.source.kind==='inspiration'?intent.opening.source.id:requestedOpener?.inspirationId,intent.opening??undefined));
       acknowledge();
       if(mine(owner)){observe(next);setError(null);setUnsent(false);setAttachNote(null);if(id)reply.check();}
     }catch(reason){
@@ -527,6 +584,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
          what to do. The rest are still staged under this message's id, so
          the next Send links them. */
       const current=draftRef.current;
+      if(!id&&reason instanceof ApiError&&reason.status===409&&reason.code==='conversation_opening_unavailable'){cancelReplyTiming(scope.profileId,intent.conversationId!);if(current?.id===intent.id)keep({...current,pending:false,updatedAt:Date.now()});setOpeningFailed(true);setError(null);return;}
       if(reason instanceof ApiError&&reason.status===409&&reason.code==='attachment_not_ready'&&current?.pending&&current.id===intent.id){
         cancelReplyTiming(scope.profileId, id ?? intent.conversationId!);
         const gone=new Set(reason.missingAttachmentIds?.length?reason.missingAttachmentIds:(current.attachments??[]).map(item=>item.id));
@@ -552,7 +610,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
      attachments, and this tab becomes its writer. Without any, the fork is
      as before: two tabs' words never overwrite each other. */
   const edit=(content:string)=>{const current=draftRef.current,carry=Boolean(current&&(current.writer===writer.current||current.attachments?.length));
-    keep({id:carry?current!.id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content,revision:conversation?.revision??0,pending:false,
+    keep({id:carry?current!.id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content,revision:conversation?.revision??0,pending:false,...(!id&&(current?.opening!==undefined||openingView?.binding)?{opening:current?.opening!==undefined?current.opening:openingView!.binding}:{}),
       ...(carry&&current!.conversationId?{conversationId:current!.conversationId}:{}),...(carry&&current!.attachments?.length?{attachments:current!.attachments}:{})});};
   /* A MESSAGE TO STAGE ONTO, made before the first chip if nothing is typed
      yet. A new chat's id is chosen here rather than at Send — the server
@@ -564,6 +622,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     const carry=Boolean(current&&(current.writer===writer.current||current.attachments?.length));
     const next:Draft=carry?{...current!,writer:writer.current}:{id:crypto.randomUUID(),writer:writer.current,updatedAt:Date.now(),content:current?.content??'',revision:conversation?.revision??0,pending:false};
     if(!id&&!next.conversationId)next.conversationId=crypto.randomUUID();
+    if(!id&&next.opening===undefined&&openingView?.binding)next.opening=openingView.binding;
     if(carry&&next.writer===current!.writer&&next.conversationId===current!.conversationId)return current;
     return keep(next)?next:null;
   };
@@ -659,7 +718,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
     : reply.terminal === 'gone' ? 'worldConversationReplyGone' as const
     : focusFailed ? 'worldPrincipleUnavailable' as const
     : full ? 'worldConversationFull' as const
-    : loading||generationEnabled===null&&!error ? 'worldChatLoading' as const
+    : openingFailed&&!draft?.pending ? 'worldConversationOpeningUnavailable' as const
+    : loading||openingBusy||generationEnabled===null&&!error ? 'worldChatLoading' as const
     : awaitingReply ? 'worldConversationThinking' as const
     : busy ? 'worldChatSending' as const
     : uploads.some(row=>!row.failed) ? 'worldComposerUploading' as const
@@ -723,7 +783,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
         {id&&!conversation&&!draft?.pending?<button type="button" disabled={busy} onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button>:null}</div>:null}
       {loading?<p className="chat-notice" role="status">{say('worldChatLoading')}</p>:null}
       {focusFailed?<p className="chat-notice" role="alert">{say('worldPrincipleUnavailable')} <button type="button" onClick={()=>onChoose(null)}>{say('worldConversationNew')}</button></p>:null}
-      <div className="jar-conversation-body chat-scroll" ref={body} onScroll={()=>{const node=body.current;if(!node)return;nearBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80;try{sessionStorage.setItem(scrollKey,JSON.stringify({top:node.scrollTop,nearBottom:nearBottom.current,...(conversationRef.current?.messageWindowStart!==undefined?{messageWindowStart:conversationRef.current.messageWindowStart}:{})}));}catch{/* The transcript remains available. */}}}>
+      <div className="jar-conversation-body chat-scroll" ref={body} onScroll={onScroll}>
         <div className="chat-transcript">
           {/* WHOSE MEMORY THIS CHAT READS is said once, by the creature's line in
               the empty chat ("This chat only uses what {name} kept"); the
@@ -744,7 +804,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               about, and the opening turn that only repeated it is not
               printed again under it — so the first thing said in the chat
               is the creature's question. */}
-          {savedOrigin&&!opener?.quote?<div className="chat-topic" data-about="save"><span>{say('worldConversationAboutSave')}</span><blockquote>{originRepeated?conversation!.messages[0]!.content:savedOrigin.text}</blockquote></div>:null}
+          {openingUnavailable?<p className="chat-reply-status" role="status">{say(openingReadFailed?'worldConversationOpeningReadFailed':'worldConversationOpeningUnavailable')}{!id&&openingReadFailed?<button type="button" onClick={()=>setOpeningAttempt(value=>value+1)}>{say('worldConversationRetryReply')}</button>:null}{!id&&!draft?.pending?<button type="button" onClick={()=>{const held=draftRef.current;const next:Draft=held?{...held,opening:null,updatedAt:Date.now()}:{id:crypto.randomUUID(),writer:writer.current,content:'',revision:0,pending:false,updatedAt:Date.now(),opening:null};if(keep(next)){setOpeningView(null);setOpeningFailed(false);setOpeningReadFailed(false);setOpeningBusy(false);}}}>{say('worldConversationContinueWithoutOpening')}</button>:null}</p>:null}
+          {savedOrigin&&!hasOpeningQuote?<div className="chat-topic" data-about="save"><span>{say('worldConversationAboutSave')}</span><blockquote>{originRepeated?conversation!.messages[0]!.content:savedOrigin.text}</blockquote></div>:null}
           {/* ═══ THE ONE YOU ARE TALKING TO IS ON SCREEN ════════════════
               Founder, of the home screen: "this is my only favorite screen
               of the experience." Of this one, empty: "nothing here feels
@@ -773,7 +834,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               question so you respond") ═══ Opened from a bubble's "Chat about
               this", the creature stands with that same question over it, in
               home's bubble, instead of the general line. */}
-          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening&&!opener?.quote&&!opener?.turn?
+          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening&&!hasOpeningQuote&&!opener?.turn?
             opener?.ask?<div className="chat-opening chat-opening--asks">
               <div className="jar-char-bubble-body chat-opening-ask"><span className="jar-char-bubble-reading">{opener.ask}</span></div>
               <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
@@ -821,11 +882,11 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                 your inspiration, whole, as a card it holds up, then its
                 question; you reply. Opened from home's bubble (no quote),
                 the question stays above your answer once you give one. */}
-            {opener?.quote?<article className="chat-message chat-message--shared" data-role="assistant" data-run={opener.ask?'fm':'fl'}>
+            {hasOpeningQuote?<article className="chat-message chat-message--shared" data-role="assistant" data-provenance="application" data-run={opener?.ask?'fm':'fl'}>
               <p className="chat-said">{say('worldConversationWaka')}</p>
-              <figure className="chat-shared"><figcaption>{say('worldInspirationReviewOriginal')}</figcaption><ConversationText text={opener.quote}/></figure>
+              <figure className="chat-shared"><figcaption>{say('worldInspirationReviewOriginal')}</figcaption>{opener?.photoId?<SavedPhoto id={opener.photoId}/>:null}{opener?.quote?(opener.wordless?<span className="sr-only">{opener.quote}</span>:<ConversationText text={opener.quote}/>):null}</figure>
             </article>:null}
-            {opener?.ask&&(opener.quote||opener.turn||conversation?.messages.length||sending)?<article className="chat-message" data-role="assistant" data-run={opener.quote?'ml':opener.sources?.length?'fm':'fl'}>
+            {opener?.ask&&(hasOpeningQuote||opener.turn||conversation?.messages.length||sending)?<article className="chat-message" data-role="assistant" data-provenance="application" data-run={hasOpeningQuote?'ml':opener.sources?.length?'fm':'fl'}>
               <p className="chat-said">{say('worldConversationWaka')}</p>
               <div className="chat-bubble"><ConversationText text={opener.ask}/></div>
             </article>:null}
@@ -833,7 +894,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                 After WAKA says the read, it says where it came from: each
                 save it rests on, as a card (its picture when it is one),
                 and you can ask about any of it. */}
-            {opener?.sources?.length?<article className="chat-message chat-message--shared" data-role="assistant" data-run="ml">
+            {opener?.sources?.length?<article className="chat-message chat-message--shared" data-role="assistant" data-provenance="application" data-run="ml">
               <p className="chat-said">{say('worldConversationWaka')}</p>
               <div className="chat-bubble"><p>{say('worldReadingWhyLabel')}:</p></div>
               {opener.sources.map(row=><figure key={row.id} className="chat-shared">
@@ -896,8 +957,14 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                 {sending.content?<div className="chat-bubble"><ConversationText text={sending.content}/></div>:null}
                 {/* What it carries, drawn the way it will be once it lands. */}
                 <MessageAttachments locale={locale} attachments={(sending.attachments??[]).map(item=>({...item,conversationId:id??sending.conversationId??'',messageId:sending.id,staged:true,createdAt:new Date(sending.updatedAt).toISOString()}))}/>
-                <p className="chat-meta" role="status">{say(busy?'worldChatSending':'worldReviewPending')}</p>
+                <p className="chat-meta">{say(busy?'worldChatSending':'worldReviewPending')}</p>
               </article>:null}
+            {waitingVisible?<div className="chat-waiting" data-phase={busy&&sending?'sending':'waiting'} role="status" aria-live="polite">
+              <span className="chat-said" aria-hidden="true">WAKA</span>
+              <div className="chat-thinking"><span className="chat-thinking-dots" aria-hidden="true"><i/><i/><i/></span>
+                <span className={!busy&&!longWait&&!reply.waiting?'sr-only':undefined}>{say(busy&&sending?(longWait?'worldConversationSendWaiting':'worldChatSending'):reply.waiting?'worldConversationReplyWaiting':longWait?'worldConversationLongWait':'worldConversationThinking')}</span>
+              </div>
+            </div>:null}
           </div>
           {/* THE ONE OTHER CONTROL ON THE SURFACE, AND IT IS HERE RATHER THAN
               IN THE FOOTER ON PURPOSE: it interrupts this sentence, so it
@@ -913,8 +980,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               not at a status line halfway up a scrolling transcript. What
               is left is the status, which keeps the live region to itself
               — a button inside one gets re-announced on every phase. */}
-          {awaitingReply&&!reply.error?<div className="chat-thinking"><span className="chat-thinking-dots" aria-hidden="true"><i/><i/><i/></span>
-            <span role="status">{say(reply.waiting?'worldConversationReplyWaiting':'worldConversationThinking')}</span></div>:null}
+
         </div>
       </div>
       {canCompose?<footer className="chat-composer">
@@ -1005,7 +1071,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
           tools={tools()}
           action={replyPending
             ?<button type="button" className="chat-send chat-send--stop waka-note-bar-action" aria-label={say('worldConversationStop')} title={say('worldConversationStop')}
-               disabled={reply.busy} onClick={()=>void reply.stop()}><HomeActionIcon kind="stop"/></button>
+               disabled={reply.busy||!reply.state?.requestId} onClick={()=>void reply.stop()}><HomeActionIcon kind="stop"/></button>
             :<button type="button" className="chat-send waka-note-bar-action"
                /* THE SAME CONTROL RETRIES AN UNCERTAIN SAVE: a message whose
                   response was lost is sent again by the press that sends. */

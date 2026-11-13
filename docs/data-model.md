@@ -335,6 +335,27 @@ The retained context API revalidates that selection; the current UI does not
 expose the former memory drawer or a separate citation list. Conversation deletion erases
 both sets of reference metadata while retaining the budget timestamps.
 
+### Application-authored conversation opening
+
+A conversation may bind one `opening` descriptor when it is created. This is
+application-authored context, not a generated assistant turn or a human message.
+The descriptor contains a version, locale, closed prompt key or owned source
+identities and current content/state hashes. It contains no copied capture,
+reading, quote or arbitrary client-authored assistant/system words. A Why opening
+also binds the ordered, server-resolved evidence identities. The human's first
+message stays exact and retains position one.
+
+Creation, opening binding, first message and reply intent commit atomically.
+Retries compare the immutable descriptor as well as the first message; an old
+client or journal without an opening remains compatible. Read and model context
+resolve the descriptor through the same ownership/current-source gates as chat
+citations. Changed/deleted sources make the opening unavailable; the same identity
+must never silently acquire new words. Opening sources participate in the reply's
+existing source/revision publication fences. A closed public prompt is resolved
+from its locale catalogue; dated activity openings are reconstructed from owned
+records at the bound observation time and fail closed if that view changes.
+Conversation deletion erases the descriptor; profile/account deletion cascades it.
+
 Client-generated conversation/message IDs make retry idempotent. A replay with
 different content conflicts rather than overwriting words. Deleting a
 conversation erases its messages and keeps only a content-free conversation

@@ -1,3 +1,4 @@
+import {conversationOpeningSchema,openingSelectionSchema,openingIdentity,prepareConversationOpening,projectConversationOpening,resolveConversationOpening} from '../lib/conversation-opening.js';
 import {chargeChatRequest,ChatRateLimitError} from '../lib/chat-rate-limit.js';
 import {Hono} from 'hono';
 import {z} from 'zod';
@@ -50,7 +51,7 @@ function windowedConversation<T extends{revision:number;messages:Array<{position
   return {...row,messageWindowStart:first,messages:row.messages.filter(message=>message.position>=first)};
 }
 type Db=ReturnType<typeof getDb>;
-type Reader=Pick<Db,'select'>;
+type Reader=Pick<Db,'select'|'execute'>;
 async function readConversation(db:Reader,profileId:string,id:string,window?:MessageWindow){
   const [row]=await db.select().from(conversations).where(and(eq(conversations.id,id),eq(conversations.profileId,profileId)));
   if(!row)throw new ConversationError('Conversation not found.',404);
@@ -83,7 +84,7 @@ async function readConversation(db:Reader,profileId:string,id:string,window?:Mes
   /* Whose memory it reads, worked out once and handed to the projection, and
      reported as it is now: an agent since removed reads as 'mine'. */
   const memory=await conversationMemory(db,profileId,row);
-  return {...row,perspective:memory.perspective,agentProfileId:memory.agentId,preview:conversationPreview(topic),...(window?{messageWindowStart:start}:{}),initialPrinciple:initialPrinciple??null,initialInspiration:initialInspiration??null,messages:(await projectConversationMessages(db,profileId,id,messages,memory)).map(message=>({...message,savedInspirationIds:saved.filter(item=>item.messageId===message.id).map(item=>item.inspirationId)}))};
+  return {...row,opening:await projectConversationOpening(db,profileId,row.opening),perspective:memory.perspective,agentProfileId:memory.agentId,preview:conversationPreview(topic),...(window?{messageWindowStart:start}:{}),initialPrinciple:initialPrinciple??null,initialInspiration:initialInspiration??null,messages:(await projectConversationMessages(db,profileId,id,messages,memory)).map(message=>({...message,savedInspirationIds:saved.filter(item=>item.messageId===message.id).map(item=>item.inspirationId)}))};
 }
 /**
  * The keep a conversation is being pointed at must exist AND be this
@@ -133,20 +134,33 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       .from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt),search)).orderBy(desc(conversations.updatedAt),asc(conversations.id)).limit(CONVERSATION_LIMITS.conversations);
     return c.json({profileId,conversations:rows,...conversationCapabilities()});
   });
+  routes.post('/opening',async c=>{
+    const input=z.union([openingSelectionSchema,z.object({binding:conversationOpeningSchema}).strict()]).safeParse(await c.req.json().catch(()=>null));
+    if(!input.success)return c.json({error:'Invalid conversation opening'},400);
+    const profileId=c.get('conversationProfileId');
+    const opening=await database().transaction(async tx=>{
+      const binding='binding' in input.data?input.data.binding:await prepareConversationOpening(tx,profileId,input.data);
+      return binding?await projectConversationOpening(tx,profileId,binding):null;
+    },{isolationLevel:'repeatable read',accessMode:'read only'});
+    if(!opening?.available)return c.json({error:'This opening changed or is no longer available.',code:'conversation_opening_unavailable'},409);
+    return c.json({opening});
+  });
   routes.post('/',async c=>{
     const window=messageWindow(c.req.query('from'),c.req.query('limit'));
-    const input=z.object({id:uuid,principleId:uuid.optional(),inspirationId:uuid.optional(),perspective:z.enum(conversationPerspectiveValues).optional(),agentId:uuid.optional(),firstMessage:firstMessageInput.optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
+    const input=z.object({id:uuid,principleId:uuid.optional(),inspirationId:uuid.optional(),perspective:z.enum(conversationPerspectiveValues).optional(),agentId:uuid.optional(),firstMessage:firstMessageInput.optional(),opening:conversationOpeningSchema.optional()}).strict().refine(row=>!row.opening||Boolean(row.firstMessage)).safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
     const profileId=c.get('conversationProfileId');let dropped:string[]=[];
     const row=await database().transaction(async tx=>{
       await tx.select({id:profiles.id}).from(profiles).where(eq(profiles.id,profileId)).for('update');
       const [existing]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,input.data.id)));
       if(existing){
+        if(existing.deletedAt)throw new ConversationError('This conversation was deleted.',410);
         /* A retry is the same create only if it asks for the same memory:
            joining an agent chat from a create that asked for your own (or
            the other way round) would quietly discard what the caller chose. */
         /* Compared as the memory each one means, not column for column: an
            agent id only matters when the perspective is not 'mine', and a
            chat whose agent has since been removed reads as 'mine'. */
+        if(openingIdentity(existing.opening)!==openingIdentity(input.data.opening))throw new ConversationError('This conversation already began with a different opening.',409);
         const stored=await conversationMemory(tx,profileId,existing);
         const asked=input.data.perspective&&input.data.perspective!=='mine'&&input.data.agentId?{perspective:input.data.perspective,agentId:input.data.agentId}:{perspective:'mine' as const,agentId:null};
         const removed=existing.perspective!=='mine'&&stored.perspective==='mine';
@@ -184,13 +198,14 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       if(count.n>=CONVERSATION_LIMITS.conversations)throw new ConversationError('Conversation limit reached. Delete an old conversation first.',429,'conversation_limit_reached');
       if(input.data.principleId){const [source]=await tx.select({id:principles.id}).from(principles).where(and(eq(principles.profileId,profileId),eq(principles.id,input.data.principleId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)));if(!source)throw new ConversationError('This principle is not available.',404);}
       if(input.data.inspirationId)await requireOwnedInspiration(tx,profileId,input.data.inspirationId);
+      if(input.data.opening&&!(await resolveConversationOpening(tx,profileId,input.data.opening,{display:false}))?.available)throw new ConversationError('This opening changed or is no longer available.',409,'conversation_opening_unavailable');
       const first=input.data.firstMessage;
       // Existing conversations above retain their original binding and idempotent replay.
       // A new conversation always uses its owning profile's memory.
       if ((input.data.perspective && input.data.perspective !== 'mine') || input.data.agentId)
         throw new ConversationError('New conversations use your own memory with WAKA.', 400);
       const perspective = 'mine' as const, agentProfileId = null;
-      await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null,initialInspirationId:input.data.inspirationId??null,perspective,agentProfileId,revision:first?1:0});
+      await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null,initialInspirationId:input.data.inspirationId??null,perspective,agentProfileId,opening:input.data.opening??null,revision:first?1:0});
       if(first){
         await tx.insert(conversationMessages).values({id:first.id,profileId,conversationId:input.data.id,position:1,role:'user',content:storedContent(first.content)});
         dropped=await linkMessageAttachments(tx,{profileId,conversationId:input.data.id,messageId:first.id,attachmentIds:first.attachmentIds??[]});
@@ -340,7 +355,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       await tx.update(conversationReplyRequests).set({status:'stopped',userMessageId:null,assistantMessageId:null,references:[],contextSources:[],followUpQuestion:null,contextHash:'',failureCode:null,finishedAt:new Date()})
         .where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,id.data)));
       await tx.delete(conversationMessages).where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id.data)));
-      await tx.update(conversations).set({deletedAt:row.deletedAt??new Date(),updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data)));
+      await tx.update(conversations).set({opening:null,deletedAt:row.deletedAt??new Date(),updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data)));
     });await sweep(keys);return c.json({deleted:true});
   });
   return routes;

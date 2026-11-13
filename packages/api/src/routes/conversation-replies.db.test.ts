@@ -1,3 +1,4 @@
+import {resolveConversationOpening} from '../lib/conversation-opening.js';
 /** WHAT THIS MOCKS, AND WHY (gate G6): `authMiddleware` supplies owned
  * sessions and `ModelProvider` returns controlled replies. Real routes,
  * queue claims, dispatch accounting, memory fences and SQL transactions run.
@@ -269,12 +270,12 @@ it('yields publication to an active source editor without blocking or repeating 
   const url=new URL(connection);url.searchParams.set('options',`-c search_path=${t.schemaName}`);
   const peer=postgres(url.toString(),{max:1,prepare:false,onnotice:()=>{}});
   try{await peer.begin(async tx=>{
-    await tx`UPDATE inspirations SET text='The owner is changing this raw capture.' WHERE id=${f.sourceId}`;
+    await tx`UPDATE inspirations SET text='The owner is changing this raw inspiration.' WHERE id=${f.sourceId}`;
     await processBackgroundJob(job);
     expect(await f.state()).toMatchObject({phase:'failed',failureCode:'publication_unconfirmed'});
     expect(answer).toHaveBeenCalledTimes(1);
   });}finally{await peer.end();}
-  expect((await t.sql`SELECT text FROM inspirations WHERE id=${f.sourceId}`)[0].text).toBe('The owner is changing this raw capture.');
+  expect((await t.sql`SELECT text FROM inspirations WHERE id=${f.sourceId}`)[0].text).toBe('The owner is changing this raw inspiration.');
   expect(await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${f.id}`).toHaveLength(1);
 });
 it('counts both reserved provider slots of earlier hybrid attempts',async()=>{
@@ -443,4 +444,81 @@ it('hands the reply the picked inspiration and points the focus at it, and drops
   expect(after.conversation.initialInspiration).toBeNull();
   expect(after.conversation.messages.map((row:any)=>row.role)).toEqual(['user','assistant','user','assistant']);
   expect(await sources()).toContain(picked.id);
+});
+
+it('keeps the application opening separate from exact human history in first and later replies, and fences changes during generation',async()=>{
+  answer.mockReset();answer.mockImplementation(async input=>{await during?.();return {answer:'A bounded fixture answer.',followUpQuestion:null,citations:input.sources.length?[{sourceNumber:1,quote:input.sources[0].text.slice(0,80)}]:[]};});
+  const f=await fixture(),id=randomUUID(),firstId=randomUUID(),words='I choose a small reversible step.',human='  Yes, for this month only.  ';
+  const [artifact]=await t.sql`INSERT INTO top_of_minds(profile_id,version,status) VALUES(${f.profileId},1,'live') RETURNING id`;
+  const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,locked_at) VALUES(${artifact.id},'pattern',${words},now()) RETURNING id`;
+  const prepared=await f.post('/opening',{locale:'en-US',text:words,source:{kind:'top_of_mind_entry',id:entry.id}});expect(prepared.status).toBe(200);
+  const {opening}=await prepared.json() as any;
+  const payload={id,opening:opening.binding,firstMessage:{id:firstId,content:human,requestReply:true}};
+  expect((await f.post('',payload)).status).toBe(200);expect((await f.post('',payload)).status).toBe(200);
+  let job=await claim();await processBackgroundJob(job);await postgresBackgroundJobStore.markSucceeded(job,null);
+  let input=answer.mock.calls[0][0];expect(input.history).toEqual([{role:'user',content:human}]);
+  expect(input.applicationOpening).toMatchObject({provenance:'application',available:true,sourceNumbers:[1]});expect(input.sources[0].text).toBe(words);
+  expect(await t.sql`SELECT id FROM conversation_reply_requests WHERE conversation_id=${id}`).toHaveLength(1);
+  expect((await f.post('/'+id+'/messages',{id:randomUUID(),content:'What could that mean?',revision:2,requestReply:true})).status).toBe(200);
+  during=async()=>{await t.sql`UPDATE top_of_mind_entries SET body='The person changed these locked words.' WHERE id=${entry.id}`;};
+  job=await claim();await processBackgroundJob(job);await postgresBackgroundJobStore.markSucceeded(job,null);
+  input=answer.mock.calls[1][0];expect(input.applicationOpening?.available).toBe(true);expect(input.sources[0].text).toBe(words);
+  expect((await t.sql`SELECT status FROM conversation_reply_requests WHERE conversation_id=${id} ORDER BY created_at DESC LIMIT 1`)[0].status).toBe('stale');
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${id} AND role='assistant'`).toHaveLength(1);
+  const current=await(await f.app.request('/conversations/'+id)).json() as any;expect(current.conversation.opening.available).toBe(false);
+  expect((await t.sql`SELECT body,locked_at FROM top_of_mind_entries WHERE id=${entry.id}`)[0]).toMatchObject({body:'The person changed these locked words.'});
+});
+
+it('retains a Why opening beyond the history window within the existing per-kind character budgets',async()=>{
+  answer.mockReset();answer.mockImplementation(async()=>({answer:'Synthetic bounded answer.',followUpQuestion:null,citations:[]}));
+  const f=await fixture(),id=randomUUID();
+  const measurements:Array<{phase:string;selectStatements:number;durationMs:number}>=[];
+  const measure=async<T>(phase:string,run:()=>T|Promise<T>)=>{const options=t.sql.options as {debug?:boolean|((...args:any[])=>void)},previous=options.debug;let count=0;const start=performance.now();options.debug=(_connection:unknown,query:string)=>{if(/^\s*(select|with)\b/i.test(query))count++;};try{return await run();}finally{options.debug=previous;measurements.push({phase,selectStatements:count,durationMs:Math.round((performance.now()-start)*100)/100});}};
+  const [artifact]=await t.sql`INSERT INTO top_of_minds(profile_id,version,status) VALUES(${f.profileId},1,'live') RETURNING id`;
+  const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,locked_at) VALUES(${artifact.id},'pattern',${'Bound reading. '.repeat(180)},now()) RETURNING id`;
+  const ids:string[]=[];
+  for(let n=0;n<3;n++){
+    const [inspiration]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},${'Synthetic material '+n+'. '+ 'long saved words '.repeat(120)}) RETURNING id`;ids.push(inspiration.id);
+    const [signal]=await t.sql`INSERT INTO signals(profile_id,statement,status) VALUES(${f.profileId},${'Supported synthetic '+n},'emerging') RETURNING id`;
+    await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id,statement_revision,material_revision) SELECT ${f.profileId},${f.profileId},${signal.id},${inspiration.id},1,personal_revision FROM inspiration_revisions WHERE inspiration_id=${inspiration.id}`;
+    await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id,statement_revision,entry_body_revision) VALUES(${entry.id},${signal.id},1,1)`;
+  }
+  const opening=(await(await measure('prepare',()=>f.post('/opening',{locale:'en-US',text:'Bound reading. '.repeat(180),source:{kind:'top_of_mind_entry',id:entry.id,why:true,supportIds:ids}}))).json() as any).opening;
+  expect(opening.available).toBe(true);
+  expect((await measure('create',()=>f.post('',{id,opening:opening.binding,firstMessage:{id:randomUUID(),content:'My exact first answer'}}))).status).toBe(200);
+  expect((await measure('read',()=>f.app.request('/conversations/'+id))).status).toBe(200);
+  await measure('opening_context_only',()=>resolveConversationOpening(t.db as never,f.profileId,opening.binding,{display:false}));
+  for(let position=2;position<=18;position++)await t.sql`INSERT INTO conversation_messages(id,profile_id,conversation_id,position,role,content) VALUES(${randomUUID()},${f.profileId},${id},${position},${position%2?'user':'assistant'},${'Synthetic intervening turn '+position})`;
+  await t.sql`UPDATE conversations SET revision=18 WHERE id=${id}`;
+  expect((await measure('reply_send_with_input',()=>f.post('/'+id+'/messages',{id:randomUUID(),content:'What about that?',revision:18,requestReply:true}))).status).toBe(200);
+  const job=await claim();await processBackgroundJob(job);
+  const input=answer.mock.calls[0][0];
+  // The eight-row window excludes fixture assistant rows without publication
+  // receipts, preserving the existing stale-evidence policy.
+  expect(input.history.map(row=>row.content)).toEqual(['Synthetic intervening turn 13','Synthetic intervening turn 15','Synthetic intervening turn 17','What about that?']);
+  expect(input.contextChanged).toBe(true);
+  expect(input.applicationOpening).toMatchObject({available:true,why:true,sourceNumbers:[1,2,3,4]});
+  expect(input.sources.filter(row=>row.kind==='inspiration').reduce((sum,row)=>sum+row.text.length,0)).toBe(4000);
+  for(const [kind,max] of [['principle',8000],['top_of_mind_entry',4000],['inspiration',4000]] as const)expect(input.sources.filter(row=>row.kind===kind).reduce((sum,row)=>sum+row.text.length,0)).toBeLessThanOrEqual(max);
+  expect(input.sources.every(row=>row.text.length<=1600)).toBe(true);expect(input.sources.reduce((sum,row)=>sum+row.text.length,0)).toBeLessThanOrEqual(16000);
+  if(process.env.WAKA_CHAT_MEASURE==='1')console.info(JSON.stringify({measurement:'chat-opening-sql',source:'locked reading plus three owned inspirations',loopback:true,providerCalls:'synthetic-only',measurements}));
+  expect(input.sources[3].truncated).toBe(true);expect(JSON.stringify(input)).not.toContain(entry.id);expect(JSON.stringify(input)).not.toContain(ids[0]);
+});
+
+it('omits source openings for deliberate no-memory corrections and does not stale the reply on an unrelated opening edit',async()=>{
+  answer.mockReset();answer.mockImplementation(async()=>{await during?.();return {answer:'Your current human words take precedence.',followUpQuestion:null,citations:[]};});
+  const f=await fixture(),id=randomUUID();
+  const [artifact]=await t.sql`INSERT INTO top_of_minds(profile_id,version,status) VALUES(${f.profileId},1,'live') RETURNING id`;
+  const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,locked_at) VALUES(${artifact.id},'pattern','An old saved guide.',now()) RETURNING id`;
+  const opening=(await(await f.post('/opening',{locale:'en-US',text:'An old saved guide.',source:{kind:'top_of_mind_entry',id:entry.id}})).json() as any).opening;
+  await f.post('',{id,opening:opening.binding,firstMessage:{id:randomUUID(),content:'What about this?',requestReply:true}});
+  let job=await claim();await processBackgroundJob(job);await postgresBackgroundJobStore.markSucceeded(job,null);
+  const [assistant]=await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${id} AND role='assistant'`;
+  const words='No, that is not my current view. I want one quiet day this month only.';
+  expect((await f.post('/'+id+'/messages',{id:randomUUID(),content:words,correctsMessageId:assistant.id,revision:2,requestReply:true})).status).toBe(200);
+  during=async()=>{await t.sql`UPDATE top_of_mind_entries SET body='An unrelated edit of the old guide.' WHERE id=${entry.id}`;};
+  job=await claim();await processBackgroundJob(job);
+  const input=answer.mock.calls[1][0];expect(input.sources).toEqual([]);expect(input.applicationOpening).toBeUndefined();expect(input.focusSourceNumber).toBeUndefined();expect(input.history.at(-1)).toEqual({role:'user',content:words,correction:true});
+  expect((await t.sql`SELECT status FROM conversation_reply_requests WHERE conversation_id=${id} ORDER BY created_at DESC LIMIT 1`)[0].status).toBe('ready');
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${id} AND role='assistant'`).toHaveLength(2);
 });

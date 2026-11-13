@@ -93,9 +93,11 @@ it('joins the message being sent to the run it continues, so one run still print
      anything, because the one in flight is sitting under it. */
   expect(runs()).toEqual(['user:fm','user:ml']);
   expect(metadata()).toBe(1);
-  /* And the row that survived is the live one, not a timestamp. A person
-     waiting on a send needs to be told it is still going. */
-  expect(host.querySelector('.chat-sending .chat-meta')?.getAttribute('role')).toBe('status');
+  /* The run still has one Sending label. Its accessible live announcement
+     now belongs to the shared stable cue, so it is not spoken twice. */
+  expect(host.querySelector('.chat-sending .chat-meta')?.textContent).toContain('Sending');
+  expect(host.querySelector('.chat-waiting[role="status"]')?.getAttribute('data-phase')).toBe('sending');
+  expect(host.querySelector('.chat-sending .chat-meta')?.getAttribute('role')).toBeNull();
 });
 it('still ends a run at a change of speaker, with the sent message starting its own',async()=>{
   stored={...stored,messages:said(['user','assistant'])};

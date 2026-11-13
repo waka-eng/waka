@@ -7,8 +7,9 @@
  * then, or if the read fails, a quiet tile of the same size holds the place,
  * so a row never jumps when the picture lands.
  */
-import { useEffect, useState } from 'react';
-import { fetchAttachmentUrl, type ApiAttachmentSummary } from '../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { type ApiAttachmentSummary } from '../lib/api';
+import {useThumbnailStore} from '../lib/thumbnail-reads';
 import { inspirationPreview } from '../lib/inspiration-preview';
 
 /** The first picture of a save, if it has one. */
@@ -23,16 +24,14 @@ export function onlyAttachments(preview: string, attachments: readonly ApiAttach
 }
 
 export function SavedPhoto({ id, className }: { id: string; className?: string }): JSX.Element {
-  const [url, setUrl] = useState<string | null>(null);
+  const store=useThumbnailStore(),node=useRef<HTMLSpanElement>(null);
+  const [shown,setShown]=useState<{store:typeof store;id:string;url:string|null}|null>(null);
   useEffect(() => {
-    const controller = new AbortController();
-    setUrl(null);
-    void fetchAttachmentUrl(id, controller.signal)
-      .then(next => { if (!controller.signal.aborted) setUrl(next); })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [id]);
-  return <span className={`waka-saved-photo${className ? ` ${className}` : ''}`} aria-hidden="true">
-    {url ? <img src={url} alt="" loading="lazy" decoding="async" /> : null}
+    if(!store||!node.current)return;
+    return store.observe(node.current,id,url=>setShown({store,id,url}));
+  }, [id,store]);
+  const url=shown?.store===store&&shown.id===id?shown.url:null;
+  return <span ref={node} className={`waka-saved-photo${className ? ` ${className}` : ''}`} aria-hidden="true">
+    {url ? <img src={url} alt="" loading="lazy" decoding="async" onError={()=>store?.invalidate(id)} /> : null}
   </span>;
 }

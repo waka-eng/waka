@@ -2,11 +2,12 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/data` supplies the memory layers;
  * `lib/api` supplies review queues; `lib/api/inspiration-relevance` supplies
  * decisions/reloads; `lib/api/conversations` supplies the chat list a new
- * chat reads; `lib/auth-context` supplies the viewer. They are server
+ * chat reads and owned opening projection (actual source proofs run in API tests); `lib/auth-context` supplies the viewer. They are server
  * boundaries whose reads and writes these controls must prove.
  * `helpers/render-home` and `helpers/canvas-stub` replace drawing and timing,
  * never Home's behavior. */
 import { act } from 'react';
+import {prepareConversationOpening} from '../src/lib/api/conversations';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { apiMockFrom, dataMockFrom, mountWorld, diveIntoReview, pressHomeBar, closeOverlay, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
@@ -19,13 +20,14 @@ vi.mock('../src/lib/api',async original=>({...await original<typeof import('../s
 vi.mock('../src/lib/api/inspiration-relevance',async original=>({...await original<typeof import('../src/lib/api/inspiration-relevance')>(),reviewInspiration:vi.fn(),readInspirationRelevance:vi.fn()}));
 /* A new chat reads the chat list once (whether generation is on): answered
    here, so "Chat about this" opens a chat that can be reached. */
-vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),listConversations:vi.fn(async(profile:string)=>({profileId:profile,conversations:[],generationEnabled:true}))}));
+vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),prepareConversationOpening:vi.fn(),listConversations:vi.fn(async(profile:string)=>({profileId:profile,conversations:[],generationEnabled:true}))}));
 vi.mock('../src/lib/data',async original=>({...await original<typeof import('../src/lib/data')>(),...dataMockFrom({inspirations:[]})}));
 vi.mock('../src/lib/auth-context',async original=>({...await original<typeof import('../src/lib/auth-context')>(),useOptionalAuth:()=>({status:'authenticated',account:{id:'account',email:'owner@example.test'},profile:{id:VIEWER_ID,name:'Owner',type:'human'},profiles:[]})}));
-const original:InspirationRelevance={id:'original-1',text:'Build a business I can run alone.',kind:'note',createdAt:'2026-08-01T12:00:00Z',sourceRevision:'3',reviewVersion:0,memoryExcludedAt:null,reviewAfter:null,attachmentLabel:null};
+const original:InspirationRelevance={id:'66666666-6666-4666-8666-666666666666',text:'Build a business I can run alone.',kind:'note',createdAt:'2026-08-01T12:00:00Z',sourceRevision:'3',reviewVersion:0,memoryExcludedAt:null,reviewAfter:null,attachmentLabel:null};
 let world:MountedWorld;
 beforeAll(()=>{installCanvasStub();setViewport(390,844);(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;});
 beforeEach(()=>{
+  vi.mocked(prepareConversationOpening).mockResolvedValue({available:true,provenance:'application',quote:original.text,ask:'Does this still matter to you?',sources:[],binding:{version:1,locale:'en-US',kind:'source',source:{kind:'inspiration',id:original.id,hash:'synthetic-current-proof'},why:false,supports:[],question:'worldInspirationReviewQuestion',hash:'1'.repeat(64)}});
   vi.mocked(listHarvest).mockResolvedValue([]);vi.mocked(listClaims).mockResolvedValue({claims:[],more:false});
   vi.mocked(listInspirationReviews).mockResolvedValue([original]);vi.mocked(reviewInspiration).mockResolvedValue();
 });

@@ -507,10 +507,10 @@ it('calls a pending message lost offline not confirmed, and retries it under the
 it('sends one durable reply intent and displays the follow-up',async()=>{
   stored.generationEnabled=true;await mount();await type('What could I try?');await click('Send');
   expect(saveConversationMessage).toHaveBeenCalledWith(scope.profileId,id,expect.objectContaining({content:'What could I try?',requestReply:true}),expect.any(AbortSignal));
-  expect(host.textContent).toContain('Thinking…');completeReply();await tick();expect(host.textContent).toContain('Which condition matters most today?');
+  expect(host.textContent).toContain('Your message is sent. WAKA’s reply is pending.');completeReply();await tick();expect(host.textContent).toContain('Which condition matters most today?');
   /* The reply arrived, so nothing is being waited for and the one other
      control on the surface goes away with the sentence it interrupted. */
-  expect(host.textContent).not.toContain('Thinking…');expect(named()).toEqual(['Add photo','Add file','Send']);
+  expect(host.textContent).not.toContain('Your message is sent. WAKA’s reply is pending.');expect(named()).toEqual(['Add photo','Add file','Send']);
 });
 it('stops a pending reply and still shows that the message was saved',async()=>{
   stored.generationEnabled=true;await mount();await type('Keep this question');await click('Send');
@@ -659,7 +659,7 @@ it('keeps Send off and keeps asking while answers are older than the screen, the
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
   await tick(15000);await tick(15000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'an older state ended the watch').toBeGreaterThan(calls);
-  expect(host.textContent).toContain('Thinking…');
+  expect(host.textContent).toContain('Your message is saved. Keep writing, or stop the reply.');
   expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
   expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Reload conversation'),'an older state was treated as terminal').toBe(false);
   await type('Still there?');
@@ -667,7 +667,7 @@ it('keeps Send off and keeps asking while answers are older than the screen, the
   expect(send().disabled,'Send came back while the reply was unconfirmed').toBe(true);
   vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:3}));
   await click('Try again');await tick(0);
-  expect(host.textContent).not.toContain('Thinking…');
+  expect(host.textContent).not.toContain('Your message is sent. WAKA’s reply is pending.');
   expect(send().disabled).toBe(false);
 });
 it('stops asking after the old window of older-than-shown answers, says it could not check, and keeps Send off',async()=>{
@@ -730,7 +730,7 @@ it('checks quick replies after one second rather than waiting two',async()=>{
 it('shows waiting immediately while reply status is still being read and preserves the next draft',async()=>{
   stored.generationEnabled=true;await mount();let finish!:(row:ConversationReplyState)=>void;
   vi.mocked(fetchConversationReply).mockImplementationOnce(()=>new Promise<ConversationReplyState>(resolve=>{finish=resolve;}));
-  await type('A question');await click('Send');expect(host.textContent).toContain('Thinking…');await type('My next thought');
+  await type('A question');await click('Send');expect(host.textContent).toContain('Your message is sent. WAKA’s reply is pending.');await type('My next thought');
   const send=host.querySelector<HTMLButtonElement>('.chat-send')!;expect(send.disabled).toBe(true);
   await act(async()=>finish(structuredClone(replyState)));expect(host.querySelector('textarea')!.value).toBe('My next thought');
 });
@@ -738,9 +738,9 @@ it('uses an immediately committed first-message response without another convers
   stored.generationEnabled=true;stored.revision=1;stored.messages=[{id:replyId,profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'The committed first question',createdAt:stored.createdAt}];
   replyState={...replyState,revision:1,messageId:replyId,requestId:replyId,phase:'pending'};
   await act(async()=>root.render(<ConversationPanel scope={scope} id={id} initialConversation={structuredClone(stored)} locale="en-US" onChoose={choose}/>));
-  expect(host.textContent).toContain('The committed first question');expect(fetchConversation).not.toHaveBeenCalled();expect(host.textContent).toContain('Thinking…');
+  expect(host.textContent).toContain('The committed first question');expect(fetchConversation).not.toHaveBeenCalled();expect(host.textContent).toContain('Your message is sent. WAKA’s reply is pending.');
 });
-it('bounds automatic progress reads and then says it is still working',async()=>{
+it('bounds automatic progress reads and preserves saved-message reassurance',async()=>{
   /* The explicit "Check reply" button this used to end on was regeneration's
      third name and went with it. The bound is still a bound: polling stops,
      and the sentence tells you the work continues without you watching it.
@@ -749,7 +749,7 @@ it('bounds automatic progress reads and then says it is still working',async()=>
   stored.generationEnabled=true;await mount();await type('A longer question');await click('Send');
   const initialCalls=vi.mocked(fetchConversationReply).mock.calls.length;await tick(70000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length-initialCalls).toBeLessThanOrEqual(35);
-  expect(host.textContent).toContain('Still working…');
+  expect(host.textContent).toContain('Your message is saved. Check for the reply when you’re ready.');
 });
 
 /**
@@ -814,7 +814,7 @@ it('retries a failed reply against the saved message without sending another use
   vi.mocked(requestConversationReply).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
   await click('Try again');
   expect(vi.mocked(requestConversationReply).mock.calls[0]?.slice(0,4)).toEqual([scope.profileId,id,messageId,replyId]);
-  expect(host.textContent).toContain('Thinking…');
+  expect(host.textContent).toContain('Your message is sent. WAKA’s reply is pending.');
   await click('Thinking…');
   expect(requestConversationReply).toHaveBeenCalledTimes(1);
   replyState={...replyState,phase:'pending',requestId:crypto.randomUUID(),canRetry:false};
@@ -852,8 +852,9 @@ it('does not hide your first message under a save that has no words of its own',
    you answer, the question stays above your answer as WAKA's first turn. */
 it('opens with the home bubble\'s question and keeps it above the first answer',async()=>{
   const opener='Want to chat about what’s on your mind?';
+  stored.opening={provenance:'application',available:true,ask:opener,binding:{version:1,locale:'en-US',kind:'prompt',key:'worldCompanionChatPrompt',hash:'0'.repeat(64)}};
   await act(async()=>root.render(<ConversationPanel scope={scope} id={id} locale="en-US" onChoose={choose} opener={{ask:opener}}/>));
-  expect(host.querySelector('.chat-opening--asks .chat-opening-ask')?.textContent).toBe(opener);
+  expect(host.querySelector('[data-provenance="application"] .chat-bubble')?.textContent).toBe(opener);
   expect(host.textContent).not.toContain('WAKA answers from what you saved.');
   await type('The move, mostly');await click('Send');
   const turns=[...host.querySelectorAll('.chat-message')];
@@ -866,6 +867,7 @@ it('opens with the home bubble\'s question and keeps it above the first answer',
    "Because you saved these:" and each save it came from as a card, before
    you have said anything. */
 it('opens on WAKA saying the read and then each save it came from', async () => {
+  stored.opening={provenance:'application',available:true,ask:'You guard your quiet hours.',sources:[{id:'a',preview:'Turned off my phone at 9'},{id:'b',preview:'Said no to a dinner'}]};
   await act(async()=>root.render(<ConversationPanel scope={scope} id={id} locale="en-US" onChoose={choose}
     opener={{ask:'You guard your quiet hours.',turn:true,sources:[{id:'a',preview:'Turned off my phone at 9'},{id:'b',preview:'Said no to a dinner'}]}}/>));
   const turns=[...host.querySelectorAll('.chat-message')];
@@ -873,4 +875,40 @@ it('opens on WAKA saying the read and then each save it came from', async () => 
   expect(turns[0]?.textContent).toContain('You guard your quiet hours.');
   expect(turns[1]?.textContent).toContain('Because you saved these');
   expect([...host.querySelectorAll('.chat-shared')].map(card=>card.textContent)).toEqual(['Turned off my phone at 9','Said no to a dinner']);
+});
+
+it('never offers an enabled no-op Stop while the current reply identity is still unknown',async()=>{
+  stored.generationEnabled=true;vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:true});
+  await mount();
+  let read!:(state:ConversationReplyState)=>void;
+  vi.mocked(fetchConversationReply).mockImplementationOnce(()=>new Promise(resolve=>{read=resolve;}));
+  await type('Keep this exact question');await click('Send');
+  // Acknowledged words are visible before the delayed status response.
+  expect(host.textContent).toContain('Keep this exact question');
+  for(const control of host.querySelectorAll<HTMLButtonElement>('[aria-label="Stop"]'))expect(control.disabled).toBe(true);
+  expect(host.querySelector<HTMLButtonElement>('[aria-label="Send"]')?.disabled??true).toBe(true);
+  expect(stopConversationReply).not.toHaveBeenCalled();
+  await act(async()=>read({...replyState,phase:'pending',requestId:null}));
+  expect(host.querySelector<HTMLButtonElement>('[aria-label="Stop"]')!.disabled).toBe(true);
+  replyState={...replyState,phase:'pending',requestId:replyId};await tick(1000);
+  expect(host.querySelector<HTMLButtonElement>('[aria-label="Stop"]')!.disabled).toBe(false);
+  vi.mocked(stopConversationReply).mockResolvedValue({...replyState,phase:'stopped'});await click('Stop');
+  expect(stopConversationReply).toHaveBeenCalledExactlyOnceWith(scope.profileId,id,replyId,expect.any(AbortSignal));
+});
+
+it('admits the optimistic message and stable wait cue before a delayed save acknowledgement without taking a reader away',async()=>{
+  stored.generationEnabled=true;vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:true});
+  await mount();const scroll=host.querySelector<HTMLElement>('.chat-scroll')!;
+  let height=1000;Object.defineProperties(scroll,{scrollHeight:{configurable:true,get:()=>height+(host.querySelector('.chat-sending')?120:0)},clientHeight:{configurable:true,value:400}});
+  scroll.scrollTop=600;await act(async()=>scroll.dispatchEvent(new Event('scroll',{bubbles:true})));
+  const original=vi.mocked(saveConversationMessage).getMockImplementation()!;let acknowledge!:()=>void;
+  vi.mocked(saveConversationMessage).mockImplementation(async(...args)=>{await new Promise<void>(resolve=>{acknowledge=resolve;});return original(...args);});
+  await type('Immediate visible acknowledgement');await click('Send');
+  expect(saveConversationMessage).toHaveBeenCalledTimes(1);expect(stored.messages).toHaveLength(0);
+  expect(host.querySelector('.chat-sending')?.textContent).toContain('Immediate visible acknowledgement');expect(host.querySelector('.chat-waiting')?.getAttribute('data-phase')).toBe('sending');
+  expect(scroll.scrollTop).toBe(1120);expect(host.querySelector('textarea')!.disabled).toBe(true);
+  // A reader who scrolls up during the acknowledgement gap keeps that position.
+  scroll.scrollTop=80;await act(async()=>scroll.dispatchEvent(new Event('scroll',{bubbles:true})));height=1300;
+  await act(async()=>acknowledge());expect(scroll.scrollTop).toBe(80);expect(host.querySelector('.chat-waiting')?.getAttribute('data-phase')).toBe('waiting');
+  expect(host.querySelector('textarea')!.disabled).toBe(false);
 });

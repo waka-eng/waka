@@ -508,6 +508,8 @@ export interface ConversationReplyInput {
   messageDate?:string;
   contextChanged?:boolean;
   focusSourceNumber?:number;
+  /** Server-resolved application context, never a fabricated assistant turn. */
+  applicationOpening?:{provenance:'application';available:boolean;why?:boolean;sourceNumbers?:number[];text?:string;observedAt?:string};
   /** Absent for a chat about the person's own memory — every chat before
       2026-10-15, and the prompt is byte-identical for them. 'agent' reads
       only the agent's memory; 'both' reads both, each source marked `owner`. */
