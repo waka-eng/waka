@@ -786,7 +786,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
           {/* AND ONCE IT HAS STARTED, A CHAT THAT IS NOT ONLY YOURS SAYS SO,
               in one quiet line, so an answer from the agent's memory is
               never read as one from yours. */}
-          {conversation?.messages.length&&conversation.perspective&&conversation.perspective!=='mine'?
+          {conversation?.messages.length&&conversation.perspective==='agent'?
             <p className="chat-with-note">{say('worldConversationEarlierMemory')}</p>:null}
           {/* ═══ THE TRANSCRIPT, ON THE REFERENCE'S MESSAGE ANATOMY ═════
               Founder: "make the chat message list and the chat message

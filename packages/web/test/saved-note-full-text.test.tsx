@@ -259,7 +259,7 @@ it("will not empty a note that has nothing else on it, and says why on the page"
   await answer(true);
   await type("   ");
   expect(save().disabled).toBe(true);
-  expect(page().placeholder).toBe("Write something…");
+  expect(page().placeholder).toBe("Write, or add a photo…");
   await act(async () => closer!());
   expect(state.written).toEqual([]);
 });

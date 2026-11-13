@@ -1621,9 +1621,9 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                    typed can land in it, because there is no draft yet. */
                 value={loaded ? draft : open.preview}
                 readOnly={saving || !loaded}
-                /* THE EMPTY NOTE SAYS WHAT IT NEEDS: with nothing attached,
-                   a note with no words cannot be kept, so Save stays dim and
-                   this line is why. */
+                /* THE EMPTY INSPIRATION SAYS WHAT IT NEEDS: with nothing
+                   attached and no words it cannot be saved, so Save stays dim
+                   and this line says words or a photo will do. */
                 placeholder={loaded && open.attachments.length === 0 ? say("worldNoteNeedsSomething") : undefined}
                 aria-busy={!loaded && !stored?.failed}
                 aria-label={say("worldCaptureInspiration")}

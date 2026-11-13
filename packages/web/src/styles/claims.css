@@ -6907,8 +6907,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* The read at the size everything written is set at (founder, 2026-11-12:
    "sooo big"): `--t-writing`, not the bubble's reading size. */
 .waka-reading-full p { margin: var(--sp-16) 0 0; font-size: var(--t-writing); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.waka-reading-full .waka-reading-details > button:not(.waka-surface-back) { padding-inline: 0; color: var(--muted); font-size: var(--t-ui); text-decoration: none; }
-.waka-reading-full .waka-reading-details > button:not(.waka-surface-back):hover { color: var(--ink); }
 .waka-dock--tabs .waka-dock-item { position: relative; }
 .waka-dock--tabs .waka-dock-item[aria-current="page"]::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: var(--sp-16); height: 2px; border-radius: var(--r-pill); background: currentColor; }
 

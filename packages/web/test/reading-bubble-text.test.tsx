@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY (gate G6): `components/ReadingDetails` reads the entry from
- * the API; here it is a stand-in that shows its words and whether it opened
- * for editing, because this file tests the bubble, not the edit flow. */
+ * the API; here it is a stand-in that shows its words in a field, because this file tests the bubble, not the edit flow. */
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ReadingBubbleText } from '../src/components/ReadingBubbleText';
 
 vi.mock('../src/components/ReadingDetails', () => ({
-  default: ({ text, startEditing }: { text: string; startEditing?: boolean }) => <p data-editing={String(Boolean(startEditing))}>{text}</p>,
+  default: ({ text }: { text: string }) => <textarea readOnly value={text} />,
 }));
 
 afterEach(() => vi.restoreAllMocks());
@@ -22,7 +21,10 @@ it('shows the whole read with nothing to open, and its acts in one row', async (
       why={[{ id: 'a', preview: 'x' }]} onWhy={onWhy} onShare={share} onChat={chat} details={details} />));
     /* NO "READ IN FULL": the sentence is plain words, not a door. */
     expect(host.querySelector('.waka-reading-preview button')).toBeNull();
-    expect(host.querySelector('.jar-char-bubble-reading')?.textContent).toBe('A long reading that the bubble holds whole.');
+    const read = host.querySelector<HTMLElement>('.jar-char-bubble-reading')!;
+    expect(read.textContent).toBe('A long reading that the bubble holds whole.');
+    /* A long read scrolls in the bubble, so a keyboard can reach it. */
+    expect(read.tabIndex).toBe(0);
     const acts = [...host.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-acts button')];
     expect(acts.map(b => b.textContent || b.getAttribute('aria-label'))).toEqual(['Why?', 'Chat about this', 'Share', 'Edit']);
     await act(async () => acts[2]!.click());
@@ -39,7 +41,7 @@ it('opens Edit on the quiet page already editing, closes by Escape, and returns 
     const edit = host.querySelector<HTMLButtonElement>('button[aria-label="Edit"]')!;
     await act(async () => { edit.focus(); edit.click(); });
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    await vi.waitFor(() => expect(dialog.querySelector('[data-editing="true"]')?.textContent).toBe('Every word remains available.'));
+    await vi.waitFor(() => expect(dialog.querySelector('textarea')?.value).toBe('Every word remains available.'));
     expect(dialog.querySelector('button')?.getAttribute('aria-label')).toBe('Close');
     await act(async () => dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     expect(document.querySelector('[role="dialog"]')).toBeNull();

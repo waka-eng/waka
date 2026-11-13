@@ -40,7 +40,9 @@ export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled,
   const edit = details ? () => { setEditState({ dirty: false, busy: false }); setConfirmDiscard(false); setEditing({ text, details }); } : null;
   return <>
     <span className="waka-reading-preview">
-      <span className="jar-char-bubble-reading">{text}</span>
+      {/* A LONG READ SCROLLS INSIDE THE BUBBLE, so it takes focus: a keyboard
+          reaches its end too (code review, 2026-11-13). */}
+      <span className="jar-char-bubble-reading" tabIndex={0} role="region" aria-label={say('worldNowTitle')}>{text}</span>
     </span>
     {hasWhy || onChat || onShare || edit ? <span className="jar-char-bubble-acts">
       {hasWhy && onWhy ? <button type="button" className="jar-char-bubble-act" onClick={onWhy}>{say('worldReadingWhy')}</button> : null}
@@ -57,7 +59,7 @@ export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled,
     {editing ? createPortal(<div className="waka-reading-sheet">
       <DialogSurface className="waka-reading-full" aria-label={say('worldNowTitle')} onClose={close}>
         <SurfaceHeader locale={locale} back={{ kind: 'close', onBack: close, disabled: editState.busy }} title={say('worldNowTitle')} />
-        <div className="waka-reading-full-body" tabIndex={0}>{confirmDiscard ? <div role="alert"><p>{say('worldReadingDiscardConfirm')}</p><button onClick={() => setConfirmDiscard(false)}>{say('worldReadingKeepEditing')}</button><button onClick={() => setEditing(null)}>{say('worldReadingDiscard')}</button></div> : null}<Suspense fallback={<p role="status">{say('worldSourceChecking')}</p>}><ReadingDetails text={editing.text} locale={locale} actions={editing.details} startEditing onEditState={setEditState} onClose={() => setEditing(null)} /></Suspense></div>
+        <div className="waka-reading-full-body" tabIndex={0}>{confirmDiscard ? <div role="alert"><p>{say('worldReadingDiscardConfirm')}</p><button onClick={() => setConfirmDiscard(false)}>{say('worldReadingKeepEditing')}</button><button onClick={() => setEditing(null)}>{say('worldReadingDiscard')}</button></div> : null}<Suspense fallback={<p role="status">{say('worldSourceChecking')}</p>}><ReadingDetails text={editing.text} locale={locale} actions={editing.details} onEditState={setEditState} onClose={() => setEditing(null)} /></Suspense></div>
       </DialogSurface>
     </div>, document.body) : null}
   </>;

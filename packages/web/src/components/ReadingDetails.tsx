@@ -7,18 +7,17 @@ export interface ReadingDetailActions {
   onUpdated: () => void;
   onMutation?: () => () => void;
 }
-/** Loaded only when a reading is expanded. Its evidence and edits stay bound
- * to the displayed wording/profile even if Home refreshes behind the dialog. */
-export default function ReadingDetails({ text, locale, actions, onClose, onEditState, startEditing = false }: {
+/** The read's editor, loaded only when Edit is pressed. The words it edits
+ * stay bound to the wording and profile shown, even if Home refreshes behind
+ * the page. */
+export default function ReadingDetails({ text, locale, actions, onClose, onEditState }: {
   text: string; locale: SupportedLocale; actions: ReadingDetailActions; onClose: () => void; onEditState?: (state: { dirty: boolean; busy: boolean }) => void;
-  /** Opened from the bubble's Edit: the words are already in the field. */
-  startEditing?: boolean;
 }) {
   const [entry, setEntry] = useState<ApiTopOfMindEntry | null>(null);
   const [loading, setLoading] = useState(true), [failed, setFailed] = useState(false), [retry, setRetry] = useState(0);
-  const [mode, setMode] = useState<'edit' | null>(startEditing ? 'edit' : null), [words, setWords] = useState(text);
+  const [words, setWords] = useState(text);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { onEditState?.({ dirty: mode === 'edit' && words !== text, busy }); }, [mode, words, text, busy, onEditState]);
+  useEffect(() => { onEditState?.({ dirty: words !== text, busy }); }, [words, text, busy, onEditState]);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
@@ -49,16 +48,14 @@ export default function ReadingDetails({ text, locale, actions, onClose, onEditS
   if (!entry) return <p role={failed ? 'alert' : 'status'}>{t(locale, failed ? 'worldReadingDetailsFailed' : 'worldReadingDetailsChanged')}
     {failed ? <button onClick={() => setRetry(n => n + 1)}>{t(locale, 'worldRetry')}</button> : null}</p>;
   return <div className="waka-reading-details">
-    {/* THE READ AND ITS ONE ACT, NOTHING AROUND IT (founder, 2026-11-12, of
-        this page: "sooo big and ugly", and "strip all unnecessary
-        descriptive text"): no "Last updated", no locked hint, no "See all"
-        disclosure; where a read came from is Why?'s chat now. */}
-    {mode !== 'edit' ? <button disabled={busy} onClick={() => setMode('edit')}>{t(locale, 'worldEditWording')}</button> : null}
-    {mode === 'edit' ? <div>
+    {/* THE READ, WRITABLE, AND NOTHING AROUND IT (founder, 2026-11-12, of
+        this page: "sooo big and ugly"): no "Last updated", no locked hint,
+        no sources; where a read came from is Why?'s chat. */}
+    <div>
       <textarea aria-label={t(locale, 'worldEditWording')} autoFocus value={words} maxLength={2000} disabled={busy} onChange={event => setWords(event.currentTarget.value)} />
-      <button disabled={busy} onClick={() => { setWords(text); if (startEditing) onClose(); else setMode(null); }}>{t(locale, 'worldCancel')}</button>
+      <button disabled={busy} onClick={onClose}>{t(locale, 'worldCancel')}</button>
       <button disabled={busy || !words.trim()} onClick={() => void write()}>{t(locale, 'worldSave')}</button>
-    </div> : null}
+    </div>
     {failed ? <p role="alert">{t(locale, 'worldReadingDetailsFailed')}</p> : null}
   </div>;
 }

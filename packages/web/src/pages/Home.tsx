@@ -4895,7 +4895,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const backToPrinciplesRef = useRef(backToPrinciples); backToPrinciplesRef.current = backToPrinciples;
   /* A PAGE WHOSE OWNER IS NOT KNOWN YET stands in with its own "<"; Escape
      is that "<" too (nav system R3; back audit, 2026-11-12). */
-  const standingIn = ((listing || making === 'talk') && !(conversationScope && conversationProfile)) || (principlesOpen && !storageScope);
+  const standingIn = (listing || making === 'talk' || principlesOpen) && !storageScope;
   const standInRef = useRef({ standingIn, closePage }); standInRef.current = { standingIn, closePage };
 
   /**
@@ -6634,13 +6634,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
       const nothingOpen = !panelOpen && !mouthOpen && !savedNoteOpen && seek === null && !thingShare && !prov;
       /* Esc steps out of review — the cards go, the invitation comes back. */
       if (event.key === 'Escape') {
-        if (reviewing && atNowView && nothingOpen && !harvestWhy) { event.preventDefault(); event.stopPropagation(); setReviewing(false); }
+        /* The stand-in's "<" is the one on screen, so it answers first. */
+        if (standInRef.current.standingIn && seek === null && !thingShare && !prov) { event.preventDefault(); event.stopPropagation(); standInRef.current.closePage(); }
+        else if (reviewing && atNowView && nothingOpen && !harvestWhy) { event.preventDefault(); event.stopPropagation(); setReviewing(false); }
         /* A PRINCIPLE IN THE SKY: Escape is its "<", back to Principles. */
         else if (inSky && viewNavigationRef.current.view?.principleId && !principlesOpen && nothingOpen) {
           event.preventDefault(); event.stopPropagation(); backToPrinciplesRef.current();
-        }
-        else if (phase === 'ready' && standInRef.current.standingIn && nothingOpen) {
-          event.preventDefault(); event.stopPropagation(); standInRef.current.closePage();
         }
         return;
       }
@@ -9559,9 +9558,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                            review, 2026-10-16). */
                         <>
                           <span className="jar-char-bubble-of">{say('worldBubbleActAgentMine')}</span>
-                          <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={agentSays} locale={locale}
-                            details={!offline && atWall.kind === 'agent' ? { profileId: atWall.id,
-                              onUpdated: () => verifyReadingRef.current(true) } : undefined} />
+                          <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={agentSays} locale={locale} />
                         </>
                       ) : (
                         /* ═══ AND THE EMPTY LINE IS A DOOR AFTER ALL ═════

@@ -27,10 +27,9 @@ it('binds edits to the displayed profile, shows no sources or dates, and asks no
   expect(host.querySelector('details'),'a sources disclosure came back').toBeNull();
   expect(host.textContent).not.toContain('Last updated');
   expect(api.signal).not.toHaveBeenCalled();
-  /* ONE ACT: Edit. No "Give feedback" row of True/Partly/Not true (Law 11:
+  /* THE EDITOR ONLY. No "Give feedback" row of True/Partly/Not true (Law 11:
      the creature already asks; a page gets one ask). */
   expect(button('Give feedback')).toBeUndefined();expect(button(t('en-US','worldClaimTrue'))).toBeUndefined();
-  await act(async()=>button('Edit').click());
   await act(async()=>{const area=host.querySelector('textarea')!;const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!;set.call(area,'A sharper reading');area.dispatchEvent(new Event('input',{bubbles:true}));});
   await act(async()=>button('Save').click());
   expect(api.edit).toHaveBeenCalledWith('entry',{body:'A sharper reading'},{profile:'agent'});
