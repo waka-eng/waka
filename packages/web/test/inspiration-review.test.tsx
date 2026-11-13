@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/data` supplies the memory layers;
  * `lib/api` supplies review queues; `lib/api/inspiration-relevance` supplies
- * decisions/reloads; `lib/auth-context` supplies the viewer. They are server
+ * decisions/reloads; `lib/api/conversations` supplies the chat list a new
+ * chat reads; `lib/auth-context` supplies the viewer. They are server
  * boundaries whose reads and writes these controls must prove.
  * `helpers/render-home` and `helpers/canvas-stub` replace drawing and timing,
  * never Home's behavior. */
