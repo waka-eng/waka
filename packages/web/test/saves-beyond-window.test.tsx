@@ -73,5 +73,5 @@ it('counts the whole archive on the handle, and opens the archive that pages it 
      archive, its labelled way home up and the home bar gone. */
   expect(world.container.querySelector('.waka-stream'), 'a second Saved sheet came up').toBeNull();
   expect(world.container.querySelector('.waka-surface-back')?.getAttribute('aria-label'), 'it did not open the archive').toBe('Close');
-  expect(world.container.querySelector('.waka-home-bar')).toBeNull();
+  expect(world.container.querySelector('.waka-home-bar'), 'the home bar left the sheet pulled up from it').not.toBeNull();
 });

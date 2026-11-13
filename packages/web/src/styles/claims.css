@@ -7702,3 +7702,24 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 .waka-list-row > .waka-list-photo { grid-column: 2; grid-row: 1 / span 3; }
 }
+
+@layer chrome {
+/* ═══ INSPIRATIONS PULLED UP FROM THE HANDLE (founder, 2026-11-12) ══════════
+   It rises from the bottom like something pulled up, stops above the home
+   bar (which stays, under it, z-60 over the page's 56), and drops back down
+   on close (`SHEET_DROP_MS` in `SavesOverlay.tsx`). Its top corners round so
+   it reads as a sheet over home rather than a new page. */
+.waka-page.waka-page--sheet {
+  bottom: calc(var(--sp-28) + var(--sp-64) + var(--sp-8) + env(safe-area-inset-bottom));
+  padding-top: calc(var(--sp-12) + env(safe-area-inset-top));
+  padding-bottom: var(--sp-12);
+  border-radius: 0 0 var(--sp-24) var(--sp-24);
+  animation: waka-sheet-up 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.waka-page.waka-page--sheet[data-leaving] { animation: waka-sheet-down 220ms cubic-bezier(0.4, 0, 1, 1) both; pointer-events: none; }
+@keyframes waka-sheet-up { from { translate: 0 100%; } to { translate: 0 0; } }
+@keyframes waka-sheet-down { from { translate: 0 0; } to { translate: 0 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .waka-page.waka-page--sheet, .waka-page.waka-page--sheet[data-leaving] { animation: none; }
+}
+}

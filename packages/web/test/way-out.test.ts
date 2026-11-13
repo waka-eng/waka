@@ -467,7 +467,7 @@ describe("every surface has a way out you can see", () => {
 
     // On the home at rest the home bar stands (design E1, `HomeBar`); every
     // page leaves by its header's "<".
-    expect(code(home)).toContain("atNowView && !reviewing && !savedNoteOpen");
+    expect(code(home)).toContain("(atNowView || (savesOpen && savesAsSheet)) && !reviewing && !savedNoteOpen");
 
     /* AND WHILE REVIEWING, THE WAY OUT IS THE SHARED HEADER'S "<" (Close),
        and Esc ends the sitting too. */

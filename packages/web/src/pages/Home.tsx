@@ -7400,7 +7400,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
      opened the archive, also titled Saved with its own search. Now every
      one of them opens the archive, the one page that has every save, the
      search and Deleted. The sheet's patterns went to Principles. */
-  const openSheet = useCallback(() => { listOrigin.current = null; openOverHome('saves'); }, [openOverHome]);
+  /* ═══ PULLED UP FROM THE HANDLE, IT IS A SHEET (founder, 2026-11-12) ═══
+     "I like how when I click on [n] kept it animates like pulling something
+     up, bottom to top, and the bottom bar is still showing ... and when I'm
+     closing it I do want it to go back down." Opened from the handle (or a
+     bubble's See all), Inspirations rises from the bottom over home, stops
+     above the home bar, which stays, and drops back down when it closes.
+     Reached any other way (Past inspirations on the notepad) it is a page. */
+  const [savesAsSheet, setSavesAsSheet] = useState(false);
+  const savesOpen = viewNavigation.view?.open === 'saves';
+  useEffect(() => { if (!savesOpen) setSavesAsSheet(false); }, [savesOpen]);
+  const openSheet = useCallback(() => { listOrigin.current = null; setSavesAsSheet(true); openOverHome('saves'); }, [openOverHome]);
   /* ═══ THE NOTE BAR'S PARTS (design E3, Writing, PhotoNote) ═══════════════
      They stood in the dock's middle group; the notepad draws them now, in a
      slim row UNDER its words so the words get the whole width — mic on the
@@ -11299,7 +11309,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           `HomeBar`. It stands on home and nowhere else (nav system R7): every page
           leaves by its header's "<", and the notepad, a saved note and a
           chat write into the one `NoteBar`. */}
-      {phase === 'ready' && atNowView && !reviewing && !savedNoteOpen && !viewNavigation.view?.sharePrinciple ? (
+      {phase === 'ready' && (atNowView || (savesOpen && savesAsSheet)) && !reviewing && !savedNoteOpen && !viewNavigation.view?.sharePrinciple ? (
         <HomeBar locale={locale}
           /* THE SAME PILL ON AN AGENT'S WALL, saving into the agent (nav
              system: the Kept list's "Keep a thought" was the web's one way
@@ -11328,7 +11338,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
              inspirations caret clickable if at least 1 exists. dont show it
              if 0"), and none while the count is still unknown, so it never
              flashes in and out. */
-          pull={standingAsAgent ? { onOpen: openSheet }
+          pull={savesOpen ? undefined : standingAsAgent ? { onOpen: openSheet }
             : !inspirations || inspirations.length + fieldBeyond === 0 ? undefined : {
               onOpen: openSheet,
               /* "{n} KEPT ⌃" (founder: "should be x kept"). The same count
@@ -11459,6 +11469,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            or the sheet), on a list opened from a chat (to the chat); Close
            otherwise (home). */
         onNew={canWriteHere ? startNewInspiration : undefined}
+        sheet={savesAsSheet}
         onBack={backPage} backKind={listOrigin.current ? 'back' : 'close'} gesture={viewNavigation.href}/>:null}
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}

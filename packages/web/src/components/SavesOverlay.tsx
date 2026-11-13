@@ -92,11 +92,17 @@ const NOTE_READ_LIMIT_MS = 20_000;
    it is the moment just after the press and not a pending state. */
 const UNDO_MS = 6000;
 
-export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, onNew }: {
+/** How long a sheet takes to drop back down; `claims.css` `waka-sheet-down` matches. */
+const SHEET_DROP_MS = 220;
+
+export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, onNew, sheet = false }: {
   canReview?:boolean; onRelevanceChanged?:()=>void;
   /** "New note", the header's right word, as Past chats has New chat
       (founder, 2026-11-10). Absent where nothing may be written. */
   onNew?: () => void;
+  /** Pulled up from home's handle: rises over home above the home bar and
+      drops back down on close (see `savesAsSheet` in `Home.tsx`). */
+  sheet?: boolean;
   topRequest?: number;
   viewState?: ListViewState;
   /**
@@ -192,6 +198,18 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
   gesture?: string | null;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
+  /* A SHEET GOES BACK DOWN THE WAY IT CAME UP: its "<" and Escape drop it
+     (`waka-sheet-down`, `SHEET_DROP_MS`) and only then leave. Under reduced
+     motion, or with no layout to animate, it leaves at once. */
+  const sheetPage = useRef<HTMLDivElement>(null);
+  const backOut = useCallback(() => {
+    const node = sheetPage.current;
+    const still = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!sheet || !node || still || typeof node.getAnimations !== "function") { onBack(); return; }
+    if (node.dataset.leaving) return;
+    node.dataset.leaving = "1";
+    window.setTimeout(onBack, SHEET_DROP_MS);
+  }, [sheet, onBack]);
   /* THE ARCHIVE'S RECORDER, OWNED BY THE CALLER (L12), read from the
      provider `Home` mounts around its world (`ArchiveRecorderProvider`). It
      outlives this surface, so a clip still finishing when the archive closes
@@ -1240,7 +1258,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
        hides them too, and `Home` is told through `onNoteOpen` — so the
        reserve is holding room for nothing, and holding it was the last 60px
        between this page and the one the founder prefers. */
-    <div className={`waka-page${open ? " waka-page--note" : ""}`}>
+    <div ref={sheetPage} className={`waka-page${open ? " waka-page--note" : sheet ? " waka-page--sheet" : ""}`}>
       <DialogSurface
         {...listScroll}
         /* ═══ AN OPEN NOTE IS A PAGE, NOT A COLUMN IN THE ARCHIVE ════════
@@ -1278,13 +1296,13 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
            also the worst place to be held: a search field, a category
            row and a chapter-grouped list of everything you have ever
            kept, and the way out of all of it was a key nobody can see. */
-        motion="modal"
+        motion={sheet && !open ? undefined : "modal"}
         modal={false}
         escapeLeavesAsModal={false}
-        onClose={onBack}
+        onClose={open ? onBack : backOut}
         >
         {open ? null : <SurfaceHeader locale={locale} gesture={gesture}
-          back={{ kind: backKind, onBack }}
+          back={{ kind: backKind, onBack: backOut }}
           /* THE NAME, THEN HOW MANY (nav system R4): "Kept (36)" centred in the
              one header, the count counting what is on screen (`shown`), and
              under a claim's filter the claim's own words. */
