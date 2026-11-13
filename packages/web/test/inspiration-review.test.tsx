@@ -16,6 +16,9 @@ import { ApiError } from '../src/lib/api/http';
 vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),...apiMockFrom({inspirations:[]}),
   listClaims:vi.fn(),listHarvest:vi.fn(),listInspirationReviews:vi.fn()}));
 vi.mock('../src/lib/api/inspiration-relevance',async original=>({...await original<typeof import('../src/lib/api/inspiration-relevance')>(),reviewInspiration:vi.fn(),readInspirationRelevance:vi.fn()}));
+/* A new chat reads the chat list once (whether generation is on): answered
+   here, so "Chat about this" opens a chat that can be reached. */
+vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),listConversations:vi.fn(async(profile:string)=>({profileId:profile,conversations:[],generationEnabled:true}))}));
 vi.mock('../src/lib/data',async original=>({...await original<typeof import('../src/lib/data')>(),...dataMockFrom({inspirations:[]})}));
 vi.mock('../src/lib/auth-context',async original=>({...await original<typeof import('../src/lib/auth-context')>(),useOptionalAuth:()=>({status:'authenticated',account:{id:'account',email:'owner@example.test'},profile:{id:VIEWER_ID,name:'Owner',type:'human'},profiles:[]})}));
 const original:InspirationRelevance={id:'original-1',text:'Build a business I can run alone.',kind:'note',createdAt:'2026-08-01T12:00:00Z',sourceRevision:'3',reviewVersion:0,memoryExcludedAt:null,reviewAfter:null,attachmentLabel:null};
@@ -89,10 +92,24 @@ it('keeps the same original on a failed write and retries with the same request 
   expect(vi.mocked(reviewInspiration).mock.calls[1]).toEqual(first);
   expect(first[2]).toBe('not_relevant');expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
 });
-it('Later records a deferral without submitting a relevance verdict',async()=>{
-  await open();await act(async()=>button('Not now').click());
-  expect(reviewInspiration).toHaveBeenCalledWith(original,VIEWER_ID,'later',expect.any(String));
-  expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
+/* NO "NOT NOW"; OPEN READS IT WHOLE WITHOUT LEAVING (founder, 2026-11-12).
+   The card answers by its row (Not really, Chat about this, Yes); Open lays
+   the whole inspiration over the review, "<" puts it away onto the same
+   card, and Yes from there answers and moves on. */
+it('reads the whole inspiration over the review and answers from there, with no Not now',async()=>{
+  await open();
+  expect(button('Not now'),'Not now came back').toBeUndefined();
+  expect(button('Chat about this'),'the row has no Chat about this').toBeDefined();
+  await act(async()=>button('Open').click());
+  const reader=()=>document.querySelector<HTMLElement>('.waka-review-reader');
+  expect(reader()?.textContent).toContain(original.text);
+  await act(async()=>reader()!.querySelector<HTMLButtonElement>('.waka-surface-back')!.click());
+  expect(reader(),'"<" did not put the reader away').toBeNull();
+  expect(world.container.querySelector('.jar-pick-slip'),'"<" left the review').not.toBeNull();
+  await act(async()=>button('Open').click());
+  await act(async()=>[...reader()!.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent?.trim()==='Yes')!.click());await settle();
+  expect(reviewInspiration).toHaveBeenCalledWith(original,VIEWER_ID,'relevant',expect.any(String));
+  expect(reader()).toBeNull();
 });
 it('requires reading changed wording before an explicit new choice',async()=>{
   vi.mocked(reviewInspiration).mockRejectedValueOnce(new ApiError({status:409,message:'changed'}));
@@ -108,7 +125,7 @@ it('limits a mixed sitting to five and reserves two slots for originals',async()
   vi.mocked(listInspirationReviews).mockResolvedValue([original,{...original,id:'original-2'}]);
   vi.mocked(listClaims).mockResolvedValue({claims:Array.from({length:5},(_,i)=>({id:`signal-${i}`,statement:`Signal ${i}`,status:'active',confidence:80,evidenceCount:3,lastEvidenceAt:null,locked:false,unsupported:false,sharedGroupIds:[],createdAt:'2026-08-01T00:00:00Z'})),more:false});
   await open();expect(world.container.textContent).toContain(original.text);
-  await act(async()=>button('Not now').click());await act(async()=>button('Not now').click());
+  await act(async()=>button('Yes').click());await settle();await act(async()=>button('Yes').click());await settle();
   expect(world.container.textContent).toContain('Signal 0');
   expect(world.container.textContent).not.toContain('Signal 3');
 });
@@ -141,4 +158,16 @@ it('shows no stale signal cards when relevance revalidation fails, and asks agai
   const asked=vi.mocked(listClaims).mock.calls.length;
   await tapCreature();await settle();
   expect(vi.mocked(listClaims).mock.calls.length,'the tap did not ask for the queue again').toBeGreaterThan(asked);
+});
+
+/* CHAT ABOUT THIS: the chat opens on the creature asking the card's own
+   question, the inspiration quoted under it (founder, 2026-11-12). */
+it('opens a chat on the same question, with the inspiration quoted',async()=>{
+  await open();
+  await act(async()=>button('Chat about this').click());
+  for(let i=0;i<20&&!world.container.querySelector('.chat-opening--asks');i++)await settle();
+  const ask=world.container.querySelector('.chat-opening--asks .chat-opening-ask')?.textContent??'';
+  expect(ask).toContain('Does this still matter to you?');
+  expect(ask).toContain(original.text);
+  expect(reviewInspiration,'opening a chat answered the card').not.toHaveBeenCalled();
 });

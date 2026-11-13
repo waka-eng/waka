@@ -9884,7 +9884,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     if(queueAtSend===queueLoadRef.current&&!standingAsAgentRef.current){setClaimQueue([]);setReviewLoadFailed(true);}
                   }
                 }}
-                onOpen={()=>{const id=inspirationReviewQueue[0]!.id;setReviewing(false);viewNavigationRef.current.write({...EMPTY_VIEW,open:'saves',note:id});}}
+                /* The chat opens on the creature asking this same question,
+                   the inspiration quoted under it (founder, 2026-11-12). */
+                onChat={(question,text)=>{const quote=text.length>280?`${text.slice(0,280).trimEnd()}…`:text;
+                  chatOpener.current={text:`${question}\n\n“${quote}”`,id:null};chatSwap.current=true;setReviewing(false);
+                  viewNavigationRef.current.write({...EMPTY_VIEW,conversationId:'new'});}}
                 onDone={()=>{const id=inspirationReviewQueue[0]!.id;setInspirationReviewQueue(queue=>queue.filter(row=>row.id!==id));}} />
             ) : null}
             {reviewing && !mouthOpen && !harvestWhy && !harvestQueue[0] && !inspirationReviewQueue[0] && claimQueue[0] ? (
