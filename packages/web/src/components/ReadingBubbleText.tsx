@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DialogSurface } from './DialogSurface';
+import { HomeActionIcon } from './HomeActionIcon';
 import { SurfaceHeader } from './SurfaceHeader';
 import { t, type SupportedLocale } from '../lib/locales';
 
@@ -8,22 +9,17 @@ import type { ReadingDetailActions } from './ReadingDetails';
 const ReadingDetails = lazy(() => import('./ReadingDetails'));
 
 /**
- * ═══ THE READ, IN THREE LINES — AND WHY (design F1, F2) ════════════════════
+ * ═══ THE READ, WHOLE, AND EVERYTHING IT DOES UNDER IT (2026-11-12) ════════
  *
- * "On your mind lately", the sentence clamped to THREE lines, and two acts
- * under a hairline: "Why?" and "Talk about this". Three lines because the
- * bubble is the reward for saving, not the place to read an essay; the rest
- * is carried by the two acts (and by pressing the sentence itself, which
- * opens it in full — with editing and removing, the founder's ruling for a
- * top of mind — on the sheet it always opened).
+ * The bubble holds the whole read (it is never cut off), so there is no
+ * "read in full" to open: founder, of the page that did it, "sooo big and
+ * ugly". Chosen from six ("bubble grows in place"): the read stays with the
+ * creature that said it, and its acts are one row at its foot. Why? and
+ * Chat about this in words, Share and Edit as icons after them.
  *
- * "WHY?" ANSWERS IN PLACE (F2, from #463). The question "what made you say
- * that" is answered by the person's own words, so the bubble turns over:
- * "Because you kept these", the saves behind the read quoted one per row,
- * and Back / See all saves. No page — the person is still looking at the
- * creature that said it. Its saves come from the cited signals' own
- * evidence (`whyFor` in `Home.tsx`); with none to show, "Why?" is not
- * offered, because a question with no answer behind it is a dead control.
+ * EDIT IS THE ONE PAGE. Rewriting needs a field and room to type, so Edit
+ * opens the quiet page with the words already in the field; leaving it with
+ * unsaved words asks first.
  */
 export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled, details, why, onWhy }: {
   text: string; locale: SupportedLocale;
@@ -32,62 +28,36 @@ export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled,
   why?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>;
   /** Why?, answered in a chat: WAKA says the read and the saves it came
       from (founder, 2026-11-12: "when clicking on why, open chat and tell
-      user how this was formed"). Absent: Why? opens the list in the bubble. */
+      user how this was formed"). */
   onWhy?: () => void;
 }) {
-  const reading = useRef<HTMLSpanElement>(null);
-  const [overflow, setOverflow] = useState(false);
-  const [expanded, setExpanded] = useState<{ text: string; onShare?: () => void; details?: ReadingDetailActions } | null>(null);
+  const [editing, setEditing] = useState<{ text: string; details: ReadingDetailActions } | null>(null);
   const [editState, setEditState] = useState({ dirty: false, busy: false });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const close = () => { if (editState.busy) return; if (editState.dirty) setConfirmDiscard(true); else setExpanded(null); };
-  useEffect(() => {
-    const node = reading.current;
-    if (!node) return;
-    let frame = 0;
-    const measure = () => setOverflow(node.scrollHeight > node.clientHeight + 1);
-    // React may change the preview's layout. Commit outside the observer's
-    // delivery cycle so resizing cannot cause a ResizeObserver feedback loop.
-    const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure); };
-    measure();
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
-    observer?.observe(node);
-    window.addEventListener('resize', schedule);
-    return () => { observer?.disconnect(); cancelAnimationFrame(frame); window.removeEventListener('resize', schedule); };
-  }, [text]);
+  const close = () => { if (editState.busy) return; if (editState.dirty) setConfirmDiscard(true); else setEditing(null); };
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
-  const opensInFull = Boolean(details || overflow || onShare);
-  const openSheet = () => { setEditState({ dirty: false, busy: false }); setConfirmDiscard(false); setExpanded({ text, onShare, details }); };
   const hasWhy = Boolean(why && why.length && onWhy);
+  const edit = details ? () => { setEditState({ dirty: false, busy: false }); setConfirmDiscard(false); setEditing({ text, details }); } : null;
   return <>
-    {/* WHY? IS ANSWERED IN A CHAT (founder, 2026-11-12), so the bubble no
-        longer folds into a list of saves. */}
-    <>
-      {/* STRIPPED: the small "On your mind lately" line over the read; the
-          full sheet's title already says it. Founder, 2026-11-12:
-          "strip all unnecessary descriptive text across the experience". */}
-      <span className="waka-reading-preview">
-        {opensInFull
-          /* THE SENTENCE IS ITS OWN "READ IN FULL": three lines are all the
-             bubble shows, and pressing them shows the rest. */
-          ? <button type="button" className="waka-reading-open" aria-haspopup="dialog" onClick={openSheet}>
-              <span ref={reading} className="jar-char-bubble-reading">{text}</span>
-            </button>
-          : <span ref={reading} className="jar-char-bubble-reading">{text}</span>}
-      </span>
-      {hasWhy || onChat ? <span className="jar-char-bubble-acts">
-        {/* NO "READ IN FULL": the sentence is its own way in (above). */}
-        {hasWhy && onWhy ? <button type="button" className="jar-char-bubble-act" onClick={onWhy}>{say('worldReadingWhy')}</button> : null}
-        {onChat ? <button type="button" className="jar-char-bubble-act" disabled={chatDisabled} onClick={onChat}>
-          {say('worldTalkAboutThis')}
-        </button> : null}
-      </span> : null}
-    </>
-    {expanded ? createPortal(<div className="waka-reading-sheet">
+    <span className="waka-reading-preview">
+      <span className="jar-char-bubble-reading">{text}</span>
+    </span>
+    {hasWhy || onChat || onShare || edit ? <span className="jar-char-bubble-acts">
+      {hasWhy && onWhy ? <button type="button" className="jar-char-bubble-act" onClick={onWhy}>{say('worldReadingWhy')}</button> : null}
+      {onChat ? <button type="button" className="jar-char-bubble-act" disabled={chatDisabled} onClick={onChat}>
+        {say('worldTalkAboutThis')}
+      </button> : null}
+      {onShare ? <button type="button" className="jar-char-bubble-act jar-char-bubble-act--icon" aria-label={say('worldShare')} title={say('worldShare')} onClick={onShare}>
+        <HomeActionIcon kind="share" />
+      </button> : null}
+      {edit ? <button type="button" className="jar-char-bubble-act jar-char-bubble-act--icon" aria-label={say('worldEditWording')} title={say('worldEditWording')} aria-haspopup="dialog" onClick={edit}>
+        <HomeActionIcon kind="edit" />
+      </button> : null}
+    </span> : null}
+    {editing ? createPortal(<div className="waka-reading-sheet">
       <DialogSurface className="waka-reading-full" aria-label={say('worldNowTitle')} onClose={close}>
         <SurfaceHeader locale={locale} back={{ kind: 'close', onBack: close, disabled: editState.busy }} title={say('worldNowTitle')} />
-        <div className="waka-reading-full-body" tabIndex={0}>{confirmDiscard ? <div role="alert"><p>{say('worldReadingDiscardConfirm')}</p><button onClick={() => setConfirmDiscard(false)}>{say('worldReadingKeepEditing')}</button><button onClick={() => setExpanded(null)}>{say('worldReadingDiscard')}</button></div> : null}<p>{expanded.text}</p>{expanded.details ? <Suspense fallback={<p role="status">{say('worldSourceChecking')}</p>}><ReadingDetails text={expanded.text} locale={locale} actions={expanded.details} onEditState={setEditState} onClose={() => setExpanded(null)} /></Suspense> : null}</div>
-        {expanded.onShare && !editState.dirty && !editState.busy ? <footer><button type="button" onClick={() => { setExpanded(null); expanded.onShare?.(); }}>{say('worldShare')}</button></footer> : null}
+        <div className="waka-reading-full-body" tabIndex={0}>{confirmDiscard ? <div role="alert"><p>{say('worldReadingDiscardConfirm')}</p><button onClick={() => setConfirmDiscard(false)}>{say('worldReadingKeepEditing')}</button><button onClick={() => setEditing(null)}>{say('worldReadingDiscard')}</button></div> : null}<Suspense fallback={<p role="status">{say('worldSourceChecking')}</p>}><ReadingDetails text={editing.text} locale={locale} actions={editing.details} startEditing onEditState={setEditState} onClose={() => setEditing(null)} /></Suspense></div>
       </DialogSurface>
     </div>, document.body) : null}
   </>;

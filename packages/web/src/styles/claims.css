@@ -4856,6 +4856,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 .jar-char-bubble-act:first-child { border-bottom-left-radius: 20px; }
 .jar-char-bubble-act:last-child { border-bottom-right-radius: 20px; }
+/* SHARE AND EDIT ARE ICONS AT THE ROW'S END (2026-11-12): a thumb's square
+   each, so the words keep the width. */
+.jar-char-bubble-act--icon { flex: 0 0 var(--bubble-act-h); padding: 0; }
+.jar-char-bubble-act--icon svg { width: 18px; height: 18px; }
 
 .jar-char-bubble-act + .jar-char-bubble-act {
   border-left: 1px solid color-mix(in srgb, var(--waka-on-light) 11%, transparent);
@@ -6903,13 +6907,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* The read at the size everything written is set at (founder, 2026-11-12:
    "sooo big"): `--t-writing`, not the bubble's reading size. */
 .waka-reading-full p { margin: var(--sp-16) 0 0; font-size: var(--t-writing); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.waka-reading-full footer { flex-shrink: 0; margin-top: var(--sp-16); }
-/* Edit and Share: two quiet words on one line under the read, no underline
-   (founder, 2026-11-12: "ugly"). */
-.waka-reading-full footer button { text-decoration: none; }
-.waka-reading-full .waka-reading-details > button:not(.waka-surface-back), .waka-reading-full footer button:not(.waka-surface-back) { padding-inline: 0; color: var(--muted); font-size: var(--t-ui); }
-.waka-reading-full .waka-reading-details > button:not(.waka-surface-back):hover, .waka-reading-full footer button:not(.waka-surface-back):hover { color: var(--ink); }
-.waka-reading-full footer { margin-top: var(--sp-4); }
+.waka-reading-full .waka-reading-details > button:not(.waka-surface-back) { padding-inline: 0; color: var(--muted); font-size: var(--t-ui); text-decoration: none; }
+.waka-reading-full .waka-reading-details > button:not(.waka-surface-back):hover { color: var(--ink); }
 .waka-dock--tabs .waka-dock-item { position: relative; }
 .waka-dock--tabs .waka-dock-item[aria-current="page"]::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: var(--sp-16); height: 2px; border-radius: var(--r-pill); background: currentColor; }
 
@@ -6963,12 +6962,14 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 @layer chrome {
 /* Reading evidence stays inside its sheet. */
 .waka-reading-details { margin-top: var(--sp-16); }
-.waka-reading-details summary { min-height: var(--sp-44); padding-block: var(--sp-12); cursor: pointer; overflow-wrap: anywhere; }
-.waka-reading-details details details { margin-inline-start: var(--sp-12); }
-.waka-reading-full .waka-reading-meta { font-size: var(--t-ui); color: var(--muted); }
-.waka-reading-details textarea { display: block; width: 100%; min-height: 100px; margin-top: var(--sp-8); padding: var(--sp-12); background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: var(--sp-12); font: inherit; font-size: var(--t-input); }
-.waka-reading-sources { margin: var(--sp-8) 0; padding-inline-start: var(--sp-20); }
-.waka-reading-sources button { text-align: start; overflow-wrap: anywhere; }
+/* EDITING IS THE READ, NOW WRITABLE (2026-11-12): no box, no label, the
+   words where they stood at the size everything written is set at; Cancel
+   quiet and Save in full ink on one line under them. */
+.waka-reading-details textarea { display: block; width: 100%; min-height: 40dvh; margin: 0; padding: 0; background: none; color: var(--ink); border: 0; resize: none; font: inherit; font-size: var(--t-writing); line-height: 1.6; }
+.waka-reading-details > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-20); }
+.waka-reading-details > div > textarea { flex-basis: 100%; }
+.waka-reading-full .waka-reading-details > div > button:not(.waka-surface-back) { padding-inline: 0; color: var(--muted); font-size: var(--t-ui); }
+.waka-reading-full .waka-reading-details > div > button:last-child:not(:disabled):not(.waka-surface-back) { color: var(--ink); }
 
 
 }
@@ -7063,11 +7064,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 
 @layer chrome {
-/* ═══ THE READ'S SENTENCE IS ITS OWN "READ IN FULL" (design F1) ══════════ */
-.waka-reading-open {
-  appearance: none; display: block; width: 100%; padding: 0; border: 0; background: none;
-  color: inherit; font: inherit; text-align: inherit; cursor: pointer;
-}
 /* ═══ "WHY?" — BECAUSE YOU KEPT THESE (design F2) ═══════════════════════════
    One quoted save per row, left-aligned, hairlines between, in the
    bubble's own ink: the person's words, not the machine's. */

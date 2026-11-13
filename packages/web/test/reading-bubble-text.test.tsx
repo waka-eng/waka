@@ -1,84 +1,60 @@
 // @vitest-environment jsdom
-/** WHAT THIS MOCKS, AND WHY (gate G6): nothing imported. JSDOM has no layout,
- * so element heights and `ResizeObserver` supply the measured overflow.
- * `requestAnimationFrame` and `cancelAnimationFrame` deliver the deferred layout check. */
+/** WHAT THIS MOCKS, AND WHY (gate G6): `components/ReadingDetails` reads the entry from
+ * the API; here it is a stand-in that shows its words and whether it opened
+ * for editing, because this file tests the bubble, not the edit flow. */
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ReadingBubbleText } from '../src/components/ReadingBubbleText';
 
+vi.mock('../src/components/ReadingDetails', () => ({
+  default: ({ text, startEditing }: { text: string; startEditing?: boolean }) => <p data-editing={String(Boolean(startEditing))}>{text}</p>,
+}));
+
 afterEach(() => vi.restoreAllMocks());
-it('holds the expanded version, focus, scroll and share target until it is closed', async () => {
+const details = { profileId: 'p', onMutation: () => () => undefined, onUpdated: () => undefined };
+it('shows the whole read with nothing to open, and its acts in one row', async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  const firstShare = vi.fn(), nextShare = vi.fn();
-  const host = document.createElement('div'); document.body.append(host); const root = createRoot(host);
-  try {
-    await act(async () => root.render(<ReadingBubbleText text="The original reading." locale="en-US" onShare={firstShare} />));
-    await act(async () => host.querySelector<HTMLButtonElement>('button')!.click());
-    const dialog = document.querySelector<HTMLElement>('.waka-reading-full')!;
-    const body = dialog.querySelector<HTMLElement>('.waka-reading-full-body')!;
-    body.scrollTop = 120;
-    const focused = document.activeElement;
-    await act(async () => root.render(<ReadingBubbleText text="A refreshed reading." locale="en-US" onShare={nextShare} />));
-    expect(document.querySelector('.waka-reading-full')).toBe(dialog);
-    expect(dialog.querySelector('p')?.textContent).toBe('The original reading.');
-    expect(body.scrollTop).toBe(120); expect(document.activeElement).toBe(focused);
-    await act(async () => dialog.querySelector<HTMLButtonElement>('footer button')!.click());
-    expect(firstShare).toHaveBeenCalledOnce(); expect(nextShare).not.toHaveBeenCalled();
-    await act(async () => host.querySelector<HTMLButtonElement>('button')!.click());
-    expect(document.querySelector('.waka-reading-full p')?.textContent).toBe('A refreshed reading.');
-    await act(async () => root.render(<ReadingBubbleText key="another-profile" text="Another profile." locale="en-US" />));
-    expect(document.querySelector('.waka-reading-full')).toBeNull();
-  } finally { await act(async () => root.unmount()); host.remove(); }
-});
-it('keeps sharing available for a short reading only inside its expanded view', async () => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  const share = vi.fn(), chat = vi.fn(), host = document.createElement('div'); document.body.append(host);
+  const share = vi.fn(), chat = vi.fn(), onWhy = vi.fn(), host = document.createElement('div'); document.body.append(host);
   const root = createRoot(host);
   try {
-    await act(async () => root.render(<ReadingBubbleText text="A short reading." locale="en-US" onShare={share} onChat={chat} />));
-    expect(host.textContent).not.toContain('Share');
-    await act(async () => host.querySelector<HTMLButtonElement>('.jar-char-bubble-acts button:last-child')!.click());
-    expect(chat).toHaveBeenCalledOnce();
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-    /* NO "VIEW READING": the sentence is its own way in. */
-    expect(host.querySelector('.jar-char-bubble-acts')?.textContent).toBe('Chat about this');
-    const opener = host.querySelector<HTMLButtonElement>('button.waka-reading-open')!;
-    await act(async () => { opener.focus(); opener.click(); });
-    const shareButton = document.querySelector<HTMLButtonElement>('.waka-reading-full footer button')!;
-    expect(shareButton.textContent).toBe('Share');
-    await act(async () => shareButton.click());
+    await act(async () => root.render(<ReadingBubbleText text="A long reading that the bubble holds whole." locale="en-US"
+      why={[{ id: 'a', preview: 'x' }]} onWhy={onWhy} onShare={share} onChat={chat} details={details} />));
+    /* NO "READ IN FULL": the sentence is plain words, not a door. */
+    expect(host.querySelector('.waka-reading-preview button')).toBeNull();
+    expect(host.querySelector('.jar-char-bubble-reading')?.textContent).toBe('A long reading that the bubble holds whole.');
+    const acts = [...host.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-acts button')];
+    expect(acts.map(b => b.textContent || b.getAttribute('aria-label'))).toEqual(['Why?', 'Chat about this', 'Share', 'Edit']);
+    await act(async () => acts[2]!.click());
     expect(share).toHaveBeenCalledOnce();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.activeElement).toBe(opener);
   } finally { await act(async () => root.unmount()); host.remove(); }
 });
-it('offers a full reading only when clipped, closes by Escape, and returns focus', async () => {
+it('opens Edit on the quiet page already editing, closes by Escape, and returns focus', async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  let height = 120, measure: () => void = () => {};
-  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(() => height);
-  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(240);
-  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { measure = callback; } observe() {} disconnect() {} });
-  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callback(0); return 1; });
-  vi.stubGlobal('cancelAnimationFrame', () => {});
   const host = document.createElement('div'); document.body.append(host);
   const root = createRoot(host);
   try {
-    await act(async () => root.render(<ReadingBubbleText text="Every word remains available." locale="en-US" />));
-    /* THE SENTENCE IS THE ONLY WAY IN: no "Read in full" beside it. */
-    expect(host.querySelector('.jar-char-bubble-acts')).toBeNull();
-    const more = host.querySelector<HTMLButtonElement>('button.waka-reading-open')!;
-    expect(more.textContent).toBe('Every word remains available.');
-    await act(async () => { more.focus(); more.click(); });
+    await act(async () => root.render(<ReadingBubbleText text="Every word remains available." locale="en-US" details={details} />));
+    const edit = host.querySelector<HTMLButtonElement>('button[aria-label="Edit"]')!;
+    await act(async () => { edit.focus(); edit.click(); });
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(dialog.textContent).toContain('Every word remains available.');
+    await vi.waitFor(() => expect(dialog.querySelector('[data-editing="true"]')?.textContent).toBe('Every word remains available.'));
     expect(dialog.querySelector('button')?.getAttribute('aria-label')).toBe('Close');
     await act(async () => dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.activeElement).toBe(more);
-    await act(async () => { height = 300; measure(); });
+    expect(document.activeElement).toBe(edit);
+  } finally { await act(async () => root.unmount()); host.remove(); }
+});
+it('offers no acts row when there is nothing to do', async () => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  const host = document.createElement('div'); document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(<ReadingBubbleText text="Just words." locale="en-US" />));
+    expect(host.querySelector('.jar-char-bubble-acts')).toBeNull();
     expect(host.querySelector('button')).toBeNull();
-  } finally { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); }
+  } finally { await act(async () => root.unmount()); host.remove(); }
 });
 
 /* DESIGN F2: "Why?" turns the bubble over to the saves behind the read —
