@@ -7537,7 +7537,16 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
    inspiration it's all the way there"). Its header spanned the window, so
    on a desktop its "<" sat at the screen's edge while Saved, Past chats and a
    chat put theirs at their 650px column's edge. Now it takes that column. */
-.jar-seek.jar-inspiration-composer > .waka-surface-head { width: min(650px, 100%); margin-inline: auto; }
+.jar-seek.jar-inspiration-composer > .waka-surface-head { width: min(100%, 602px, calc(100vw - 88px)); margin-inline: auto; }
+/* EXACTLY THE LIST'S ROW (founder, 2026-11-12: "the placement of the back
+   button and [the word on the right] should be exactly the same here").
+   The Inspirations list's header is its 650px column less that column's
+   24px padding each side (602px, and 88px in from a narrower window); at
+   700px and under the column drops its padding and the row is the page's
+   16px gutter. The notepad's row now takes those same two widths. */
+@media (max-width: 700px) {
+  .jar-seek.jar-inspiration-composer > .waka-surface-head { width: min(100%, calc(100vw - 32px)); }
+}
 
 /* A SURFACE WITH NO DOM PAGE OF ITS OWN (a principle in the sky, the
    creature's questions) gets the same row in a strip at the top. */
