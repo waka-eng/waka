@@ -55,6 +55,8 @@ export const conversations=pgTable('conversations',{
    * would have made tenant isolation a rule to remember.
    */
   initialInspirationId:uuid('initial_inspiration_id'),
+  /** Application-authored descriptor only; resolved through current owned sources. */
+  opening:jsonb('opening').$type<Record<string,unknown>|null>(),
   revision:integer('revision').notNull().default(0),
   /**
    * WHOSE MEMORY THE REPLY READS. Founder, 2026-10-15: "new chat should also
@@ -88,6 +90,7 @@ export const conversations=pgTable('conversations',{
   ownerUpdated:index('conversations_owner_updated_idx').on(table.profileId,table.updatedAt),
   /* Removing an agent nulls this column across every chat that named it. */
   agentProfile:index('conversations_agent_profile_idx').on(table.agentProfileId),
+  openingDescriptor:check('conversations_opening_descriptor_check',sql`${table.opening} IS NULL OR coalesce((jsonb_typeof(${table.opening})='object' AND ${table.opening}->>'version'='1' AND ${table.opening}->>'kind' IN ('source','prompt','activity') AND (${table.opening} - ARRAY['version','locale','hash','kind','source','why','supports','question','imageId','key','asOf','day','backing'])='{}'::jsonb),false)`),
   revisionBounds:check('conversations_revision_bounds',sql`${table.revision} BETWEEN 0 AND 200`),
   /* Spelled out because the migration that created it is: keep it equal to
      `conversationPerspectiveValues`. */

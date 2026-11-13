@@ -1,5 +1,6 @@
+import {isConversationOpening,type ConversationOpening} from './conversation-opening';
 import {profileStorageKey,type ProfileStorageScope} from './profile-storage';
-export interface ConversationDraft{id:string;writer:string;updatedAt:number;content:string;revision:number;pending:boolean;correctsMessageId?:string;conversationId?:string;
+export interface ConversationDraft{opening?:ConversationOpening|null;id:string;writer:string;updatedAt:number;content:string;revision:number;pending:boolean;correctsMessageId?:string;conversationId?:string;
   /** Whose memory a NEW chat answers from, kept with the first message so a reload re-sends it the same way. */
   talkWith?:'agent'|'both';
   /** Which agent `talkWith` names — kept with it, so a retried create asks
@@ -19,7 +20,7 @@ export interface ConversationDraftAttachment{id:string;type:'image'|'file';name:
 export interface StoredConversationDraft{key:string;raw:string;value:ConversationDraft}
 const prefix=(scope:ProfileStorageScope,id:string)=>profileStorageKey(scope,`conversation:${id}:draft:`)!;
 const uuid=(value:unknown)=>typeof value==='string'&&/^[0-9a-f-]{36}$/i.test(value);
-function valid(row:ConversationDraft,maxRevision=200){return row&&uuid(row.id)&&uuid(row.writer)&&Number.isFinite(row.updatedAt)&&typeof row.content==='string'&&row.content.length<=4000&&Number.isSafeInteger(row.revision)&&row.revision>=0&&row.revision<=maxRevision&&typeof row.pending==='boolean'&&(row.correctsMessageId===undefined||uuid(row.correctsMessageId))&&(row.conversationId===undefined||uuid(row.conversationId))&&(row.talkWith===undefined||row.talkWith==='agent'||row.talkWith==='both')&&(row.agentId===undefined||uuid(row.agentId))&&(row.attachments===undefined||Array.isArray(row.attachments)&&row.attachments.length<=6&&row.attachments.every(attached));}
+function valid(row:ConversationDraft,maxRevision=200){return row&&(row.opening==null||isConversationOpening(row.opening))&&uuid(row.id)&&uuid(row.writer)&&Number.isFinite(row.updatedAt)&&typeof row.content==='string'&&row.content.length<=4000&&Number.isSafeInteger(row.revision)&&row.revision>=0&&row.revision<=maxRevision&&typeof row.pending==='boolean'&&(row.correctsMessageId===undefined||uuid(row.correctsMessageId))&&(row.conversationId===undefined||uuid(row.conversationId))&&(row.talkWith===undefined||row.talkWith==='agent'||row.talkWith==='both')&&(row.agentId===undefined||uuid(row.agentId))&&(row.attachments===undefined||Array.isArray(row.attachments)&&row.attachments.length<=6&&row.attachments.every(attached));}
 const attached=(item:ConversationDraftAttachment)=>Boolean(item)&&uuid(item.id)&&(item.type==='image'||item.type==='file')&&(item.name===null||typeof item.name==='string')&&(item.contentType===null||typeof item.contentType==='string')&&(item.size===null||Number.isSafeInteger(item.size));
 export function readConversationDrafts(scope:ProfileStorageScope,id:string){
   const start=prefix(scope,id);return Object.keys(localStorage).filter(key=>key.startsWith(start)).map(key=>{const raw=localStorage.getItem(key)!,value=JSON.parse(raw) as ConversationDraft;if(!valid(value,id.startsWith('thought:')?Number.MAX_SAFE_INTEGER:200)||key!==start+value.id)throw new Error('Unreadable conversation draft');return {key,raw,value};}).sort((a,b)=>b.value.updatedAt-a.value.updatedAt||a.key.localeCompare(b.key));

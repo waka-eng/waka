@@ -685,6 +685,12 @@
   color: var(--muted);
 }
 
+/* One stable place for the next reply, from save acknowledgement to delivery.
+   This is status, never a fabricated assistant message or progress percentage. */
+.chat-waiting { display: flex; align-items: center; gap: var(--sp-12); align-self: flex-start; width: min(100%, 34rem); min-height: 5rem; }
+.chat-waiting .chat-said { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; font-size: var(--t-meta); color: var(--muted); }
+.chat-waiting .chat-thinking { margin-block: var(--sp-8); min-height: 2.8em; letter-spacing: normal; }
+
 .chat-thinking-dots {
   display: flex;
   gap: var(--sp-4);

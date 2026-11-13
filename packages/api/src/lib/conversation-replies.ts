@@ -1,3 +1,4 @@
+import {resolveConversationOpening} from './conversation-opening.js';
 import {chargeChatRequest} from './chat-rate-limit.js';
 import {randomUUID} from 'node:crypto';
 import {and,asc,desc,eq,gte,inArray,sql} from 'drizzle-orm';
@@ -14,7 +15,7 @@ import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs}
 import {attachmentNote,readMessageAttachments} from './conversation-attachments.js';
 type Db=ReturnType<typeof getDb>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
-type Reader=Pick<Db,'select'>;
+type Reader=Pick<Db,'select'|'execute'>;
 type Request=typeof conversationReplyRequests.$inferSelect;
 const HOUR=3600000;
 export class ConversationReplyError extends Error{constructor(readonly status:404|409|410|429|503,message:string){super(message);}}
@@ -102,11 +103,22 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
   const window=conversationReplyWindow(projected),history=window.history,searchQuery=window.searchQuery;
   const contextChanged=messages.length>8||window.cut||projected.some(row=>row.memoryChanged);
   let retrievalTrace:ConversationRetrievalTrace|undefined;
-  const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,searchQuery,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]};
+  const useSavedSources=conversationUsesSavedSources(history);
+  const context=useSavedSources?await readPerspectiveContext(db,memory,searchQuery,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]};
   const [profile]=await db.select({locale:profiles.preferredLocale,type:profiles.type}).from(profiles).where(eq(profiles.id,profileId));
   // New chats belong to their selected profile. `mine` means that profile's
   // memory; when it is an agent, its work must not become the human's biography.
-  const sources=[...context.principles,...context.reading,...context.inspirations]
+  const opening=memory.perspective==='mine'&&(useSavedSources||conversation.opening?.kind==='prompt')?await resolveConversationOpening(db,profileId,conversation.opening,{display:false}):null;
+  const openingSources=opening?.available?opening.context:[];
+  // Same total/per-source/per-kind budgets, with the bound opening first.
+  const seen=new Set<string>(),kindCounts={principle:0,top_of_mind_entry:0,inspiration:0},kindRemaining={principle:8000,top_of_mind_entry:4000,inspiration:4000};let remaining=CONVERSATION_LIMITS.contextCharacters;
+  const selected=opening?.available?[...openingSources,...context.principles,...context.reading,...context.inspirations].flatMap(source=>{
+    const key=source.kind+':'+source.id,cap={principle:10,top_of_mind_entry:5,inspiration:6}[source.kind];
+    if(seen.has(key)||kindCounts[source.kind]>=cap||remaining<=0||kindRemaining[source.kind]<=0)return [];
+    seen.add(key);kindCounts[source.kind]++;const text=source.text.slice(0,Math.min(1600,remaining,kindRemaining[source.kind]));remaining-=text.length;kindRemaining[source.kind]-=text.length;
+    return [{...source,text,truncated:source.truncated||text.length<source.text.length}];
+  }):[...context.principles,...context.reading,...context.inspirations];
+  const sources=selected
     .map(source=>profile?.type==='agent'?{...source,owner:'agent' as const}:source);
   const perspective=profile?.type==='agent'?'agent':memory.perspective;
   /* Pinning a keep into `sources` puts it in front of the model; pointing
@@ -131,7 +143,8 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     sources.findIndex(source=>source.kind==='principle'&&source.id===conversation.initialPrincipleId),
     sources.findIndex(source=>source.kind==='inspiration'&&source.id===conversation.initialInspirationId),
   ].find(index=>index>=0)??-1;
-  const input:ConversationReplyInput={...(perspective!=='mine'?{perspective}:{}),preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
+  const applicationOpening=opening?{provenance:'application' as const,available:opening.available,...(opening.available?opening.binding.kind==='source'?{why:opening.binding.why,...(opening.binding.question?{text:opening.ask}:{}),sourceNumbers:openingSources.map(row=>sources.findIndex(source=>source.kind===row.kind&&source.id===row.id)+1).filter(number=>number>0)}:{text:opening.ask,...(opening.binding.kind==='activity'?{observedAt:opening.binding.asOf}:{})}:{})}:undefined;
+  const input:ConversationReplyInput={...(applicationOpening?{applicationOpening}:{}),...(perspective!=='mine'?{perspective}:{}),preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged:contextChanged||Boolean(opening&&!opening.available),...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
   return {input,searchQuery,sources,memory,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){

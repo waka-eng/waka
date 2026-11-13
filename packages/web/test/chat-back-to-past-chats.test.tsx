@@ -2,7 +2,7 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/data` and `lib/api` supply the
  * world's layers (`helpers/render-home`'s fixtures), `lib/auth-context` the
  * session, and `lib/api/conversations` one committed conversation, listed and
- * readable. `helpers/render-home` and `helpers/canvas-stub` replace canvas,
+ * readable, plus a server-resolved opening projection (SQL proofs run in API tests). `helpers/render-home` and `helpers/canvas-stub` replace canvas,
  * viewport and clock; the real world, Past chats and the chat page render, and
  * React Router history runs.
  *
@@ -13,16 +13,16 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, pressHomeBar, VIEWER_ID, type MountedWorld } from './helpers/render-home';
-import { createConversation, fetchConversation, listConversations, type ApiConversation } from '../src/lib/api/conversations';
+import { prepareConversationOpening,createConversation, fetchConversation, listConversations, type ApiConversation } from '../src/lib/api/conversations';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [{ id: 'loaded', text: 'Current inspiration', daysAgo: 1 }] }));
 /* A reading on home, so the creature's bubble carries its "Chat about this". */
 vi.mock('../src/lib/data', async (original) => ({ ...await original<typeof import('../src/lib/data')>(), ...dataMockFrom(FACTS),
-  loadTopOfMind: async () => ({ id: 'tom', version: 1, reason: 'initial', createdMs: 0, entries: [{ id: 'lead', type: 'hypothesis', body: 'You guard your quiet hours.',
+  loadTopOfMind: async () => ({ id: 'tom', version: 1, reason: 'initial', createdMs: 0, entries: [{ id: '55555555-5555-4555-8555-555555555555', type: 'hypothesis', body: 'You guard your quiet hours.',
     belief: null, prompt: null, locked: false, pinned: true, dismissed: false, sortOrder: 0, createdMs: 0, citedSignals: [] }] }) }));
 vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS) }));
 vi.mock('../src/lib/api/conversations', async (original) => ({
-  ...await original<typeof import('../src/lib/api/conversations')>(), fetchConversation: vi.fn(), listConversations: vi.fn(), createConversation: vi.fn(),
+  ...await original<typeof import('../src/lib/api/conversations')>(), fetchConversation: vi.fn(), listConversations: vi.fn(), createConversation: vi.fn(),prepareConversationOpening:vi.fn(),
 }));
 vi.mock('../src/lib/auth-context', async (original) => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
@@ -38,6 +38,7 @@ const open = () => new URLSearchParams(location.search).get('open');
 beforeAll(() => { installCanvasStub(); setViewport(390, 844); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 beforeEach(() => {
   localStorage.clear(); sessionStorage.clear();
+  vi.mocked(prepareConversationOpening).mockResolvedValue({available:true,provenance:'application',ask:'You guard your quiet hours.',sources:[],binding:{version:1,locale:'en-US',kind:'source',source:{kind:'top_of_mind_entry',id:'55555555-5555-4555-8555-555555555555',hash:'synthetic-current-proof'},why:false,supports:[],hash:'1'.repeat(64)}});
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const row: ApiConversation = { id: CHAT, profileId: VIEWER_ID, revision: 1, generationEnabled: true, createdAt: '2026-10-15T00:00:00Z', updatedAt: '2026-10-15T00:00:00Z',
     messages: [{ id: '33333333-3333-4333-8333-333333333333', profileId: VIEWER_ID, conversationId: CHAT, position: 1, role: 'user', content: 'An earlier chat', createdAt: '2026-10-15T00:00:00Z' }] };

@@ -1,3 +1,4 @@
+import type {OpeningSelection} from '../lib/conversation-opening';
 import { startJourney } from '../lib/journey-performance';
 import { ReadingBubbleText } from '../components/ReadingBubbleText';
 import { firstPhoto, onlyAttachments } from '../components/SavedPhoto';
@@ -2054,7 +2055,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /** The question a chat was opened to answer, and which chat that is: `null`
       while it is still new, its id once it is saved. Any other chat (one
       opened from Past chats) never shows it. See `ConversationPanel.opener`. */
-  const chatOpener = useRef<{ ask?: string; quote?: string; turn?: boolean; inspirationId?: string; sources?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>; whyOf?: Entry; id: string | null } | null>(null);
+  const chatOpener = useRef<{ selection?:OpeningSelection;ask?: string; quote?: string; turn?: boolean; inspirationId?: string; sources?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>; whyOf?: Entry; id: string | null } | null>(null);
   const chatOrList = Boolean(viewNavigation.view?.conversationId) || viewNavigation.view?.open === 'conversations';
   useEffect(() => { if (!chatOrList) { chatSwap.current = false; chatOpener.current = null; } }, [chatOrList]);
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
@@ -5843,8 +5844,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
      place with that on WAKA's side; you reply. A save is held up as a card
      and pinned to the chat (its id goes with the first send, so the reply
      reads it); a line is WAKA's first turn. */
-  const chatOn = useCallback((opener: { ask?: string; quote?: string; turn?: boolean; inspirationId?: string; sources?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>; whyOf?: Entry }) => {
-    chatOpener.current = { ...opener, id: null }; chatSwap.current = true;
+  const chatOn = useCallback((opener: { selection?:OpeningSelection;ask?: string; quote?: string; turn?: boolean; inspirationId?: string; sources?: ReadonlyArray<{ id: string; preview: string; photoId?: string | null; wordless?: boolean }>; whyOf?: Entry }) => {
+    chatOpener.current = { ...opener,selection:opener.selection??(opener.ask?{locale:localeRef.current,text:opener.ask}:undefined), id: null }; chatSwap.current = true;
     setRecentInspiration(null);
     viewNavigationRef.current.write({ ...EMPTY_VIEW, wallId: atWallRef.current.kind === 'agent' ? atWallRef.current.id : null, conversationId: 'new' });
   }, []);
@@ -9522,11 +9523,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
                             label={say('worldBubbleOnYourMind')}
                             why={whyFor(lead)}
-                            onWhy={() => chatOn({ ask: lead.body, turn: true, whyOf: lead })}
+                            onWhy={() => chatOn({ ask: lead.body, turn: true, whyOf: lead,selection:{locale,text:lead.body,source:{kind:'top_of_mind_entry',id:lead.id,why:true,supportIds:whyIds(lead)}} })}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true),
                               onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
-                            onChat={() => chatOn({ ask: lead.body, turn: true })} chatDisabled={talking}
+                            onChat={() => chatOn({ ask: lead.body, turn: true,selection:{locale,text:lead.body,source:{kind:'top_of_mind_entry',id:lead.id}} })} chatDisabled={talking}
                             onShare={storageScope && !offline ? () => setThingShare({
                               kind: "topOfMind", text: lead.body,
                               proof: formatMessage(locale, "worldShareOnMyMind", { date: dateStamp(Date.now(), locale) }),
@@ -9712,7 +9713,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   <span className="jar-char-bubble-acts">
                     {visibleInspiration && keptSubject(visibleInspiration).text ? <button type="button" className="jar-char-bubble-act"
                       disabled={talking}
-                      onClick={() => { const kept = keptSubject(visibleInspiration); chatOn({ quote: kept.text, inspirationId: kept.id || undefined }); }}>
+                      onClick={() => { const kept = keptSubject(visibleInspiration); chatOn({ quote: kept.text, inspirationId: kept.id || undefined,selection:{locale,text:kept.text,source:{kind:'inspiration',id:kept.id,...(keptWords?.status==='ready'&&keptWords.text?.trim()&&keptImageId?{imageId:keptImageId}:{})}} }); }}>
                       {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
                     </button> : null}
                     <button type="button" className="jar-char-bubble-act"
@@ -9736,7 +9737,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         /* The chat asks the same question the bubble did, and
                            opens in place, not with a fade (founder,
                            2026-11-12). */
-                        chatOpener.current = { ask: say('worldCompanionChatPrompt'), id: null }; chatSwap.current = true;
+                        chatOpener.current = { ask: say('worldCompanionChatPrompt'),selection:{locale,text:say('worldCompanionChatPrompt')}, id: null }; chatSwap.current = true;
                         viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.kind === 'agent' ? atWall.id : null, conversationId: 'new' });
                       }}>
                       {say('worldTalkAboutThis')}
@@ -9911,7 +9912,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 /* The chat opens on the creature asking this same question,
                    the inspiration quoted under it (founder, 2026-11-12). */
                 onChat={(question,text)=>{
-                  chatOpener.current={ask:question,quote:text,id:null};chatSwap.current=true;setReviewing(false);
+                  chatOpener.current={ask:question,quote:text,inspirationId:inspirationReviewQueue[0]!.id,selection:{locale,text:text,source:{kind:'inspiration',id:inspirationReviewQueue[0]!.id,question:'worldInspirationReviewQuestion'}},id:null};chatSwap.current=true;setReviewing(false);
                   viewNavigationRef.current.write({...EMPTY_VIEW,conversationId:'new'});}}
                 onDone={()=>{const id=inspirationReviewQueue[0]!.id;setInspirationReviewQueue(queue=>queue.filter(row=>row.id!==id));}} />
             ) : null}
@@ -11576,7 +11577,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               scope={conversationScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
-              opener={chatOpener.current && chatOpener.current.id === talkId ? { ask: chatOpener.current.ask, quote: chatOpener.current.quote, turn: chatOpener.current.turn, inspirationId: chatOpener.current.inspirationId,
+              opener={chatOpener.current && chatOpener.current.id === talkId ? { selection:chatOpener.current.selection,ask: chatOpener.current.ask, quote: chatOpener.current.quote, turn: chatOpener.current.turn, inspirationId: chatOpener.current.inspirationId,
                 /* Why?'s saves are read as the chat draws, not when Why? was pressed,
                    so one fetched from outside the loaded window still arrives (code
                    review, 2026-11-12). */

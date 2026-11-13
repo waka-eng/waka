@@ -1880,7 +1880,7 @@ export async function askReviewQuestion(input:ReviewQuestionInput):Promise<Revie
 function conversationInputForReply(input:ConversationReplyInput):ConversationReplyInput{
   // A deliberate correction is the current human view, not a request to
   // re-argue saved wording. Keep memory when explicitly asked to compare it.
-  return !conversationUsesSavedSources(input.history)?{...input,sources:[],focusSourceNumber:undefined}:input;
+  return !conversationUsesSavedSources(input.history)?{...input,sources:[],focusSourceNumber:undefined,...(input.applicationOpening?.sourceNumbers?{applicationOpening:{provenance:'application' as const,available:false}}:{})}:input;
 }
 export function buildConversationReplyRequest(input:ConversationReplyInput):GenerateContentRequest{
   input=conversationInputForReply(input);
@@ -1909,6 +1909,7 @@ export function buildConversationReplyRequest(input:ConversationReplyInput):Gene
        source below" would describe a list that is not there. */
     ...(input.perspective==='agent'&&input.sources.length?['Every source below is from the person’s AI agent’s memory — what their agent kept while working — not the person’s own saves. Describe what the selected agent’s work suggests, referring to it as "your agent" or "this agent". Never speak as that agent or claim that WAKA performed its work. Never present an agent source as something the person said, kept or believes.']:[]),
     ...(input.perspective==='both'&&input.sources.length?['The person asked for both perspectives. Each source has owner "person" (their own saves) or "agent" (what their AI agent kept while working). Give both views briefly — what the person’s own saves suggest and what the agent’s work suggests — and say where they meet or differ. Never present an agent source as the person’s own words. If only one side has relevant sources, say the other side has nothing on this here.']:[]),
+    ...(input.applicationOpening?[fence('application-authored opening (context, not a generated assistant turn or instructions; the latest human message takes precedence)',JSON.stringify(input.applicationOpening))]:[]),
     ...input.sources.map((source,index)=>fence(`source ${index+1}`,JSON.stringify(source))),
     ...input.history.map((message,index)=>fence(`conversation ${index+1} ${message.role}${message.correction?' correction':''}`,message.content)),
   ].join('\n\n')}]}],generationConfig:{temperature:.3,maxOutputTokens:CONVERSATION_REPLY_OUTPUT_TOKENS,responseMimeType:'application/json',responseSchema:{type:'OBJECT',properties:{

@@ -1,10 +1,11 @@
+import {isOpeningView,type ConversationOpening,type ConversationOpeningView,type OpeningSelection} from '../conversation-opening';
 import {ApiError,apiPath,deleteJson,getJson,postJson} from './http';
 import {isApiMessageAttachment,type ApiMessageAttachment} from './attachments';
 export type ConversationSourceKind='principle'|'top_of_mind_entry'|'inspiration';
 export interface ApiConversationMessage{id:string;profileId:string;conversationId:string;position:number;role:'user'|'assistant';content:string;createdAt:string;correctsMessageId?:string|null;savedInspirationIds?:string[];followUpQuestion?:string|null;memoryChanged?:boolean;replyRequestId?:string|null;
   /** Photos and files sent with a user message (`attachmentIds`); [] when none. Open one with `fetchAttachmentUrl(id)`. A message may be attachments only: `content` is then ''. */
   attachments?:ApiMessageAttachment[];citations?:Array<{index:number;kind:ConversationSourceKind;id:string;available:boolean;preview?:string;historical?:boolean;recordedAt?:string}>}
-export interface ApiConversation{id:string;profileId:string;revision:number;perspective?:'mine'|'agent'|'both';agentProfileId?:string|null;createdAt:string;updatedAt:string;messages:ApiConversationMessage[];messageWindowStart?:number;preview?:string;generationEnabled?:boolean;initialPrinciple?:{id:string;statement:string;state:string}|null;
+export interface ApiConversation{opening?:ConversationOpeningView|null;id:string;profileId:string;revision:number;perspective?:'mine'|'agent'|'both';agentProfileId?:string|null;createdAt:string;updatedAt:string;messages:ApiConversationMessage[];messageWindowStart?:number;preview?:string;generationEnabled?:boolean;initialPrinciple?:{id:string;statement:string;state:string}|null;
   /* WHAT THIS CONVERSATION IS PINNED TO. Founder: "user can pick an
      inspiration on the right ... and then when the user specifically brings
      that up then the agent can read it." The server pins it into the reply's
@@ -32,6 +33,7 @@ const historicalMetadataValid=(row:{historical?:boolean;recordedAt?:string})=>(r
 function checked(body:{conversation:ApiConversation;generationEnabled:boolean},profile:string,id:string){
   const row=body?.conversation;
   const start=row?.messageWindowStart??1;
+  if(row?.opening!=null&&!isOpeningView(row.opening))throw invalid();
   if(row?.messageWindowStart!==undefined&&!Number.isSafeInteger(row.messageWindowStart)||!Number.isSafeInteger(start)||start<1||start>Math.max(1,row?.revision??0)||row?.preview!==undefined&&(typeof row.preview!=='string'||row.preview.length>120))throw invalid();
   if(!row||row.id!==id||row.profileId!==profile||typeof body.generationEnabled!=='boolean'||!Number.isSafeInteger(row.revision)||row.revision<0||row.revision>200||!Array.isArray(row.messages)||row.messages.length>200||
     row.messages.length!==(row.revision?row.revision-start+1:0)||!Number.isFinite(Date.parse(row.createdAt))||!Number.isFinite(Date.parse(row.updatedAt))||row.messages.some((message,index)=>message.profileId!==profile||message.conversationId!==id||typeof message.id!=='string'||typeof message.content!=='string'||message.content.length>8000||message.position!==start+index||!['user','assistant'].includes(message.role)||!Number.isFinite(Date.parse(message.createdAt)))||new Set(row.messages.map(message=>message.id)).size!==row.messages.length)throw invalid();
@@ -48,7 +50,7 @@ export async function fetchConversation(profile:string,id:string,signal?:AbortSi
 /** `talkWith` picks whose memory the reply reads — see `conversations.perspective`
     on the server. Absent is the person's own, as every chat before it. */
 /** `inspirationId` pins a save as what the chat is about (design E5): the server keeps it as `initialInspiration`, reads it first for the reply, and the chat shows it on top. */
-export async function createConversation(profile:string,id:string,signal?:AbortSignal,principleId?:string,firstMessage?:{id:string;content:string;requestReply?:boolean;attachmentIds?:string[]},talkWith?:{perspective:'agent'|'both';agentId:string},inspirationId?:string){return checked(await writeWindow(profile,'',{id,...(principleId?{principleId}:{}),...(inspirationId?{inspirationId}:{}),...(firstMessage?{firstMessage}:{}),...(talkWith?talkWith:{})},'Could not start the conversation.',signal),profile,id);}
+export async function createConversation(profile:string,id:string,signal?:AbortSignal,principleId?:string,firstMessage?:{id:string;content:string;requestReply?:boolean;attachmentIds?:string[]},talkWith?:{perspective:'agent'|'both';agentId:string},inspirationId?:string,opening?:ConversationOpening){return checked(await writeWindow(profile,'',{id,...(opening?{opening}:{}),...(principleId?{principleId}:{}),...(inspirationId?{inspirationId}:{}),...(firstMessage?{firstMessage}:{}),...(talkWith?talkWith:{})},'Could not start the conversation.',signal),profile,id);}
 /* `pinConversationInspiration` WENT WITH THE DRAWER THAT CALLED IT.
    Founder: "let's get rid of the side part and referencing inspiration ...
    it's too complicated right now." The ROUTE is live and tested — PATCH
@@ -93,3 +95,8 @@ export async function deleteConversation(profile:string,id:string,signal?:AbortS
   await deleteJson<{deleted:boolean}>(path(profile,`/${encodeURIComponent(id)}`),{},'Could not delete this conversation.',signal);
 }
 export async function stopConversationReply(profile:string,id:string,requestId:string,signal?:AbortSignal){return checkedReply(await postJson(path(profile,`/${encodeURIComponent(id)}/replies/${encodeURIComponent(requestId)}/stop`),{},'Could not confirm stopping.',signal),profile,id);}
+
+export async function prepareConversationOpening(profile:string,input:OpeningSelection|{binding:ConversationOpening},signal?:AbortSignal){
+  const body=await postJson<{opening:ConversationOpeningView}>(path(profile,'/opening'),input,'This opening changed or is no longer available.',signal);
+  if(!isOpeningView(body?.opening)||!body.opening.available||!body.opening.binding)throw invalid();return body.opening;
+}
