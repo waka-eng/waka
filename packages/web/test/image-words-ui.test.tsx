@@ -108,32 +108,7 @@ it('asks only while the inline read is still going', async () => {
 });
 
 
-/* CODE REVIEW, 2026-11-08 (fourth round). */
-it('offers "Try reading it again" when nothing is queued, promises nothing, and queues a read only on the press', async () => {
-  vi.useFakeTimers();
-  const queued = row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null });
-  vi.mocked(fetchImageWords).mockResolvedValueOnce(row({ status: 'failed', text: null, read: null, canRetry: true }))
-    .mockResolvedValueOnce(queued).mockResolvedValue(row({}));
-  vi.mocked(retryImageWords).mockResolvedValue(queued);
-  await mount();
-  expect(host.textContent).toContain("I couldn't make out the words. Which line stuck?");
-  expect(host.textContent, 'it promised a retry nothing will make').not.toContain("I'll try reading it again in a bit.");
-  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
-  expect(retryImageWords, 'the screen queued a paid read by itself').not.toHaveBeenCalled();
-  await press('Try reading it again');
-  expect(retryImageWords).toHaveBeenCalledTimes(1);
-  expect(host.textContent, 'a queued read is not said').toContain("I'll try reading it again in a bit.");
-  await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
-  expect(host.querySelector('.waka-note-read-text')?.textContent, 'the queued read was not followed').toBe('“Nobody feels ready.”');
-});
 
-it('says when the retry budget is spent instead of failing quietly', async () => {
-  vi.mocked(fetchImageWords).mockResolvedValue(row({ status: 'failed', text: null, read: null, canRetry: true }));
-  vi.mocked(retryImageWords).mockRejectedValue(new ApiError({ status: 429, code: 'words_retry_limit', message: 'Too many' }));
-  await mount();
-  await press('Try reading it again');
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Try again in an hour.');
-});
 
 it('shows the detail\'s words at once, and offers Fix only once the read says this session may edit', async () => {
   let answer!: (value: ApiImageWords) => void;
@@ -146,52 +121,9 @@ it('shows the detail\'s words at once, and offers Fix only once the read says th
   expect(fetchImageWords, 'a settled reading was polled').toHaveBeenCalledTimes(1);
 });
 
-it('keeps a fix when a read that left before it answers after it', async () => {
-  vi.useFakeTimers();
-  const queued = row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null });
-  let late!: (value: ApiImageWords) => void;
-  vi.mocked(fetchImageWords).mockResolvedValueOnce(queued)
-    .mockImplementationOnce(() => new Promise(resolve => { late = resolve; }));
-  vi.mocked(correctImageWords).mockResolvedValue(row({ text: 'My line.', correction: 'My line.', revision: '2' }));
-  await mount();
-  await act(async () => { await vi.advanceTimersByTimeAsync(1_600); }); // the second read has left
-  expect(late, 'the second read never left').toBeTypeOf('function');
-  await press('Type the line'); await type('My line.'); await press('Save');
-  expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“My line.”');
-  await act(async () => { late(queued); });
-  expect(host.querySelector('.waka-note-read-text')?.textContent, 'an older read overwrote the fix').toBe('“My line.”');
-});
 
 
-/* Code review, 2026-11-08: 'failed' (nothing queued) never promises a read;
-   'retrying' (a read queued) always does — inline too. */
-it('promises a read only for one that is queued, from the inline summary as from the read', async () => {
-  vi.mocked(fetchImageWords).mockImplementation(() => new Promise(() => {}));
-  await mountInline({ status: 'failed', text: null, read: null, correction: null, revision: '0' });
-  expect(host.textContent).toContain("I couldn't make out the words. Which line stuck?");
-  expect(host.textContent).not.toContain("I'll try reading it again in a bit.");
-  await mountInline({ status: 'retrying', text: null, read: null, correction: null, revision: '0' });
-  expect(host.textContent).toContain("I'll try reading it again in a bit.");
-});
 
-/* Code review, 2026-11-08: a poll dropped as stale (a write began while it
-   was out) stopped the asking for good, even when that write then failed. */
-it('keeps following a queued read when a write it raced with fails', async () => {
-  vi.useFakeTimers();
-  const queued = row({ status: 'retrying', text: null, read: null, canRetry: false, retryAfter: null });
-  let late!: (value: ApiImageWords) => void;
-  vi.mocked(fetchImageWords).mockResolvedValueOnce(queued)
-    .mockImplementationOnce(() => new Promise(resolve => { late = resolve; }))
-    .mockResolvedValue(queued);
-  vi.mocked(correctImageWords).mockRejectedValue(new ApiError({ status: 500, code: 'server', message: 'Down' }));
-  await mount();
-  await act(async () => { await vi.advanceTimersByTimeAsync(1_600); });
-  await press('Type the line'); await type('My line.'); await press('Save');
-  await act(async () => { late(queued); });
-  const asked = vi.mocked(fetchImageWords).mock.calls.length;
-  await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
-  expect(vi.mocked(fetchImageWords).mock.calls.length, 'the asking stopped after a stale answer').toBeGreaterThan(asked);
-});
 
 /* Code review, 2026-11-08: a new inline summary (after a Fix) reset what the
    session may do to "nothing", and Fix flickered away until the read came back. */
@@ -203,4 +135,15 @@ it('keeps what this session may do across a new inline summary', async () => {
   await mountInline({ status: 'ready', text: 'My line.', read: 'Nobody feels ready.', correction: 'My line.', revision: '2' });
   expect(host.querySelector('.waka-note-read-text')?.textContent).toBe('“My line.”');
   expect([...host.querySelectorAll('button')].map(b => b.textContent), 'Fix flickered away').toContain('Edit');
+});
+
+/* A PICTURE WHOSE WORDS COULD NOT BE READ SAYS NOTHING ABOUT IT (founder,
+   2026-11-12: "don't write this thing"): no question, no field, no retry. */
+it('draws nothing for words it could not read, whether or not a read is queued', async () => {
+  vi.mocked(fetchImageWords).mockImplementation(() => new Promise(() => {}));
+  for (const status of ['unreadable', 'failed', 'retrying'] as const) {
+    await mountInline({ status, text: null, read: null, correction: null, revision: '0' });
+    expect(host.querySelector('.waka-note-read'), `${status} still drew a words line`).toBeNull();
+    expect(host.textContent).not.toContain('Which line stuck?');
+  }
 });

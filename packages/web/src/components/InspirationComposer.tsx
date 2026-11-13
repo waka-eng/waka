@@ -304,8 +304,8 @@ function LeaveAsk({ question, keepLabel, discardLabel, failed, failedLabel, busy
    with nothing in it. Now the frame says so (`onBroken`) and the page puts
    that file on the shelf instead, as a named tile with its ×, so it is still
    there to keep or remove and never a blank box. */
-function HeroPhoto({ item, name, blurred, removeLabel, disabled, onRemove, onBroken }: {
-  item: InspirationDraftMedia; name: string; blurred: boolean; removeLabel: string; disabled: boolean; onRemove: () => void;
+function HeroPhoto({ item, name, removeLabel, disabled, onRemove, onBroken }: {
+  item: InspirationDraftMedia; name: string; removeLabel: string; disabled: boolean; onRemove: () => void;
   onBroken: () => void;
 }) {
   const [url, setUrl] = useState('');
@@ -315,7 +315,7 @@ function HeroPhoto({ item, name, blurred, removeLabel, disabled, onRemove, onBro
     const value = URL.createObjectURL(item.blob); setUrl(value);
     return () => URL.revokeObjectURL(value);
   }, [item.blob]);
-  return <figure className="waka-note-hero" data-blurred={blurred ? '1' : undefined}>
+  return <figure className="waka-note-hero">
     {url ? <img src={url} alt={name} onError={() => broken.current()} /> : null}
     <button type="button" className="waka-note-hero-x" aria-label={removeLabel} disabled={disabled} onClick={onRemove}>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" /></svg>
@@ -453,13 +453,12 @@ export function InspirationComposer(props: {
   const hero = props.media.find(item => item.type === 'image' && item.blob && item.blob.size > 0 && !broken.has(item.id)
     && !item.validationError && !item.uploadError) ?? null;
   const shelf = hero ? props.media.filter(item => item !== hero) : props.media;
-  const unreadable = Boolean(hero && (props.readWords?.status === 'unreadable' || props.readWords?.status === 'retrying' || props.readWords?.status === 'failed'));
   /* ═══ NO QUESTION OVER A PICTURE (founder, 2026-11-10) ═══════════════
      "It's a chat that it's asking but my response is a note." The creature
      asked "What about it stuck with you?" over every photo, a chat line
      whose answer was never a chat reply. The page is a note: the picture,
-     and "Add a note…" under it. Only an unreadable picture still says so,
-     in the words-read line under it, because that is news, not a prompt. */
+     and "Add a few words…" under it. A picture whose words could not be read
+     says nothing about that either (founder, 2026-11-12). */
   const line = !hero && props.arrival ? say('worldShareArrived') : null;
   /* `invalidFiles` AND `empty` WENT WITH THE SAVE BUTTON. Both existed only
      to decide whether that button was there and whether it was pressable;
@@ -539,11 +538,11 @@ export function InspirationComposer(props: {
       <button type="button" className="waka-note-arrival-act" onClick={() => bodyRef.current?.querySelector<HTMLTextAreaElement>('.jar-composer-text')?.focus()}>{say('worldShareAddNote')}</button>
       <button type="button" className="waka-note-arrival-act" disabled={blocked} onClick={submit}>{say('worldShareThatsAll')}</button>
     </div> : null}
-    {hero ? <HeroPhoto item={hero} name={attachmentLabel(props.locale, hero.type, hero.name)} blurred={unreadable} disabled={blocked}
+    {hero ? <HeroPhoto item={hero} name={attachmentLabel(props.locale, hero.type, hero.name)} disabled={blocked}
       removeLabel={formatMessage(props.locale, 'worldComposerRemoveFile', { name: attachmentLabel(props.locale, hero.type, hero.name) })}
       onRemove={() => props.onRemove(hero.id)}
       onBroken={() => setBroken(previous => new Set(previous).add(hero.id))} /> : null}
-    {hero && props.readWords ? <ReadWordsQuote words={props.readWords} locale={props.locale} onFix={props.onFixReadWords} disabled={blocked} asks /> : null}
+    {hero && props.readWords ? <ReadWordsQuote words={props.readWords} locale={props.locale} onFix={props.onFixReadWords} disabled={blocked} /> : null}
     {/* ═══ THE WORDS ARE WRITTEN ON THE PAGE, NOT IN A BOX ════════════════
         Founder, 2026-11-09: "notepad feels so 답답해." The words sat in a big
         dark card, a box inside the page, with the tools along its foot. The
@@ -551,7 +550,7 @@ export function InspirationComposer(props: {
         wide margins, and the tools float under it as one small pill. */}
     {props.listening ? null : <textarea ref={props.inputRef} className="jar-mouth-field jar-composer-text" autoFocus rows={hero ? 1 : 4} value={props.text} readOnly={blocked}
       aria-label={say('worldCaptureInspiration')}
-      placeholder={hero ? say(unreadable ? 'worldNotePlaceholderLine' : 'worldNotePlaceholder') : say('worldCapturePrompt')}
+      placeholder={hero ? say('worldNotePlaceholder') : say('worldCapturePrompt')}
       onChange={event => props.onText(event.target.value, event.target.selectionStart ?? event.target.value.length)} onKeyDown={props.onKeyDown}
       onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); if (!blocked) props.onFiles([...event.clipboardData.files]); } }} />}
     {props.ready && !props.fileDraftsAvailable ? <p className="jar-composer-storage-note">{say('worldComposerFilesUnavailable')}</p> : null}
