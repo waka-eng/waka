@@ -151,7 +151,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   /** The creature's question the chat was opened from ("Chat about this"
       under it on home): it asks it again here, in its own bubble, so the
       first message is an answer to it (founder, 2026-11-12). */
-  opener?:string;
+  opener?:{ask:string;quote?:string};
 }){
   /* THE MIC AND THE ATTACH TOOLS LIVE IN THIS PANEL'S OWN NOTE BAR (`NoteBar`,
      2026-11-08): the page's bar no longer lends them a slot. */
@@ -772,9 +772,9 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               question so you respond") ═══ Opened from a bubble's "Chat about
               this", the creature stands with that same question over it, in
               home's bubble, instead of the general line. */}
-          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening?
+          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening&&!opener?.quote?
             opener?<div className="chat-opening chat-opening--asks">
-              <div className="jar-char-bubble-body chat-opening-ask"><span className="jar-char-bubble-reading">{opener}</span></div>
+              <div className="jar-char-bubble-body chat-opening-ask"><span className="jar-char-bubble-reading">{opener.ask}</span></div>
               <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
             </div>:<div className="chat-opening">
               <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
@@ -810,11 +810,21 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               corners so a run reads as one person continuing rather than
               as two separate sayings. */}
           <div className="chat-messages" role="log" aria-label={say('worldConversationMessages')} aria-live="polite" aria-relevant="additions">
-            {/* And once you answer, the question stays above your answer as
-                WAKA's first turn, so the reply reads as a reply. */}
-            {opener&&(conversation?.messages.length||sending)?<article className="chat-message" data-role="assistant" data-run="fl">
+            {/* ═══ THE CREATURE SENDS IT, IN FULL (founder, 2026-11-12: "it
+                should be an actual chat that comes from the other side ...
+                because this way it's gonna be cut", then "the inspiration
+                should come from the other side, not as me sending it") ═══
+                Opened from the review card, the chat starts as WAKA's turn:
+                your inspiration, whole, as a card it holds up, then its
+                question; you reply. Opened from home's bubble (no quote),
+                the question stays above your answer once you give one. */}
+            {opener?.quote?<article className="chat-message chat-message--shared" data-role="assistant" data-run="fm">
               <p className="chat-said">{say('worldConversationWaka')}</p>
-              <div className="chat-bubble"><ConversationText text={opener}/></div>
+              <figure className="chat-shared"><figcaption>{say('worldInspirationReviewOriginal')}</figcaption><ConversationText text={opener.quote}/></figure>
+            </article>:null}
+            {opener&&(opener.quote||conversation?.messages.length||sending)?<article className="chat-message" data-role="assistant" data-run={opener.quote?'ml':'fl'}>
+              <p className="chat-said">{say('worldConversationWaka')}</p>
+              <div className="chat-bubble"><ConversationText text={opener.ask}/></div>
             </article>:null}
             {(conversation?.messages??[]).map((message,at,all)=>{
               if(at===0&&originRepeated)return null;

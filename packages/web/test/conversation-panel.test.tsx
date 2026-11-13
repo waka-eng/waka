@@ -852,7 +852,7 @@ it('does not hide your first message under a save that has no words of its own',
    you answer, the question stays above your answer as WAKA's first turn. */
 it('opens with the home bubble\'s question and keeps it above the first answer',async()=>{
   const opener='Want to chat about what’s on your mind?';
-  await act(async()=>root.render(<ConversationPanel scope={scope} id={id} locale="en-US" onChoose={choose} opener={opener}/>));
+  await act(async()=>root.render(<ConversationPanel scope={scope} id={id} locale="en-US" onChoose={choose} opener={{ask:opener}}/>));
   expect(host.querySelector('.chat-opening--asks .chat-opening-ask')?.textContent).toBe(opener);
   expect(host.textContent).not.toContain('WAKA answers from what you saved.');
   await type('The move, mostly');await click('Send');

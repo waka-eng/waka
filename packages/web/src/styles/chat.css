@@ -1295,3 +1295,15 @@
    up under the tail rather than standing a body and a half below it. */
 .chat-opening--asks .chat-opening-beings { margin-top: calc(var(--sp-8) - 96px); }
 }
+
+@layer chrome {
+/* ═══ AN INSPIRATION THE CREATURE HOLDS UP (founder, 2026-11-12) ═══════════
+   WAKA's first turn in a chat opened from the review card: your inspiration,
+   whole, on a raised card in WAKA's column, its small label over it; the
+   question follows as the next line of the same turn. */
+.chat-message--shared .chat-shared {
+  margin: 0; padding: var(--sp-14) var(--sp-16); border-radius: var(--sp-16);
+  background: var(--waka-raised); color: var(--ink); max-width: 100%; box-sizing: border-box;
+}
+.chat-message--shared .chat-shared figcaption { margin: 0 0 var(--sp-6); font-size: var(--t-meta); color: var(--muted); }
+}

@@ -2054,7 +2054,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /** The question a chat was opened to answer, and which chat that is: `null`
       while it is still new, its id once it is saved. Any other chat (one
       opened from Past chats) never shows it. See `ConversationPanel.opener`. */
-  const chatOpener = useRef<{ text: string; id: string | null } | null>(null);
+  const chatOpener = useRef<{ ask: string; quote?: string; id: string | null } | null>(null);
   const chatOrList = Boolean(viewNavigation.view?.conversationId) || viewNavigation.view?.open === 'conversations';
   useEffect(() => { if (!chatOrList) { chatSwap.current = false; chatOpener.current = null; } }, [chatOrList]);
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
@@ -9705,7 +9705,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         /* The chat asks the same question the bubble did, and
                            opens in place, not with a fade (founder,
                            2026-11-12). */
-                        chatOpener.current = { text: say('worldCompanionChatPrompt'), id: null }; chatSwap.current = true;
+                        chatOpener.current = { ask: say('worldCompanionChatPrompt'), id: null }; chatSwap.current = true;
                         viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.kind === 'agent' ? atWall.id : null, conversationId: 'new' });
                       }}>
                       {say('worldTalkAboutThis')}
@@ -9879,8 +9879,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 }}
                 /* The chat opens on the creature asking this same question,
                    the inspiration quoted under it (founder, 2026-11-12). */
-                onChat={(question,text)=>{const quote=text.length>280?`${text.slice(0,280).trimEnd()}…`:text;
-                  chatOpener.current={text:`${question}\n\n“${quote}”`,id:null};chatSwap.current=true;setReviewing(false);
+                onChat={(question,text)=>{
+                  chatOpener.current={ask:question,quote:text,id:null};chatSwap.current=true;setReviewing(false);
                   viewNavigationRef.current.write({...EMPTY_VIEW,conversationId:'new'});}}
                 onDone={()=>{const id=inspirationReviewQueue[0]!.id;setInspirationReviewQueue(queue=>queue.filter(row=>row.id!==id));}} />
             ) : null}
@@ -11547,7 +11547,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               scope={conversationScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
-              opener={chatOpener.current && chatOpener.current.id === talkId ? chatOpener.current.text : undefined}
+              opener={chatOpener.current && chatOpener.current.id === talkId ? { ask: chatOpener.current.ask, quote: chatOpener.current.quote } : undefined}
               onHistory={()=>{chatSwap.current=true;openOverHome('conversations');}}
               /* The bar's middle group, lent for the mic and the ＋. */
               onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};if(chatOpener.current&&chatOpener.current.id===null&&talkId===null)chatOpener.current={...chatOpener.current,id:row.id};}}

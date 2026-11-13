@@ -168,9 +168,14 @@ it('shows no stale signal cards when relevance revalidation fails, and asks agai
 it('opens a chat on the same question, with the inspiration quoted',async()=>{
   await open();
   await act(async()=>world.container.querySelector<HTMLButtonElement>('button[aria-label="Chat about this"]')!.click());
-  for(let i=0;i<20&&!world.container.querySelector('.chat-opening--asks');i++)await settle();
-  const ask=world.container.querySelector('.chat-opening--asks .chat-opening-ask')?.textContent??'';
-  expect(ask).toContain('Does this still matter to you?');
-  expect(ask).toContain(original.text);
+  for(let i=0;i<20&&!world.container.querySelector('.chat-message--shared');i++)await settle();
+  /* The creature sends the inspiration, whole, from its side (founder,
+     2026-11-12: "not as me sending it"), and asks under it. */
+  const turns=[...world.container.querySelectorAll('.chat-message')];
+  expect(turns[0]?.getAttribute('data-role')).toBe('assistant');
+  expect(turns[0]?.querySelector('.chat-shared'),'the inspiration is not a card WAKA holds up').not.toBeNull();
+  expect(turns[0]?.textContent).toContain(original.text);
+  expect(turns[1]?.getAttribute('data-role')).toBe('assistant');
+  expect(turns[1]?.textContent).toContain('Does this still matter to you?');
   expect(reviewInspiration,'opening a chat answered the card').not.toHaveBeenCalled();
 });
