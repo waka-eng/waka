@@ -100,14 +100,16 @@ it('keeps the same original on a failed write and retries with the same request 
 it('reads the whole inspiration over the review and answers from there, with no Not now',async()=>{
   await open();
   expect(button('Not now'),'Not now came back').toBeUndefined();
-  expect(button('Chat about this'),'the row has no Chat about this').toBeDefined();
-  await act(async()=>button('Open').click());
+  expect(world.container.querySelector('button[aria-label="Chat about this"]'),'the row has no Chat about this').not.toBeNull();
+  /* A tap on the card reads it all (founder's swipe card, 2026-11-12). */
+  const tapCard=()=>act(async()=>{world.container.querySelector<HTMLElement>('.jar-pick-slip')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));});
+  await tapCard();
   const reader=()=>document.querySelector<HTMLElement>('.waka-review-reader');
   expect(reader()?.textContent).toContain(original.text);
   await act(async()=>reader()!.querySelector<HTMLButtonElement>('.waka-surface-back')!.click());
   expect(reader(),'"<" did not put the reader away').toBeNull();
   expect(world.container.querySelector('.jar-pick-slip'),'"<" left the review').not.toBeNull();
-  await act(async()=>button('Open').click());
+  await tapCard();
   await act(async()=>[...reader()!.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent?.trim()==='Yes')!.click());await settle();
   expect(reviewInspiration).toHaveBeenCalledWith(original,VIEWER_ID,'relevant',expect.any(String));
   expect(reader()).toBeNull();
@@ -165,7 +167,7 @@ it('shows no stale signal cards when relevance revalidation fails, and asks agai
    question, the inspiration quoted under it (founder, 2026-11-12). */
 it('opens a chat on the same question, with the inspiration quoted',async()=>{
   await open();
-  await act(async()=>button('Chat about this').click());
+  await act(async()=>world.container.querySelector<HTMLButtonElement>('button[aria-label="Chat about this"]')!.click());
   for(let i=0;i<20&&!world.container.querySelector('.chat-opening--asks');i++)await settle();
   const ask=world.container.querySelector('.chat-opening--asks .chat-opening-ask')?.textContent??'';
   expect(ask).toContain('Does this still matter to you?');

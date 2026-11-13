@@ -7633,37 +7633,39 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 
 @layer chrome {
-/* ═══ THE REVIEW CARD IS THE CREATURE'S OWN BUBBLE (founder, 2026-11-12:
-   "the card design is so ugly") ═══════════════════════════════════════════
-   The reading slip was a dark glassy box with a hairline edge under the
-   creature, so the question read as a form rather than as the creature
-   asking. It wears home's bubble now: the same paper, the same ink, the same
-   soft corners, its tail pointing up at the one asking. The answer row under
-   it (Not really, Chat about this, Yes) is unchanged ground. */
+/* ═══ THE REVIEW CARD IS A CARD YOU SWIPE (founder, 2026-11-12, picking
+   "Swipe the card" of six) ═══════════════════════════════════════════════
+   The question stands above it (`.waka-review-ask`); the card is the
+   inspiration itself on the bubble's paper, big enough to read, the next
+   card a darker sheet behind it. Dragged, it tilts toward its answer and a
+   dark tag names it. A tap reads it all over the review. */
+.waka-review-ask { margin: 0 0 var(--sp-16); text-align: center; font-size: var(--t-lead); font-weight: 500; line-height: 1.35; color: var(--ink); }
 .jar-pick--reading .jar-pick-slip {
   --bubble-fill: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep));
-  border: 0; border-radius: 20px 20px 20px 20px / 18px 18px 20px 20px;
+  display: flex; flex-direction: column; gap: var(--sp-10); min-height: min(26rem, 52dvh);
+  padding: var(--sp-24) var(--sp-24) var(--sp-20);
+  border: 0; border-radius: 22px; text-align: start;
   background: var(--bubble-fill); color: var(--waka-on-light);
-  box-shadow: 0 0 24px color-mix(in srgb, var(--jar-live) 16%, transparent);
+  box-shadow: 0 18px 40px color-mix(in srgb, var(--jar-deep) 70%, transparent);
 }
-.jar-pick--reading .jar-pick-slip::after {
-  content: ""; position: absolute; top: -5px; left: 50%; z-index: -1;
-  width: 13px; height: 13px; transform: translateX(-50%) rotate(45deg);
-  border-radius: 4px 0 0 0; background: var(--bubble-fill);
-}
-.jar-pick--reading .jar-pick-slip .jar-pick-statement,
-.jar-pick--reading .jar-pick-slip .waka-inspiration-review-question { color: var(--waka-on-light); }
-.jar-pick--reading .jar-pick-slip .jar-pick-source { color: color-mix(in srgb, var(--waka-on-light) 62%, transparent); }
-.jar-pick--reading .jar-pick-slip .waka-inspiration-review-action { color: var(--waka-on-light); }
+.jar-pick--reading .jar-pick-slip .jar-pick-statement { color: var(--waka-on-light); font-size: var(--t-writing); line-height: 1.55; text-align: start; text-wrap: pretty; }
+.jar-pick--reading .jar-pick-slip .waka-inspiration-review-text { -webkit-line-clamp: 9; margin: 0; }
+.jar-pick--reading .jar-pick-slip .jar-pick-source { margin: 0; color: color-mix(in srgb, var(--waka-on-light) 62%, transparent); }
+.jar-pick--reading .jar-pick-slip .waka-inspiration-review-action { align-self: flex-start; color: var(--waka-on-light); }
+.waka-review-hint { margin: auto 0 0; padding-top: var(--sp-12); font-size: var(--t-ui); color: color-mix(in srgb, var(--waka-on-light) 62%, transparent); }
 .jar-pick--reading .jar-pick-behind {
-  border: 0; border-radius: 20px;
-  background: color-mix(in srgb, var(--jar-live) 30%, var(--jar-deep));
+  inset: var(--sp-16) var(--sp-14) 0; border: 0; border-radius: 22px;
+  background: color-mix(in srgb, var(--jar-live) 16%, var(--jar-deep));
 }
-/* The answer forming as you drag is a dark tag on the paper, not paper on paper. */
+/* The answer forming as you drag: a dark tag on the paper. */
 .jar-pick--reading .jar-pick-tag { background: var(--jar-deep); color: var(--ink); box-shadow: none; }
 /* The middle seat: Chat about this, between the two answers. */
 .jar-pick-acts-middle { grid-column: 2; justify-self: center; }
-.jar-pick-act--chat { color: var(--ink); }
+.jar-pick-act--chat {
+  justify-content: center; width: var(--sp-48); height: var(--sp-48); min-height: 0; padding: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 50%; color: var(--ink);
+}
+.jar-pick-act--chat svg { width: var(--sp-20); height: var(--sp-20); }
 
 /* ═══ OPEN: THE WHOLE INSPIRATION, OVER THE REVIEW ════════════════════════
    A full page on the ground over the card, the shared header's "<" back to

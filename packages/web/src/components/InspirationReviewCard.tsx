@@ -6,6 +6,7 @@ import { dateStamp } from '../lib/words';
 import { createPortal } from 'react-dom';
 import { ClaimSlip } from './ClaimSlip';
 import { DialogSurface } from './DialogSurface';
+import { HomeActionIcon } from './HomeActionIcon';
 import { SurfaceHeader } from './SurfaceHeader';
 
 /** A check of the original, visually and semantically separate from a signal verdict. */
@@ -29,6 +30,8 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
   // Parent keys this component to the profile and source; late replies cannot advance another card.
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
+  const words=item.text||item.attachmentLabel||say('worldSavedWord');
+  const when=dateStamp(new Date(item.createdAt).getTime(),locale);
   async function answer(choice:RelevanceChoice){
     if(saving.current||changed)return false;
     saving.current=true;setBusy(true);setFailed(false);
@@ -42,27 +45,29 @@ export function InspirationReviewCard({item:initial,profileId,locale,more,onDone
     labelKeep={say('worldInspirationStillRelevant')} labelNot={say('worldInspirationNotRelevant')}
     savingLabel={say('worldReviewAnswerSaving')} failureLabel={say(changed?'worldInspirationReviewChanged':'worldReviewAnswerFailed')}
     onAnswer={choice=>answer(choice==='keep'?'relevant':'not_relevant')} onLeft={onDone}
-    middle={<button type="button" className="jar-pick-act jar-pick-act--chat" disabled={busy}
-      onClick={()=>onChat(say('worldInspirationReviewQuestion'),item.text||item.attachmentLabel||say('worldSavedWord'))}>{say('worldTalkAboutThis')}</button>}>
-    <p className="waka-inspiration-review-question">{say('worldInspirationReviewQuestion')}</p>
-    <p className="jar-pick-source">{say('worldInspirationReviewOriginal')} · {dateStamp(new Date(item.createdAt).getTime(),locale)}</p>
-    <blockquote className="jar-pick-statement waka-inspiration-review-text">{item.text || item.attachmentLabel || say('worldSavedWord')}</blockquote>
+    /* ═══ A CARD YOU SWIPE (founder, 2026-11-12, choosing "Swipe the card"
+       of six) ═══ The question stands over the card; the card is the
+       inspiration itself, big, on paper, with the next one behind it. Drag
+       it right for Yes, left for Not really; a tap reads it all over the
+       review. Under it: Not really · a round Chat about this · Yes. */
+    header={<p className="waka-review-ask">{say('worldInspirationReviewQuestion')}</p>}
+    onOpen={changed?undefined:()=>setReading(true)}
+    middle={<button type="button" className="jar-pick-act jar-pick-act--chat" disabled={busy} aria-label={say('worldTalkAboutThis')} title={say('worldTalkAboutThis')}
+      onClick={()=>onChat(say('worldInspirationReviewQuestion'),words)}><HomeActionIcon kind="bubble"/></button>}>
+    <p className="jar-pick-source">{say('worldInspirationReviewOriginal')} · {when}</p>
+    <blockquote className="jar-pick-statement waka-inspiration-review-text">{words}</blockquote>
     {item.text&&item.attachmentLabel?<p className="jar-pick-source">{item.attachmentLabel}</p>:null}
-    {/* "NOT NOW" WENT (founder, 2026-11-12: "what's the purpose of not
-        now?"). Open reads the whole inspiration without leaving; the row
-        under the card answers: Not really, Chat about this, Yes. A card that
-        changed elsewhere offers Read it again instead. */}
     {changed?<button type="button" className="waka-inspiration-review-action" disabled={busy} onClick={()=>{
       setBusy(true);void readInspirationRelevance(item.id,profileId).then(fresh=>{if(!alive.current)return;setItem(fresh);setChanged(false);setFailed(false);intent.current=null;}).catch(()=>{if(alive.current)setFailed(true);}).finally(()=>{if(alive.current)setBusy(false);});
-    }}>{say('worldInspirationReviewReload')}</button>:<button type="button" className="waka-inspiration-review-action" onClick={()=>setReading(true)}>{say('worldInspirationReviewOpen')}</button>}
+    }}>{say('worldInspirationReviewReload')}</button>:<p className="waka-review-hint">{say('worldReviewTapToRead')}</p>}
     {reading?createPortal(<DialogSurface className="waka-review-reader" modal={false} aria-label={say('worldInspirationReviewQuestion')} onClose={()=>setReading(false)}
       /* Portalled, but still the slip's React child: a drag or a text
          selection here must never reach the slip and answer the card (code
          review, 2026-11-12). */
       onPointerDown={stopSlip} onPointerMove={stopSlip} onPointerUp={stopSlip} onPointerCancel={stopSlip}>
-      <SurfaceHeader locale={locale} back={{kind:'back',onBack:()=>setReading(false)}} title={`${say('worldInspirationReviewOriginal')} · ${dateStamp(new Date(item.createdAt).getTime(),locale)}`}/>
+      <SurfaceHeader locale={locale} back={{kind:'back',onBack:()=>setReading(false)}} title={`${say('worldInspirationReviewOriginal')} · ${when}`}/>
       <div className="waka-review-reader-page">
-        <p className="waka-review-reader-text">{item.text || item.attachmentLabel || say('worldSavedWord')}</p>
+        <p className="waka-review-reader-text">{words}</p>
         {item.text&&item.attachmentLabel?<p className="jar-pick-source">{item.attachmentLabel}</p>:null}
       </div>
       <div className="waka-review-reader-foot">
