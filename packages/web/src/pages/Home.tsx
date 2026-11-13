@@ -2054,7 +2054,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /** The question a chat was opened to answer, and which chat that is: `null`
       while it is still new, its id once it is saved. Any other chat (one
       opened from Past chats) never shows it. See `ConversationPanel.opener`. */
-  const chatOpener = useRef<{ ask: string; quote?: string; id: string | null } | null>(null);
+  const chatOpener = useRef<{ ask?: string; quote?: string; turn?: boolean; inspirationId?: string; id: string | null } | null>(null);
   const chatOrList = Boolean(viewNavigation.view?.conversationId) || viewNavigation.view?.open === 'conversations';
   useEffect(() => { if (!chatOrList) { chatSwap.current = false; chatOpener.current = null; } }, [chatOrList]);
   const [crossSeen, setCrossSeen] = useState({ open: principlesOpen, now: atNowView });
@@ -5836,6 +5836,18 @@ const RETRY_READ_LIMIT_MS = 20_000;
     return () => mq.removeEventListener('change', change);
   }, []);
   const [talking, setTalking] = useState(false);
+  /* ═══ WHAT YOU CHAT ABOUT COMES FROM WAKA'S SIDE (founder, 2026-11-12:
+     "the thing that I wanted to chat about shouldn't come from me, it should
+     come from the other person, the sender, on the left side") ═══ A read,
+     the creature's own line, or a save you just made opens a new chat in
+     place with that on WAKA's side; you reply. A save is held up as a card
+     and pinned to the chat (its id goes with the first send, so the reply
+     reads it); a line is WAKA's first turn. */
+  const chatOn = useCallback((opener: { ask?: string; quote?: string; turn?: boolean; inspirationId?: string }) => {
+    chatOpener.current = { ...opener, id: null }; chatSwap.current = true;
+    setRecentInspiration(null);
+    viewNavigationRef.current.write({ ...EMPTY_VIEW, wallId: atWallRef.current.kind === 'agent' ? atWallRef.current.id : null, conversationId: 'new' });
+  }, []);
   const talkAbout = useCallback(async (kept: { id: string; text: string }) => {
     const profileId = memoryScope?.profileId;
     if (!profileId || talking) return;
@@ -9490,7 +9502,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true),
                               onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
-                            onChat={() => { void talkAbout({ id: '', text: lead.body }); }} chatDisabled={talking}
+                            onChat={() => chatOn({ ask: lead.body, turn: true })} chatDisabled={talking}
                             onShare={storageScope && !offline ? () => setThingShare({
                               kind: "topOfMind", text: lead.body,
                               proof: formatMessage(locale, "worldShareOnMyMind", { date: dateStamp(Date.now(), locale) }),
@@ -9681,7 +9693,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       </button>
                     ) : visibleInspiration && keptSubject(visibleInspiration).text ? <button type="button" className="jar-char-bubble-act"
                       disabled={talking}
-                      onClick={() => { void talkAbout(keptSubject(visibleInspiration)); }}>
+                      onClick={() => { const kept = keptSubject(visibleInspiration); chatOn({ quote: kept.text, inspirationId: kept.id || undefined }); }}>
                       {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
                     </button> : null}
                     <button type="button" className="jar-char-bubble-act"
@@ -9701,7 +9713,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     <button type="button" className="jar-char-bubble-act"
                       disabled={talking}
                       onClick={() => {
-                        if (charSay) { void talkAbout({ id: '', text: charSay }); return; }
+                        if (charSay) { chatOn({ ask: charSay, turn: true }); return; }
                         /* The chat asks the same question the bubble did, and
                            opens in place, not with a fade (founder,
                            2026-11-12). */
@@ -11475,7 +11487,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            creature's line as YOUR first message, and on an agent's ground that
            line is about the agent — the defect the agent wall fixed by
            removing its own act. */
-        onChat={atWall.kind==='agent'?undefined:said => { void talkAbout({ id: '', text: said }); }}
+        onChat={atWall.kind==='agent'?undefined:said => chatOn({ ask: said, turn: true })}
         crossing={principlesCrossing}
         onCrossed={() => setPrinciplesCrossing(null)}/>:null}
       {/* Chats, their drafts, and their memory all belong to the profile in the address. */}
@@ -11547,7 +11559,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               scope={conversationScope} id={talkId}
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
-              opener={chatOpener.current && chatOpener.current.id === talkId ? { ask: chatOpener.current.ask, quote: chatOpener.current.quote } : undefined}
+              opener={chatOpener.current && chatOpener.current.id === talkId ? { ask: chatOpener.current.ask, quote: chatOpener.current.quote, turn: chatOpener.current.turn, inspirationId: chatOpener.current.inspirationId } : undefined}
               onHistory={()=>{chatSwap.current=true;openOverHome('conversations');}}
               /* The bar's middle group, lent for the mic and the ＋. */
               onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};if(chatOpener.current&&chatOpener.current.id===null&&talkId===null)chatOpener.current={...chatOpener.current,id:row.id};}}

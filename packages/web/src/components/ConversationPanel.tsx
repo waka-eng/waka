@@ -151,7 +151,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
   /** The creature's question the chat was opened from ("Chat about this"
       under it on home): it asks it again here, in its own bubble, so the
       first message is an answer to it (founder, 2026-11-12). */
-  opener?:{ask:string;quote?:string};
+  opener?:{ask?:string;quote?:string;turn?:boolean;inspirationId?:string};
 }){
   /* THE MIC AND THE ATTACH TOOLS LIVE IN THIS PANEL'S OWN NOTE BAR (`NoteBar`,
      2026-11-08): the page's bar no longer lends them a slot. */
@@ -500,7 +500,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
       const attachmentIds=intent.attachments?.length?{attachmentIds:intent.attachments.map(item=>item.id)}:{};
       const next=id?await run(signal=>{const input={id:intent.id,content:intent.content,revision:intent.revision,...(replies?{requestReply:true}:{}),...attachmentIds},from=conversationRef.current?.messageWindowStart;
         return from!==undefined?saveConversationMessage(scope.profileId,id,input,signal,from):saveConversationMessage(scope.profileId,id,input,signal);})
-        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:replies===true,...attachmentIds},legacyPerspective&&talkAgent?{perspective:legacyPerspective,agentId:talkAgent}:undefined));
+        :await run(signal=>createConversation(scope.profileId,intent.conversationId!,signal,initialPrincipleId,{id:intent.id,content:intent.content,requestReply:replies===true,...attachmentIds},legacyPerspective&&talkAgent?{perspective:legacyPerspective,agentId:talkAgent}:undefined,opener?.inspirationId));
       acknowledge();
       if(mine(owner)){observe(next);setError(null);setUnsent(false);setAttachNote(null);if(id)reply.check();}
     }catch(reason){
@@ -743,7 +743,7 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               about, and the opening turn that only repeated it is not
               printed again under it — so the first thing said in the chat
               is the creature's question. */}
-          {savedOrigin?<div className="chat-topic" data-about="save"><span>{say('worldConversationAboutSave')}</span><blockquote>{originRepeated?conversation!.messages[0]!.content:savedOrigin.text}</blockquote></div>:null}
+          {savedOrigin&&!opener?.quote?<div className="chat-topic" data-about="save"><span>{say('worldConversationAboutSave')}</span><blockquote>{originRepeated?conversation!.messages[0]!.content:savedOrigin.text}</blockquote></div>:null}
           {/* ═══ THE ONE YOU ARE TALKING TO IS ON SCREEN ════════════════
               Founder, of the home screen: "this is my only favorite screen
               of the experience." Of this one, empty: "nothing here feels
@@ -772,8 +772,8 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
               question so you respond") ═══ Opened from a bubble's "Chat about
               this", the creature stands with that same question over it, in
               home's bubble, instead of the general line. */}
-          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening&&!opener?.quote?
-            opener?<div className="chat-opening chat-opening--asks">
+          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening&&!opener?.quote&&!opener?.turn?
+            opener?.ask?<div className="chat-opening chat-opening--asks">
               <div className="jar-char-bubble-body chat-opening-ask"><span className="jar-char-bubble-reading">{opener.ask}</span></div>
               <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
             </div>:<div className="chat-opening">
@@ -818,11 +818,11 @@ export function ConversationPanel({scope,id,initialPrincipleId,initialConversati
                 your inspiration, whole, as a card it holds up, then its
                 question; you reply. Opened from home's bubble (no quote),
                 the question stays above your answer once you give one. */}
-            {opener?.quote?<article className="chat-message chat-message--shared" data-role="assistant" data-run="fm">
+            {opener?.quote?<article className="chat-message chat-message--shared" data-role="assistant" data-run={opener.ask?'fm':'fl'}>
               <p className="chat-said">{say('worldConversationWaka')}</p>
               <figure className="chat-shared"><figcaption>{say('worldInspirationReviewOriginal')}</figcaption><ConversationText text={opener.quote}/></figure>
             </article>:null}
-            {opener&&(opener.quote||conversation?.messages.length||sending)?<article className="chat-message" data-role="assistant" data-run={opener.quote?'ml':'fl'}>
+            {opener?.ask&&(opener.quote||opener.turn||conversation?.messages.length||sending)?<article className="chat-message" data-role="assistant" data-run={opener.quote?'ml':'fl'}>
               <p className="chat-said">{say('worldConversationWaka')}</p>
               <div className="chat-bubble"><ConversationText text={opener.ask}/></div>
             </article>:null}
