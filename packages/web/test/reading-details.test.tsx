@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** WHAT THIS MOCKS, AND WHY (gate G6): The helpers in `lib/api/top-of-mind`, `lib/api/signals`, and `lib/api/feedback` return explicit server-shaped fixtures. The real component renders those responses; no Home fallback, database, or model is involved. */
+/** WHAT THIS MOCKS, AND WHY (gate G6): The helpers in `lib/api/top-of-mind`, `lib/api/signals` (which nothing here reads any more), and `lib/api/feedback` return explicit server-shaped fixtures. The real component renders those responses; no Home fallback, database, or model is involved. */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -9,7 +9,7 @@ vi.mock('../src/lib/api/signals',()=>({fetchSignal:api.signal}));
 vi.mock('../src/lib/api/feedback',()=>({createFeedback:api.feedback}));
 import { t } from '../src/lib/locales';
 import ReadingDetails from '../src/components/ReadingDetails';
-const actions={profileId:'agent',onUpdated:vi.fn(),onOpenInspiration:vi.fn()};
+const actions={profileId:'agent',onUpdated:vi.fn()};
 let host:HTMLDivElement,root:Root;
 const button=(name:string)=>[...host.querySelectorAll('button')].find(node=>node.textContent===name)!;
 beforeEach(()=>{
@@ -19,14 +19,14 @@ beforeEach(()=>{
   api.edit.mockResolvedValue({});api.feedback.mockResolvedValue({});
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.clearAllMocks();});
-it('binds edits and evidence to the displayed profile, loading notes only after source disclosure, and asks no second question',async()=>{
-  api.signal.mockResolvedValue({id:'signal',evidence:[{inspirationId:'source',preview:'Source preview'}]});
+/* The read and its one act (founder, 2026-11-12): no "Last updated", no
+   "See all" disclosure of sources; where a read came from is Why?'s chat. */
+it('binds edits to the displayed profile, shows no sources or dates, and asks no second question',async()=>{
   await act(async()=>root.render(<ReadingDetails text="A reading" locale="en-US" actions={actions} onClose={()=>{}}/>));
-  expect(api.read).toHaveBeenCalledWith({profile:'agent'},expect.any(AbortSignal));expect(api.signal).not.toHaveBeenCalled();
-  const disclosure=[...host.querySelectorAll('details')].find(node=>node.querySelector('summary')?.textContent==='A source pattern')!;
-  await act(async()=>{disclosure.open=true;disclosure.dispatchEvent(new Event('toggle'));});
-  expect(api.signal).toHaveBeenCalledWith('signal',expect.any(AbortSignal),{profile:'agent'});
-  await act(async()=>button('Source preview').click());expect(actions.onOpenInspiration).toHaveBeenCalledWith('source');
+  expect(api.read).toHaveBeenCalledWith({profile:'agent'},expect.any(AbortSignal));
+  expect(host.querySelector('details'),'a sources disclosure came back').toBeNull();
+  expect(host.textContent).not.toContain('Last updated');
+  expect(api.signal).not.toHaveBeenCalled();
   /* ONE ACT: Edit. No "Give feedback" row of True/Partly/Not true (Law 11:
      the creature already asks; a page gets one ask). */
   expect(button('Give feedback')).toBeUndefined();expect(button(t('en-US','worldClaimTrue'))).toBeUndefined();

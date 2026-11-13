@@ -9524,8 +9524,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                             why={whyFor(lead)}
                             onWhy={() => chatOn({ ask: lead.body, turn: true, whyOf: lead })}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
-                              onUpdated: () => verifyReadingRef.current(true),
-                              onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
+                              onUpdated: () => verifyReadingRef.current(true) } : undefined}
                             onChat={() => chatOn({ ask: lead.body, turn: true })} chatDisabled={talking}
                             onShare={storageScope && !offline ? () => setThingShare({
                               kind: "topOfMind", text: lead.body,
@@ -9559,8 +9558,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                           <span className="jar-char-bubble-of">{say('worldBubbleActAgentMine')}</span>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={agentSays} locale={locale}
                             details={!offline && atWall.kind === 'agent' ? { profileId: atWall.id,
-                              onUpdated: () => verifyReadingRef.current(true),
-                              onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.id, open: 'saves', note: id }) } : undefined} />
+                              onUpdated: () => verifyReadingRef.current(true) } : undefined} />
                         </>
                       ) : (
                         /* ═══ AND THE EMPTY LINE IS A DOOR AFTER ALL ═════

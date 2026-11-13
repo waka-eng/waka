@@ -6915,15 +6915,23 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 @media (max-height: 500px) {
   .jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading { max-height: 30dvh; }
 }
-.waka-reading-sheet { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: max(var(--sp-16), env(safe-area-inset-top)) var(--sp-16) max(var(--sp-16), env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--paper) 85%, transparent); }
+/* The read in full is a page now (2026-11-12); this only holds it. */
+.waka-reading-sheet { position: fixed; inset: 0; z-index: 120; display: grid; place-items: stretch; padding: 0; background: none; }
 .waka-reading-full { display: flex; flex-direction: column; width: min(36rem, 100%); max-height: 100%; overflow: hidden; padding: var(--sp-24); border: 1px solid var(--line); border-radius: var(--sp-24); background: var(--paper); color: var(--ink); font-family: var(--waka-face); }
 .waka-reading-full header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-16); }
 .waka-reading-full-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; }
 .waka-reading-full h2 { margin: 0; font-size: var(--t-body); font-weight: 500; }
 .waka-reading-full button { min-height: var(--sp-44); padding: var(--sp-8); background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
-.waka-reading-full p { margin: var(--sp-16) 0 0; font-size: var(--t-bubble-reading); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The read at the size everything written is set at (founder, 2026-11-12:
+   "sooo big"): `--t-writing`, not the bubble's reading size. */
+.waka-reading-full p { margin: var(--sp-16) 0 0; font-size: var(--t-writing); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .waka-reading-full footer { flex-shrink: 0; margin-top: var(--sp-16); }
-.waka-reading-full footer button { text-decoration: underline; }
+/* Edit and Share: two quiet words on one line under the read, no underline
+   (founder, 2026-11-12: "ugly"). */
+.waka-reading-full footer button { text-decoration: none; }
+.waka-reading-full .waka-reading-details > button:not(.waka-surface-back), .waka-reading-full footer button:not(.waka-surface-back) { padding-inline: 0; color: var(--muted); font-size: var(--t-ui); }
+.waka-reading-full .waka-reading-details > button:not(.waka-surface-back):hover, .waka-reading-full footer button:not(.waka-surface-back):hover { color: var(--ink); }
+.waka-reading-full footer { margin-top: var(--sp-4); }
 .waka-dock--tabs .waka-dock-item { position: relative; }
 .waka-dock--tabs .waka-dock-item[aria-current="page"]::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: var(--sp-16); height: 2px; border-radius: var(--r-pill); background: currentColor; }
 
@@ -7522,7 +7530,19 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
    inspiration it's all the way there"). Its header spanned the window, so
    on a desktop its "<" sat at the screen's edge while Saved, Past chats and a
    chat put theirs at their 650px column's edge. Now it takes that column. */
-.jar-seek.jar-inspiration-composer > .waka-surface-head { width: min(100%, 602px, calc(100vw - 88px)); margin-inline: auto; }
+.jar-seek.jar-inspiration-composer > .waka-surface-head,
+/* ONE "<" EVERYWHERE (founder, 2026-11-12: "the back button should always be
+   the same, no matter if it's saving an inspiration or the chat or anything
+   that requires the back button"). Measured in a browser: every page put its
+   "<" at 16,12 on a phone and on the list's 602px column at 1280 (339,12),
+   except these, which hugged the page or screen edge on a desktop (the
+   saved note at 28, Your days at 20, the strip and the login head at 16)
+   or sat 24px off the column (the review reader at 315). They take the
+   same row now. */
+.waka-over--note .waka-over-one > .waka-surface-head,
+main.waka-page > .waka-surface-head,
+.waka-surface-strip > .waka-surface-head,
+.waka-review-reader > .waka-surface-head { width: min(100%, 602px, calc(100vw - 88px)); margin-inline: auto; }
 /* EXACTLY THE LIST'S ROW (founder, 2026-11-12: "the placement of the back
    button and [the word on the right] should be exactly the same here").
    The Inspirations list's header is its 650px column less that column's
@@ -7534,6 +7554,10 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
    column drops its padding, the same 700 its own rule was measured at. */
 @media (max-width: 700px) {
   .jar-seek.jar-inspiration-composer > .waka-surface-head { width: min(100%, calc(100vw - 32px)); }
+  .waka-over--note .waka-over-one > .waka-surface-head,
+  main.waka-page > .waka-surface-head,
+  .waka-surface-strip > .waka-surface-head,
+  .waka-review-reader > .waka-surface-head { width: 100%; }
 }
 
 /* A SURFACE WITH NO DOM PAGE OF ITS OWN (a principle in the sky, the
@@ -7589,7 +7613,13 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
    the screen on the 16px gutter, above the centred card. */
 .login-shell > .login-head {
   position: absolute; top: calc(var(--sp-12) + env(safe-area-inset-top));
-  left: max(var(--sp-16), env(safe-area-inset-left)); right: max(var(--sp-16), env(safe-area-inset-right)); width: auto;
+  /* On the same 602px column as every page's "<" (2026-11-12). */
+  left: 0; right: 0; margin-inline: auto; width: min(calc(100% - 2 * var(--sp-16)), 602px, calc(100vw - 88px));
+}
+/* MEASURED at 390 and 1280: 700px is where the list's column drops its
+   padding (the rule above measured it); under it, the 16px gutter. */
+@media (max-width: 700px) {
+  .login-shell > .login-head { width: calc(100% - 2 * max(var(--sp-16), env(safe-area-inset-left))); }
 }
 .login-shell { position: relative; }
 }
@@ -7678,7 +7708,6 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   box-sizing: border-box; padding: calc(var(--sp-12) + env(safe-area-inset-top)) var(--sp-16) calc(var(--sp-28) + env(safe-area-inset-bottom));
   background: var(--bg); color: var(--ink); font-family: var(--waka-face);
 }
-.waka-review-reader > .waka-surface-head { width: min(650px, 100%); margin-inline: auto; }
 .waka-review-reader-page { flex: 1; min-height: 0; overflow-y: auto; width: min(40rem, 100%); margin: var(--sp-16) auto 0; }
 .waka-review-reader-text { margin: 0; font-size: var(--t-writing); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .waka-review-reader-foot { width: min(40rem, 100%); margin: var(--sp-16) auto 0; text-align: center; }
@@ -7754,5 +7783,35 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 .waka-principles-spark:focus-visible { outline: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   .waka-principles-spark svg { animation: none; opacity: 0.6; }
+}
+}
+
+
+@layer chrome {
+/* ═══ SHEETS ARE PAGES, SO THEIR "<" IS EVERY PAGE'S (founder, 2026-11-12) ═══
+   Share, search, what changed, a principle's share card, the read in full and
+   where a read came from were centred cards, so their "<" floated mid-screen
+   (measured at y≈380). Now each is a page like the notepad: the whole window,
+   its header the first row 12px under the safe area on the same column, the
+   rest in that column under it, on the page's own ground. */
+.jar-seek:is(.jar-thing-share, .jar-inspiration-search, .jar-reading-comparison, .jar-principle-share),
+.jar-seek:is(.jar-thing-share, .jar-inspiration-search, .jar-reading-comparison, .jar-principle-share)[data-visual-viewport],
+.waka-reading-full {
+  position: fixed; z-index: 62; inset: 0; box-sizing: border-box;
+  width: auto; max-width: none; max-height: none; margin: 0; transform: none;
+  display: flex; flex-direction: column; gap: var(--sp-16);
+  padding: calc(var(--sp-12) + env(safe-area-inset-top)) max(var(--sp-16), env(safe-area-inset-right))
+    calc(var(--sp-28) + env(safe-area-inset-bottom)) max(var(--sp-16), env(safe-area-inset-left));
+  border: 0; border-radius: 0; background: var(--bg); overflow-y: auto;
+}
+:is(.jar-thing-share, .jar-inspiration-search, .jar-reading-comparison, .jar-principle-share, .waka-reading-full) > .waka-surface-head {
+  flex: none; width: min(100%, 602px, calc(100vw - 88px)); margin: 0 auto;
+}
+:is(.jar-thing-share, .jar-inspiration-search, .jar-reading-comparison, .jar-principle-share, .waka-reading-full) > :not(.waka-surface-head) {
+  width: min(100%, 602px); margin-inline: auto; box-sizing: border-box;
+}
+/* MEASURED at 390 and 1280, the list's own 700px: the 16px gutter under it. */
+@media (max-width: 700px) {
+  :is(.jar-thing-share, .jar-inspiration-search, .jar-reading-comparison, .jar-principle-share, .waka-reading-full) > .waka-surface-head { width: 100%; }
 }
 }
