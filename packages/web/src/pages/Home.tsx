@@ -4894,6 +4894,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
   /** A principle's "<" (and its Escape): back to the Principles page. */
   const backToPrinciples = () => viewNavigationRef.current.write({ ...EMPTY_VIEW, wallId: viewNavigationRef.current.view?.wallId ?? null, open: 'principles' });
   const backToPrinciplesRef = useRef(backToPrinciples); backToPrinciplesRef.current = backToPrinciples;
+  /* A PAGE WHOSE OWNER IS NOT KNOWN YET stands in with its own "<"; Escape
+     is that "<" too (nav system R3; back audit, 2026-11-12). */
+  const standingIn = (listing || making === 'talk' || principlesOpen) && !storageScope;
+  const standInRef = useRef({ standingIn, closePage }); standInRef.current = { standingIn, closePage };
 
   /**
    * THE ONE "<" HANDLER FOR EVERY PAGE (nav system R3). The header's "<",
@@ -6631,7 +6635,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
       const nothingOpen = !panelOpen && !mouthOpen && !savedNoteOpen && seek === null && !thingShare && !prov;
       /* Esc steps out of review — the cards go, the invitation comes back. */
       if (event.key === 'Escape') {
-        if (reviewing && atNowView && nothingOpen && !harvestWhy) { event.preventDefault(); event.stopPropagation(); setReviewing(false); }
+        /* The stand-in's "<" is the one on screen, so it answers first. */
+        if (standInRef.current.standingIn && seek === null && !thingShare && !prov) { event.preventDefault(); event.stopPropagation(); standInRef.current.closePage(); }
+        else if (reviewing && atNowView && nothingOpen && !harvestWhy) { event.preventDefault(); event.stopPropagation(); setReviewing(false); }
         /* A PRINCIPLE IN THE SKY: Escape is its "<", back to Principles. */
         else if (inSky && viewNavigationRef.current.view?.principleId && !principlesOpen && nothingOpen) {
           event.preventDefault(); event.stopPropagation(); backToPrinciplesRef.current();
@@ -7947,9 +7953,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         <p className="jar-values-lead">
                           {formatMessage(locale, "worldValuesLeadOther", { name: w.name })}
                         </p>
-                        <p className="jar-values-sub">
-                          {say("worldValuesSubOther")}
-                        </p>
+                        {/* STRIPPED: the sub-line explaining what principles
+                            are and that they take time. Founder, 2026-11-12:
+                            "strip all unnecessary descriptive text across the experience". */}
                       </>
                     ) : null}
                     {/* NOTHING IS DECLARED HERE. What stood in this slot was
@@ -8166,7 +8172,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                           :c.formingAlt ?? say("worldFormingNothingAdopted")}
                       </p>
                     )}
-                    {here&&w.kind==='self'&&atNow&&readingLoadPhase==='ready'&&!inspirations?.length&&!fieldBeyond?<p className="jar-first-capture-hint">{say('worldFirstCaptureExample')}</p>:null}
+                    {/* STRIPPED: the first-capture example line ("A thought,
+                        a link…") under the empty reading. Founder, 2026-11-12:
+                        "strip all unnecessary descriptive text across the experience". */}
                     {/* The dial's historical date stays attached to its read. */}
                     {c.asOf ? (
                       <div className="jar-asof jar-label">
@@ -8820,14 +8828,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   agents?.some(a => a.agent.id === w.id && a.inspirationTotal === 0 && !a.direction.current) ? (
                   <p className="jar-wall-empty">
                     {say("worldAgentEmptyGive")}
-                    {/* THE LINE NAMED A WAIT AND NOT THE WAY. "Give me
-                        something" with no control under it asked a person to
-                        act and gave them nowhere to — and the honest answer
-                        is not a button on this wall: an agent's memory is
-                        written by the agent, signed in as itself (see
-                        `docs/data-model.md`, "What an agent session may do").
-                        So the wall says how material gets here. */}
-                    <span className="jar-wall-empty-how">{say("agentWallHowItFills")}</span>
+                    {/* STRIPPED: the line explaining that the agent fills
+                        this wall itself. The creature's own line stays.
+                        Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
                   </p>
                 ) : null}
                 {/* THE EDGE OF THE WORLD, AND WHAT IS BEYOND IT.
@@ -9521,12 +9524,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       lead && !standingAsAgent ? (
                         <>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
-                            label={say('worldBubbleOnYourMind')}
                             why={whyFor(lead)}
                             onWhy={() => chatOn({ ask: lead.body, turn: true, whyOf: lead,selection:{locale,text:lead.body,source:{kind:'top_of_mind_entry',id:lead.id,why:true,supportIds:whyIds(lead)}} })}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
-                              onUpdated: () => verifyReadingRef.current(true),
-                              onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, open: 'saves', note: id }) } : undefined}
+                              onUpdated: () => verifyReadingRef.current(true) } : undefined}
                             onChat={() => chatOn({ ask: lead.body, turn: true,selection:{locale,text:lead.body,source:{kind:'top_of_mind_entry',id:lead.id}} })} chatDisabled={talking}
                             onShare={storageScope && !offline ? () => setThingShare({
                               kind: "topOfMind", text: lead.body,
@@ -9558,10 +9559,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                            review, 2026-10-16). */
                         <>
                           <span className="jar-char-bubble-of">{say('worldBubbleActAgentMine')}</span>
-                          <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={agentSays} locale={locale}
-                            details={!offline && atWall.kind === 'agent' ? { profileId: atWall.id,
-                              onUpdated: () => verifyReadingRef.current(true),
-                              onOpenInspiration: id => viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.id, open: 'saves', note: id }) } : undefined} />
+                          <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={agentSays} locale={locale} />
                         </>
                       ) : (
                         /* ═══ AND THE EMPTY LINE IS A DOOR AFTER ALL ═════
@@ -9597,7 +9595,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                              `sayVerdict` the review uses; the card leaves the
                              queue with no page change. */
                           <>
-                            <span className="jar-char-bubble-of">{say('worldBubbleTentative')}</span>
+                            {/* STRIPPED: the "I might be noticing" eyebrow;
+                                Yes / Not really already make it a question.
+                                Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
                             <span className="jar-char-bubble-reading">{tentativeClaim.statement}</span>
                             <span className="jar-char-bubble-acts">
                               <button type="button" className="jar-char-bubble-act" disabled={answering}
@@ -9645,7 +9645,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           {offeredShare && !standingAsAgent && memoryScope?.profileId === storageScope?.profileId && !mouthOpen && !turning ? (
             <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
-                <span className="jar-char-bubble-reading" role="status">{say(offeredShare.link ? 'worldShareArrived' : 'worldShareArrivedText')}</span>
+                <span className="jar-char-bubble-reading" role="status">{say('worldShareArrived')}</span>
                 <span className="jar-char-bubble-of">“{offeredShare.preview}”</span>
                 <span className="jar-char-bubble-acts">
                   <button type="button" className="jar-char-bubble-act" onClick={takeOfferedShare}>{say('worldShareAddNote')}</button>
@@ -9993,7 +9993,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   <p className="jar-pick-source">
                     {formatMessage(locale, "worldClaimAskedAgain", { month: monthTag(Date.parse(claimQueue[0].askedAgain.lastAnsweredAt), locale) })}
                   </p>
-                ) : <p className="jar-pick-source">{say('worldClaimUnanswered')}</p>}
+                ) : null /* STRIPPED: "You haven't answered this yet." Founder,
+                    2026-11-12: "strip all unnecessary descriptive text across the experience". */}
                 {/* WHERE IT CAME FROM, IN ONE LINE — unchanged. Founder:
                     "how do we help the user deep dive into what inspirations
                     led to this ... without overwhelming the space we have?"
@@ -10330,7 +10331,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               apparatus: it made a person ask what each list was instead of
               reading what they saved. */}
 
-          {panel.detail?.conversationOrigin?<p className="jar-review-context">{say(panel.detail.conversationOrigin.authorship==='adopted'?'worldChatAdoptedOrigin':'worldChatUserOrigin')}</p>:null}
+          {panel.detail?.conversationOrigin?<p className="jar-review-context">{say('worldChatUserOrigin')}</p>:null}
           {reflectOpen && !panel.detail ? <p role="status">{say('worldOpeningAttachment')}</p> : null}
           {/* WHAT YOU ALREADY WROTE ABOUT THIS SAVE, READ BACK.
               `ReflectionFlow` stood here — 297 lines that generated a
@@ -10669,12 +10670,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
             </div>
             {prov.rows.length>0?<div className="jar-prov-room-full">
               {provPick === null ? (
-                /* THE PANE SAYS WHAT IT IS FOR RATHER THAN SITTING BLANK, and
-                   it never guesses by pre-selecting the first ground: which
-                   memory you are reading is a thing you chose, and a pane
-                   that chose for you would put words on screen you did not
-                   ask for and could not tell apart from your own choice. */
-                <p className="jar-prov-room-idle">{say("worldProvIdle")}</p>
+                /* NEVER PRE-SELECTS the first ground: which memory you are
+                   reading is a thing you chose. Until you choose, the pane
+                   stays empty. STRIPPED: the "Tap one to open" line.
+                   Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */
+                null
               ) : provFull === null || provFull.id !== provPick ? (
                 <p className="jar-prov-room-idle">{say("worldFetchingIt")}</p>
               ) : provFull.text === "" ? (
@@ -11307,7 +11307,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {/* A PAGE WHOSE OWNER IS NOT KNOWN YET still has its way out: the
           lists, a chat and Principles draw their own header once their scope
           is here, and until then this one stands in, Close to home. */}
-      {phase === 'ready' && (((listing || making === 'talk') && !(conversationScope && conversationProfile)) || (principlesOpen && !storageScope)) ? <div className="waka-surface-strip">
+      {phase === 'ready' && standingIn ? <div className="waka-surface-strip">
         <SurfaceHeader locale={locale} back={{ kind: 'close', onBack: closePage }} /></div> : null}
       {/* "{n} INSPIRATIONS" LEFT THE NOTEPAD (founder, 2026-11-08: "i also dont
           like seeing 0 inspirations while im saving sth new"). Inspirations

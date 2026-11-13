@@ -57,7 +57,10 @@ it('asks through the creature, glasses on only while it asks, even without signa
   await diveIntoReview(world.container,world.step);
   expect(world.container.textContent).toContain('Does this still matter to you?');expect(world.container.textContent).toContain(original.text);
   expect(think,'the glasses are not on while it asks').toHaveBeenLastCalledWith(true);
-  expect(world.container.textContent).toContain('Your inspiration');
+  /* The card's source line is the date alone (founder, 2026-11-12: "strip
+     all unnecessary descriptive text across the experience"). */
+  expect(world.container.querySelector('.jar-pick-slip .jar-pick-source')?.textContent).not.toContain('Your inspiration');
+  expect(world.container.textContent).not.toContain('Tap to read all');
   await act(async()=>button('Yes').click());await settle();
   expect(reviewInspiration).toHaveBeenCalledWith(original,VIEWER_ID,'relevant',expect.any(String));
   expect(world.container.querySelector('.jar-pick-slip')).toBeNull();

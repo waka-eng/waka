@@ -102,7 +102,8 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 
       <label className="waka-account-field">
         <span>{say("profileLanguageLabel")}</span>
-        <small>{say("profileLanguageScope")}</small>
+        {/* STRIPPED: "The language WAKA uses with you." under the label.
+            Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
         <select aria-label={say("profileLanguageLabel")} value={props.locale} disabled={props.localeBusy}
           onChange={(event) => props.onLocale(event.currentTarget.value as SupportedLocale)}>
           {supportedLocales.map((option) => (

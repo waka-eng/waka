@@ -265,7 +265,7 @@ export function ConversationsOverlay({ locale, profileId, title, onBack, backKin
         ) : rows.length === 0 && search ? (
           <p className="waka-over-status" role="status">{say("worldChatsNoMatches")}</p>
         ) : rows.length === 0 ? (
-          <p className="waka-over-status">{say("worldConversationFirst")}</p>
+          <p className="waka-over-status">{say("worldChatsEmpty")}</p>
         ) : (
           /* ═══ THE SAME LIST THE ARCHIVE IS ═══════════════════════════
               Founder: "chat and inspirations should have same look and feel

@@ -340,9 +340,12 @@ it("says when the last yes was, when a reading is being asked again", async () =
   expect(line, "states render, numerals never").not.toMatch(/\d/);
 });
 
-it("explains an unanswered wording without implying an earlier yes", async () => {
+it("says nothing about an unanswered wording, and never implies an earlier yes", async () => {
   await withClaims(CLAIM);
-  expect(world.container.querySelector(".jar-pick-source")?.textContent).toBe('You haven’t answered this yet.');
+  /* Founder, 2026-11-12: "strip all unnecessary descriptive text across the
+     experience". */
+  expect(world.container.textContent).not.toContain('You haven’t answered this yet.');
+  expect(world.container.textContent).not.toMatch(/You said this was true/);
 });
 
 it("hints at the next claim with a bare edge, and no back card when it is the last", async () => {

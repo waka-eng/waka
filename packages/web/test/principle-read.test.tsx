@@ -100,10 +100,19 @@ describe("principle read", () => {
     expect(host.textContent).not.toContain(principle.statement);
   });
 
-  it("says your principles will form here while there are none", async () => {
+  it("says only where the read stands while there are none", async () => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: ready });
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    expect(host.textContent).toContain("Your principles will form here.");
+    /* Founder, 2026-11-12: "strip all unnecessary descriptive text across
+       the experience". */
+    expect(host.textContent).not.toContain("Your principles will form here.");
+    expect(host.textContent).toBe("No principle is clear yet.");
+  });
+
+  it("says nothing while too few patterns exist to read", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, signalCount: 2 } });
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    expect(host.textContent).toBe("");
   });
 
   it("recovers from one failed first read without showing a retry button", async () => {

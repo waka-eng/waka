@@ -1621,10 +1621,9 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
                    typed can land in it, because there is no draft yet. */
                 value={loaded ? draft : open.preview}
                 readOnly={saving || !loaded}
-                /* THE EMPTY NOTE SAYS WHAT IT NEEDS, the way the notepad's
-                   blank page does: with nothing attached, a note with no
-                   words cannot be kept, so Save stays dim and this line is
-                   why. */
+                /* THE EMPTY INSPIRATION SAYS WHAT IT NEEDS: with nothing
+                   attached and no words it cannot be saved, so Save stays dim
+                   and this line says words or a photo will do. */
                 placeholder={loaded && open.attachments.length === 0 ? say("worldNoteNeedsSomething") : undefined}
                 aria-busy={!loaded && !stored?.failed}
                 aria-label={say("worldCaptureInspiration")}
@@ -1656,7 +1655,9 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
              microphone at a time */
           recordDisabled={recorder.blocked}
           failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : dictation.error === 'dictation-denied' ? say("worldComposerDictateDenied") : dictation.error === 'dictation-failed' ? say("worldComposerDictateFailed") : editUnavailable ? say("worldNoteDraftUnavailable") : editConflict ? say("worldNoteDraftConflict") : ""}
-          status={saving ? say("worldSaving") : loaded ? say(draft.trim() !== stored?.text?.trim() ? "worldDraftWord" : "worldSavedWord") : ""}
+          /* STRIPPED: the idle "Saved" status; only a change in progress
+             or unsaved speaks. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */
+          status={saving ? say("worldSaving") : loaded && draft.trim() !== stored?.text?.trim() ? say("worldDraftWord") : ""}
           /* THE FULL-TEXT READ'S TWO STATES, in the bar with every other
              state (founder: "states should show and disappear in the bottom
              bar only"). See `stored`. */

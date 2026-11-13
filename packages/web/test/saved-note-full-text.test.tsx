@@ -168,7 +168,10 @@ it("keeps all 1,000 characters through open → edit → Save", async () => {
   await answer(true);
   expect(page().readOnly).toBe(false);
   expect(page().value).toBe(LONG);
-  expect(bar()).toBe("Saved");
+  /* A saved note's bar is quiet: the idle "Saved" went on 2026-11-12
+     (founder: "strip all unnecessary descriptive text across the
+     experience"). */
+  expect(bar()).toBe("");
 
   await type(`${LONG} And one more sentence.`);
   expect(save().disabled).toBe(false);
@@ -256,7 +259,7 @@ it("will not empty a note that has nothing else on it, and says why on the page"
   await answer(true);
   await type("   ");
   expect(save().disabled).toBe(true);
-  expect(page().placeholder).toBe("Write something, or add a photo or file, to save this inspiration.");
+  expect(page().placeholder).toBe("Write, or add a photo…");
   await act(async () => closer!());
   expect(state.written).toEqual([]);
 });
@@ -334,7 +337,7 @@ it("keeps one note's upload failure on that note: not on the next, still on its 
   const other = [...host.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((b) => (b.textContent ?? "").includes("an older note"))!;
   await act(async () => other.click());
   await answer(true);
-  expect(bar(), "not on the next note opened").toBe("Saved");
+  expect(bar(), "not on the next note opened").toBe("");
   await act(async () => closer!());
   const own = [...host.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((b) => !(b.textContent ?? "").includes("an older note"))!;
   await act(async () => own.click());
@@ -383,7 +386,7 @@ it("keeps one note's upload off another note's bar", async () => {
   const other = [...host.querySelectorAll<HTMLButtonElement>(".waka-list-row")].find((b) => (b.textContent ?? "").includes("an older note"))!;
   await act(async () => other.click());
   await answer(true);
-  expect(bar(), "and not on the next note").toBe("Saved");
+  expect(bar(), "and not on the next note").toBe("");
   expect(slot.querySelector<HTMLButtonElement>('[aria-label="Add file"]')?.disabled, "whose tools it does not hold").toBe(false);
 });
 
