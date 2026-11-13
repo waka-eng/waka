@@ -2,7 +2,8 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/api/conversations` supplies
  * owned API projections, committed responses and definite/lost refusals.
  * Real panel/account-scoped Storage journals execute; `crypto` replaces the
- * jsdom placeholder with actual Node WebCrypto, not a mocked digest.
+ * jsdom placeholder with actual Node WebCrypto. A wrapper tracks the runtime
+ * digest promises for React readiness; digest bytes are never mocked.
  * Actual SQL ownership/current-source/publication proofs live in the API DB
  * suites; this file does not claim a browser mock establishes those gates. */
 /** Real panel, draft journal and WebCrypto. Only owned API replies are synthetic. */
@@ -18,22 +19,28 @@ import {isOpeningView,openingJournal,type ConversationOpening,type ConversationO
 import en from '../src/lib/i18n/messages/en-US.json';
 vi.mock('../src/lib/api/conversations',async original=>({...await original<any>(),createConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationReply:vi.fn(),listConversations:vi.fn(),prepareConversationOpening:vi.fn()}));
 const scope={accountId:'11111111-1111-4111-8111-111111111111',profileId:'22222222-2222-4222-8222-222222222222'},id='33333333-3333-4333-8333-333333333333',sourceId='44444444-4444-4444-8444-444444444444',photoId='55555555-5555-4555-8555-555555555555';
+const actualDigest=webcrypto.subtle.digest.bind(webcrypto.subtle);
+let digestWork:Array<ReturnType<typeof actualDigest>>=[];
 const binding:ConversationOpening={version:1,locale:'en-US',kind:'source',source:{kind:'inspiration',id:sourceId,hash:'current-material-proof'},why:false,supports:[],hash:'1'.repeat(64)};
 const view:ConversationOpeningView={binding,available:true,provenance:'application',quote:'Original saved words',sources:[]};
 let host:HTMLDivElement,root:ReturnType<typeof createRoot>,row:ApiConversation;
 beforeEach(()=>{
-  vi.resetAllMocks();vi.stubGlobal('crypto',webcrypto);localStorage.clear();sessionStorage.clear();(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
+  vi.resetAllMocks();digestWork=[];
+  vi.spyOn(webcrypto.subtle,'digest').mockImplementation((...args:Parameters<typeof actualDigest>)=>{const work=actualDigest(...args);digestWork.push(work);return work;});
+  vi.stubGlobal('crypto',webcrypto);localStorage.clear();sessionStorage.clear();(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
   row={id,profileId:scope.profileId,revision:0,messages:[],createdAt:'2026-11-13T00:00:00Z',updatedAt:'2026-11-13T00:00:00Z',generationEnabled:false};
   vi.mocked(listConversations).mockResolvedValue({profileId:scope.profileId,conversations:[],generationEnabled:false});vi.mocked(fetchConversation).mockImplementation(async()=>row);
   vi.mocked(prepareConversationOpening).mockResolvedValue(view);
   vi.mocked(createConversation).mockImplementation(async(_profile,conversationId,_signal,_principle,first,_talk,_inspiration,opening)=>({...row,id:conversationId,opening:opening?view:null,revision:1,messages:[{id:first!.id,profileId:scope.profileId,conversationId,position:1,role:'user',content:first!.content,createdAt:row.createdAt}]}));
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
 });
-afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.unstubAllGlobals();});
+afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.restoreAllMocks();vi.unstubAllGlobals();});
 async function mount(selection?:OpeningSelection,conversationId:string|null=null){
-  if(selection)await openingJournal(selection); // allow native crypto completion, not fake timer advancement
-  await act(async()=>{root.render(<ConversationPanel scope={scope} id={conversationId} locale="en-US" onChoose={()=>{}} opener={selection?{selection,ask:selection.source?undefined:selection.text,quote:selection.source?.kind==='inspiration'?selection.text:undefined}:undefined}/>);await new Promise(resolve=>setImmediate(resolve));});
-  for(let turn=0;turn<20&&!host.querySelector('textarea');turn++)await act(async()=>{await new Promise(resolve=>setImmediate(resolve));});
+  const start=digestWork.length;
+  await act(async()=>{root.render(<ConversationPanel scope={scope} id={conversationId} locale="en-US" onChoose={()=>{}} opener={selection?{selection,ask:selection.source?undefined:selection.text,quote:selection.source?.kind==='inspiration'?selection.text:undefined}:undefined}/>);});
+  // Wait for the component's own digest, bounded by the normal test timeout.
+  await act(async()=>{await Promise.all(digestWork.slice(start));});
+  expect(host.querySelector('textarea'),'composer after runtime opening digest').not.toBeNull();
 }
 async function type(text:string){await act(async()=>{const field=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(field,text);field.dispatchEvent(new Event('input',{bubbles:true}));});}
 async function click(name:string){await act(async()=>{const control=[...host.querySelectorAll('button')].find(button=>(button.getAttribute('aria-label')??button.textContent)===name);if(!control)throw Error('Missing synthetic control: '+name);control.click();});}
