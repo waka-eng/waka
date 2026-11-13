@@ -35,8 +35,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { deleteConversation, listConversations, type ConversationSummary } from "../lib/api/conversations";
 import { DialogSurface } from "./DialogSurface";
-import { HomeActionIcon } from "./HomeActionIcon";
-import { NoteBar } from "./NoteBar";
 import { SurfaceHeader, type BackKind } from "./SurfaceHeader";
 import { t, type SupportedLocale } from "../lib/locales";
 import { dateWords, timeOf } from "../lib/words";
@@ -240,7 +238,7 @@ export function ConversationsOverlay({ locale, profileId, title, onBack, backKin
           changes — Escape still leaves, and there is no scrim to press
           away on, because `.waka-page` is the ground rather than a film
           over one. */}
-      <DialogSurface {...listScroll} className="waka-over waka-over--chats" motion={still ? undefined : "modal"} aria-label={title} modal={false} escapeLeavesAsModal={false} onClose={onBack}>
+      <DialogSurface {...listScroll} className="waka-over" motion={still ? undefined : "modal"} aria-label={title} modal={false} escapeLeavesAsModal={false} onClose={onBack}>
         <SurfaceHeader locale={locale} gesture={gesture} back={{ kind: backKind, onBack }} title={title}
           right={<button type="button" className="waka-over-new" onClick={() => onOpen(null)}>{say("worldConversationNew")}</button>} />
         <div className="waka-over-find">
@@ -367,23 +365,6 @@ export function ConversationsOverlay({ locale, profileId, title, onBack, backKin
             ))}
           </nav>
         )}
-        {/* ═══ THE CHAT'S OWN BAR, AT THE FOOT OF PAST CHATS TOO (founder,
-            2026-11-10: "the top bar should just stay the same and the bottom
-            content should be the same") ═══ A chat and its list are one
-            place with two middles: the same header row, the same bar under
-            them. Here the bar starts a new chat: a press anywhere on it
-            opens one, whose own field then takes the words. */}
-        <footer className="waka-over-foot">
-          <NoteBar
-            tools={<>
-              <button type="button" className="waka-dock-tool" aria-label={say("worldComposerDictate")} tabIndex={-1} onClick={() => onOpen(null)}><HomeActionIcon kind="record" /></button>
-              <button type="button" className="waka-dock-tool" aria-label={say("worldAddPhoto")} tabIndex={-1} onClick={() => onOpen(null)}><HomeActionIcon kind="photo" /></button>
-              <button type="button" className="waka-dock-tool" aria-label={say("worldAddFile")} tabIndex={-1} onClick={() => onOpen(null)}><HomeActionIcon kind="file" /></button>
-            </>}
-            action={<button type="button" className="chat-send waka-note-bar-action" disabled tabIndex={-1}>{say("worldConversationSendWord")}</button>}>
-            <button type="button" className="waka-over-foot-field" onClick={() => onOpen(null)}>{say("worldConversationFirst")}</button>
-          </NoteBar>
-        </footer>
       </DialogSurface>
     </div>
   );

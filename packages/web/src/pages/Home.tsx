@@ -11512,7 +11512,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
         title={say('worldPastChats')}
         onBack={backPage} backKind={listOrigin.current ? 'back' : 'close'} gesture={viewNavigation.href}
         still={chatSwap.current}
-        onOpen={id=>{ chatSwap.current = true; chatOpener.current = null; openTalk(id); setChatFromList(id ?? 'new'); }}/>:null}
+        onOpen={id=>{ chatSwap.current = true; chatOpener.current = null; openTalk(id); }}/>:null}
 
       {/* THE CONVERSATION ITSELF, ALSO OVER THE WORLD.
           Founder: "also dont move talk to waka in a new page. find better
@@ -11562,8 +11562,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
               srTitle={say('worldConversationTitle')}
               right={viewNavigation.view?.sharePrinciple || !hasOtherChats(talkId) ? undefined : <button type="button" className="waka-surface-act"
                 onClick={() => {
+                  /* "<" IS ALWAYS HOME between a chat and Past chats (founder,
+                     2026-11-12: "regardless how many times you do that the
+                     back button should always go back to home"), so the list
+                     is not told where it came from. */
                   chatSwap.current = true;
-                  listOrigin.current = { kind: 'chat', id: viewNavigation.view?.conversationId ?? 'new', principleId: viewNavigation.view?.principleId };
                   openOverHome('conversations');
                 }}>{say('worldPastChats')}</button>} />
             <ConversationPanel key={`${owner}:${talkId??'new'}:${viewNavigation.view.principleId??''}`}
@@ -11571,7 +11574,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               initialPrincipleId={!talkId&&viewNavigation.view.principleId?viewNavigation.view.principleId:undefined}
               initialConversation={committedTalk.current?.row} locale={locale}
               opener={chatOpener.current && chatOpener.current.id === talkId ? chatOpener.current.text : undefined}
-              onHistory={()=>{chatSwap.current=true;listOrigin.current={kind:'chat',id:talkId??'new',principleId:viewNavigation.view?.principleId};openOverHome('conversations');}}
+              onHistory={()=>{chatSwap.current=true;openOverHome('conversations');}}
               /* The bar's middle group, lent for the mic and the ＋. */
               onCreated={row=>{if(row.profileId===conversationScope.profileId)committedTalk.current={owner,row};if(chatOpener.current&&chatOpener.current.id===null&&talkId===null)chatOpener.current={...chatOpener.current,id:row.id};}}
               /* `replace` on the new-to-id hop so dismissing does not land

@@ -7619,22 +7619,6 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 
 @layer chrome {
-/* ═══ PAST CHATS WEARS THE CHAT'S BAR (founder, 2026-11-10) ═════════════════
-   Pinned to the list's foot exactly where a chat's bar stands, 28px off the
-   bottom plus the phone's inset; the list scrolls under a short fade. Its
-   field is a press that opens a new chat, set like the chat's placeholder. */
-.waka-over--chats .waka-over-foot {
-  position: sticky; bottom: 0; z-index: 1; margin-top: auto;
-  padding: var(--sp-12) 0 calc(var(--sp-28) + env(safe-area-inset-bottom));
-  background: linear-gradient(to bottom, transparent, var(--paper) var(--sp-12));
-}
-.waka-over-foot-field {
-  display: block; width: 100%; min-height: calc(var(--t-input) * 1.45); padding: 0; border: 0; background: none;
-  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-input); line-height: 1.45; text-align: start; cursor: text;
-}
-}
-
-@layer chrome {
 /* ═══ THE REVIEW CARD IS THE CREATURE'S OWN BUBBLE (founder, 2026-11-12:
    "the card design is so ugly") ═══════════════════════════════════════════
    The reading slip was a dark glassy box with a hairline edge under the
