@@ -50,6 +50,38 @@ it('polls an active reply with at most four application statements',async()=>{
     expect(statements).toBe(4);
   }finally{options.debug=previous;}
 });
+it('reads a bounded tail while preserving the exact latest eight complete messages and overflow disclosure',async()=>{
+  const f=await fixture(),contents=new Map<number,string>();
+  for(let position=2;position<=120;position++){
+    const id=randomUUID(),role=position%2?'user':'assistant';
+    const content=(position===114?'A trial is NOT a permanent choice. ':`Earlier complete turn ${position}. `).padEnd(1000,'x');contents.set(position,content);
+    await t.sql`INSERT INTO conversation_messages(id,profile_id,conversation_id,position,role,content) VALUES(${id},${f.profileId},${f.id},${position},${role},${content})`;
+    if(role==='assistant')await t.sql`INSERT INTO conversation_reply_requests(id,profile_id,conversation_id,conversation_revision,context_hash,status,assistant_message_id) VALUES(${randomUUID()},${f.profileId},${f.id},${position-1},'fixture','ready',${id})`;
+  }
+  await t.sql`UPDATE conversations SET revision=120 WHERE id=${f.id}`;
+  const latest='Please keep the trial temporary.\nDo not turn it into a permanent choice.';contents.set(121,latest);
+  expect((await f.post(`/${f.id}/messages`,{id:randomUUID(),content:latest,revision:120,requestReply:true})).status).toBe(200);
+  const state=await f.state(),job=await claim(),options=t.sql.options as {debug?:boolean|((...args:any[])=>void)},previous=options.debug;
+  const reads:Array<{query:string;params:unknown[]}>=[];
+  options.debug=(_c:unknown,query:string,params:unknown[])=>{if(/from "conversation_messages"/.test(query))reads.push({query,params});};
+  try{await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{},{embeddingClient:null});}finally{options.debug=previous;}
+  expect(reads).toHaveLength(2);
+  // postgres-js debug observes wire-serialized parameters, including LIMIT.
+  for(const read of reads){expect(read.query).toMatch(/order by "conversation_messages"\."position" desc limit/);expect(read.params.map(String)).toEqual([f.profileId,f.id,'9']);}
+  const input=answer.mock.calls[0][0];expect(input.contextChanged).toBe(true);
+  expect(input.history.map(row=>row.content)).toEqual(Array.from({length:8},(_,index)=>contents.get(114+index)));
+  expect(input.history[0].content).toContain('NOT a permanent choice');expect(input.history.at(-1)?.content).toBe(latest);
+  expect((await f.state()).phase).toBe('ready');
+});
+it('keeps stale-anchor refusal and fences a locale edit before publication after the joined profile read',async()=>{
+  const f=await fixture();await t.sql`UPDATE conversations SET revision=2 WHERE id=${f.id}`;
+  expect((await f.request()).status).toBe(409);expect(await t.sql`SELECT id FROM conversation_reply_requests`).toHaveLength(0);
+  await t.sql`UPDATE conversations SET revision=1 WHERE id=${f.id}`;
+  await f.request();during=async()=>{await t.sql`UPDATE profiles SET preferred_locale='ko-KR' WHERE id=${f.profileId}`;};
+  await processBackgroundJob(await claim());
+  expect(answer).toHaveBeenCalledOnce();expect(answer.mock.calls[0][0].preferredLocale).toBe('en-US');
+  expect((await f.state()).phase).toBe('stale');expect(await t.sql`SELECT id FROM conversation_messages WHERE role='assistant'`).toHaveLength(0);
+});
 it('delivers actual dated earlier/current records without IDs and keeps history citations reopenable',async()=>{
   const f=await fixture();
   await t.sql`UPDATE conversation_messages SET content='What has changed in how I think?' WHERE id=${f.messageId}`;

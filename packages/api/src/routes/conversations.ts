@@ -12,6 +12,7 @@ import {CONVERSATION_LIMITS,conversationCapabilities,conversationMemory,conversa
 import {CONVERSATION_STARTERS,conversationPreview} from '../lib/conversation-preview.js';
 import {ConversationReplyError,conversationReplyWindow,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
 import {wakeCommittedBackgroundJobs} from '../lib/queue.js';
+import {measurePerformanceStage} from '../lib/performance-stages.js';
 import {personalPrincipleReadable} from '../lib/personal-output.js';
 import {PRINCIPLE_MIN_SIGNALS} from '../lib/principle-generation.js';
 import {ConversationAttachmentError,MAX_MESSAGE_ATTACHMENTS,conversationAttachmentKeys,linkMessageAttachments} from '../lib/conversation-attachments.js';
@@ -53,6 +54,7 @@ function windowedConversation<T extends{revision:number;messages:Array<{position
 type Db=ReturnType<typeof getDb>;
 type Reader=Pick<Db,'select'|'execute'>;
 async function readConversation(db:Reader,profileId:string,id:string,window?:MessageWindow){
+  return measurePerformanceStage('reply_read','conversation',async()=>{
   const [row]=await db.select().from(conversations).where(and(eq(conversations.id,id),eq(conversations.profileId,profileId)));
   if(!row)throw new ConversationError('Conversation not found.',404);
   if(row.deletedAt)throw new ConversationError('This conversation was deleted.',410);
@@ -85,6 +87,7 @@ async function readConversation(db:Reader,profileId:string,id:string,window?:Mes
      reported as it is now: an agent since removed reads as 'mine'. */
   const memory=await conversationMemory(db,profileId,row);
   return {...row,opening:await projectConversationOpening(db,profileId,row.opening),perspective:memory.perspective,agentProfileId:memory.agentId,preview:conversationPreview(topic),...(window?{messageWindowStart:start}:{}),initialPrinciple:initialPrinciple??null,initialInspiration:initialInspiration??null,messages:(await projectConversationMessages(db,profileId,id,messages,memory)).map(message=>({...message,savedInspirationIds:saved.filter(item=>item.messageId===message.id).map(item=>item.inspirationId)}))};
+  });
 }
 /**
  * The keep a conversation is being pointed at must exist AND be this
