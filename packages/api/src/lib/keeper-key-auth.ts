@@ -7,7 +7,8 @@
  * credential of their own for MCP — one that survives session expiry, needs
  * no browser consent dance to re-mint, and can be revoked from the account.
  *
- * THE SHAPE OF THE SECRET. `waka_keeper_` + 48 hex characters, minted by the
+ * THE SHAPE OF THE SECRET. Legacy `waka_keeper_` or read-only `waka_readonly_`
+ * + 48 hex characters, minted by the
  * same `mintStandingKey` an agent key uses — one entropy-and-hash dance for
  * every key kind. The prefix routes it in `requireAuth` without a signature
  * check and makes a leaked key greppable by shape.
@@ -34,17 +35,19 @@ import { hashSessionToken, type AuthenticatedSession } from "./session.js";
 import { normalizeSupportedLocale } from "./locales.js";
 
 export const KEEPER_KEY_PREFIX = "waka_keeper_";
+/** Disjoint from the legacy prefix: pre-capability auth must reject, not widen. */
+export const READ_ONLY_KEEPER_KEY_PREFIX = "waka_readonly_";
 
 /** Same display budget as an agent key; a list needs no more to tell keys apart. */
 export const KEEPER_KEY_DISPLAY_CHARS = AGENT_KEY_DISPLAY_CHARS;
 
-export async function mintKeeperKey(): Promise<MintedAgentKey> {
-  return mintStandingKey(KEEPER_KEY_PREFIX);
+export async function mintKeeperKey(access: "read_capture" | "read_only" = "read_capture"): Promise<MintedAgentKey> {
+  return mintStandingKey(access === "read_only" ? READ_ONLY_KEEPER_KEY_PREFIX : KEEPER_KEY_PREFIX);
 }
 
 /** Is this bearer credential shaped like a keeper key at all? */
 export function looksLikeKeeperKey(token: string): boolean {
-  return token.startsWith(KEEPER_KEY_PREFIX);
+  return token.startsWith(KEEPER_KEY_PREFIX) || token.startsWith(READ_ONLY_KEEPER_KEY_PREFIX);
 }
 
 /**
@@ -62,6 +65,7 @@ export async function lookupKeeperKeySession(
   const rows = await db
     .select({
       keyId: keeperKeys.id,
+      access: keeperKeys.access,
       profileId: profiles.id,
       profileName: profiles.name,
       preferredLocale: profiles.preferredLocale,
@@ -81,6 +85,9 @@ export async function lookupKeeperKeySession(
     .limit(1);
   const row = rows[0];
   if (!row) return null;
+  // A hand-edited row cannot convert a rollback-safe key into capture or
+  // make a legacy-shaped key appear safe across old auth versions.
+  if ((row.access === "read_only") !== token.startsWith(READ_ONLY_KEEPER_KEY_PREFIX)) return null;
 
   void db
     .update(keeperKeys)
@@ -101,5 +108,6 @@ export async function lookupKeeperKeySession(
       preferredLocale: normalizeSupportedLocale(row.preferredLocale),
     },
     keyScoped: true,
+    keeperAccess: row.access,
   };
 }

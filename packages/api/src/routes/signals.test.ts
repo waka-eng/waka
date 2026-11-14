@@ -59,6 +59,7 @@ const detail: SignalDetail = {
   ...summary,
   evidence: [
     {
+      current: true,
       inspirationId: "00000000-0000-4000-8000-000000000301",
       preview: "A saved note about quiet research rooms.",
       reason: "The capture names the room as the condition, not the topic.",
@@ -74,7 +75,7 @@ const detail: SignalDetail = {
    a 200-path test injects must accept that one insert — the write itself is
    pinned against real Postgres in consultations.db.test.ts. */
 function serveDb(): Record<string, unknown> {
-  return { insert: () => ({ values: async () => undefined }) };
+  const db={ insert: () => ({ values: async () => undefined }),transaction:async (run:(tx:unknown)=>unknown,options:unknown)=>{expect(options).toEqual({isolationLevel:"repeatable read",accessMode:"read only"});return run(db);} };return db;
 }
 
 describe("GET /api/signals", () => {
@@ -237,6 +238,7 @@ describe("GET /api/signals/:signalId", () => {
     const body = (await response.json()) as { signal: SignalDetail };
     expect(body.signal.evidence).toEqual([
       {
+        current: true,
         inspirationId: "00000000-0000-4000-8000-000000000301",
         preview: "A saved note about quiet research rooms.",
         reason: "The capture names the room as the condition, not the topic.",

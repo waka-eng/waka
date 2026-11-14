@@ -360,9 +360,12 @@ export function registerRecallRoutes(
     const target = await resolveTargetProfile(db, session, query.data.profile, "read");
     if (!target.ok) return c.json(target.body, target.status);
 
+    return db.transaction(async tx => {
+    const db=tx;
     const [row] = await db
-      .select(inspirationSelection)
+      .select({...inspirationSelection,materialRevision:inspirationRevisions.personalRevision})
       .from(inspirations)
+      .leftJoin(inspirationRevisions,and(eq(inspirationRevisions.inspirationId,inspirations.id),eq(inspirationRevisions.profileId,inspirations.profileId)))
       .where(
         and(
           eq(inspirations.id, idCheck.data),
@@ -398,12 +401,13 @@ export function registerRecallRoutes(
 
     return c.json(
       {
-        inspiration: {...serializeInspirationDetail(row, {
+        inspiration: {materialRevision:row.materialRevision?.toString()??null,...serializeInspirationDetail(row, {
           attachments: attachmentRows.map(serializeAttachment),
           reflections: reflectionRows,
         }),conversationOrigin:await readConversationOrigin(db,target.profileId,row.id)},
       },
       200,
     );
+    }, {isolationLevel:'repeatable read',accessMode:'read only'});
   });
 }

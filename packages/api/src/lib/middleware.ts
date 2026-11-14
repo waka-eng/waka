@@ -70,7 +70,7 @@ async function resolveSessionFromToken(token: string): Promise<AuthenticatedSess
  * is what makes "keep and recall, nothing else" a fact rather than a
  * convention. Exported pure, so the list is a unit test away.
  */
-export function keeperKeyMayPass(method: string, path: string): boolean {
+export function keeperKeyMayPass(method: string, path: string, access: "read_capture" | "read_only" = "read_capture"): boolean {
   // MCP can prove its bound identity without gaining account permissions.
   if (method === "GET" && (path === "/api/auth/me" || path === "/api/profiles")) return true;
   if (method === "POST" && path === "/api/auth/cli/verify") return true;
@@ -78,7 +78,7 @@ export function keeperKeyMayPass(method: string, path: string): boolean {
      person's own collector proposes sentences there for the person to
      decide on at a browser. Proposing only — the decision routes under it
      are `humanSessionsOnly`, which refuses this key. */
-  if (method === "POST") return path === "/api/inspirations" || path === "/api/harvest";
+  if (method === "POST") return access === "read_capture" && (path === "/api/inspirations" || path === "/api/harvest");
   if (method !== "GET") return false;
   return [
     "/api/inspirations",
@@ -119,9 +119,9 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
   if (!session) {
     return c.json({ error: "Authentication required" }, 401);
   }
-  if (session.keyScoped && !keeperKeyMayPass(c.req.method, c.req.path)) {
+  if (session.keyScoped && !keeperKeyMayPass(c.req.method, c.req.path, session.keeperAccess)) {
     return c.json(
-      { error: "Beyond this key's scope. A keeper key can keep and recall; the rest needs you at a browser" },
+      { error: "Beyond this key's scope. This key cannot perform that operation; check its memory access in My profile · MCP" },
       403,
     );
   }
@@ -252,7 +252,7 @@ export function resolveProfileAccess(
      profile, nothing anywhere else. Checked before the human-admin rule,
      which must never apply to a key sitting in a config file. */
   if (session.keyScoped) {
-    return target.id === session.profile.id && operation !== "write"
+    return target.id === session.profile.id && operation !== "write" && (operation === "read" || session.keeperAccess !== "read_only")
       ? "allowed"
       : "denied";
   }

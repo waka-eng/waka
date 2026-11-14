@@ -2,7 +2,7 @@ import { formatMessage, t, type SupportedLocale } from '../lib/locales';
 import { mcpClientName, mcpSetupPrompt, type McpAuthMethod, type McpClient, type McpScope } from '../lib/mcp-setup';
 import { McpCopyBlock } from './McpCopyBlock';
 
-export function McpInstallPrompt({ locale, profile, apiUrl, packageOrigin, client, scope, authMethod, hideCopy = false, onCopied, onCopyFailed }: {
+export function McpInstallPrompt({ locale, profile, apiUrl, packageOrigin, client, scope, authMethod, memoryAccess, hideCopy = false, onCopied, onCopyFailed }: {
   locale: SupportedLocale;
   profile: { id: string; name: string; type?: 'human' | 'agent' };
   apiUrl: string;
@@ -10,6 +10,7 @@ export function McpInstallPrompt({ locale, profile, apiUrl, packageOrigin, clien
   client: McpClient;
   scope: McpScope;
   authMethod: McpAuthMethod;
+  memoryAccess?: "read_capture" | "read_only";
   hideCopy?: boolean;
   onCopied?: () => void;
   onCopyFailed?: () => void;
@@ -19,6 +20,6 @@ export function McpInstallPrompt({ locale, profile, apiUrl, packageOrigin, clien
       authMethod === 'key' ? 'profileMcpPromptKeyHint' : 'profileMcpPromptHint', { client: mcpClientName(client) })}</p>
     <McpCopyBlock locale={locale} prompt scrollable mode={hideCopy ? 'text' : 'full'} copyLabel={t(locale, 'profileMcpCopySetupPrompt')}
       onCopied={onCopied} onCopyFailed={onCopyFailed}
-      text={mcpSetupPrompt({ locale, profile, apiUrl, packageOrigin, client, scope, authMethod })} />
+      text={mcpSetupPrompt({ locale, profile, apiUrl, packageOrigin, client, scope, authMethod, memoryAccess })} />
   </>;
 }

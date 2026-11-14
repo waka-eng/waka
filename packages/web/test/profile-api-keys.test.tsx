@@ -54,7 +54,7 @@ beforeEach(() => {
       if (fail === method) return Response.json({ error: 'Unavailable' }, { status: 500 });
       if (method === 'GET') return Response.json({ keys });
       if (method === 'POST') {
-        const made = { ...key('new-key', url.includes('/keeper-keys') ? personal.id : body.profileId), label: body.label }; keys.push(made);
+        const made = { ...key('new-key', url.includes('/keeper-keys') ? personal.id : body.profileId), label: body.label, ...(body.access ? {access:body.access} : {}) }; keys.push(made);
         return Response.json({ key: { ...made, secret } }, { status: 201 });
       }
       keys = keys.filter(k => !url.endsWith(encodeURIComponent(k.id)));
@@ -83,7 +83,8 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
   expect(host.textContent).toContain('You · You');
   expect(calls.some(c => c.path.includes('keys'))).toBe(false);
   await click('API keys');
-  expect(host.textContent).toContain('can’t edit or delete notes or manage your account');
+  expect(host.textContent).toContain('neither can edit or delete notes or manage your account');
+  expect(host.textContent).toContain('Choose Read only for a reader, or Read and capture to allow new saves');
   expect(host.textContent).toContain('Personal laptop');
   for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent name']) expect(host.textContent).not.toContain(hidden);
   expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys']);
@@ -97,12 +98,14 @@ it('keeps personal keys in their tab and copies a profile-bound setup prompt wit
   expect(button('Create key')).toBeUndefined();
   expect(calls.map(c=>c.path)).toEqual(['/api/profiles']);
   await click('API keys');
+  expect([...host.querySelectorAll('select')].find(node=>node.value==='read_only')).toBeDefined();
   await input('Key name, e.g. Work laptop', 'My Codex'); await click('Create key');
-  expect(calls.find(c => c.method === 'POST')).toEqual({ path: '/api/keeper-keys', method: 'POST', body: { label: 'My Codex' } });
+  expect(calls.find(c => c.method === 'POST')).toEqual({ path: '/api/keeper-keys', method: 'POST', body: { label: 'My Codex', access:'read_only' } });
   expect(host.querySelector<HTMLInputElement>('input[readonly]')?.value).toBe(secret);
   await click('Copy configuration');
   expect(copied.at(-1)).toContain('YOUR_API_KEY');
   expect(copied.at(-1)).not.toContain(secret);
+  expect(copied.at(-1)).toContain('WAKA_MCP_MODE');
   await click('MCP setup');
   expect(host.querySelector('input[readonly]')).toBeNull();
   expect(host.textContent).not.toContain('My Codex');
@@ -167,6 +170,7 @@ it('does not display a returned key bound to a different profile', async () => {
   const original = vi.mocked(fetch).getMockImplementation()!;
   vi.mocked(fetch).mockImplementation((...args) => args[1]?.method === 'POST'
     ? Promise.resolve(Response.json({ key: { ...key('wrong-profile'), secret } })) : original(...args));
+  expect([...host.querySelectorAll('select')].find(node=>node.value==='read_only')).toBeDefined();
   await input('Key name, e.g. Work laptop', 'My Codex'); await click('Create key');
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('Couldn’t create the key');
   expect(host.querySelector('input[readonly]')).toBeNull();
