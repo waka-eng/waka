@@ -52,6 +52,21 @@ it('stores ordered words once, rejects changed replay and never requests an assi
   const history=await (await f.app.request('/conversations')).json() as any;expect(history.conversations).toHaveLength(1);expect(history.conversations[0].preview).toBe(message.content);
   expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
 });
+it('validates a new message by ID and projects a long transcript only once, preserving exact replay',async()=>{
+  const f=await fixture();await f.send('',{id:f.id});
+  await t.sql`INSERT INTO conversation_messages(id,profile_id,conversation_id,position,role,content)
+    SELECT gen_random_uuid(),${f.profileId},${f.id},i,CASE WHEN i%2=0 THEN 'assistant' ELSE 'user' END,'Earlier complete turn '||i FROM generate_series(1,120) i`;
+  await t.sql`UPDATE conversations SET revision=120 WHERE id=${f.id}`;
+  const input={id:randomUUID(),revision:120,content:'Keep these exact words.\nNot a permanent change.'},queries:string[]=[];
+  const options=t.sql.options as {debug?:boolean|((...args:any[])=>void)},before=options.debug;
+  options.debug=(_c:unknown,query:string)=>{if(/from "conversation_messages"/.test(query))queries.push(query);};
+  let accepted:any;
+  try{const sent=await f.send(`/${f.id}/messages`,input);expect(sent.status).toBe(200);accepted=await sent.json();}finally{options.debug=before;}
+  expect(queries).toHaveLength(2);expect(queries.filter(query=>/order by "conversation_messages"\."position" asc limit/.test(query))).toHaveLength(1);
+  expect(accepted.conversation.messages).toHaveLength(121);expect(accepted.conversation.messages.at(-1)).toMatchObject({id:input.id,content:input.content,position:121});
+  const replay=await f.send(`/${f.id}/messages`,input);expect(replay.status).toBe(200);expect(await replay.json()).toEqual(accepted);
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE id=${input.id}`).toHaveLength(1);
+});
 it('explains the per-profile chat cap and accepts the same draft after a chat is deleted',async()=>{
   const f=await fixture(),other=await fixture();
   await t.sql`INSERT INTO conversations(id,profile_id) SELECT gen_random_uuid(),${f.profileId} FROM generate_series(1,100)`;
