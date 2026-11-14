@@ -39,8 +39,8 @@ configuration or handoff behavior.
 
 A small client adapter forwards SQL and parameter arrays unchanged and returns
 original native Query objects. It adds prepare=true only for nonempty bound
-queries without an explicit/inherited prepare option. Explicit prepare=false or
-undefined stays on the native path. Transaction callbacks, savepoints and reserved
+queries without an explicit/inherited prepare or simple option. Explicit protocol
+choices, including false or undefined values, stay on the native path. Transaction callbacks, savepoints and reserved
 clients inherit the adapter; release, values/raw/execute/cancel and callback return
 values retain driver behavior. No dependency patch, interpolation, application
 retry, fallback, pool expansion, TLS/type change or source-proof cache is added.

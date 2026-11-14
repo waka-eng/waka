@@ -1,6 +1,9 @@
 /** WHAT THIS MOCKS, AND WHY: a callable postgres client records forwarding and
- * native Query identity only. Real SQL/protocol/rollback is covered separately. */
+ * native Query identity only. One test constructs lazy native `postgres`
+ * Queries with a refusing socket factory; it executes no SQL/network. Actual
+ * SQL/protocol/rollback is covered separately. */
 import {expect,it,vi} from 'vitest';
+import postgres from 'postgres';
 import {developmentPreparedQueries,preparedPostgresClient} from './postgres-transport.js';
 function fixture(){
  const query={values:vi.fn(),raw:vi.fn(),cancel:vi.fn()},calls:unknown[][]=[];
@@ -37,4 +40,25 @@ it('keeps production/default/local off and refuses accidental or unknown activat
  for(const stage of ['production','local','test','other',''])expect(()=>developmentPreparedQueries({WAKA_STAGE:stage,WAKA_DB_PREPARED_QUERIES:'1'})).toThrow();
  expect(()=>developmentPreparedQueries({WAKA_STAGE:'development',WAKA_DB_PREPARED_QUERIES:'true'})).toThrow();
  expect(developmentPreparedQueries({WAKA_STAGE:'production',WAKA_DB_PREPARED_QUERIES:'0'})).toBe(false);
+});
+
+it('forwards explicit or inherited simple options by identity without changing native Query semantics',async()=>{
+ const f=fixture(),db=preparedPostgresClient(f.root),params=[1];
+ const socket=vi.fn(async()=>{throw Error('Unexpected network connection');});
+ // Pinned3.4.9 supports socket at runtime but omits it from Options' type.
+ const optionsWithSocket={prepare:true,max:1,ssl:false,socket};
+ const native=postgres('postgres://fixture@127.0.0.1:56504/unused_test',optionsWithSocket);
+ expect(Object.getOwnPropertyDescriptor(native.options,'socket')?.value).toBe(socket);
+ const adapted=preparedPostgresClient(native),debug=vi.fn();native.options.debug=debug;
+ try{for(const value of [true,false,undefined])for(const inherited of [false,true]){
+  const options=inherited?Object.create({simple:value}):{simple:value};
+  db.unsafe('SELECT $1::integer',params,options);expect(f.calls.at(-1)?.[2]).toBe(options);
+  const expected=native.unsafe('SELECT $1::integer',params,options);
+  const actual=adapted.unsafe('SELECT $1::integer',params,options);
+  // Reading metadata does not await/execute the lazy native Query.
+  const view=(query:unknown)=>(query as {options:unknown}).options;
+  expect(view(actual)).toEqual(view(expected));expect(view(actual)).toEqual({prepare:false,simple:value});
+ }
+ expect(socket).not.toHaveBeenCalled();expect(debug).not.toHaveBeenCalled();
+ }finally{await native.end({timeout:1});}
 });

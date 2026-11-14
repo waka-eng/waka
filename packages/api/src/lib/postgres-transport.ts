@@ -21,11 +21,12 @@ export function preparedPostgresClient<T extends object>(client: T): T {
             const parameters = args[1], options = args[2];
             const validOptions = options === undefined ||
               options !== null && typeof options === 'object' && !Array.isArray(options);
-            // Explicit options, including inherited prepare:false/undefined,
-            // stay on the native path. Never replace or interpolate parameters.
+            // Explicit prepare/simple choices (including inherited or undefined
+            // values) stay on the native path. Never interpolate parameters.
             if (typeof args[0] === 'string' && Array.isArray(parameters) &&
                 parameters.length > 0 && validOptions &&
-                !('prepare' in ((options ?? {}) as object))) {
+                !('prepare' in ((options ?? {}) as object)) &&
+                !('simple' in ((options ?? {}) as object))) {
               return value.call(target, args[0], parameters, {
                 ...(options as object | undefined), prepare: true,
               });
