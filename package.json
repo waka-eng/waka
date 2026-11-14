@@ -83,7 +83,7 @@
     "overrides": {
       "@aws-sdk/xml-builder>fast-xml-parser": "5.12.0",
       "esbuild": "^0.25.12",
-      "opencontrol>hono": "4.13.14",
+      "opencontrol>hono": "4.13.16",
       "opencontrol>@modelcontextprotocol/sdk": "1.32.2",
       "proxy-addr": "2.0.8",
       "source-map-js": "1.2.2",

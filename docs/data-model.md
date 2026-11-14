@@ -196,8 +196,14 @@ the auth-hardening track.
 
 The one exception to "the human session is the account's admin": a session
 resolved from a **keeper key** (below) is bound to the human profile but
-carries `keyScoped`, and gets exactly two verbs on exactly one profile —
-**read and capture on its own**. Keep an inspiration; read the four
+carries `keyScoped` and a persisted `access` capability: `read_capture`
+(the compatible default for existing keys) or `read_only`. New read-only keys
+use the disjoint `waka_readonly_` + 48-hex format so older authentication rejects
+them instead of silently granting capture on code rollback. The prefix and stored
+capability must agree; legacy `waka_keeper_` keys remain read_capture. Both read only
+their own profile; only `read_capture` may capture inspirations or submit
+harvest proposals. `read_only` denies those writes at authentication and
+the access matrix, including direct HTTP requests. Keep an inspiration; read the four
 layers; nothing else. No curation (an inspiration kept through the key is
 edited at a browser), no other profiles (not even the account's own
 agents), no account decisions (`humanSessionsOnly` refuses it). The scope
@@ -211,6 +217,15 @@ A keeper key can identify and verify its own binding through
 `POST /api/auth/cli/verify` (matching profile only). These exact endpoints
 support MCP setup; they cannot start a login, mint credentials or administer
 profiles. Account and sibling memory remain inaccessible.
+
+Read-only means no memory mutation, not no bookkeeping or spend. Identity
+verification/last-used metadata and consultation receipts are still recorded.
+Semantic recall reserves at most ten embedding attempts per minute and sixty
+per hour per account, before dispatch, with one bounded attempt and no provider
+fallback/retry. Empty eligible vector sets spend nothing; provider failure is
+explicitly unavailable, never an invented match or semantic score.
+MCP `WAKA_MCP_MODE=read_only` additionally hides and refuses capture tools;
+this client mode does not replace a server-issued `read_only` credential.
 
 Settings exposes these personal credentials under **My profile · MCP**, with
 creation, one-time secret display, setup and revocation. Setup pins the human
@@ -1577,21 +1592,33 @@ words for the wrong layer. Disposition of every existing concept:
 | `GET /api/principles.md` | L4 | The canonical machine rendering: one deterministic markdown document, byte-identical for every consumer. |
 | `POST /api/harvest`, `GET /api/harvest`, `POST /:id/keep`, `POST /:id/decline` | before L1 | The harvest basket. Proposing is open to the human profile's own sessions, the keeper key included; reading and deciding are browser only. |
 | `GET /api/inspirations/deleted`, `POST /deleted/:id/restore`, `DELETE /deleted/:id` | beside L1 | The deleted shelf: thirty days of each owned profile's deletes, including attachments. Human browser sessions only. |
-| Cross-profile reads | L2/L3/L4 | An agent-bound session may read the human profile per the permission matrix (explicit target parameter; server-enforced). |
+| Cross-profile reads | L2/L3/L4 | MCP credentials read only their bound stack. Retained agent bindings never gain human/sibling memory through historical grants. |
 | `/api/wow-moments`, `/api/wow-status` | — | Deleted. |
 
 ### MCP tools after the cleanup
 
-Tools act as the session's bound profile by default; cross-profile access
-follows the permission matrix.
+Tools act only as the session's bound profile. New consent binds the human
+profile; retained agent credentials remain isolated. The one WAKA companion
+does not require creating or selecting an agent profile.
 
 | Tool | Maps to | Notes |
 |---|---|---|
 | `waka_add_inspiration` (was `waka_add_signal`) | `POST /api/inspirations` | Same `source: "app" \| "agent"` contract; target profile defaults per binding (human-directed saves go to the human profile). |
 | `waka_list_inspirations` (was `waka_list_signals`) | `GET /api/inspirations` | Episodic recall over raw captures. |
 | `waka_list_signals` (new meaning) | `GET /api/signals` | Distilled patterns — likely the most useful recall surface for agents. |
-| `waka_get_profile` | `GET /api/top-of-mind` | The bound profile's artifact; an agent session may also read the human profile's (read-only). |
-| `waka_get_principles` | `GET /api/principles.md` | Returns the canonical markdown document — the same bytes the endpoint serves — plus the structured list for tools that want fields. |
+| `waka_get_profile` | `GET /api/top-of-mind` | Only the bound profile's current artifact. |
+| `waka_get_principles` | `GET /api/principles.md` | One read of the canonical markdown, no refresh/model generation on GET. |
+| `waka_get_inspiration` | `GET /api/inspirations/:id` | Bounded owned current full text/reflections and safe media metadata; no object URLs or upload powers. |
+| `waka_get_signal` | `GET /api/signals/:id` | Current evidence and explicit pending/unsupported/locked/conflict qualifiers. |
+| `waka_get_capture_status` | save-request lookup + owned processing read | Reconcile the same request ID after an uncertain save; missing does not prove an in-flight save failed. |
+
+New MCP captures require a stable caller-generated UUID `requestId`, sent as
+`Idempotency-Key`. Replays must use the same ID and exact material. The save,
+processing receipt and identity commit atomically; neither retries nor status
+reads may invent completion. Old keyless clients retain their original contract.
+Recall matches only current supported signals with matching embedding model,
+dimensions and current statement hash, rechecked after provider HTTP. Locked
+unsupported words remain available as qualified detail, not standing matches.
 
 ---
 

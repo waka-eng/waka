@@ -51,6 +51,20 @@ Browser login has a separate `WAKA_HOME` per profile. Existing agent connections
 can be retested or disconnected from the connection list. Key activity alone
 is never presented as verified MCP access. Nothing polls for a connection.
 
+Production setup uses the parsed API origin `https://waka.im` to generate
+`waka-production-<profileId>`. Development and custom endpoints retain their
+existing names; the archive download host never selects a credential namespace.
+The same profile ID in two environments therefore does not overwrite a connection.
+Browser commands use `$HOME/.waka/production/profiles/<profileId>`. Production
+key configurations instead specify
+`/REPLACE_WITH_YOUR_HOME/.waka/production/key-only/profiles/<profileId>`.
+Replace that home placeholder with your absolute home directory locally, along
+with `YOUR_API_KEY`; MCP environment values do not expand `~` or `$HOME`.
+Keep this key-only directory empty of browser credentials. This isolates a missing
+key from normal existing dev/production browser credentials; it is not a universal
+key-required security mode if someone deliberately places credentials there.
+Setup never moves, copies or deletes existing credential files or MCP entries.
+
 - Browser approval creates a separate 30-day session for the chosen profile.
   The consent page locks an explicitly requested profile and describes its
   permissions. Revoking the connection removes that session; it does not erase
@@ -74,3 +88,126 @@ URL updates a client to the current parser; existing configurations retain their
 older URL. This review adds support for reading audio and decision captures
 without rejecting the entire inspiration list. It does not give the MCP capture
 tool an audio upload capability.
+
+
+## MCP 0.2 refresh (dev delivery only until separately promoted)
+
+Client and app changes are coordinated PRs targeting dev. The final app archive
+must be built from a clean client commit already published on origin/dev; no
+local-only source commit belongs in the distribution manifest. The packaging
+command refuses an unpublished final source. `--candidate-dir /tmp/<directory>`
+builds a test-only archive/manifest without modifying the distributed app files.
+Package it twice from identical source/lock/build inputs to verify reproducible
+bytes, run the real archive/API fixture, and retain prior archives unchanged.
+
+Upgrade/reinstall from the new immutable package URL. Existing installed archives
+do not automatically update, and old keyless capture remains non-idempotent.
+New capture/detail/read-only contracts require the refreshed API; there is no
+fallback to a broader token, old unsafe POST or another profile. New consent is
+human-only; retained legacy keys remain isolated. Never create an agent profile.
+
+Settings defaults NEW personal keys to read_only, while an omitted API `access`
+retains read_capture compatibility. Server-issued read_only denies memory writes
+through direct HTTP as well as MCP; WAKA_MCP_MODE=read_only additionally hides and
+denies capture and requires the matching backend capability. It does not revoke
+old keys or turn a broad credential into a narrow one. Authentication bookkeeping
+and consultation receipts are writes distinct from memory mutation.
+
+Recall admits only current supported signals with own compatible model/dimensions
+and current statement input hash. A fresh post-provider snapshot repeats source
+proofs and uses canonical independent review/inspiration witnesses, owner feedback
+and conflict qualifiers. Locked unsupported wording remains readable as qualified
+detail, not semantic proof. There is no backfill/re-embedding or repair on GET.
+Zero eligible compatible vectors means zero provider calls. Account-wide fixed
+windows permit 10 attempts/minute and 60/hour; reservations commit before one HTTP
+attempt. Failure consumes its attempt. 429 includes Retry-After; provider failure
+is 503 with a fixed unavailable code, no fabricated scores or raw provider error.
+These are attempt controls, not a universal dollar cap. The provider deadline is
+5s; client HTTP including body consumption is bounded to 15s and 4 MiB per request.
+The three-request cold capture-status path can therefore take up to 45s before
+client errors; there is no automatic polling or POST retry.
+
+Each new capture must retain its caller-generated UUID requestId and exact
+material. Idempotency-Key uses the existing atomic save ledger; a committed capture
+and pending processing are separate states. Lost acknowledgement, malformed success,
+body failure or uncertain 5xx means UNCERTAIN: reconcile the SAME ID. A missing
+committed row does not prove an in-flight save failed. Changed-material replay
+conflicts; no new ID is silently invented and no processing retry tool is exposed.
+
+Read tools provide on-demand owned inspiration text/reflections (shared max32,768
+characters with truncation flags), safe media identity only, and at most20 current
+inspiration/review examples per signal detail. No object keys, signed URLs, raw
+remote errors or arbitrary URL fetch is exposed. Source detail uses a repeatable
+snapshot; derived-signal detail records a consultation. List results remain
+previews. Owner-locked does not mean the owner authored every word.
+Principles returns the exact canonical markdown (including its empty state) with
+one memory HTTP read and one consultation, never generation/refresh on GET.
+
+Migration0087 adds keeper_keys.access with read_capture default/check and one
+count-only account_recall_limits row/account (account deletion cascades). No human
+memory/vector rewriting. The PG17 rehearsal must attest old key/hash/words,
+invalid-access refusal, monotonic nonfuture journal and idempotent ledger replay.
+Rollback keeps these additive fields/table. New read_only keys use the disjoint
+waka_readonly_ prefix: old authentication rejects them, rather than widening to
+capture. New auth requires the prefix and stored access to agree. Legacy keys
+retain waka_keeper_/read_capture; no real key is converted, rotated or revoked.
+
+No media/decision/proposal capture, chat/admin/edit/delete, model switch, extra
+metric series, cloud resources, secret changes or production rollout is included.
+
+
+### Rehearsed release evidence and limits
+
+The local PG17.11 baseline reproduced empty-set embedding, material-edited-during-
+HTTP serving and unsupported locked recall. Canonical recall regressions now
+exercise strict space/hash/current support, review-only witnesses counted once,
+current owner feedback and post-HTTP edit/delete/exclusion. Real account-counter
+contention/rollback/window fixtures test attempt controls. No provider quality,
+availability or dollar budget is inferred from deterministic fake vectors.
+
+The packed stdio client runs against real HTTP/auth and disposable PG with
+nonempty captures/signals/reading/Principles, not mocked tool registration.
+Malformed response after actual commit is uncertain; same-ID lookup/replay keeps
+one capture. Missing lookup is explicitly not proof of failure. Tests cover full
+owned detail/current qualifiers, foreign IDs, human read-only direct HTTP bypass,
+legacy binding/revocation and one Principles consultation. The retained old archive
+also reads/captures compatibly and cannot bypass new backend read-only enforcement.
+The old client repo's optional paid live suite (new agent creation/foreign-human
+reads) was obsolete; it is replaced by a separately opt-in loopback-only read
+fixture with no model or profile creation. Existing automatic offline login tests
+and real packaged binding/API tests remain. These are synthetic local proofs,
+not live user-content, provider, latency or production acceptance.
+
+The client production audit required only Hono4.13.16 and node-server2.1.6 override
+patches, matching the app. Primary advisories include
+[Hono middleware routing](https://github.com/advisories/GHSA-h7mg-cq63-vhpq),
+[node path parsing](https://github.com/advisories/GHSA-jpvv-r467-5p4w), and
+[node WebSocket upgrade errors](https://github.com/advisories/GHSA-qv5m-9pm6-hqp3).
+These HTTP middleware paths are not a demonstrated stdio exploit. The refreshed
+production dependency graph audits clean; older immutable archives are retained,
+not silently replaced. No extra runtime dependency or paid service is added.
+
+### Focused production backport preparation
+
+The same environment-independent 0.2.0 archive can serve production after the
+matching API version 2 backend is deployed. Pointing it at the older API alone
+does not provide the upgraded contract: capture/detail/status capability checks
+fail clearly, and the new recall response requires the server's explicit state.
+Existing installed immutable URLs continue to use their old client until upgraded.
+
+The focused candidate carries unchanged migrations 0086 and 0087 in order.
+0086 adds only the nullable `conversations.opening` column and its descriptor
+constraint as an inert prerequisite; no opening routes, UI, resolver or model
+context are activated. Drizzle's timestamp high-water rule would otherwise skip
+0086 forever after applying 0087 first. The journal and 0087 snapshot remain
+identical to dev, so a later reviewed promotion shares the same migration history.
+0087 adds keeper-key access and count-only recall limits. Existing key hashes,
+locked wording, captures and conversation IDs are retained. Code rollback must
+retain both additive migrations; it must not drop columns/tables or reset data.
+Old authentication rejects the disjoint read-only token prefix on rollback.
+
+Production model/provider routing, SST, workflows, secrets, monitoring and budget
+configuration stay at the production baseline. Local PG17 rehearsals and packed
+synthetic API tests are preparation evidence, not a production migration-ledger,
+provider-availability or user-connection attestation. Publication and deployment
+require separate review of the exact candidate, CI and production effects.

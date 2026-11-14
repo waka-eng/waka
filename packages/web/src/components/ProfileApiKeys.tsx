@@ -15,6 +15,7 @@ export function ProfileApiKeys({ profile, locale }: {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
   const [client, setClient] = useState<McpClient>('claude');
   const personal = profile.type === 'human';
+  const [access,setAccess]=useState<'read_only'|'read_capture'>('read_only');
   const [keys, setKeys] = useState<ApiProfileKey[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -46,7 +47,7 @@ export function ProfileApiKeys({ profile, locale }: {
     if (!label.trim() || busy) return;
     setBusy('create'); setError(''); setCopy(null);
     try {
-      const key = await createProfileKey(profile, label.trim());
+      const key = await createProfileKey(profile, label.trim(), personal ? access : "read_capture");
       if (!alive.current) return;
       const { secret: _secret, ...summary } = key;
       setKeys(rows => [summary, ...(rows ?? [])]); setFresh(key); setLabel('');
@@ -66,7 +67,7 @@ export function ProfileApiKeys({ profile, locale }: {
   };
   const apiUrl = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, '');
   const packageOrigin = publicWebOrigin();
-  const config = mcpKeyConfig(client, profile.id, apiUrl, packageOrigin);
+  const config = mcpKeyConfig(client, profile.id, apiUrl, packageOrigin, fresh?.access ?? (personal ? access : "read_capture"));
   const install = mcpSetupCommands({ profile, apiUrl, packageOrigin, installed: false, client, scope: 'user' })[0]!;
   return <div className="waka-api-keys">
     <div className="waka-session-list-heading">
@@ -76,6 +77,10 @@ export function ProfileApiKeys({ profile, locale }: {
     <p className="waka-settings-note">{say(personal ? 'profilePersonalMcpHint' : 'profileApiKeysHint')}</p>
     <h4 className="waka-mcp-instruction-title">{say('profileApiKeysCreateStep')}</h4>
     <p className="waka-settings-note">{say('profileApiKeysCreateHint')}</p>
+    {personal ? <label className="waka-mcp-choice"><span>{say('profileMcpAccess')}</span>
+      <select value={access} disabled={busy !== null || fresh !== null} onChange={event=>setAccess(event.target.value as typeof access)}>
+        <option value="read_only">{say('profileMcpReadOnly')}</option><option value="read_capture">{say('profileMcpReadCapture')}</option>
+      </select><span>{say('profileMcpReadOnlyNote')}</span></label> : null}
     {error ? <p className="waka-account-failed" role="alert">{error}</p> : null}
     {loading ? <p className="waka-settings-note" role="status">{say('worldInspirationsLoad')}</p> : null}
     {fresh ? <div className="waka-session-confirm">
@@ -104,7 +109,7 @@ export function ProfileApiKeys({ profile, locale }: {
         <option value="claude">Claude Code / JSON</option><option value="codex">Codex</option>
       </select></label>
       <h4 className="waka-mcp-instruction-title">{say('profileMcpPromptTitle')}</h4>
-      <McpInstallPrompt locale={locale} profile={profile} apiUrl={apiUrl} packageOrigin={packageOrigin} client={client} scope="project" authMethod="key" />
+      <McpInstallPrompt locale={locale} profile={profile} apiUrl={apiUrl} packageOrigin={packageOrigin} client={client} scope="project" authMethod="key" memoryAccess={fresh?.access ?? (personal ? access : "read_capture")} />
       <details className="waka-mcp-key-setup">
         <summary>{say('profileMcpManualInstall')}</summary>
         <ol className="waka-mcp-key-steps">
@@ -137,7 +142,7 @@ export function ProfileApiKeys({ profile, locale }: {
     </> : null}
     <ul className="waka-session-list" aria-busy={loading}>
       {keys?.map(key => <li key={key.id} className="waka-session-card">
-        <div className="waka-session-card-heading"><strong>{key.label || say('profileApiKeysSecret')}</strong><span>{key.prefix}…</span></div>
+        <div className="waka-session-card-heading"><strong>{key.label || say('profileApiKeysSecret')}</strong>{personal ? <span>{say(key.access === "read_only" ? "profileMcpReadOnly" : "profileMcpReadCapture")}</span> : null}<span>{key.prefix}…</span></div>
         <p className="waka-settings-note">{say('profileConnectionLastUsed')}: {key.lastUsedAt
           ? new Date(key.lastUsedAt).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' }) : say('profileApiKeysNeverUsed')}</p>
         {confirm === key.id ? <div className="waka-session-confirm">

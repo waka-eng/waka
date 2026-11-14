@@ -31,11 +31,13 @@ export const MAX_KEEPER_KEYS = 5;
 
 const issueSchema = z
   .object({
+    access: z.enum(["read_capture", "read_only"]).default("read_capture"),
     label: z.string().trim().min(1).max(120).optional(),
   })
   .strict();
 
 export interface KeeperKeyView {
+  access: "read_capture" | "read_only";
   id: string;
   profileId: string;
   prefix: string;
@@ -84,7 +86,7 @@ export function createKeeperKeyRoutes(deps: KeeperKeyRouteDependencies = {}): Ho
         return c.json({ error: `You may hold ${MAX_KEEPER_KEYS} keys` }, 409);
       }
 
-      const minted = await mintKeeperKey();
+      const minted = await mintKeeperKey(parsed.data.access);
       const [row] = await tx
         .insert(keeperKeys)
         .values({
@@ -92,6 +94,7 @@ export function createKeeperKeyRoutes(deps: KeeperKeyRouteDependencies = {}): Ho
           tokenHash: minted.tokenHash,
           prefix: minted.prefix,
           label: parsed.data.label ?? null,
+          access: parsed.data.access,
         })
         .returning({ id: keeperKeys.id, createdAt: keeperKeys.createdAt });
 
@@ -104,6 +107,7 @@ export function createKeeperKeyRoutes(deps: KeeperKeyRouteDependencies = {}): Ho
             secret: minted.secret,
             prefix: minted.prefix,
             label: parsed.data.label ?? null,
+            access: parsed.data.access,
             createdAt: row!.createdAt.toISOString(),
           },
         },
@@ -122,6 +126,7 @@ export function createKeeperKeyRoutes(deps: KeeperKeyRouteDependencies = {}): Ho
         profileId: keeperKeys.profileId,
         prefix: keeperKeys.prefix,
         label: keeperKeys.label,
+        access: keeperKeys.access,
         createdAt: keeperKeys.createdAt,
         lastUsedAt: keeperKeys.lastUsedAt,
         revokedAt: keeperKeys.revokedAt,
@@ -132,6 +137,7 @@ export function createKeeperKeyRoutes(deps: KeeperKeyRouteDependencies = {}): Ho
 
     const keys: KeeperKeyView[] = rows.map((row) => ({
       id: row.id,
+      access: row.access,
       profileId: row.profileId,
       prefix: row.prefix.slice(0, KEEPER_KEY_DISPLAY_CHARS),
       label: row.label,

@@ -603,6 +603,20 @@
       "when": 1794391200000,
       "tag": "0085_account_chat_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1794577200000,
+      "tag": "0086_conversation_opening",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1794650915751,
+      "tag": "0087_mcp_access_and_recall_limits",
+      "breakpoints": true
     }
   ]
 }

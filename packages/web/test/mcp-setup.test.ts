@@ -62,7 +62,8 @@ it('provides a Korean key setup prompt without requesting a key in chat', () => 
   expect(prompt).toContain(mcpPackageUrl('https://waka.im'));
   expect(prompt).toContain('키를 채팅에 붙여 넣으라고 요청하거나 출력하지 마세요.');
   expect(prompt).toContain('"profileId": "agent-noah"');
-  expect(prompt).not.toContain('WAKA_HOME');
+  expect(prompt).toContain('WAKA_HOME');
+  expect(prompt).toContain('/REPLACE_WITH_YOUR_HOME/.waka/production/key-only/profiles/agent-noah');
 });
 
 it('downloads from the public web origin when the API is hosted separately', () => {
@@ -84,5 +85,47 @@ it('makes API-key installation project-scoped for both supported clients', () =>
     expect(prompt).toContain('current project only');
     expect(prompt).not.toContain('user configuration across sessions');
     expect(mcpKeyConfig(client,profile.id,options.apiUrl)).toContain('YOUR_API_KEY');
+  }
+});
+
+it('operational read-only setup names both backend capability and client mode without credentials',()=>{
+  const prompt=mcpSetupPrompt({...options,locale:'en-US',authMethod:'key',memoryAccess:'read_only'});
+  expect(prompt).toContain('read_only');expect(prompt).toContain('WAKA_MCP_MODE');
+  const config=JSON.parse(mcpKeyConfig('claude',profile.id,options.apiUrl,options.apiUrl,'read_only'));
+  expect(config.mcpServers[`waka-${profile.id}`].env.WAKA_MCP_MODE).toBe('read_only');
+});
+
+it('keeps production and development with the same profile in separate entries and credential homes', () => {
+  const prod = { ...options, apiUrl: 'https://waka.im' };
+  const commands = mcpSetupCommands(prod);
+  expect(commands[1]).toContain('WAKA_HOME="$HOME/.waka/production/profiles/agent-noah"');
+  expect(commands[2]).toContain('mcp_servers."waka-production-agent-noah"');
+  expect(mcpSetupCommands(options)[1]).toContain('WAKA_HOME="$HOME/.waka/profiles/agent-noah"');
+  for (const client of ['claude', 'codex'] as const) {
+    const config = mcpKeyConfig(client, profile.id, prod.apiUrl);
+    expect(config).toContain('waka-production-agent-noah');
+    expect(config).toContain('/REPLACE_WITH_YOUR_HOME/.waka/production/key-only/profiles/agent-noah');
+    expect(config).not.toContain('$HOME');
+    expect(mcpKeyConfig(client, profile.id, options.apiUrl)).not.toContain('key-only');
+  }
+  for (const authMethod of ['browser', 'key'] as const) {
+    const prompt = mcpSetupPrompt({ ...prod, locale: 'en-US', authMethod, memoryAccess: 'read_only' });
+    const data = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(prompt)![1]!);
+    const home = `/REPLACE_WITH_YOUR_HOME/.waka/production/${authMethod === 'key' ? 'key-only/' : ''}profiles/agent-noah`;
+    expect(data.serverName).toBe('waka-production-agent-noah');
+    expect(data.serverEnvironment).toEqual({ WAKA_HOME: home, WAKA_MCP_MODE: 'read_only' });
+    if (authMethod === 'browser') expect(data.login.env).toEqual({ WAKA_HOME: home });
+    else expect(data.login).toBeUndefined();
+    expect(prompt).toContain('Preserve existing MCP entries and credential files');
+  }
+});
+
+it('chooses the production namespace by parsed API origin, never the archive origin or a lookalike host', () => {
+  const parse = (apiUrl: string, packageOrigin: string) => JSON.parse(mcpKeyConfig('claude', profile.id, apiUrl, packageOrigin)).mcpServers;
+  expect(Object.keys(parse('https://waka.im/', 'https://dev.waka.im'))).toEqual(['waka-production-agent-noah']);
+  for (const apiUrl of ['https://dev.waka.im', 'https://api.example.test', 'https://waka.im.example.test', 'http://waka.im']) {
+    const servers = parse(apiUrl, 'https://waka.im');
+    expect(Object.keys(servers)).toEqual(['waka-agent-noah']);
+    expect(servers['waka-agent-noah'].env.WAKA_HOME).toBeUndefined();
   }
 });
