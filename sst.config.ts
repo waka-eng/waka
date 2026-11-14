@@ -337,6 +337,7 @@ export default $config({
       environment: {
         ...runtimeEnvironment,
         WAKA_BACKGROUND_JOB_CRON_LIMIT: "25",
+        ...(isDevelopmentDomain ? { WAKA_DB_PREPARED_QUERIES: "1" } : {}),
         WAKA_BACKGROUND_JOB_WAKE_GROUP: jobWakeGroup.name,
         WAKA_BACKGROUND_JOB_WAKE_ROLE: jobWakeRole.arn,
       },
@@ -403,6 +404,7 @@ export default $config({
         // Which function to wake when work is enqueued. Absent (local, tests)
         // means the in-process drain owns it instead.
         WAKA_BACKGROUND_WORKER_FUNCTION: backgroundWorker.name,
+        ...(isDevelopmentDomain ? { WAKA_DB_PREPARED_QUERIES: "1" } : {}),
         WAKA_BACKGROUND_JOB_WAKE_GROUP: jobWakeGroup.name,
       },
       // Waking the worker is the whole point of the push model; without this

@@ -67,11 +67,13 @@ it('limits the development Actions key to the three setup/audit steps',()=>{
 function auditFixture(){
  const outputs={apiFunctionName:'api',backgroundWorkerFunctionName:'worker',principleRefreshFunctionName:'principle'},expected={stage:'development',openAi:'PRIVATE_KEY',database:'PRIVATE_DB',replies:'1'};
  const env={...profile,OPENAI_API_KEY:expected.openAi,DB_CONNECTION_URL:expected.database,WAKA_STAGE:'development',WAKA_CONVERSATION_REPLIES:'1',SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'development'}),WAKA_BACKGROUND_WORKER_FUNCTION:'worker'};
- const read=(args:string[])=>args[0]==='sts'?{Account:'123456789012'}:{FunctionName:args.at(-1),FunctionArn:`arn:aws:lambda:us-west-2:123456789012:function:${args.at(-1)}`,Environment:{Variables:env}};return {outputs,expected,env,read};
+ const transport:Record<string,unknown>={api:'1',worker:'1'};
+ const read=(args:string[])=>args[0]==='sts'?{Account:'123456789012'}:{FunctionName:args.at(-1),FunctionArn:`arn:aws:lambda:us-west-2:123456789012:function:${args.at(-1)}`,Environment:{Variables:{...env,...(transport[String(args.at(-1))]===undefined?{}:{WAKA_DB_PREPARED_QUERIES:transport[String(args.at(-1))]})}}};return {outputs,expected,env,transport,read};
 }
 it('audits all three actual model-runtime bindings and refuses missing/wrong profile/key/identity',async()=>{
  const {auditDevelopmentGpt}=await import(/* @vite-ignore */resolve(root,'scripts/dev-gpt-config-audit.mjs'));
- expect(auditDevelopmentGpt(auditFixture()).passed).toBe(true);
+ const accepted=auditDevelopmentGpt(auditFixture());expect(accepted.passed).toBe(true);expect(Object.keys(accepted.checks)).toHaveLength(22);
+ for(const [role,value] of [['api',undefined],['api','0'],['worker','true'],['principle','1']]){const f=auditFixture();f.transport[String(role)]=value;const report=auditDevelopmentGpt(f);expect(report.passed).toBe(false);expect(report.checks[role==='principle'?'principleRefreshDatabaseTransport':role+'DatabaseTransport']).toBe(false);}
  for(const patch of [{OPENAI_API_KEY:'wrong'},{WAKA_MODEL_CHAT:'deepseek/deepseek-v4.1-flash-1017'},{WAKA_MODEL_SYNTHESIZE:'gpt-6.1-terra'},{WAKA_GENERATION_PROVIDER:'openrouter'},{SST_RESOURCE_App:'{}'}]){const f=auditFixture();Object.assign(f.env,patch);const r=auditDevelopmentGpt(f);expect(r.passed).toBe(false);expect(JSON.stringify(r)).not.toMatch(/PRIVATE_KEY|PRIVATE_DB/);}
  const f=auditFixture();expect(auditDevelopmentGpt({...f,read:()=>({})}).passed).toBe(false);
 });
@@ -80,4 +82,16 @@ it('executes the audit CLI with isolated fake AWS and emits valid safe failure/s
  auditDevelopmentGpt({...f,read:(args:string[])=>{const json=f.read(args);responses[JSON.stringify(args)]={json};return json;}});
  const r=executeAuditCli('dev-gpt-config-audit.mjs',{outputs:f.outputs,responses,env:{OPENAI_API_KEY:f.expected.openAi,DB_CONNECTION_URL:f.expected.database,WAKA_CONVERSATION_REPLIES:'1',SST_STAGE:'development'}});
  expect(r.status).toBe(0);expect(JSON.parse(r.stdout).passed).toBe(true);expect(r.stdout+r.stderr).not.toMatch(/PRIVATE_KEY|PRIVATE_DB/);
+});
+
+it('executes actual API/worker environment expressions; default/prod and other consumers stay unprepared',()=>{
+ function environment(name:string){let value='';const walk=(n:ts.Node)=>{if(ts.isVariableDeclaration(n)&&n.name.getText(ast)===name&&n.initializer&&ts.isNewExpression(n.initializer)){const options=n.initializer.arguments?.[1];if(options&&ts.isObjectLiteralExpression(options))for(const p of options.properties)if(ts.isPropertyAssignment(p)&&p.name.getText(ast)==='environment')value=p.initializer.getText(ast);}ts.forEachChild(n,walk);};walk(ast);if(!value)throw Error('Missing runtime environment');return value;}
+ for(const isDevelopmentDomain of [false,true])for(const name of ['api','backgroundWorker']){
+  const env=Function('isDevelopmentDomain','runtimeEnvironment','jobWakeGroup','jobWakeRole','backgroundWorker',`return (${environment(name)});`)(isDevelopmentDomain,{WAKA_STAGE:isDevelopmentDomain?'development':'production'},{name:'group'},{arn:'role'},{name:'worker'});
+  expect(env.WAKA_DB_PREPARED_QUERIES).toBe(isDevelopmentDomain?'1':undefined);
+ }
+ expect(initializer('runtimeEnvironment')).not.toContain('WAKA_DB_PREPARED_QUERIES');
+ expect(initializer('principleRefresh')).not.toContain('WAKA_DB_PREPARED_QUERIES');
+ // A new opt-in elsewhere must be explicitly reviewed, never inherited.
+ expect(source.match(/WAKA_DB_PREPARED_QUERIES:/g)).toHaveLength(2);
 });

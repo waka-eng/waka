@@ -15,6 +15,7 @@ export function auditDevelopmentGpt({outputs,expected,read}){
   checks[role+'Database']=!!expected.database&&env.DB_CONNECTION_URL===expected.database;
   checks[role+'Profile']=Object.entries(profile).every(([key,value])=>env[key]===value);
   checks[role+'Chat']=env.WAKA_CONVERSATION_REPLIES===expected.replies;
+  checks[role+'DatabaseTransport']=role==='api'||role==='worker'?env.WAKA_DB_PREPARED_QUERIES==='1':env.WAKA_DB_PREPARED_QUERIES===undefined||env.WAKA_DB_PREPARED_QUERIES==='0';
  }
  checks.workerPointer=read(['lambda','get-function-configuration','--function-name',outputs.apiFunctionName]).Environment?.Variables?.WAKA_BACKGROUND_WORKER_FUNCTION===outputs.backgroundWorkerFunctionName;
  return {stage:'development',observedAt:new Date().toISOString(),checks,resources,passed:Object.values(checks).every(v=>v===true),liveModelCapabilityExercised:false,embeddingParityApproved:false};
