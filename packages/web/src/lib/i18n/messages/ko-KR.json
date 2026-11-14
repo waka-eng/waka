@@ -672,7 +672,7 @@
   "profileMcpSetupTab": "MCP 설정",
   "profilePersonalTitle": "나",
   "profilePersonalMcpTitle": "나 · MCP",
-  "profilePersonalMcpHint": "개인 API 키로 앱에서 내 메모를 읽고 새로 남길 수 있어요. 메모 수정·삭제나 계정 관리는 할 수 없어요. 키를 삭제하면 접근이 중단돼요.",
+  "profilePersonalMcpHint": "개인 키는 내 기억에만 접근해요. 읽기만 하려면 읽기 전용, 새 메모도 남기려면 읽기 및 저장을 선택하세요. 어느 쪽도 메모 수정·삭제나 계정 관리를 할 수 없어요.",
   "profilePersonalMcpLoadError": "내 프로필을 불러오지 못했어요. 다시 시도해 주세요.",
   "profileMcpAccess": "기억 접근 권한",
   "profileMcpReadOnly": "읽기 전용",

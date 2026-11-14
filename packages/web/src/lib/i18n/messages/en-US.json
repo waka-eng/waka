@@ -672,7 +672,7 @@
   "profileMcpSetupTab": "MCP setup",
   "profilePersonalTitle": "You",
   "profilePersonalMcpTitle": "You · MCP",
-  "profilePersonalMcpHint": "A personal API key lets apps read your inspirations and save new ones. It can’t edit or delete inspirations or manage your account. Delete it to stop access.",
+  "profilePersonalMcpHint": "Personal keys read only your memory. Choose Read only for a reader, or Read and capture to allow new saves; neither can edit or delete inspirations or manage your account.",
   "profilePersonalMcpLoadError": "Couldn’t load your profile. Try again.",
   "profileMcpAccess": "Memory access",
   "profileMcpReadOnly": "Read only",
