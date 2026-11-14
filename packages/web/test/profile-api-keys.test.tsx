@@ -83,7 +83,8 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
   expect(host.textContent).toContain('You · You');
   expect(calls.some(c => c.path.includes('keys'))).toBe(false);
   await click('API keys');
-  expect(host.textContent).toContain('can’t edit or delete inspirations or manage your account');
+  expect(host.textContent).toContain('neither can edit or delete inspirations or manage your account');
+  expect(host.textContent).toContain('Choose Read only for a reader, or Read and capture to allow new saves');
   expect(host.textContent).toContain('Personal laptop');
   for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent name']) expect(host.textContent).not.toContain(hidden);
   expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys']);
