@@ -57,3 +57,4 @@ export * from "./schema-feedback";
 export * from "./schema-background-job-runs";
 
 export * from './schema-account-chat-limits.js';
+export * from './schema-account-recall-limits.js';

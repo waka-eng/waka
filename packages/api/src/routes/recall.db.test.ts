@@ -16,10 +16,13 @@
  * because the subject is the door and the arithmetic, not Gemini. The
  * database is real.
  */
+import {randomUUID} from "node:crypto";
+import {createReviewSession} from "../lib/review-sessions.js";
 import { Hono } from "hono";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
+import {hashEmbeddingInput} from "../lib/inspiration-embeddings.js";
 import type { GeminiEmbeddingClient } from "../lib/inspiration-embeddings.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
@@ -74,7 +77,7 @@ async function seedSignal(
   await t.sql`
     INSERT INTO signal_embeddings (profile_id, signal_id, model, dimensions, input_hash, embedding)
     VALUES (${profileId}, ${signal.id}, 'bench-model', ${embedding.length},
-            ${`hash-${signal.id}`}, ${JSON.stringify(embedding)}::jsonb)`;
+            ${hashEmbeddingInput(statement)}, ${JSON.stringify(embedding)}::jsonb)`;
   const [insp] = await t.sql`
     INSERT INTO inspirations (profile_id, text) VALUES (${profileId}, ${`behind: ${statement}`}) RETURNING id`;
   await t.sql`
@@ -118,6 +121,7 @@ function appFor(person: Person, client: GeminiEmbeddingClient): Hono {
       getDatabase: () => t.db as never,
       authMiddleware: authAs(person.session) as never,
       embedClient: client,
+      dimensions: 3,
     }),
   );
   return app as unknown as Hono;
@@ -186,4 +190,100 @@ describe("recall — ask the memory", () => {
     );
     expect(res.status).toBe(404);
   });
+
+  it('does not spend on an empty eligible vector set', async () => {
+    const person = await seedPerson('Empty');
+    const embedder = scriptedEmbedder(NEAR);
+    expect((await appFor(person, embedder.client).request('/api/recall?q=tools')).status).toBe(200);
+    expect(embedder.calls).toHaveLength(0);
+  });
+
+  it('does not serve an old claim after its source changes during provider HTTP', async () => {
+    const person = await seedPerson('Edited');
+    const id = await seedSignal(person.profileId, 'A formerly supported claim', NEAR);
+    const client = {model:'bench-model', embed:async () => {
+      await t.sql`UPDATE inspirations SET text='Changed source words' WHERE profile_id=${person.profileId}`;
+      return NEAR;
+    }};
+    const result = await (await appFor(person,client).request('/api/recall?q=tools')).json() as {recall:{matches:Array<{signalId:string}>}};
+    expect(result.recall.matches.map((m:{signalId:string})=>m.signalId)).not.toContain(id);
+  });
+
+  it('preserves but does not recall human-locked unsupported words as standing evidence', async () => {
+    const person=await seedPerson('Locked');
+    const id=await seedSignal(person.profileId,'Exact human words',NEAR);
+    await t.sql`UPDATE signals SET locked_at=now(),unsupported_at=now() WHERE id=${id}`;
+    const result=await (await appFor(person,scriptedEmbedder(NEAR).client).request('/api/recall?q=tools')).json() as {recall:{matches:Array<{signalId:string}>}};
+    expect(result.recall.matches).toEqual([]);
+    expect((await t.sql`SELECT statement FROM signals WHERE id=${id}`)[0]!.statement).toBe('Exact human words');
+  });
+  it.each(['model','dimensions','hash'] as const)('refuses incompatible vector %s before spending',async kind=>{
+    const p=await seedPerson(kind);const id=await seedSignal(p.profileId,'Current statement',NEAR);
+    if(kind==='model')await t.sql`UPDATE signal_embeddings SET model='another-space' WHERE signal_id=${id}`;
+    if(kind==='dimensions')await t.sql`UPDATE signal_embeddings SET dimensions=2 WHERE signal_id=${id}`;
+    if(kind==='hash')await t.sql`UPDATE signal_embeddings SET input_hash=${hashEmbeddingInput('old words')} WHERE signal_id=${id}`;
+    const fake=scriptedEmbedder(NEAR);
+    const r=await (await appFor(p,fake.client).request('/api/recall?q=tools')).json() as {recall:{state:string;matches:unknown[]}};
+    expect(r.recall).toMatchObject({state:'empty',matches:[]});expect(fake.calls).toHaveLength(0);
+    expect(await t.sql`SELECT * FROM account_recall_limits WHERE account_id=${p.session.account.id}`).toHaveLength(0);
+  });
+  it.each(['delete','exclude','statement','vector'] as const)('rechecks %s after HTTP without rewriting owner words',async mode=>{
+    const p=await seedPerson(mode);const id=await seedSignal(p.profileId,'Original claim',NEAR);
+    const client={model:'bench-model',embed:async()=>{
+      if(mode==='delete')await t.sql`DELETE FROM inspirations WHERE profile_id=${p.profileId}`;
+      if(mode==='exclude')await t.sql`UPDATE inspirations SET memory_excluded_at=now() WHERE profile_id=${p.profileId}`;
+      if(mode==='statement')await t.sql`UPDATE signals SET statement='Owner replacement',locked_at=now() WHERE id=${id}`;
+      if(mode==='vector')await t.sql`UPDATE signal_embeddings SET input_hash='not-current' WHERE signal_id=${id}`;
+      return NEAR;
+    }};
+    const r=await (await appFor(p,client).request('/api/recall?q=tools')).json() as {recall:{matches:unknown[]}};
+    expect(r.recall.matches).toEqual([]);
+    expect((await t.sql`SELECT statement FROM signals WHERE id=${id}`)[0]!.statement).toBe(mode==='statement'?'Owner replacement':'Original claim');
+  });
+  it('never invents semantic scores or exposes provider text on HTTP failure',async()=>{
+    const p=await seedPerson('Failure');await seedSignal(p.profileId,'A current claim',NEAR);
+    const r=await appFor(p,{model:'bench-model',embed:async()=>{throw new Error('PRIVATE_CANARY_secret_url_prompt');}}).request('/api/recall?q=tools');
+    expect(r.status).toBe(503);const text=await r.text();expect(text).toContain('recall_embedding_unavailable');expect(text).not.toContain('PRIVATE_CANARY');
+    expect(await t.sql`SELECT minute_count,hour_count FROM account_recall_limits WHERE account_id=${p.session.account.id}`).toEqual([{minute_count:1,hour_count:1}]);
+    expect(await t.sql`SELECT id FROM consultations WHERE profile_id=${p.profileId}`).toHaveLength(1);
+  });
+  it('ignores wrong-model rows even when they precede a valid current vector',async()=>{
+    const p=await seedPerson('Two models');const id=await seedSignal(p.profileId,'Current claim',NEAR);
+    await t.sql`INSERT INTO signal_embeddings(profile_id,signal_id,model,dimensions,input_hash,embedding)
+      VALUES(${p.profileId},${id},'aaaa-wrong',3,${hashEmbeddingInput('Current claim')},${JSON.stringify(FAR)}::jsonb)`;
+    const r=await (await appFor(p,scriptedEmbedder(NEAR).client).request('/api/recall?q=tools')).json() as {recall:{matches:Array<{signalId:string;locked:boolean;unsupported:boolean}>}};
+    expect(r.recall.matches).toMatchObject([{signalId:id,locked:false,unsupported:false}]);
+  });
+
+  it('serves review-only witnesses once per independent unit and applies only the current owner verdict',async()=>{
+    const p=await seedPerson('Review');const id=await seedSignal(p.profileId,'Current review claim',NEAR);
+    const sources=await t.sql`SELECT id FROM inspirations WHERE profile_id=${p.profileId}`;
+    const source=sources[0]!.id as string;
+    await t.sql`DELETE FROM signal_evidence WHERE signal_id=${id}`;
+    const session=(await createReviewSession(t.db as never,p.profileId,{id:randomUUID(),inspirationIds:[source]}))!;
+    const answers:string[]=[];
+    for(let n=0;n<2;n++){
+      const answer=randomUUID();answers.push(answer);
+      await t.sql`INSERT INTO review_answers(id,profile_id,session_id,question_job_id,input_hash,context_hash,question,answer,source_count)
+        VALUES(${answer},${p.profileId},${session.id},${randomUUID()},'fixture','fixture','What stayed?','A synthetic human answer',1)`;
+      await t.sql`INSERT INTO review_answer_sources(profile_id,session_id,answer_id,inspiration_id,source_revision,referenced)
+        SELECT ${p.profileId},${session.id},${answer},${source},personal_revision,true FROM inspiration_revisions WHERE inspiration_id=${source}`;
+      await t.sql`INSERT INTO signal_review_evidence(profile_id,signal_id,session_id,answer_id,statement_revision,answer_revision,source_count,question_context_included)
+        SELECT a.profile_id,${id},a.session_id,a.id,s.statement_revision,a.revision,1,review_question_context_current(a.profile_id,a.session_id,a.id)
+        FROM review_answers a JOIN signals s ON s.profile_id=a.profile_id AND s.id=${id} WHERE a.id=${answer}`;
+      await t.sql`INSERT INTO signal_review_evidence_sources(profile_id,signal_id,answer_id,inspiration_id,material_revision,referenced)
+        SELECT ${p.profileId},${id},${answer},${source},personal_revision,true FROM inspiration_revisions WHERE inspiration_id=${source}`;
+    }
+    const read=async()=>await (await appFor(p,scriptedEmbedder(NEAR).client).request('/api/recall?q=tools')).json() as {recall:{matches:Array<{signalId:string;evidenceCount:number;confidence:number}>}};
+    const first=await read();expect(first.recall.matches).toMatchObject([{signalId:id,evidenceCount:1}]);
+    const stranger=await seedPerson('Other');
+    await t.sql`INSERT INTO feedback(profile_id,target_type,target_id,value) VALUES(${stranger.profileId},'signal',${id},'true')`;
+    expect((await read()).recall.matches[0]!.confidence).toBe(first.recall.matches[0]!.confidence);
+    await t.sql`INSERT INTO feedback(profile_id,target_type,target_id,value) VALUES(${p.profileId},'signal',${id},'true')`;
+    expect((await read()).recall.matches[0]!.confidence).toBeGreaterThan(first.recall.matches[0]!.confidence);
+    await t.sql`UPDATE review_answers SET answer='Changed answer' WHERE id=${answers[0]!}`;
+    const fake=scriptedEmbedder(NEAR);const response=await (await appFor(p,fake.client).request('/api/recall?q=tools')).json() as {recall:{matches:unknown[]}};
+    expect(response.recall.matches).toEqual([]);expect(fake.calls).toHaveLength(0);
+  });
+
 });

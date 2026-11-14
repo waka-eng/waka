@@ -134,6 +134,7 @@ export async function meHandler(c: Context<AuthEnv>): Promise<Response> {
   return c.json({
     account: serializeAccount(identity.account),
     profile: serializeProfile(identity.profile),
+    mcp: { version: 2, memoryAccess: c.get("session").keeperAccess ?? (c.get("session").keyScoped ? "read_capture" : "session") },
   });
 }
 

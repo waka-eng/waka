@@ -147,7 +147,7 @@ export interface SignalSummary {
   confidence: number;
   evidenceCount: number;
   lastEvidenceAt: string | null;
-  /** A human edited the statement; regeneration will not rewrite it. */
+  /** Owner-locked wording; generation must not rewrite it (not authorship). */
   locked: boolean;
   /** Locked, but every capture behind it is gone. */
   unsupported: boolean;
@@ -183,6 +183,8 @@ export interface SignalSummary {
 }
 
 export interface SignalEvidenceItem {
+  /** Explicitly false for withdrawn/superseded source support. */
+  current: boolean;
   inspirationId: string;
   /** A bounded excerpt of the capture — enough to recognize, not the whole. */
   preview: string;
@@ -238,7 +240,7 @@ function truncatePreview(value: string): string {
  * correlated subqueries on the signal row: two bounded lookups keyed by the
  * ids already in hand, instead of a count that re-runs for every row.
  */
-async function decorateSignals(
+export async function decorateSignals(
   db: WakaDb,
   ownerProfileId: string,
   rows: Array<{
@@ -700,6 +702,7 @@ export async function getProfileSignal(
       const quote = evidence.current === true ? sources.map((text) => quoteForEvidence(evidence.quote, { text, enrichment: null }, 500)).find(Boolean) ?? null : null;
       return {
         inspirationId: evidence.inspirationId,
+        current: evidence.current === true,
         preview: truncatePreview(evidence.text),
         reason: evidence.current === true && evidence.material ? evidence.reason : null,
         quote,
@@ -1119,11 +1122,12 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     );
     if (!scope.ok) return c.json(scope.body, scope.status);
 
-    const signal = await getSignal(db, {
+    const signal = await db.transaction(tx => getSignal(tx as unknown as WakaDb, {
       profileId: scope.profileId,
       signalId: parsedParams.data.signalId,
-    });
+    }), { isolationLevel: 'repeatable read', accessMode: 'read only' });
     if (!signal) return c.json({ error: "Signal not found" }, 404);
+    await recordConsultation(db,{profileId:scope.profileId,session:c.get("session"),surface:"signals"});
     return c.json({ signal }, 200);
   });
 
@@ -1278,10 +1282,10 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
 
     await wakeCommittedBackgroundJobs();
 
-    const signal = await getSignal(db, {
+    const signal = await db.transaction(tx => getSignal(tx as unknown as WakaDb, {
       profileId: scope.profileId,
       signalId: parsedParams.data.signalId,
-    });
+    }), { isolationLevel: 'repeatable read', accessMode: 'read only' });
     return c.json({ signal }, 200);
   });
 
