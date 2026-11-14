@@ -2,6 +2,8 @@
 import {fetchModelWithTimeout} from './gemini-http.js';
 import {buildOpenRouterHeaders,getOpenRouterApiKey,openRouterPrivacyPreferences,OpenRouterHttpError} from './openrouter-http.js';
 import {recordModelUsage} from './model-usage.js';
+import {EMBEDDING_2_SPACE,formatEmbedding2Input} from './embedding-2-space.js';
+import {cosineSimilarity} from '../scoring/vector.js';
 import {GEMINI_EMBEDDING_DIMENSIONS,validateEmbeddingVector,type EmbeddingTaskType} from './inspiration-embeddings.js';
 export const OPENROUTER_AUDIO_MODEL='google/gemini-3.5-transcribe';
 const OR_EMBEDDING_MODEL='google/gemini-embedding-001';
@@ -44,5 +46,33 @@ export class OpenRouterEmbeddingCandidate {
     if(!object(raw)||raw.model!==OR_EMBEDDING_MODEL||!Array.isArray(raw.data)||raw.data.length!==1)throw new Error('OpenRouter embedding response was invalid');
     const row=raw.data[0];if(!object(row)||row.index!==0||!Array.isArray(row.embedding)||!row.embedding.every(v=>typeof v==='number'))throw new Error('OpenRouter embedding vector was invalid');
     return validateEmbeddingVector(row.embedding);
+  }
+}
+
+/** PREPARATION ONLY. No factory selects this client, no vector is persisted,
+ * and no threshold set is granted by constructing it. Model2 is incompatible
+ * with native001; its exact formatted-input space has its own storage identity. */
+export class OpenRouterEmbedding2Candidate {
+  readonly model = EMBEDDING_2_SPACE.id;
+  readonly dimensions = EMBEDDING_2_SPACE.dimensions;
+  constructor(private readonly options: Options = {}) {}
+  async embed(input: string, task: EmbeddingTaskType = 'RETRIEVAL_DOCUMENT') {
+    const raw = await request('embeddings', {
+      model: EMBEDDING_2_SPACE.wireModel,
+      input: formatEmbedding2Input(input, task),
+      dimensions: this.dimensions,
+      encoding_format: 'float',
+    }, {timeoutMs: 5000, exchangeTimeoutMs: 10000, ...this.options});
+    if (!object(raw) || raw.model !== EMBEDDING_2_SPACE.wireModel || !Array.isArray(raw.data) || raw.data.length !== 1) {
+      throw new Error('Embedding2 response was invalid');
+    }
+    const row = raw.data[0];
+    if (!object(row) || row.index !== 0 || !Array.isArray(row.embedding) || !row.embedding.every(value => typeof value === 'number')) {
+      throw new Error('Embedding2 vector was invalid');
+    }
+    const vector = validateEmbeddingVector(row.embedding, this.dimensions);
+    if (!Number.isFinite(cosineSimilarity(vector, vector))) throw new Error('Embedding2 vector geometry was invalid');
+    // Preserve raw provider values. No undocumented normalization conversion.
+    return vector;
   }
 }
