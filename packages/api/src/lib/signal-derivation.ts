@@ -1,3 +1,4 @@
+import {createEmbeddingClient,embeddingInSpace,readableEmbeddingSpace} from './embedding-provider.js';
 /**
  * Layer 2 — turning one inspiration into evidence for the profile's signals.
  *
@@ -37,11 +38,13 @@
  * `signal-derivation-thresholds.ts` for the failure it produced.
  */
 
-import { and, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import {
   inspirationEmbeddings,
   inspirations,
+  attachments,
+  reflections,
   profiles,
   signals,
 } from "../db/index.js";
@@ -49,8 +52,11 @@ import { cosineSimilarity } from "../scoring/vector.js";
 import { getDb } from "./db.js";
 import {
   ensureInspirationEmbedding,
-  GeminiEmbeddingHttpClient,
+  buildCanonicalInspirationEmbeddingInput,
+  hashEmbeddingInput,
+  type CanonicalAttachmentInput,
 } from "./inspiration-embeddings.js";
+import {effectiveAttachmentText} from './attachment-material.js';
 import { normalizeSupportedLocale } from "./locales.js";
 import { assertMaterialCurrent, loadInspirationMaterial, relatedMaterialIdentity, resolveMaterialQuote } from "./inspiration-material.js";
 import { reviewSignalSupport, SupportSourceUnavailableError } from "./signal-support-review.js";
@@ -212,7 +218,7 @@ export async function deriveSignalsForInspiration(
     if (error instanceof SupportSourceUnavailableError) return emptyResult(error.status);
     throw error;
   }
-  const embeddingClient = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
+  const embeddingClient = deps.embeddingClient ?? createEmbeddingClient();
 
   // Existing support is its own question, before bounded discovery. Applying
   // it rechecks current inputs under locks and persists any reading request.
@@ -465,19 +471,24 @@ async function findRelatedInspirations(
     model: string;
   },
 ): Promise<RelatedInspirationContext[]> {
+  const space={model:input.model,dimensions:input.embedding.length},native=readableEmbeddingSpace();
+  if((space.model===native.model&&space.dimensions!==native.dimensions)||!embeddingInSpace(input.embedding,space.dimensions,space))throw new Error('Related capture embedding space is invalid');
   const rows = await db
     .select({
       id: inspirations.id,
       text: inspirations.text,
       createdAt: inspirations.createdAt,
       embedding: inspirationEmbeddings.embedding,
+      dimensions:inspirationEmbeddings.dimensions,
+      inputHash:inspirationEmbeddings.inputHash,
     })
     .from(inspirationEmbeddings)
-    .innerJoin(inspirations, eq(inspirations.id, inspirationEmbeddings.inspirationId))
+    .innerJoin(inspirations, and(eq(inspirations.id, inspirationEmbeddings.inspirationId),eq(inspirations.profileId,inspirationEmbeddings.profileId)))
     .where(
       and(
         eq(inspirationEmbeddings.profileId, input.profileId),
         eq(inspirationEmbeddings.model, input.model),
+        eq(inspirationEmbeddings.dimensions,space.dimensions),
         eq(inspirationEmbeddings.inputScope, "personal"),
         isNull(inspirations.memoryExcludedAt),
       ),
@@ -485,16 +496,34 @@ async function findRelatedInspirations(
     .orderBy(desc(inspirations.createdAt))
     .limit(RELATED_INSPIRATION_SCAN_LIMIT);
 
-  return rows
-    .filter((row) => row.id !== input.inspirationId)
+  const ranked=rows
+    .filter((row) => row.id !== input.inspirationId&&embeddingInSpace(row.embedding,row.dimensions,space))
     .map((row) => ({
       row,
       similarity: cosineSimilarity(input.embedding, row.embedding) ?? -1,
     }))
     .filter((scored) => scored.similarity >= RELATED_INSPIRATION_MIN_COSINE)
     .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, RELATED_INSPIRATION_CONTEXT_LIMIT)
-    .map(({ row }) => ({ id: row.id, text: row.text, createdAt: row.createdAt }));
+    .slice(0, RELATED_INSPIRATION_CONTEXT_LIMIT);
+  if(!ranked.length)return [];
+  // One bounded current-material statement for at most the existing five
+  // selected sources, rather than two extra child reads for every scan row.
+  // Reuse the indexer's canonical builder; no alternate hash or normalized store.
+  const parentId=sql`${sql.identifier('inspirations')}.${sql.identifier('id')}`;
+  const current=await db.select({id:inspirations.id,text:inspirations.text,kind:inspirations.kind,createdAt:inspirations.createdAt,
+    answers:sql<Array<{question:string;answer:string|null;skipped:boolean;createdAt:string}>>`coalesce((SELECT jsonb_agg(jsonb_build_object(
+      'question',${reflections.question},'answer',${reflections.answer},'skipped',${reflections.skipped},'createdAt',${reflections.createdAt}) ORDER BY ${reflections.createdAt},${reflections.id})
+      FROM ${reflections} WHERE ${reflections.profileId}=${input.profileId}::uuid AND ${reflections.inspirationId}=${parentId}),'[]'::jsonb)`,
+    media:sql<CanonicalAttachmentInput[]>`coalesce((SELECT jsonb_agg(jsonb_build_object('type',${attachments.type},'enrichmentText',${effectiveAttachmentText}) ORDER BY ${attachments.createdAt},${attachments.id})
+      FROM ${attachments} WHERE ${attachments.profileId}=${input.profileId}::uuid AND ${attachments.inspirationId}=${parentId}),'[]'::jsonb)`,
+  }).from(inspirations).where(and(eq(inspirations.profileId,input.profileId),isNull(inspirations.memoryExcludedAt),inArray(inspirations.id,ranked.map(item=>item.row.id))));
+  const byId=new Map(current.map(row=>[row.id,row]));
+  return ranked.flatMap(({row})=>{
+    const source=byId.get(row.id);if(!source)return [];
+    const canonical=buildCanonicalInspirationEmbeddingInput({text:source.text,kind:source.kind,
+      reflections:source.answers.map(answer=>({...answer,createdAt:new Date(answer.createdAt)})),attachments:source.media});
+    return hashEmbeddingInput(canonical)===row.inputHash?[{id:source.id,text:source.text,createdAt:source.createdAt}]:[];
+  });
 }
 
 /**

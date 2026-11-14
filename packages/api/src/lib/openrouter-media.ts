@@ -15,7 +15,8 @@ async function request(kind:'audio/transcriptions'|'embeddings',body:Record<stri
     const privacy=openRouterPrivacyPreferences();
     const response=await fetchModelWithTimeout(options.fetchFn??fetch,'https://openrouter.ai/api/v1/'+kind,{
       method:'POST',headers:buildOpenRouterHeaders(key),signal:options.signal,
-      body:JSON.stringify({...body,provider:{...privacy,require_parameters:true}}),
+      body:JSON.stringify({...body,provider:{...privacy,require_parameters:true,
+        ...(kind==='embeddings'?{only:['google-ai-studio'],order:['google-ai-studio'],allow_fallbacks:false}:{})}}),
     },options.timeoutMs,options.exchangeTimeoutMs);
     if(!response.ok){record('http_error');throw new OpenRouterHttpError('OpenRouter media HTTP failure',response.status);}
     try{raw=await response.json();}catch{throw new Error('OpenRouter media response JSON was invalid');}
@@ -35,6 +36,7 @@ export async function requestAudioTranscript(bytes:Uint8Array,mimeType:string,op
  * A later reviewed activation needs direct/OR parity + compatible-reader proof. */
 export class OpenRouterEmbeddingCandidate {
   readonly model='openrouter:google/gemini-embedding-001:unverified';
+  readonly dimensions=GEMINI_EMBEDDING_DIMENSIONS;
   constructor(private readonly options:Options={}){}
   async embed(input:string,taskType:EmbeddingTaskType='RETRIEVAL_DOCUMENT'){
     const raw=await request('embeddings',{model:OR_EMBEDDING_MODEL,input,dimensions:GEMINI_EMBEDDING_DIMENSIONS,

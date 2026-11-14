@@ -295,6 +295,21 @@ it('falls back to lexical context when the bounded embedding request fails',asyn
   await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>{throw new Error('Synthetic outage');}}});
   expect((await f.state()).phase).toBe('ready');expect(answer).toHaveBeenCalledOnce();
 });
+it('keeps lexical grounded publication when OpenRouter embedding compatibility is held, without reserving or dispatching lookup',async()=>{
+  const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
+  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await f.request();const state=await f.state(),job=await claim();
+  const network=vi.fn(()=>{throw Error('Unexpected provider HTTP');});
+  vi.stubEnv('WAKA_EMBEDDING_PROVIDER','openrouter');vi.stubGlobal('fetch',network);
+  try{
+    await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{});
+    expect((await f.state()).phase).toBe('ready');expect(answer).toHaveBeenCalledOnce();
+    expect(answer.mock.calls[0]![0].sources.some(source=>source.kind==='inspiration'&&source.text==='A quiet morning gives me room for an experiment.')).toBe(true);
+    expect((await t.sql`SELECT retrieval_dispatched_at FROM conversation_reply_requests WHERE id=${state.requestId}`)[0]!.retrieval_dispatched_at).toBeNull();
+    expect(await t.sql`SELECT id FROM conversation_messages WHERE role='assistant'`).toHaveLength(1);
+    expect(network).not.toHaveBeenCalled();
+  }finally{delete process.env.WAKA_EMBEDDING_PROVIDER;vi.unstubAllGlobals();}
+});
 it('does not purchase a query embedding when only incompatible dimensions are indexed',async()=>{
   const f=await fixture();
   await t.sql`INSERT INTO inspiration_embeddings(profile_id,inspiration_id,model,input_scope,dimensions,input_hash,embedding)

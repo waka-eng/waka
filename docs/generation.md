@@ -1501,8 +1501,36 @@ matching unfinished source receipts, without marking those receipts derived.
 
 One prompt, two roads: generation defaults to DeepSeek V4.1 Flash 1017 on
 OpenRouter when `OPENROUTER_API_KEY` is present, and falls back
-to Gemini without it. Embeddings never switch roads — the stored vectors and
-every cosine threshold above live in `gemini-embedding-001`'s space.
+to Gemini without it. Embeddings retain the native Google default: the stored
+vectors and every cosine threshold above live in `gemini-embedding-001`'s space.
+
+Embedding construction is centralized in `embedding-provider.ts`, separately from
+readable vector identity (`gemini-embedding-001`, 768 dimensions). All six runtime
+construction paths use it. `WAKA_EMBEDDING_PROVIDER` absent, blank or `gemini`
+preserves native behavior; `openrouter` is **compatibility-held**, and unknown
+values fail closed. No deployment enables that setting. A held transport cannot
+masquerade as an empty native corpus: cached native readers retain their space,
+MCP recall reports unavailable, and chat explicitly uses lexical fallback without
+reserving a query-embedding attempt.
+
+The offline OpenRouter candidate retains a distinct unverified model namespace.
+Its request pins Google AI Studio (`only` and `order`: `google-ai-studio`), disables
+provider fallback, requires parameter support, and preserves existing restrictive
+privacy preferences. Generic `input_type` support is documented; exact Gemini
+query/document mapping and space equivalence still require paired proof. Matching
+model names and dimensions alone do not establish compatible vectors. Native
+Google availability may prevent that proof; no automatic transport fallback,
+relabel, re-embedding or normalization change is permitted by this preparation.
+
+Reader guards require the expected model, dimension metadata, finite nonzero
+geometry and current input hash. This includes cache reuse, match/suppression,
+gardener, reading diversity, recurrence, recall and chat. Recurrence validates the
+existing top-five selected sources against current canonical text, ordered
+reflections and effective attachment material in one additional SQL statement;
+stale selections are dropped without scanning further to fill the five slots.
+This is a bounded source-count proof, not a byte bound or a whole-archive scan.
+Source/claim/Stop and final publication checks remain required after provider HTTP.
+No vector is normalized or rewritten by a reader.
 
 Top of Mind synthesis and publication review default to `openai/gpt-6.1-terra`,
 with medium reasoning for synthesis and low reasoning for review. Signal extraction/support/judging,

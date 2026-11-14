@@ -26,6 +26,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import type { ModelProvider, SignalMatchJudgement } from "./model-provider.js";
+import {hashEmbeddingInput,GEMINI_EMBEDDING_MODEL} from './inspiration-embeddings.js';
 import { resolveSignalDuplicate, tendSignalGarden } from "./signal-gardener.js";
 
 let t: TestDatabase;
@@ -53,10 +54,11 @@ async function seedSignal(
             ${opts.lockedAt ? opts.lockedAt.toISOString() : null},
             ${(opts.createdAt ?? new Date()).toISOString()})
     RETURNING id`;
+  const values=[...embedding,...Array<number>(768-embedding.length).fill(0)];
   await t.sql`
     INSERT INTO signal_embeddings (profile_id, signal_id, model, dimensions, input_hash, embedding)
-    VALUES (${profileId}, ${signal.id}, 'bench-model', ${embedding.length},
-            ${`hash-${signal.id}`}, ${JSON.stringify(embedding)}::jsonb)`;
+    VALUES (${profileId}, ${signal.id}, ${GEMINI_EMBEDDING_MODEL}, 768,
+            ${hashEmbeddingInput(statement)}, ${JSON.stringify(values)}::jsonb)`;
   return signal.id as string;
 }
 

@@ -1,7 +1,8 @@
 import {and,desc,eq,inArray,sql} from 'drizzle-orm';
 import {attachments,inspirationEmbeddings,inspirations,type Attachment} from '../db/index.js';
 import type {getDb} from './db.js';
-import {buildCanonicalInspirationEmbeddingInput,GEMINI_EMBEDDING_DIMENSIONS,GEMINI_EMBEDDING_MODEL,hashEmbeddingInput} from './inspiration-embeddings.js';
+import {buildCanonicalInspirationEmbeddingInput,hashEmbeddingInput} from './inspiration-embeddings.js';
+import {readableEmbeddingSpace,embeddingInSpace} from './embedding-provider.js';
 import {effectiveAttachmentStatus,effectiveAttachmentText} from './attachment-material.js';
 import {MATCH_CANDIDATE_SCAN_LIMIT,RECALL_MIN_COSINE} from './signal-derivation-thresholds.js';
 import {cosineSimilarity} from '../scoring/vector.js';
@@ -40,12 +41,13 @@ export function rankConversationCandidates(lexicalIds:string[],semantic:Semantic
 /** No provider calls. Existing personal vectors are used only after checking
  * the same canonical bytes used by the indexing path. Oversized/unavailable
  * material fails closed for semantic ranking; lexical recall stays available. */
-export async function readSemanticConversationCandidates(db:Reader,profileId:string,queryVector:number[],model=GEMINI_EMBEDDING_MODEL,lexicalIds:string[]=[]){
-  if(queryVector.length!==GEMINI_EMBEDDING_DIMENSIONS||queryVector.some(value=>!Number.isFinite(value)))throw new Error('Invalid conversation query vector');
+export async function readSemanticConversationCandidates(db:Reader,profileId:string,queryVector:number[],model=readableEmbeddingSpace().model,lexicalIds:string[]=[]){
+  const space={...readableEmbeddingSpace(),model};
+  if(!embeddingInSpace(queryVector,space.dimensions,space))throw new Error('Invalid conversation query vector');
   const vectors=await db.select({id:inspirationEmbeddings.inspirationId,vector:inspirationEmbeddings.embedding,inputHash:inspirationEmbeddings.inputHash})
-    .from(inspirationEmbeddings).where(and(eq(inspirationEmbeddings.profileId,profileId),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,model),eq(inspirationEmbeddings.dimensions,GEMINI_EMBEDDING_DIMENSIONS)))
+    .from(inspirationEmbeddings).where(and(eq(inspirationEmbeddings.profileId,profileId),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,space.model),eq(inspirationEmbeddings.dimensions,space.dimensions)))
     .orderBy(desc(inspirationEmbeddings.updatedAt),desc(inspirationEmbeddings.id)).limit(CONVERSATION_RETRIEVAL_LIMITS.scan+1);
-  const scored=vectors.slice(0,CONVERSATION_RETRIEVAL_LIMITS.scan).map(row=>({...row,similarity:cosineSimilarity(queryVector,row.vector)}))
+  const scored=vectors.slice(0,CONVERSATION_RETRIEVAL_LIMITS.scan).filter(row=>embeddingInSpace(row.vector,space.dimensions,space)).map(row=>({...row,similarity:cosineSimilarity(queryVector,row.vector)}))
     .filter((row):row is typeof row&{similarity:number}=>row.similarity!==null&&Number.isFinite(row.similarity))
     .sort((a,b)=>b.similarity-a.similarity||a.id.localeCompare(b.id));
   const ranked=[...new Map([...scored.filter(row=>lexicalIds.includes(row.id)).slice(0,6),...scored.filter(row=>row.similarity>=RECALL_MIN_COSINE)].map(row=>[row.id,row])).values()].slice(0,CONVERSATION_RETRIEVAL_LIMITS.validate);

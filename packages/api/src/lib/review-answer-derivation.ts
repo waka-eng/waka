@@ -1,3 +1,4 @@
+import {createEmbeddingClient} from './embedding-provider.js';
 import {and,asc,eq,inArray,sql} from 'drizzle-orm';
 import {backgroundJobs,profiles,reviewAnswerProcessing,reviewSignalSupport,signalReviewEvidence,signals,type BackgroundJob,type BackgroundJobResult} from '../db/index.js';
 import {getDb} from './db.js';
@@ -7,7 +8,6 @@ import {readGenerationRevision,assertGenerationRevision} from './generation-revi
 import {REVIEW_SUPPORT_POLICY,recordReviewSupport,writeReviewEvidence} from './review-evidence.js';
 import {refreshSignalLifecycle,reconcileSignalsAfterEvidenceLoss} from './signal-lifecycle.js';
 import {acquireSignalDerivationLock,applyCandidates} from './signal-match-or-mint.js';
-import {GeminiEmbeddingHttpClient} from './inspiration-embeddings.js';
 import type {StatementEmbeddingClient} from './signal-embeddings.js';
 import {enqueueReviewAnswerDerivation,enqueueTopOfMindRefresh,reserveReviewModelRun,type EnqueueResult} from './queue.js';
 import {BackgroundJobHeldError} from './background-job-hold.js';
@@ -138,7 +138,7 @@ export async function deriveSignalsForReviewAnswer(input:{profileId:string;sessi
   const [reembedding]=await db.select({id:backgroundJobs.id}).from(backgroundJobs).where(and(eq(backgroundJobs.profileId,input.profileId),eq(backgroundJobs.type,'reembed_signal'),inArray(backgroundJobs.status,['pending','running']))).limit(1);
   if(reembedding)throw new BackgroundJobHeldError(new Date(Date.now()+5000),'Signal wording is being indexed');
   const request=modelInput(material,[],true);await beforeModel();const discovered=parseReviewAnswerDerivation(await provider.deriveReviewAnswer(request),request);
-  const embedding=deps.embeddingClient??new GeminiEmbeddingHttpClient();
+  const embedding=deps.embeddingClient??createEmbeddingClient();
   const candidates=await Promise.all(discovered.statements.map(async row=>({statement:row.statement,reason:null,quote:null,quoteSource:null,relatedEvidence:[],embedding:await embedding.embed(row.statement)})));
   const result=await db.transaction(async tx=>{
     await acquireSignalDerivationLock(tx,input.profileId);

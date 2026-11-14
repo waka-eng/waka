@@ -10,7 +10,8 @@ import {getDefaultModelProvider,type ConversationReplyInput} from './model-provi
 import {parseConversationReply} from '../queue/gemini.js';
 import {conversationSearchQuery} from './conversation-material.js';
 import {conversationUsesSavedSources} from './conversation-corrections.js';
-import {GEMINI_EMBEDDING_DIMENSIONS,GEMINI_EMBEDDING_MODEL,GeminiEmbeddingHttpClient,validateEmbeddingVector,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
+import {validateEmbeddingVector,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
+import {configuredEmbeddingClient,readableEmbeddingSpace} from './embedding-provider.js';
 import type {ConversationRetrievalTrace} from './conversation-retrieval.js';
 import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs} from './queue.js';
 import {attachmentNote,readMessageAttachments} from './conversation-attachments.js';
@@ -250,9 +251,9 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
   const timing=createConversationTiming();let answerAttempted=false,published=false;
   try{
   const retrievalStarted=performance.now();
-  const embeddingClient=deps.embeddingClient===undefined
-    ?process.env.GEMINI_API_KEY||process.env.SST_RESOURCE_GeminiApiKey?new GeminiEmbeddingHttpClient(GEMINI_EMBEDDING_MODEL,{timeoutMs:5000,exchangeTimeoutMs:10000}):null
-    :deps.embeddingClient;
+  const embeddingState=deps.embeddingClient===undefined?configuredEmbeddingClient({timeoutMs:5000,exchangeTimeoutMs:10000})
+    :{client:deps.embeddingClient,availability:deps.embeddingClient?'ready' as const:'not_configured' as const};
+  const embeddingClient=embeddingState.client,embeddingSpace=readableEmbeddingSpace();
   const finish=async(status:'failed'|'stale',failureCode:string)=>db.update(conversationReplyRequests).set({status,failureCode,finishedAt:new Date()})
     .where(and(eq(conversationReplyRequests.profileId,job.profileId),eq(conversationReplyRequests.id,requestId),inArray(conversationReplyRequests.status,['pending','running'])));
   const initial=await timing.measure('prepare',()=>db.transaction(async tx=>{
@@ -272,9 +273,9 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
     const [usage]=await tx.execute<{count:number}>(sql`SELECT coalesce(sum(1 + CASE WHEN r.retrieval_dispatched_at IS NOT NULL THEN 1 ELSE 0 END),0)::int AS count FROM conversation_reply_requests r JOIN profiles p ON p.id=r.profile_id
       WHERE p.account_id=${owner.accountId}::uuid AND r.dispatched_at>=now()-interval '1 hour'`);
     if(usage.count>=CONVERSATION_LIMITS.modelCalls)return refuse('failed','budget');
-    const [indexed]=conversationUsesSavedSources(next.input.history)&&embeddingClient?.model===GEMINI_EMBEDDING_MODEL&&usage.count+2<=CONVERSATION_LIMITS.modelCalls
+    const [indexed]=conversationUsesSavedSources(next.input.history)&&embeddingClient?.model===embeddingSpace.model&&usage.count+2<=CONVERSATION_LIMITS.modelCalls
       /* Indexed where the chat actually reads: the agent's memory for an agent chat. */
-      ?await tx.select({id:inspirationEmbeddings.id}).from(inspirationEmbeddings).where(and(inArray(inspirationEmbeddings.profileId,memoryProfiles(next.memory)),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,GEMINI_EMBEDDING_MODEL),eq(inspirationEmbeddings.dimensions,GEMINI_EMBEDDING_DIMENSIONS))).limit(1):[];
+      ?await tx.select({id:inspirationEmbeddings.id}).from(inspirationEmbeddings).where(and(inArray(inspirationEmbeddings.profileId,memoryProfiles(next.memory)),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,embeddingSpace.model),eq(inspirationEmbeddings.dimensions,embeddingSpace.dimensions))).limit(1):[];
     const semantic=Boolean(indexed);
     await tx.update(conversationReplyRequests).set({status:'running',dispatchedAt:sql`clock_timestamp()`,retrievalDispatchedAt:semantic?sql`clock_timestamp()`:null,failureCode:null}).where(eq(conversationReplyRequests.id,requestId));
     return {...next,userMessageId:request.userMessageId!,semantic};
@@ -302,7 +303,7 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
   })):initial;
   if(!work)return;
   console.info('[conversation-retrieval]',JSON.stringify({requestId,profileId:job.profileId,
-    mode:queryVector?'hybrid':initial.semantic?'lexical_fallback':'lexical',preparationMs:Math.round(performance.now()-retrievalStarted),
+    mode:queryVector?'hybrid':initial.semantic||embeddingState.availability==='compatibility_held'?'lexical_fallback':'lexical',embeddingAvailability:embeddingState.availability,preparationMs:Math.round(performance.now()-retrievalStarted),
     ...work.retrievalTrace,sources:work.sources.map(({kind,id,revision})=>({kind,id,revision}))}));
   let result;
   try{answerAttempted=true;result=await timing.measure('answer',async()=>parseConversationReply(await (await getDefaultModelProvider()).answerConversation(work.input),work.input));}

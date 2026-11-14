@@ -197,11 +197,13 @@ export type EmbeddingTaskType = "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY";
 
 export interface GeminiEmbeddingClient {
   readonly model: string;
+  readonly dimensions?: number;
   embed(input: string, taskType?: EmbeddingTaskType): Promise<number[]>;
 }
 
 export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
   readonly model: string;
+  readonly dimensions=GEMINI_EMBEDDING_DIMENSIONS;
 
   constructor(model = GEMINI_EMBEDDING_MODEL, private readonly deadlines?:{timeoutMs:number;exchangeTimeoutMs:number}) {
     this.model = model;
@@ -440,7 +442,11 @@ export async function ensureInspirationEmbedding(
   params: EnsureInspirationEmbeddingParams,
 ): Promise<EnsureInspirationEmbeddingResult> {
   const db: WakaDb = params.db ?? getDb();
-  const client = params.client ?? new GeminiEmbeddingHttpClient();
+  // Lazy import keeps the storage/canonical module below the factory in the
+  // initialization graph; standalone callers still use the same selection.
+  const {createEmbeddingClient,embeddingInSpace,embeddingSpaceForClient}=await import('./embedding-provider.js');
+  const client = params.client ?? createEmbeddingClient();
+  const space=embeddingSpaceForClient(client);
   const inputScope = params.inputScope ?? "personal";
 
   return db.transaction(async (tx) => {
@@ -483,7 +489,7 @@ export async function ensureInspirationEmbedding(
       inputScope,
     );
 
-    if (existing && !needsEmbeddingRegeneration(existing, inputHash, client.model)) {
+    if (existing && !needsEmbeddingRegeneration(existing, inputHash, client.model)&&embeddingInSpace(existing.embedding,existing.dimensions,space)) {
       return { status: "unchanged", embedding: existing, generated: false, inputHash };
     }
 

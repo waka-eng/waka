@@ -1,3 +1,4 @@
+import {createEmbeddingClient,embeddingInSpace,embeddingSpaceForClient} from './embedding-provider.js';
 /**
  * A signal's vector — the only four things that ever happen to one.
  *
@@ -22,7 +23,6 @@ import { and, eq, ne } from "drizzle-orm";
 import { signalEmbeddings, signals } from "../db/index.js";
 import { getDb } from "./db.js";
 import {
-  GeminiEmbeddingHttpClient,
   hashEmbeddingInput,
 } from "./inspiration-embeddings.js";
 
@@ -32,6 +32,7 @@ type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
 /** Whatever can produce a vector for a statement, so tests need no network. */
 export interface StatementEmbeddingClient {
   readonly model: string;
+  readonly dimensions?: number;
   embed(input: string): Promise<number[]>;
 }
 
@@ -124,15 +125,16 @@ export async function reembedSignalStatement(
   input: { profileId: string; signalId: string; statement: string },
   deps: ReembeddingDependencies = {},
 ): Promise<void> {
-  const client = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
+  const client = deps.embeddingClient ?? createEmbeddingClient();
+  const space=embeddingSpaceForClient(client);
   const inputHash = hashEmbeddingInput(input.statement);
   const [initial] = await db.select({ statement: signals.statement }).from(signals)
     .where(and(eq(signals.profileId, input.profileId), eq(signals.id, input.signalId))).limit(1);
   if (!initial) return;
   if (initial.statement !== input.statement) throw new Error("Signal statement changed; retry current wording");
-  const [cached] = await db.select({ inputHash: signalEmbeddings.inputHash }).from(signalEmbeddings)
+  const [cached] = await db.select({ inputHash: signalEmbeddings.inputHash,embedding:signalEmbeddings.embedding,dimensions:signalEmbeddings.dimensions }).from(signalEmbeddings)
     .where(and(eq(signalEmbeddings.profileId, input.profileId), eq(signalEmbeddings.signalId, input.signalId), eq(signalEmbeddings.model, client.model))).limit(1);
-  if (cached?.inputHash === inputHash) return;
+  if (cached?.inputHash === inputHash&&embeddingInSpace(cached.embedding,cached.dimensions,space)) return;
 
   let embedding: number[] | null = null;
   try {
@@ -148,10 +150,10 @@ export async function reembedSignalStatement(
     if (!current) return false;
     if (current.statement !== input.statement) throw new Error("Signal statement changed; retry current wording");
     await deps.beforeCommit?.(tx);
-    const [concurrent] = await tx.select({ inputHash: signalEmbeddings.inputHash }).from(signalEmbeddings)
+    const [concurrent] = await tx.select({ inputHash: signalEmbeddings.inputHash,embedding:signalEmbeddings.embedding,dimensions:signalEmbeddings.dimensions }).from(signalEmbeddings)
       .where(and(eq(signalEmbeddings.profileId, input.profileId), eq(signalEmbeddings.signalId, input.signalId), eq(signalEmbeddings.model, client.model))).limit(1);
-    if (concurrent?.inputHash === inputHash) return false;
-    if (!embedding) {
+    if (concurrent?.inputHash === inputHash&&embeddingInSpace(concurrent.embedding,concurrent.dimensions,space)) return false;
+    if (!embedding||!embeddingInSpace(embedding,space.dimensions,space)) {
       await tx.delete(signalEmbeddings).where(and(eq(signalEmbeddings.profileId, input.profileId),
         eq(signalEmbeddings.signalId, input.signalId), eq(signalEmbeddings.model, client.model), ne(signalEmbeddings.inputHash, inputHash)));
       return true;

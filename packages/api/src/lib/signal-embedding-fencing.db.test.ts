@@ -35,7 +35,7 @@ describe('statement embedding races', () => {
   it('stores a current vector without changing human wording', async () => {
     const f = await fixture();
     const [locked] = await t.sql`UPDATE signals SET locked_at = now() WHERE id = ${f.signalId} RETURNING locked_at`;
-    await reembedSignal(f, { db: t.db as never, embeddingClient: { model, embed: async () => [1, 0] } });
+    await reembedSignal(f, { db: t.db as never, embeddingClient: { model, dimensions:2, embed: async () => [1, 0] } });
     expect(await stored(f.signalId)).toMatchObject([{ input_hash: hashEmbeddingInput(f.statement), embedding: [1, 0] }]);
     expect((await t.sql`SELECT statement, locked_at FROM signals WHERE id = ${f.signalId}`)[0])
       .toMatchObject({ statement: f.statement, locked_at: locked.locked_at });
@@ -69,7 +69,7 @@ describe('statement embedding races', () => {
     });
     try {
       await ready;
-      await expect(reembedSignal(f, { db: t.db as never, embeddingClient: { model, embed: async () => [1, 0] } }))
+      await expect(reembedSignal(f, { db: t.db as never, embeddingClient: { model, dimensions:2, embed: async () => [1, 0] } }))
         .rejects.toMatchObject({ cause: { code: '55P03' } });
     } finally { release(); await mutation; await other.end(); }
     expect((await t.sql`SELECT statement FROM signals WHERE id = ${f.signalId}`)[0].statement).toBe('The human edit survives');
@@ -80,21 +80,21 @@ describe('statement embedding races', () => {
     const f = await fixture();
     await vector(f, 'Stale cached words');
     await vector(f, f.statement, [0, 1], 'another-model');
-    const failure = reembedSignal(f, { db: t.db as never, embeddingClient: { model, embed: async () => { throw new Error('PRIVATE provider response'); } } });
+    const failure = reembedSignal(f, { db: t.db as never, embeddingClient: { model, dimensions:2, embed: async () => { throw new Error('PRIVATE provider response'); } } });
     await expect(failure).rejects.toThrow('Signal embedding unavailable; retry current wording');
     expect(await stored(f.signalId)).toEqual([{ model: 'another-model', input_hash: hashEmbeddingInput(f.statement), embedding: [0, 1] }]);
   });
 
   it('does not disguise a commit failure as provider failure or delete existing cache rows', async () => {
     const f = await fixture(); await vector(f, 'Stale cached words');
-    await expect(reembedSignal(f, { db: t.db as never, embeddingClient: { model, embed: async () => [1, 0] },
+    await expect(reembedSignal(f, { db: t.db as never, embeddingClient: { model, dimensions:2, embed: async () => [1, 0] },
       beforeCommit: async () => { throw new Error('Synthetic commit refused'); } })).rejects.toThrow('Synthetic commit refused');
     expect(await stored(f.signalId)).toMatchObject([{ input_hash: hashEmbeddingInput('Stale cached words') }]);
   });
 
   it('does not overwrite a newer human edit with the vector for older words', async () => {
     const f = await fixture();
-    const pending = reembedSignalStatement(t.db as never, f, { embeddingClient: { model, embed: async () => {
+    const pending = reembedSignalStatement(t.db as never, f, { embeddingClient: { model, dimensions:2, embed: async () => {
       await t.sql`UPDATE signals SET statement = 'Newer wording', locked_at = now() WHERE id = ${f.signalId}`;
       await vector(f, 'Newer wording');
       return [1, 0];
@@ -105,7 +105,7 @@ describe('statement embedding races', () => {
 
   it('a failed older call cannot delete a newer successful vector', async () => {
     const f = await fixture();
-    const pending = reembedSignalStatement(t.db as never, f, { embeddingClient: { model, embed: async () => {
+    const pending = reembedSignalStatement(t.db as never, f, { embeddingClient: { model, dimensions:2, embed: async () => {
       await t.sql`UPDATE signals SET statement = 'Newer wording' WHERE id = ${f.signalId}`;
       await vector(f, 'Newer wording');
       throw new Error('Synthetic failure');
@@ -116,7 +116,7 @@ describe('statement embedding races', () => {
 
   it.each(['success', 'failure'] as const)('preserves a concurrent current vector when this call ends in %s', async (outcome) => {
     const f = await fixture();
-    await reembedSignalStatement(t.db as never, f, { embeddingClient: { model, embed: async () => {
+    await reembedSignalStatement(t.db as never, f, { embeddingClient: { model, dimensions:2, embed: async () => {
       await vector(f, f.statement);
       if (outcome === 'failure') throw new Error('Synthetic failure');
       return [1, 0];
@@ -127,16 +127,16 @@ describe('statement embedding races', () => {
   it('reuses an already current vector without a provider call', async () => {
     const f = await fixture(); await vector(f, f.statement);
     const embed = vi.fn(async () => [1, 0]);
-    await reembedSignal(f, { db: t.db as never, embeddingClient: { model, embed } });
+    await reembedSignal(f, { db: t.db as never, embeddingClient: { model, dimensions:2, embed } });
     expect(embed).not.toHaveBeenCalled();
   });
 
   it('rejects an outdated or cross-profile direct request before spending a call', async () => {
     const f = await fixture();
     const embed = vi.fn(async () => [1, 0]);
-    await expect(reembedSignalStatement(t.db as never, { ...f, statement: 'Words it never carried' }, { embeddingClient: { model, embed } }))
+    await expect(reembedSignalStatement(t.db as never, { ...f, statement: 'Words it never carried' }, { embeddingClient: { model, dimensions:2, embed } }))
       .rejects.toThrow(/statement changed/i);
-    await reembedSignalStatement(t.db as never, { ...f, profileId: '00000000-0000-4000-8000-000000000001' }, { embeddingClient: { model, embed } });
+    await reembedSignalStatement(t.db as never, { ...f, profileId: '00000000-0000-4000-8000-000000000001' }, { embeddingClient: { model, dimensions:2, embed } });
     expect(embed).not.toHaveBeenCalled();
     expect(await stored(f.signalId)).toHaveLength(0);
   });

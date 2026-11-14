@@ -6,8 +6,9 @@ import { z } from 'zod';
 import { signalEmbeddings, signals } from '../db/index.js';
 import { recordConsultation } from '../lib/consultations.js';
 import { getDb } from '../lib/db.js';
-import { GeminiEmbeddingHttpClient, GEMINI_EMBEDDING_DIMENSIONS, hashEmbeddingInput, validateEmbeddingVector,
+import { hashEmbeddingInput, validateEmbeddingVector,
   type GeminiEmbeddingClient } from '../lib/inspiration-embeddings.js';
+import {createEmbeddingClient,readableEmbeddingSpace,embeddingInSpace,EmbeddingProviderUnavailableError} from '../lib/embedding-provider.js';
 import { requireAuth, type AuthEnv } from '../lib/middleware.js';
 import { personalSignalReadable } from '../lib/personal-output.js';
 import { reserveRecallAttempt, RECALL_TIMEOUT_MS } from '../lib/recall-budget.js';
@@ -35,18 +36,24 @@ export function createRecallRoutes(deps:RecallRouteDependencies={}):Hono<AuthEnv
     const db=getDatabase(),session=c.get('session');
     const scope=await resolveProfileScope(db,session,parsed.data.profile,'read',deps.loadProfile??loadProfileTarget);
     if(!scope.ok)return c.json(scope.body,scope.status);
-    const client=deps.embedClient??new GeminiEmbeddingHttpClient(undefined,{timeoutMs:RECALL_TIMEOUT_MS,exchangeTimeoutMs:RECALL_TIMEOUT_MS});
-    const dimensions=deps.dimensions??GEMINI_EMBEDDING_DIMENSIONS;
+    const receipt=()=>recordConsultation(db,{profileId:scope.profileId,session,surface:'signals'});
+    let client:GeminiEmbeddingClient;
+    try{client=deps.embedClient??createEmbeddingClient({timeoutMs:RECALL_TIMEOUT_MS,exchangeTimeoutMs:RECALL_TIMEOUT_MS});}
+    catch(error){
+      if(!(error instanceof EmbeddingProviderUnavailableError))throw error;
+      await receipt();return c.json({error:'Semantic recall is unavailable. Use the list/detail tools to read current memory.',code:'recall_embedding_unavailable',reason:error.code,recall:{state:'unavailable',matches:[]}},503);
+    }
+    const dimensions=deps.dimensions??readableEmbeddingSpace().dimensions;
+    const space={model:client.model,dimensions};
     const candidates=async(reader:Pick<typeof db,'select'>)=>{
       const rows=await reader.select({...getTableColumns(signals),embedding:signalEmbeddings.embedding,inputHash:signalEmbeddings.inputHash})
         .from(signals).innerJoin(signalEmbeddings,and(eq(signalEmbeddings.signalId,signals.id),eq(signalEmbeddings.profileId,signals.profileId),
           eq(signalEmbeddings.model,client.model),eq(signalEmbeddings.dimensions,dimensions)))
         .where(and(personalSignalReadable(scope.profileId),inArray(signals.status,['active','emerging'])))
         .orderBy(desc(signals.lastEvidenceAt),desc(signals.createdAt),desc(signals.id)).limit(MATCH_CANDIDATE_SCAN_LIMIT);
-      return rows.filter(row=>row.inputHash===hashEmbeddingInput(row.statement)&&row.embedding.length===dimensions&&cosineSimilarity(row.embedding,row.embedding)!==null);
+      return rows.filter(row=>row.inputHash===hashEmbeddingInput(row.statement)&&embeddingInSpace(row.embedding,dimensions,space));
     };
     const before=await candidates(db);
-    const receipt=()=>recordConsultation(db,{profileId:scope.profileId,session,surface:'signals'});
     if(!before.length){await receipt();return c.json({recall:{query:parsed.data.q,state:'empty',matches:[]}});}
     const reservation=await reserveRecallAttempt(db,session.account.id);
     if(!reservation.allowed){

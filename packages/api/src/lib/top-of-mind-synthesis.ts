@@ -55,7 +55,8 @@ import {
   attachments,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
-import { GEMINI_EMBEDDING_MODEL, hashEmbeddingInput } from "./inspiration-embeddings.js";
+import { hashEmbeddingInput } from "./inspiration-embeddings.js";
+import {readableEmbeddingSpace,embeddingInSpace} from './embedding-provider.js';
 import { getDb } from "./db.js";
 import { computeSignalConfidence, selectIndependentEvidence, type ConfidenceEvidence } from "./signal-lifecycle.js";
 import {loadSignalEvidence} from './review-evidence.js';
@@ -506,11 +507,12 @@ async function selectSignals(
 
   /* the board's twelve slots are worth one bounded read of the candidate
      vectors — jsonb rows, cosine in process, no model anywhere */
+  const embeddingSpace=readableEmbeddingSpace();
   const embeddingRows = await db
-    .select({ signalId: signalEmbeddings.signalId, inputHash: signalEmbeddings.inputHash, embedding: signalEmbeddings.embedding })
+    .select({ signalId: signalEmbeddings.signalId, inputHash: signalEmbeddings.inputHash, embedding: signalEmbeddings.embedding,dimensions:signalEmbeddings.dimensions })
     .from(signalEmbeddings)
     .where(
-      and(eq(signalEmbeddings.profileId, profileId), eq(signalEmbeddings.model, GEMINI_EMBEDDING_MODEL), inArray(
+      and(eq(signalEmbeddings.profileId, profileId), eq(signalEmbeddings.model, embeddingSpace.model),eq(signalEmbeddings.dimensions,embeddingSpace.dimensions), inArray(
         signalEmbeddings.signalId,
         scored.map((s) => s.id),
       )),
@@ -518,7 +520,7 @@ async function selectSignals(
   const embeddingById = new Map<string, number[]>();
   const currentHash = new Map(scored.map(row=>[row.id,hashEmbeddingInput(row.statement)]));
   for (const row of embeddingRows) {
-    if (row.inputHash===currentHash.get(row.signalId)&&!embeddingById.has(row.signalId)) embeddingById.set(row.signalId, row.embedding);
+    if (row.inputHash===currentHash.get(row.signalId)&&embeddingInSpace(row.embedding,row.dimensions,embeddingSpace)&&!embeddingById.has(row.signalId)) embeddingById.set(row.signalId, row.embedding);
   }
 
   const diverse = diversifyRanked(scored, embeddingById, SELECTION_DIVERSITY_MAX_COSINE);

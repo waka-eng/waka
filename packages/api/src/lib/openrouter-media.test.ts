@@ -12,8 +12,15 @@ it.each([['RETRIEVAL_QUERY','search_query'],['RETRIEVAL_DOCUMENT','search_docume
  expect(await client.embed('Synthetic public fixture.',task)).toEqual(vector);expect(client.model).not.toBe(GEMINI_EMBEDDING_MODEL);
  const [url,init]=fetchFn.mock.calls[0]!;expect(url).toBe('https://openrouter.ai/api/v1/embeddings');
  expect(init!.headers).toMatchObject({Authorization:'Bearer SYNTHETIC_OR'});expect(init!.headers).not.toHaveProperty('x-goog-api-key');
- expect(JSON.parse(String(init!.body))).toMatchObject({model:'google/gemini-embedding-001',dimensions:768,input_type:inputType,encoding_format:'float',provider:{zdr:true,data_collection:'deny',require_parameters:true}});
+ expect(JSON.parse(String(init!.body))).toMatchObject({model:'google/gemini-embedding-001',dimensions:768,input_type:inputType,encoding_format:'float'});
+ expect(JSON.parse(String(init!.body)).provider).toEqual({zdr:true,data_collection:'deny',require_parameters:true,only:['google-ai-studio'],order:['google-ai-studio'],allow_fallbacks:false});
  expect(fetchFn).toHaveBeenCalledOnce();
+});
+it('pins the embedding provider without inventing a new account privacy override or alternate route',async()=>{
+ vi.stubEnv('WAKA_OPENROUTER_REQUIRE_ZDR',undefined);vi.stubEnv('WAKA_OPENROUTER_DATA_COLLECTION',undefined);
+ const fetchFn=vi.fn<typeof fetch>().mockResolvedValue(new Response('PRIVATE_PROVIDER_BODY',{status:400}));
+ await expect(new OpenRouterEmbeddingCandidate({apiKey:'SYNTHETIC_OR',fetchFn}).embed('Fixture')).rejects.toMatchObject({status:400});
+ expect(fetchFn).toHaveBeenCalledOnce();expect(JSON.parse(String(fetchFn.mock.calls[0]![1]!.body)).provider).toEqual({require_parameters:true,only:['google-ai-studio'],order:['google-ai-studio'],allow_fallbacks:false});
 });
 it.each([{model:'foreign',data:[{index:0,embedding:vector}]},{model:'google/gemini-embedding-001',data:[{index:0,embedding:[1,2]}]},
  {model:'google/gemini-embedding-001',data:[{index:1,embedding:vector}]},{model:'google/gemini-embedding-001',data:[]}])('refuses incompatible embedding envelopes without retry',async body=>{

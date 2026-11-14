@@ -37,6 +37,7 @@ import {
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
 import { hashEmbeddingInput } from './inspiration-embeddings.js';
+import {readableEmbeddingSpace,embeddingInSpace,type EmbeddingSpace} from './embedding-provider.js';
 import { getDb } from "./db.js";
 import type { normalizeSupportedLocale } from "./locales.js";
 import type { ModelProvider } from "./model-provider.js";
@@ -173,8 +174,11 @@ export async function applyCandidates(
   input: ApplyCandidatesInput,
 ): Promise<Pick<SignalDerivationResult, "matchedSignalIds" | "mintedSignalIds" | "promotedSignalIds">> {
   if((input.inspirationId===null)!==Boolean(input.reviewSource))throw new Error('One derivation source is required');
-  const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
-  const anchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
+  const native=readableEmbeddingSpace();
+  const space={model:input.embeddingModel,dimensions:input.candidates[0]?.embedding.length??native.dimensions};
+  if((space.model===native.model&&space.dimensions!==native.dimensions)||input.candidates.some(row=>!embeddingInSpace(row.embedding,space.dimensions,space)))throw new Error('Candidate embedding space is invalid');
+  const targets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
+  const anchors = await loadSuppressionAnchors(tx, input.profileId, space, input.inputPolicy);
   const prior = JSON.stringify({ targets, anchors });
   const { judgements, refusals } = await prepareJudgements(input, targets, anchors);
   await input.beforeWrites();
@@ -182,8 +186,8 @@ export async function applyCandidates(
   if (ids.length) await tx.select({ id: signals.id }).from(signals)
     .where(and(eq(signals.profileId, input.profileId), inArray(signals.id, ids)))
     .orderBy(asc(signals.id)).for("share");
-  const currentTargets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
-  const currentAnchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
+  const currentTargets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
+  const currentAnchors = await loadSuppressionAnchors(tx, input.profileId, space, input.inputPolicy);
   if (JSON.stringify({ targets: currentTargets, anchors: currentAnchors }) !== prior) {
     throw new Error("Signal inputs changed during judgement; retry current statements");
   }
@@ -378,7 +382,7 @@ export async function applyCandidates(
 async function loadMatchTargets(
   tx: WakaTx,
   profileId: string,
-  embeddingModel: string,
+  space: EmbeddingSpace,
   inputPolicy: string | undefined,
   inspirationId: string|null,
   ownerProfileId: string,
@@ -399,9 +403,10 @@ async function loadMatchTargets(
       lockedAt: signals.lockedAt,
       embedding: signalEmbeddings.embedding,
       inputHash: signalEmbeddings.inputHash,
+      dimensions:signalEmbeddings.dimensions,
     })
     .from(signals)
-    .innerJoin(signalEmbeddings, eq(signalEmbeddings.signalId, signals.id))
+    .innerJoin(signalEmbeddings, and(eq(signalEmbeddings.signalId, signals.id),eq(signalEmbeddings.profileId,signals.profileId)))
     .where(
       and(
         eq(signals.profileId, profileId),
@@ -411,7 +416,7 @@ async function loadMatchTargets(
         or(inArray(signals.status, ["emerging", "active"]), ...(withdrawn.size ? [
           and(eq(signals.status, "retired"), isNotNull(signals.supportRetiredAt), inArray(signals.id, [...withdrawn])),
         ] : [])),
-        eq(signalEmbeddings.model, embeddingModel),
+        eq(signalEmbeddings.model, space.model),eq(signalEmbeddings.dimensions,space.dimensions),
       ),
     )
     // Mandatory refusals must not fall outside the ordinary bounded scan.
@@ -419,7 +424,7 @@ async function loadMatchTargets(
       desc(signals.lastEvidenceAt), asc(signals.id))
     .limit(MATCH_CANDIDATE_SCAN_LIMIT + withdrawn.size);
 
-  return rows.filter(row => row.inputHash === hashEmbeddingInput(row.statement)).map((row) => ({
+  return rows.filter(row => row.inputHash === hashEmbeddingInput(row.statement)&&embeddingInSpace(row.embedding,row.dimensions,space)).map((row) => ({
     id: row.id,
     statement: row.statement,
     status: row.status,
@@ -460,7 +465,7 @@ interface SuppressionAnchor {
 async function loadSuppressionAnchors(
   tx: WakaTx,
   profileId: string,
-  embeddingModel: string,
+  space: EmbeddingSpace,
   inputPolicy?: string,
 ): Promise<SuppressionAnchor[]> {
   const rows = await tx
@@ -469,20 +474,21 @@ async function loadSuppressionAnchors(
       statement: signals.statement,
       embedding: signalEmbeddings.embedding,
       inputHash: signalEmbeddings.inputHash,
+      dimensions:signalEmbeddings.dimensions,
     })
     .from(signals)
-    .innerJoin(signalEmbeddings, eq(signalEmbeddings.signalId, signals.id))
+    .innerJoin(signalEmbeddings, and(eq(signalEmbeddings.signalId, signals.id),eq(signalEmbeddings.profileId,signals.profileId)))
     .where(
       and(
         eq(signals.profileId, profileId),
         ...(inputPolicy ? [eq(signals.inputPolicy, inputPolicy)] : []),
         isNotNull(signals.dismissedAt),
-        eq(signalEmbeddings.model, embeddingModel),
+        eq(signalEmbeddings.model, space.model),eq(signalEmbeddings.dimensions,space.dimensions),
       ),
     )
     .orderBy(desc(signals.dismissedAt), asc(signals.id))
     .limit(MATCH_CANDIDATE_SCAN_LIMIT);
-  return rows.filter(row => row.inputHash === hashEmbeddingInput(row.statement));
+  return rows.filter(row => row.inputHash === hashEmbeddingInput(row.statement)&&embeddingInSpace(row.embedding,row.dimensions,space));
 }
 
 function findSuppressionAnchor(

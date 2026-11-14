@@ -46,6 +46,8 @@ import { readGenerationRevision, assertGenerationRevision } from "./generation-r
 import type { ModelProvider, SignalMatchJudgement } from "./model-provider.js";
 import { getDefaultModelProvider } from "./model-provider.js";
 import { cosineSimilarity } from "../scoring/vector.js";
+import {hashEmbeddingInput} from './inspiration-embeddings.js';
+import {readableEmbeddingSpace,embeddingInSpace} from './embedding-provider.js';
 import {
   GARDENER_MAX_JUDGED_PAIRS,
   GARDENER_SCAN_LIMIT,
@@ -116,13 +118,14 @@ export async function tendSignalGarden(
   }
 
   const ids = rows.map((row) => row.id);
+  const space=readableEmbeddingSpace(),currentHashes=new Map(rows.map(row=>[row.id,hashEmbeddingInput(row.statement)]));
   const embeddingRows = await db
-    .select({ signalId: signalEmbeddings.signalId, embedding: signalEmbeddings.embedding })
+    .select({ signalId: signalEmbeddings.signalId, embedding: signalEmbeddings.embedding,dimensions:signalEmbeddings.dimensions,inputHash:signalEmbeddings.inputHash })
     .from(signalEmbeddings)
-    .where(inArray(signalEmbeddings.signalId, ids));
+    .where(and(eq(signalEmbeddings.profileId,input.profileId),eq(signalEmbeddings.model,space.model),eq(signalEmbeddings.dimensions,space.dimensions),inArray(signalEmbeddings.signalId, ids)));
   const vectorById = new Map<string, number[]>();
   for (const row of embeddingRows) {
-    if (!vectorById.has(row.signalId)) vectorById.set(row.signalId, row.embedding);
+    if (row.inputHash===currentHashes.get(row.signalId)&&embeddingInSpace(row.embedding,row.dimensions,space)&&!vectorById.has(row.signalId)) vectorById.set(row.signalId, row.embedding);
   }
 
   /* every pair already on the record, in either table, in any state */
