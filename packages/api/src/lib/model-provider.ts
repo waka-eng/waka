@@ -25,6 +25,7 @@
 import type { ConversationPerspective, PrincipleType, TopOfMindEntryType } from "../db/index.js";
 import type { SupportedLocale } from "./locales.js";
 import {timeModelProvider} from './performance-stages.js';
+import {configuredGenerationProvider} from './model-routing.js';
 
 // ---------------------------------------------------------------------------
 // Layer 2 — signal candidate extraction
@@ -550,13 +551,18 @@ let defaultProvider: ModelProvider | null = null;
  */
 export async function getDefaultModelProvider(): Promise<ModelProvider> {
   if (!defaultProvider) {
-    /* OpenRouter when its key is present (owner request, 2026-10-05:
-       DeepSeek V4.1 Flash for generation); Gemini otherwise, so an environment
-       without the new key — CI before the secret lands, a fresh checkout —
-       keeps generating instead of failing. Rollback anywhere is deleting
-       one env var. Embeddings are untouched by this switch: they are pinned
-       to Gemini regardless of which road generation takes. */
-    if (process.env.OPENROUTER_API_KEY?.trim()) {
+    /* An explicit closed provider choice wins, and its key is mandatory.
+       Unset preserves the old OR-key/Gemini selection for existing stages.
+       Adding an OpenAI key alone cannot hijack an existing route; retained OR
+       media credentials cannot hijack the selected native text provider.
+       Stored embeddings remain on their separate calibrated route. */
+    const selected=configuredGenerationProvider();
+    if(selected==='openai'){
+      if(!process.env.OPENAI_API_KEY?.trim())throw new Error('Selected OpenAI provider requires OPENAI_API_KEY');
+      const {createOpenAiModelProvider}=await import('./openai-model-provider.js');
+      defaultProvider=timeModelProvider(createOpenAiModelProvider());
+    } else if (selected==='openrouter') {
+      if(!process.env.OPENROUTER_API_KEY?.trim())throw new Error('Selected OpenRouter provider requires OPENROUTER_API_KEY');
       const { createOpenRouterModelProvider } = await import(
         "./openrouter-model-provider.js"
       );

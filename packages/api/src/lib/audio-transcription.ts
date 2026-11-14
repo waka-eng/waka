@@ -3,6 +3,8 @@ import { parseBuffer } from 'music-metadata';
 import { z } from 'zod';
 import { buildGeminiJsonHeaders, buildGeminiModelEndpoint, fetchModelWithTimeout } from './gemini-http.js';
 import { webmOpusDurationBound } from './webm-audio-duration.js';
+import {requestAudioTranscript} from './openrouter-media.js';
+import {OpenRouterHttpError,getOpenRouterApiKey} from './openrouter-http.js';
 
 export const AUDIO_TRANSCRIPTION_MODEL = 'gemini-2.5-flash';
 // Base64 plus JSON stays below the provider's 20 MB inline request limit.
@@ -69,9 +71,21 @@ const PROMPT = [
 /** One bounded attempt. The durable worker, not this adapter, owns retries.
  * Failure codes contain no provider body, captured words or credentials. */
 export async function transcribeAudio(input: {
-  bytes: Uint8Array; contentType: string; apiKey?: string; fetchFn?: typeof fetch; signal?: AbortSignal;
+  bytes: Uint8Array; contentType: string; apiKey?: string; openRouterApiKey?:string; fetchFn?: typeof fetch; signal?: AbortSignal;
 }) {
   const media = await inspectTranscriptionAudio(input.bytes, input.contentType);
+  const selected=process.env.WAKA_AUDIO_PROVIDER?.trim()||'gemini';
+  if(selected!=='gemini'&&selected!=='openrouter')throw new AudioTranscriptionError('transcription_provider_invalid',false);
+  if(input.signal?.aborted)throw new AudioTranscriptionError('transcription_canceled',false);
+  if(selected==='openrouter'){
+    if(!input.openRouterApiKey&&!getOpenRouterApiKey())throw new AudioTranscriptionError('transcription_unconfigured',false);
+    try{return {...media,...await requestAudioTranscript(input.bytes,media.mimeType,{apiKey:input.openRouterApiKey,fetchFn:input.fetchFn,signal:input.signal})};}
+    catch(error){
+      if(input.signal?.aborted)throw new AudioTranscriptionError('transcription_canceled',false);
+      if(error instanceof OpenRouterHttpError)throw new AudioTranscriptionError(`transcription_http_${error.status}`,error.status===408||error.status===429||error.status>=500);
+      throw new AudioTranscriptionError('transcription_openrouter_failed',true);
+    }
+  }
   const apiKey = input.apiKey ?? process.env.GEMINI_API_KEY;
   if (!apiKey) throw new AudioTranscriptionError('transcription_unconfigured', false);
   if (input.signal?.aborted) throw new AudioTranscriptionError('transcription_canceled', false);
@@ -87,7 +101,7 @@ export async function transcribeAudio(input: {
           responseMimeType: 'application/json',
           responseSchema: { type: 'OBJECT', properties: { transcript: { type: 'STRING' } }, required: ['transcript'] },
         } }),
-      });
+      },undefined,undefined,'audio transcription');
   } catch {
     if (input.signal?.aborted) throw new AudioTranscriptionError('transcription_canceled', false);
     throw new AudioTranscriptionError('transcription_transport_failed', true);

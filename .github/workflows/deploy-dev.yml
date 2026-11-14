@@ -132,10 +132,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Validate AWS deployment credentials
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
         shell: bash
         run: |
           set -euo pipefail
-          required=(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION OPENROUTER_API_KEY DB_CONNECTION_URL)
+          required=(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION OPENROUTER_API_KEY OPENAI_API_KEY DB_CONNECTION_URL)
           missing=()
           for name in "${required[@]}"; do
             if [[ -z "${!name:-}" ]]; then
@@ -196,6 +198,11 @@ jobs:
       - name: Set development OpenRouter secret
         run: pnpm sst secret set OpenRouterApiKey "$OPENROUTER_API_KEY" --stage "$SST_STAGE"
 
+      - name: Set development OpenAI secret through stdin
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
+        run: node scripts/set-development-openai-secret.mjs
+
       # The migration runner and deployed functions must use the same target.
       - name: Set development database secret
         run: pnpm sst secret set DbConnectionUrl "$DB_CONNECTION_URL" --stage "$SST_STAGE"
@@ -221,6 +228,8 @@ jobs:
           node scripts/dev-alert-audit.mjs
 
       - name: Verify deployed chat configuration
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
         shell: bash
         run: |
           set -euo pipefail
@@ -229,9 +238,10 @@ jobs:
             configuration="$(aws lambda get-function-configuration --function-name "$function_name" \
               --query '{replies:Environment.Variables.WAKA_CONVERSATION_REPLIES,chatModel:Environment.Variables.WAKA_MODEL_CHAT,generationModel:Environment.Variables.OPENROUTER_GENERATION_MODEL,database:Environment.Variables.DB_CONNECTION_URL}' --output json)"
             jq -e --arg enabled "$WAKA_CONVERSATION_REPLIES" --arg database "$DB_CONNECTION_URL" \
-              '.replies == $enabled and .chatModel == "deepseek/deepseek-v4.1-flash-1017" and .generationModel == "deepseek/deepseek-v4.1-flash-1017" and .database == $database' <<< "$configuration"
+              '.replies == $enabled and .chatModel == "gpt-6.1-terra" and .generationModel == "deepseek/deepseek-v4.1-flash-1017" and .database == $database' <<< "$configuration"
             printf '%s chat configuration and migrated database target verified.\n' "$output_key"
           done
+          node scripts/dev-gpt-config-audit.mjs
 
       - name: Connect Route53 dev domain
         shell: bash

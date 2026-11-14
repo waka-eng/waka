@@ -44,6 +44,19 @@ describe("isDescribableImageType", () => {
 });
 
 describe("describeImage", () => {
+  it('uses stateless native Terra for common images even with an OR key retained',async()=>{
+    vi.stubEnv('WAKA_GENERATION_PROVIDER','openai');
+    const fetchFn=vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({status:'completed',model:'gpt-6.1-terra',output:[{type:'message',role:'assistant',content:[{type:'output_text',text:JSON.stringify({description:'Words: Leave room.\nImage: A handwritten note.'})}]}]}));
+    expect(await describeImage({bytes:PNG,contentType:'image/png',openAiApiKey:'SYNTHETIC_NATIVE',openRouterApiKey:'SYNTHETIC_OR',fetchFn})).toContain('Leave room.');
+    expect(fetchFn).toHaveBeenCalledOnce();const [url,init]=fetchFn.mock.calls[0]!;expect(url).toBe('https://api.openai.com/v1/responses');
+    expect(init!.headers).toMatchObject({Authorization:'Bearer SYNTHETIC_NATIVE'});const body=JSON.parse(String(init!.body));
+    expect(body).toMatchObject({model:'gpt-6.1-terra',store:false,stream:false,max_output_tokens:800,reasoning:{effort:'low'}});
+    expect(body.input[1].content[1]).toMatchObject({type:'input_image',image_url:`data:image/png;base64,${Buffer.from(PNG).toString('base64')}`});
+  });
+  it('fails closed for a missing selected native key without falling back to OR',async()=>{
+    vi.stubEnv('WAKA_GENERATION_PROVIDER','openai');vi.stubEnv('OPENAI_API_KEY','');const fetchFn=vi.fn<typeof fetch>();
+    await expect(describeImage({bytes:PNG,contentType:'image/png',openRouterApiKey:'SYNTHETIC_OR',fetchFn})).rejects.toMatchObject({transient:false});expect(fetchFn).not.toHaveBeenCalled();
+  });
   it('uses DeepSeek vision, inline private bytes and the shared privacy policy when OpenRouter is configured', async () => {
     vi.stubEnv('OPENROUTER_API_KEY', 'openrouter-key');
     vi.stubEnv('WAKA_OPENROUTER_REQUIRE_ZDR', '1');
@@ -66,12 +79,21 @@ describe("describeImage", () => {
   });
 
   it.each(['image/heic', 'image/heif'])('keeps %s on the compatible Gemini path', async contentType => {
+    vi.stubEnv('WAKA_GENERATION_PROVIDER','openai');
     const fetchFn = vi.fn<typeof fetch>(async () => jsonResponse(candidate('An iPhone photo.')));
     expect(await describeImage({ bytes: PNG, contentType, openRouterApiKey: 'openrouter-key', apiKey: 'gemini-key', fetchFn })).toBe('An iPhone photo.');
     expect(fetchFn).toHaveBeenCalledOnce();
     expect(String(fetchFn.mock.calls[0]![0])).toContain('gemini-3.1-flash-lite');
     expect(fetchFn.mock.calls[0]![1]!.headers).toMatchObject({ 'x-goog-api-key': 'gemini-key' });
     expect(fetchFn.mock.calls[0]![1]!.headers).not.toHaveProperty('Authorization');
+  });
+
+  it('keeps GIF on its retained OR route under the native text profile',async()=>{
+    vi.stubEnv('WAKA_GENERATION_PROVIDER','openai');
+    const fetchFn=vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({choices:[{finish_reason:'stop',message:{content:JSON.stringify({description:'Words: none\nImage: A small animation.'})}}]}));
+    await describeImage({bytes:PNG,contentType:'image/gif',openAiApiKey:'SYNTHETIC_NATIVE',openRouterApiKey:'SYNTHETIC_OR',fetchFn});
+    expect(fetchFn).toHaveBeenCalledOnce();expect(fetchFn.mock.calls[0]![0]).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(fetchFn.mock.calls[0]![1]!.headers).toMatchObject({Authorization:'Bearer SYNTHETIC_OR'});
   });
 
   it.each([400, 401, 402, 403, 408, 429, 503])('preserves the retry policy for OpenRouter HTTP %s without falling back', async status => {
