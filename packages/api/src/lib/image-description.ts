@@ -14,6 +14,8 @@
 
 import { z } from 'zod';
 import { callOpenRouter, getOpenRouterApiKey, OpenRouterHttpError } from './openrouter-http.js';
+import {ModelConfigurationError,configuredGenerationProvider} from './model-routing.js';
+import {openAiRequest,callOpenAi,OpenAiHttpError} from './openai-http.js';
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
@@ -234,6 +236,7 @@ export async function describeImage(input: {
   /** Gemini fallback credential; never sent to OpenRouter. */
   apiKey?: string;
   openRouterApiKey?: string;
+  openAiApiKey?:string;
   /** Injectable so the request shape can be asserted without a network. */
   fetchFn?: typeof fetch;
 }): Promise<string> {
@@ -252,6 +255,25 @@ export async function describeImage(input: {
   }
 
   const contentType = input.contentType.split(';')[0]!.trim().toLowerCase();
+  if(configuredGenerationProvider()==='openai'&&['image/png','image/jpeg','image/webp'].includes(contentType)){
+    try{
+      const result=await callOpenAi(openAiRequest('image',[
+        {role:'system',content:[{type:'input_text',text:DESCRIPTION_PROMPT+'\nReturn only JSON with a description string.'}]},
+        {role:'user',content:[{type:'input_text',text:'Describe the attached image.'},
+          {type:'input_image',image_url:`data:${contentType};base64,${base64FromBytes(input.bytes)}`,detail:'auto'}]},
+      ],'image_description',{type:'OBJECT',properties:{description:{type:'STRING'}},required:['description']},800),
+      'image description',{apiKey:input.openAiApiKey,fetchFn:input.fetchFn});
+      const parsed=descriptionSchema.safeParse(result);
+      if(!parsed.success)throw new ImageDescriptionError('model returned no complete description',{transient:false});
+      return parsed.data.description.slice(0,MAX_IMAGE_DESCRIPTION_CHARS);
+    }catch(error){
+      if(error instanceof ImageDescriptionError)throw error;
+      const status=error instanceof OpenAiHttpError?error.status:undefined;
+      throw new ImageDescriptionError('Direct image description failed',{transient:!(error instanceof ModelConfigurationError)&&(status===undefined||isRetryableStatus(status))});
+    }
+  }
+  // GIF retains its existing OR path (animated GIF is not promised by the
+  // native image contract). HEIC/HEIF retains the current direct Google route.
   const openRouterApiKey = input.openRouterApiKey ?? getOpenRouterApiKey();
   // OpenRouter only accepts PNG/JPEG/WebP/GIF. Keep iPhone HEIC/HEIF
   // enrichment working on the existing Gemini path; do not send unsupported bytes.

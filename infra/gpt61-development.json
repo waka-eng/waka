@@ -1,0 +1,15 @@
+{
+  "WAKA_GENERATION_PROVIDER": "openai",
+  "WAKA_MODEL_CHAT": "gpt-6.1-terra",
+  "WAKA_MODEL_EXTRACT": "gpt-6.1-terra",
+  "WAKA_MODEL_SUPPORT": "gpt-6.1-terra",
+  "WAKA_MODEL_JUDGE": "gpt-6.1-terra",
+  "WAKA_MODEL_REFLECT": "gpt-6.1-terra",
+  "WAKA_MODEL_SYNTHESIZE": "gpt-6.1-sol",
+  "WAKA_MODEL_TOP_OF_MIND_REVIEW": "gpt-6.1-terra",
+  "WAKA_MODEL_PRINCIPLES": "gpt-6.1-terra",
+  "WAKA_MODEL_PRINCIPLE_JUDGE": "gpt-6.1-terra",
+  "WAKA_MODEL_ROUTE": "gpt-6.1-terra",
+  "WAKA_MODEL_IMAGE": "gpt-6.1-terra",
+  "WAKA_AUDIO_PROVIDER": "gemini"
+}

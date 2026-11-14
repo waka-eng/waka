@@ -23,7 +23,7 @@ it('uses the real pinned CLI: static config import fails; dynamic import reaches
    AWS_EC2_METADATA_DISABLED:'true',AWS_SHARED_CREDENTIALS_FILE:join(folder,'no-credentials'),AWS_CONFIG_FILE:join(folder,'no-config')};
   const command=process.platform==='darwin'?'/usr/bin/sandbox-exec':binary;
   const prefix=process.platform==='darwin'?['-p','(version 1) (allow default) (deny network*)',binary]:[];
-  const invoke=(args:string[],cwd:string)=>spawnSync(command,[...prefix,...args],{cwd,env,encoding:'utf8',timeout:15000,stdio:'pipe'});
+  const invoke=(args:string[],cwd:string,input?:string)=>spawnSync(command,[...prefix,...args],{cwd,env,input,encoding:'utf8',timeout:15000,stdio:'pipe'});
   const check=invoke(['version'],folder);
   expect(check.status).toBe(0);expect((check.stdout+check.stderr).includes('3.19.3')).toBe(true);
   const source=readFileSync(join(root,'sst.config.ts'),'utf8');
@@ -34,7 +34,7 @@ it('uses the real pinned CLI: static config import fails; dynamic import reaches
   const previous="import scheduledWorkerEvent from './infra/background-worker-event.json';\n"+guarded.replace(dynamic,'');
   for(const [kind,config] of [['static',previous],['dynamic',guarded]]){
    const cwd=join(folder,kind);mkdirSync(cwd,{mode:0o700});writeFileSync(join(cwd,'sst.config.ts'),config);
-   for(const file of ['infra/background-worker-event.json','infra/monitoring-relay-arn.mjs','packages/api/src/monitoring/protocol.ts','packages/api/src/monitoring/budget-protocol.ts']){
+   for(const file of ['infra/background-worker-event.json','infra/gpt61-development.json','infra/monitoring-relay-arn.mjs','packages/api/src/monitoring/protocol.ts','packages/api/src/monitoring/budget-protocol.ts']){
     const target=join(cwd,file);mkdirSync(dirname(target),{recursive:true});writeFileSync(target,readFileSync(join(root,file)));
    }
    const result=invoke(['diff','--stage','offline-startup'],cwd),output=result.stdout+result.stderr;
@@ -43,6 +43,14 @@ it('uses the real pinned CLI: static config import fails; dynamic import reaches
    if(kind==='static')expect(classifyPreviewFailure(output).categories).toContain('config_top_level_import');
    expect(output.includes('WAKA_OFFLINE_APP_REACHED')).toBe(kind==='dynamic');
    expect(output.includes('loading home')).toBe(false);
+   if(kind==='dynamic'){
+    // Real secret-set command, no value argument: EOF-terminated synthetic
+    // stdin reaches app(). The sentinel prevents backend access/secret writes.
+    const secret=invoke(['secret','set','OpenAiApiKey','--stage','offline-startup'],cwd,'PRIVATE_STDIN_CANARY');
+    expect(secret.status).toBe(1);expect(secret.error).toBeUndefined();
+    expect(secret.stdout+secret.stderr).toContain('WAKA_OFFLINE_APP_REACHED');
+    expect(secret.stdout+secret.stderr).not.toMatch(/PRIVATE_STDIN_CANARY|loading home/);
+   }
   }
  } finally {rmSync(folder,{recursive:true,force:true});}
 },40000);

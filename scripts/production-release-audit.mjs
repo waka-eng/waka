@@ -79,7 +79,7 @@ export function auditProductionRelease({outputs,expected,read}){
    checks.cleanupDatabaseMatches=!!expected.database&&env.DB_CONNECTION_URL===expected.database;
    checks.cleanupBucketMatches=env.ATTACHMENTS_BUCKET===expected.attachments;
    checks.cleanupRegionMatches=env.ATTACHMENTS_REGION==='us-west-2';
-   checks.cleanupNoModelKeys=!env.OPENROUTER_API_KEY&&!env.GEMINI_API_KEY;
+   checks.cleanupNoModelKeys=!env.OPENROUTER_API_KEY&&!env.GEMINI_API_KEY&&!env.OPENAI_API_KEY;
    checks.cleanupIsolated=['cleanupFunctionBinding','cleanupStackIdentity','cleanupTimeout','cleanupDatabaseMatches','cleanupBucketMatches','cleanupRegionMatches','cleanupNoModelKeys'].every(key=>checks[key]===true);
   }
   if(checks.redrive){
