@@ -13,11 +13,14 @@ import {GEMINI_EMBEDDING_DIMENSIONS,GEMINI_EMBEDDING_MODEL,GeminiEmbeddingHttpCl
 import type {ConversationRetrievalTrace} from './conversation-retrieval.js';
 import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs} from './queue.js';
 import {attachmentNote,readMessageAttachments} from './conversation-attachments.js';
+import {createConversationTiming} from './conversation-timing.js';
+import {measurePerformanceStage} from './performance-stages.js';
 type Db=ReturnType<typeof getDb>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
 type Reader=Pick<Db,'select'|'execute'>;
 type Request=typeof conversationReplyRequests.$inferSelect;
 const HOUR=3600000;
+const REPLY_HISTORY_MESSAGES=8;
 export class ConversationReplyError extends Error{constructor(readonly status:404|409|410|429|503,message:string){super(message);}}
 async function owned(db:Reader,profileId:string,id:string){
   const [row]=await db.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
@@ -50,7 +53,7 @@ async function effectiveStatus(db:Reader,row:Request){
   return statusWithJob(row.status,job);
 }
 export async function projectConversationMessages(db:Reader,profileId:string,id:string,messages:Array<typeof conversationMessages.$inferSelect>,memory?:ConversationMemory){
-  const requests=await requestsFor(db,profileId,id);
+  const requests=messages.some(message=>message.role==='assistant')?await requestsFor(db,profileId,id):[];
   const byMessage=new Map<string,Request>();
   for(const request of requests)if(request.status==='ready'&&request.assistantMessageId&&!byMessage.has(request.assistantMessageId))byMessage.set(request.assistantMessageId,request);
   const groups=await currentConversationReferenceGroups(db,memory??await memoryOf(db,profileId,id),messages.map(message=>message.role==='assistant'?byMessage.get(message.id)?.references??[]:[]));
@@ -83,7 +86,7 @@ export function conversationReplyWindow(messages:ReadonlyArray<{role:'user'|'ass
   const searchHistory:Array<{role:string;content:string;attachments:ReadonlyArray<{name:string|null}>}>=[];
   // Keep complete messages: truncating a human sentence can drop its negation
   // or correction. Missing earlier context is disclosed to the provider.
-  for(const row of messages.slice(-8).reverse()){
+  for(const row of messages.slice(-REPLY_HISTORY_MESSAGES).reverse()){
     if(row.role==='assistant'&&row.memoryChanged)continue;
     const note=attachmentNote(row.attachments);
     const content=row.content+(row.followUpQuestion?'\n'+row.followUpQuestion:'')+(note?(row.content?'\n':'')+note:'');
@@ -94,18 +97,24 @@ export function conversationReplyWindow(messages:ReadonlyArray<{role:'user'|'ass
   return {history,cut,searchQuery:conversationSearchQuery(searchHistory)};
 }
 async function inputFor(db:Reader,profileId:string,id:string,userMessageId:string,queryVector?:number[]){
-  const conversation=await owned(db,profileId,id),messages=await db.select().from(conversationMessages)
-    .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id))).orderBy(asc(conversationMessages.position));
+  const [owner]=await db.select({conversation:conversations,locale:profiles.preferredLocale,profileType:profiles.type}).from(conversations)
+    .innerJoin(profiles,eq(profiles.id,conversations.profileId)).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
+  if(!owner)throw new ConversationReplyError(404,'Conversation not found.');
+  const conversation=owner.conversation;if(conversation.deletedAt)throw new ConversationReplyError(410,'This conversation was deleted.');
+  // One overflow row preserves contextChanged without transferring the whole
+  // transcript at every admission/currentness/publication proof.
+  const messages=(await db.select().from(conversationMessages)
+    .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id)))
+    .orderBy(desc(conversationMessages.position)).limit(REPLY_HISTORY_MESSAGES+1)).reverse();
   const anchor=messages.find(row=>row.id===userMessageId&&row.role==='user');
   if(!anchor||anchor.position!==conversation.revision)return null;
   const memory=await conversationMemory(db,profileId,conversation);
-  const projected=await projectConversationMessages(db,profileId,id,messages.slice(-8),memory);
+  const projected=await projectConversationMessages(db,profileId,id,messages.slice(-REPLY_HISTORY_MESSAGES),memory);
   const window=conversationReplyWindow(projected),history=window.history,searchQuery=window.searchQuery;
-  const contextChanged=messages.length>8||window.cut||projected.some(row=>row.memoryChanged);
+  const contextChanged=messages.length>REPLY_HISTORY_MESSAGES||window.cut||projected.some(row=>row.memoryChanged);
   let retrievalTrace:ConversationRetrievalTrace|undefined;
   const useSavedSources=conversationUsesSavedSources(history);
   const context=useSavedSources?await readPerspectiveContext(db,memory,searchQuery,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]};
-  const [profile]=await db.select({locale:profiles.preferredLocale,type:profiles.type}).from(profiles).where(eq(profiles.id,profileId));
   // New chats belong to their selected profile. `mine` means that profile's
   // memory; when it is an agent, its work must not become the human's biography.
   const opening=memory.perspective==='mine'&&(useSavedSources||conversation.opening?.kind==='prompt')?await resolveConversationOpening(db,profileId,conversation.opening,{display:false}):null;
@@ -119,8 +128,8 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     return [{...source,text,truncated:source.truncated||text.length<source.text.length}];
   }):[...context.principles,...context.reading,...context.inspirations];
   const sources=selected
-    .map(source=>profile?.type==='agent'?{...source,owner:'agent' as const}:source);
-  const perspective=profile?.type==='agent'?'agent':memory.perspective;
+    .map(source=>owner.profileType==='agent'?{...source,owner:'agent' as const}:source);
+  const perspective=owner.profileType==='agent'?'agent':memory.perspective;
   /* Pinning a keep into `sources` puts it in front of the model; pointing
    * `focusSourceNumber` at it is what tells the model that THIS is the one the
    * person is talking about. Without the second half, "the agent can read it"
@@ -144,7 +153,7 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     sources.findIndex(source=>source.kind==='inspiration'&&source.id===conversation.initialInspirationId),
   ].find(index=>index>=0)??-1;
   const applicationOpening=opening?{provenance:'application' as const,available:opening.available,...(opening.available?opening.binding.kind==='source'?{why:opening.binding.why,...(opening.binding.question?{text:opening.ask}:{}),sourceNumbers:openingSources.map(row=>sources.findIndex(source=>source.kind===row.kind&&source.id===row.id)+1).filter(number=>number>0)}:{text:opening.ask,...(opening.binding.kind==='activity'?{observedAt:opening.binding.asOf}:{})}:{})}:undefined;
-  const input:ConversationReplyInput={...(applicationOpening?{applicationOpening}:{}),...(perspective!=='mine'?{perspective}:{}),preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged:contextChanged||Boolean(opening&&!opening.available),...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
+  const input:ConversationReplyInput={...(applicationOpening?{applicationOpening}:{}),...(perspective!=='mine'?{perspective}:{}),preferredLocale:owner.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged:contextChanged||Boolean(opening&&!opening.available),...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
   return {input,searchQuery,sources,memory,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){
@@ -172,12 +181,13 @@ async function replyState(db:Reader,profileId:string,id:string){
     runAfter:phase==='pending'&&job?.status==='pending'&&job.runAfter.getTime()>now.getTime()?job.runAfter.toISOString():null,
     failureCode:row?.failureCode??null,retryAfter,canRetry:conversationRepliesEnabled()&&Boolean(message)&&conversation.revision<200&&!retryAfter&&['idle','failed','stopped','stale'].includes(phase),generationEnabled:conversationRepliesEnabled()};
 }
-export async function readConversationReplyState(db:Db,profileId:string,id:string){return db.transaction(tx=>replyState(tx,profileId,id),{isolationLevel:'repeatable read',accessMode:'read only'});}
+export async function readConversationReplyState(db:Db,profileId:string,id:string){return measurePerformanceStage('reply_state','conversation',()=>db.transaction(tx=>replyState(tx,profileId,id),{isolationLevel:'repeatable read',accessMode:'read only'}));}
 export async function requestConversationReply(db:Db,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null},quotaAccountId?:string){
   const result=await db.transaction(tx=>requestConversationReplyInTransaction(tx,profileId,id,input,quotaAccountId));await wakeCommittedBackgroundJobs();return result;
 }
 /** Also used by Send's transaction: the message and its reply intent commit together. */
 export async function requestConversationReplyInTransaction(tx:Tx,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null},quotaAccountId?:string){
+  return measurePerformanceStage('reply_admission','conversation',async()=>{
   if(!conversationRepliesEnabled())throw new ConversationReplyError(503,'Replies are not enabled here yet. Your messages are saved.');
     const conversation=await lockConversation(tx,profileId,id),rows=await requestsFor(tx,profileId,id),latest=rows.find(row=>row.userMessageId===input.messageId);
     // The predecessor is a compare-and-swap token. Replaying a lost retry
@@ -196,6 +206,7 @@ export async function requestConversationReplyInTransaction(tx:Tx,profileId:stri
     const accepted=await replyState(tx,profileId,id);
     if(quotaAccountId)await chargeChatRequest(tx,quotaAccountId);
     return accepted;
+  });
 }
 export async function stopConversationReply(db:Db,profileId:string,id:string,requestId:string){
   return db.transaction(async tx=>{
@@ -218,13 +229,15 @@ export async function readConversationReference(db:Db,profileId:string,id:string
 /** At most one query embedding and one answer per attempt, with both slots
  * accounted before transport. Uncertain attempts are not automatically replayed. */
 export async function processConversationReply(db:Db,job:BackgroundJob,id:string,requestId:string,beforeCommit:(tx:Tx)=>Promise<void>,deps:{embeddingClient?:GeminiEmbeddingClient|null}={}){
+  const timing=createConversationTiming();let answerAttempted=false,published=false;
+  try{
   const retrievalStarted=performance.now();
   const embeddingClient=deps.embeddingClient===undefined
     ?process.env.GEMINI_API_KEY||process.env.SST_RESOURCE_GeminiApiKey?new GeminiEmbeddingHttpClient(GEMINI_EMBEDDING_MODEL,{timeoutMs:5000,exchangeTimeoutMs:10000}):null
     :deps.embeddingClient;
   const finish=async(status:'failed'|'stale',failureCode:string)=>db.update(conversationReplyRequests).set({status,failureCode,finishedAt:new Date()})
     .where(and(eq(conversationReplyRequests.profileId,job.profileId),eq(conversationReplyRequests.id,requestId),inArray(conversationReplyRequests.status,['pending','running'])));
-  const initial=await db.transaction(async tx=>{
+  const initial=await timing.measure('prepare',()=>db.transaction(async tx=>{
     const [conversation]=await tx.select().from(conversations).where(and(eq(conversations.profileId,job.profileId),eq(conversations.id,id))).for('update');
     if(!conversation||conversation.deletedAt)return null;
     await lockMemory(tx,job.profileId);await beforeCommit(tx);
@@ -247,16 +260,16 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
     const semantic=Boolean(indexed);
     await tx.update(conversationReplyRequests).set({status:'running',dispatchedAt:sql`clock_timestamp()`,retrievalDispatchedAt:semantic?sql`clock_timestamp()`:null,failureCode:null}).where(eq(conversationReplyRequests.id,requestId));
     return {...next,userMessageId:request.userMessageId!,semantic};
-  });
+  }));
   if(!initial)return;
   let queryVector:number[]|undefined;
   if(initial.semantic){
-    try{queryVector=validateEmbeddingVector(await embeddingClient!.embed(initial.searchQuery,'RETRIEVAL_QUERY'));}
+    try{queryVector=validateEmbeddingVector(await timing.measure('lookup',()=>embeddingClient!.embed(initial.searchQuery,'RETRIEVAL_QUERY')));}
     catch{ /* Bounded lexical context remains usable when semantic lookup fails. */ }
   }
   // The network call above owns no DB locks. Stop, deletion and edits during
   // lookup must be checked before spending the answer slot, not only afterward.
-  const work=initial.semantic?await db.transaction(async tx=>{
+  const work=initial.semantic?await timing.measure('revalidate',()=>db.transaction(async tx=>{
     const [conversation]=await tx.select().from(conversations).where(and(eq(conversations.profileId,job.profileId),eq(conversations.id,id))).for('update');
     if(!conversation||conversation.deletedAt)return null;
     await lockMemory(tx,job.profileId);await beforeCommit(tx);
@@ -268,15 +281,16 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
     if(!selected)return null;
     await tx.update(conversationReplyRequests).set({contextHash:selected.hash,contextSources:selected.sources.map(({kind,id,hash})=>({kind,id,hash}))}).where(eq(conversationReplyRequests.id,requestId));
     return selected;
-  }):initial;
+  })):initial;
   if(!work)return;
   console.info('[conversation-retrieval]',JSON.stringify({requestId,profileId:job.profileId,
     mode:queryVector?'hybrid':initial.semantic?'lexical_fallback':'lexical',preparationMs:Math.round(performance.now()-retrievalStarted),
     ...work.retrievalTrace,sources:work.sources.map(({kind,id,revision})=>({kind,id,revision}))}));
   let result;
-  try{result=parseConversationReply(await (await getDefaultModelProvider()).answerConversation(work.input),work.input);}
+  try{answerAttempted=true;result=await timing.measure('answer',async()=>parseConversationReply(await (await getDefaultModelProvider()).answerConversation(work.input),work.input));}
   catch{await finish('failed','provider_failed');return;}
-  try{await db.transaction(async tx=>{
+  let staged=false;
+  try{await timing.measure('publication',()=>db.transaction(async tx=>{
     const [conversation]=await tx.select().from(conversations).where(and(eq(conversations.profileId,job.profileId),eq(conversations.id,id))).for('update');
     if(!conversation||conversation.deletedAt)return;
     await lockMemory(tx,job.profileId);
@@ -308,5 +322,7 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
     await tx.insert(conversationMessages).values({id:assistantId,profileId:job.profileId,conversationId:id,position:conversation.revision+1,role:'assistant',content:result.answer});
     await tx.update(conversations).set({revision:conversation.revision+1,updatedAt:new Date()}).where(eq(conversations.id,id));
     await tx.update(conversationReplyRequests).set({status:'ready',assistantMessageId:assistantId,references,followUpQuestion:result.followUpQuestion,finishedAt:new Date()}).where(eq(conversationReplyRequests.id,requestId));
-  });}catch{await finish('failed','publication_unconfirmed');}
+    staged=true;
+  }));published=staged;}catch{await finish('failed','publication_unconfirmed');}
+  }finally{timing.finish({answerAttempted,published});}
 }

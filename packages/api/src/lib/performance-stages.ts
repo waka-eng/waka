@@ -1,6 +1,6 @@
 import type {ModelProvider} from './model-provider.js';
 import {backgroundJobTypeValues} from '../db/schema-background-jobs.js';
-export type PerformanceStage='queue_wait'|'material_read'|'context_read'|'embedding'|'model'|'publication_validation';
+export type PerformanceStage='queue_wait'|'material_read'|'context_read'|'embedding'|'model'|'publication_validation'|'reply_admission'|'reply_state'|'reply_read';
 /** Timing only. No inputs, outputs, identifiers, exceptions or credentials.
  * A broken log sink must never change a memory operation's outcome. */
 export function recordPerformanceStage(stage:PerformanceStage,operation:string,durationMs:number,outcome:'ok'|'error'='ok'){
