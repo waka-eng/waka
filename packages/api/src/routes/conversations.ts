@@ -15,7 +15,7 @@ import {wakeCommittedBackgroundJobs} from '../lib/queue.js';
 import {measurePerformanceStage} from '../lib/performance-stages.js';
 import {personalPrincipleReadable} from '../lib/personal-output.js';
 import {PRINCIPLE_MIN_SIGNALS} from '../lib/principle-generation.js';
-import {ConversationAttachmentError,MAX_MESSAGE_ATTACHMENTS,conversationAttachmentKeys,linkMessageAttachments} from '../lib/conversation-attachments.js';
+import {ConversationAttachmentError,MAX_MESSAGE_ATTACHMENTS,conversationAttachmentKeys,linkMessageAttachments,readMessageAttachments} from '../lib/conversation-attachments.js';
 import {sweepAttachmentObjects,type DeleteAttachmentObjects} from '../lib/attachment-sweep.js';
 
 const uuid=z.string().uuid().transform(value=>value.toLowerCase());
@@ -313,12 +313,24 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     const input=messageInput.safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Write a message of up to 4,000 characters, or add a photo or file.'},400);
     const profileId=c.get('conversationProfileId'),id=c.req.param('id'),content=storedContent(input.data.content);let dropped:string[]=[];
     const row=await database().transaction(async tx=>{
-      await tx.select({id:conversations.id}).from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id))).for('update');
-      const current=await readConversation(tx,profileId,id),existing=current.messages.find(message=>message.id===input.data.id);
-      if(existing){if(existing.role!=='user'||existing.content!==content||existing.correctsMessageId!==(input.data.correctsMessageId??null)||!sameAttachments(existing.attachments,input.data.attachmentIds))throw new ConversationError('This message id already holds different words.',409);return windowedConversation(current,window,input.data.id);}
+      const [current]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id))).for('update');
+      if(!current)throw new ConversationError('Conversation not found.',404);
+      if(current.deletedAt)throw new ConversationError('This conversation was deleted.',410);
+      // New IDs need validation, not an already-projected transcript. A replay
+      // still compares the exact stored words/correction/attachments and returns
+      // the same current projection, without charging or creating another turn.
+      const [existing]=await tx.select().from(conversationMessages).where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id),eq(conversationMessages.id,input.data.id)));
+      if(existing){
+        const linked=await readMessageAttachments(tx,profileId,id,[existing.id]);
+        if(existing.role!=='user'||existing.content!==content||existing.correctsMessageId!==(input.data.correctsMessageId??null)||!sameAttachments(linked.get(existing.id)??[],input.data.attachmentIds))throw new ConversationError('This message id already holds different words.',409);
+        return windowedConversation(await readConversation(tx,profileId,id),window,input.data.id);
+      }
       if(current.revision!==input.data.revision)throw new ConversationError('New messages arrived. Check the conversation before sending.',409);
       if(current.revision>=(input.data.requestReply&&conversationRepliesEnabled()?CONVERSATION_LIMITS.messages-1:CONVERSATION_LIMITS.messages))throw new ConversationError('This conversation is full. Start another one.',429);
-      if(input.data.correctsMessageId&&!current.messages.some(message=>message.id===input.data.correctsMessageId&&message.role==='assistant'))throw new ConversationError('Choose a reply in this conversation to correct.',409);
+      if(input.data.correctsMessageId){
+        const [corrected]=await tx.select({id:conversationMessages.id}).from(conversationMessages).where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id),eq(conversationMessages.id,input.data.correctsMessageId),eq(conversationMessages.role,'assistant')));
+        if(!corrected)throw new ConversationError('Choose a reply in this conversation to correct.',409);
+      }
       await tx.insert(conversationMessages).values({id:input.data.id,profileId,conversationId:id,position:current.revision+1,role:'user',content,correctsMessageId:input.data.correctsMessageId??null});
       dropped=await linkMessageAttachments(tx,{profileId,conversationId:id,messageId:input.data.id,attachmentIds:input.data.attachmentIds??[]});
       await tx.update(conversations).set({revision:current.revision+1,updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));

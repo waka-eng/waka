@@ -2,6 +2,7 @@ import {resolveConversationOpening} from './conversation-opening.js';
 import {chargeChatRequest} from './chat-rate-limit.js';
 import {randomUUID} from 'node:crypto';
 import {and,asc,desc,eq,gte,inArray,sql} from 'drizzle-orm';
+import {alias} from 'drizzle-orm/pg-core';
 import {backgroundJobs,conversationMessages,conversationReplyRequests,conversations,generationRevisions,inspirationEmbeddings,inspirationRevisions,profiles,type BackgroundJob,type ConversationReference} from '../db/index.js';
 import type {getDb} from './db.js';
 import {CONVERSATION_LIMITS,conversationHash,conversationMemory,conversationRepliesEnabled,currentConversationReferences,currentConversationReferenceGroups,memoryProfiles,readPerspectiveContext,conversationPromptSources,type ConversationMemory} from './conversation-context.js';
@@ -33,10 +34,15 @@ async function memoryOf(db:Reader,profileId:string,id:string){
   return conversationMemory(db,profileId,row??{});
 }
 async function lockConversation(tx:Tx,profileId:string,id:string){
-  await tx.select({id:conversations.id}).from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id))).for('update');
-  return owned(tx,profileId,id);
+  const [row]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id))).for('update');
+  if(!row)throw new ConversationReplyError(404,'Conversation not found.');if(row.deletedAt)throw new ConversationReplyError(410,'This conversation was deleted.');return row;
 }
 async function lockMemory(tx:Tx,profileId:string){
+  // Most profiles already have their fence. Acquire that same row lock without
+  // first sending an INSERT that can only conflict. The missing-row path still
+  // serializes concurrent creators before any current-source proof is used.
+  const [existing]=await tx.select().from(generationRevisions).where(eq(generationRevisions.profileId,profileId)).for('update');
+  if(existing)return;
   await tx.insert(generationRevisions).values({profileId}).onConflictDoNothing();
   await tx.select().from(generationRevisions).where(eq(generationRevisions.profileId,profileId)).for('update');
 }
@@ -157,31 +163,43 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
   return {input,searchQuery,sources,memory,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){
-  const now=new Date(),boundary=new Date(now.getTime()-HOUR);
-  const [conversation]=await db.select({id:conversations.id,revision:conversations.revision,deletedAt:conversations.deletedAt,accountId:profiles.accountId,
-    messages:sql<Array<{id:string;role:string}>>`COALESCE((SELECT jsonb_agg(jsonb_build_object('id',m.id,'role',m.role) ORDER BY m.position DESC)
-      FROM (SELECT id,role,position FROM conversation_messages WHERE profile_id=${profileId}::uuid AND conversation_id=${id}::uuid ORDER BY position DESC LIMIT 2) m),'[]'::jsonb)`})
-    .from(conversations).innerJoin(profiles,eq(profiles.id,conversations.profileId)).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
-  if(!conversation)throw new ConversationReplyError(404,'Conversation not found.');
-  if(conversation.deletedAt)throw new ConversationReplyError(410,'This conversation was deleted.');
-  const message=conversation.messages.find(row=>row.role==='user');
-  const [row]=message?await db.select({id:conversationReplyRequests.id,jobId:conversationReplyRequests.jobId,status:conversationReplyRequests.status,failureCode:conversationReplyRequests.failureCode,
-    recentCount:sql<number>`(SELECT count(*)::int FROM conversation_reply_requests r WHERE r.profile_id=${profileId}::uuid AND r.conversation_id=${id}::uuid AND r.user_message_id=${message.id}::uuid AND r.created_at>${boundary.toISOString()}::timestamptz)`,
-    recentOldest:sql<string|null>`(SELECT min(r.created_at)::text FROM conversation_reply_requests r WHERE r.profile_id=${profileId}::uuid AND r.conversation_id=${id}::uuid AND r.user_message_id=${message.id}::uuid AND r.created_at>${boundary.toISOString()}::timestamptz)`})
+  const now=new Date(),boundary=new Date(now.getTime()-HOUR),owner=alias(profiles,'conversation_owner');
+  // Select the user only from the last TWO positions, as before. These lateral
+  // readers share one snapshot/round trip, not parallel work on a one-slot pool.
+  const recent=db.select({id:conversationMessages.id,role:conversationMessages.role,position:conversationMessages.position}).from(conversationMessages)
+    .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id)))
+    .orderBy(desc(conversationMessages.position)).limit(2).as('recent_messages');
+  const message=db.select({id:recent.id}).from(recent).where(eq(recent.role,'user')).orderBy(desc(recent.position)).limit(1).as('last_user');
+  const latest=db.select({id:conversationReplyRequests.id,jobId:conversationReplyRequests.jobId,status:conversationReplyRequests.status,failureCode:conversationReplyRequests.failureCode,
+    recentCount:sql<number>`(SELECT count(*)::int FROM conversation_reply_requests r WHERE r.profile_id=${profileId}::uuid AND r.conversation_id=${id}::uuid AND r.user_message_id=${message.id} AND r.created_at>${boundary.toISOString()}::timestamptz)`.as('recent_count'),
+    recentOldest:sql<string|null>`(SELECT min(r.created_at)::text FROM conversation_reply_requests r WHERE r.profile_id=${profileId}::uuid AND r.conversation_id=${id}::uuid AND r.user_message_id=${message.id} AND r.created_at>${boundary.toISOString()}::timestamptz)`.as('recent_oldest')})
     .from(conversationReplyRequests).where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,id),eq(conversationReplyRequests.userMessageId,message.id)))
-    .orderBy(desc(conversationReplyRequests.createdAt),desc(conversationReplyRequests.id)).limit(1):[];
+    .orderBy(desc(conversationReplyRequests.createdAt),desc(conversationReplyRequests.id)).limit(1).as('latest_reply');
+  const accountBudget=db.select({count:sql<number>`coalesce(sum(1 + CASE WHEN ${conversationReplyRequests.retrievalDispatchedAt} IS NOT NULL THEN 1 ELSE 0 END),0)::int`.as('call_count'),oldest:sql<string|null>`min(${conversationReplyRequests.dispatchedAt})::text`.as('oldest_dispatch')}).from(conversationReplyRequests)
+    .innerJoin(profiles,eq(profiles.id,conversationReplyRequests.profileId)).where(and(eq(profiles.accountId,owner.accountId),gte(conversationReplyRequests.dispatchedAt,boundary))).as('account_budget');
+  const [state]=await db.select({conversation:{id:conversations.id,revision:conversations.revision,deletedAt:conversations.deletedAt},messageId:message.id,
+    request:{id:latest.id,status:latest.status,failureCode:latest.failureCode,recentCount:latest.recentCount,recentOldest:latest.recentOldest},
+    budget:{count:accountBudget.count,oldest:accountBudget.oldest},
+    job:{id:backgroundJobs.id,status:backgroundJobs.status,runAfter:backgroundJobs.runAfter,lockedAt:backgroundJobs.lockedAt,attempts:backgroundJobs.attempts,maxAttempts:backgroundJobs.maxAttempts}})
+    .from(conversations).innerJoin(owner,eq(owner.id,conversations.profileId))
+    .leftJoinLateral(message,sql`true`).leftJoinLateral(latest,sql`true`).leftJoinLateral(accountBudget,sql`true`)
+    .leftJoin(backgroundJobs,and(eq(backgroundJobs.profileId,profileId),eq(backgroundJobs.id,latest.jobId)))
+    .where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
+  if(!state)throw new ConversationReplyError(404,'Conversation not found.');
+  const {conversation,messageId}=state;if(conversation.deletedAt)throw new ConversationReplyError(410,'This conversation was deleted.');
+  const row=state.request?.id?state.request:undefined,job=state.job?.id?state.job:undefined;
   const messageRetryAfter=row&&row.recentCount>=CONVERSATION_LIMITS.attemptsPerMessage&&row.recentOldest?new Date(Date.parse(row.recentOldest)+HOUR).toISOString():null;
-  const [budget]=await db.select({count:sql<number>`coalesce(sum(1 + CASE WHEN ${conversationReplyRequests.retrievalDispatchedAt} IS NOT NULL THEN 1 ELSE 0 END),0)::int`,oldest:sql<string|null>`min(${conversationReplyRequests.dispatchedAt})::text`}).from(conversationReplyRequests)
-    .innerJoin(profiles,eq(profiles.id,conversationReplyRequests.profileId)).where(and(eq(profiles.accountId,conversation.accountId!),gte(conversationReplyRequests.dispatchedAt,boundary)));
+  const budget=state.budget!;
   const accountRetryAfter=budget.count>=CONVERSATION_LIMITS.modelCalls&&budget.oldest?new Date(Date.parse(budget.oldest)+HOUR).toISOString():null;
   const retryAfter=[messageRetryAfter,accountRetryAfter].filter((value):value is string=>value!==null).sort().at(-1)??null;
-  const [job]=row?.jobId?await db.select({status:backgroundJobs.status,runAfter:backgroundJobs.runAfter,lockedAt:backgroundJobs.lockedAt,attempts:backgroundJobs.attempts,maxAttempts:backgroundJobs.maxAttempts}).from(backgroundJobs).where(and(eq(backgroundJobs.profileId,profileId),eq(backgroundJobs.id,row.jobId))):[];
   const phase=row?statusWithJob(row.status,job):'idle';
-  return {profileId,conversationId:id,messageId:message?.id??null,requestId:row?.id??null,phase,revision:conversation.revision,
+  return {profileId,conversationId:id,messageId,requestId:row?.id??null,phase,revision:conversation.revision,
     runAfter:phase==='pending'&&job?.status==='pending'&&job.runAfter.getTime()>now.getTime()?job.runAfter.toISOString():null,
-    failureCode:row?.failureCode??null,retryAfter,canRetry:conversationRepliesEnabled()&&Boolean(message)&&conversation.revision<200&&!retryAfter&&['idle','failed','stopped','stale'].includes(phase),generationEnabled:conversationRepliesEnabled()};
+    failureCode:row?.failureCode??null,retryAfter,canRetry:conversationRepliesEnabled()&&Boolean(messageId)&&conversation.revision<200&&!retryAfter&&['idle','failed','stopped','stale'].includes(phase),generationEnabled:conversationRepliesEnabled()};
 }
-export async function readConversationReplyState(db:Db,profileId:string,id:string){return measurePerformanceStage('reply_state','conversation',()=>db.transaction(tx=>replyState(tx,profileId,id),{isolationLevel:'repeatable read',accessMode:'read only'}));}
+/** The single SELECT is the snapshot boundary. Splitting it into multiple reads
+ * would require restoring an explicit repeatable-read transaction. */
+export async function readConversationReplyState(db:Db,profileId:string,id:string){return measurePerformanceStage('reply_state','conversation',()=>replyState(db,profileId,id));}
 export async function requestConversationReply(db:Db,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null},quotaAccountId?:string){
   const result=await db.transaction(tx=>requestConversationReplyInTransaction(tx,profileId,id,input,quotaAccountId));await wakeCommittedBackgroundJobs();return result;
 }
