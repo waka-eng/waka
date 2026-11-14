@@ -10,9 +10,15 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const source = resolve(process.argv[2] ?? join(root, '../waka-mcp'));
+const candidateIndex = process.argv.indexOf('--candidate-dir');
+const candidateDir = candidateIndex < 0 ? null : resolve(process.argv[candidateIndex + 1] ?? '');
+if (candidateDir && !candidateDir.startsWith('/tmp/')) throw new Error('Candidate archives belong in an explicit /tmp directory.');
 const git = (...args) => execFileSync('git', ['-C', source, ...args], { encoding: 'utf8' }).trim();
 if (git('status', '--porcelain')) throw new Error('Commit MCP client changes before packaging a release.');
 const sourceCommit = git('rev-parse', 'HEAD');
+// A local reviewed candidate can be exercised before publication, but it must
+// never become the app's distributed manifest until the source is published.
+if (!candidateDir) git('merge-base', '--is-ancestor', sourceCommit, 'refs/remotes/origin/dev');
 execFileSync('pnpm', ['--ignore-workspace', 'audit', '--prod', '--audit-level=low'], { cwd: source, stdio: 'inherit' });
 const sourcePackage = JSON.parse(await readFile(join(source, 'package.json'), 'utf8'));
 const version = `${sourcePackage.version}-client.${sourceCommit.slice(0, 12)}`;
@@ -70,10 +76,10 @@ try {
     ['waka-login', 'login', 'Usage: waka-login <api-url> --profile <profile-id> --device <label>'],
   ]) {
     const file = join(packageDir, 'bin', `${name}.mjs`);
-    await writeFile(file, `#!/usr/bin/env node\nconst option = process.argv[2];\nif (option === '--version') console.log(${JSON.stringify(`WAKA MCP ${version}`)});\nelse if (option === '--help' || option === '-h') console.log(${JSON.stringify(usage + '\nGet your profile-specific setup instructions in WAKA Settings → Agent profiles → your agent.')});\nelse await import('../${module}.mjs');\n`);
+    await writeFile(file, `#!/usr/bin/env node\nconst option = process.argv[2];\nif (option === '--version') console.log(${JSON.stringify(`WAKA MCP ${version}`)});\nelse if (option === '--help' || option === '-h') console.log(${JSON.stringify(usage + '\nGet your bound-profile setup instructions in WAKA Settings → My profile · MCP.')});\nelse await import('../${module}.mjs');\n`);
     await chmod(file, 0o755);
   }
-  await writeFile(join(packageDir, 'README.md'), '# WAKA MCP client\n\nInstall from the package URL shown in WAKA Settings → Agent profiles → your agent. Node.js 20+ and npm are required. Git, pnpm, repository access and a local build are not required.\n\nUse `waka-login` for browser sign-in and `waka-mcp` as the MCP server executable. Each connection must pin WAKA_PROFILE_ID. Browser sign-ins also use a separate WAKA_HOME per profile. API key connections use WAKA_API_URL and WAKA_API_KEY.\n\nThis archive contains the bundled client and dependency notices, not the WAKA backend or a source checkout.\n');
+  await copyFile(join(source, 'README.md'), join(packageDir, 'README.md'));
 
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   const [packed] = JSON.parse(execFileSync(npm, ['pack', '--json', '--ignore-scripts', '--pack-destination', staging], {
@@ -82,11 +88,11 @@ try {
   const bytes = await readFile(join(staging, packed.filename));
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   const filename = `waka-mcp-${version}-${sha256.slice(0, 12)}.tgz`;
-  const downloads = join(root, 'packages/web/public/downloads');
+  const downloads = candidateDir ?? join(root, 'packages/web/public/downloads');
   await mkdir(downloads, { recursive: true });
   // Published names are immutable. Retain older archives for existing MCP entries.
   await copyFile(join(staging, packed.filename), join(downloads, filename));
-  await writeFile(join(root, 'packages/web/src/lib/mcp-distribution.json'), JSON.stringify({ filename, version, sha256, sourceCommit }, null, 2) + '\n');
+  await writeFile(candidateDir ? join(candidateDir, 'manifest.json') : join(root, 'packages/web/src/lib/mcp-distribution.json'), JSON.stringify({ filename, version, sha256, sourceCommit }, null, 2) + '\n');
   console.log(`Built ${filename} (${bytes.length} bytes), ${notices.size} dependency notices; no runtime dependencies.`);
 } finally {
   await rm(staging, { recursive: true, force: true });

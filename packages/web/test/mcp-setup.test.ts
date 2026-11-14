@@ -86,3 +86,10 @@ it('makes API-key installation project-scoped for both supported clients', () =>
     expect(mcpKeyConfig(client,profile.id,options.apiUrl)).toContain('YOUR_API_KEY');
   }
 });
+
+it('operational read-only setup names both backend capability and client mode without credentials',()=>{
+  const prompt=mcpSetupPrompt({...options,locale:'en-US',authMethod:'key',memoryAccess:'read_only'});
+  expect(prompt).toContain('read_only');expect(prompt).toContain('WAKA_MCP_MODE');
+  const config=JSON.parse(mcpKeyConfig('claude',profile.id,options.apiUrl,options.apiUrl,'read_only'));
+  expect(config.mcpServers[`waka-${profile.id}`].env.WAKA_MCP_MODE).toBe('read_only');
+});

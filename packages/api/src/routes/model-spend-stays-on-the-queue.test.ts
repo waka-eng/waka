@@ -65,16 +65,11 @@ const ACKNOWLEDGED: Record<string, string> = {
     "background generation, and not a loop. Retire this entry by moving the " +
     "call to the drain (a `route_declaration` job) and deleting the line.",
   "recall.ts":
-    "`GET /api/recall` embeds the caller's QUESTION inline — one embedding " +
-    "call per request, capped at five hundred characters, no generation and " +
-    "no loop — because recall is intrinsically synchronous: a question that " +
-    "answers a minute later through the queue is not a question anyone asks. " +
-    "The job-count budget cannot meter it (the meter counts job rows, and " +
-    "this is not a job).\n\n" +
-    "A DEBT, like the entry above it: the budget window covers every model " +
-    "call except these two human-initiated singles. Retire this entry by " +
-    "teaching the budget to count non-job spends (a usage row per inline " +
-    "call, assessed with the same arithmetic) and deleting the line.",
+    "Synchronous query embedding only: <=500 characters, one attempt, 5s deadline, " +
+    "no retries/fallback/generation. Current compatible candidates are checked " +
+    "before spending. Atomic account_recall_limits reservations enforce ten " +
+    "attempts/minute and sixty/hour independently of the queue job budget. " +
+    "This exception remains named so other routes cannot quietly gain inline spend.",
 };
 
 const SPENDS_THE_SHARED_KEY: Record<string, string> = {

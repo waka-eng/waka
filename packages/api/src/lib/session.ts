@@ -116,6 +116,8 @@ export interface AuthenticatedSession {
    * so their powers are exactly what they were. Absent means unscoped.
    */
   keyScoped?: true;
+  /** Only keeper-key lookup supplies this database-backed capability. */
+  keeperAccess?: "read_capture" | "read_only";
 }
 
 /**

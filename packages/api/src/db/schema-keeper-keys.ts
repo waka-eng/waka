@@ -18,7 +18,8 @@
  * for agents quietly holding the human's credential is exactly the
  * one-name-per-concept drift the canon forbids.
  */
-import { index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { profiles } from "./schema-profiles";
 
@@ -36,11 +37,14 @@ export const keeperKeys = pgTable(
     prefix: text("prefix").notNull(),
     /** Optional human label ("laptop mcp", "work machine"). */
     label: text("label"),
+    /** Server-enforced memory capability; omission preserves existing keys. */
+    access: text("access").$type<"read_capture" | "read_only">().notNull().default("read_capture"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
   (table) => ({
+    accessCheck: check("keeper_keys_access_check", sql`${table.access} IN ('read_capture', 'read_only')`),
     tokenHashUnique: uniqueIndex("keeper_keys_token_hash_unique_idx").on(table.tokenHash),
     profileIdx: index("keeper_keys_profile_idx").on(table.profileId),
   }),

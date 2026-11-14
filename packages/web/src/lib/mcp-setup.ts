@@ -10,7 +10,7 @@ export const mcpPackageUrl = (origin: string) => new URL(`/downloads/${distribut
 
 type SetupTarget = {
   profile: { id: string; name: string; type?: 'human' | 'agent' }; apiUrl: string; client: McpClient; scope: McpScope;
-  packageOrigin?: string;
+  packageOrigin?: string; memoryAccess?: "read_capture" | "read_only";
 };
 
 /** A setup request, not a credential. Names remain quoted data and keys are never included. */
@@ -19,6 +19,8 @@ export function mcpSetupPrompt(options: SetupTarget & { locale: SupportedLocale;
   const packageUrl = mcpPackageUrl(packageOrigin);
   const args = ['--yes', '--package', packageUrl];
   const details = JSON.stringify({
+    memoryAccess: options.memoryAccess ?? "read_capture",
+    ...(options.memoryAccess === "read_only" ? { requiredKeyAccess: "read_only", serverEnvironment: { WAKA_MCP_MODE: "read_only" } } : {}),
     packageUrl, packageVersion: distribution.version, minimumNodeVersion: 20,
     apiUrl, profileId: profile.id, profileName: profile.name, serverName: `waka-${profile.id}`,
     ...(profile.type ? { profileType: profile.type } : {}),
@@ -64,9 +66,9 @@ export function mcpSetupCommands(options: SetupTarget & { installed: boolean; sc
   ];
 }
 
-export function mcpKeyConfig(client: McpClient, profileId: string, apiUrl: string, packageOrigin = apiUrl): string {
+export function mcpKeyConfig(client: McpClient, profileId: string, apiUrl: string, packageOrigin = apiUrl, access: "read_capture" | "read_only" = "read_capture"): string {
   const name = `waka-${profileId}`;
-  const env = { WAKA_API_URL: apiUrl, WAKA_PROFILE_ID: profileId, WAKA_API_KEY: 'YOUR_API_KEY' };
+  const env = { WAKA_API_URL: apiUrl, WAKA_PROFILE_ID: profileId, WAKA_API_KEY: 'YOUR_API_KEY', ...(access === 'read_only' ? { WAKA_MCP_MODE: 'read_only' } : {}) };
   const server = { command: 'npx', args: ['--yes', '--package', mcpPackageUrl(packageOrigin), 'waka-mcp'], env };
   if (client === 'claude') return JSON.stringify({ mcpServers: { [name]: server } }, null, 2);
   return `[mcp_servers.${JSON.stringify(name)}]\ncommand = "npx"\nargs = ${JSON.stringify(server.args)}\n\n[mcp_servers.${JSON.stringify(name)}.env]\n${Object.entries(env).map(([key, value]) => `${key} = ${JSON.stringify(value)}`).join('\n')}`;

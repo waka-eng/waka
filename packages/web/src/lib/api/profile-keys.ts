@@ -1,6 +1,7 @@
 import { apiPath, getJson, postJson, requestVoid } from './http';
 
 export interface ApiProfileKey {
+  access?: "read_capture" | "read_only";
   id: string;
   profileId: string;
   prefix: string;
@@ -18,11 +19,11 @@ export async function fetchProfileKeys(profile: KeyProfile): Promise<ApiProfileK
   return keys.filter(key => key.profileId === profile.id && !key.revokedAt);
 }
 
-export async function createProfileKey(profile: KeyProfile, label: string): Promise<ApiProfileKey & { secret: string }> {
+export async function createProfileKey(profile: KeyProfile, label: string, access: "read_capture" | "read_only" = "read_capture"): Promise<ApiProfileKey & { secret: string }> {
   // Personal keys bind to the authenticated human on the server, never a
   // caller-supplied destination. Agent keys still require the selected ID.
   const { key } = await postJson<{ key: Omit<ApiProfileKey, 'lastUsedAt' | 'revokedAt'> & { secret: string } }>(
-    apiPath(keyPath(profile)), profile.type === 'human' ? { label } : { profileId: profile.id, label }, 'Could not create API key');
+    apiPath(keyPath(profile)), profile.type === 'human' ? { label, access } : { profileId: profile.id, label }, 'Could not create API key');
   if (key.profileId !== profile.id) throw new Error('API key belongs to a different profile');
   return { ...key, lastUsedAt: null, revokedAt: null };
 }
