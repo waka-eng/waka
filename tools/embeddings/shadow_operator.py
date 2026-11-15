@@ -122,6 +122,7 @@ def main():
             raise Refusal("credential", "missing_runtime_credential")
         payload["apiKey"] = metadata["router"]
     env = {k: v for k, v in os.environ.items() if k in ["PATH", "LANG", "LC_ALL", "TZ"]}
+    env["WAKA_BACKGROUND_JOB_AUTODRAIN"] = "0"
     result = subprocess.run(["node", str(bundle), "--execute", "--approved-sha", args.approved_bundle_sha], input=json.dumps(payload), capture_output=True, text=True, env=env, timeout=75)
     metadata.clear(); payload.clear(); uri = None
     if len(result.stdout.encode()) > 65536:
@@ -131,6 +132,8 @@ def main():
         raise Refusal("runner", "invalid_receipt")
     wake = {"attempted": False, "accepted": False}
     if args.mode == "R1_signal" and result.returncode == 0 and receipt["passed"]:
+        if receipt.get("bundleSha256") != args.approved_bundle_sha or receipt.get("manifestSha256") != args.approved_manifest_sha or receipt.get("mode") != args.mode:
+            raise Refusal("runner", "recovery_receipt_identity")
         recovery = receipt.get("receipt")
         if not isinstance(recovery, dict) or type(recovery.get("renewedCells")) is not int or recovery["renewedCells"] not in [0, 1]:
             raise Refusal("runner", "invalid_recovery_receipt")

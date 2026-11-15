@@ -90,7 +90,11 @@ The callable implementation is `renewEmbeddingSignalFromManifest`; the lower
 SQL-only helper is `renewKnownFailedSignalEmbedding`. The wrapper uses the same
 hash/once/target guards and receives no provider key. The Node helper performs
 SQL only; the wrapper then sends one Event wake to the already-attested dev
-worker after a confirmed one-cell renewal. There is no local app autodrain. A
+worker after a matching bundle/manifest/mode receipt confirms one-cell renewal
+and the child exits successfully. Child autodrain is explicitly disabled. This
+ordinary worker wake can drain other eligible backlog under existing budgets;
+it does not guarantee one downstream model call and is not covered by the D1
+input allowance. There is no local app autodrain. A
 failed/unknown wake leaves confirmed metadata intact and is never retried
 automatically. Approving this recovery
 must include the resulting ordinary queue intent. There is no signal Retry UI

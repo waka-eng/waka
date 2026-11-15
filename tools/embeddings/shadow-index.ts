@@ -42,7 +42,7 @@ try{
  phase='database';raw=postgres(input.dbUrl,{max:1,prepare:false,ssl:requiredTlsMode(input.dbUrl),connect_timeout:5,idle_timeout:5,connection:{statement_timeout:10000,lock_timeout:1000,application_name:'waka-embedding-shadow-operator'},onnotice:()=>{}});sqlStarted=true;const db=drizzle(raw,{schema});
  phase=input.mode;const receipt=input.mode==='D0'?await readEmbeddingShadowInventory(db,input.manifest,input.manifestSha256):input.mode==='D1_prepare'?await prepareEmbeddingShadowBuild(db,input.manifest,input.manifestSha256):input.mode==='R1_signal'?await renewEmbeddingSignalFromManifest(db,input.manifest,input.manifestSha256):await runEmbeddingShadowBatch(db,input.manifest,input.manifestSha256);
  await raw.end({timeout:2});raw=undefined;delete process.env.OPENROUTER_API_KEY;input.apiKey=undefined;input.dbUrl='';
- output({passed:true,mode:input.mode,manifestSha256:input.manifestSha256,receipt,usage:usage.snapshot(),activation:false,invoiceOrFullCoverageClaim:false});
+ output({passed:true,bundleSha256:args[2],mode:input.mode,manifestSha256:input.manifestSha256,receipt,usage:usage.snapshot(),activation:false,invoiceOrFullCoverageClaim:false});
 }catch(error){
  if(raw)try{await raw.end({timeout:1});}catch{/* termination does not prove rollback */}
  delete process.env.OPENROUTER_API_KEY;
