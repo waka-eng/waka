@@ -46,6 +46,8 @@ import { readGenerationRevision, assertGenerationRevision } from "./generation-r
 import type { ModelProvider, SignalMatchJudgement } from "./model-provider.js";
 import { getDefaultModelProvider } from "./model-provider.js";
 import { cosineSimilarity } from "../scoring/vector.js";
+import {embeddingRetrievalMinimum} from './embedding-policy.js';
+import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash} from './embedding-provider.js';
 import {
   GARDENER_MAX_JUDGED_PAIRS,
   GARDENER_SCAN_LIMIT,
@@ -116,13 +118,14 @@ export async function tendSignalGarden(
   }
 
   const ids = rows.map((row) => row.id);
+  const space=readableEmbeddingSpace(revision.embeddingPolicy),currentHashes=new Map(rows.map(row=>[row.id,embeddingInputHash(space,row.statement)]));
   const embeddingRows = await db
-    .select({ signalId: signalEmbeddings.signalId, embedding: signalEmbeddings.embedding })
+    .select({ signalId: signalEmbeddings.signalId, embedding: signalEmbeddings.embedding,dimensions:signalEmbeddings.dimensions,inputHash:signalEmbeddings.inputHash })
     .from(signalEmbeddings)
-    .where(inArray(signalEmbeddings.signalId, ids));
+    .where(and(eq(signalEmbeddings.profileId,input.profileId),eq(signalEmbeddings.model,space.model),eq(signalEmbeddings.dimensions,space.dimensions),inArray(signalEmbeddings.signalId, ids)));
   const vectorById = new Map<string, number[]>();
   for (const row of embeddingRows) {
-    if (!vectorById.has(row.signalId)) vectorById.set(row.signalId, row.embedding);
+    if (row.inputHash===currentHashes.get(row.signalId)&&embeddingInSpace(row.embedding,row.dimensions,space)&&!vectorById.has(row.signalId)) vectorById.set(row.signalId, row.embedding);
   }
 
   /* every pair already on the record, in either table, in any state */
@@ -138,7 +141,7 @@ export async function tendSignalGarden(
       const vb = vectorById.get(rows[j]!.id);
       if (!vb) continue;
       const sim = cosineSimilarity(va, vb);
-      if (sim === null || sim < GARDENER_SUSPECT_MIN_COSINE) continue;
+      if (sim === null || sim < embeddingRetrievalMinimum(space.model,GARDENER_SUSPECT_MIN_COSINE)) continue;
       const { a, b } = normalizePair(rows[i]!.id, rows[j]!.id);
       if (recorded.has(`${a}:${b}`)) continue;
       suspects.push({ a: rows[i]!, b: rows[j]!, sim });

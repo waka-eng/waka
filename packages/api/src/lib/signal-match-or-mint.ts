@@ -36,7 +36,9 @@ import {
   type SignalStatus,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
-import { hashEmbeddingInput } from './inspiration-embeddings.js';
+import {embeddingNeedsMeaningReview,type EmbeddingIndexPolicy} from './embedding-policy.js';
+import {EmbeddingIndexError} from './embedding-index-coordination.js';
+import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash,type EmbeddingSpace} from './embedding-provider.js';
 import { getDb } from "./db.js";
 import type { normalizeSupportedLocale } from "./locales.js";
 import type { ModelProvider } from "./model-provider.js";
@@ -125,11 +127,13 @@ interface ApplyCandidatesInput {
   evidenceOwnerProfileId: string;
   candidates: ResolvedCandidate[];
   embeddingModel: string;
+  embeddingPolicy?:EmbeddingIndexPolicy;
   provider: ModelProvider;
   preferredLocale: ReturnType<typeof normalizeSupportedLocale>;
   now: Date;
   material?: InspirationMaterialIdentity;
-  /** Complete source/permission validation after model calls, before writes. */
+  /** Complete source/permission AND captured policy validation after model
+   * calls, before writes (material or generation fence; no proof cache). */
   beforeWrites: () => Promise<void>;
 }
 
@@ -140,14 +144,14 @@ async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarg
   const judgements = new Map<number, { statement: string; relation: "same" | "independent" | "opposed" }>();
   const refusals = new Map<number, NonNullable<ReturnType<typeof findSuppressionAnchor>>>();
   for (const [index, candidate] of input.candidates.entries()) {
-    const anchor = findSuppressionAnchor(candidate, anchors);
+    const anchor = findSuppressionAnchor(candidate, anchors,input.embeddingModel);
     if (anchor && (candidate.statement.trim() === anchor.anchor.statement.trim() ||
       (await input.provider.judgeSignalMatch({ preferredLocale: input.preferredLocale,
         candidateStatement: candidate.statement, existingStatement: anchor.anchor.statement })).relation === 'same')) {
       refusals.set(index, anchor);
       continue;
     }
-    const nearest = findBestMatch(candidate.embedding, projected);
+    const nearest = findBestMatch(candidate.embedding, projected,input.embeddingModel);
     if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
     let decision = classifyMatch(nearest?.similarity ?? null);
     if (nearest && (decision === "judge" || input.reviewSource || candidate.statement.trim() !== nearest.target.statement.trim())) {
@@ -173,8 +177,12 @@ export async function applyCandidates(
   input: ApplyCandidatesInput,
 ): Promise<Pick<SignalDerivationResult, "matchedSignalIds" | "mintedSignalIds" | "promotedSignalIds">> {
   if((input.inspirationId===null)!==Boolean(input.reviewSource))throw new Error('One derivation source is required');
-  const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
-  const anchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
+  const native=readableEmbeddingSpace(input.embeddingPolicy);
+  if(embeddingNeedsMeaningReview(input.embeddingModel)&&(!input.embeddingPolicy||input.embeddingPolicy.activeSpace!==input.embeddingModel))throw new EmbeddingIndexError("identity");
+  const space={model:input.embeddingModel,dimensions:input.candidates[0]?.embedding.length??native.dimensions};
+  if((space.model===native.model&&space.dimensions!==native.dimensions)||input.candidates.some(row=>!embeddingInSpace(row.embedding,space.dimensions,space)))throw new Error('Candidate embedding space is invalid');
+  const targets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
+  const anchors = await loadSuppressionAnchors(tx, input.profileId, space, input.inputPolicy);
   const prior = JSON.stringify({ targets, anchors });
   const { judgements, refusals } = await prepareJudgements(input, targets, anchors);
   await input.beforeWrites();
@@ -182,8 +190,8 @@ export async function applyCandidates(
   if (ids.length) await tx.select({ id: signals.id }).from(signals)
     .where(and(eq(signals.profileId, input.profileId), inArray(signals.id, ids)))
     .orderBy(asc(signals.id)).for("share");
-  const currentTargets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
-  const currentAnchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
+  const currentTargets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
+  const currentAnchors = await loadSuppressionAnchors(tx, input.profileId, space, input.inputPolicy);
   if (JSON.stringify({ targets: currentTargets, anchors: currentAnchors }) !== prior) {
     throw new Error("Signal inputs changed during judgement; retry current statements");
   }
@@ -209,7 +217,7 @@ export async function applyCandidates(
       continue;
     }
 
-    const nearest = findBestMatch(candidate.embedding, targets);
+    const nearest = findBestMatch(candidate.embedding, targets,input.embeddingModel);
     if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
     let decision = classifyMatch(nearest?.similarity ?? null);
     /** Set when the judge answers `opposed`: the mint below also records
@@ -247,6 +255,7 @@ export async function applyCandidates(
             statement: candidate.statement,
             embedding: candidate.embedding,
             model: input.embeddingModel,
+            embeddingPolicy:input.embeddingPolicy,
           });
           // The restatement joins the chain: the sentence it replaced was
           // seeded at mint (or is seeded here for pre-chain rows), so "what
@@ -303,6 +312,7 @@ export async function applyCandidates(
       statement: candidate.statement,
       embedding: candidate.embedding,
       model: input.embeddingModel,
+            embeddingPolicy:input.embeddingPolicy,
     });
 
     // The chain begins at birth: the machine's first sentence is the row
@@ -378,7 +388,7 @@ export async function applyCandidates(
 async function loadMatchTargets(
   tx: WakaTx,
   profileId: string,
-  embeddingModel: string,
+  space: EmbeddingSpace,
   inputPolicy: string | undefined,
   inspirationId: string|null,
   ownerProfileId: string,
@@ -399,9 +409,10 @@ async function loadMatchTargets(
       lockedAt: signals.lockedAt,
       embedding: signalEmbeddings.embedding,
       inputHash: signalEmbeddings.inputHash,
+      dimensions:signalEmbeddings.dimensions,
     })
     .from(signals)
-    .innerJoin(signalEmbeddings, eq(signalEmbeddings.signalId, signals.id))
+    .leftJoin(signalEmbeddings, and(eq(signalEmbeddings.signalId, signals.id),eq(signalEmbeddings.profileId,signals.profileId),eq(signalEmbeddings.model,space.model),eq(signalEmbeddings.dimensions,space.dimensions)))
     .where(
       and(
         eq(signals.profileId, profileId),
@@ -411,7 +422,7 @@ async function loadMatchTargets(
         or(inArray(signals.status, ["emerging", "active"]), ...(withdrawn.size ? [
           and(eq(signals.status, "retired"), isNotNull(signals.supportRetiredAt), inArray(signals.id, [...withdrawn])),
         ] : [])),
-        eq(signalEmbeddings.model, embeddingModel),
+
       ),
     )
     // Mandatory refusals must not fall outside the ordinary bounded scan.
@@ -419,7 +430,8 @@ async function loadMatchTargets(
       desc(signals.lastEvidenceAt), asc(signals.id))
     .limit(MATCH_CANDIDATE_SCAN_LIMIT + withdrawn.size);
 
-  return rows.filter(row => row.inputHash === hashEmbeddingInput(row.statement)).map((row) => ({
+  if(embeddingNeedsMeaningReview(space.model)&&rows.some(row=>row.inputHash!==embeddingInputHash(space,row.statement)||!embeddingInSpace(row.embedding,row.dimensions??0,space)))throw new EmbeddingIndexError("missing");
+  return rows.filter((row):row is typeof row&{embedding:number[]} => row.inputHash === embeddingInputHash(space,row.statement)&&embeddingInSpace(row.embedding,row.dimensions??0,space)).map((row) => ({
     id: row.id,
     statement: row.statement,
     status: row.status,
@@ -432,12 +444,13 @@ async function loadMatchTargets(
 function findBestMatch(
   embedding: number[],
   targets: MatchTarget[],
+  model?:string,
 ): { target: MatchTarget; similarity: number } | null {
   let best: { target: MatchTarget; similarity: number } | null = null;
 
   for (const target of targets) {
     const similarity = cosineSimilarity(embedding, target.embedding);
-    if (similarity === null || similarity < SIGNAL_MERGE_JUDGE_MIN_COSINE) continue;
+    if (similarity === null || similarity < (embeddingNeedsMeaningReview(model??"")?-1:SIGNAL_MERGE_JUDGE_MIN_COSINE)) continue;
     if (!best || similarity > best.similarity) best = { target, similarity };
   }
 
@@ -460,7 +473,7 @@ interface SuppressionAnchor {
 async function loadSuppressionAnchors(
   tx: WakaTx,
   profileId: string,
-  embeddingModel: string,
+  space: EmbeddingSpace,
   inputPolicy?: string,
 ): Promise<SuppressionAnchor[]> {
   const rows = await tx
@@ -469,25 +482,28 @@ async function loadSuppressionAnchors(
       statement: signals.statement,
       embedding: signalEmbeddings.embedding,
       inputHash: signalEmbeddings.inputHash,
+      dimensions:signalEmbeddings.dimensions,
     })
     .from(signals)
-    .innerJoin(signalEmbeddings, eq(signalEmbeddings.signalId, signals.id))
+    .leftJoin(signalEmbeddings, and(eq(signalEmbeddings.signalId, signals.id),eq(signalEmbeddings.profileId,signals.profileId),eq(signalEmbeddings.model,space.model),eq(signalEmbeddings.dimensions,space.dimensions)))
     .where(
       and(
         eq(signals.profileId, profileId),
         ...(inputPolicy ? [eq(signals.inputPolicy, inputPolicy)] : []),
         isNotNull(signals.dismissedAt),
-        eq(signalEmbeddings.model, embeddingModel),
+
       ),
     )
     .orderBy(desc(signals.dismissedAt), asc(signals.id))
     .limit(MATCH_CANDIDATE_SCAN_LIMIT);
-  return rows.filter(row => row.inputHash === hashEmbeddingInput(row.statement));
+  if(embeddingNeedsMeaningReview(space.model)&&rows.some(row=>row.inputHash!==embeddingInputHash(space,row.statement)||!embeddingInSpace(row.embedding,row.dimensions??0,space)))throw new EmbeddingIndexError("missing");
+  return rows.filter((row):row is typeof row&{embedding:number[]} => row.inputHash === embeddingInputHash(space,row.statement)&&embeddingInSpace(row.embedding,row.dimensions??0,space));
 }
 
 function findSuppressionAnchor(
   candidate: Pick<ResolvedCandidate, 'statement' | 'embedding'>,
   anchors: SuppressionAnchor[],
+  model?:string,
 ): { anchor: SuppressionAnchor; similarity: number } | null {
   let best: { anchor: SuppressionAnchor; similarity: number } | null = null;
 
@@ -497,7 +513,7 @@ function findSuppressionAnchor(
     // An exact owner refusal wins even when a different nearby statement has
     // a higher cosine. Vectors retrieve meaning; they cannot overrule words.
     if (candidate.statement.trim() === anchor.statement.trim()) return { anchor, similarity };
-    if (similarity < SIGNAL_SUPPRESSION_MIN_COSINE) continue;
+    if (similarity < (embeddingNeedsMeaningReview(model??"")?-1:SIGNAL_SUPPRESSION_MIN_COSINE)) continue;
     if (!best || similarity > best.similarity) best = { anchor, similarity };
   }
 

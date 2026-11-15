@@ -224,7 +224,7 @@ describe("recall — ask the memory", () => {
     if(kind==='hash')await t.sql`UPDATE signal_embeddings SET input_hash=${hashEmbeddingInput('old words')} WHERE signal_id=${id}`;
     const fake=scriptedEmbedder(NEAR);
     const r=await (await appFor(p,fake.client).request('/api/recall?q=tools')).json() as {recall:{state:string;matches:unknown[]}};
-    expect(r.recall).toMatchObject({state:'empty',matches:[]});expect(fake.calls).toHaveLength(0);
+    expect(r.recall).toMatchObject({state:'unavailable',matches:[]});expect(fake.calls).toHaveLength(0);
     expect(await t.sql`SELECT * FROM account_recall_limits WHERE account_id=${p.session.account.id}`).toHaveLength(0);
   });
   it.each(['delete','exclude','statement','vector'] as const)('rechecks %s after HTTP without rewriting owner words',async mode=>{

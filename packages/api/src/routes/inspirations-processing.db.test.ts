@@ -1,9 +1,16 @@
+/** WHAT THIS MOCKS, AND WHY (gate G6): `../lib/db.js` binds the actual routes
+ * to this disposable database. `../lib/queue.js` post-commit wake is spied
+ * only in denial cases to prove zero wakes without any cloud transport.
+ * Auth uses fixed synthetic owned sessions; processing and SQL remain real. */
 import { Hono } from 'hono';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import { createInspirationsRoutes } from './inspirations.js';
 import { enqueueDeriveSignals, enqueueTopOfMindRefresh } from '../lib/queue.js';
+import * as queue from '../lib/queue.js';
 import type { AuthEnv } from '../lib/middleware.js';
+import {EMBEDDING_2_SPACE} from '../lib/embedding-2-space.js';
+import {PROVISIONAL_EMBEDDING_2_POLICY} from '../lib/embedding-policy.js';
 
 const state = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('../lib/db.js', () => ({ getDb: () => state.db }));
@@ -11,16 +18,16 @@ let t: TestDatabase;
 let sequence = 0;
 beforeEach(async () => { t ??= await createTestDatabase(); await t.truncateAll(); state.db = t.db; });
 afterAll(async () => { await t?.cleanup(); });
-async function fixture(keyScoped = false) {
+async function fixture(keyScoped = false, keeperAccess: 'read_only'|'read_capture' = 'read_capture', profileType: 'human'|'agent' = 'human') {
   const [account] = await t.sql`INSERT INTO accounts(email) VALUES (${`status-${++sequence}@example.test`}) RETURNING id`;
-  const [profile] = await t.sql`INSERT INTO profiles(account_id, type, name) VALUES (${account.id}, 'human', 'Owner') RETURNING id`;
+  const [profile] = await t.sql`INSERT INTO profiles(account_id, type, name) VALUES (${account.id}, ${profileType}, 'Owner') RETURNING id`;
   const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${profile.id}, 'PRIVATE_SOURCE') RETURNING id`;
   const request = await enqueueDeriveSignals(profile.id as string, source.id as string, 'created');
   const app = new Hono<AuthEnv>();
   app.route('/api/inspirations', createInspirationsRoutes({ getDatabase: () => t.db as never,
     authMiddleware: async (c, next) => {
-      c.set('session', { sessionId: '00000000-0000-4000-8000-000000000001', ...(keyScoped ? { keyScoped: true as const } : {}), account: { id: account.id as string, email: 'test@example.test' },
-        profile: { id: profile.id as string, accountId: account.id as string, type: 'human', name: 'Owner', preferredLocale: 'en-US' } });
+      c.set('session', { sessionId: '00000000-0000-4000-8000-000000000001', ...(keyScoped ? { keyScoped: true as const, keeperAccess } : {}), account: { id: account.id as string, email: 'test@example.test' },
+        profile: { id: profile.id as string, accountId: account.id as string, type: profileType, name: 'Owner', preferredLocale: 'en-US' } });
       await next();
     },
   }));
@@ -31,6 +38,32 @@ const retry = (f: Awaited<ReturnType<typeof fixture>>) => f.app.request(`${f.url
   headers: { 'content-type': 'application/json' }, body: JSON.stringify({ receiptId: f.request.receipt.id }) });
 
 describe('source processing status and recovery', () => {
+  it.each(['read_only','read_capture','agent'] as const)('keeps GET/POST recovery capability consistent and denies %s with zero writes/wakes', async mode => {
+    const f=await fixture(mode!=='agent',mode==='read_only'?'read_only':'read_capture',mode==='agent'?'agent':'human');
+    await t.sql`UPDATE background_jobs SET status='failed' WHERE id=${f.request.jobId}`;
+    const before=await t.sql`SELECT id,status,request_version,attempts FROM background_jobs ORDER BY id`;
+    const work=await t.sql`SELECT id,requested_version,completed_version FROM embedding_index_work ORDER BY id`;
+    const wake=vi.spyOn(queue,'wakeCommittedBackgroundJobs').mockResolvedValue(undefined);
+    try{
+      expect(await (await f.app.request(f.url)).json()).toMatchObject({canRetry:false});
+      expect((await retry(f)).status).toBe(403);expect(wake).not.toHaveBeenCalled();
+      expect(await t.sql`SELECT id,status,request_version,attempts FROM background_jobs ORDER BY id`).toEqual(before);
+      expect(await t.sql`SELECT id,requested_version,completed_version FROM embedding_index_work ORDER BY id`).toEqual(work);
+      expect(await t.sql`SELECT id FROM inspiration_processing`).toHaveLength(1);
+    }finally{wake.mockRestore();}
+  });
+  it('bounds the unresolved-status lookup by the leading account identity in its actual index plan', async () => {
+    const f=await fixture();await t.sql`INSERT INTO profile_embedding_indexes(profile_id,active_space,active_epoch,active_threshold_policy) VALUES(${f.profileId},${EMBEDDING_2_SPACE.id},1,${PROVISIONAL_EMBEDDING_2_POLICY}) ON CONFLICT(profile_id) DO UPDATE SET active_space=excluded.active_space,active_epoch=1,active_threshold_policy=excluded.active_threshold_policy`;
+    const debug=t.sql.options.debug;let observed:{text:string;params:unknown[]}|undefined;
+    t.sql.options.debug=(_id,text,params)=>{if(text.includes('embedding_index_attempts')&&!observed)observed={text,params:[...params]};};
+    try {expect((await f.app.request(f.url)).status).toBe(200);} finally {t.sql.options.debug=debug;}
+    expect(observed).toBeDefined();
+    const plans=await t.sql.begin(async tx=>{await tx`SET LOCAL enable_seqscan=off`;return tx.unsafe('EXPLAIN (FORMAT JSON) '+observed!.text,observed!.params as never);});
+    const nodes:Array<Record<string,unknown>>=[];const walk=(n:Record<string,unknown>)=>{nodes.push(n);for(const child of n.Plans as Array<Record<string,unknown>>??[])walk(child);};walk(plans[0]['QUERY PLAN'][0].Plan);
+    const lookup=nodes.find(n=>n['Index Name']==='embedding_index_attempts_unresolved_source');expect(lookup).toBeDefined();expect(lookup!['Index Cond']).toContain('account_id');
+    // Forced index eligibility is a structural proof, not measured query CPU,
+    // physical RTT or a claim about the planner's cost choice on real data.
+  });
   it('does not offer a write action to a read-and-capture keeper credential', async () => {
     const f = await fixture(true);
     await t.sql`UPDATE background_jobs SET status = 'failed' WHERE id = ${f.request.jobId}`;

@@ -1501,8 +1501,36 @@ matching unfinished source receipts, without marking those receipts derived.
 
 One prompt, two roads: generation defaults to DeepSeek V4.1 Flash 1017 on
 OpenRouter when `OPENROUTER_API_KEY` is present, and falls back
-to Gemini without it. Embeddings never switch roads — the stored vectors and
-every cosine threshold above live in `gemini-embedding-001`'s space.
+to Gemini without it. Embeddings retain the native Google default: the stored
+vectors and every cosine threshold above live in `gemini-embedding-001`'s space.
+
+Embedding construction is centralized in `embedding-provider.ts`, separately from
+readable vector identity (`gemini-embedding-001`, 768 dimensions). All six runtime
+construction paths use it. `WAKA_EMBEDDING_PROVIDER` absent, blank or `gemini`
+preserves native behavior; `openrouter` is **compatibility-held**, and unknown
+values fail closed. No deployment enables that setting. A held transport cannot
+masquerade as an empty native corpus: cached native readers retain their space,
+MCP recall reports unavailable, and chat explicitly uses lexical fallback without
+reserving a query-embedding attempt.
+
+The offline OpenRouter candidate retains a distinct unverified model namespace.
+Its request pins Google AI Studio (`only` and `order`: `google-ai-studio`), disables
+provider fallback, requires parameter support, and preserves existing restrictive
+privacy preferences. Generic `input_type` support is documented; exact Gemini
+query/document mapping and space equivalence still require paired proof. Matching
+model names and dimensions alone do not establish compatible vectors. Native
+Google availability may prevent that proof; no automatic transport fallback,
+relabel, re-embedding or normalization change is permitted by this preparation.
+
+Reader guards require the expected model, dimension metadata, finite nonzero
+geometry and current input hash. This includes cache reuse, match/suppression,
+gardener, reading diversity, recurrence, recall and chat. Recurrence validates the
+existing top-five selected sources against current canonical text, ordered
+reflections and effective attachment material in one additional SQL statement;
+stale selections are dropped without scanning further to fill the five slots.
+This is a bounded source-count proof, not a byte bound or a whole-archive scan.
+Source/claim/Stop and final publication checks remain required after provider HTTP.
+No vector is normalized or rewritten by a reader.
 
 Top of Mind synthesis and publication review default to `openai/gpt-6.1-terra`,
 with medium reasoning for synthesis and low reasoning for review. Signal extraction/support/judging,
@@ -1811,3 +1839,49 @@ not dispatch latency: daily batch limits, retries and backlog can delay work.
 No new polling clock, provider call or generation policy is introduced.
 Actual bucket notifications, queue/DLQ monitoring, operator notification and
 production erasure bounds remain unverified deployment gates.
+
+
+### Embedding2 coordination preparation
+
+The owner selected stable `google/gemini-embedding-2` on OpenRouter, not transport
+parity with001. The earlier001 parity experiment was withdrawn without execution.
+Native001 remains active while the separate text-only space is prepared.
+`embedding-2-space.ts` fixes query `task: search result | query: ` and document
+`title: none | text: ` prefixes,768 dimensions, unchanged raw output and exact
+formatted-input hash. It sends no task_type/input_type. Runtime factory selection is policy-bound; native001 remains the default and
+model2 activation stays held. No001 cosine threshold is silently inherited;
+model2 threshold policy starts unvalidated and cannot authorize cutover.
+
+Per-source `embedding_index_work` versions recover cache/success/edit/delete/replay
+without clearing concurrent dirty work. `index_embedding` is a bounded normal
+fallback, not a bulk backfill queue. Existing derivation/reindex paths may satisfy
+the same intent; a later cache hit spends no embedding request. The paid attempt
+ledger records actual dispatch reservations only. Shadow sweeps are separately
+capped, resumable operator work; no new idle polling/service or implicit native
+fallback is introduced. Full source/progress/locking and scheduling acceptance
+must pass on disposablePG17 before any deployment or paid/data-operation approval.
+
+Model2 similarities retrieve candidates; they do not establish agreement or
+independence. The synthetic capability check included opposed claims above0.90.
+The provisional model2 policy therefore requires existing semantic judgements
+for non-identical attachment/suppression decisions and does not use cosine alone
+to prune the reading's claims. Exact owner-locked wording, independent support,
+correction/withdrawal and mandatory publication review remain authoritative.
+Its retrieval policy is separate from001 and remains unvalidated for activation.
+
+One active embedding policy snapshot (owner, selected space, epoch and policy
+identity) accompanies each pipeline input and publication proof. It is projected
+by existing owner/source queries; shadow-building metadata cannot invalidate a
+native001 reply. A new capture's pending index work does not globally hide
+already-current memory. Released MCP response states remain unchanged: compatible
+metadata may explain incomplete semantic coverage, while unavailable required
+vectors cannot be presented as a genuine empty archive or permit mint-through.
+
+Explicit human processing Retry may renew a definite failed current Embedding2
+canonical work version, retaining the attempt ledger and ordinary account meter.
+A key-scoped credential cannot invoke it. Unknown/received outcomes remain held
+across material, job, wording and manifest changes within the same source/space/
+scope/dispatch family. Canonical indexing and generated discovery are separate
+families, not alternate purposes for evading uncertainty. See the prepared
+[operator and recovery contract](../tools/embeddings/README.md) for exact limits
+and the privileged metadata-only signal recovery path.

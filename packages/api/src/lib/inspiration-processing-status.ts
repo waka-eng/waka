@@ -5,6 +5,7 @@ import { parseTopOfMindRefreshResult } from './top-of-mind-refresh-status.js';
 import type { InspirationProcessingReceipt } from './inspiration-processing.js';
 import { STALE_LOCK_SECONDS } from './queue.js';
 import { ENRICHMENT_RETRY_WINDOW_MS, MAX_ENRICHMENT_RETRIES } from './attachment-analysis-retry.js';
+import { EMBEDDING_2_SPACE } from './embedding-2-space.js';
 import { effectiveAttachmentStatus } from './attachment-material.js';
 
 type Database = ReturnType<typeof getDb>;
@@ -47,7 +48,7 @@ export async function readInspirationProcessingStatus(db: Reader, input: {
   profileId: string; inspirationId: string; receiptId?: string;
 }): Promise<InspirationProcessingStatus | null> {
   const now = new Date();
-  const [source] = await db.select({ id: inspirations.id, revision: inspirationRevisions.personalRevision }).from(inspirations)
+  const [source] = await db.select({ id: inspirations.id, revision: inspirationRevisions.personalRevision, embeddingHeld: sql<boolean>`EXISTS (SELECT 1 FROM profile_embedding_indexes e WHERE e.profile_id=${input.profileId}::uuid AND e.active_space=${EMBEDDING_2_SPACE.id} AND EXISTS (SELECT 1 FROM embedding_index_attempts a WHERE a.account_id=(SELECT account_id FROM profiles WHERE id=${input.profileId}::uuid) AND a.profile_id=e.profile_id AND a.space=e.active_space AND a.source_kind='inspiration' AND a.source_id=${input.inspirationId}::uuid AND a.status IN ('reserved','received','unknown')))` }).from(inspirations)
     .leftJoin(inspirationRevisions, and(eq(inspirationRevisions.inspirationId, inspirations.id), eq(inspirationRevisions.profileId, inspirations.profileId)))
     .where(and(eq(inspirations.id, input.inspirationId), eq(inspirations.profileId, input.profileId))).limit(1);
   if (!source) return null;
@@ -70,7 +71,7 @@ export async function readInspirationProcessingStatus(db: Reader, input: {
     currentMaterialRevision: source.revision?.toString() ?? null, requestedMaterialRevision: requested?.materialRevision.toString() ?? null,
     latestDerivedRevision: String(progress?.derived ?? '0'), latestCompletedRevision: String(progress?.completed ?? '0'),
     superseded: Boolean(requested && requested.id !== current?.id), phase: 'unknown', stage: null,
-    runAfter: null, result: null, unavailableAttachments: 0, canRetry: true };
+    runAfter: null, result: null, unavailableAttachments: 0, canRetry: !source.embeddingHeld };
 
   const [media] = await db.execute(sql`SELECT
     count(*) FILTER (WHERE a.material_status::text = 'unavailable')::int AS unavailable,
@@ -96,7 +97,7 @@ export async function readInspirationProcessingStatus(db: Reader, input: {
     state.stage = 'enrichment';
     state.phase = media?.failed ? 'failed' : media?.untracked ? 'unknown' : media?.running ? 'processing' : runAfter && runAfter > now ? 'waiting' : 'queued';
     state.runAfter = state.phase === 'waiting' ? runAfter!.toISOString() : null;
-    state.canRetry = (state.phase === 'failed' || state.phase === 'unknown') && media?.retry_allowed === true;
+    state.canRetry = !source.embeddingHeld && (state.phase === 'failed' || state.phase === 'unknown') && media?.retry_allowed === true;
     return state;
   }
   if (!current) {
@@ -104,7 +105,7 @@ export async function readInspirationProcessingStatus(db: Reader, input: {
       eq(backgroundJobs.type, 'derive_signals'), eq(backgroundJobs.idempotencyKey, `derive_signals:${input.inspirationId}`))).limit(1);
     Object.assign(state, jobState(active, now));
     state.stage = 'derivation';
-    state.canRetry = state.phase === 'failed' || state.phase === 'unknown';
+    state.canRetry = !source.embeddingHeld && (state.phase === 'failed' || state.phase === 'unknown');
     return state;
   }
   if (current.completedAt && current.derivedAt) {
@@ -120,6 +121,6 @@ export async function readInspirationProcessingStatus(db: Reader, input: {
   const [job] = jobId ? await db.select().from(backgroundJobs).where(and(eq(backgroundJobs.id, jobId),
     eq(backgroundJobs.profileId, input.profileId), eq(backgroundJobs.type, current.derivedAt ? 'refresh_top_of_mind' : 'derive_signals'))).limit(1) : [];
   if (job && required !== null && job.requestVersion >= required) Object.assign(state, jobState(job, now));
-  state.canRetry = state.phase === 'failed' || state.phase === 'unknown';
+  state.canRetry = !source.embeddingHeld && (state.phase === 'failed' || state.phase === 'unknown');
   return state;
 }

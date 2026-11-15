@@ -1,3 +1,5 @@
+import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyMatchesSql,embeddingPolicyIdentity,type EmbeddingIndexPolicy} from './embedding-policy.js';
+import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
 /**
  * Gemini embeddings for the two things signal generation compares.
  *
@@ -32,6 +34,7 @@ import {
 import { getDb } from "./db.js";
 import {measurePerformanceStage} from './performance-stages.js';
 import { effectiveAttachmentText } from './attachment-material.js';
+import {EMBEDDING_SOURCE_READ_LIMITS,EmbeddingSourceReadLimit} from './embedding-source-limits.js';
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
@@ -197,11 +200,13 @@ export type EmbeddingTaskType = "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY";
 
 export interface GeminiEmbeddingClient {
   readonly model: string;
+  readonly dimensions?: number;
   embed(input: string, taskType?: EmbeddingTaskType): Promise<number[]>;
 }
 
 export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
   readonly model: string;
+  readonly dimensions=GEMINI_EMBEDDING_DIMENSIONS;
 
   constructor(model = GEMINI_EMBEDDING_MODEL, private readonly deadlines?:{timeoutMs:number;exchangeTimeoutMs:number}) {
     this.model = model;
@@ -260,12 +265,13 @@ export interface EnsureInspirationEmbeddingParams {
   inputScope?: InspirationEmbeddingScope;
   db?: WakaDb;
   client?: GeminiEmbeddingClient;
+  embeddingPolicy?:EmbeddingIndexPolicy;
   beforeCommit?: (tx: Parameters<Parameters<WakaDb["transaction"]>[0]>[0]) => Promise<void>;
 }
 
 export type EnsureInspirationEmbeddingResult =
   | {
-      status: "missing_inspiration" | "not_public";
+      status: "missing_inspiration" | "not_public" | "ineligible";
       embedding: null;
       generated: false;
       inputHash: null;
@@ -273,8 +279,8 @@ export type EnsureInspirationEmbeddingResult =
   | {
       status: "stale_source";
       embedding: null;
-      generated: true;
-      inputHash: string;
+      generated: boolean;
+      inputHash: string|null;
     }
   | {
       status: "unchanged" | "created" | "updated";
@@ -295,14 +301,14 @@ async function loadProfileScopedInspiration(
   db: WakaDb,
   profileId: string,
   inspirationId: string,
-  lock = false,
+  lock:boolean|'nowait' = false,expected?:EmbeddingIndexPolicy,
 ): Promise<Inspiration | null> {
   const query = db
     .select()
     .from(inspirations)
-    .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, profileId)))
+    .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, profileId),expected?embeddingPolicyMatchesSql(expected):undefined))
     .limit(1);
-  const rows = await (lock ? query.for("update") : query);
+  const rows = await (lock ? query.for("update",lock==='nowait'?{noWait:true}:{}) : query);
 
   return rows[0] ?? null;
 }
@@ -334,7 +340,7 @@ async function loadProfileScopedReflections(
   db: WakaDb,
   profileId: string,
   inspirationId: string,
-  lock = false,
+  lock:boolean|'nowait' = false,
 ): Promise<CanonicalReflectionInput[]> {
   const query = db
     .select({
@@ -351,14 +357,14 @@ async function loadProfileScopedReflections(
       ),
     )
     .orderBy(asc(reflections.createdAt), asc(reflections.id));
-  return lock ? query.for("share") : query;
+  return lock ? query.for("share",lock==='nowait'?{noWait:true}:{}) : query;
 }
 
 async function loadProfileScopedAttachments(
   db: WakaDb,
   profileId: string,
   inspirationId: string,
-  lock = false,
+  lock:boolean|'nowait' = false,
 ): Promise<CanonicalAttachmentInput[]> {
   const query = db
     .select({
@@ -373,7 +379,7 @@ async function loadProfileScopedAttachments(
       ),
     )
     .orderBy(asc(attachments.createdAt), asc(attachments.id));
-  return lock ? query.for("share") : query;
+  return lock ? query.for("share",lock==='nowait'?{noWait:true}:{}) : query;
 }
 
 async function buildCanonicalInputForInspiration(
@@ -381,7 +387,7 @@ async function buildCanonicalInputForInspiration(
   profileId: string,
   inspiration: Inspiration,
   inputScope: InspirationEmbeddingScope,
-  lock = false,
+  lock:boolean|'nowait' = false,
 ): Promise<string> {
   const [reflectionRows, attachmentRows] = await Promise.all([
     inputScope === "personal" ? loadProfileScopedReflections(db, profileId, inspiration.id, lock) : [],
@@ -395,22 +401,49 @@ async function buildCanonicalInputForInspiration(
   });
 }
 
-async function acquireEmbeddingAdvisoryLock(
-  db: WakaDb,
-  params: Pick<EnsureInspirationEmbeddingParams, "profileId" | "inspirationId"> & {
-    model: string;
-    inputScope: InspirationEmbeddingScope;
-  },
-): Promise<void> {
-  await db.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${[
-      "waka.inspiration_embedding",
-      params.profileId,
-      params.inspirationId,
-      params.model,
-      params.inputScope,
-    ].join(":")}, 0))`,
-  );
+/** Shared canonical reader for the model2 indexer/operator. Native callers keep
+ * their existing transaction and exact canonical-v1 bytes. */
+export async function readInspirationEmbeddingSource(db:WakaDb,profileId:string,id:string,scope:InspirationEmbeddingScope,lock:boolean|'nowait'=false){
+ const {bytesPerKind:bytes,childrenPerKind:children}=EMBEDDING_SOURCE_READ_LIMITS;
+ const q=db.select({id:inspirations.id,profileId:inspirations.profileId,kind:inspirations.kind,visibility:inspirations.visibility,memoryExcludedAt:inspirations.memoryExcludedAt,
+  text:sql<string|null>`CASE WHEN octet_length(${inspirations.text})<=${bytes} THEN ${inspirations.text} END`,oversized:sql<boolean>`octet_length(${inspirations.text})>${bytes}`}).from(inspirations).where(and(eq(inspirations.profileId,profileId),eq(inspirations.id,id))).limit(1);
+ const [source]=await(lock?q.for('update',lock==='nowait'?{noWait:true}:{}):q);
+ if(!source)return null;
+ if(source.memoryExcludedAt||scope==='public'&&source.visibility!=='public')return {source:{...source,text:source.text??''},input:''};
+ if(source.oversized||source.text===null)throw new EmbeddingSourceReadLimit();
+ // Window bounds suppress oversized fields on the SERVER. At most65 metadata
+ // rows per kind cross the connection; accepted raw UTF8 field totals are
+ // <=48k parent +48k reflections +48k media (plus protocol/row overhead).
+ // Locks stay on real bounded child rows before computing window aggregates.
+ const answers=scope==='public'?[]:await db.execute<{question:string|null;answer:string|null;skipped:boolean;created_at:string;within_bounds:boolean}>(sql`WITH held AS MATERIALIZED (
+   SELECT id,question,answer,skipped,created_at FROM reflections WHERE profile_id=${profileId}::uuid AND inspiration_id=${id}::uuid ORDER BY created_at,id LIMIT ${children+1} ${lock?sql`FOR SHARE ${lock==='nowait'?sql`NOWAIT`:sql``}`:sql``}
+  ), bounded AS (SELECT *,count(*) OVER() AS n,sum(octet_length(question)+octet_length(coalesce(answer,''))) OVER() AS bytes FROM held)
+  SELECT CASE WHEN n<=${children} AND bytes<=${bytes} THEN question END AS question,CASE WHEN n<=${children} AND bytes<=${bytes} THEN answer END AS answer,skipped,created_at::text,n<=${children} AND bytes<=${bytes} AS within_bounds FROM bounded ORDER BY bounded.created_at,bounded.id`);
+ if(answers.some(r=>!r.within_bounds))throw new EmbeddingSourceReadLimit();
+ const media=await db.execute<{type:Attachment['type'];enrichment_text:string|null;within_bounds:boolean}>(sql`WITH held AS MATERIALIZED (
+   SELECT ${attachments.id} AS id,${attachments.type} AS type,${effectiveAttachmentText} AS text,${attachments.createdAt} AS created_at FROM ${attachments} WHERE ${attachments.profileId}=${profileId}::uuid AND ${attachments.inspirationId}=${id}::uuid ORDER BY ${attachments.createdAt},${attachments.id} LIMIT ${children+1} ${lock?sql`FOR SHARE ${lock==='nowait'?sql`NOWAIT`:sql``}`:sql``}
+  ), bounded AS (SELECT *,count(*) OVER() AS n,sum(octet_length(coalesce(text,''))) OVER() AS bytes FROM held)
+  SELECT type,CASE WHEN n<=${children} AND bytes<=${bytes} THEN text END AS enrichment_text,n<=${children} AND bytes<=${bytes} AS within_bounds FROM bounded ORDER BY bounded.created_at,bounded.id`);
+ if(answers.some(r=>!r.within_bounds)||media.some(r=>!r.within_bounds))throw new EmbeddingSourceReadLimit();
+ return {source:{...source,text:source.text},input:buildCanonicalInspirationEmbeddingInput({text:source.text,kind:source.kind,reflections:answers.map(r=>({question:r.question!,answer:r.answer,skipped:r.skipped,createdAt:new Date(r.created_at)})),attachments:media.map(r=>({type:r.type,enrichmentText:r.enrichment_text}))})};
+}
+
+async function acquireEmbeddingAdvisoryLock(db:WakaDb,params:{profileId:string;inspirationId:string;model?:string;inputScope:InspirationEmbeddingScope}){
+ const [row]=await db.execute<{policy:unknown}>(sql`WITH metadata AS MATERIALIZED(SELECT ${embeddingPolicySql(params.profileId)} AS policy)
+ SELECT pg_advisory_xact_lock(hashtextextended(${'waka.inspiration_embedding:'+params.profileId+':'+params.inspirationId+':'}::text||${params.model?sql`${params.model}::text`:sql`(policy->>'activeSpace')`}||${':'+params.inputScope}::text,0)),policy FROM metadata`);
+ return parseEmbeddingPolicy(params.profileId,row.policy);
+}
+
+async function ensureModel2Inspiration(params:EnsureInspirationEmbeddingParams,policy?:EmbeddingIndexPolicy):Promise<EnsureInspirationEmbeddingResult>{
+ const db=params.db??getDb(),scope=params.inputScope??'personal';
+ const {indexEmbeddingSource}=await import('./embedding-indexer.js');
+ const result=await indexEmbeddingSource(db,{profileId:params.profileId,sourceKind:'inspiration',sourceId:params.inspirationId,space:EMBEDDING_2_SPACE.id,scope},{client:params.client,expectedPolicy:policy,beforeCommit:params.beforeCommit});
+ if(result.status==='inactive')return{status:'stale_source',embedding:null,generated:false,inputHash:null};
+ if(result.status==='missing'||result.status==='ineligible')return{status:result.status==='missing'?'missing_inspiration':'ineligible',embedding:null,generated:false,inputHash:null};
+ const stored=await loadExistingEmbedding(db,params.profileId,params.inspirationId,EMBEDDING_2_SPACE.id,scope);
+ const {embeddingInSpace}=await import('./embedding-provider.js');
+ if(!stored||stored.inputHash!==result.inputHash||!embeddingInSpace(stored.embedding,stored.dimensions,{model:EMBEDDING_2_SPACE.id,dimensions:768}))return{status:'stale_source',embedding:null,generated:result.generated,inputHash:result.inputHash};
+ return{status:result.generated?'updated':'unchanged',embedding:stored,generated:result.generated,inputHash:stored.inputHash};
 }
 
 async function sourceMatchesSnapshot(
@@ -440,21 +473,28 @@ export async function ensureInspirationEmbedding(
   params: EnsureInspirationEmbeddingParams,
 ): Promise<EnsureInspirationEmbeddingResult> {
   const db: WakaDb = params.db ?? getDb();
-  const client = params.client ?? new GeminiEmbeddingHttpClient();
+  // Lazy import keeps the storage/canonical module below the factory in the
+  // initialization graph; standalone callers still use the same selection.
+  const {createEmbeddingClient,embeddingInSpace,embeddingSpaceForClient}=await import('./embedding-provider.js');
+  if(params.embeddingPolicy?.activeSpace===EMBEDDING_2_SPACE.id||params.client?.model===EMBEDDING_2_SPACE.id)return ensureModel2Inspiration(params,params.embeddingPolicy);
   const inputScope = params.inputScope ?? "personal";
-
-  return db.transaction(async (tx) => {
-    await acquireEmbeddingAdvisoryLock(tx, {
+  let deferred:EmbeddingIndexPolicy|undefined;
+  const result:EnsureInspirationEmbeddingResult=await db.transaction(async (tx) => {
+    const policy=await acquireEmbeddingAdvisoryLock(tx, {
       profileId: params.profileId,
       inspirationId: params.inspirationId,
-      model: client.model,
+      model: params.client?.model,
       inputScope,
     });
+    if(params.embeddingPolicy&&embeddingPolicyIdentity(params.embeddingPolicy)!==embeddingPolicyIdentity(policy))return{status:'stale_source',embedding:null,generated:false,inputHash:null};
+    const client=params.client??createEmbeddingClient(undefined,policy),space=embeddingSpaceForClient(client);
+    if(client.model===EMBEDDING_2_SPACE.id){deferred=policy;return{status:'stale_source',embedding:null,generated:false,inputHash:null};}
 
     const inspiration = await loadProfileScopedInspiration(
       tx,
       params.profileId,
       params.inspirationId,
+      false,policy,
     );
     if (!inspiration) {
       return {
@@ -483,7 +523,7 @@ export async function ensureInspirationEmbedding(
       inputScope,
     );
 
-    if (existing && !needsEmbeddingRegeneration(existing, inputHash, client.model)) {
+    if (existing && !needsEmbeddingRegeneration(existing, inputHash, client.model)&&embeddingInSpace(existing.embedding,existing.dimensions,space)) {
       return { status: "unchanged", embedding: existing, generated: false, inputHash };
     }
 
@@ -492,7 +532,7 @@ export async function ensureInspirationEmbedding(
       tx,
       params.profileId,
       params.inspirationId,
-      true,
+      true,policy,
     );
     if (
       !(await sourceMatchesSnapshot(tx, params.profileId, freshSource, { inputHash }, inputScope))
@@ -538,4 +578,5 @@ export async function ensureInspirationEmbedding(
 
     return { status, embedding: stored, generated: true, inputHash };
   });
+  return deferred?ensureModel2Inspiration(params,deferred):result;
 }
