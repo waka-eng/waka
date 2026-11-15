@@ -147,3 +147,81 @@ thresholds and review the exact cutover. Before rollback: prove current native
 coverage and availability, preserve additive schema/attempt history, and never
 reset or erase real memory as recovery. Current Google availability is not fixed
 by this preparation. All earlier synthetic canary allowances are consumed.
+
+## C0 current coverage (keyless sibling, execution requires separate approval)
+
+`coverage-index.ts`/`coverage_operator.py` are read-only siblings. They do not
+modify or call the frozen paid shadow operator. C0 accepts only the strict
+`embedding-coverage-v1` account/profile/epoch/policy/space manifest, independent
+DB fingerprint, finite expiry and explicit cell/byte/statement/time/attempt caps.
+There is no provider, repair, accepted-policy, activation or public API mode.
+
+Run placement is deliberately distinct from runtime identity: native CloudShell
+`AWS_REGION` and `AWS_DEFAULT_REGION` must honestly be **us-east-1**. Main must
+verify the Console/native inventory agrees; do not export false region variables.
+Both STS and dev worker configuration reads remain explicitly **us-west-2**, with
+the same fixed development ARN/account/App/stage and independently approved URI
+SHA. The child inherits only those verified non-secret region variables and basic
+locale/PATH/autodrain-off settings. Receipt fields `executionRegion` and
+`runtimeConfigurationRegion` record the distinction; they are not Lambda RTT or
+execution-equivalence proof. No app/DB region, resource, secret or D1 route moves.
+
+The operator requests no provider key in its CLI projection; AWS still returns
+the complete configuration to the AWS CLI process before `--query` narrows stdout.
+URI stays in memory/stdin. The built graph excludes provider HTTP/factory, queue,
+DB-singleton and activation runtime modules. No dotenv is loaded. Only fixed,
+account-bound SQL and explicit READ ONLY REPEATABLE READ are used. C0 never calls
+the shared-fence helper because that helper may INSERT missing control rows.
+
+Interpret its result precisely:
+
+| Field | Meaning |
+| --- | --- |
+| `report.complete` | Actual current canonical/hash/finite768 nonzero geometry and work/tombstone coverage for this RR snapshot only |
+| `report.unresolvedAttempts` | Always-present reserved/received/unknown counts across all owned target-space live/migration manifests, including deleted-source attempts; separate from coverage |
+| `report.reconciliation` | Optional exact-manifest aggregate; foreign/out-of-scope manifest refuses without foreign counts; does not replace global unresolved counts |
+| `providerOutcomeProven`, `invoiceProven`, `activationAuthorized` | Always false; a correct vector or committed ledger row does not prove billing, receipt certainty or activation permission |
+
+Future C1 must re-run the actual verifier under its own current exclusive fences,
+require source completeness **and** `unresolvedAttempts.total=0`/
+`resolutionRequired=false`, and independently satisfy policy/calibration/frontier
+checks. C0 results cannot be supplied as cached certificates. C1 must not inherit
+a stale RR snapshot: inactive vectors can change without active-generation bumps.
+Explicit fresh-statement RC or a separately proved fail-closed protocol is required.
+Current C1/policy/enrollment source is unchanged and remains held.
+
+Every source field is server-bounded before transfer. Each query also reserves a
+conservative512KiB field-payload accounting allowance before it executes. This
+is **not** a wire/heap bound. The default maximum aggregate8MiB and60s cap remain
+fail-closed: individually bounded cells can still exceed the whole-cohort budget.
+No subset complete is returned. Statement budget includes four reserved control/
+cold-catalog units; application counts and actual measured controls are reported
+separately, not mistaken for physical network flights. Time uses monotonic elapsed
+checks plus wall-clock expiry; the entry has an independent deadline and closes
+its client on refusal.
+
+Stdout contains closed numeric counts/reasons/measurements, not source words,
+hashes identifying individual inputs, vectors, UUIDs, SQL params or raw errors.
+Needed profile/epoch/generation/frontier metadata is atomically published0600
+without overwriting an existing path; its SHA/size is in the safe receipt. Once
+markers remain. Losing stdout does not authorize replay or erase uncertainty.
+
+Offline build (never executes the operator):
+
+```sh
+node tools/embeddings/build-coverage-operator.mjs /tmp/waka-embedding-2-20261115/c0/REVIEWED_OUTPUT
+```
+
+The builder currently requires an explicit owned task preparation directory and
+records every input SHA. A future approved read uses the reviewed private
+manifest, source/bundle/operator hashes and dedicated invocation:
+
+```sh
+python3 tools/embeddings/coverage_operator.py --execute-reviewed \
+  --bundle PRIVATE_REVIEWED_C0_BUNDLE.mjs --manifest PRIVATE_C0_MANIFEST.json \
+  --invocation APPROVED_UUID --approved-bundle-sha REVIEWED_C0_SHA \
+  --approved-manifest-sha REVIEWED_MANIFEST_SHA --approved-operator-sha REVIEWED_OPERATOR_SHA
+```
+
+This recipe is not execution permission. No C0 AWS/sharedSQL read, D1 paid call,
+source migration, policy grant, cutover or main/prod action is authorized here.

@@ -1936,3 +1936,44 @@ unknown outcomes block renewal across changed material, request or manifest.
 Only exact current-result reconciliation can progress without another dispatch;
 a lost result requires a separate explicit recovery/spending decision. No
 operator is authorized merely by this source contract.
+
+### Read-only embedding coverage (C0)
+
+C0 verifies a bounded, owned set of current personal/public inspiration and signal
+cells, including required refusal anchors and stale/tombstoned work or extra
+target-space vectors. It reads the actual canonical input, formatted hash,
+768 finite values with finite nonzero norm, and matching work version/outcome.
+Counts, a ledger receipt or zero pending work cannot substitute for those proofs.
+Oversized domains, fields, aggregate bytes, statement budgets or elapsed time
+refuse rather than certify a subset. No vector normalization is performed.
+
+The operation uses an explicit READ ONLY REPEATABLE READ snapshot. A complete
+result is true for that snapshot, even if a writer commits later; it is not a
+cached activation certificate. All sources, work, vectors and optional exact
+manifest reconciliation are bound to one account and its owned profiles.
+Foreign-manifest reconciliation refuses without returning foreign counts.
+Current-vector completeness and paid-attempt/provider/invoice certainty are
+separate facts; C0 neither clears an unknown attempt nor repairs data.
+A single owned account/profile/target-space aggregate always reports reserved,
+received and unknown attempts across all live/migration manifests, even without
+optional exact-manifest reconciliation. Deleted-source attempts remain visible.
+Valid source coverage can coexist with an unresolved attempt; a future cutover
+must independently require this aggregate's total to be zero under its fences,
+or hold for exact resolution. Neither aggregate proves billing outcome.
+
+C0 has no provider key, HTTP, queue, wake, write or activation capability. It must
+not call the shared-index-fence function, which may insert missing control rows.
+Reports contain only numeric counts/closed flags; target UUIDs and frontier
+metadata, if needed, stay in a private0600 artifact. Raw words, hashes identifying
+individual inputs, vectors and source identifiers are never report/error fields.
+The proposed sibling keyless operator requires its own exact review before any
+live read. Existing paid operators, native defaults and model2 calibration holds
+remain unchanged.
+
+A future cutover must re-run this verifier under its own current exclusive
+fences. Its transaction cannot inherit an old REPEATABLE READ snapshot: an
+inactive-space vector edit need not advance active generation. Explicit READ
+COMMITTED (fresh proof statements after fences) or another proved fail-closed
+snapshot protocol is required before future activation is implemented. A lost
+cutover acknowledgment requires exact before/after policy/epoch/frontier tuple
+reconciliation, never activation replay based on missing stdout.
