@@ -123,4 +123,3 @@ export async function readInspirationEmbeddingSource(db:WakaDb,profileId:string,
  if(answers.some(r=>!r.within_bounds)||media.some(r=>!r.within_bounds))throw new EmbeddingSourceReadLimit();
  return {source:{...source,text:source.text},input:buildCanonicalInspirationEmbeddingInput({text:source.text,kind:source.kind,reflections:answers.map(r=>({question:r.question!,answer:r.answer,skipped:r.skipped,createdAt:new Date(r.created_at)})),attachments:media.map(r=>({type:r.type,enrichmentText:r.enrichment_text}))})};
 }
-
