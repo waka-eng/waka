@@ -4,6 +4,11 @@ import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.
 import { reembedSignal, reembedSignalStatement } from './signal-embeddings.js';
 import { GeminiEmbeddingHttpClient, GEMINI_EMBEDDING_MODEL, hashEmbeddingInput } from './inspiration-embeddings.js';
 import { postgresBackgroundJobStore, processBackgroundJob } from './queue.js';
+import { Hono } from 'hono';
+import type {AuthEnv} from './middleware.js';
+import {createSignalRoutes} from '../routes/signals.js';
+import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
+import {embeddingInputHash} from './embedding-provider.js';
 
 let t: TestDatabase;
 let sequence = 0;
@@ -26,12 +31,37 @@ async function fixture() {
 }
 async function vector(f: Awaited<ReturnType<typeof fixture>>, statement: string, embedding = [0, 1], storedModel = model) {
   await t.sql`INSERT INTO signal_embeddings(profile_id, signal_id, model, dimensions, input_hash, embedding)
-    VALUES (${f.profileId}, ${f.signalId}, ${storedModel}, ${embedding.length}, ${hashEmbeddingInput(statement)}, ${JSON.stringify(embedding)}::jsonb)
+    VALUES (${f.profileId}, ${f.signalId}, ${storedModel}, ${embedding.length}, ${embeddingInputHash(storedModel,statement)}, ${JSON.stringify(embedding)}::jsonb)
     ON CONFLICT (signal_id, model) DO UPDATE SET input_hash = excluded.input_hash, embedding = excluded.embedding, updated_at = now()`;
 }
 const stored = async (id: string) => (await t.sql`SELECT model, input_hash, embedding FROM signal_embeddings WHERE signal_id = ${id} ORDER BY model`);
 
 describe('statement embedding races', () => {
+  it.each(['success','rollback'] as const)('invalidates both native and inactive2 vectors only for the changed owned statement: %s', async mode => {
+    const f=await fixture(),foreign=await fixture();
+    const [unchanged]=await t.sql`INSERT INTO signals(profile_id,statement) VALUES(${f.profileId},'Untouched local wording') RETURNING id`;
+    const local={profileId:f.profileId,signalId:unchanged.id as string,statement:'Untouched local wording'},values=[1,...Array<number>(767).fill(0)];
+    for(const source of [f,foreign,local])for(const space of [GEMINI_EMBEDDING_MODEL,EMBEDDING_2_SPACE.id])await vector(source,source.statement,values,space);
+    const before=await stored(f.signalId),foreignBefore=await stored(foreign.signalId),localBefore=await stored(local.signalId);
+    const [owner]=await t.sql`SELECT account_id FROM profiles WHERE id=${f.profileId}`;
+    const app=new Hono<AuthEnv>();app.onError(()=>Response.json({error:'synthetic statement rollback'},{status:500}));
+    app.route('/api/signals',createSignalRoutes({getDatabase:()=>t.db as never,authMiddleware:async(c,next)=>{
+      c.set('session',{sessionId:'00000000-0000-4000-8000-000000000001',account:{id:owner.account_id as string,email:'synthetic@example.test'},profile:{id:f.profileId,accountId:owner.account_id as string,type:'human',name:'Owner',preferredLocale:'en-US'}});await next();
+    }}));
+    if(mode==='rollback'){
+      await t.sql`CREATE FUNCTION refuse_vector_edit() RETURNS trigger AS $$ BEGIN IF NEW.type::text='reembed_signal' THEN RAISE EXCEPTION 'synthetic queue refusal'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`;
+      await t.sql`CREATE TRIGGER refuse_vector_edit BEFORE INSERT ON background_jobs FOR EACH ROW EXECUTE FUNCTION refuse_vector_edit()`;
+    }
+    try{
+      const res=await app.request('/api/signals/'+f.signalId,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({statement:'Changed exact human wording'})});
+      expect(res.status).toBe(mode==='success'?200:500);
+      expect(await stored(f.signalId)).toEqual(mode==='success'?[]:before);
+      expect(await stored(foreign.signalId)).toEqual(foreignBefore);expect(await stored(local.signalId)).toEqual(localBefore);
+      const [words]=await t.sql`SELECT statement,locked_at FROM signals WHERE id=${f.signalId}`;
+      expect(words).toEqual(mode==='success'?{statement:'Changed exact human wording',locked_at:expect.anything()}:{statement:f.statement,locked_at:null});
+      if(mode==='rollback'){expect(await t.sql`SELECT id FROM signal_statements`).toHaveLength(0);expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);}
+    }finally{if(mode==='rollback'){await t.sql`DROP TRIGGER refuse_vector_edit ON background_jobs`;await t.sql`DROP FUNCTION refuse_vector_edit()`;}}
+  });
   it('stores a current vector without changing human wording', async () => {
     const f = await fixture();
     const [locked] = await t.sql`UPDATE signals SET locked_at = now() WHERE id = ${f.signalId} RETURNING locked_at`;

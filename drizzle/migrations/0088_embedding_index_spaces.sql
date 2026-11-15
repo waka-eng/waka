@@ -119,6 +119,9 @@ CREATE TRIGGER embedding_index_profile_delete_fence BEFORE DELETE ON "public"."p
 CREATE FUNCTION "public"."embedding_index_request"(owner_id uuid,kind_value text,source_id_value uuid,scope_value text) RETURNS void
 LANGUAGE plpgsql SET search_path="public",pg_temp AS $$
 DECLARE active_value text; building_value text; work_id uuid; queue_id uuid; key_value text;
+ -- Keep the newly added label text-typed during migration. The enum cast is
+ -- evaluated only when this function runs, after the migration commits.
+ job_type_value text := 'index_embedding'::text;
 BEGIN
  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id=owner_id) THEN RETURN; END IF;
  SELECT active_space,building_space INTO active_value,building_value FROM profile_embedding_indexes WHERE profile_id=owner_id;
@@ -131,7 +134,7 @@ BEGIN
  IF active_value<>'waka.embedding.gemini-2.text-retrieval.v1.768.raw' THEN RETURN; END IF;
  key_value:='index_embedding:'||owner_id::text||':waka.embedding.gemini-2.text-retrieval.v1.768.raw:'||kind_value||':'||source_id_value::text;
  INSERT INTO background_jobs(profile_id,type,payload,max_attempts,idempotency_key)
- VALUES(owner_id,'index_embedding',jsonb_build_object('sourceKind',kind_value,'sourceId',source_id_value,'space','waka.embedding.gemini-2.text-retrieval.v1.768.raw'),3,key_value)
+ VALUES(owner_id,job_type_value::background_job_type,jsonb_build_object('sourceKind',kind_value,'sourceId',source_id_value,'space','waka.embedding.gemini-2.text-retrieval.v1.768.raw'),3,key_value)
  ON CONFLICT(idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET
   request_version=background_jobs.request_version+1,
   status=CASE WHEN background_jobs.status IN ('succeeded','failed') THEN 'pending'::background_job_status ELSE background_jobs.status END,

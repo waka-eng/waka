@@ -19,7 +19,7 @@ export function registerProcessingRoutes(routes: Hono<AuthEnv>, getDatabase: typ
     return c.json(await loadProfileProcessing(db, target.profileId));
   });
 
-  routes.post('/:id/processing/retry', humanSessionsOnly, async (c) => {
+  routes.post('/:id/processing/retry', async (c) => {
     c.header('Cache-Control', 'private, no-store');
     const id = uuidSchema.safeParse(c.req.param('id'));
     const query = profileQuerySchema.safeParse(c.req.query());
@@ -28,16 +28,22 @@ export function registerProcessingRoutes(routes: Hono<AuthEnv>, getDatabase: typ
     const db = getDatabase();
     const target = await resolveTargetProfile(db, c.get('session'), query.data.profile, 'write');
     if (!target.ok) return c.json(target.body, target.status);
-    try {
-      const status = await recoverInspirationProcessing(db, { profileId: target.profileId, inspirationId: id.data, receiptId: body.data.receiptId });
-      if (!status) return c.json({ error: 'Processing request not found' }, 404);
-      return c.json(status, status.phase === 'ready' ? 200 : 202);
-    } catch (error) {
-      const code = (error as { code?: string; cause?: { code?: string } }).cause?.code ?? (error as { code?: string }).code;
-      if (code === 'outcome_unknown') return c.json({ error: 'An earlier embedding request has an uncertain outcome. Check its current result before requesting another.' }, 409);
-      if (code === '55P03') return c.json({ error: 'An update is already in progress. Check again shortly.' }, 409);
-      throw error;
-    }
+    // Ownership is resolved before the human-only gate, so foreign profiles
+    // remain 404 for every caller. No recovery write or wake precedes this gate.
+    const recover = async () => {
+      try {
+        const status = await recoverInspirationProcessing(db, { profileId: target.profileId, inspirationId: id.data, receiptId: body.data.receiptId });
+        if (!status) return c.json({ error: 'Processing request not found' }, 404);
+        return c.json(status, status.phase === 'ready' ? 200 : 202);
+      } catch (error) {
+        const code = (error as { code?: string; cause?: { code?: string } }).cause?.code ?? (error as { code?: string }).code;
+        if (code === 'outcome_unknown') return c.json({ error: 'An earlier embedding request has an uncertain outcome. Check its current result before requesting another.' }, 409);
+        if (code === '55P03') return c.json({ error: 'An update is already in progress. Check again shortly.' }, 409);
+        throw error;
+      }
+    };
+    const refusal = await humanSessionsOnly(c, async () => { c.res = await recover(); });
+    return refusal ?? c.res;
   });
 
   routes.get('/:id/processing', async (c) => {
@@ -51,6 +57,7 @@ export function registerProcessingRoutes(routes: Hono<AuthEnv>, getDatabase: typ
     const status = await loadInspirationProcessingStatus(db, { profileId: target.profileId, inspirationId: id.data, receiptId: query.data.receipt });
     if (!status) return c.json({ error: 'Processing request not found' }, 404);
     const writer = await resolveTargetProfile(db, c.get('session'), target.profileId, 'write');
-    return c.json({ ...status, canRetry: status.canRetry && writer.ok && !c.get('session').keyScoped });
+    const session = c.get('session');
+    return c.json({ ...status, canRetry: status.canRetry && writer.ok && session.profile.type === 'human' && !session.keyScoped });
   });
 }

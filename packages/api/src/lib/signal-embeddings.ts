@@ -1,5 +1,5 @@
 import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
-import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyMatchesSql,embeddingPolicyIdentity,activeEmbeddingSpaceSql,type EmbeddingIndexPolicy} from './embedding-policy.js';
+import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyMatchesSql,embeddingPolicyIdentity,type EmbeddingIndexPolicy} from './embedding-policy.js';
 import {settleEmbeddingIndexWork,EmbeddingIndexError} from './embedding-index-coordination.js';
 import {createEmbeddingClient,embeddingInSpace,embeddingSpaceForClient,embeddingInputHash} from './embedding-provider.js';
 /**
@@ -98,7 +98,6 @@ export async function dropSignalEmbedding(
       and(
         eq(signalEmbeddings.profileId, input.profileId),
         eq(signalEmbeddings.signalId, input.signalId),
-        eq(signalEmbeddings.model,activeEmbeddingSpaceSql(input.profileId)),
       ),
     );
 }

@@ -156,3 +156,32 @@ lookup is an InitPlan in the existing SQL statement, with no new polling flight.
 The affected processing/queue/operator26-case follow-up and types passed on a
 new separately attested disposable PG17 fixture; these overlap the196-case gate
 and must not be added as independent cases. Both owned fixtures were cleaned.
+
+## PR482 full-CI correction
+
+The original87e3 preparation passed local focused gates but its ordinary full
+CI43690051974 failed three hermetic checks. That failure is retained; no deployment
+was attempted. The enum corpus scanner flagged a new enum literal inside a
+deferred function body. This was a conservative static-gate failure, not an
+established unsafe-enum runtime abort. The function now initializes a text-typed
+variable and casts it at invocation. A real official-migrator rehearsal staged
+through87 with the enum already existing, applied88 in one BEGIN/COMMIT, retained
+that type's identity and existing locked words/native vector, then proved native
+old-writer defaults, postcommit synthetic model2 enqueue and replay without new
+ledger rows. This is disposable proof, not a live ledger attestation.
+
+Retry now resolves the owned target/write boundary before the shared human-only
+gate, preserving foreign404 and same-account forbidden403. GET agrees with the
+human/non-keyScoped POST capability. Actual denial tests retain all rows/versions
+and prove zero wakes. Signal wording edits again invalidate ALL vector spaces
+for only that changed owned signal. Unchanged and foreign rows remain; a failed
+queue handoff rolls back wording and both native001/inactive2 vectors. The failed
+signal assertion was vector row count, not pending job count, and stays intact.
+
+The exact failed suites plus recovery/lock/vector neighbors passed86 distinct
+PG17 cases across8 files, assembled from overlapping focused runs without adding
+the overlaps. Focused source/operator unit checks passed36; types, vocabulary
+and migration consistency passed. No healthy full matrix was repeated locally.
+The same PR still requires new exact-head ordinary CI and renewed Main acceptance
+before any dev merge. Live operators/backfill/activation and production remain
+held; the original frozen source/operator packets are retained.
