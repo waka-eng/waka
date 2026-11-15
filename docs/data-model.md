@@ -1860,3 +1860,79 @@ unsupported words remain available as qualified detail, not standing matches.
 The migration itself (schema, API, web, MCP phases and gates) belongs in a
 `docs/goals/` goal document that references this file — for this layer,
 `goals/principles.md`.
+
+
+## Embedding index migration (local preparation)
+
+An **embedding space** is the versioned combination of provider model, exact
+query/document formatting, dimensions and normalization policy. The provider's
+wire model name is different from that stored coordinate-space identity. Existing
+`model` keys in the two vector tables retain that identity; no row is relabeled.
+Native `gemini-embedding-001` remains active. Proposed OpenRouter
+`google/gemini-embedding-2` is incompatible and needs its own current-source
+vectors and separately accepted threshold policy before activation. Text-only
+Embedding2 preparation uses768 raw provider values, exact versioned text prefixes
+and SHA256 of formatted UTF8 input; it changes no human words or existing hashes.
+
+Three internal operational tables coordinate this transition, not new memory
+layers: `profile_embedding_indexes` holds selected/building spaces, policy epochs
+and a historical cutover frontier; `embedding_index_attempts` holds content-free
+paid reservations/outcomes; `embedding_index_work` holds per-owned-source requested
+and completed versions. No source text, query, credentials or duplicate vector
+body lives in these records. Pending work is not evidence that all profile memory
+is unavailable. Existing current supported signals and lexical conversation
+context remain usable when another source is indexing.
+
+Normal source/child/signal mutations coalesce current-space indexing work. A
+completion proves the exact source/work/policy version before atomically writing
+a vector and settling that version. It cannot clear a later edit or another
+source's work. Cache hits can settle work without HTTP; deletions/ineligibility
+settle without new inference. A new uncited source has durable indexing intent
+independent of extraction. Bulk shadow indexing remains outside the interactive
+queue; existing account limits and scheduling policy are not increased.
+
+Initial cutover requires a complete current-hash/geometry inventory and a separate
+accepted threshold policy under bounded owner fences. Ongoing coverage is derived
+from per-source progress, not a sticky profile-wide dirty flag or an expensive
+full-corpus scan after every job. Required current matching/suppression vectors
+must not be missing when discovery decides to mint or suppress. A failed/unknown
+paid request remains explicit and is not an unsafe automatic duplicate call.
+Unchanged old vectors remain retained; existing source-edit/delete privacy
+redaction is not relaxed. Rollback after new writes requires fresh old-space
+coverage and availability, not an assumption of immediate semantic rollback.
+No live data migration or route activation is authorized by this schema contract.
+
+Discovery reservations name their actual source: `inspiration` or
+`review_answer`. A review answer's ledger scope is `statement`, describing the
+generated candidate input, not a stored copy of the answer. Its input hash is
+the exact formatted candidate bytes; source lineage is proved separately.
+Work/control rows remain capture/signal-only. A stable job request, source
+material identity, policy epoch and bounded member ordinal bind each discovery
+dispatch. Regenerating different wording or order cannot bypass a reserved or
+uncertain dispatch. A closed dispatch family separates canonical `index` work
+from generated `discovery` work. Its unresolved identity is owner/source, space,
+input scope and family, independent of input hash, material version, request,
+manifest or live-versus-migration purpose. Newer source words can remain held
+behind an older uncertain dispatch; this does not hide other current memory. Review reservations require current owned review material,
+generation/policy and live claim proofs. They are excluded from bulk indexing.
+
+The proposed model2 policy is **unvalidated** and cannot activate a profile.
+Its retrieval-only floor is0.80; all nonidentical matching/refusal candidates
+still need a semantic judgment, regardless of cosine. Gardener candidates use
+that floor but require their existing meaning judge. Model2 reading selection
+does not discard claims using cosine-only redundancy. Model2 chat proposes
+0.80 minimum/0.85 uncorroborated/0.90 strong/0.02 relative gap with no cosine
+diversity penalty. These are bounded local integration settings for review,
+not calibrated truth thresholds or an inference from the small smoke corpus.
+
+Explicit human processing Retry may renew a definite HTTP-failed canonical
+Embedding2 work version and enqueue ordinary metered work. This is not a ledger
+reset: old attempts remain, and reads/background retries never renew versions.
+Key-scoped/read-only/foreign sessions cannot invoke recovery. A second click
+joins the newly queued work; it cannot renew a version without a definite HTTP
+failure on that version. A bounded privileged signal metadata helper requires
+account, source, exact work version and policy epoch. Reserved, received or
+unknown outcomes block renewal across changed material, request or manifest.
+Only exact current-result reconciliation can progress without another dispatch;
+a lost result requires a separate explicit recovery/spending decision. No
+operator is authorized merely by this source contract.

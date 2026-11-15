@@ -1,4 +1,7 @@
-import {createEmbeddingClient,embeddingInSpace,embeddingSpaceForClient} from './embedding-provider.js';
+import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
+import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyMatchesSql,embeddingPolicyIdentity,activeEmbeddingSpaceSql,type EmbeddingIndexPolicy} from './embedding-policy.js';
+import {settleEmbeddingIndexWork,EmbeddingIndexError} from './embedding-index-coordination.js';
+import {createEmbeddingClient,embeddingInSpace,embeddingSpaceForClient,embeddingInputHash} from './embedding-provider.js';
 /**
  * A signal's vector — the only four things that ever happen to one.
  *
@@ -18,13 +21,10 @@ import {createEmbeddingClient,embeddingInSpace,embeddingSpaceForClient} from './
  * names this file as their home and fails if a route so much as mentions them.
  */
 
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne,sql } from "drizzle-orm";
 
 import { signalEmbeddings, signals } from "../db/index.js";
 import { getDb } from "./db.js";
-import {
-  hashEmbeddingInput,
-} from "./inspiration-embeddings.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -38,6 +38,7 @@ export interface StatementEmbeddingClient {
 
 interface ReembeddingDependencies {
   embeddingClient?: StatementEmbeddingClient;
+  embeddingPolicy?:EmbeddingIndexPolicy;
   /** The queue verifies its still-current claim inside the write transaction. */
   beforeCommit?: (tx: WakaTx) => Promise<void>;
 }
@@ -55,27 +56,22 @@ export async function writeSignalEmbedding(
     statement: string;
     embedding: number[];
     model: string;
+    embeddingPolicy?:EmbeddingIndexPolicy;
   },
 ): Promise<void> {
-  await tx
-    .insert(signalEmbeddings)
-    .values({
-      profileId: input.profileId,
-      signalId: input.signalId,
-      model: input.model,
-      dimensions: input.embedding.length,
-      inputHash: hashEmbeddingInput(input.statement),
-      embedding: input.embedding,
-    })
-    .onConflictDoUpdate({
-      target: [signalEmbeddings.signalId, signalEmbeddings.model],
-      set: {
-        dimensions: input.embedding.length,
-        inputHash: hashEmbeddingInput(input.statement),
-        embedding: input.embedding,
-        updatedAt: new Date(),
-      },
-    });
+  const hash=embeddingInputHash(input.model,input.statement);
+  const put=async()=>{const rows=await tx.execute(sql`INSERT INTO signal_embeddings(profile_id,signal_id,model,dimensions,input_hash,embedding)
+   SELECT ${input.profileId}::uuid,${input.signalId}::uuid,${input.model},${input.embedding.length},${hash},${JSON.stringify(input.embedding)}::jsonb
+   WHERE EXISTS(SELECT 1 FROM signals WHERE profile_id=${input.profileId}::uuid AND id=${input.signalId}::uuid AND statement=${input.statement}) ${input.embeddingPolicy?sql`AND ${embeddingPolicyMatchesSql(input.embeddingPolicy)}`:sql``}
+   ON CONFLICT(signal_id,model) DO UPDATE SET dimensions=excluded.dimensions,input_hash=excluded.input_hash,embedding=excluded.embedding,updated_at=clock_timestamp() RETURNING id`);if(rows.length!==1)throw new EmbeddingIndexError('stale');};
+  if(input.model!==EMBEDDING_2_SPACE.id){await put();return;}
+  const policy=input.embeddingPolicy;if(!policy||policy.activeSpace!==input.model||!embeddingInSpace(input.embedding,input.embedding.length,{model:input.model,dimensions:768}))throw new EmbeddingIndexError('identity');
+  const [work]=await tx.execute<{id:string;version:string}>(sql`SELECT id,requested_version::text AS version FROM embedding_index_work WHERE profile_id=${input.profileId}::uuid AND source_kind='signal' AND source_id=${input.signalId}::uuid AND input_scope='statement' AND space=${input.model}`);if(!work)throw new EmbeddingIndexError('missing');
+  await settleEmbeddingIndexWork(tx,{profileId:input.profileId,workId:work.id,version:BigInt(work.version),space:input.model,activeEpoch:policy.activeEpoch,inputHash:hash,outcome:'current'},{
+   prove:async transaction=>{const rows=await transaction.execute(sql`SELECT id FROM signals WHERE profile_id=${input.profileId}::uuid AND id=${input.signalId}::uuid AND statement=${input.statement} AND ${embeddingPolicyMatchesSql(policy)} FOR UPDATE NOWAIT`);if(rows.length!==1)throw new EmbeddingIndexError('stale');await transaction.execute(sql`SELECT profile_id FROM generation_revisions WHERE profile_id=${input.profileId}::uuid FOR UPDATE NOWAIT`);},
+   current:async transaction=>{const [row]=await transaction.select().from(signalEmbeddings).where(and(eq(signalEmbeddings.profileId,input.profileId),eq(signalEmbeddings.signalId,input.signalId),eq(signalEmbeddings.model,input.model))).for('share',{noWait:true});return !!row&&row.inputHash===hash&&embeddingInSpace(row.embedding,row.dimensions,{model:input.model,dimensions:768});},
+   write:put,
+  });
 }
 
 /**
@@ -102,6 +98,7 @@ export async function dropSignalEmbedding(
       and(
         eq(signalEmbeddings.profileId, input.profileId),
         eq(signalEmbeddings.signalId, input.signalId),
+        eq(signalEmbeddings.model,activeEmbeddingSpaceSql(input.profileId)),
       ),
     );
 }
@@ -125,13 +122,15 @@ export async function reembedSignalStatement(
   input: { profileId: string; signalId: string; statement: string },
   deps: ReembeddingDependencies = {},
 ): Promise<void> {
-  const client = deps.embeddingClient ?? createEmbeddingClient();
-  const space=embeddingSpaceForClient(client);
-  const inputHash = hashEmbeddingInput(input.statement);
-  const [initial] = await db.select({ statement: signals.statement }).from(signals)
+  const [initial] = await db.select({ statement: signals.statement,embeddingPolicy:embeddingPolicySql(input.profileId) }).from(signals)
     .where(and(eq(signals.profileId, input.profileId), eq(signals.id, input.signalId))).limit(1);
   if (!initial) return;
+  const policy=parseEmbeddingPolicy(input.profileId,initial.embeddingPolicy);
+  if(deps.embeddingPolicy&&embeddingPolicyIdentity(deps.embeddingPolicy)!==embeddingPolicyIdentity(policy))throw new EmbeddingIndexError('stale');
+  const client=deps.embeddingClient??createEmbeddingClient(undefined,policy),space=embeddingSpaceForClient(client);
   if (initial.statement !== input.statement) throw new Error("Signal statement changed; retry current wording");
+  if(client.model===EMBEDDING_2_SPACE.id){const {indexEmbeddingSource}=await import('./embedding-indexer.js');await indexEmbeddingSource(db,{profileId:input.profileId,sourceKind:'signal',sourceId:input.signalId,space:client.model},{client,expectedPolicy:policy,beforeCommit:deps.beforeCommit});return;}
+  const inputHash=embeddingInputHash(client.model,input.statement);
   const [cached] = await db.select({ inputHash: signalEmbeddings.inputHash,embedding:signalEmbeddings.embedding,dimensions:signalEmbeddings.dimensions }).from(signalEmbeddings)
     .where(and(eq(signalEmbeddings.profileId, input.profileId), eq(signalEmbeddings.signalId, input.signalId), eq(signalEmbeddings.model, client.model))).limit(1);
   if (cached?.inputHash === inputHash&&embeddingInSpace(cached.embedding,cached.dimensions,space)) return;
@@ -145,7 +144,7 @@ export async function reembedSignalStatement(
   }
   const missing = await db.transaction(async (tx) => {
     const [current] = await tx.select({ statement: signals.statement }).from(signals)
-      .where(and(eq(signals.profileId, input.profileId), eq(signals.id, input.signalId)))
+      .where(and(eq(signals.profileId, input.profileId), eq(signals.id, input.signalId),embeddingPolicyMatchesSql(policy)))
       .limit(1).for("no key update", { noWait: true });
     if (!current) return false;
     if (current.statement !== input.statement) throw new Error("Signal statement changed; retry current wording");
@@ -158,7 +157,7 @@ export async function reembedSignalStatement(
         eq(signalEmbeddings.signalId, input.signalId), eq(signalEmbeddings.model, client.model), ne(signalEmbeddings.inputHash, inputHash)));
       return true;
     }
-    await writeSignalEmbedding(tx, { ...input, model: client.model, embedding });
+    await writeSignalEmbedding(tx, { ...input, model: client.model, embedding,embeddingPolicy:policy });
     return false;
   });
   if (missing) throw new Error("Signal embedding unavailable; retry current wording");

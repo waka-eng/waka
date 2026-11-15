@@ -1,107 +1,149 @@
-# Embedding transport preparation, 2026-11-14
+# Embedding2 index preparation, 2026-11-14
 
-This change prepares a broker migration and fixes reader identity gaps. It does
-not activate OpenRouter, move stored vectors, change normalization, or establish
-provider availability. The default remains native Google
-`gemini-embedding-001` / 768 dimensions. Google audio and HEIC remain separate
-routes and still require the existing Google credential.
+The owner selected stable `google/gemini-embedding-2` through OpenRouter. This
+candidate prepares its separate index, runtime readers/writers and bounded
+migration/recovery operators. **Native `gemini-embedding-001` remains active by
+default.** No real data backfill, route activation, key change or production
+publication is included. Google audio and HEIC remain separate existing routes.
 
 Production synchronizes GitHub `GEMINI_API_KEY` into stage SST `GeminiApiKey`.
-The development workflow does not synchronize that secret: its existing stage
-SST value supplies runtime `GEMINI_API_KEY`. The native getter prefers that
-runtime variable, then the SST resource link. This source inventory neither
-identifies a Google account/project nor proves which credential currently works.
-No credential value was parsed, exported or used; no owner memory was read.
+Development uses its existing stage SST value without that workflow sync. This
+source inventory identifies credential slots, not a Google account/project or
+current provider availability. No credential values or owner memory are present
+in this report.
 
-## Construction and readable space
+## Space, policy and currentness
 
-`embedding-provider.ts` separates requested HTTP transport from readable storage
-identity. The six default construction sites are capture indexing, signal
-derivation, review derivation, statement reindex, MCP recall and chat lookup.
-Only the central factory now constructs the native client in runtime source.
+Model001 and model2 are incompatible spaces. Existing unique vector keys permit
+side-by-side rows; no old vector is relabeled or normalized. Model2 fixes 768 raw
+values, exact query/document prefixes and SHA256 of formatted UTF8 input. There
+is no task_type/input_type mapping. Only the exact broker stable model identifier
+and observed bare stable identifier are accepted; preview/001/arbitrary aliases
+are refused. Google AI Studio is the sole pinned endpoint, with no fallback and
+existing restrictive privacy settings preserved.
 
-`WAKA_EMBEDDING_PROVIDER` absent/blank/`gemini` retains the native route.
-`openrouter` is compatibility-held before any key lookup or HTTP; other values
-fail closed without echoing them. No SST/workflow sets this flag. Native cached
-memory remains readable. A held recall request returns explicit unavailable,
-with its ordinary consultation receipt but no attempt reservation. Chat retains
-grounded lexical context and publication checks without a lookup reservation.
-An unavailable semantic transport is not reported as an empty native corpus.
+The six construction paths share the policy-aware factory. Policy metadata rides
+existing source/owner/generation queries and is rechecked at publication. Missing
+control rows preserve native epoch0 hashes, prompt identity and selected space.
+Building a shadow index does not invalidate a native reply.
 
-| Reader group | Required identity/currentness |
+| Writer / reader | Current-space boundary |
 | --- | --- |
-| Capture cache | Owner/source/model/scope, canonical input hash, metadata and vector shape |
-| Statement reindex cache | Owner/signal/model, current statement hash and vector shape, including locked recheck |
-| Related captures | Owner/personal scope/model/dimensions, current canonical material for selected sources |
-| Match targets and dismissal anchors | Owner/input policy/model/dimensions, current exact statement hash |
-| Gardener | Owner/native model/dimensions, current statement hash before comparing pairs |
-| Reading diversity | Owner/native model/dimensions and current statement hash |
-| MCP recall | Compatible model/dimensions/current hash/support before and after HTTP |
-| Chat semantic context | Compatible model/dimensions/owner/personal scope/current canonical material |
+| Inspiration canonical indexing | Owned source/ordered reflection/effective attachment material, exact formatted hash, scope, policy/epoch and work version |
+| Capture and review discovery | Current material/lineage, generation, job request/claim and durable candidate-group reservations |
+| Signal reindex | Current exact statement, owner, policy/epoch and geometry, including locked wording |
+| Recall query | Only after eligible current compatible vectors exist; account query budget and after-HTTP source/support proof |
+| Chat query | One selected cohort space; mixed legacy `both` remains lexical, with both owners fenced at publication |
+| Related inspirations | Central model/dimensions/hash selection plus canonical proof for the bounded selected sources |
+| Match targets / dismissal anchors | Current selected-space vectors are required; missing anchors hold discovery instead of permitting a new duplicate |
+| Gardener / reading selection | Current statement hash/model/dimensions; meaning judges and human locks retained |
 
-Shape checks require finite, nonzero cosine geometry with the expected length.
-They do not rescale or rewrite stored values. Existing explicit synthetic test
-clients may advertise their fixture dimensions; runtime configuration cannot use
-that seam to assign an unverified transport the native identity.
+Model2 cosine is a retrieval signal, not agreement. The small synthetic corpus
+included opposed pairs above0.90. Nonidentical match/refusal decisions therefore
+retain semantic judgment; model2 reading selection does not discard claims using
+cosine-only diversity. Its separate provisional numeric policy is **unvalidated**
+and cannot activate profiles. No001 threshold is silently transferred.
 
-The gardener previously read the first vector per signal without constraining
-model, input hash or dimensions. A real PostgreSQL17 fixture reproduced four
-invalid-vector comparisons; the guarded reader refuses all four and still
-compares the valid native pair. This is a correctness issue, not evidence of a
-tenant leak.
+## Progress, uncertainty and recovery
 
-Related-capture discovery adds one current-material SQL statement for the existing
-maximum five selected sources, reusing the canonical index builder and ordered
-reflection/effective-attachment inputs. A stale selection is dropped without
-refilling from the archive. Parent count is bounded; child material bytes are
-not newly capped. Claim, material, human-wording and final publication fences
-remain separate checks, including changes during provider HTTP.
+Draft migration0088 adds three operational tables, a version sequence, canonical
+mutation fences/triggers and one bounded normal `index_embedding` job kind. It
+changes no memory layer or vector column. A source's requested/completed versions
+prevent one completion from clearing another edit. Inactive shadow vectors do not
+advance active generation; active vector writes/cutover still do. Child ID edits
+are included because tied timestamps can change canonical ordering.
 
-## Broker contract and pending gate
+Canonical indexing and generated discovery have distinct closed dispatch
+families. An unresolved source/space/scope/family remains held across changed
+hashes, material, request, manifest or live-versus-migration purpose. A bounded
+same-invocation discovery group may continue only while it retains earlier
+received results. A restarted invocation cannot treat ledger rows as vectors.
 
-The candidate sends `google/gemini-embedding-001`, float encoding, 768 dimensions,
-and `search_document` / `search_query`. It pins `google-ai-studio` in both `only`
-and `order`, disables provider fallback, requires parameter support and retains
-existing restrictive privacy preferences. Audio requests are unchanged.
+Two actual disposable-PG regressions initially dispatched twice after changed
+source wording or combined new request/new wording; both now dispatch once.
+The separate different-manifest race is rechecked under the existing work lock
+with explicit READ COMMITTED statement snapshots. No database lock spans HTTP.
+A received result survives bounded SQL-only lock/serialization retry; an uncertain
+COMMIT is reconciled against exact current source/hash/space/epoch/vector, without
+provider replay. Unknown dispatch and received-without-publication remain distinct.
 
-The official [embedding request schema](https://openrouter.ai/docs/api/api-reference/embeddings/submit-an-embedding-request)
-documents generic `input_type`; it does not establish the exact Gemini task
-mapping. The public endpoint metadata's empty `supported_parameters` list is
-inconclusive. [Provider selection](https://openrouter.ai/docs/guides/routing/provider-selection)
-defines the slug allowlist and fallback controls. Naming/dimensional agreement
-alone does not establish compatible vectors. The candidate therefore retains its
-unverified namespace and is never returned by the runtime factory.
+Existing human processing Retry can renew a definite HTTP-failed current work
+version, retaining attempt history and ordinary metered queue intent. Two clicks
+coalesce; polling and background retries never renew versions. Backend human and
+owner/write gates refuse key-scoped/read-only/foreign attempts independently of
+UI visibility. Existing `canRetry` excludes unresolved embedding work using an
+EXISTS projection on the existing status SQL. Signals have a bounded privileged
+metadata-only `R1_signal` operator, not a new public tool or UI. Exact callable
+paths and the recovery truth table are in the
+[operator contract](../../tools/embeddings/README.md).
 
-A separately reviewed operator runner is proposed, not executed or paid-approved:
-four fixed synthetic documents and three queries through each transport, at most
-14 sequential requests. One identical input has both task types. Native results
-must distinguish those tasks before OpenRouter requests begin; otherwise the
-result is inconclusive. Native failure, including the previously observed 402,
-stops the run without fallback or retry.
+Unchanged old rows are retained. Existing source edit/delete privacy redaction
+continues to remove invalidated caches. Rollback after subsequent writes requires
+fresh native coverage **and** native provider availability; it is not an instant
+semantic reversal. Other usable current memory is not globally hidden because an
+unrelated source is pending or held.
 
-The narrow proposed gate requires paired cosine at least .99999, stable rankings
-and existing threshold decisions across native, broker and mixed corpora. It
-records raw norms rather than normalizing data. Google's guidance about manual
-normalization below 3072 dimensions is a separate question: this preparation
-preserves existing native behavior. Passing the small fixture would not prove
-universal compatibility, broad retrieval quality or account privacy policy.
+## Measured overhead and limits
 
-## Verification and limits
+Five matched native route fixtures used the exact old dev runtime source against
+the same new synthetic schema: first plain, first/long120 Why3 with successful
+query lookup, and first/long120 Why3 with failed lookup. Prompt and publication
+semantic digests, provider call counts, application statements and dependent
+protocol boundary counts matched. Volatile timestamps were excluded from the
+publication digest; whole response byte identity is not claimed. No owner data,
+paid calls, network RTT simulation or cloud latency measurement was involved.
 
-- Full API unit gate: 1,478 passed, 24 existing skips. Final focused factory,
-  generation-document and queue-boundary gate: 23 passed.
-- PostgreSQL17 targeted readers, reply publication, source edits/Stop, matching,
-  suppression, cache/attachment and support fencing: 213 distinct cases across
-  15 files passed, combining the retained per-file receipts. All provider
-  transports were deterministic fakes; no remote SQL or paid inference ran.
-- API types passed. The disposable database is explicitly loopback and separate
-  from owner/shared data. No migration, dependency, SST, workflow, secret or
-  deployment change is included.
-- Failed local receipts are retained: the expected gardener baseline, prohibited
-  fixture identifier, synthetic consultation/type assumptions and a model-input
-  DTO assertion were corrected without relaxing product guards. They are not
-  evidence of failed deployment or provider availability.
+| Native prepare fixture | Application statements before / after | Backend bytes before / after |
+| --- | --- | --- |
+| First plain | 16 / 16 | 3,543 / 3,968 |
+| First Why3 indexed | 21 / 21 | 6,283 / 8,955 |
+| Long120 Why3 indexed | 22 / 22 | 32,807 / 35,488 |
 
-The parity allowance, actual operator key read, any native-space grant and route
-activation remain separate review gates. This preparation does not fix Google's
-account capacity/billing availability or claim that embeddings have switched.
+The strict current-index presence proof has a real byte cost. A 24-source,
+three-children-per-kind synthetic fixture returned174,602 warm backend bytes
+versus72 for the old existence-only check. A 17-child heavy fixture conservatively
+fell back to lexical context at59,402 bytes instead of the earlier unguarded
+3,483,434 bytes. Both checks still use one SQL statement; that does not mean zero
+cost. Character guards are not total UTF8/wire ceilings. No cloud/chat speedup is
+inferred from these figures.
+
+An actual pool-one prepared-driver index fixture with three reflections measured
+29 application statements plus five transaction commands on first indexing,
+59 dependent protocol boundaries and6,973 backend bytes, with one fake call.
+The subsequent current-cache proof used12 statements plus two controls,
+15 boundaries and6,940 bytes, with no call. Statement-shape preparation and
+connection/type warm-up are distinguished; these are not physical RTTs or a
+prediction for Neon/Lambda.
+
+The normal queue retained its60-start account limit and kind fairness. With100
+index jobs, a synthetic chat was claimed second, behind one index slot. A40ms
+controlled preceding delay remained about40ms; there is no zero-delay guarantee
+or priority/pool change. Bulk D1 work stays outside that queue.
+
+## Verification and remaining release gates
+
+- Full API unit gate: **1,543 passed**,24 existing paid-evaluation skips.
+- Final focused real PG17 gate: **196 passed across12 files**. Includes actual
+  dispatcher, source/epoch/tenant/claim/Stop, native concurrency, locks, ledger,
+  deleted/edited material, released packed-client partial-coverage errors,
+  human recovery, budget and rollback cases. Provider/LLM transports were fake.
+- API types and migration consistency passed. The fixture was explicitly
+  attested PostgreSQL17.11 on disposable loopback, not an env-file assumption.
+- Failed receipts remain: unknown-dispatch double-call baselines; the prior
+  cross-manifest race; vocabulary naming violations; a structural test's old
+  suppression-call literal; earlier fixture/transport construction mistakes.
+  The structural assertion now names the model argument while retaining refusal
+  ordering. No runtime safety assertion was removed to pass a gate.
+- Historical model2 capability run:24/24 accepted and8/8 fixed retrieval checks,
+ 527 input tokens and reportedUSD0.0001054, not an invoice. Earlier two single
+  calls stopped on strict response rejection; only the second established the
+  stable string-form mismatch. All approvals are consumed. These agent-authored,
+  agent-reviewed synthetic expectations are not independent human ground truth,
+  calibrated thresholds or broad product quality evidence.
+
+The earlier001 parity proposal was withdrawn and never executed. Current work is
+model2 migration preparation. The prepared D0/D1/R1 operators require exact
+source/target/data/spending review before execution. Full current coverage,
+writer/in-flight barriers, threshold calibration and exact cutover remain held.
+The Google availability issue is not repaired by this code. No backfill, provider
+account policy change, environment activation or user-connection proof is claimed.

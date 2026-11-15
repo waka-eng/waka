@@ -617,6 +617,13 @@
       "when": 1794650915751,
       "tag": "0087_mcp_access_and_recall_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1794691935858,
+      "tag": "0088_embedding_index_spaces",
+      "breakpoints": true
     }
   ]
 }

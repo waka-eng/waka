@@ -2,7 +2,7 @@ import { loadProfileProcessing } from '../lib/profile-processing.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../lib/db.js';
-import type { AuthEnv } from '../lib/middleware.js';
+import { humanSessionsOnly, type AuthEnv } from '../lib/middleware.js';
 import { loadInspirationProcessingStatus } from '../lib/inspiration-processing-status.js';
 import { recoverInspirationProcessing } from '../lib/inspiration-processing-recovery.js';
 import { resolveTargetProfile } from './inspirations-tenancy.js';
@@ -19,7 +19,7 @@ export function registerProcessingRoutes(routes: Hono<AuthEnv>, getDatabase: typ
     return c.json(await loadProfileProcessing(db, target.profileId));
   });
 
-  routes.post('/:id/processing/retry', async (c) => {
+  routes.post('/:id/processing/retry', humanSessionsOnly, async (c) => {
     c.header('Cache-Control', 'private, no-store');
     const id = uuidSchema.safeParse(c.req.param('id'));
     const query = profileQuerySchema.safeParse(c.req.query());
@@ -34,6 +34,7 @@ export function registerProcessingRoutes(routes: Hono<AuthEnv>, getDatabase: typ
       return c.json(status, status.phase === 'ready' ? 200 : 202);
     } catch (error) {
       const code = (error as { code?: string; cause?: { code?: string } }).cause?.code ?? (error as { code?: string }).code;
+      if (code === 'outcome_unknown') return c.json({ error: 'An earlier embedding request has an uncertain outcome. Check its current result before requesting another.' }, 409);
       if (code === '55P03') return c.json({ error: 'An update is already in progress. Check again shortly.' }, 409);
       throw error;
     }

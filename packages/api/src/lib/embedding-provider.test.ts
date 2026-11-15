@@ -4,6 +4,9 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {createEmbeddingClient,configuredEmbeddingClient,readableEmbeddingSpace,requestedEmbeddingTransport,embeddingInSpace} from './embedding-provider.js';
 import {GeminiEmbeddingHttpClient,GEMINI_EMBEDDING_MODEL} from './inspiration-embeddings.js';
+import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
+import {PROVISIONAL_EMBEDDING_2_POLICY} from './embedding-policy.js';
+import {assertEmbeddingDispatchDeadline,EmbeddingDispatchExpired} from './embedding-dispatch.js';
 afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();});
 it('defaults to the existing native model and keeps construction free of credential/network reads',()=>{
  vi.stubEnv('WAKA_EMBEDDING_PROVIDER',undefined);vi.stubEnv('GEMINI_API_KEY',undefined);vi.stubEnv('SST_RESOURCE_GeminiApiKey',undefined);
@@ -28,4 +31,9 @@ it('checks dimensions and nondegenerate finite geometry without normalizing stor
  const space=readableEmbeddingSpace(),values=[2,...Array<number>(767).fill(0)],copy=values.slice();
  expect(embeddingInSpace(values,768,space)).toBe(true);expect(values).toEqual(copy);
  for(const [value,dimensions] of [[values,3],[[1,0],768],[Array(768).fill(0),768],[Array(768).fill(Infinity),768],[Array(768).fill(1e308),768]] as const)expect(embeddingInSpace(value,dimensions,space)).toBe(false);
+});
+it('checks operator expiry at the actual OpenRouter fetch seam after lazy client setup, with no HTTP or usage record',async()=>{
+ vi.stubEnv('OPENROUTER_API_KEY','SYNTHETIC_OR');const network=vi.fn(async()=>Response.json({}));vi.stubGlobal('fetch',network);const usage=vi.spyOn(console,'info').mockImplementation(()=>{});let now=0;
+ const client=createEmbeddingClient({timeoutMs:5000,exchangeTimeoutMs:10000,beforeDispatch:()=>assertEmbeddingDispatchDeadline({expiresAtMs:10,deadlineAtMs:10},now)},{profileId:'00000000-0000-4000-8000-000000000001',activeSpace:EMBEDDING_2_SPACE.id,activeEpoch:1n,activeThresholdPolicy:PROVISIONAL_EMBEDDING_2_POLICY,buildingSpace:null});
+ now=11;try{await expect(client.embed('A fixed synthetic document.')).rejects.toBeInstanceOf(EmbeddingDispatchExpired);expect(network).not.toHaveBeenCalled();expect(usage).not.toHaveBeenCalled();}finally{usage.mockRestore();}
 });

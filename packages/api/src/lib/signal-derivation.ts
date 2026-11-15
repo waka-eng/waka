@@ -1,4 +1,7 @@
-import {createEmbeddingClient,embeddingInSpace,readableEmbeddingSpace} from './embedding-provider.js';
+import {embedDiscoveryCandidates,commitDiscoveryEmbeddings} from './embedding-discovery.js';
+import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
+import {embeddingPolicySql,parseEmbeddingPolicy,embeddingRetrievalMinimum} from "./embedding-policy.js";
+import {createEmbeddingClient,embeddingInSpace,readableEmbeddingSpace,embeddingInputHash} from './embedding-provider.js';
 /**
  * Layer 2 — turning one inspiration into evidence for the profile's signals.
  *
@@ -53,7 +56,6 @@ import { getDb } from "./db.js";
 import {
   ensureInspirationEmbedding,
   buildCanonicalInspirationEmbeddingInput,
-  hashEmbeddingInput,
   type CanonicalAttachmentInput,
 } from "./inspiration-embeddings.js";
 import {effectiveAttachmentText} from './attachment-material.js';
@@ -218,7 +220,6 @@ export async function deriveSignalsForInspiration(
     if (error instanceof SupportSourceUnavailableError) return emptyResult(error.status);
     throw error;
   }
-  const embeddingClient = deps.embeddingClient ?? createEmbeddingClient();
 
   // Existing support is its own question, before bounded discovery. Applying
   // it rechecks current inputs under locks and persists any reading request.
@@ -256,7 +257,7 @@ export async function deriveSignalsForInspiration(
   }
   const [profileRows, existingStatements, existingCategories] = await Promise.all([
     db
-      .select({ preferredLocale: profiles.preferredLocale })
+      .select({ preferredLocale: profiles.preferredLocale,embeddingPolicy:embeddingPolicySql(profileId) })
       .from(profiles)
       .where(eq(profiles.id, profileId))
       .limit(1),
@@ -290,6 +291,9 @@ export async function deriveSignalsForInspiration(
       .limit(MAX_EXISTING_CATEGORIES),
   ]);
 
+  const embeddingPolicy=parseEmbeddingPolicy(profileId,profileRows[0]?.embeddingPolicy);
+  const embeddingClient=deps.embeddingClient??createEmbeddingClient(undefined,embeddingPolicy);
+
   /*
     The capture's own vector, BEFORE extraction — the reorder is the feature.
     It was always computed in this pass (layer-1 recall keeps it warm even
@@ -306,12 +310,14 @@ export async function deriveSignalsForInspiration(
     inputScope: "personal",
     db,
     client: embeddingClient,
+    embeddingPolicy,
     beforeCommit: deps.beforeCommit,
   });
   if (inspirationEmbedding.status === "stale_source") {
     throw new Error("Source material changed during embedding");
   }
   if (inspirationEmbedding.status === "missing_inspiration") return emptyResult("missing_inspiration");
+  if(inspirationEmbedding.status=== "ineligible")return emptyResult("no_candidates");
   const relatedInspirations = inspirationEmbedding.embedding
     ? await findRelatedInspirations(db, {
         /* recurrence is retrieved over the keeper's earlier captures */
@@ -380,7 +386,7 @@ export async function deriveSignalsForInspiration(
     .filter((candidate) => candidate.statement.length > 0);
 
   const validateSources = async (tx: WakaTx) => {
-    await assertMaterialCurrent(tx, material, relatedInspirations);
+    await assertMaterialCurrent(tx, material, relatedInspirations,embeddingPolicy);
     await deps.beforeCommit?.(tx);
   };
   const canComplete = !supportReview?.retryable && !material.attachmentRows.some((row) => row.status !== "ready" && row.status !== "unavailable");
@@ -396,14 +402,14 @@ export async function deriveSignalsForInspiration(
     return emptyResult("no_candidates");
   }
 
-  const embedded: ResolvedCandidate[] = [];
-  for (const candidate of statements) {
-    // Identical wording is one candidate. Similar vectors can still encode
-    // opposite positions or different time scopes; matching checks meaning.
-    if (embedded.some(seen => seen.statement === candidate.statement)) continue;
-    const embedding = await embeddingClient.embed(candidate.statement);
-    embedded.push({ ...candidate, embedding });
+  const unique=statements.filter((candidate,index)=>statements.findIndex(row=>row.statement===candidate.statement)===index);
+  let discovery:Array<{embedding:number[];attemptId:string}>|undefined;
+  if(embeddingClient.model===EMBEDDING_2_SPACE.id){
+    if(!deps.processingRequest||!deps.beforeCommit)throw new Error('Model2 discovery requires a current job request');
+    discovery=await embedDiscoveryCandidates(db,{profileId,sourceKind:'inspiration',sourceId:inspiration.id,materialHash:material.identity.hash,request:deps.processingRequest,policy:embeddingPolicy,statements:unique.map(row=>row.statement),prove:tx=>assertMaterialCurrent(tx,material,relatedInspirations,embeddingPolicy),claim:deps.beforeCommit},embeddingClient);
   }
+  const embedded:ResolvedCandidate[]=[];
+  for(const [index,candidate] of unique.entries())embedded.push({...candidate,embedding:discovery?.[index]?.embedding??await embeddingClient.embed(candidate.statement)});
 
   const outcome = await db.transaction(async (tx) => {
       await acquireSignalDerivationLock(tx, profileId);
@@ -428,6 +434,7 @@ export async function deriveSignalsForInspiration(
         inspirationId: inspiration.id,
         candidates: embedded,
         embeddingModel: embeddingClient.model,
+        embeddingPolicy,
         provider,
         preferredLocale: normalizeSupportedLocale(profileRows[0]?.preferredLocale),
         now,
@@ -441,6 +448,7 @@ export async function deriveSignalsForInspiration(
       if (deps.processingRequest) await finishInspirationDerivation(tx, processingInput(material.identity.revision), {
         reading, complete: canComplete, requestReading: () => requestReading(tx),
       });
+      await commitDiscoveryEmbeddings(tx,profileId,discovery?.map(row=>row.attemptId)??[]);
       return applied;
     });
 
@@ -502,7 +510,7 @@ async function findRelatedInspirations(
       row,
       similarity: cosineSimilarity(input.embedding, row.embedding) ?? -1,
     }))
-    .filter((scored) => scored.similarity >= RELATED_INSPIRATION_MIN_COSINE)
+    .filter((scored) => scored.similarity >= embeddingRetrievalMinimum(input.model,RELATED_INSPIRATION_MIN_COSINE))
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, RELATED_INSPIRATION_CONTEXT_LIMIT);
   if(!ranked.length)return [];
@@ -522,7 +530,7 @@ async function findRelatedInspirations(
     const source=byId.get(row.id);if(!source)return [];
     const canonical=buildCanonicalInspirationEmbeddingInput({text:source.text,kind:source.kind,
       reflections:source.answers.map(answer=>({...answer,createdAt:new Date(answer.createdAt)})),attachments:source.media});
-    return hashEmbeddingInput(canonical)===row.inputHash?[{id:source.id,text:source.text,createdAt:source.createdAt}]:[];
+    return embeddingInputHash(input.model,canonical)===row.inputHash?[{id:source.id,text:source.text,createdAt:source.createdAt}]:[];
   });
 }
 

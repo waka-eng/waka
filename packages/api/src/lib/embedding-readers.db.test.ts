@@ -1,111 +1,92 @@
-/** WHAT THIS MOCKS, AND WHY (gate G6): `ModelProvider` is a deterministic
- * judge recording which synthetic pairs reach it. Real PostgreSQL17 schemas,
- * production readers, hashes and tenant constraints run without provider HTTP. */
-import {afterAll,beforeAll,expect,it,vi} from 'vitest';
+/** WHAT THIS MOCKS, AND WHY (gate G6): `GeminiEmbeddingClient` and
+ * `ModelProvider.judgeSignalMatch` return fixed synthetic results. Actual
+ * PG17 current sources, selected spaces, routes, receipts and matching run. */
 import {randomUUID} from 'node:crypto';
+import {afterAll,beforeAll,expect,it,vi} from 'vitest';
 import {Hono} from 'hono';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js';
-import {hashEmbeddingInput,GEMINI_EMBEDDING_MODEL,buildCanonicalInspirationEmbeddingInput,ensureInspirationEmbedding} from './inspiration-embeddings.js';
-import {tendSignalGarden} from './signal-gardener.js';
-import {reembedSignalStatement} from './signal-embeddings.js';
-import {deriveSignalsForInspiration} from './signal-derivation.js';
-import type {ModelProvider,SignalCandidateExtractionInput} from './model-provider.js';
 import {createRecallRoutes} from '../routes/recall.js';
 import type {AuthEnv} from './middleware.js';
-
-let t:TestDatabase,sequence=0;
-beforeAll(async()=>{t=await createTestDatabase();});
-afterAll(async()=>{await t?.cleanup();});
+import {EMBEDDING_2_SPACE,hashEmbedding2Input} from './embedding-2-space.js';
+import {PROVISIONAL_EMBEDDING_2_POLICY} from './embedding-policy.js';
+import {readEmbeddingIndexPolicy} from './embedding-index-coordination.js';
+import {indexEmbeddingSource} from './embedding-indexer.js';
+import {hasCurrentConversationIndex,readSemanticConversationCandidates} from './conversation-retrieval.js';
+import {applyCandidates} from './signal-match-or-mint.js';
+import {hashEmbeddingInput} from './inspiration-embeddings.js';
+import {readGenerationRevision,assertGenerationRevision} from './generation-revision.js';
+import type {ModelProvider} from './model-provider.js';
+let t:TestDatabase;beforeAll(async()=>{t=await createTestDatabase();});afterAll(async()=>{await t?.cleanup();});
 const vector=()=>[1,...Array<number>(767).fill(0)];
-async function fixture(mode:'current'|'foreign_space'|'stale_hash'|'wrong_dimensions'|'wrong_length'){
- const [account]=await t.sql`INSERT INTO accounts(email) VALUES(${`embedding-reader-${++sequence}@example.test`}) RETURNING id`;
- const [profile]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${account.id},'human','Synthetic owner') RETURNING id`;
- const rows=await t.sql`INSERT INTO signals(profile_id,statement,status,locked_at) VALUES
-   (${profile.id},'I protect quiet time.','emerging',now()),(${profile.id},'I preserve room to think.','emerging',now()) RETURNING id,statement`;
- for(const [i,row] of rows.entries()){
-  const model=i===1&&mode==='foreign_space'?'openrouter:google/gemini-embedding-001:unverified':GEMINI_EMBEDDING_MODEL;
-  const hash=i===1&&mode==='stale_hash'?hashEmbeddingInput('Previous statement'):hashEmbeddingInput(row.statement);
-  const values=mode==='wrong_length'?[1,0,0]:vector();
-  await t.sql`INSERT INTO signal_embeddings(profile_id,signal_id,model,dimensions,input_hash,embedding)
-    VALUES(${profile.id},${row.id},${model},${mode==='wrong_dimensions'?3:768},${hash},${JSON.stringify(values)}::jsonb)`;
- }
- const calls:Array<{candidateStatement:string;existingStatement:string}>=[];
- const provider={judgeSignalMatch:async(input:{candidateStatement:string;existingStatement:string})=>{calls.push(input);return {relation:'independent' as const};}} as unknown as ModelProvider;
- return {profileId:profile.id as string,accountId:account.id as string,rows,calls,provider};
+async function person(){
+ const [a]=await t.sql`INSERT INTO accounts(email) VALUES(${randomUUID()+'@example.test'}) RETURNING id`;
+ const [p]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${a.id},'human','Synthetic') RETURNING id`;
+ await t.sql`INSERT INTO profile_embedding_indexes(profile_id,active_space,active_epoch,active_threshold_policy) VALUES(${p.id},${EMBEDDING_2_SPACE.id},1,${PROVISIONAL_EMBEDDING_2_POLICY})`;
+ const [session]=await t.sql`INSERT INTO sessions(profile_id,token_hash,expires_at) VALUES(${p.id},${randomUUID().replaceAll('-','').padEnd(64,'0')},now()+interval '1 day') RETURNING id`;
+ return {profileId:p.id as string,accountId:a.id as string,sessionId:session.id as string};
 }
-it.each(['foreign_space','stale_hash','wrong_dimensions','wrong_length'] as const)('does not compare %s vectors in the native gardener space',async mode=>{
- const f=await fixture(mode);await tendSignalGarden(t.db as never,{profileId:f.profileId,preferredLocale:'en-US',provider:f.provider});
- expect(f.calls).toEqual([]);
- expect((await t.sql`SELECT statement,locked_at FROM signals WHERE profile_id=${f.profileId}`).every(row=>row.locked_at)).toBe(true);
+async function source(profileId:string,text='I make room for quiet mornings.'){
+ const [r]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${profileId},${text}) RETURNING id`;return r.id as string;
+}
+async function signal(profileId:string){
+ const id=await source(profileId),[s]=await t.sql`INSERT INTO signals(profile_id,statement,status,locked_at) VALUES(${profileId},'I prefer quiet mornings.','emerging',now()) RETURNING id,statement`;
+ await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id) VALUES(${profileId},${profileId},${s.id},${id})`;
+ await t.sql`INSERT INTO signal_embeddings(profile_id,signal_id,model,dimensions,input_hash,embedding) VALUES(${profileId},${s.id},'gemini-embedding-001',768,${hashEmbeddingInput(s.statement)},${JSON.stringify(vector())}::jsonb)`;
+ return {id:s.id as string,statement:s.statement as string};
+}
+function recall(f:Awaited<ReturnType<typeof person>>,embed=vi.fn(async()=>vector())){
+ const app=new Hono<AuthEnv>();app.route('/recall',createRecallRoutes({getDatabase:()=>t.db as never,embedClient:{model:EMBEDDING_2_SPACE.id,dimensions:768,embed},authMiddleware:async(c,next)=>{c.set('session',{sessionId:f.sessionId,account:{id:f.accountId,email:'synthetic@example.test'},profile:{id:f.profileId,accountId:f.accountId,type:'human',name:'Synthetic',preferredLocale:'en-US'}});await next();}}));return {app,embed};
+}
+it('does not mistake old-space eligible memory for empty and buys no query without compatible current vectors',async()=>{
+ const f=await person(),s=await signal(f.profileId),r=recall(f);
+ const unavailable=await r.app.request('/recall?q=quiet%20mornings');expect(unavailable.status).toBe(503);expect(await unavailable.json()).toMatchObject({code:'recall_index_incomplete',recall:{state:'unavailable',matches:[],coverage:{compatible:0,scanned:1}}});expect(r.embed).not.toHaveBeenCalled();
+ expect(await t.sql`SELECT * FROM account_recall_limits WHERE account_id=${f.accountId}`).toHaveLength(0);
+ await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'signal',sourceId:s.id,space:EMBEDDING_2_SPACE.id},{client:{model:EMBEDDING_2_SPACE.id,embed:async()=>vector()}});
+ const ready=await r.app.request('/recall?q=quiet%20mornings');expect(ready.status).toBe(200);expect(await ready.json()).toMatchObject({recall:{state:'ready',matches:[{signalId:s.id,locked:true}]}});expect(r.embed).toHaveBeenCalledOnce();
+ expect(await t.sql`SELECT model FROM signal_embeddings WHERE signal_id=${s.id}`).toHaveLength(2);
 });
-it('still compares valid native current vectors and preserves owner-locked wording',async()=>{
- const f=await fixture('current');await tendSignalGarden(t.db as never,{profileId:f.profileId,preferredLocale:'en-US',provider:f.provider});
- expect(f.calls).toHaveLength(1);
- expect((await t.sql`SELECT statement FROM signals WHERE profile_id=${f.profileId} ORDER BY statement`).map(row=>row.statement)).toEqual(f.rows.map(row=>row.statement).sort());
+it('rechecks policy after query HTTP and emits no cross-space matches or new public state enum',async()=>{
+ const f=await person(),s=await signal(f.profileId);await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'signal',sourceId:s.id,space:EMBEDDING_2_SPACE.id},{client:{model:EMBEDDING_2_SPACE.id,embed:async()=>vector()}});
+ const r=recall(f,vi.fn(async()=>{await t.sql`UPDATE profile_embedding_indexes SET active_epoch=active_epoch+1 WHERE profile_id=${f.profileId}`;return vector();}));const response=await r.app.request('/recall?q=quiet%20mornings');expect(response.status).toBe(503);expect(await response.json()).toMatchObject({code:'recall_sources_changed',recall:{state:'unavailable',matches:[]}});expect(r.embed).toHaveBeenCalledOnce();
 });
-it('keeps current native memory readable but reports held query transport instead of false empty recall',async()=>{
- const f=await fixture('current');const network=vi.fn(()=>{throw Error('Unexpected network');});
- vi.stubEnv('WAKA_EMBEDDING_PROVIDER','openrouter');vi.stubGlobal('fetch',network);
- try{
-  await tendSignalGarden(t.db as never,{profileId:f.profileId,preferredLocale:'en-US',provider:f.provider});expect(f.calls).toHaveLength(1);
-  const app=new Hono<AuthEnv>();app.route('/recall',createRecallRoutes({getDatabase:()=>t.db as never,authMiddleware:async(c,next)=>{
-   c.set('session',{sessionId:'keeper-key:'+randomUUID(),keyScoped:true,keeperAccess:'read_only',account:{id:f.accountId,email:'fixture@example.test'},profile:{id:f.profileId,accountId:f.accountId,type:'human',name:'Owner',preferredLocale:'en-US'}});await next();
-  }}));
-  const response=await app.request('/recall?q=quiet');expect(response.status).toBe(503);
-  expect(await response.json()).toMatchObject({reason:'compatibility_held',recall:{state:'unavailable'}});
-  expect(network).not.toHaveBeenCalled();expect(await t.sql`SELECT account_id FROM account_recall_limits WHERE account_id=${f.accountId}`).toHaveLength(0);
-  expect((await t.sql`SELECT count(*)::int AS n FROM consultations WHERE profile_id=${f.profileId}`)[0]!.n).toBe(1);
-  expect(await t.sql`SELECT id FROM signals WHERE profile_id=${f.profileId}`).toHaveLength(2);
- }finally{vi.unstubAllEnvs();vi.unstubAllGlobals();}
+it('returns unavailable rather than false empty when a current far vector hides eligible old-space-only memory',async()=>{
+ const f=await person(),far=await signal(f.profileId);await signal(f.profileId);
+ await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'signal',sourceId:far.id,space:EMBEDDING_2_SPACE.id},{client:{model:EMBEDDING_2_SPACE.id,embed:async()=>[0,1,...Array<number>(766).fill(0)]}});
+ const r=recall(f),response=await r.app.request('/recall?q=quiet%20mornings');expect(response.status).toBe(503);expect(await response.json()).toMatchObject({code:'recall_index_incomplete',recall:{state:'unavailable',matches:[],coverage:{compatible:1,scanned:2}}});expect(r.embed).toHaveBeenCalledOnce();
 });
-it('repairs an invalid current-hash cache only after a valid current vector is available',async()=>{
- const f=await fixture('current'),source=f.rows[0]!;
- const [before]=await t.sql`SELECT locked_at FROM signals WHERE id=${source.id}`;
- await t.sql`UPDATE signal_embeddings SET dimensions=3 WHERE signal_id=${source.id}`;
- const embed=vi.fn(async()=>vector());
- await reembedSignalStatement(t.db as never,{profileId:f.profileId,signalId:source.id,statement:source.statement},{embeddingClient:{model:GEMINI_EMBEDDING_MODEL,dimensions:768,embed}});
- expect(embed).toHaveBeenCalledOnce();expect((await t.sql`SELECT dimensions,input_hash FROM signal_embeddings WHERE signal_id=${source.id}`)[0]).toEqual({dimensions:768,input_hash:hashEmbeddingInput(source.statement)});
- expect((await t.sql`SELECT statement,locked_at FROM signals WHERE id=${source.id}`)[0]).toEqual({statement:source.statement,locked_at:before!.locked_at});
+it('refuses a wholly replaced current candidate set after HTTP even when fresh coverage is complete',async()=>{
+ const f=await person(),old=await signal(f.profileId),client={model:EMBEDDING_2_SPACE.id,embed:async()=>vector()};await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'signal',sourceId:old.id,space:EMBEDDING_2_SPACE.id},{client});
+ const r=recall(f,vi.fn(async()=>{const fresh=await signal(f.profileId);await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'signal',sourceId:fresh.id,space:EMBEDDING_2_SPACE.id},{client});await t.sql`DELETE FROM signals WHERE id=${old.id}`;return vector();}));
+ const response=await r.app.request('/recall?q=quiet%20mornings');expect(response.status).toBe(503);expect(await response.json()).toMatchObject({code:'recall_sources_changed',recall:{state:'unavailable',matches:[]}});
 });
-it('repairs an invalid inspiration cache without changing canonical bytes or creating a foreign namespace',async()=>{
- const f=await fixture('current');
- const [source]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'I preserve quiet time.\r\n') RETURNING id,text`;
- const client={model:GEMINI_EMBEDDING_MODEL,dimensions:768,embed:vi.fn(async()=>vector())};
- const before=await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:source.id,client});
- await t.sql`UPDATE inspiration_embeddings SET dimensions=3 WHERE inspiration_id=${source.id}`;
- client.embed.mockClear();
- const after=await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:source.id,client});
- expect(after.generated).toBe(true);expect(client.embed).toHaveBeenCalledOnce();expect(after.inputHash).toBe(before.inputHash);
- expect(after.embedding?.dimensions).toBe(768);expect(after.embedding?.model).toBe(GEMINI_EMBEDDING_MODEL);
- expect((await t.sql`SELECT text FROM inspirations WHERE id=${source.id}`)[0]!.text).toBe(source.text);
+it('proves canonical selected-space material before query eligibility and rejects edits, exclusions and foreign sources',async()=>{
+ const f=await person(),foreign=await person(),id=await source(f.profileId),other=await source(foreign.profileId),c={model:EMBEDDING_2_SPACE.id,embed:vi.fn(async()=>vector())};
+ await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'inspiration',sourceId:id,space:EMBEDDING_2_SPACE.id},{client:c});
+ const policy=await readEmbeddingIndexPolicy(t.db,f.profileId);
+ expect(await hasCurrentConversationIndex(t.db as never,f.profileId,policy)).toBe(true);
+ expect((await readSemanticConversationCandidates(t.db as never,f.profileId,vector(),undefined,[],policy)).candidates.map(row=>row.id)).toEqual([id]);
+ await t.sql`UPDATE inspirations SET text='Changed exact current words.' WHERE id=${id}`;
+ expect(await hasCurrentConversationIndex(t.db as never,f.profileId,policy)).toBe(false);expect((await readSemanticConversationCandidates(t.db as never,f.profileId,vector(),undefined,[],policy)).candidates).toEqual([]);
+ await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'inspiration',sourceId:id,space:EMBEDDING_2_SPACE.id},{client:c});
+ await t.sql`UPDATE inspirations SET memory_excluded_at=now() WHERE id=${id}`;expect(await hasCurrentConversationIndex(t.db as never,f.profileId,policy)).toBe(false);
+ await expect(indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'inspiration',sourceId:other,space:EMBEDDING_2_SPACE.id},{client:c})).resolves.toMatchObject({status:'missing',generated:false});expect(c.embed).toHaveBeenCalledTimes(2);
 });
-it('proves the selected recurrence inputs against current canonical text and reflections in one bounded statement',async()=>{
- const [account]=await t.sql`INSERT INTO accounts(email) VALUES(${`recurrence-${++sequence}@example.test`}) RETURNING id`;
- const [profile]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${account.id},'human','Owner') RETURNING id`;
- const inputs:SignalCandidateExtractionInput[]=[];
- const provider={extractSignalCandidates:async(input:SignalCandidateExtractionInput)=>{inputs.push(input);return {statements:[]};}} as unknown as ModelProvider;
- const seed=async(text:string,options:{model?:string;dimensions?:number;oldText?:string;answer?:string;excluded?:boolean}={})=>{
-  const [row]=await t.sql`INSERT INTO inspirations(profile_id,text,memory_excluded_at) VALUES(${profile.id},${text},${options.excluded?new Date().toISOString():null}) RETURNING id`;
-  if(options.answer)await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer) VALUES(${profile.id},${row.id},'Why?',${options.answer})`;
-  const canonical=buildCanonicalInspirationEmbeddingInput({text:options.oldText??text,kind:null,
-    reflections:options.answer?[{question:'Why?',answer:options.answer,skipped:false,createdAt:new Date()}]:[]});
-  await t.sql`INSERT INTO inspiration_embeddings(profile_id,inspiration_id,model,input_scope,dimensions,input_hash,embedding) VALUES
-    (${profile.id},${row.id},${options.model??GEMINI_EMBEDDING_MODEL},'personal',${options.dimensions??768},${hashEmbeddingInput(canonical)},${JSON.stringify(vector())}::jsonb)`;
-  return row.id as string;
- };
- const primary=await seed('Today I protect quiet time.');
- const valid=await seed('Earlier I left room to think.',{answer:'Quiet time helps.'});
- await seed('Different current wording.',{oldText:'Earlier wording.'});
- const edited=await seed('A reflective capture.',{answer:'Previous answer.'});await t.sql`UPDATE reflections SET answer='Current answer.' WHERE inspiration_id=${edited}`;
- await seed('Wrong metadata.',{dimensions:3});await seed('Other vector space.',{model:'openrouter:google/gemini-embedding-001:unverified'});await seed('Excluded source.',{excluded:true});
- const embed=vi.fn(async()=>vector());
- const options=(t.sql as unknown as {options:{debug?:unknown}}).options,prior=options.debug;let currentMaterialStatements=0;
- options.debug=(_connection:unknown,query:string)=>{if(query.includes('jsonb_agg(jsonb_build_object')&&query.includes('"reflections"')&&query.includes('"inspirations"'))currentMaterialStatements++;};
- let result:Awaited<ReturnType<typeof deriveSignalsForInspiration>>;
- try{result=await deriveSignalsForInspiration({inspirationId:primary,reason:'created'},{db:t.db as never,modelProvider:provider,embeddingClient:{model:GEMINI_EMBEDDING_MODEL,dimensions:768,embed}});}
- finally{options.debug=prior;}
- expect(currentMaterialStatements).toBe(1);
- expect(result.status).toBe('no_candidates');expect(embed).not.toHaveBeenCalled();expect(inputs).toHaveLength(1);
- expect(inputs[0]!.relatedInspirations.map(row=>row.id)).toEqual([valid]);
- expect(inputs[0]!.relatedInspirations[0]!.text).toBe('Earlier I left room to think.');
+it.each([false,true])('holds required model2 match/refusal holes instead of minting through old vectors (dismissed=%s)',async dismissed=>{
+ const f=await person(),s=await signal(f.profileId),id=await source(f.profileId),policy=await readEmbeddingIndexPolicy(t.db,f.profileId),judge=vi.fn(async()=>({relation:'same' as const}));
+ if(dismissed)await t.sql`UPDATE signals SET status='retired',dismissed_at=now() WHERE id=${s.id}`;
+ await expect(t.db.transaction(tx=>applyCandidates(tx as never,{profileId:f.profileId,inspirationId:id,evidenceOwnerProfileId:f.profileId,embeddingModel:EMBEDDING_2_SPACE.id,embeddingPolicy:policy,candidates:[{statement:'I prefer busy mornings.',embedding:vector(),quote:null,quoteSource:null,reason:null,relatedEvidence:[]}],provider:{judgeSignalMatch:judge} as unknown as ModelProvider,preferredLocale:'en-US',now:new Date(),beforeWrites:async()=>{}}))).rejects.toMatchObject({code:'missing'});
+ expect(judge).not.toHaveBeenCalled();expect(await t.sql`SELECT id FROM signals WHERE profile_id=${f.profileId}`).toHaveLength(1);
+});
+it('treats a high-cosine opposing claim as a judgment, preserves locked words and commits separate current model2 rows',async()=>{
+ const f=await person(),s=await signal(f.profileId),id=await source(f.profileId),policy=await readEmbeddingIndexPolicy(t.db,f.profileId),judge=vi.fn(async()=>({relation:'opposed' as const}));
+ await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'signal',sourceId:s.id,space:EMBEDDING_2_SPACE.id},{client:{model:EMBEDDING_2_SPACE.id,embed:async()=>vector()}});
+ const result=await t.db.transaction(tx=>applyCandidates(tx as never,{profileId:f.profileId,inspirationId:id,evidenceOwnerProfileId:f.profileId,embeddingModel:EMBEDDING_2_SPACE.id,embeddingPolicy:policy,candidates:[{statement:'I prefer busy mornings.',embedding:vector(),quote:null,quoteSource:null,reason:null,relatedEvidence:[]}],provider:{judgeSignalMatch:judge} as unknown as ModelProvider,preferredLocale:'en-US',now:new Date(),beforeWrites:async()=>{}}));
+ expect(judge).toHaveBeenCalledOnce();expect(result.mintedSignalIds).toHaveLength(1);expect(result.matchedSignalIds).toEqual([]);expect((await t.sql`SELECT statement,locked_at FROM signals WHERE id=${s.id}`)[0]).toMatchObject({statement:s.statement,locked_at:expect.any(String)});
+ expect(await t.sql`SELECT id FROM signal_contradictions WHERE profile_id=${f.profileId}`).toHaveLength(1);
+ const [kept]=await t.sql`SELECT input_hash FROM signal_embeddings WHERE signal_id=${result.mintedSignalIds[0]} AND model=${EMBEDDING_2_SPACE.id}`;expect(kept.input_hash).toBe(hashEmbedding2Input('I prefer busy mornings.','RETRIEVAL_DOCUMENT'));
+});
+it('captures policy in the existing generation query and refuses a changed epoch under the publication fence',async()=>{
+ const f=await person(),before=await readGenerationRevision(t.db as never,{profileId:f.profileId});expect(before?.embeddingPolicy?.activeEpoch).toBe(1n);
+ await t.sql`UPDATE profile_embedding_indexes SET active_epoch=2 WHERE profile_id=${f.profileId}`;
+ await expect(t.db.transaction(tx=>assertGenerationRevision(tx as never,before!))).rejects.toThrow('Generation inputs changed');
 });

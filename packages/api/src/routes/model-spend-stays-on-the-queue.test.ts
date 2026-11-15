@@ -79,6 +79,9 @@ const SPENDS_THE_SHARED_KEY: Record<string, string> = {
   createEmbeddingClient: "src/lib/embedding-provider.ts",
   configuredEmbeddingClient: "src/lib/embedding-provider.ts",
   ensureInspirationEmbedding: "src/lib/inspiration-embeddings.ts",
+  indexEmbeddingSource: "src/lib/embedding-indexer.ts",
+  embedDiscoveryCandidates: "src/lib/embedding-discovery.ts",
+  runEmbeddingShadowBatch: "src/lib/embedding-index-operator.ts",
   reembedSignalStatement: "src/lib/signal-embeddings.ts",
   reembedSignal: "src/lib/signal-embeddings.ts",
   // Extraction, judging, synthesis — the generation calls.

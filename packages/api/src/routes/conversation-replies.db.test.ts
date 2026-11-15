@@ -22,6 +22,9 @@ import {postgresBackgroundJobStore,processBackgroundJob} from '../lib/queue.js';
 import {assembleProfileExport} from '../lib/profile-export.js';
 import {processConversationReply} from '../lib/conversation-replies.js';
 import {ensureInspirationEmbedding,GEMINI_EMBEDDING_MODEL} from '../lib/inspiration-embeddings.js';
+import {indexEmbeddingSource} from '../lib/embedding-indexer.js';
+import {EMBEDDING_2_SPACE} from '../lib/embedding-2-space.js';
+import {PROVISIONAL_EMBEDDING_2_POLICY} from '../lib/embedding-policy.js';
 let t:TestDatabase,during:(()=>Promise<void>)|null=null;
 const connection=process.env.DB_CONNECTION_URL!;
 const answer=vi.fn<(input:ConversationReplyInput)=>Promise<ConversationReplyResult>>(async(input)=>{await during?.();return {answer:'A small experiment may help you compare these priorities.',followUpQuestion:'What would you most like that experiment to clarify?',citations:input.sources.length?[{sourceNumber:1,quote:input.sources[0].text.slice(0,80)}]:[]};});
@@ -44,6 +47,34 @@ async function claim(){
   await t.sql`UPDATE background_jobs SET run_after=now()+interval '1 day' WHERE type::text<>'generate_conversation_reply'`;
   const job=await postgresBackgroundJobStore.claimNext(new Date());expect(job?.type).toBe('generate_conversation_reply');return job!;
 }
+async function model2(f:Awaited<ReturnType<typeof fixture>>){
+ await t.sql`UPDATE profile_embedding_indexes SET active_space=${EMBEDDING_2_SPACE.id},active_epoch=1,active_threshold_policy=${PROVISIONAL_EMBEDDING_2_POLICY} WHERE profile_id=${f.profileId}`;
+ await t.sql`INSERT INTO embedding_index_work(profile_id,space,source_kind,source_id,input_scope) VALUES(${f.profileId},${EMBEDDING_2_SPACE.id},'inspiration',${f.sourceId},'personal') ON CONFLICT DO NOTHING`;
+ const vector=[1,...Array<number>(767).fill(0)];await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'inspiration',sourceId:f.sourceId,space:EMBEDDING_2_SPACE.id},{client:{model:EMBEDDING_2_SPACE.id,embed:async()=>vector}});return vector;
+}
+it('uses current model2 memory while an unrelated capture remains pending, without a global indexing hold',async()=>{
+ const f=await fixture(),vector=await model2(f);await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'An unrelated unfinished source.')`;
+ await f.request();const job=await claim(),embed=vi.fn(async()=>vector);await processConversationReply(t.db as never,job,f.id,(await f.state()).requestId,async()=>{},{embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});
+ expect(embed).toHaveBeenCalledOnce();expect(answer).toHaveBeenCalledOnce();expect((await f.state()).phase).toBe('ready');expect(answer.mock.calls[0][0].sources.some(source=>source.text.includes('quiet morning'))).toBe(true);
+});
+it.each(['lookup','publication'] as const)('fences a model2 epoch change during %s without publishing or changing human words',async phase=>{
+ const f=await fixture(),vector=await model2(f);await f.request();const job=await claim(),change=async()=>{await t.sql`UPDATE profile_embedding_indexes SET active_epoch=2 WHERE profile_id=${f.profileId}`;};
+ if(phase==='publication')during=change;
+ const embed=vi.fn(async()=>{if(phase==='lookup')await change();return vector;});await processConversationReply(t.db as never,job,f.id,(await f.state()).requestId,async()=>{},{embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});
+ expect((await f.state()).phase).toBe('stale');expect(answer).toHaveBeenCalledTimes(phase==='lookup'?0:1);expect(await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${f.id} AND role='assistant'`).toHaveLength(0);expect((await t.sql`SELECT content FROM conversation_messages WHERE id=${f.messageId}`)[0].content).toBe('How could a quiet morning help me decide?');
+});
+it('rejects an old native admission after a model2 policy change before any provider dispatch',async()=>{
+ const f=await fixture();await f.request();const vector=await model2(f),job=await claim(),embed=vi.fn(async()=>vector);
+ await processConversationReply(t.db as never,job,f.id,(await f.state()).requestId,async()=>{},{embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});expect((await f.state()).phase).toBe('stale');expect(embed).not.toHaveBeenCalled();expect(answer).not.toHaveBeenCalled();
+});
+it('keeps mixed embedding spaces in legacy both chats lexical and fences both owned memories at publication',async()=>{
+ const f=await fixture(),vector=await model2(f),[agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','Retained agent') RETURNING id`,[source]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${agent.id},'A quiet morning supports an agent experiment.') RETURNING id`;
+ await ensureInspirationEmbedding({db:t.db as never,profileId:agent.id,inspirationId:source.id,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+ await t.sql`UPDATE conversations SET perspective='both',agent_profile_id=${agent.id} WHERE id=${f.id}`;await f.request();const job=await claim(),embed=vi.fn(async()=>vector);
+ during=async()=>{await t.sql`UPDATE inspirations SET text='Changed agent memory while the answer was in flight.' WHERE id=${source.id}`;};
+ await processConversationReply(t.db as never,job,f.id,(await f.state()).requestId,async()=>{},{embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});
+ expect(embed).not.toHaveBeenCalled();expect(answer).toHaveBeenCalledOnce();expect(new Set(answer.mock.calls[0][0].sources.map(source=>source.owner))).toEqual(new Set(['person','agent']));expect((await f.state()).phase).toBe('stale');
+});
 it('polls an active reply in one statement snapshot without transaction chatter',async()=>{
   const f=await fixture();expect((await f.request()).status).toBe(200);
   const options=t.sql.options as {debug?:boolean|((...args:any[])=>void)};
