@@ -48,7 +48,7 @@ export async function readInspirationProcessingStatus(db: Reader, input: {
   profileId: string; inspirationId: string; receiptId?: string;
 }): Promise<InspirationProcessingStatus | null> {
   const now = new Date();
-  const [source] = await db.select({ id: inspirations.id, revision: inspirationRevisions.personalRevision, embeddingHeld: sql<boolean>`EXISTS (SELECT 1 FROM profile_embedding_indexes e WHERE e.profile_id=${input.profileId}::uuid AND e.active_space=${EMBEDDING_2_SPACE.id} AND EXISTS (SELECT 1 FROM embedding_index_attempts a WHERE a.profile_id=e.profile_id AND a.space=e.active_space AND a.source_kind='inspiration' AND a.source_id=${input.inspirationId}::uuid AND a.status IN ('reserved','received','unknown')))` }).from(inspirations)
+  const [source] = await db.select({ id: inspirations.id, revision: inspirationRevisions.personalRevision, embeddingHeld: sql<boolean>`EXISTS (SELECT 1 FROM profile_embedding_indexes e WHERE e.profile_id=${input.profileId}::uuid AND e.active_space=${EMBEDDING_2_SPACE.id} AND EXISTS (SELECT 1 FROM embedding_index_attempts a WHERE a.account_id=(SELECT account_id FROM profiles WHERE id=${input.profileId}::uuid) AND a.profile_id=e.profile_id AND a.space=e.active_space AND a.source_kind='inspiration' AND a.source_id=${input.inspirationId}::uuid AND a.status IN ('reserved','received','unknown')))` }).from(inspirations)
     .leftJoin(inspirationRevisions, and(eq(inspirationRevisions.inspirationId, inspirations.id), eq(inspirationRevisions.profileId, inspirations.profileId)))
     .where(and(eq(inspirations.id, input.inspirationId), eq(inspirations.profileId, input.profileId))).limit(1);
   if (!source) return null;

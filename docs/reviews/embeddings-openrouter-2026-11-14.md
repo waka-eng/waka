@@ -147,3 +147,12 @@ source/target/data/spending review before execution. Full current coverage,
 writer/in-flight barriers, threshold calibration and exact cutover remain held.
 The Google availability issue is not repaired by this code. No backfill, provider
 account policy change, environment activation or user-connection proof is claimed.
+
+A final status/recovery lookup review added the account predicate needed by the
+leading column of the unresolved-attempt index. An actual generated-query PG17
+EXPLAIN eligibility test failed before the fix and passed afterward; it forces
+index eligibility, not a production cost choice or CPU benchmark. The account
+lookup is an InitPlan in the existing SQL statement, with no new polling flight.
+The affected processing/queue/operator26-case follow-up and types passed on a
+new separately attested disposable PG17 fixture; these overlap the196-case gate
+and must not be added as independent cases. Both owned fixtures were cleaned.

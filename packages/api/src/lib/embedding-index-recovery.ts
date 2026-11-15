@@ -11,18 +11,18 @@ type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
  * The first renewal removes its own eligibility, so repeated human clicks
  * cannot reset an unattempted version's budget indefinitely. */
 export async function renewKnownFailedEmbeddingWork(tx:Tx,input:{profileId:string;kind:'inspiration'|'signal';sourceId:string;expectedVersion?:bigint}){
- const [policy]=await tx.execute<{active_space:string;active_epoch:string}>(sql`SELECT active_space,active_epoch::text FROM profile_embedding_indexes WHERE profile_id=${input.profileId}::uuid`);
+ const [policy]=await tx.execute<{active_space:string;active_epoch:string;account_id:string}>(sql`SELECT e.active_space,e.active_epoch::text,p.account_id FROM profile_embedding_indexes e JOIN profiles p ON p.id=e.profile_id WHERE e.profile_id=${input.profileId}::uuid`);
  if(policy?.active_space!==EMBEDDING_2_SPACE.id)return {renewed:0};
  const work=await tx.execute<{id:string;requested_version:string;input_scope:'personal'|'public'|'statement'}>(sql`SELECT id,requested_version::text,input_scope FROM embedding_index_work WHERE profile_id=${input.profileId}::uuid AND source_kind=${input.kind} AND source_id=${input.sourceId}::uuid AND space=${policy.active_space} ORDER BY input_scope FOR UPDATE NOWAIT`);
  if(input.expectedVersion!==undefined&&(work.length!==1||BigInt(work[0]!.requested_version)!==input.expectedVersion))throw new EmbeddingIndexError('stale');
  // All scopes/families for this source are checked before ANY renewal. A
  // failed canonical request must not bypass an unknown discovery request.
- const [unresolved]=await tx.execute(sql`SELECT id FROM embedding_index_attempts WHERE profile_id=${input.profileId}::uuid AND space=${policy.active_space} AND source_kind=${input.kind} AND source_id=${input.sourceId}::uuid AND status IN ('reserved','received','unknown') LIMIT 1`);
+ const [unresolved]=await tx.execute(sql`SELECT id FROM embedding_index_attempts WHERE account_id=${policy.account_id}::uuid AND profile_id=${input.profileId}::uuid AND space=${policy.active_space} AND source_kind=${input.kind} AND source_id=${input.sourceId}::uuid AND status IN ('reserved','received','unknown') LIMIT 1`);
  if(unresolved)throw new EmbeddingIndexError('outcome_unknown');
  let renewed=0;
  for(const cell of work){
   const suffix=':'+cell.id+':'+cell.requested_version+':'+policy.active_epoch+':%';
-  const [failed]=await tx.execute(sql`SELECT id FROM embedding_index_attempts WHERE profile_id=${input.profileId}::uuid AND space=${policy.active_space} AND source_kind=${input.kind} AND source_id=${input.sourceId}::uuid AND input_scope=${cell.input_scope} AND dispatch_family='index' AND status='http_failed' AND request_key LIKE ${'index:%'+suffix} LIMIT 1`);
+  const [failed]=await tx.execute(sql`SELECT id FROM embedding_index_attempts WHERE account_id=${policy.account_id}::uuid AND profile_id=${input.profileId}::uuid AND space=${policy.active_space} AND source_kind=${input.kind} AND source_id=${input.sourceId}::uuid AND input_scope=${cell.input_scope} AND dispatch_family='index' AND status='http_failed' AND request_key LIKE ${'index:%'+suffix} LIMIT 1`);
   if(!failed)continue;
   await tx.execute(sql`SELECT embedding_index_request(${input.profileId}::uuid,${input.kind},${input.sourceId}::uuid,${cell.input_scope})`);renewed++;
  }
