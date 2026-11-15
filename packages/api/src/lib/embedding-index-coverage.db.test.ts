@@ -1,5 +1,5 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `GeminiEmbeddingClient` is a fixed
- * fake at the paid HTTP seam. Actual PG17 canonical readers, migration/work,
+ * fake at the paid HTTP seam. Actual PostgreSQL canonical readers, migration/work,
  * vector publication, tenant predicates, RO/RR snapshots and bounds execute. */
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,expect,it,vi} from 'vitest';
@@ -14,7 +14,9 @@ let t:TestDatabase;
 beforeAll(async()=>{
  const uri=new URL(process.env.DB_CONNECTION_URL!);expect(['127.0.0.1','localhost','::1','[::1]']).toContain(uri.hostname);
  t=await createTestDatabase();const[r]=await t.sql`SELECT current_setting('server_version_num') AS version,current_setting('data_directory') AS directory`;
- expect(Math.floor(Number(r.version)/10000)).toBe(17);if(process.env.WAKA_C0_LOCAL_DISPOSABLE_DIR)expect(r.directory).toBe(process.env.WAKA_C0_LOCAL_DISPOSABLE_DIR);
+ const major=Math.floor(Number(r.version)/10000);expect([16,17]).toContain(major);
+ const localDirectory=process.env.WAKA_C0_LOCAL_DISPOSABLE_DIR;
+ if(localDirectory!==undefined){expect(major).toBe(17);expect(r.directory).toBe(localDirectory);}
 });afterAll(async()=>{await t?.cleanup();});
 const vector=()=>[1,...Array<number>(767).fill(0)];
 async function fixture(empty=false){
