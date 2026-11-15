@@ -20,7 +20,7 @@ fresh native coverage **and** provider availability after subsequent writes.
 | `D0` | Read-only aggregate counts/byte totals for at most 32 approved profiles | No words, source IDs or vectors returned; counts do not prove current coverage |
 | `D1_prepare` | Bounded inventory, cohort fence and missing work/control metadata | No inference or active-space change; resumptions preserve existing versions |
 | `D1` | Reads bounded current source material; writes shadow vectors and paid attempt/progress metadata | Sequential, capped calls; first refusal/uncertain outcome stops the invocation |
-| `R1_signal` | Exact account/profile/signal/work-version/epoch recovery metadata | Zero HTTP in operator; ordinary metered queue intent may lead to a later call |
+| `R1_signal` | Exact account/profile/signal/work-version/epoch recovery metadata | Zero provider HTTP; one explicit worker Event wake after confirmed renewal; ordinary metered queue intent may lead to a later call |
 
 No mode performs cutover. A complete current-hash/geometry inventory under a
 writer/cohort barrier, stale-worker drain and a separately accepted threshold
@@ -88,7 +88,11 @@ A metadata-only `R1_signal` manifest adds exactly one `signalRecovery` object:
 Its sole profile/epoch must match that target. Other modes refuse this field.
 The callable implementation is `renewEmbeddingSignalFromManifest`; the lower
 SQL-only helper is `renewKnownFailedSignalEmbedding`. The wrapper uses the same
-hash/once/target guards and receives no provider key. Approving this recovery
+hash/once/target guards and receives no provider key. The Node helper performs
+SQL only; the wrapper then sends one Event wake to the already-attested dev
+worker after a confirmed one-cell renewal. There is no local app autodrain. A
+failed/unknown wake leaves confirmed metadata intact and is never retried
+automatically. Approving this recovery
 must include the resulting ordinary queue intent. There is no signal Retry UI
 and no automatic renewal by status reads or queue retries.
 

@@ -4,7 +4,6 @@ import {sql} from 'drizzle-orm';
 import type {PostgresJsDatabase} from 'drizzle-orm/postgres-js';
 import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
 import {EmbeddingIndexError} from './embedding-index-coordination.js';
-import {wakeCommittedBackgroundJobs} from './queue.js';
 type Db=PostgresJsDatabase<typeof import('../db/index.js')>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
 /** The caller holds shared index fence, owned source and generation locks.
@@ -41,5 +40,7 @@ export async function renewKnownFailedSignalEmbedding(db:Db,input:{accountId:str
   const [policy]=await tx.execute<{epoch:string}>(sql`SELECT active_epoch::text AS epoch FROM profile_embedding_indexes WHERE profile_id=${input.profileId}::uuid`);if(!policy||BigInt(policy.epoch)!==input.expectedEpoch)throw new EmbeddingIndexError('stale');
   return renewKnownFailedEmbeddingWork(tx,{profileId:input.profileId,kind:'signal',sourceId:input.signalId,expectedVersion:input.expectedVersion});
  },{isolationLevel:'read committed'});
- if(result.renewed)await wakeCommittedBackgroundJobs();return result;
+ // No imported queue/local autodrain here. The approved operator must wake
+ // its independently attested worker only after this commit is confirmed.
+ return result;
 }

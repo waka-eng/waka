@@ -129,9 +129,32 @@ def main():
     receipt = json.loads(result.stdout)
     if not isinstance(receipt, dict) or not isinstance(receipt.get("passed"), bool):
         raise Refusal("runner", "invalid_receipt")
+    wake = {"attempted": False, "accepted": False}
+    if args.mode == "R1_signal" and result.returncode == 0 and receipt["passed"]:
+        recovery = receipt.get("receipt")
+        if not isinstance(recovery, dict) or type(recovery.get("renewedCells")) is not int or recovery["renewedCells"] not in [0, 1]:
+            raise Refusal("runner", "invalid_recovery_receipt")
+        if recovery["renewedCells"] == 1:
+            # The child has committed metadata and terminated. Never import
+            # the local app queue or dispatch a model inside the operator.
+            # One asynchronous wake uses only this freshly attested worker.
+            wake["attempted"] = True
+            try:
+                response = aws("wake", ["lambda", "invoke", "--region", "us-west-2",
+                    "--function-name", ARN, "--invocation-type", "Event",
+                    "--payload", '{"mode":"enqueue"}', "--cli-binary-format", "raw-in-base64-out",
+                    "--query", "{status:StatusCode}", "--output", "json", "/dev/null"])
+                wake["accepted"] = response.get("status") == 202
+            except (Refusal, subprocess.TimeoutExpired):
+                # Metadata is confirmed; an uncertain wake is not rollback
+                # and does not authorize replaying either mutation or HTTP.
+                wake["accepted"] = False
     print(json.dumps({"operatorIdentityVerified": True, "mode": args.mode,
                       "bundleSha256": args.approved_bundle_sha, "childExit": result.returncode,
-                      "stderrPresent": bool(result.stderr), "receipt": receipt}))
+                      "stderrPresent": bool(result.stderr), "receipt": receipt,
+                      "workerWake": wake, "automaticRetryAuthorized": False}))
+    if wake["attempted"] and not wake["accepted"]:
+        return 1
     return result.returncode
 
 
