@@ -5,7 +5,8 @@ import type {PostgresJsDatabase} from 'drizzle-orm/postgres-js';
 import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
 import {createEmbeddingClient,embeddingInSpace,embeddingInputHash,type EmbeddingSpace} from './embedding-provider.js';
 import {parseEmbeddingPolicy,embeddingPolicySql,embeddingPolicyIdentity,type EmbeddingIndexPolicy} from './embedding-policy.js';
-import {readInspirationEmbeddingSource,buildCanonicalInspirationEmbeddingInput,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
+import type {GeminiEmbeddingClient} from './inspiration-embeddings.js';
+import {readEmbeddingIndexSource} from './embedding-index-source.js';
 import {commitEmbeddingIndexResult,reserveEmbeddingIndexAttempt,EmbeddingIndexError,type SettleEmbeddingWork} from './embedding-index-coordination.js';
 import {OpenRouterHttpError} from './openrouter-http.js';
 import {BackgroundJobHeldError} from './background-job-hold.js';
@@ -30,17 +31,8 @@ export interface IndexSourceDependencies{
 }
 const space:EmbeddingSpace={model:EMBEDDING_2_SPACE.id,dimensions:EMBEDDING_2_SPACE.dimensions};
 async function source(db:Db|Tx,work:Work,lock=false):Promise<Source>{
- try{
- if(work.source_kind==='inspiration'){
-  const row=await readInspirationEmbeddingSource(db as Db,work.profile_id,work.source_id,work.input_scope==='public'?'public':'personal',lock?'nowait':false);
-  const eligible=!!row&&!row.source.memoryExcludedAt&&(work.input_scope!=='public'||row.source.visibility==='public')&&row.input!==buildCanonicalInspirationEmbeddingInput({text:'',kind:row.source.kind});
-  return {input:row?.input??'',eligible};
- }
- const [row]=await db.execute<{statement:string|null;oversized:boolean}>(sql`SELECT CASE WHEN octet_length(statement)<=${EMBEDDING_INDEX_LIMITS.sourceBytes} THEN statement END AS statement,octet_length(statement)>${EMBEDDING_INDEX_LIMITS.sourceBytes} AS oversized FROM signals WHERE profile_id=${work.profile_id}::uuid AND id=${work.source_id}::uuid ${lock?sql`FOR UPDATE NOWAIT`:sql``}`);
- if(row?.oversized)throw new EmbeddingSourceReadLimit();
- // Dismissed and retired statements still form required refusal anchors.
- return {input:row?.statement??'',eligible:!!row&&Boolean(row.statement?.trim())};
- }catch(error){if(error instanceof EmbeddingSourceReadLimit)throw new EmbeddingIndexNeedsRetry('input_too_large');throw error;}
+ try{return await readEmbeddingIndexSource(db as Db,work,lock);}
+ catch(error){if(error instanceof EmbeddingSourceReadLimit)throw new EmbeddingIndexNeedsRetry('input_too_large');throw error;}
 }
 async function generation(tx:Tx,profileId:string){await tx.execute(sql`SELECT profile_id FROM generation_revisions WHERE profile_id=${profileId}::uuid FOR UPDATE NOWAIT`);}
 async function vector(db:Db|Tx,work:Work,hash:string|null,lock=false){
