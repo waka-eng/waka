@@ -7,7 +7,7 @@ import {sql} from 'drizzle-orm';
 import postgres from 'postgres';
 import {drizzle} from 'drizzle-orm/postgres-js';
 import * as schema from '../db/index.js';
-import {activateEmbeddingIndex,commitEmbeddingIndexResult,EmbeddingIndexError,hasPendingEmbeddingWork,readEmbeddingIndexPolicy,readEmbeddingIndexProgress,reserveEmbeddingIndexAttempt,settleEmbeddingIndexWork} from './embedding-index-coordination.js';
+import {commitEmbeddingIndexResult,EmbeddingIndexError,hasPendingEmbeddingWork,readEmbeddingIndexPolicy,readEmbeddingIndexProgress,reserveEmbeddingIndexAttempt,settleEmbeddingIndexWork} from './embedding-index-coordination.js';
 import {hashEmbedding2Input} from './embedding-2-space.js';
 import {randomUUID} from 'node:crypto';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js';
@@ -134,23 +134,7 @@ it('uses explicit READ COMMITTED statement snapshots even when the connection de
  try{expect(await reserveEmbeddingIndexAttempt(checked,{accountId:f.accountId,profileId:f.profileId,family:'index' as const,requestKey:randomUUID(),space:EMBEDDING_2_SPACE.id,activeEpoch:0n,kind:'inspiration',sourceId:item.id,scope:'personal',workId:current.workId,workVersion:current.version,inputHash:current.inputHash,inputBytes:80,manifestHash:hashEmbeddingInput('Isolation manifest'),maxRequests:1,maxInputBytes:100})).toMatchObject({reserved:true});expect(isolation).toBe('read committed');}
  finally{await connection.sql.end();}
 });
-it('blocks unvalidated activation, rejects a busy writer and atomically changes epoch and generation only after complete proof',async()=>{
- const f=await owner();await building(f.profileId);const item=await source(f.profileId,'Cutover current source.'),input=await snapshot(f.profileId,item);
- await t.db.transaction(tx=>settleEmbeddingIndexWork(tx as never,input,commitFor(input,item)));
- const request={profiles:[{id:f.profileId,epoch:0n}],space:EMBEDDING_2_SPACE.id,thresholdPolicy:'synthetic-test-only'};
- const coverage=async(tx:any)=>{const p=await readEmbeddingIndexProgress(tx,f.profileId,input.space);return {complete:!p.pending,maxVersion:p.latestVersion};};
- await expect(activateEmbeddingIndex(t.db as never,request,{coverage})).rejects.toMatchObject({code:'calibration_held'});
- const connection=await peer();let entered!:()=>void,release!:()=>void;const ready=new Promise<void>(r=>{entered=r;}),hold=new Promise<void>(r=>{release=r;});
- const writer=connection.sql.begin(async tx=>{await tx`UPDATE inspirations SET text='A concurrent new source.' WHERE id=${item.id}`;entered();await hold;});await ready;
- try{await expect(activateEmbeddingIndex(t.db as never,request,{coverage,assertThresholdPolicy:()=>{}})).rejects.toMatchObject({code:'busy'});}finally{release();await writer;await connection.sql.end();}
- expect((await readEmbeddingIndexPolicy(t.db as never,f.profileId)).activeEpoch).toBe(0n);
- const changed={...item,text:'A concurrent new source.'},fresh=await snapshot(f.profileId,changed);await t.db.transaction(tx=>settleEmbeddingIndexWork(tx as never,fresh,commitFor(fresh,changed)));
- const [before]=await t.sql`SELECT revision FROM generation_revisions WHERE profile_id=${f.profileId}`;
- expect(await activateEmbeddingIndex(t.db as never,request,{coverage,assertThresholdPolicy:()=>{}})).toEqual({activated:true,profiles:1});
- expect(await readEmbeddingIndexPolicy(t.db as never,f.profileId)).toMatchObject({activeSpace:EMBEDDING_2_SPACE.id,activeEpoch:1n});
- expect(BigInt((await t.sql`SELECT revision FROM generation_revisions WHERE profile_id=${f.profileId}`)[0]!.revision)).toBe(BigInt(before.revision)+1n);
- await expect(t.db.transaction(tx=>settleEmbeddingIndexWork(tx as never,fresh,commitFor(fresh,changed)))).rejects.toMatchObject({code:'stale'});
-});
+// C1 real-core/atomic-cohort cases: test/pg17/embedding-index-cutover.pg17.ts.
 
 it('settles delete/ineligibility without leaving sticky indexing or inventing a vector',async()=>{
  const f=await owner();await building(f.profileId);const item=await source(f.profileId,'Deleted fixture words.'),input=await snapshot(f.profileId,item);
@@ -190,13 +174,8 @@ it('keeps paid reservations on profile deletion while cascading memory/progress 
  expect(await t.sql`SELECT id FROM embedding_index_attempts WHERE id=${attempt.id}`).toHaveLength(1);
  await t.sql`DELETE FROM accounts WHERE id=${f.accountId}`;expect(await t.sql`SELECT id FROM embedding_index_attempts WHERE id=${attempt.id}`).toHaveLength(0);
 });
-it('rolls back an entire cohort when another owner lacks complete coverage',async()=>{
- const a=await owner(),b=await owner();await building(a.profileId);await building(b.profileId);
- const item=await source(a.profileId,'First cohort words.'),input=await snapshot(a.profileId,item);await t.db.transaction(tx=>settleEmbeddingIndexWork(tx as never,input,commitFor(input,item)));
- await source(b.profileId,'Second cohort words.');
- await expect(activateEmbeddingIndex(t.db as never,{profiles:[{id:a.profileId,epoch:0n},{id:b.profileId,epoch:0n}],space:EMBEDDING_2_SPACE.id,thresholdPolicy:'synthetic-test-only'},{assertThresholdPolicy:()=>{},coverage:async(tx,id)=>{const p=await readEmbeddingIndexProgress(tx as never,id,EMBEDDING_2_SPACE.id);return {complete:!p.pending,maxVersion:p.latestVersion};}})).rejects.toMatchObject({code:'stale'});
- expect((await readEmbeddingIndexPolicy(t.db as never,a.profileId)).activeEpoch).toBe(0n);expect((await readEmbeddingIndexPolicy(t.db as never,b.profileId)).activeEpoch).toBe(0n);
-});
+// C1 real-core/atomic-cohort cases: test/pg17/embedding-index-cutover.pg17.ts.
+
 it('holds an unclear unconfirmed commit without re-dispatching HTTP or retrying an ambiguous write',async()=>{
  const f=await owner();await building(f.profileId);const item=await source(f.profileId,'Uncertain fixture.'),input=await snapshot(f.profileId,item),commit=commitFor(input,item);const write=vi.fn(commit.write);commit.write=write;
  let transactions=0;const unknown=new Proxy(t.db,{get(target,key,receiver){if(key==='transaction')return async()=>{transactions++;throw Object.assign(Error('synthetic uncertain transport'),{code:'ECONNRESET'});};return Reflect.get(target,key,receiver);}});

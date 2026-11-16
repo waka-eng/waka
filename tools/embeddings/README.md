@@ -225,3 +225,22 @@ python3 tools/embeddings/coverage_operator.py --execute-reviewed \
 
 This recipe is not execution permission. No C0 AWS/sharedSQL read, D1 paid call,
 source migration, policy grant, cutover or main/prod action is authorized here.
+
+
+## C1 preparation (not live authority)
+
+The separate `cutover-index.ts` / `cutover_operator.py` pair prepares fenced
+activation and read-only tuple reconciliation. See
+[the cutover review](../../docs/reviews/embedding-cutover-2026-11-15.md).
+It needs supported PG17 transaction-local timeout semantics and a dedicated6s
+child boundary; unsupported setting, missing/nonzero child receipt or uncertain
+commit holds and never retries a mutation. Existing frozen C0/D1 tools stay separate.
+
+CI's PG16 suite proves actual unsupported-C1 refusal. The positive mandatory
+local proof is explicit, with an already-attested disposable URL and physical
+`WAKA_C1_LOCAL_DISPOSABLE_DIR`, using
+`pnpm --filter @waka/api exec vitest run --config vitest.cutover17.config.ts`.
+That entry does not load env files, run providers, or silently skip its semantics
+on16. The source flag for future new humans stays0; no current profile changes
+by publishing this code. Any real C1, fresh read reconciliation, enrollment enable
+or ongoing provider/data-processing scope needs its concrete later approval.

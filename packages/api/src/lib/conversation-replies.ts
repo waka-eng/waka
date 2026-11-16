@@ -1,4 +1,4 @@
-import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyContextIdentity} from './embedding-policy.js';
+import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyContextIdentity,embeddingCandidateRules} from './embedding-policy.js';
 import {hasCurrentConversationIndex} from './conversation-retrieval.js';
 import {resolveConversationOpening} from './conversation-opening.js';
 import {chargeChatRequest} from './chat-rate-limit.js';
@@ -281,7 +281,7 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
     const policies=next.memory.embeddingPolicies??[],owners=memoryProfiles(next.memory),selected=policies.filter(p=>owners.includes(p.profileId));
     const cohort=selected.length>0&&new Set(selected.map(p=>p.activeSpace)).size===1;
     const policy=selected[0],embeddingSpace=readableEmbeddingSpace(policy);
-    const embeddingState=!cohort?{client:null,availability:'compatibility_held' as const}:deps.embeddingClient===undefined?configuredEmbeddingClient({timeoutMs:5000,exchangeTimeoutMs:10000},policy):{client:deps.embeddingClient,availability:deps.embeddingClient?'ready' as const:'not_configured' as const};
+    const embeddingState=!cohort?{client:null,availability:'compatibility_held' as const}:deps.embeddingClient===undefined?configuredEmbeddingClient({timeoutMs:embeddingCandidateRules(policy)?.chat.lookupDeadlineMs??5000,exchangeTimeoutMs:embeddingCandidateRules(policy)?.chat.exchangeTimeoutMs??10000},policy):{client:deps.embeddingClient,availability:deps.embeddingClient?'ready' as const:'not_configured' as const};
     const embeddingClient=embeddingState.client;
     let indexed=false;
     if(conversationUsesSavedSources(next.input.history)&&embeddingClient?.model===embeddingSpace.model&&usage.count+2<=CONVERSATION_LIMITS.modelCalls){

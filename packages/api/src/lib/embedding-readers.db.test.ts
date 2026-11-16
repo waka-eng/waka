@@ -8,7 +8,7 @@ import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js'
 import {createRecallRoutes} from '../routes/recall.js';
 import type {AuthEnv} from './middleware.js';
 import {EMBEDDING_2_SPACE,hashEmbedding2Input} from './embedding-2-space.js';
-import {PROVISIONAL_EMBEDDING_2_POLICY} from './embedding-policy.js';
+import {PROVISIONAL_EMBEDDING_2_POLICY,EMBEDDING_2_CANDIDATE_POLICY} from './embedding-policy.js';
 import {readEmbeddingIndexPolicy} from './embedding-index-coordination.js';
 import {indexEmbeddingSource} from './embedding-indexer.js';
 import {hasCurrentConversationIndex,readSemanticConversationCandidates} from './conversation-retrieval.js';
@@ -18,10 +18,10 @@ import {readGenerationRevision,assertGenerationRevision} from './generation-revi
 import type {ModelProvider} from './model-provider.js';
 let t:TestDatabase;beforeAll(async()=>{t=await createTestDatabase();});afterAll(async()=>{await t?.cleanup();});
 const vector=()=>[1,...Array<number>(767).fill(0)];
-async function person(){
+async function person(thresholdPolicy=PROVISIONAL_EMBEDDING_2_POLICY){
  const [a]=await t.sql`INSERT INTO accounts(email) VALUES(${randomUUID()+'@example.test'}) RETURNING id`;
  const [p]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${a.id},'human','Synthetic') RETURNING id`;
- await t.sql`INSERT INTO profile_embedding_indexes(profile_id,active_space,active_epoch,active_threshold_policy) VALUES(${p.id},${EMBEDDING_2_SPACE.id},1,${PROVISIONAL_EMBEDDING_2_POLICY})`;
+ await t.sql`INSERT INTO profile_embedding_indexes(profile_id,active_space,active_epoch,active_threshold_policy) VALUES(${p.id},${EMBEDDING_2_SPACE.id},1,${thresholdPolicy})`;
  const [session]=await t.sql`INSERT INTO sessions(profile_id,token_hash,expires_at) VALUES(${p.id},${randomUUID().replaceAll('-','').padEnd(64,'0')},now()+interval '1 day') RETURNING id`;
  return {profileId:p.id as string,accountId:a.id as string,sessionId:session.id as string};
 }
@@ -77,8 +77,8 @@ it.each([false,true])('holds required model2 match/refusal holes instead of mint
  await expect(t.db.transaction(tx=>applyCandidates(tx as never,{profileId:f.profileId,inspirationId:id,evidenceOwnerProfileId:f.profileId,embeddingModel:EMBEDDING_2_SPACE.id,embeddingPolicy:policy,candidates:[{statement:'I prefer busy mornings.',embedding:vector(),quote:null,quoteSource:null,reason:null,relatedEvidence:[]}],provider:{judgeSignalMatch:judge} as unknown as ModelProvider,preferredLocale:'en-US',now:new Date(),beforeWrites:async()=>{}}))).rejects.toMatchObject({code:'missing'});
  expect(judge).not.toHaveBeenCalled();expect(await t.sql`SELECT id FROM signals WHERE profile_id=${f.profileId}`).toHaveLength(1);
 });
-it('treats a high-cosine opposing claim as a judgment, preserves locked words and commits separate current model2 rows',async()=>{
- const f=await person(),s=await signal(f.profileId),id=await source(f.profileId),policy=await readEmbeddingIndexPolicy(t.db,f.profileId),judge=vi.fn(async()=>({relation:'opposed' as const}));
+it.each([PROVISIONAL_EMBEDDING_2_POLICY,EMBEDDING_2_CANDIDATE_POLICY])('treats a high-cosine opposing claim as a judgment and preserves locked words (%s)',async thresholdPolicy=>{
+ const f=await person(thresholdPolicy),s=await signal(f.profileId),id=await source(f.profileId),policy=await readEmbeddingIndexPolicy(t.db,f.profileId),judge=vi.fn(async()=>({relation:'opposed' as const}));
  await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'signal',sourceId:s.id,space:EMBEDDING_2_SPACE.id},{client:{model:EMBEDDING_2_SPACE.id,embed:async()=>vector()}});
  const result=await t.db.transaction(tx=>applyCandidates(tx as never,{profileId:f.profileId,inspirationId:id,evidenceOwnerProfileId:f.profileId,embeddingModel:EMBEDDING_2_SPACE.id,embeddingPolicy:policy,candidates:[{statement:'I prefer busy mornings.',embedding:vector(),quote:null,quoteSource:null,reason:null,relatedEvidence:[]}],provider:{judgeSignalMatch:judge} as unknown as ModelProvider,preferredLocale:'en-US',now:new Date(),beforeWrites:async()=>{}}));
  expect(judge).toHaveBeenCalledOnce();expect(result.mintedSignalIds).toHaveLength(1);expect(result.matchedSignalIds).toEqual([]);expect((await t.sql`SELECT statement,locked_at FROM signals WHERE id=${s.id}`)[0]).toMatchObject({statement:s.statement,locked_at:expect.any(String)});
@@ -89,4 +89,11 @@ it('captures policy in the existing generation query and refuses a changed epoch
  const f=await person(),before=await readGenerationRevision(t.db as never,{profileId:f.profileId});expect(before?.embeddingPolicy?.activeEpoch).toBe(1n);
  await t.sql`UPDATE profile_embedding_indexes SET active_epoch=2 WHERE profile_id=${f.profileId}`;
  await expect(t.db.transaction(tx=>assertGenerationRevision(tx as never,before!))).rejects.toThrow('Generation inputs changed');
+});
+
+it('uses the compiled candidate recall floor without a model-only policy shortcut',async()=>{
+ const f=await person(EMBEDDING_2_CANDIDATE_POLICY),s=await signal(f.profileId);
+ await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'signal',sourceId:s.id,space:EMBEDDING_2_SPACE.id},{client:{model:EMBEDDING_2_SPACE.id,embed:async()=>vector()}});
+ const r=recall(f,vi.fn(async()=>[.76,Math.sqrt(1-.76*.76),...Array<number>(766).fill(0)]));
+ const result=await r.app.request('/recall?q=quiet%20mornings');expect(result.status).toBe(200);expect(await result.json()).toMatchObject({recall:{state:'ready',matches:[{signalId:s.id,locked:true}]}});expect(r.embed).toHaveBeenCalledOnce();
 });

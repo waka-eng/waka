@@ -36,7 +36,7 @@ import {
   type SignalStatus,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
-import {embeddingNeedsMeaningReview,type EmbeddingIndexPolicy} from './embedding-policy.js';
+import {embeddingNeedsMeaningReview,embeddingCandidateRules,type EmbeddingIndexPolicy} from './embedding-policy.js';
 import {EmbeddingIndexError} from './embedding-index-coordination.js';
 import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash,type EmbeddingSpace} from './embedding-provider.js';
 import { getDb } from "./db.js";
@@ -144,14 +144,14 @@ async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarg
   const judgements = new Map<number, { statement: string; relation: "same" | "independent" | "opposed" }>();
   const refusals = new Map<number, NonNullable<ReturnType<typeof findSuppressionAnchor>>>();
   for (const [index, candidate] of input.candidates.entries()) {
-    const anchor = findSuppressionAnchor(candidate, anchors,input.embeddingModel);
+    const anchor = findSuppressionAnchor(candidate, anchors,input.embeddingPolicy);
     if (anchor && (candidate.statement.trim() === anchor.anchor.statement.trim() ||
       (await input.provider.judgeSignalMatch({ preferredLocale: input.preferredLocale,
         candidateStatement: candidate.statement, existingStatement: anchor.anchor.statement })).relation === 'same')) {
       refusals.set(index, anchor);
       continue;
     }
-    const nearest = findBestMatch(candidate.embedding, projected,input.embeddingModel);
+    const nearest = findBestMatch(candidate.embedding, projected,input.embeddingPolicy);
     if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
     let decision = classifyMatch(nearest?.similarity ?? null);
     if (nearest && (decision === "judge" || input.reviewSource || candidate.statement.trim() !== nearest.target.statement.trim())) {
@@ -217,7 +217,7 @@ export async function applyCandidates(
       continue;
     }
 
-    const nearest = findBestMatch(candidate.embedding, targets,input.embeddingModel);
+    const nearest = findBestMatch(candidate.embedding, targets,input.embeddingPolicy);
     if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
     let decision = classifyMatch(nearest?.similarity ?? null);
     /** Set when the judge answers `opposed`: the mint below also records
@@ -444,13 +444,13 @@ async function loadMatchTargets(
 function findBestMatch(
   embedding: number[],
   targets: MatchTarget[],
-  model?:string,
+  policy?:EmbeddingIndexPolicy,
 ): { target: MatchTarget; similarity: number } | null {
   let best: { target: MatchTarget; similarity: number } | null = null;
 
   for (const target of targets) {
     const similarity = cosineSimilarity(embedding, target.embedding);
-    if (similarity === null || similarity < (embeddingNeedsMeaningReview(model??"")?-1:SIGNAL_MERGE_JUDGE_MIN_COSINE)) continue;
+    if (similarity === null || similarity < (embeddingCandidateRules(policy)?.match.minimum??SIGNAL_MERGE_JUDGE_MIN_COSINE)) continue;
     if (!best || similarity > best.similarity) best = { target, similarity };
   }
 
@@ -503,7 +503,7 @@ async function loadSuppressionAnchors(
 function findSuppressionAnchor(
   candidate: Pick<ResolvedCandidate, 'statement' | 'embedding'>,
   anchors: SuppressionAnchor[],
-  model?:string,
+  policy?:EmbeddingIndexPolicy,
 ): { anchor: SuppressionAnchor; similarity: number } | null {
   let best: { anchor: SuppressionAnchor; similarity: number } | null = null;
 
@@ -513,7 +513,7 @@ function findSuppressionAnchor(
     // An exact owner refusal wins even when a different nearby statement has
     // a higher cosine. Vectors retrieve meaning; they cannot overrule words.
     if (candidate.statement.trim() === anchor.statement.trim()) return { anchor, similarity };
-    if (similarity < (embeddingNeedsMeaningReview(model??"")?-1:SIGNAL_SUPPRESSION_MIN_COSINE)) continue;
+    if (similarity < (embeddingCandidateRules(policy)?.match.minimum??SIGNAL_SUPPRESSION_MIN_COSINE)) continue;
     if (!best || similarity > best.similarity) best = { anchor, similarity };
   }
 

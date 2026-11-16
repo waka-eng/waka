@@ -46,7 +46,7 @@ import { readGenerationRevision, assertGenerationRevision } from "./generation-r
 import type { ModelProvider, SignalMatchJudgement } from "./model-provider.js";
 import { getDefaultModelProvider } from "./model-provider.js";
 import { cosineSimilarity } from "../scoring/vector.js";
-import {embeddingRetrievalMinimum} from './embedding-policy.js';
+import {embeddingRetrievalMinimum,embeddingCandidateRules} from './embedding-policy.js';
 import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash} from './embedding-provider.js';
 import {
   GARDENER_MAX_JUDGED_PAIRS,
@@ -97,6 +97,7 @@ export async function tendSignalGarden(
   /* The standing set, most-recently-evidenced first — the same bounding rule
      match-or-mint scans by. Dismissed rows are out (their vectors are
      suppression anchors now, a different job), and so is anything retired. */
+  const rules=embeddingCandidateRules(revision.embeddingPolicy)?.gardener;
   const rows = await db
     .select({
       id: signals.id,
@@ -112,7 +113,7 @@ export async function tendSignalGarden(
       ),
     )
     .orderBy(desc(signals.lastEvidenceAt), desc(signals.createdAt))
-    .limit(GARDENER_SCAN_LIMIT);
+    .limit(rules?.scan??GARDENER_SCAN_LIMIT);
   if (rows.length < 2) {
     return { scanned: rows.length, suspectPairs: 0, judged: 0, proposed: 0, opposed: 0 };
   }
@@ -141,7 +142,7 @@ export async function tendSignalGarden(
       const vb = vectorById.get(rows[j]!.id);
       if (!vb) continue;
       const sim = cosineSimilarity(va, vb);
-      if (sim === null || sim < embeddingRetrievalMinimum(space.model,GARDENER_SUSPECT_MIN_COSINE)) continue;
+      if (sim === null || sim < embeddingRetrievalMinimum(revision.embeddingPolicy,'gardener',GARDENER_SUSPECT_MIN_COSINE)) continue;
       const { a, b } = normalizePair(rows[i]!.id, rows[j]!.id);
       if (recorded.has(`${a}:${b}`)) continue;
       suspects.push({ a: rows[i]!, b: rows[j]!, sim });
@@ -158,7 +159,7 @@ export async function tendSignalGarden(
   };
 
   const plans: Array<{ pair: (typeof suspects)[number]; relation: SignalMatchJudgement["relation"] }> = [];
-  for (const pair of suspects.slice(0, GARDENER_MAX_JUDGED_PAIRS)) {
+  for (const pair of suspects.slice(0,rules?.topK??GARDENER_MAX_JUDGED_PAIRS)) {
     /* the same austere judge derivation uses; a road failure throws and the
        job attempt retries — the failure-honesty rule, unchanged here */
     const verdict = await provider.judgeSignalMatch({

@@ -1,4 +1,4 @@
-import {embeddingRetrievalMinimum,embeddingNeedsMeaningReview,embeddingPolicyMatchesSql,type EmbeddingIndexPolicy} from './embedding-policy.js';
+import {embeddingRetrievalMinimum,embeddingCandidateRules,embeddingPolicyMatchesSql,type EmbeddingIndexPolicy} from './embedding-policy.js';
 import {and,desc,eq,inArray,isNull,sql} from 'drizzle-orm';
 import {attachments,inspirationEmbeddings,inspirations,type Attachment} from '../db/index.js';
 import type {getDb} from './db.js';
@@ -15,25 +15,25 @@ export interface ConversationRetrievalTrace{scanned:number;scanLimited:boolean;v
 
 /** Hybrid rank with a modest diversity penalty. Lexical-only fallback is
  * useful when indexing is absent; similarity never overrides source ownership. */
-export function rankConversationCandidates(lexicalIds:string[],semantic:SemanticConversationCandidate[],validatedSimilarities?:ReadonlyMap<string,number>,model?:string){
-  const minimum=embeddingRetrievalMinimum(model??"",RECALL_MIN_COSINE),newSpace=embeddingNeedsMeaningReview(model??"");
+export function rankConversationCandidates(lexicalIds:string[],semantic:SemanticConversationCandidate[],validatedSimilarities?:ReadonlyMap<string,number>,policy?:EmbeddingIndexPolicy){
+  const rules=embeddingCandidateRules(policy)?.chat,minimum=embeddingRetrievalMinimum(policy,'chat',RECALL_MIN_COSINE),newSpace=rules!==undefined;
   const sorted=semantic.filter(row=>Number.isFinite(row.similarity)&&row.similarity>=minimum
-    &&(row.similarity>=(newSpace ? .85 : CONVERSATION_RETRIEVAL_LIMITS.uncorroboratedSimilarity)||lexicalIds.includes(row.id)))
+    &&(row.similarity>=(rules?.uncorroborated??(newSpace?minimum:CONVERSATION_RETRIEVAL_LIMITS.uncorroboratedSimilarity))||lexicalIds.includes(row.id)))
     .sort((a,b)=>b.similarity-a.similarity||a.id.localeCompare(b.id));
-  const floor=Math.max(minimum,Math.min(newSpace ? .90 : CONVERSATION_RETRIEVAL_LIMITS.strongSimilarity,(sorted[0]?.similarity??minimum)-(newSpace ? .02 : CONVERSATION_RETRIEVAL_LIMITS.relativeGap)));
+  const floor=rules&&rules.relativeFloor===null?minimum:Math.max(minimum,Math.min(rules?.relativeFloor??CONVERSATION_RETRIEVAL_LIMITS.strongSimilarity,(sorted[0]?.similarity??minimum)-(rules?.relativeGap??CONVERSATION_RETRIEVAL_LIMITS.relativeGap)));
   const relevant=sorted.filter(row=>row.similarity>=floor);
   const known=validatedSimilarities??new Map(semantic.map(row=>[row.id,row.similarity]));
   const candidates=new Map<string,{id:string;score:number;vector?:number[]}>();
   // A weak keyword must not pull in a source that a current, validated vector
   // places well below the strongest matches. Unindexed sources retain lexical
   // access, and no confident semantic result still means lexical fallback.
-  lexicalIds.filter(id=>!relevant.length||!known.has(id)||known.get(id)!>=floor).slice(0,CONVERSATION_RETRIEVAL_LIMITS.validate).forEach((id,index)=>candidates.set(id,{id,score:.45/(index+1)}));
-  relevant.slice(0,CONVERSATION_RETRIEVAL_LIMITS.validate).forEach((row,index)=>{
-    const prior=candidates.get(row.id);candidates.set(row.id,{id:row.id,score:(prior?.score??0)+.55/(index+1),vector:row.vector});
+  lexicalIds.filter(id=>!relevant.length||!known.has(id)||known.get(id)!>=floor).slice(0,rules?.validate??CONVERSATION_RETRIEVAL_LIMITS.validate).forEach((id,index)=>candidates.set(id,{id,score:(rules?.lexicalWeight??.45)/(index+1)}));
+  relevant.slice(0,rules?.validate??CONVERSATION_RETRIEVAL_LIMITS.validate).forEach((row,index)=>{
+    const prior=candidates.get(row.id);candidates.set(row.id,{id:row.id,score:(prior?.score??0)+(rules?.semanticWeight??.55)/(index+1),vector:row.vector});
   });
   const selected:Array<{id:string;vector?:number[]}>=[];
-  while(candidates.size&&selected.length<CONVERSATION_RETRIEVAL_LIMITS.sources){
-    const next=[...candidates.values()].map(row=>({...row,utility:row.score-(newSpace?0:.15)*Math.max(0,...selected.map(other=>row.vector&&other.vector?cosineSimilarity(row.vector,other.vector)??0:0))}))
+  while(candidates.size&&selected.length<(rules?.topK??CONVERSATION_RETRIEVAL_LIMITS.sources)){
+    const next=[...candidates.values()].map(row=>({...row,utility:row.score-(rules?.diversityPenalty??.15)*Math.max(0,...selected.map(other=>row.vector&&other.vector?cosineSimilarity(row.vector,other.vector)??0:0))}))
       .sort((a,b)=>b.utility-a.utility||b.score-a.score||a.id.localeCompare(b.id))[0]!;
     selected.push(next);candidates.delete(next.id);
   }
@@ -44,17 +44,17 @@ export function rankConversationCandidates(lexicalIds:string[],semantic:Semantic
  * the same canonical bytes used by the indexing path. Oversized/unavailable
  * material fails closed for semantic ranking; lexical recall stays available. */
 export async function readSemanticConversationCandidates(db:Reader,profileId:string,queryVector:number[],model?:string,lexicalIds:string[]=[],policy?:EmbeddingIndexPolicy){
-  const selected=readableEmbeddingSpace(policy),space={...selected,model:model??selected.model},minimum=embeddingRetrievalMinimum(space.model,RECALL_MIN_COSINE);
+  const selected=readableEmbeddingSpace(policy),space={...selected,model:model??selected.model},minimum=embeddingRetrievalMinimum(policy,'chat',RECALL_MIN_COSINE),rules=embeddingCandidateRules(policy)?.chat;
   if(policy&&space.model!==policy.activeSpace)throw new Error('Conversation embedding space changed');
   if(!embeddingInSpace(queryVector,space.dimensions,space))throw new Error('Invalid conversation query vector');
   const vectors=await db.select({id:inspirationEmbeddings.inspirationId,vector:inspirationEmbeddings.embedding,inputHash:inspirationEmbeddings.inputHash})
     .from(inspirationEmbeddings).where(and(eq(inspirationEmbeddings.profileId,profileId),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,space.model),eq(inspirationEmbeddings.dimensions,space.dimensions)))
-    .orderBy(desc(inspirationEmbeddings.updatedAt),desc(inspirationEmbeddings.id)).limit(CONVERSATION_RETRIEVAL_LIMITS.scan+1);
-  const scored=vectors.slice(0,CONVERSATION_RETRIEVAL_LIMITS.scan).filter(row=>embeddingInSpace(row.vector,space.dimensions,space)).map(row=>({...row,similarity:cosineSimilarity(queryVector,row.vector)}))
+    .orderBy(desc(inspirationEmbeddings.updatedAt),desc(inspirationEmbeddings.id)).limit((rules?.scan??CONVERSATION_RETRIEVAL_LIMITS.scan)+1);
+  const scored=vectors.slice(0,rules?.scan??CONVERSATION_RETRIEVAL_LIMITS.scan).filter(row=>embeddingInSpace(row.vector,space.dimensions,space)).map(row=>({...row,similarity:cosineSimilarity(queryVector,row.vector)}))
     .filter((row):row is typeof row&{similarity:number}=>row.similarity!==null&&Number.isFinite(row.similarity))
     .sort((a,b)=>b.similarity-a.similarity||a.id.localeCompare(b.id));
-  const ranked=[...new Map([...scored.filter(row=>lexicalIds.includes(row.id)).slice(0,6),...scored.filter(row=>row.similarity>=minimum)].map(row=>[row.id,row])).values()].slice(0,CONVERSATION_RETRIEVAL_LIMITS.validate);
-  const trace={scanned:Math.min(vectors.length,CONVERSATION_RETRIEVAL_LIMITS.scan),scanLimited:vectors.length>CONVERSATION_RETRIEVAL_LIMITS.scan,validated:0,rejected:0};
+  const ranked=[...new Map([...scored.filter(row=>lexicalIds.includes(row.id)).slice(0,6),...scored.filter(row=>row.similarity>=minimum)].map(row=>[row.id,row])).values()].slice(0,rules?.validate??CONVERSATION_RETRIEVAL_LIMITS.validate);
+  const trace={scanned:Math.min(vectors.length,rules?.scan??CONVERSATION_RETRIEVAL_LIMITS.scan),scanLimited:vectors.length>(rules?.scan??CONVERSATION_RETRIEVAL_LIMITS.scan),validated:0,rejected:0};
   const similarities=new Map<string,number>();
   if(!ranked.length)return {candidates:[] as SemanticConversationCandidate[],similarities,trace};
   const rows=await currentMaterial(db,profileId,ranked.map(row=>row.id),policy);

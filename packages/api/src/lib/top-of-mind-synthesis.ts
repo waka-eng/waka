@@ -55,7 +55,7 @@ import {
   attachments,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
-import {embeddingNeedsMeaningReview,type EmbeddingIndexPolicy} from "./embedding-policy.js";
+import {embeddingCandidateRules,type EmbeddingIndexPolicy} from "./embedding-policy.js";
 import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash} from './embedding-provider.js';
 import { getDb } from "./db.js";
 import { computeSignalConfidence, selectIndependentEvidence, type ConfidenceEvidence } from "./signal-lifecycle.js";
@@ -526,7 +526,7 @@ async function selectSignals(
 
   // Model2 smoke scores cannot establish redundancy. Preserve all ranked
   // claims within existing selection caps; publication still requires review.
-  const diverse = embeddingNeedsMeaningReview(embeddingSpace.model)?scored:diversifyRanked(scored, embeddingById, SELECTION_DIVERSITY_MAX_COSINE);
+  const diverse = embeddingCandidateRules(embeddingPolicy)?.reading.cosinePruning===false?scored:diversifyRanked(scored, embeddingById, SELECTION_DIVERSITY_MAX_COSINE);
   const recentFocus = diverse.filter(row=>row.lastEvidenceAt !== null &&
     row.lastEvidenceAt.getTime()>=now.getTime()-TOP_OF_MIND_FOCUS_DAYS*MS_PER_DAY &&
     (row.status==='active'||row.evidenceCount>=TOP_OF_MIND_EMERGING_MIN_EVIDENCE))
@@ -534,7 +534,8 @@ async function selectSignals(
   const chosen = chooseSelection(
     diverse.filter((s) => s.status === "active"),
     diverse.filter((s) => s.status === "emerging"),
-    recentFocus.slice(0,TOP_OF_MIND_FOCUS_LIMIT),
+    recentFocus.slice(0,embeddingCandidateRules(embeddingPolicy)?.reading.maxFocus??TOP_OF_MIND_FOCUS_LIMIT),
+    embeddingPolicy,
   );
 
   const finalList = keepContestedTogether(
@@ -657,9 +658,11 @@ export function chooseSelection<T>(
   active: T[],
   emerging: T[],
   recentFocus: T[] = [],
+  embeddingPolicy?:EmbeddingIndexPolicy,
 ): { signals: T[]; provisional: boolean } {
-  const focus=recentFocus.slice(0,TOP_OF_MIND_FOCUS_LIMIT);
-  const primary=[...focus,...active.filter(row=>!focus.includes(row))].slice(0,TOP_OF_MIND_SIGNAL_LIMIT);
+  const rules=embeddingCandidateRules(embeddingPolicy)?.reading;
+  const focus=recentFocus.slice(0,rules?.maxFocus??TOP_OF_MIND_FOCUS_LIMIT);
+  const primary=[...focus,...active.filter(row=>!focus.includes(row))].slice(0,rules?.maxSignals??TOP_OF_MIND_SIGNAL_LIMIT);
   const backfill=emerging.filter(row=>!primary.includes(row)).slice(0,Math.max(0,TOP_OF_MIND_MIN_SIGNALS-primary.length));
   const selected=[...primary,...backfill];
   return {signals:selected,provisional:selected.some(row=>emerging.includes(row))};

@@ -50,7 +50,7 @@ export async function readConversationContext(db:Reader,profileId:string,questio
   if(queryVector&&!referenceIds){
     const semantic=await readSemanticConversationCandidates(db,profileId,queryVector,undefined,i.map(row=>row.id),embeddingPolicy);
     onRetrievalTrace?.(semantic.trace);
-    const ids=rankConversationCandidates(i.map(row=>row.id),semantic.candidates,semantic.similarities,embeddingPolicy?.activeSpace);
+    const ids=rankConversationCandidates(i.map(row=>row.id),semantic.candidates,semantic.similarities,embeddingPolicy);
     i=await readConversationMaterial(db,profileId,[],ids);
   }
   /* THE PIN, APPLIED LAST so it survives both retrieval paths above — lexical
