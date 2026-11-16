@@ -241,6 +241,22 @@ local proof is explicit, with an already-attested disposable URL and physical
 `WAKA_C1_LOCAL_DISPOSABLE_DIR`, using
 `pnpm --filter @waka/api exec vitest run --config vitest.cutover17.config.ts`.
 That entry does not load env files, run providers, or silently skip its semantics
-on16. The source flag for future new humans stays0; no current profile changes
-by publishing this code. Any real C1, fresh read reconciliation, enrollment enable
-or ongoing provider/data-processing scope needs its concrete later approval.
+on16. This source configures the dev API's new-empty-human flag as literal1;
+the runtime audit requires exactly API1 and absence on other roles (same23 checks).
+It must remain unpublished until the exact source and ongoing dev data/spend
+scope are approved, the25 C1 rollout/final membership gate is accepted, and the
+fresh source/private/controller/state guards pass. A local commit does not
+change the deployed flag; only the later approved normal dev delivery applies it.
+
+The existing shared helper enrolls only newly created empty humans on handled
+signup/Google/recovery paths from that deployment onward. Final rollout is a
+stated-time snapshot: profiles created afterward while flag0 still serves,
+including during later CI/deploy, stay native001 and need fresh scoped
+membership/empty enrollment review, not silent extra C1 slots or paid indexing.
+Existing logins/nonempty profiles, groups, retained agents, direct
+SQL and unhandled creation paths do not retroactively flip missing controls.
+Absent/0 remains the helper's off default; production is unchanged. Ordinary
+post-enrollment processing is metered under existing count limits, not the
+consumed shadow grant or a guaranteed dollar cap. Any real C1/read/spend still
+needs its exact authority. Turning the flag0 again only stops future enrollment;
+it does not roll back activated profiles or authorize erasing vectors/ledger.

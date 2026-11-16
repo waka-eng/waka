@@ -287,8 +287,8 @@ describe('attachment event delivery authority',()=>{
  });
 });
 
-it('keeps future empty-human enrollment explicitly off and only in API dev configuration',()=>{
+it('configures approved empty-human enrollment explicitly on and only in API dev configuration',()=>{
  const api=sstConfig.slice(sstConfig.indexOf('const api ='));
- expect(api).toContain('...(isDevelopmentDomain ? { WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: "0" } : {})');
+ expect(api).toContain('...(isDevelopmentDomain ? { WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: "1" } : {})');
  expect(sstConfig.match(/WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2/g)).toHaveLength(1);
 });
