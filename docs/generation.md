@@ -1843,6 +1843,22 @@ production erasure bounds remain unverified deployment gates.
 
 ### Embedding2 coordination preparation
 
+The limited-dev task record `embedding2.dev-candidates.v1` uses0.75 only as a
+candidate floor: chat scans500/validates24/returns6; recall scans500/returns8;
+related-capture context scans500/returns5 using its existing document vector.
+Model2 chat has no additional0.85/0.90 relative floor and no cosine diversity
+penalty. Native ranking is unchanged. Match/suppression still inspect one nearest
+target each and require existing semantic judgments for nonidentical claims;
+ordinary extraction retains3 candidates, at most6 such judgments. Gardener reads
+300 signals and judges at most8 pairs; it does not automatically merge. Reading
+selection retains its12-signal/3-focus caps and bypasses cosine-only model2 pruning.
+Publishing this record alone dispatches no model calls or route activation.
+Existing budgets stay fixed; active model2 candidate volume can change within
+those caps.
+The24-call smoke and opposed pairs above0.90 justify semantic safeguards, not a
+claim of calibrated precision/recall. Compiled task rules travel with the captured
+policy; no model-only threshold or caller acceptance callback grants activation.
+
 The owner selected stable `google/gemini-embedding-2` on OpenRouter, not transport
 parity with001. The earlier001 parity experiment was withdrawn without execution.
 Native001 remains active while the separate text-only space is prepared.
@@ -1850,7 +1866,9 @@ Native001 remains active while the separate text-only space is prepared.
 `title: none | text: ` prefixes,768 dimensions, unchanged raw output and exact
 formatted-input hash. It sends no task_type/input_type. Runtime factory selection is policy-bound; native001 remains the default and
 model2 activation stays held. No001 cosine threshold is silently inherited;
-model2 threshold policy starts unvalidated and cannot authorize cutover.
+a building space starts unvalidated and cannot authorize cutover. Only the
+separately reviewed compiled candidate identity may pass the C1 policy gate;
+its publication alone does not activate any profile.
 
 Per-source `embedding_index_work` versions recover cache/success/edit/delete/replay
 without clearing concurrent dirty work. `index_embedding` is a bounded normal
@@ -1863,11 +1881,13 @@ must pass on disposablePG17 before any deployment or paid/data-operation approva
 
 Model2 similarities retrieve candidates; they do not establish agreement or
 independence. The synthetic capability check included opposed claims above0.90.
-The provisional model2 policy therefore requires existing semantic judgements
+Both historical provisional and compiled candidate model2 policies require existing semantic judgements
 for non-identical attachment/suppression decisions and does not use cosine alone
 to prune the reading's claims. Exact owner-locked wording, independent support,
 correction/withdrawal and mandatory publication review remain authoritative.
-Its retrieval policy is separate from001 and remains unvalidated for activation.
+The provisional identity remains activation-held. The distinct compiled candidate
+record is a limited-dev risk choice; no broad calibration is claimed and live
+activation still requires its separate concrete boundary.
 
 One active embedding policy snapshot (owner, selected space, epoch and policy
 identity) accompanies each pipeline input and publication proof. It is projected

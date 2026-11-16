@@ -226,7 +226,7 @@ describe("the doc's [checked] structural claims", () => {
       resolve(REPO_ROOT, "packages/api/src/lib/signal-match-or-mint.ts"),
       "utf8",
     );
-    const refusal = source.indexOf("findSuppressionAnchor(candidate, anchors,input.embeddingModel)");
+    const refusal = source.indexOf("findSuppressionAnchor(candidate, anchors,input.embeddingPolicy)");
     const match = source.indexOf("findBestMatch(candidate.embedding");
     expect(refusal).toBeGreaterThan(-1);
     expect(match).toBeGreaterThan(-1);

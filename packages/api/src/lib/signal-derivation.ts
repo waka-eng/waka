@@ -1,6 +1,6 @@
 import {embedDiscoveryCandidates,commitDiscoveryEmbeddings} from './embedding-discovery.js';
 import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
-import {embeddingPolicySql,parseEmbeddingPolicy,embeddingRetrievalMinimum} from "./embedding-policy.js";
+import {embeddingPolicySql,parseEmbeddingPolicy,embeddingRetrievalMinimum,embeddingCandidateRules,type EmbeddingIndexPolicy} from "./embedding-policy.js";
 import {createEmbeddingClient,embeddingInSpace,readableEmbeddingSpace,embeddingInputHash} from './embedding-provider.js';
 /**
  * Layer 2 — turning one inspiration into evidence for the profile's signals.
@@ -325,6 +325,7 @@ export async function deriveSignalsForInspiration(
         inspirationId: inspiration.id,
         embedding: inspirationEmbedding.embedding.embedding,
         model: inspirationEmbedding.embedding.model,
+        policy: embeddingPolicy,
       })
     : [];
 
@@ -477,9 +478,10 @@ async function findRelatedInspirations(
     inspirationId: string;
     embedding: number[];
     model: string;
+    policy: EmbeddingIndexPolicy;
   },
 ): Promise<RelatedInspirationContext[]> {
-  const space={model:input.model,dimensions:input.embedding.length},native=readableEmbeddingSpace();
+  const rules=embeddingCandidateRules(input.policy)?.related,space={model:input.model,dimensions:input.embedding.length},native=readableEmbeddingSpace();
   if((space.model===native.model&&space.dimensions!==native.dimensions)||!embeddingInSpace(input.embedding,space.dimensions,space))throw new Error('Related capture embedding space is invalid');
   const rows = await db
     .select({
@@ -502,7 +504,7 @@ async function findRelatedInspirations(
       ),
     )
     .orderBy(desc(inspirations.createdAt))
-    .limit(RELATED_INSPIRATION_SCAN_LIMIT);
+    .limit(rules?.scan??RELATED_INSPIRATION_SCAN_LIMIT);
 
   const ranked=rows
     .filter((row) => row.id !== input.inspirationId&&embeddingInSpace(row.embedding,row.dimensions,space))
@@ -510,9 +512,9 @@ async function findRelatedInspirations(
       row,
       similarity: cosineSimilarity(input.embedding, row.embedding) ?? -1,
     }))
-    .filter((scored) => scored.similarity >= embeddingRetrievalMinimum(input.model,RELATED_INSPIRATION_MIN_COSINE))
+    .filter((scored) => scored.similarity >= embeddingRetrievalMinimum(input.policy,'related',RELATED_INSPIRATION_MIN_COSINE))
     .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, RELATED_INSPIRATION_CONTEXT_LIMIT);
+    .slice(0,rules?.topK??RELATED_INSPIRATION_CONTEXT_LIMIT);
   if(!ranked.length)return [];
   // One bounded current-material statement for at most the existing five
   // selected sources, rather than two extra child reads for every scan row.

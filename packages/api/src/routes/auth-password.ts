@@ -32,6 +32,7 @@ import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 
+import {insertHumanProfile} from "../lib/new-human-profile.js";
 import { accounts, profiles } from "../db/index.js";
 import {
   buildSessionCookie,
@@ -216,15 +217,9 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
         })
         .returning(accountColumns);
 
-      const [profile] = await tx
-        .insert(profiles)
-        .values({
-          accountId: account!.id,
-          type: "human",
-          name: name ?? "",
-          preferredLocale: preferredLocale ?? DEFAULT_LOCALE,
-        })
-        .returning(profileColumns);
+      const profile = await insertHumanProfile(tx,{
+        accountId: account!.id,name:name??"",preferredLocale:preferredLocale??DEFAULT_LOCALE,
+      });
 
       /* inserted with this account's id one statement up; the narrow only
          teaches the types what the insert already wrote */

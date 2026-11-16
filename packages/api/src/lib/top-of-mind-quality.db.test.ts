@@ -2,6 +2,8 @@ import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import { refreshTopOfMindForProfile } from './top-of-mind-synthesis.js';
+import {EMBEDDING_2_SPACE,hashEmbedding2Input} from './embedding-2-space.js';
+import {EMBEDDING_2_CANDIDATE_POLICY} from './embedding-policy.js';
 import { writeSignalEmbedding } from './signal-embeddings.js';
 import type { ModelProvider, TopOfMindSynthesisInput, TopOfMindSynthesisResult, TopOfMindReviewInput, TopOfMindReviewResult } from './model-provider.js';
 
@@ -391,4 +393,13 @@ it('does not compare caches from different embedding models in the same coordina
   }
   expect((await refresh()).entryCount).toBe(1);
   expect(synthesize.mock.calls[0]![0].signals.map(row => row.id).sort()).toEqual([...signalIds].sort());
+});
+
+it('retains both current model2 claims at cosine1 and still calls mandatory publication review',async()=>{
+ await t.sql`UPDATE profile_embedding_indexes SET active_space=${EMBEDDING_2_SPACE.id},active_epoch=1,active_threshold_policy=${EMBEDDING_2_CANDIDATE_POLICY} WHERE profile_id=${profileId}`;
+ const rows=await t.sql`SELECT id,statement FROM signals WHERE profile_id=${profileId}`;
+ for(const s of rows)await t.sql`INSERT INTO signal_embeddings(profile_id,signal_id,model,dimensions,input_hash,embedding) VALUES(${profileId},${s.id},${EMBEDDING_2_SPACE.id},768,${hashEmbedding2Input(s.statement,'RETRIEVAL_DOCUMENT')},${JSON.stringify([1,...Array<number>(767).fill(0)])}::jsonb)`;
+ reply=async input=>{expect(input.signals.map(s=>s.id).sort()).toEqual([...signalIds].sort());return proposed();};
+ const reviewed=vi.fn(approveReadingReview);review=reviewed;await refresh();
+ expect(synthesize).toHaveBeenCalledOnce();expect(reviewed).toHaveBeenCalledOnce();
 });

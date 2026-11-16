@@ -130,26 +130,3 @@ export async function reserveEmbeddingIndexAttempt(db:Db,input:{accountId:string
   return {id:row.id,reserved:true,status:row.status};
  },{isolationLevel:'read committed'});
 }
-
-/** Deliberately no accepted model2 threshold policy until reviewed calibration.
- * The injected checker is an explicit privileged operator/test dependency,
- * never a client-provided request body or runtime env escape hatch. */
-export async function activateEmbeddingIndex(db:Db,input:{profiles:Array<{id:string;epoch:bigint}>;space:string;thresholdPolicy:string},proof:{
- assertThresholdPolicy?:(space:string,policy:string)=>void;
- coverage:(tx:Tx,profileId:string)=>Promise<{complete:boolean;maxVersion:bigint}>;
-}){
- assertSpace(input.space);const ids=input.profiles.map(row=>row.id).sort();if(!ids.length||ids.length>32||new Set(ids).size!==ids.length)throw new EmbeddingIndexError('identity');
- const checker=proof.assertThresholdPolicy??((space,policy)=>{if(space!=='gemini-embedding-001'||policy!=='gemini-embedding-001.thresholds.v1')throw new EmbeddingIndexError('calibration_held');});checker(input.space,input.thresholdPolicy);
- const idArray=sql`ARRAY[${sql.join(ids.map(id=>sql`${id}::uuid`),sql`, `)}]`;
- return db.transaction(async tx=>{
-  const fences=await tx.execute<{id:string;locked:boolean}>(sql`WITH owners AS MATERIALIZED (SELECT unnest(${idArray}) AS id ORDER BY id) SELECT id,pg_try_advisory_xact_lock(hashtextextended('waka.embedding-index:'||id::text,0)) AS locked FROM owners`);if(fences.some(row=>!row.locked))throw new EmbeddingIndexError('busy');
-  const generations=await tx.execute(sql`SELECT profile_id FROM generation_revisions WHERE profile_id=ANY(${idArray}) ORDER BY profile_id FOR UPDATE NOWAIT`);if(generations.length!==ids.length)throw new EmbeddingIndexError('missing');
-  const policies=await tx.execute<{profile_id:string;active_epoch:string;building_space:string|null}>(sql`SELECT profile_id,active_epoch::text,building_space FROM profile_embedding_indexes WHERE profile_id=ANY(${idArray}) ORDER BY profile_id FOR UPDATE NOWAIT`);if(policies.length!==ids.length)throw new EmbeddingIndexError('missing');
-  for(const row of policies){if(BigInt(row.active_epoch)!==input.profiles.find(p=>p.id===row.profile_id)!.epoch||row.building_space!==input.space)throw new EmbeddingIndexError('stale');
-   const coverage=await proof.coverage(tx,row.profile_id);if(!coverage.complete)throw new EmbeddingIndexError('stale');
-   const pending=await readEmbeddingIndexProgress(tx as Reader,row.profile_id,input.space);if(pending.pending||pending.latestVersion!==coverage.maxVersion)throw new EmbeddingIndexError('stale');
-   await tx.execute(sql`UPDATE profile_embedding_indexes SET active_space=${input.space},active_epoch=active_epoch+1,active_threshold_policy=${input.thresholdPolicy},building_space=NULL,building_threshold_policy=NULL,cutover_covered_version=${coverage.maxVersion.toString()}::bigint,updated_at=clock_timestamp() WHERE profile_id=${row.profile_id}::uuid`);
-  }
-  await tx.execute(sql`SELECT advance_generation_revisions(${idArray})`);return {activated:true as const,profiles:ids.length};
- });
-}

@@ -1,4 +1,4 @@
-import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyIdentity,activeEmbeddingSpaceSql,embeddingRetrievalMinimum} from '../lib/embedding-policy.js';
+import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyIdentity,activeEmbeddingSpaceSql,embeddingRetrievalMinimum,embeddingCandidateRules} from '../lib/embedding-policy.js';
 /** Own-profile semantic retrieval. Current support and vector identity are
  * proved again after HTTP; an unavailable embedder never invents a match. */
 import { and, desc, eq, getTableColumns, inArray,sql } from 'drizzle-orm';
@@ -49,16 +49,17 @@ export function createRecallRoutes(deps:RecallRouteDependencies={}):Hono<AuthEnv
         .where(and(personalSignalReadable(scope.profileId),inArray(signals.status,['active','emerging'])))
         .orderBy(desc(signals.lastEvidenceAt),desc(signals.createdAt),desc(signals.id)).limit(MATCH_CANDIDATE_SCAN_LIMIT+1);
       const policy=parseEmbeddingPolicy(scope.profileId,rows[0]?.policy),space={model:deps.embedClient?.model??readableEmbeddingSpace(policy).model,dimensions:deps.dimensions??768};
-      const eligible=rows.slice(0,MATCH_CANDIDATE_SCAN_LIMIT);
+      const scan=embeddingCandidateRules(policy)?.recall.scan??MATCH_CANDIDATE_SCAN_LIMIT,eligible=rows.slice(0,scan);
       const usable=eligible.filter((row):row is typeof row&{embedding:number[];inputHash:string}=>row.inputHash===embeddingInputHash(space,row.statement)&&embeddingInSpace(row.embedding,row.dimensions??0,space));
-      return {policy,space,rows:usable,coverage:{scanned:eligible.length,compatible:usable.length,scanLimited:rows.length>MATCH_CANDIDATE_SCAN_LIMIT}};
+      return {policy,space,rows:usable,coverage:{scanned:eligible.length,compatible:usable.length,scanLimited:rows.length>scan}};
     };
     const before=await candidates(db);
     const unavailable=async(code:string)=>{await receipt();return c.json({error:'Semantic recall is unavailable. Use the list/detail tools to read current memory.',code,recall:{state:'unavailable',matches:[],coverage:before.coverage}},503);};
     if(!before.coverage.scanned){await receipt();return c.json({recall:{query:parsed.data.q,state:'empty',matches:[],coverage:before.coverage}});}
     if(!before.rows.length)return unavailable('recall_index_incomplete');
     let client:GeminiEmbeddingClient;
-    try{client=deps.embedClient??createEmbeddingClient({timeoutMs:RECALL_TIMEOUT_MS,exchangeTimeoutMs:RECALL_TIMEOUT_MS},before.policy);}
+    const timeoutMs=embeddingCandidateRules(before.policy)?.recall.deadlineMs??RECALL_TIMEOUT_MS;
+    try{client=deps.embedClient??createEmbeddingClient({timeoutMs,exchangeTimeoutMs:timeoutMs},before.policy);}
     catch(error){if(!(error instanceof EmbeddingProviderUnavailableError))throw error;return unavailable('recall_embedding_unavailable');}
     const dimensions=before.space.dimensions;
     const reservation=await reserveRecallAttempt(db,session.account.id);
@@ -69,7 +70,7 @@ export function createRecallRoutes(deps:RecallRouteDependencies={}):Hono<AuthEnv
     let vector:number[],timer:ReturnType<typeof setTimeout>|undefined;
     try{
       vector=validateEmbeddingVector(await Promise.race([client.embed(parsed.data.q,'RETRIEVAL_QUERY'),
-        new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('deadline')),RECALL_TIMEOUT_MS);})]),dimensions);
+        new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('deadline')),timeoutMs);})]),dimensions);
       if(cosineSimilarity(vector,vector)===null)throw new Error('invalid vector');
     }catch{
       await receipt();
@@ -85,8 +86,8 @@ export function createRecallRoutes(deps:RecallRouteDependencies={}):Hono<AuthEnv
       if(!retained.length)return 'recall_sources_changed' as const;
       const scored=retained.flatMap(row=>{
         const similarity=cosineSimilarity(vector,row.embedding);
-        return similarity!==null&&similarity>=embeddingRetrievalMinimum(before.space.model,RECALL_MIN_COSINE)?[{row,similarity}]:[];
-      }).sort((a,b)=>b.similarity-a.similarity||a.row.id.localeCompare(b.row.id)).slice(0,RECALL_LIMIT);
+        return similarity!==null&&similarity>=embeddingRetrievalMinimum(before.policy,'recall',RECALL_MIN_COSINE)?[{row,similarity}]:[];
+      }).sort((a,b)=>b.similarity-a.similarity||a.row.id.localeCompare(b.row.id)).slice(0,embeddingCandidateRules(before.policy)?.recall.topK??RECALL_LIMIT);
       // Published MCP clients discard optional coverage metadata. An empty
       // subset cannot honestly represent unindexed eligible signal memory.
       if(!scored.length&&(before.coverage.compatible<before.coverage.scanned||fresh.coverage.compatible<fresh.coverage.scanned||before.coverage.scanLimited||fresh.coverage.scanLimited))return 'recall_index_incomplete' as const;

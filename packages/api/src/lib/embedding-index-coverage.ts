@@ -69,16 +69,23 @@ const reasons=()=>({missingWork:0,pendingWork:0,invalidWork:0,missingVector:0,wr
 type CellRow={work_id:string|null;requested:string|null;completed:string|null;completed_hash:string|null;outcome:string|null;
  vector_id:string|null;dimensions:number|null;input_hash:string|null;values:unknown;vector_bytes:number|null;vector_allowed:boolean|null};
 
-/** Explicit RO/RR is mandatory. No certificate is accepted as an input. */
+/** Public C0 owns its RO/RR snapshot. C1 calls the real core in its own RC tx. */
 export async function readEmbeddingCoverage(db:Db,value:unknown,options:{now?:()=>number}={}){
  const parsed=embeddingCoverageManifest.safeParse(value);if(!parsed.success)throw new EmbeddingCoverageRefused('identity');
- const m=parsed.data,now=options.now??(()=>performance.now()),started=now(),expiry=Date.parse(m.expiresAt),deadline=started+Math.min(m.maxDurationMs,expiry-Date.now());
+ const started=(options.now??(()=>performance.now()))(),deadline=started+Math.min(parsed.data.maxDurationMs,Date.parse(parsed.data.expiresAt)-Date.now());
+ if(!Number.isFinite(deadline)||deadline<=started)throw new EmbeddingCoverageRefused('deadline');
+ return db.transaction(tx=>verifyEmbeddingCoverage(tx,parsed.data,{...options,started}),{isolationLevel:'repeatable read',accessMode:'read only'}).catch(error=>{throw databaseRefusal(error);});
+}
+/** Transaction-free bounded verifier. No certificate, writer, provider or repair
+ * dependency. The caller must supply its actual transaction, never another DB. */
+export async function verifyEmbeddingCoverage(tx:Pick<Db,'execute'>,value:unknown,options:{now?:()=>number;started?:number}={}){
+ const parsed=embeddingCoverageManifest.safeParse(value);if(!parsed.success)throw new EmbeddingCoverageRefused('identity');
+ const m=parsed.data,now=options.now??(()=>performance.now()),started=options.started??now(),expiry=Date.parse(m.expiresAt),deadline=started+Math.min(m.maxDurationMs,expiry-Date.now());
  if(!Number.isFinite(deadline)||deadline<=started)throw new EmbeddingCoverageRefused('deadline');
  // Reserve BEGIN, SET TRANSACTION, COMMIT/ROLLBACK and one cold type-catalog
  // statement. These budget units are not a claim that a warm client ran all4.
  const reservedControlStatements=4;let applicationStatements=0,fieldBytes=0,rowsRead=0;
  const check=()=>{if(now()>=deadline||Date.now()>=expiry)throw new EmbeddingCoverageRefused('deadline');};
- return db.transaction(async tx=>{
   const execute=async<T extends Record<string,unknown>>(query:SQL):Promise<T[]>=>{
    check();if(applicationStatements+reservedControlStatements>=m.maxStatements)throw new EmbeddingCoverageRefused('statement_limit');
    // Every query below returns fixed bounded metadata or server-guarded fields.
@@ -180,5 +187,4 @@ export async function readEmbeddingCoverage(db:Db,value:unknown,options:{now?:()
   return {report:{snapshotAt:owned[0]!.snapshot_at,complete,counts:{profiles:owned.length,domainCells:cells.length,eligibleCells:eligible,ineligibleCells:ineligible,currentCells:current,...holes},unresolvedAttempts,reconciliation,
     measurements:{applicationStatements,reservedControlStatements,statementBudgetUnits:applicationStatements+reservedControlStatements,fieldPayloadBytes:fieldBytes,rowsRead,elapsedMs:Math.max(0,now()-started)},providerCalls:0 as const,memoryMutations:0 as const,providerOutcomeProven:false as const,invoiceProven:false as const,activationAuthorized:false as const},
    privateMetadata:{frontiers:owned.map(p=>({profileId:p.id,epoch:p.epoch,generationRevision:p.generation,maxRequestedVersion:frontiers.get(p.id)!.toString()}))}};
- },{isolationLevel:'repeatable read',accessMode:'read only'}).catch(error=>{throw databaseRefusal(error);});
 }

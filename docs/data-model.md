@@ -1939,6 +1939,33 @@ operator is authorized merely by this source contract.
 
 ### Read-only embedding coverage (C0)
 
+The limited-dev compiled policy `embedding2.dev-candidates.v1` selects bounded
+candidates, never agreement, truth, independence or a suppression verdict. Its
+task-specific retrieval floor is0.75 (chat6, recall8, related captures5), with
+nearest-match/refusal semantic review and at most8 gardener pair judgments.
+Owner-locked words, current evidence and mandatory reading review remain binding;
+model2 cosine alone never prunes reading claims. This is a reviewed risk choice
+using a small agent-authored smoke corpus, not human calibration or broad quality
+proof. Native001 thresholds and missing-control defaults remain unchanged.
+
+Cutover (C1) is a separate privileged, keyless metadata operation. Its actual
+coverage core runs in one explicit READ COMMITTED transaction after sorted
+exclusive owner, profile, generation and control barriers. It re-reads owned
+canonical hashes, raw768 geometry, complete work/tombstone domain and frontier,
+and all-manifest unresolved attempts. A C0 receipt is never its certificate.
+Only exact native-before policy/epoch/generation/frontier tuples and the compiled
+policy authorize the atomic cohort transition. A server whole-transaction
+deadline is mandatory; unsupported servers hold without weakening that boundary.
+
+Lost cutover acknowledgment requires fresh whole-cohort before/after tuple
+reconciliation, not mutation replay. All-before cannot prove rollback while an
+original invocation may still execute. An empty-profile path proves zero domain
+under the same barriers before metadata enrollment. A default-off dev-only
+new-human helper may enroll only a freshly inserted empty human profile in its
+creation transaction. Existing logins, groups, retained stacks, production and
+direct-SQL missing-control/native defaults do not change. Ongoing provider spend
+and live cutover/enrollment need separate scope; shadow-build approval is consumed.
+
 C0 verifies a bounded, owned set of current personal/public inspiration and signal
 cells, including required refusal anchors and stale/tombstoned work or extra
 target-space vectors. It reads the actual canonical input, formatted hash,
