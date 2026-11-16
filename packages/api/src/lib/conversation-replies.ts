@@ -17,7 +17,7 @@ import {configuredEmbeddingClient,readableEmbeddingSpace} from './embedding-prov
 import type {ConversationRetrievalTrace} from './conversation-retrieval.js';
 import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs} from './queue.js';
 import {attachmentNote,readMessageAttachments} from './conversation-attachments.js';
-import {createConversationTiming} from './conversation-timing.js';
+import {createConversationTiming,createConversationApiTiming,type ConversationAdmissionObserver} from './conversation-timing.js';
 import {measurePerformanceStage} from './performance-stages.js';
 type Db=ReturnType<typeof getDb>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -209,17 +209,25 @@ async function replyState(db:Reader,profileId:string,id:string){
  * would require restoring an explicit repeatable-read transaction. */
 export async function readConversationReplyState(db:Db,profileId:string,id:string){return measurePerformanceStage('reply_state','conversation',()=>replyState(db,profileId,id));}
 export async function requestConversationReply(db:Db,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null},quotaAccountId?:string){
-  const result=await db.transaction(tx=>requestConversationReplyInTransaction(tx,profileId,id,input,quotaAccountId));await wakeCommittedBackgroundJobs();return result;
+  const timing=createConversationApiTiming('retry');timing.mark('transaction');
+  try{
+    const result=await db.transaction(async tx=>{try{return await requestConversationReplyInTransaction(tx,profileId,id,input,quotaAccountId,timing.observe);}finally{timing.bodyFinished();}});
+    timing.mark('resolved');timing.mark('wake');await wakeCommittedBackgroundJobs();timing.finish(true);return result;
+  }finally{timing.finish();}
 }
 /** Also used by Send's transaction: the message and its reply intent commit together. */
-export async function requestConversationReplyInTransaction(tx:Tx,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null},quotaAccountId?:string){
+export async function requestConversationReplyInTransaction(tx:Tx,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null},quotaAccountId?:string,onAdmission?:ConversationAdmissionObserver){
+  const observed=(value:Awaited<ReturnType<typeof replyState>>,admission:'new'|'replay')=>{
+    try{const result=onAdmission?.({requestId:value.requestId,revision:value.revision,admission});if(result&&typeof (result as PromiseLike<unknown>).then==='function')void Promise.resolve(result).catch(()=>{});}catch{/* diagnostic callback only */}
+    return value;
+  };
   return measurePerformanceStage('reply_admission','conversation',async()=>{
   if(!conversationRepliesEnabled())throw new ConversationReplyError(503,'Replies are not enabled here yet. Your messages are saved.');
     const conversation=await lockConversation(tx,profileId,id),rows=await requestsFor(tx,profileId,id),latest=rows.find(row=>row.userMessageId===input.messageId);
     // The predecessor is a compare-and-swap token. Replaying a lost retry
     // joins its successor even if it has already failed or finished.
-    if((latest?.id??null)!==input.afterRequestId)return replyState(tx,profileId,id);
-    if(latest&&!['failed','stopped','stale'].includes(await effectiveStatus(tx,latest)))return replyState(tx,profileId,id);
+    if((latest?.id??null)!==input.afterRequestId)return observed(await replyState(tx,profileId,id),'replay');
+    if(latest&&!['failed','stopped','stale'].includes(await effectiveStatus(tx,latest)))return observed(await replyState(tx,profileId,id),'replay');
     if(conversation.revision>=200)throw new ConversationReplyError(429,'This conversation is full. Start another one.');
     const work=await inputFor(tx,profileId,id,input.messageId);if(!work)throw new ConversationReplyError(409,'The conversation changed. Check saved messages.');
     const recent=rows.filter(row=>row.userMessageId===input.messageId&&row.createdAt.getTime()>Date.now()-HOUR);
@@ -231,7 +239,7 @@ export async function requestConversationReplyInTransaction(tx:Tx,profileId:stri
     await tx.update(conversationReplyRequests).set({jobId:job.jobId}).where(eq(conversationReplyRequests.id,requestId));
     const accepted=await replyState(tx,profileId,id);
     if(quotaAccountId)await chargeChatRequest(tx,quotaAccountId);
-    return accepted;
+    return observed(accepted,'new');
   });
 }
 export async function stopConversationReply(db:Db,profileId:string,id:string,requestId:string){
@@ -267,6 +275,7 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
     await lockMemory(tx,job.profileId,conversation);await beforeCommit(tx);
     const [request]=await tx.select().from(conversationReplyRequests).where(and(eq(conversationReplyRequests.profileId,job.profileId),eq(conversationReplyRequests.id,requestId),eq(conversationReplyRequests.conversationId,id))).for('update');
     if(!request||!['pending','running'].includes(request.status))return null;
+    timing.correlate(request.id,request.conversationRevision);
     const refuse=async(status:'failed'|'stale',failureCode:string)=>{await tx.update(conversationReplyRequests).set({status,failureCode,finishedAt:new Date()}).where(eq(conversationReplyRequests.id,requestId));return null;};
     if(request.dispatchedAt)return refuse('failed','outcome_unknown');
     if(!conversationRepliesEnabled())return refuse('failed','disabled');
