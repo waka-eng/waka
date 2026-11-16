@@ -13,6 +13,7 @@ import {CONVERSATION_STARTERS,conversationPreview} from '../lib/conversation-pre
 import {ConversationReplyError,conversationReplyWindow,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
 import {wakeCommittedBackgroundJobs} from '../lib/queue.js';
 import {measurePerformanceStage} from '../lib/performance-stages.js';
+import {createConversationApiTiming} from '../lib/conversation-timing.js';
 import {personalPrincipleReadable} from '../lib/personal-output.js';
 import {PRINCIPLE_MIN_SIGNALS} from '../lib/principle-generation.js';
 import {ConversationAttachmentError,MAX_MESSAGE_ATTACHMENTS,conversationAttachmentKeys,linkMessageAttachments,readMessageAttachments} from '../lib/conversation-attachments.js';
@@ -152,7 +153,9 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     const window=messageWindow(c.req.query('from'),c.req.query('limit'));
     const input=z.object({id:uuid,principleId:uuid.optional(),inspirationId:uuid.optional(),perspective:z.enum(conversationPerspectiveValues).optional(),agentId:uuid.optional(),firstMessage:firstMessageInput.optional(),opening:conversationOpeningSchema.optional()}).strict().refine(row=>!row.opening||Boolean(row.firstMessage)).safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
     const profileId=c.get('conversationProfileId');let dropped:string[]=[];
-    const row=await database().transaction(async tx=>{
+    const timing=createConversationApiTiming('create',input.data.firstMessage?.requestReply===true&&conversationRepliesEnabled());
+    timing.mark('transaction');try{
+    const row=await database().transaction(async tx=>{try{
       await tx.select({id:profiles.id}).from(profiles).where(eq(profiles.id,profileId)).for('update');
       const [existing]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,input.data.id)));
       if(existing){
@@ -195,6 +198,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
           if(current.initialPrincipleId!==null&&current.initialPrincipleId!==(input.data.principleId??null)||current.initialInspirationId!==null&&current.initialInspirationId!==(input.data.inspirationId??null)||!first||first.role!=='user'||first.id!==input.data.firstMessage.id||first.content!==storedContent(input.data.firstMessage.content)||!sameAttachments(first.attachments,input.data.firstMessage.attachmentIds))
             throw new ConversationError('This conversation already began with different words.',409);
         }
+        timing.observe({requestId:null,revision:current.revision,admission:'replay'});
         return windowedConversation(current,window,input.data.firstMessage?.id);
       }
       const [count]=await tx.select({n:sql<number>`count(*)::int`}).from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt)));
@@ -212,15 +216,16 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       if(first){
         await tx.insert(conversationMessages).values({id:first.id,profileId,conversationId:input.data.id,position:1,role:'user',content:storedContent(first.content)});
         dropped=await linkMessageAttachments(tx,{profileId,conversationId:input.data.id,messageId:first.id,attachmentIds:first.attachmentIds??[]});
-        if(first.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,input.data.id,{messageId:first.id,afterRequestId:null});
+        if(first.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,input.data.id,{messageId:first.id,afterRequestId:null},undefined,timing.observe);
       }
       const accepted=windowedConversation(await readConversation(tx,profileId,input.data.id),window,input.data.firstMessage?.id);
       await chargeChatRequest(tx,c.get('session').account.id);
       return accepted;
-    });
-    await sweep(dropped);
-    if(input.data.firstMessage?.requestReply&&conversationRepliesEnabled())await wakeCommittedBackgroundJobs();
-    return c.json({conversation:row,...conversationCapabilities()});
+    }finally{timing.bodyFinished();}});
+    timing.mark('resolved');timing.mark('sweep');await sweep(dropped);
+    if(input.data.firstMessage?.requestReply&&conversationRepliesEnabled()){timing.mark('wake');await wakeCommittedBackgroundJobs();}
+    timing.finish(true);return c.json({conversation:row,...conversationCapabilities()});
+    }finally{timing.finish();}
   });
   routes.use('/:id/*',async(c,next)=>{if(!uuid.safeParse(c.req.param('id')).success)return c.json({error:'Invalid conversation'},400);await next();});
   routes.get('/:id',async c=>{
@@ -312,7 +317,9 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     const window=messageWindow(c.req.query('from'),c.req.query('limit'));
     const input=messageInput.safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Write a message of up to 4,000 characters, or add a photo or file.'},400);
     const profileId=c.get('conversationProfileId'),id=c.req.param('id'),content=storedContent(input.data.content);let dropped:string[]=[];
-    const row=await database().transaction(async tx=>{
+    const timing=createConversationApiTiming('message',input.data.requestReply===true&&conversationRepliesEnabled());
+    timing.mark('transaction');try{
+    const row=await database().transaction(async tx=>{try{
       const [current]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id))).for('update');
       if(!current)throw new ConversationError('Conversation not found.',404);
       if(current.deletedAt)throw new ConversationError('This conversation was deleted.',410);
@@ -323,6 +330,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       if(existing){
         const linked=await readMessageAttachments(tx,profileId,id,[existing.id]);
         if(existing.role!=='user'||existing.content!==content||existing.correctsMessageId!==(input.data.correctsMessageId??null)||!sameAttachments(linked.get(existing.id)??[],input.data.attachmentIds))throw new ConversationError('This message id already holds different words.',409);
+        timing.observe({requestId:null,revision:current.revision,admission:'replay'});
         return windowedConversation(await readConversation(tx,profileId,id),window,input.data.id);
       }
       if(current.revision!==input.data.revision)throw new ConversationError('New messages arrived. Check the conversation before sending.',409);
@@ -334,11 +342,14 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       await tx.insert(conversationMessages).values({id:input.data.id,profileId,conversationId:id,position:current.revision+1,role:'user',content,correctsMessageId:input.data.correctsMessageId??null});
       dropped=await linkMessageAttachments(tx,{profileId,conversationId:id,messageId:input.data.id,attachmentIds:input.data.attachmentIds??[]});
       await tx.update(conversations).set({revision:current.revision+1,updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
-      if(input.data.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,id,{messageId:input.data.id,afterRequestId:null});
+      if(input.data.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,id,{messageId:input.data.id,afterRequestId:null},undefined,timing.observe);
       const accepted=windowedConversation(await readConversation(tx,profileId,id),window,input.data.id);
       await chargeChatRequest(tx,c.get('session').account.id);
       return accepted;
-    });await sweep(dropped);if(input.data.requestReply&&conversationRepliesEnabled())await wakeCommittedBackgroundJobs();return c.json({conversation:row,...conversationCapabilities()});
+    }finally{timing.bodyFinished();}});timing.mark('resolved');timing.mark('sweep');await sweep(dropped);
+    if(input.data.requestReply&&conversationRepliesEnabled()){timing.mark('wake');await wakeCommittedBackgroundJobs();}
+    timing.finish(true);return c.json({conversation:row,...conversationCapabilities()});
+    }finally{timing.finish();}
   });
   routes.get('/:id/reply',async c=>c.json(await readConversationReplyState(database(),c.get('conversationProfileId'),c.req.param('id'))));
   routes.post('/:id/replies',async c=>{
