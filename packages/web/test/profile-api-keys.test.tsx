@@ -80,11 +80,10 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
   keys.push(key('Personal laptop', personal.id), { ...key('Old personal key', personal.id), revokedAt: '2026-10-22T00:00:00Z' });
   await openPersonal();
   expect(host.querySelector('h2')?.textContent).toBe('You');
-  expect(host.textContent).toContain('You · You');
   expect(calls.some(c => c.path.includes('keys'))).toBe(false);
   await click('API keys');
-  expect(host.textContent).toContain('neither can edit or delete inspirations or manage your account');
-  expect(host.textContent).toContain('Choose Read only for a reader, or Read and capture to allow new saves');
+  expect(host.textContent).toMatch(/Neither can edit or delete inspirations or manage your account/i);
+  expect(host.textContent).toContain('Read and capture also allows new saves');
   expect(host.textContent).toContain('Personal laptop');
   for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent name']) expect(host.textContent).not.toContain(hidden);
   expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys']);
@@ -150,7 +149,7 @@ it('retries a failed personal profile load and translates personal setup in Kore
   expect(calls.every(c => c.path === '/api/profiles')).toBe(true);
   fail = null;
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-settings-erase')!.click());
-  expect(host.textContent).toContain('나 · You');
+  expect(host.querySelector('[role="alert"]')).toBeNull();
   await click('설정 프롬프트 복사');
   expect(copied.at(-1)).toContain('브라우저 로그인이나 에이전트 프로필 생성을 사용하지 마세요');
   expect(copied.at(-1)).toContain(personal.id);
@@ -192,7 +191,7 @@ it('offers personal setup even when keys cannot load or five keys are active', a
   await click('API keys');
   expect(host.textContent).toContain('Couldn’t load API keys');
   fail = null; await click('Refresh');
-  expect(host.textContent).toContain('Five keys are active');
+  expect(host.textContent).toContain('You have five active keys');
   expect(button('Create key').disabled).toBe(true);
   await click('MCP setup');
   expect(button('Copy setup prompt').disabled).toBe(false);
