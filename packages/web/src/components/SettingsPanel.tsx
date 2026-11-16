@@ -118,18 +118,9 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 
       {/* SAVE FROM ANYWHERE: the bookmarklet opens this app's /share with
           the page it was pressed on (see lib/bookmarklet.ts). */}
-      {/* ONE ROW PER PLACE YOU MIGHT BE (design F6). Only the doors that
-          exist today are listed: the iPhone share extension and dropping
-          onto the home are drawn in the frame but not built yet, and a row
-          promising them would be a control that lies (Law 1). */}
       <div className="waka-account-field waka-save-anywhere" role="group" aria-labelledby="waka-save-anywhere-title">
         <span id="waka-save-anywhere-title">{say("profileSaveAnywhere")}</span>
         <div className="waka-save-anywhere-row">
-          <strong>{say("profileSaveAnywhereShareTitle")}</strong>
-          <small>{say("profileSaveAnywhereShareHint")}</small>
-        </div>
-        <div className="waka-save-anywhere-row">
-          <strong>{say("profileSaveAnywhereBrowserTitle")}</strong>
           <small>{say("profileBookmarkletHint")}</small>
           <a ref={bookmarklet} className="waka-bookmarklet" draggable
             onClick={(event) => event.preventDefault()}>{say("profileBookmarkletName")}</a>
@@ -252,12 +243,10 @@ function ProfileConnections({ locale }: { locale: SupportedLocale }): JSX.Elemen
   return <>
     {error ? <span className="waka-account-failed" role="alert">{error}</span> : null}
     <div className="waka-session-list-heading">
-      <h3>{say('profileConnectionsLive')}</h3>
       <button type="button" className="waka-settings-erase" disabled={loading || busy !== null} onClick={() => void load()}>
         {say("profileConnectionsRefresh")}
       </button>
     </div>
-    <p className="waka-settings-note">{say('profileAccountConnectionsHint')}</p>
     {notice ? <p className="waka-settings-note" role="status">{notice}</p> : null}
     {loading ? <p className="waka-settings-note" role="status">{say("worldInspirationsLoad")}</p> : null}
     {others?.length === 0 && !loading ? <p className="waka-settings-note">
@@ -269,7 +258,6 @@ function ProfileConnections({ locale }: { locale: SupportedLocale }): JSX.Elemen
         return <li key={session.id} className="waka-session-card">
           <div className="waka-session-card-heading">
             <strong>{name}</strong>
-            <span>{say('profileConnectionSignedIn')}</span>
           </div>
           <dl className="waka-session-info">
             {session.verifiedAt ? <><dt>{say('profileMcpLastVerified')}</dt><dd>{date(session.verifiedAt)}</dd></> : null}
