@@ -405,7 +405,7 @@ export default $config({
         // means the in-process drain owns it instead.
         WAKA_BACKGROUND_WORKER_FUNCTION: backgroundWorker.name,
         ...(isDevelopmentDomain ? { WAKA_DB_PREPARED_QUERIES: "1" } : {}),
-        ...(isDevelopmentDomain ? { WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: "0" } : {}),
+        ...(isDevelopmentDomain ? { WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: "1" } : {}),
         WAKA_BACKGROUND_JOB_WAKE_GROUP: jobWakeGroup.name,
       },
       // Waking the worker is the whole point of the push model; without this
