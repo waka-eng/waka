@@ -65,7 +65,10 @@ requires native Node20. No live Neon/pooler deadline capability is attested.
 - Actual PG16 affected coverage/coordination/reader/C1-refusal run:49 passes including
   the compiled-policy reader cases. The earlier47-pass snapshot is retained. Auth routes:14 passes, including
   real signup, production refusal/rollback, Google new/missing/concurrent recovery
-  and preservation of existing native logins. Four focused reader cases cover
+  and preservation of existing native logins. One additional fresh-PG16 case
+  proves helper enrollment -> first capture -> normal durable index job/work ->
+  one fake request/current completion without a sweep or wake; its initial test
+  used the wrong `kind` column and was corrected to canonical `type`. Four focused reader cases cover
   compiled recall, both-policy opposed/locked judgments and actual reading
   cosine1 retention with mandatory review. Counts overlap; do not sum them.
 - Explicit PG17 proof:15 cases passed, including stale inactive-vector RC race,

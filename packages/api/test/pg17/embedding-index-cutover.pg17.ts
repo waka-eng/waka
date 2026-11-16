@@ -1,6 +1,7 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): only `GeminiEmbeddingClient.embed`
  * returns deterministic synthetic vectors. Actual migrated PG17/core/C1 and
- * wire disconnect run. Explicit local proof entry (not CI16 test discovery).
+ * wire disconnect run. `Db.execute` wrappers pause/throw only after actual
+ * SQL for controlled races; child debug hooks inject stall/query faults. Explicit local proof entry (not CI16 test discovery).
  * CI16 refusal is embedding-index-cutover.db.test.ts; no conditional skips. */
 import {writeFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
