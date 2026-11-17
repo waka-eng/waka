@@ -11,8 +11,9 @@ type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
 export type SignupFlow='password'|'google';
 type CreationLimits = { createHour: number; createDay: number };
 type CreationConfig = { stage: string; limits: CreationLimits };
+type HourlyCreationConfig = { stage: 'production'; limits: Pick<CreationLimits, 'createHour'> };
 export type SignupConfig =
- | { mode: 'off'; creation?: CreationConfig }
+ | { mode: 'off'; creation?: HourlyCreationConfig }
  | { mode: 'closed' }
  | (CreationConfig & { mode: 'turnstile'; origin: string; hostname: string; siteKey: string; secret: string; signing: string; limits: CreationLimits & { verifyHour: number; verifyDay: number } });
 const ENDPOINT='https://challenges.cloudflare.com/turnstile/v0/siteverify';
@@ -39,9 +40,7 @@ export function signupConfiguration(env:Record<string,string|undefined>=process.
        ['WAKA_TURNSTILE_SECRET', 'WAKA_TURNSTILE_SITE_KEY', 'SST_RESOURCE_TurnstileSecret'].some(key => env[key] !== undefined)) {
     return { mode: 'closed' };
    }
-   const limits = creationLimits();
-   if (limits.createHour > limits.createDay) return { mode: 'closed' };
-   return { mode: 'off', creation: { stage, limits } };
+   return { mode: 'off', creation: { stage, limits: { createHour: read('WAKA_SIGNUP_CREATE_HOUR',50,50) } } };
   }
   if(mode!=='turnstile')return {mode:'closed'};
   const origin={development:'https://dev.waka.im',dev:'https://dev.waka.im',production:'https://waka.im'}[stage??''];
@@ -137,8 +136,8 @@ export async function verifySignupAdmission(c:Context,db:Db,flow:SignupFlow,toke
 }
 export type SignupGrant =
  | { kind: 'challenge'; config: Ready; proof: Proof; nonceHash: string }
- | { kind: 'server'; config: CreationConfig; nonceHash: string };
-function serverGrant(config: CreationConfig | undefined): SignupGrant | null {
+ | { kind: 'server'; config: HourlyCreationConfig; nonceHash: string };
+function serverGrant(config: HourlyCreationConfig | undefined): SignupGrant | null {
  return config ? { kind: 'server', config, nonceHash: randomBytes(32).toString('hex') } : null;
 }
 export function readSignupGrant(c:Context,flow:SignupFlow):SignupGrant|null{
@@ -151,8 +150,13 @@ export function readSignupGrant(c:Context,flow:SignupFlow):SignupGrant|null{
  * the grant cannot buy repeated hashing or recreate an ambiguous account. */
 export async function beginSignupCreation(db:Db,grant:SignupGrant|null,flow:SignupFlow){if(!grant)return;
  await fenced(db,async tx=>{
-  await capacity(tx,grant.config);
   if (grant.kind === 'server') {
+   const [current] = await tx.execute<{ starts: number }>(sql`
+     SELECT count(*)::int AS starts FROM signup_admissions
+     WHERE stage=${grant.config.stage} AND creation_started_at>clock_timestamp()-interval '1 hour'`);
+   if (!current || current.starts >= grant.config.limits.createHour) {
+    throw new SignupAdmissionError('signup_capacity',429,3600);
+   }
    await pruneAdmissions(tx);
    // Equal digests mark a server reservation in the existing schema. These
    // rows share the creation ceiling but do not spend Turnstile verify slots.
@@ -162,6 +166,7 @@ export async function beginSignupCreation(db:Db,grant:SignupGrant|null,flow:Sign
    if (rows.length !== 1) throw new SignupAdmissionError('signup_admission_used');
    return;
   }
+  await capacity(tx,grant.config);
   const rows=await tx.execute(sql`UPDATE signup_admissions SET state='creating',creation_started_at=clock_timestamp() WHERE nonce_hash=${grant.nonceHash} AND stage=${grant.config.stage} AND flow=${flow} AND state=${flow==='google'?'oauth_bound':'verified'} AND expires_at>clock_timestamp() AND (${flow}='password' OR (oauth_state_hash=${grant.proof.oauth?digest(grant.proof.oauth.state):null} AND oauth_pkce_hash=${grant.proof.oauth?digest(grant.proof.oauth.pkce):null})) RETURNING nonce_hash`);
   if(rows.length!==1)throw new SignupAdmissionError('signup_admission_used');
  });

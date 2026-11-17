@@ -13,15 +13,15 @@ it('closes missing/invalid production settings without throwing, and leaves loca
 });
 it('allows explicit challenge-free production signup only with exact trusted stage, origin and no challenge binding',()=>{
  const off={...env,WAKA_SIGNUP_ADMISSION:'off',WAKA_TURNSTILE_SITE_KEY:undefined,WAKA_TURNSTILE_SECRET:undefined};
- expect(signupConfiguration(off)).toEqual({mode:'off',creation:{stage:'production',limits:{createHour:10,createDay:50}}});
- expect(signupConfiguration({...off,WAKA_SIGNUP_CREATE_HOUR:'2',WAKA_SIGNUP_CREATE_DAY:'3'})).toMatchObject({creation:{limits:{createHour:2,createDay:3}}});
+ expect(signupConfiguration(off)).toEqual({mode:'off',creation:{stage:'production',limits:{createHour:50}}});
+ expect(signupConfiguration({...off,WAKA_SIGNUP_CREATE_HOUR:'2',WAKA_SIGNUP_CREATE_DAY:'0'})).toEqual({mode:'off',creation:{stage:'production',limits:{createHour:2}}});
  for(const patch of [
   {WAKA_STAGE:undefined},{WAKA_STAGE:'developmnt'},{SST_RESOURCE_App:undefined},{SST_RESOURCE_App:'null'},
   {SST_RESOURCE_App:'{"name":"other","stage":"production"}'},{SST_RESOURCE_App:'{"name":"waka","stage":"development"}'},
   {PUBLIC_WEB_URL:undefined},{PUBLIC_WEB_URL:'https://waka.im/'},{PUBLIC_WEB_URL:'http://waka.im'},
   {PUBLIC_WEB_URL:'https://waka.im:443'},{PUBLIC_WEB_URL:'https://waka.im.evil.test'},
   {SST_RESOURCE_TurnstileSecret:'{}'},{WAKA_TURNSTILE_SITE_KEY:''},{WAKA_TURNSTILE_SECRET:''},
-  {WAKA_SIGNUP_CREATE_HOUR:'0'},{WAKA_SIGNUP_CREATE_DAY:'201'},{WAKA_SIGNUP_CREATE_HOUR:'3',WAKA_SIGNUP_CREATE_DAY:'2'},
+  {WAKA_SIGNUP_CREATE_HOUR:'0'},{WAKA_SIGNUP_CREATE_HOUR:'51'},{WAKA_SIGNUP_CREATE_HOUR:'1.5'},
  ]) expect(signupConfiguration({...off,...patch})).toEqual({mode:'closed'});
  expect(signupConfiguration({WAKA_STAGE:'development',WAKA_SIGNUP_ADMISSION:'off'})).toEqual({mode:'off'});
 });
