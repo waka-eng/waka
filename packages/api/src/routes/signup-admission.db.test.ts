@@ -71,30 +71,43 @@ function productionSignupWithoutChallenge() {
  vi.stubEnv('WAKA_TURNSTILE_SECRET',undefined);
 }
 
-it('creates password and Google accounts without browser proof while preserving the shared production creation limit',async()=>{
+it('shares the rolling production limit of 50 creation starts across password and Google',async()=>{
  productionSignupWithoutChallenge();
- vi.stubEnv('WAKA_SIGNUP_CREATE_HOUR','2');
- vi.stubEnv('WAKA_SIGNUP_CREATE_DAY','2');
+ vi.stubEnv('WAKA_SIGNUP_CREATE_HOUR',undefined);
+ vi.stubEnv('WAKA_SIGNUP_CREATE_DAY',undefined);
  for (const flow of ['password','google']) {
   expect(await (await request('signup-admission?flow='+flow)).json()).toEqual({mode:'off'});
  }
- expect((await signup('')).status).toBe(201);
+ // The first 50 rows fill the former daily cap but fall outside this hour.
+ // The next 48 are recent starts across both flows, including unfinished ones.
+ await t.sql`
+  WITH starts AS (
+   SELECT lpad(i::text,64,'0') AS hash, CASE WHEN i%2=0 THEN 'password' ELSE 'google' END AS flow,
+    clock_timestamp()-CASE WHEN i<=50 THEN interval '2 hours' ELSE interval '10 minutes' END AS started
+   FROM generate_series(1,98) AS i
+  )
+  INSERT INTO signup_admissions(nonce_hash,token_hash,stage,flow,state,created_at,expires_at,creation_started_at)
+  SELECT hash,hash,'production',flow,'creating',started,started+interval '5 minutes',started FROM starts`;
+ const passwordEmail=randomUUID()+'@example.test';
+ expect((await signup('',passwordEmail)).status).toBe(201);
  expect(new URL((await callback(await googleStart())).headers.get('location')!).pathname).toBe('/');
  expect(await t.sql`SELECT id FROM accounts`).toHaveLength(2);
  expect(await t.sql`SELECT id FROM profiles WHERE type='human'`).toHaveLength(2);
- expect(await t.sql`SELECT flow,state,nonce_hash=token_hash AS server_reservation FROM signup_admissions ORDER BY flow`).toEqual([
+ expect(await t.sql`SELECT flow,state,nonce_hash=token_hash AS server_reservation FROM signup_admissions WHERE state='consumed' ORDER BY flow`).toEqual([
   {flow:'google',state:'consumed',server_reservation:true},
   {flow:'password',state:'consumed',server_reservation:true},
  ]);
- // Returning Google sign-in ignores new-account capacity. Password and a new
- // Google identity both stop at the exact same durable ceiling.
+ // Returning sign-in still works when the 51st creation attempt is blocked.
+ expect((await request('login','',{email:passwordEmail,password:'synthetic-password-123'})).status).toBe(200);
  expect(new URL((await callback(await googleStart())).headers.get('location')!).pathname).toBe('/');
  const blocked=await signup('');
  expect(blocked.status).toBe(429);
- expect(blocked.headers.get('retry-after')).toBe('86400');
+ expect(await blocked.json()).toMatchObject({code:'signup_capacity'});
+ expect(blocked.headers.get('retry-after')).toBe('3600');
  claims={email:randomUUID()+'@example.test',sub:'google-'+randomUUID()};
  expect(new URL((await callback(await googleStart())).headers.get('location')!).searchParams.get('error')).toBe('signup_capacity');
  expect(await t.sql`SELECT id FROM accounts`).toHaveLength(2);
+ expect((await t.sql`SELECT count(*)::int AS starts FROM signup_admissions`)[0]?.starts).toBe(100);
  expect(verifyCalls).toBe(0);
 });
 

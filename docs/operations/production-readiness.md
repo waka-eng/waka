@@ -249,9 +249,12 @@ from the API's conditional same-stage SST `TurnstileSecret`. The production-envi
 `WAKA_TURNSTILE_SITE_KEY_PRODUCTION` and `WAKA_SIGNUP_ADMISSION_PRODUCTION` are
 the public variables. The workflow accepts `closed`, configured `turnstile`, or
 explicit `off`. Production `off` opens password and Google account creation
-without a challenge, with the existing shared creation ceiling (10 per hour and
-50 per day by default). The API requires matching production stage identity,
-`https://waka.im`, and absent Turnstile bindings for this mode.
+without a challenge and shares a single ceiling of 50 creation starts per
+rolling hour across both methods. There is no separate daily cap in this mode.
+The default lives in `packages/api/src/lib/signup-admission.ts`. SST can pass
+an explicit `WAKA_SIGNUP_CREATE_HOUR` value from 1 to 50, but the normal
+production workflow does not supply one. The API requires matching production
+stage identity, `https://waka.im`, and absent Turnstile bindings for this mode.
 Configured preflight requires real keys; preview supplies the proposed secret only
 in memory; the existing bounded stdin setter writes the fixed `TurnstileSecret`
 only for actual configured deployment. No credential is passed in argv. Secret
