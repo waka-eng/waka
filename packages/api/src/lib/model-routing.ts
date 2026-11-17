@@ -1,5 +1,5 @@
 /** Reviewed task routing. Credential presence never overrides an explicit choice. */
-import developmentGpt from '../../../../infra/gpt61-development.json';
+import modelProfile from '../../../../infra/model-profile.json';
 export type GenerationProvider = 'openai' | 'openrouter' | 'gemini';
 export class ModelConfigurationError extends Error {constructor(message:string){super(message);this.name='ModelConfigurationError';}}
 export const GPT_TERRA = 'gpt-6.1-terra';
@@ -21,7 +21,7 @@ export function configuredGenerationProvider(): GenerationProvider {
   return selected;
 }
 export function nativeGptTask(task: GptTask) {
-  const model = process.env[TEXT_TASK_ENV[task]]?.trim() || developmentGpt[TEXT_TASK_ENV[task]];
+  const model = process.env[TEXT_TASK_ENV[task]]?.trim() || modelProfile[TEXT_TASK_ENV[task]];
   if (model !== GPT_TERRA && model !== GPT_SOL) throw new ModelConfigurationError('Unsupported native GPT task model configuration');
   return { model, effort: task === 'synthesize' ? 'medium' as const : 'low' as const };
 }

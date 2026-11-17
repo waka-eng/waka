@@ -201,7 +201,7 @@ jobs:
       - name: Set development OpenAI secret through stdin
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
-        run: node scripts/set-development-openai-secret.mjs
+        run: node scripts/set-openai-secret.mjs
 
       # The migration runner and deployed functions must use the same target.
       - name: Set development database secret

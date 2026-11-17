@@ -1,6 +1,6 @@
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import profile from '../infra/gpt61-development.json' with {type:'json'};
+import profile from '../infra/model-profile.json' with {type:'json'};
 import {readAuditAwsJson,readAuditOutputs,auditFailure,printAuditReport} from './audit-diagnostics.mjs';
 export function auditDevelopmentGpt({outputs,expected,read}){
  const checks={},resources={};
@@ -8,7 +8,7 @@ export function auditDevelopmentGpt({outputs,expected,read}){
  for(const [role,output] of [['api','apiFunctionName'],['worker','backgroundWorkerFunctionName'],['principleRefresh','principleRefreshFunctionName']]){
   const name=outputs[output];if(typeof name!=='string'||!name){checks[role+'Identity']=false;continue;}
   const fn=read(['lambda','get-function-configuration','--function-name',name]),env=fn.Environment?.Variables??{};
-  checks.newHumanEmbeddingEnrollment=(checks.newHumanEmbeddingEnrollment??true)&&(role==='api'?env.WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2==='1':env.WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2===undefined);
+  checks.newHumanEmbeddingEnrollment=(checks.newHumanEmbeddingEnrollment??true)&&(role==='api'?env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2==='1':env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2===undefined);
   resources[role]=name;checks[role+'Identity']=typeof account==='string'&&/^\d{12}$/.test(account)&&fn.FunctionName===name&&fn.FunctionArn===`arn:aws:lambda:us-west-2:${account}:function:${name}`;
   let app;try{app=JSON.parse(env.SST_RESOURCE_App??'{}');}catch{app={};}
   checks[role+'Stage']=['development','dev'].includes(expected.stage)&&env.WAKA_STAGE===expected.stage&&app.name==='waka'&&app.stage===expected.stage;

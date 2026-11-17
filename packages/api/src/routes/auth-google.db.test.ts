@@ -112,7 +112,7 @@ it('rolls back the identity link and every earlier revocation if revoking keys f
 });
 
 it('uses the same new-human helper for Google signup and missing-human repair, with concurrent repair coalesced',async()=>{
- vi.stubEnv('WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2','1');vi.stubEnv('WAKA_STAGE','development');vi.stubEnv('SST_RESOURCE_App',JSON.stringify({name:'waka',stage:'development'}));
+ vi.stubEnv('WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2','1');vi.stubEnv('WAKA_STAGE','development');vi.stubEnv('SST_RESOURCE_App',JSON.stringify({name:'waka',stage:'development'}));
  const email=randomUUID()+'@example.test';expect((await link(email)).status).toBe(302);
  const[first]=await t.sql`SELECT p.id,e.active_space,e.active_epoch::text AS epoch FROM accounts a JOIN profiles p ON p.account_id=a.id LEFT JOIN profile_embedding_indexes e ON e.profile_id=p.id WHERE a.email=${email}`;
  expect(first).toMatchObject({active_space:'waka.embedding.gemini-2.text-retrieval.v1.768.raw',epoch:'1'});
@@ -124,7 +124,7 @@ it('uses the same new-human helper for Google signup and missing-human repair, w
 });
 it('does not enroll an existing native Google login even with the future enrollment flag enabled',async()=>{
  const email=randomUUID()+'@example.test';expect((await link(email)).status).toBe(302);
- vi.stubEnv('WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2','1');vi.stubEnv('WAKA_STAGE','development');vi.stubEnv('SST_RESOURCE_App',JSON.stringify({name:'waka',stage:'development'}));
+ vi.stubEnv('WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2','1');vi.stubEnv('WAKA_STAGE','development');vi.stubEnv('SST_RESOURCE_App',JSON.stringify({name:'waka',stage:'development'}));
  expect((await link(email)).status).toBe(302);
  expect(await t.sql`SELECT e.profile_id FROM profile_embedding_indexes e JOIN profiles p ON p.id=e.profile_id JOIN accounts a ON a.id=p.account_id WHERE a.email=${email}`).toHaveLength(0);
 });
