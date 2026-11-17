@@ -58,9 +58,9 @@ it('enrolls a new signup only with the closed enrollment flag and leaves an exis
  expect((await fixture.sql`SELECT e.active_space,e.active_epoch::text AS epoch FROM profile_embedding_indexes e JOIN profiles p ON p.id=e.profile_id JOIN accounts a ON a.id=p.account_id WHERE a.email=${email}`)[0]).toMatchObject({active_space:'waka.embedding.gemini-2.text-retrieval.v1.768.raw',epoch:'1'});
  expect(await fixture.sql`SELECT id FROM embedding_index_attempts`).toHaveLength(0);
 });
-it('rolls back signup entirely when enabled enrollment has no trusted production App identity',async()=>{
- vi.stubEnv('WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2','1');vi.stubEnv('WAKA_STAGE','production');
- const email=randomUUID()+'@example.test';expect((await send('/signup',email,'synthetic-password-123')).status).toBe(500);
+it('closes signup before identity writes when development App metadata is invalid',async()=>{
+ vi.stubEnv('WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2','1');vi.stubEnv('WAKA_STAGE','development');vi.stubEnv('SST_RESOURCE_App','{}');
+ const email=randomUUID()+'@example.test';expect((await send('/signup',email,'synthetic-password-123')).status).toBe(503);
  expect(await fixture.sql`SELECT id FROM accounts WHERE email=${email}`).toHaveLength(0);
  expect(await fixture.sql`SELECT profile_id FROM profile_embedding_indexes`).toHaveLength(0);
 });
@@ -78,9 +78,10 @@ it('creates normal durable index intent for the first capture of a helper-enroll
  expect((await fixture.sql`SELECT text FROM inspirations WHERE id=${i.id}`)[0].text).toBe(i.text);
 });
 
-it('leaves production signup native with enrollment explicitly off',async()=>{
+it('closes new production signup without admission config while enrollment is off',async()=>{
  vi.stubEnv('WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2','0');vi.stubEnv('WAKA_STAGE','production');vi.stubEnv('SST_RESOURCE_App',JSON.stringify({name:'waka',stage:'production'}));
- const email=randomUUID()+'@example.test';expect((await send('/signup',email,'synthetic-password-123')).status).toBe(201);
+ const email=randomUUID()+'@example.test';expect((await send('/signup',email,'synthetic-password-123')).status).toBe(503);
+ expect(await fixture.sql`SELECT id FROM accounts WHERE email=${email}`).toHaveLength(0);
  expect(await fixture.sql`SELECT e.profile_id FROM profile_embedding_indexes e JOIN profiles p ON p.id=e.profile_id JOIN accounts a ON a.id=p.account_id WHERE a.email=${email}`).toHaveLength(0);
  expect(await fixture.sql`SELECT id FROM embedding_index_attempts`).toHaveLength(0);
 });

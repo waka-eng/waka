@@ -51,6 +51,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { SurfaceHeader } from "../components/SurfaceHeader";
 
 import { Companion } from "../components/Companion";
+import {NativePasswordSignup,SignupAdmission} from "../components/SignupAdmission";
+import {isMobileBuild} from "../lib/platform";
 import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSignIn";
 import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
@@ -130,10 +132,14 @@ interface SignupFormProps {
   onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
-export function SignupForm({
+export function SignupForm(props:SignupFormProps = {}):JSX.Element{
+ return isMobileBuild?<NativePasswordSignup locale={props.locale??readStoredLocale()}><PasswordForm {...props} admissionOff/></NativePasswordSignup>:<PasswordForm {...props}/>;
+}
+function PasswordForm({
   locale: shellLocale = readStoredLocale(),
   onLocaleChange,
-}: SignupFormProps = {}): JSX.Element {
+  admissionOff=false,
+}: SignupFormProps&{admissionOff?:boolean}): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const { signup } = useAuth();
@@ -146,6 +152,9 @@ export function SignupForm({
   const [fieldErrors, setFieldErrors] = useState<SignupFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [admissionReady,setAdmissionReady]=useState(admissionOff);
+  const [uncertain,setUncertain]=useState(false);
+  const [admissionRevision,setAdmissionRevision]=useState(0);
 
   useEffect(() => {
     setValues((prev) => {
@@ -166,12 +175,12 @@ export function SignupForm({
         return next;
       });
     }
-    if (formError) setFormError(null);
+    if (formError&&!uncertain) setFormError(null);
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
-    if (submitting) return;
+    if (submitting||!admissionReady||uncertain) return;
 
     // Cheap pre-flight validation so common typos don't even hit the network.
     const local: SignupFieldErrors = {};
@@ -230,8 +239,14 @@ export function SignupForm({
            the world quietly regressed the door, and only pressing the door's
            submit with the network dead showed it. */
         if (err.status === 0) {
-          setFormError(t(locale, "loginNetworkError"));
+          setUncertain(true);setFormError(t(locale,"signupOutcomeUnknown"));
+        } else if(err.code?.startsWith("signup_")&&err.code!=="signup_outcome_unknown"){
+          setAdmissionReady(false);setAdmissionRevision(v=>v+1);setFormError(t(locale,"signupVerificationUnavailable"));
+        } else if(err.status>=500){
+          setUncertain(true);setFormError(t(locale,"signupOutcomeUnknown"));
+
         } else {
+          setAdmissionReady(false);setAdmissionRevision(v=>v+1);
           if (err.fieldErrors) {
             setFieldErrors(err.fieldErrors as SignupFieldErrors);
           }
@@ -240,8 +255,8 @@ export function SignupForm({
           }
         }
       } else {
-        setFormError(
-          t(locale, "loginNetworkError"),
+        setUncertain(true);setFormError(
+          t(locale, "signupOutcomeUnknown"),
         );
       }
     } finally {
@@ -360,7 +375,8 @@ export function SignupForm({
           save or onboarding's. `.login-card` is shared by four screens, so
           the weight this control needs had to be asked for by name rather
           than inherited by ancestor. */}
-      <button className="btn-primary btn-doorway" type="submit" disabled={submitting}>
+      {!uncertain&&!admissionOff&&<SignupAdmission key={admissionRevision} flow="password" locale={locale} onReady={setAdmissionReady}/>}
+      <button className="btn-primary btn-doorway" type="submit" disabled={submitting||!admissionReady||uncertain}>
         {submitting ? t(locale, "loginCreatingAccount") : t(locale, "loginCreateAccount")}
       </button>
     </form>
@@ -604,11 +620,12 @@ type Mode = "login" | "signup";
  * for the lifetime of the page render.
  */
 export default function LoginPage(): JSX.Element {
-  const [mode, setMode] = useState<Mode>("login");
+  const location = useLocation();
+  // A browser handoff chooses the visible tab only; it carries no proof.
+  const [mode, setMode] = useState<Mode>(()=>new URLSearchParams(location.search).get('signup')==='1'?'signup':'login');
   const loginTabRef = useRef<HTMLButtonElement>(null);
   const signupTabRef = useRef<HTMLButtonElement>(null);
   const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
-  const location = useLocation();
   const navigate = useNavigate();
   /* Why the door is standing here, when the reason is "we could not ask" —
      see `AuthContextValue.serverUnreachable`. It never decides access. */
@@ -829,7 +846,7 @@ export default function LoginPage(): JSX.Element {
             button is the same button, in the place an alternative goes. */}
         <OrDivider locale={locale} />
 
-        <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} />
+        <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} needsVerification={oauthErrorCode === "signup_verification_required" || oauthErrorCode === "signup_capacity" || oauthErrorCode === "signup_admission_used" || oauthErrorCode === "signup_busy" || oauthErrorCode === "signup_closed"} />
 
         {/* BACK TO WHAT THEY WERE READING — see `wayBackFrom` for why this is
             the only arrival this page can honestly offer a way out of, and

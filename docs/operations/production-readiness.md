@@ -2,7 +2,7 @@
 
 Status: preparation only, 2026-11-17. Owner selected public signup after abuse and
 human acceptance, current dev features/models including Embedding2, a combined
-$10/month dev+production AI allowance, disclosed nontraining retention, Google and
+$10/month dev+production AI spending target with alerts and existing quotas, disclosed nontraining retention, Google and
 password sign-in, and basic existing managed recovery verification before any
 paid upgrade. This document does not authorize a production deploy, source-data
 transfer, backfill, billing change, restore or credential action.
@@ -25,36 +25,84 @@ production `connectionTarget` uses `waka-production-<profile>`, isolated browser
 `WAKA_HOME`, and the key-only HOME placeholder. Retain those semantics and existing
 tests while forward-porting latest dev copy, Embedding2 recall and journal paths.
 Do not take the dev tree wholesale, discard prod-only protections, or label this
-preparation branch an exact production integration. A small separately reviewed
-local integration proposal/merge candidate is still required; no main ref changed.
+preparation branch a live production release. Local merge9a7cfff5 and the
+53db0128 follow-up preserve those protections and are the reviewed source input
+for this admission work. Final exact release review is still required; no main
+ref or deployed production state changed.
 
-## Admission and AI allowance — open gates
+## Signup admission and AI target
 
-Public signup is not yet launch-ready. Password signup and Google new-account
-creation currently lack a shared abuse admission gate. Login identifier/device
-throttles are not signup controls. Per-source login throttling is unset because
-CloudFront's edge address and a publicly reachable FunctionURL make header trust
-ambiguous; do not set `WAKA_TRUSTED_PROXY_HOPS=1` from guesswork. Returning-account
-login/recovery must remain usable when new-account admission is held. The minimal
-ingress/human mechanism and bounded durable admission design require Main review;
-no vendor, table, invitation-only substitution or UI-only proof is added here.
-Real first-time human acceptance is a separate gate from automated abuse controls.
+Source preparation now includes one conditional Turnstile adapter and one
+`signup_admissions` table. No vendor account, widget, secret or live verification
+was created. Production defaults to `closed` for NEW accounts; local/dev defaults
+to `off`. `turnstile` requires exact trusted stage/App/origin, a real same-stage
+sitekey/secret and a valid signing secret. Invalid/missing production settings
+close new signup only. Existing password login and verified Google recovery do
+not load a challenge or depend on its readiness.
 
-The existing 60 shared starts/account/hour, 20 chat model slots/account/hour and
-recall 10/min + 60/hour remain. They are per-database/account counts, not a combined
-monthly dollar stop. New accounts, job fanout and separate stages matter.
-OpenAI project spend alerts do not stop requests. OpenRouter credit limits cover
-only their actual key; Gemini/native OpenAI/media/legacy001 can remain outside.
-Native cost can be unknown: do not record it as zero, refund uncertainty, equate
-reported cost with invoices, or promise a stop exactly at$10. AWS hosting/monitoring
-alerts are separate from the owner's AI allowance. No top-up is approved.
+The shared password/Google helper claims UNIQUE token and nonce digests BEFORE
+Siteverify, since vendor replay detection is eventually consistent. GET readiness is read-only; nonce-cookie issuance is an Origin-checked POST.
+HTTP is outside SQL locks, fixed endpoint/no redirects/no retries,8s and8KiB. Required proof
+fields are exact hostname, action, cdata and <=300s freshness. No IP is guessed
+from XFF. A signed flow/stage/origin grant is consumed with account+human creation;
+creation-start reservations persist across failure/uncertainty and account erasure.
+Unknown outcomes cannot replay the same grant or silently recreate an account.
 
-Main must establish actual provider/project/key scope, reset period, enforcement
-versus alert behavior, exhaustion/recovery and all-stage coverage. If enforced
-provider allocations cannot cover every path within the total, public paid
-admission remains held for a concrete enforcement decision. No new central cost
-service, reroute or pricing framework is implied. Billing consoles still needing
-authentication provide no policy/enforcement evidence; “approve” does not sign in.
+New Google users without a grant return to verification, then start a second
+ordinary OAuth round. Its state and PKCE are bound to the signed grant; no raw
+proof or Google identity is passed in URL parameters or stored in admission rows.
+Existing identities, verified-email takeover and owned missing-human repair retain
+the existing paths. Native new-account continuation keeps only the existing signed
+mobile binding, verifies on the web, then restarts ordinary mobile OAuth. A routing
+`mobile=1` flag grants no authority without that cookie.
+
+Configured password admission is a same-origin web flow. The native resource
+transport intentionally omits WebView cookies and cannot carry this web grant.
+Native signup reads only public readiness: OFF keeps the existing native form;
+closed/unavailable shows that state while sign-in remains usable; configured
+verification offers a browser handoff to the checked API origin's
+`/login?signup=1`. The hint selects a tab only. No email, password, nonce, grant or
+session is passed, and no cookies are copied. After web signup the user returns
+and signs in normally. Origin/cookie checks stay unchanged. Actual native-device
+handoff and human acceptance remain unpassed; production stays closed until
+activation and human-use gates pass.
+Existing installed bundles do not gain this handoff from a web deployment.
+When verification is configured, legacy cookie-less/native-Origin refusals
+include the same stage-checked public browser signup URL and return/sign-in
+instructions; closed configuration never advertises browser signup availability.
+No native build, store release or paused native work is resumed here.
+
+Beta defaults per stage database are20 verification reservations/hour,100/day,
+and10 creation-start reservations/hour,50/day. Every instance shares the SQL
+reservation, including invalid/unknown attempts. Configuration is strict and
+bounded (verification max100/hour500/day, creation max50/hour200/day); no quotas
+are replenished by deleting an account. Digests are kept at least seven days, then pruned in bounded batches on new
+attempts. Without new attempts they can remain; no scheduled purge or exact
+deletion deadline is claimed. No new job is added. **An attacker can exhaust the global invalid
+attempt budget and temporarily refuse legitimate NEW users.** These bounds do not
+identify a source or replace ingress/DDoS protection. Existing login throttles and
+per-source trust ambiguity remain: do not invent `WAKA_TRUSTED_PROXY_HOPS=1`.
+No invitation-only substitute or UI-only checkbox is called human verification.
+Actual vendor/sitekey/privacy/activation, ingress and human acceptance remain open.
+
+The owner explicitly chose a **$10/month combined dev+production spending TARGET
+with alerts and existing quotas**, not an automatic dollar stop. Earlier local
+preparation wording requiring a strict cap is superseded; old receipts are kept.
+The existing60 shared starts/account/hour,20 chat model slots/account/hour and
+recall10/min+60/hour remain. They are counts, not dollars. No shared spend service,
+new price framework, provider reroute or top-up is requested.
+
+Main/operator must own alert destinations and a monthly all-provider review across
+OpenAI, OpenRouter and direct Google, including media and native001/retained paths.
+Record actual account/project/key/stage scope, reset periods, thresholds and alert
+recipient/delivery. OpenAI spend alerts do not stop requests; an OR key credit limit
+covers that key only. Existing AWS hosting/monitoring budgets are separate.
+Unknown native costs remain unknown; reported usage is not an invoice and should
+not be described as zero or as guaranteed spending within$10. Review usage and
+respond to alerts by an explicitly approved configuration pause or budget choice;
+do not hide quota exhaustion with account splitting, resets or retries. Actual
+billing/account metadata and alert delivery may still require authenticated access;
+approval alone does not sign in. No hard-cap or enforced-invoice claim is made.
 
 ## Credential and privacy readiness
 
@@ -74,6 +122,10 @@ Direct Google audio/HEIC/native001 terms are separate. Preserve restrictive OR
 collection/ZDR preferences exactly; incompatible, invalid or unproven account
 requirements hold processing, not a reason to relax flags or select another route.
 Logs/receipts must exclude memory words, tokens, raw error bodies, cookies and keys.
+The human widget itself contacts Cloudflare and can process browser/network
+metadata under its policy, even though our Siteverify POST omits remoteip. Its
+site configuration, terms/disclosure and real human acceptance remain required
+before activation; no claim that omitting remoteip prevents all vendor IP data.
 
 ## Supported sign-in and manual recovery
 
@@ -135,9 +187,10 @@ recovery-time/data-loss target or paid backup upgrade was selected.
 ## Migration, Embedding2 and rollback sequence
 
 1. Bind exact release/tree and actual production target/ledger. Current source has
-   89 SQL files through 0088; accepted production c395 officially applied 0086/0087,
+   90 SQL files through 0089; accepted production c395 officially applied 0086/0087,
    but no independent current production-ledger read is attested here.
-   Review the only new migration 0088 and exact staged upgrade proof; no reset,
+   Review additive0088 (embedding indexes) and0089 (signup admission), with the
+   unchanged prior journal and matching staged proofs; no reset,
    down-migration or stale source restoration. Inspect the production integration
    conflicts above before an exact release can be approved.
 2. Reuse frozen count/build/current-coverage/cutover tools and prior source proofs;
@@ -173,6 +226,29 @@ recovery-time/data-loss target or paid backup upgrade was selected.
    Preserve all-space invalidation on wording edits and all unknown-dispatch holds.
 
 Final readiness still needs bounded live auth/tenant/erasure/alarm delivery and
-real first-time human observations, actual providers/privacy/enforcement, exact
+real first-time human observations, actual providers/privacy/alerts, exact
 integration/target/backup coverage, and the final production/data/spend approval.
 No synthetic/source pass closes those external gates.
+
+## Conditional challenge configuration and acceptance
+
+Current source defaults are API dev-off /production-closed. Workers,
+PrincipleRefresh and cleanup receive neither Turnstile secret nor sitekey.
+`WAKA_SIGNUP_ADMISSION_<STAGE>` and `WAKA_TURNSTILE_SITE_KEY_<STAGE>` are explicit
+GitHub variables (DEVELOPMENT/PRODUCTION suffixes); they are not proof of a
+configured vendor site. The private runtime `WAKA_TURNSTILE_SECRET` comes only
+from the API's conditional same-stage SST `TurnstileSecret`. A separately approved
+private stdin setup is needed before enabling; do not pass it in argv or use a
+public dummy key. This candidate performs no setup and both deployment preflight and audits intentionally
+reject activation until a later exact review changes that expectation.
+
+Dev runtime acceptance retains the old23 check names and adds ONE aggregate,
+`signupAdmissionIsolated` (24 total). It attests API off plus absent human
+secret/sitekey, no signup configuration on worker/PrincipleRefresh/cleanup, and
+keyless cleanup. The existing `monitorCleanupFunctionName` output is now emitted
+in dev as well, adding one read-only function-config read to this audit.
+Production acceptance adds `signupAdmissionIsolated` and
+`cleanupNoSignupSecrets` while preserving every prior check; API must be closed
+and all four roles lack Turnstile material. Values stay in memory; only booleans
+and existing safe resource names leave the auditor. Actual deployed24/production
+audit evidence is still required; source tests do not substitute for it.

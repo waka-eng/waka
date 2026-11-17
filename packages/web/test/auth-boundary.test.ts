@@ -61,6 +61,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     fetchCurrentViewer: vi.fn(async () => null),
+    fetchSignupAdmission: vi.fn(async()=>({mode:"off"})),
     login: vi.fn(),
     signup: vi.fn(),
     logout: vi.fn(async () => undefined),

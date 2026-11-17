@@ -17,7 +17,7 @@ function fixture(){
  const managed=[{PolicyArn:'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'}];
  const read=(args:string[])=>{
   if(args[0]==='sts')return {Account:'123456789012'};
-  if(args[1]==='get-function-configuration')return args.some(x=>x.includes(':function:'))?{FunctionArn:functionArn,Role:roleArn,Timeout:30,Environment:{Variables:consumerEnv}}:{FunctionName:args.at(-1),FunctionArn:`arn:aws:lambda:us-west-2:123456789012:function:${args.at(-1)}`,Environment:{Variables:{...env,...(args.at(-1)===outputs.apiFunctionName?{WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2:'0'}:{})}}};
+  if(args[1]==='get-function-configuration')return args.some(x=>x.includes(':function:'))?{FunctionArn:functionArn,Role:roleArn,Timeout:30,Environment:{Variables:consumerEnv}}:{FunctionName:args.at(-1),FunctionArn:`arn:aws:lambda:us-west-2:123456789012:function:${args.at(-1)}`,Environment:{Variables:{...env,...(args.at(-1)===outputs.apiFunctionName?{WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2:'0',WAKA_SIGNUP_ADMISSION:'closed'}:{})}}};
   if(args[1]==='get-bucket-notification-configuration')return {QueueConfigurations:[{Events:['s3:ObjectCreated:*'],QueueArn:arn}]};
   if(args[1]==='get-queue-url')return {QueueUrl:args.includes('waka-production-dlq')?'dlq':'queue'};
   if(args[1]==='get-queue-attributes')return {Attributes:args.includes('dlq')?{MessageRetentionPeriod:'1209600'}:{Policy:JSON.stringify(policy),VisibilityTimeout:'180',MessageRetentionPeriod:'1209600',RedrivePolicy:JSON.stringify({maxReceiveCount:5,deadLetterTargetArn:'arn:aws:sqs:us-west-2:123456789012:waka-production-dlq'})}};
@@ -31,7 +31,7 @@ function fixture(){
 }
 it('accepts stage-scoped runtime and durable event wiring without returning credential values',async()=>{
  const {auditProductionRelease}=await load(),f=fixture(),r=auditProductionRelease(f);
- expect(r.passed).toBe(true);expect(JSON.stringify(r)).not.toMatch(/PRIVATE_DB|PRIVATE_KEY/);
+ expect(r.passed).toBe(true);expect(Object.keys(r.checks)).toHaveLength(56);expect(JSON.stringify(r)).not.toMatch(/PRIVATE_DB|PRIVATE_KEY/);
  expect(r.checks.sendPolicyScoped).toBe(true);expect(r.checks.cleanupIamIsolated).toBe(true);
  expect(r.actualLatePutExercise).toBe(false);expect(r.externalAlertDeliveryVerified).toBe(false);
 });
@@ -105,4 +105,10 @@ it('checks every model runtime identity/profile and keeps production enrollment 
   {WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2:'1'},{SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'development'})},
  ]){const f=fixture(),read=f.read;expect(auditProductionRelease({...f,read:(args:string[])=>{const row=read(args);if(args[1]==='get-function-configuration'&&args.at(-1)===f.outputs[role])return {...row,Environment:{Variables:{...row.Environment!.Variables,...patch}}};return row;}}).passed).toBe(false);}
  const f=fixture(),read=f.read;expect(auditProductionRelease({...f,read:(args:string[])=>{const row=read(args);return args.at(-1)===f.outputs.principleRefreshFunctionName?{...row,FunctionArn:'arn:aws:lambda:us-west-2:999999999999:function:foreign'}:row;}}).passed).toBe(false);
+});
+
+it('requires production signup closed and human secrets absent in API/worker/principle/cleanup',async()=>{
+ const {auditProductionRelease}=await load();const baseline=auditProductionRelease(fixture());expect(baseline.checks.signupAdmissionIsolated).toBe(true);expect(baseline.checks.cleanupNoSignupSecrets).toBe(true);
+ for(const role of ['apiFunctionName','backgroundWorkerFunctionName','principleRefreshFunctionName'] as const)for(const patch of [{WAKA_TURNSTILE_SECRET:'SYNTHETIC_PRIVATE_HUMAN_KEY'},{WAKA_TURNSTILE_SITE_KEY:'synthetic-site'},{WAKA_SIGNUP_ADMISSION:'turnstile'}]){const f=fixture(),read=f.read;const report=auditProductionRelease({...f,read:(args:string[])=>{const row=read(args);return args.at(-1)===f.outputs[role]&&'Environment' in row?{...row,Environment:{Variables:{...row.Environment!.Variables,...patch}}}:row;}});expect(report.passed).toBe(false);expect(report.checks.signupAdmissionIsolated).toBe(false);expect(JSON.stringify(report)).not.toContain('SYNTHETIC_PRIVATE');}
+ const f=fixture();Object.assign(f.consumerEnv,{WAKA_TURNSTILE_SECRET:'SYNTHETIC_PRIVATE_HUMAN_KEY'});const r=auditProductionRelease(f);expect(r.checks.cleanupNoSignupSecrets).toBe(false);expect(r.checks.cleanupIsolated).toBe(false);expect(r.passed).toBe(false);
 });

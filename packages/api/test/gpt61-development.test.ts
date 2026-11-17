@@ -69,14 +69,14 @@ it('limits the development Actions key to the three setup/audit steps',()=>{
  expect(workflow.slice(0,workflow.indexOf('\n    steps:'))).not.toContain('OPENAI_API_KEY');
 });
 function auditFixture(){
- const outputs={apiFunctionName:'api',backgroundWorkerFunctionName:'worker',principleRefreshFunctionName:'principle'},expected={stage:'development',openAi:'PRIVATE_KEY',database:'PRIVATE_DB',replies:'1'};
+ const outputs={apiFunctionName:'api',backgroundWorkerFunctionName:'worker',principleRefreshFunctionName:'principle',monitorCleanupFunctionName:'cleanup'},expected={stage:'development',openAi:'PRIVATE_KEY',database:'PRIVATE_DB',replies:'1'};
  const env={...profile,OPENAI_API_KEY:expected.openAi,DB_CONNECTION_URL:expected.database,WAKA_STAGE:'development',WAKA_CONVERSATION_REPLIES:'1',SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'development'}),WAKA_BACKGROUND_WORKER_FUNCTION:'worker'};
  const transport:Record<string,unknown>={api:'1',worker:'1'};
- const read=(args:string[])=>args[0]==='sts'?{Account:'123456789012'}:{FunctionName:args.at(-1),FunctionArn:`arn:aws:lambda:us-west-2:123456789012:function:${args.at(-1)}`,Environment:{Variables:{...env,...(args.at(-1)==='api'?{WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2:'1'}:{}),...(transport[String(args.at(-1))]===undefined?{}:{WAKA_DB_PREPARED_QUERIES:transport[String(args.at(-1))]})}}};return {outputs,expected,env,transport,read};
+ const read=(args:string[])=>args[0]==='sts'?{Account:'123456789012'}:args.at(-1)==='cleanup'?{FunctionName:'cleanup',FunctionArn:'arn:aws:lambda:us-west-2:123456789012:function:cleanup',Environment:{Variables:{SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'development'})}}}:{FunctionName:args.at(-1),FunctionArn:`arn:aws:lambda:us-west-2:123456789012:function:${args.at(-1)}`,Environment:{Variables:{...env,...(args.at(-1)==='api'?{WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2:'1',WAKA_SIGNUP_ADMISSION:'off'}:{}),...(transport[String(args.at(-1))]===undefined?{}:{WAKA_DB_PREPARED_QUERIES:transport[String(args.at(-1))]})}}};return {outputs,expected,env,transport,read};
 }
 it('audits all three actual model-runtime bindings and refuses missing/wrong profile/key/identity',async()=>{
  const {auditDevelopmentGpt}=await import(/* @vite-ignore */resolve(root,'scripts/dev-gpt-config-audit.mjs'));
- const accepted=auditDevelopmentGpt(auditFixture());expect(accepted.passed).toBe(true);expect(Object.keys(accepted.checks).sort()).toEqual(['api','worker','principleRefresh'].flatMap(role=>['Identity','Stage','OpenAiKey','Database','Profile','Chat','DatabaseTransport'].map(field=>role+field)).concat(['workerPointer','newHumanEmbeddingEnrollment']).sort());
+ const accepted=auditDevelopmentGpt(auditFixture());expect(accepted.passed).toBe(true);expect(Object.keys(accepted.checks).sort()).toEqual(['api','worker','principleRefresh'].flatMap(role=>['Identity','Stage','OpenAiKey','Database','Profile','Chat','DatabaseTransport'].map(field=>role+field)).concat(['workerPointer','newHumanEmbeddingEnrollment','signupAdmissionIsolated']).sort());
  for(const [role,flag] of [['api',undefined],['api','0'],['api','true'],['worker','0'],['worker','1'],['principle','0'],['principle','1']]){const f=auditFixture();const r=auditDevelopmentGpt({...f,read:(args:string[])=>{const row=f.read(args);if(args.at(-1)===role&&'Environment' in row)Object.assign(row.Environment!.Variables,{WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2:flag});return row;}});expect(r.passed).toBe(false);expect(r.checks.newHumanEmbeddingEnrollment).toBe(false);}
  for(const [role,value] of [['api',undefined],['api','0'],['worker','true'],['principle','1']]){const f=auditFixture();f.transport[String(role)]=value;const report=auditDevelopmentGpt(f);expect(report.passed).toBe(false);expect(report.checks[role==='principle'?'principleRefreshDatabaseTransport':role+'DatabaseTransport']).toBe(false);}
  for(const patch of [{OPENAI_API_KEY:'wrong'},{WAKA_MODEL_CHAT:'deepseek/deepseek-v4.1-flash-1017'},{WAKA_MODEL_SYNTHESIZE:'gpt-6.1-terra'},{WAKA_GENERATION_PROVIDER:'openrouter'},{SST_RESOURCE_App:'{}'},{WAKA_STAGE:'production'},{SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'production'})}]){const f=auditFixture();Object.assign(f.env,patch);const r=auditDevelopmentGpt(f);expect(r.passed).toBe(false);expect(JSON.stringify(r)).not.toMatch(/PRIVATE_KEY|PRIVATE_DB/);}
@@ -92,9 +92,11 @@ it('executes the audit CLI with isolated fake AWS and emits valid safe failure/s
 
 it('executes actual API/worker environment expressions; default/prod and other consumers stay unprepared',()=>{
  function environment(name:string){let value='';const walk=(n:ts.Node)=>{if(ts.isVariableDeclaration(n)&&n.name.getText(ast)===name&&n.initializer&&ts.isNewExpression(n.initializer)){const options=n.initializer.arguments?.[1];if(options&&ts.isObjectLiteralExpression(options))for(const p of options.properties)if(ts.isPropertyAssignment(p)&&p.name.getText(ast)==='environment')value=p.initializer.getText(ast);}ts.forEachChild(n,walk);};walk(ast);if(!value)throw Error('Missing runtime environment');return value;}
- for(const isDevelopmentDomain of [false,true])for(const name of ['api','backgroundWorker']){
-  const env=Function('isDevelopmentDomain','$app','runtimeEnvironment','jobWakeGroup','jobWakeRole','backgroundWorker',`return (${environment(name)});`)(isDevelopmentDomain,{stage:isDevelopmentDomain?'development':'production'},{WAKA_STAGE:isDevelopmentDomain?'development':'production'},{name:'group'},{arn:'role'},{name:'worker'});
+ for(const isDevelopmentDomain of [false,true])for(const name of ['api','backgroundWorker'])for(const challenge of [false,true]){
+  const env=Function('signupAdmissionMode','turnstileSecret','process','isDevelopmentDomain','$app','runtimeEnvironment','jobWakeGroup','jobWakeRole','backgroundWorker',`return (${environment(name)});`)(challenge?'turnstile':'off',challenge?{value:'SYNTHETIC_CHALLENGE_SECRET'}:undefined,{env:{WAKA_TURNSTILE_SITE_KEY:'synthetic-site-key'}},isDevelopmentDomain,{stage:isDevelopmentDomain?'development':'production'},{WAKA_STAGE:isDevelopmentDomain?'development':'production'},{name:'group'},{arn:'role'},{name:'worker'});
   expect(env.WAKA_DB_PREPARED_QUERIES).toBe(isDevelopmentDomain?'1':undefined);
+  expect(env.WAKA_TURNSTILE_SECRET).toBe(challenge&&name==='api'?'SYNTHETIC_CHALLENGE_SECRET':undefined);
+  expect(env.WAKA_SIGNUP_ADMISSION).toBe(name==='api'?(challenge?'turnstile':'off'):undefined);
   expect(env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2).toBe(name==='api'?(isDevelopmentDomain?'1':'0'):undefined);
  }
  expect(initializer('runtimeEnvironment')).not.toContain('WAKA_DB_PREPARED_QUERIES');
@@ -116,5 +118,16 @@ it('keeps production key exposure step-scoped and refuses a missing key before p
  const env=Object.fromEntries(['AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_REGION','AUTH_GOOGLE_ID','AUTH_GOOGLE_SECRET','AUTH_SECRET','JWT_SECRET','DB_CONNECTION_URL','GEMINI_API_KEY','OPENROUTER_API_KEY','WAKA_DISCORD_WEBHOOK_URL'].map(name=>[name,'SYNTHETIC_PRIVATE_VALUE']));
  const missing=spawnSync('/bin/bash',['-c',body],{env,encoding:'utf8'});expect(missing.status).toBe(1);expect(missing.stderr).toContain('OPENAI_API_KEY');expect(missing.stdout+missing.stderr).not.toContain('SYNTHETIC_PRIVATE');
  expect(spawnSync('/bin/bash',['-c',body],{env:{...env,OPENAI_API_KEY:'SYNTHETIC_PRIVATE_VALUE'},encoding:'utf8'}).status).toBe(0);
+ expect(spawnSync('/bin/bash',['-c',body],{env:{...env,OPENAI_API_KEY:'SYNTHETIC_PRIVATE_VALUE',WAKA_SIGNUP_ADMISSION:'turnstile'},encoding:'utf8'}).status).toBe(1);
  for(const operation of ['Preserve current heartbeat','Release legacy CloudFront','Set SST production secrets','Apply production database migrations','Deploy SST production stage'])expect(workflow.indexOf('Validate deployment environment')).toBeLessThan(workflow.indexOf(operation));
+});
+
+it('creates the challenge secret only for an explicitly configured supported stage',()=>{
+ for(const stage of [false,true])for(const mode of ['off','closed','turnstile']){const names:string[]=[];class Secret{constructor(name:string){names.push(name);}}Function('isModelProfileStage','signupAdmissionMode','sst',`return (${initializer('turnstileSecret')});`)(stage,mode,{Secret});expect(names).toEqual(stage&&mode==='turnstile'?['TurnstileSecret']:[]);}
+ expect(initializer('principleRefresh')).not.toContain('WAKA_TURNSTILE_SECRET');
+});
+
+it('adds exactly one24th dev aggregate for signup-off and model/human-secret isolation including cleanup',async()=>{
+ const {auditDevelopmentGpt}=await import(/* @vite-ignore */resolve(root,'scripts/dev-gpt-config-audit.mjs'));const base=auditFixture();expect(Object.keys(auditDevelopmentGpt(base).checks)).toHaveLength(24);
+ for(const role of ['api','worker','principle','cleanup'])for(const patch of [{WAKA_TURNSTILE_SECRET:'SYNTHETIC_PRIVATE_HUMAN_KEY'},{WAKA_TURNSTILE_SITE_KEY:'synthetic-site'},{WAKA_SIGNUP_ADMISSION:'turnstile'}]){const f=auditFixture(),read=f.read;const report=auditDevelopmentGpt({...f,read:(args:string[])=>{const row=read(args);return args.at(-1)===role&&'Environment' in row?{...row,Environment:{Variables:{...row.Environment!.Variables,...patch}}}:row;}});expect(report.passed).toBe(false);expect(report.checks.signupAdmissionIsolated).toBe(false);expect(JSON.stringify(report)).not.toContain('SYNTHETIC_PRIVATE');}
 });

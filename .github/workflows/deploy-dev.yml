@@ -57,6 +57,8 @@ env:
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_APP }}
   DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL_DEV }}
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  WAKA_SIGNUP_ADMISSION: ${{ vars.WAKA_SIGNUP_ADMISSION_DEVELOPMENT || 'off' }}
+  WAKA_TURNSTILE_SITE_KEY: ${{ vars.WAKA_TURNSTILE_SITE_KEY_DEVELOPMENT }}
   WAKA_OPENROUTER_DATA_COLLECTION: ${{ vars.WAKA_OPENROUTER_DATA_COLLECTION_DEVELOPMENT }}
   WAKA_OPENROUTER_REQUIRE_ZDR: ${{ vars.WAKA_OPENROUTER_REQUIRE_ZDR_DEVELOPMENT }}
   WAKA_OPERATIONS_ALERT_TOPIC_ARN: ${{ vars.WAKA_OPERATIONS_ALERT_TOPIC_ARN_DEVELOPMENT }}
@@ -137,6 +139,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "${WAKA_SIGNUP_ADMISSION:-off}" != "off" ]]; then
+            printf 'This reviewed candidate requires signup admission off.\n' >&2
+            exit 1
+          fi
           required=(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION OPENROUTER_API_KEY OPENAI_API_KEY DB_CONNECTION_URL)
           missing=()
           for name in "${required[@]}"; do

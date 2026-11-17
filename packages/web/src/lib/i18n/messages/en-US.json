@@ -794,5 +794,13 @@
   "worldPastChats": "Past chats",
   "worldConversationEarlierMemory": "Answers from your agent’s memory.",
   "worldNoteNew": "New inspiration",
-  "worldPastInspirations": "Past inspirations"
+  "worldPastInspirations": "Past inspirations",
+  "signupVerificationRequired": "Verify with Cloudflare to create an account. Existing accounts can sign in.",
+  "signupVerificationChecking": "Checking verification…",
+  "signupVerified": "Verified. Continue to create your account.",
+  "signupVerificationUnavailable": "New account verification is unavailable or expired. Existing accounts can still sign in.",
+  "signupVerificationRetry": "Try verification again",
+  "signupOutcomeUnknown": "Account setup may have finished. Sign in to check before creating another account.",
+  "signupNativeBrowserHint": "Create your account in the browser, then return here and sign in.",
+  "signupOpenBrowser": "Create account in browser"
 }

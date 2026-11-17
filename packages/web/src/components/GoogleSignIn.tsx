@@ -20,6 +20,7 @@
  * mount — so it stayed with the page. This file only says what a code MEANS.
  */
 
+import {SignupAdmission} from "./SignupAdmission";
 import { apiPath } from "../lib/api";
 import { readStoredLocale, t } from "../lib/locales";
 import type { MessageKey, SupportedLocale } from "../lib/locales";
@@ -39,8 +40,9 @@ import { isMobileBuild } from '../lib/platform';
  * unit-tested and reused if a future page adds a "Re-authenticate with
  * Google" affordance.
  */
-export function googleLoginUrl(returnTo: string): string {
+export function googleLoginUrl(returnTo: string, mobile = false): string {
   const params = new URLSearchParams({ returnTo });
+  if(mobile)params.set("mobile","1");
   return `${apiPath("/auth/google/login")}?${params.toString()}`;
 }
 
@@ -54,6 +56,12 @@ export function googleLoginUrl(returnTo: string): string {
  * if the API adds a new failure mode before the SPA learns about it.
  */
 const OAUTH_ERROR_KEYS = {
+  signup_verification_required: "signupVerificationRequired",
+  signup_closed: "signupVerificationUnavailable",
+  signup_capacity: "signupVerificationUnavailable",
+  signup_busy: "signupVerificationUnavailable",
+  signup_admission_used: "signupVerificationUnavailable",
+  signup_outcome_unknown: "signupOutcomeUnknown",
   oauth_denied: "oauthDenied",
   state_expired: "oauthExpired",
   state_mismatch: "oauthMismatch",
@@ -92,10 +100,12 @@ export function GoogleSignInButton({
   disabled = false,
   locale = readStoredLocale(),
   returnTo = DEFAULT_REDIRECT,
+  needsVerification = false,
 }: {
   disabled?: boolean;
   locale?: SupportedLocale;
   returnTo?: string;
+  needsVerification?: boolean;
 }): JSX.Element {
   const [pending, setPending] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -121,10 +131,11 @@ export function GoogleSignInButton({
     // history so the user can hit "Back" from Google's consent page and
     // land where they were. replace() would silently swallow that history
     // entry, which is hostile to users who change their mind.
-    window.location.assign(googleLoginUrl(returnTo));
+    window.location.assign(googleLoginUrl(returnTo,new URLSearchParams(window.location.search).get("mobile")==="1"));
   }
 
   return <>
+    {needsVerification && <SignupAdmission flow="google" locale={locale}/>}
     <button
       type="button"
       className="btn-google"

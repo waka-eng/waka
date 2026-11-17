@@ -130,6 +130,11 @@ export default $config({
     // The source candidate does not provision credentials or authorize a deploy.
     const openAiApiKey = isModelProfileStage ? new sst.Secret("OpenAiApiKey") : undefined;
     const { default: modelProfile } = await import('./infra/model-profile.json');
+    // Source-only conditional admission. No widget/site/credential is created
+    // by this declaration; missing/invalid production mode closes NEW signup.
+    const signupAdmissionMode = process.env.WAKA_SIGNUP_ADMISSION || ($app.stage === "production" ? "closed" : "off");
+    const turnstileSecret = isModelProfileStage && signupAdmissionMode === "turnstile" ? new sst.Secret("TurnstileSecret") : undefined;
+
 
     // -----------------------------------------------------------------------
     // Storage
@@ -403,6 +408,14 @@ export default $config({
       // (vitest / smoke runs) where the SST env is not present.
       environment: {
         ...runtimeEnvironment,
+        WAKA_SIGNUP_ADMISSION: signupAdmissionMode,
+        ...Object.fromEntries(["WAKA_SIGNUP_VERIFY_HOUR","WAKA_SIGNUP_VERIFY_DAY","WAKA_SIGNUP_CREATE_HOUR","WAKA_SIGNUP_CREATE_DAY"]
+          .filter(name => process.env[name] !== undefined && process.env[name] !== "")
+          .map(name => [name,process.env[name]])),
+        ...(turnstileSecret ? {
+          WAKA_TURNSTILE_SITE_KEY: process.env.WAKA_TURNSTILE_SITE_KEY || "",
+          WAKA_TURNSTILE_SECRET: turnstileSecret.value,
+        } : {}),
         // Which function to wake when work is enqueued. Absent (local, tests)
         // means the in-process drain owns it instead.
         WAKA_BACKGROUND_WORKER_FUNCTION: backgroundWorker.name,
@@ -641,7 +654,7 @@ export default $config({
       ] });
       monitoringOutputs = { monitorRelayFunctionName: relay.name, monitorProbeFunctionName: probe.name,
         monitorDeliveryTable: deliveryTable.name, monitorDeliveryDlqUrl: deliveryDlq.url, monitorProbeRuleName: probeCron.nodes.rule.name,
-        monitorPrincipleFunctionName: principleRefresh.nodes.function.name, monitorCleanupFunctionName: objectEventSubscriber.nodes.function.name, monitorAttachmentDlqName: objectEventDlq.nodes.queue.name,
+        monitorPrincipleFunctionName: principleRefresh.nodes.function.name, monitorAttachmentDlqName: objectEventDlq.nodes.queue.name,
         monitorDailyRuleName: dailyDrain.nodes.rule.name, monitorPrincipleRuleName: principleRefresh.nodes.rule.name,
         monitorWakeGroup: jobWakeGroup.name, monitorWakeRole: jobWakeRole.arn };
 
@@ -742,6 +755,8 @@ export default $config({
 
     return {
       ...monitoringOutputs,
+      // Existing output name is now available in dev for the keyless audit too.
+      monitorCleanupFunctionName: objectEventSubscriber.nodes.function.name,
       apiFunctionName: api.name,
       backgroundWorkerFunctionName: backgroundWorker.name,
       principleRefreshFunctionName: principleRefresh.nodes.function.name,

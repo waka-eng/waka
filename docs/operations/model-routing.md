@@ -10,6 +10,11 @@ streaming, Pro mode, server-side conversation history or automatic paid fallback
 is added. Existing completion caps, human locks, ownership, citations, currentness,
 opening recovery, idempotency, Stop and quota fences remain authoritative.
 
+The current owner-approved AI allowance is a $10/month COMBINED dev+production
+spending target with alerts and existing quotas, not an automatic hard stop.
+Native unknown costs stay unknown. Per-key limits and project alerts do not prove
+a global invoice cap; no provider reroute or shared budget service is added.
+
 This document describes source configuration. It is not proof that credentials,
 account access, a model-quality comparison or a deployment has passed.
 

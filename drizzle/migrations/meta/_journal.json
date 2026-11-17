@@ -624,6 +624,13 @@
       "when": 1794691935858,
       "tag": "0088_embedding_index_spaces",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1794906105429,
+      "tag": "0089_signup_admissions",
+      "breakpoints": true
     }
   ]
 }
