@@ -61,6 +61,7 @@ export function InspirationSearch(props: InspirationSearchProps) {
     <SurfaceHeader locale={props.locale} back={{ kind: 'close', onBack: props.onClose }} title={label} />
     <input autoFocus className="jar-roomform-box" aria-label={label} value={props.query}
       placeholder={t(props.locale, 'worldSeekPlaceholder')} onChange={(event) => props.onQuery(event.target.value)} />
+    {query.length < 2 ? <p role="status">{t(props.locale, 'worldSearchMinimum')}</p> : null}
     {query.length >= 2 && (!current || current.phase === 'loading') ? <p role="status">{t(props.locale, 'worldSearchingInspirations')}</p> : null}
     {current?.phase === 'failed' ? <p role="alert">{t(props.locale, 'worldSearchFailed')} <button type="button" onClick={() => current.rows.length && current.cursor ? void more() : setRetry((value) => value + 1)}>{t(props.locale, 'worldRoomHistoryRetry')}</button></p> : null}
     {current?.phase === 'ready' && !current.rows.length ? <p role="status">{t(props.locale, 'worldNothingSaysThat')}</p> : null}
