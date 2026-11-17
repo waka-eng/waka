@@ -187,7 +187,7 @@ These HTTP middleware paths are not a demonstrated stdio exploit. The refreshed
 production dependency graph audits clean; older immutable archives are retained,
 not silently replaced. No extra runtime dependency or paid service is added.
 
-### Focused production backport preparation (2026-11-11 record)
+### Focused production backport preparation (2026-11-14 record)
 
 This section records the accepted focused release. The new integration and
 model rollout gates are described in [production readiness](operations/production-readiness.md);
