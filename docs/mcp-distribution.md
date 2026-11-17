@@ -187,7 +187,11 @@ These HTTP middleware paths are not a demonstrated stdio exploit. The refreshed
 production dependency graph audits clean; older immutable archives are retained,
 not silently replaced. No extra runtime dependency or paid service is added.
 
-### Focused production backport preparation
+### Focused production backport preparation (2026-11-14 record)
+
+This section records the accepted focused release. The new integration and
+model rollout gates are described in [production readiness](operations/production-readiness.md);
+it does not treat the production and dev trees as interchangeable.
 
 The same environment-independent 0.2.0 archive can serve production after the
 matching API version 2 backend is deployed. Pointing it at the older API alone

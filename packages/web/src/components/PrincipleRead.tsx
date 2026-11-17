@@ -76,12 +76,17 @@ export function PrincipleRead({ active, locale, onRead, profileId, name }: {
     : !status ? "worldPrinciplesLoading"
     : status.supportPending ? (status.phase === 'processing' ? 'worldSupportChecking' : status.phase === 'pending' ? 'worldSupportQueued' : 'worldSupportNeedsContext')
     : status.phase === "processing" || status.phase === "pending" ? "worldPrinciplesReading"
-    : status.signalCount < 3 ? "worldValuesSubSelf"
+    /* STRIPPED: "Principles come from patterns in what you save." for too
+       few signals; with nothing to report the line is simply absent.
+       Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */
+    : status.signalCount < 3 ? null
     : status.topOfMindCount < 1 ? "worldPrinciplesNeedRead"
     : "worldPrinciplesNoCandidate";
   return <>
-    {visibleRows.length === 0 ? <p className="jar-values-lead">{profileId && name ? formatMessage(locale, "worldValuesLeadOther", { name }) : t(locale, "worldValuesLeadSelf")}</p> : null}
-    {visibleRows.length === 0 || error || status?.phase === "processing" ?
+    {/* STRIPPED: "Your principles will form here." on your own wall; another
+        profile's wall still names whose. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
+    {visibleRows.length === 0 && profileId && name ? <p className="jar-values-lead">{formatMessage(locale, "worldValuesLeadOther", { name })}</p> : null}
+    {message && (visibleRows.length === 0 || error || status?.phase === "processing") ?
       <p className="jar-values-sub" role={error ? "alert" : status?.phase === "processing" ? "status" : undefined}>
         {t(locale, message)}
         {error ? <> <button type="button" onClick={() => setAttempt((value) => value + 1)}>

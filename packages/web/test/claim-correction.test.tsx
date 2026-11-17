@@ -340,9 +340,12 @@ it("says when the last yes was, when a reading is being asked again", async () =
   expect(line, "states render, numerals never").not.toMatch(/\d/);
 });
 
-it("explains an unanswered wording without implying an earlier yes", async () => {
+it("says nothing about an unanswered wording, and never implies an earlier yes", async () => {
   await withClaims(CLAIM);
-  expect(world.container.querySelector(".jar-pick-source")?.textContent).toBe('You haven’t answered this yet.');
+  /* Founder, 2026-11-12: "strip all unnecessary descriptive text across the
+     experience". */
+  expect(world.container.textContent).not.toContain('You haven’t answered this yet.');
+  expect(world.container.textContent).not.toMatch(/You said this was true/);
 });
 
 it("hints at the next claim with a bare edge, and no back card when it is the last", async () => {
@@ -445,7 +448,7 @@ it("leaves the questions by the page's \"<\", with no bar while they are up", as
   const bar = () => [...world.container.querySelectorAll<HTMLButtonElement>(".waka-dock .waka-dock-item, .waka-home-bar-row button")]
     .map((n) => n.getAttribute("aria-label") || n.textContent?.trim());
   await mountQueue(CLAIM, SECOND);
-  expect(bar(), "the bar before review").toEqual(["Keep a thought", "Keep a screenshot", "Keep your voice", "Chat"]);
+  expect(bar(), "the bar before review").toEqual(["Save an inspiration", "Save a screenshot", "Save your voice", "Chat"]);
   await diveIntoReview(world.container, world.step);
   expect(bar(), "the bar while reviewing").toEqual([]);
   const back = world.container.querySelector<HTMLButtonElement>(".waka-surface-back")!;
@@ -453,7 +456,7 @@ it("leaves the questions by the page's \"<\", with no bar while they are up", as
   await act(async () => { back.click(); });
   expect(card(), "the \"<\" left the cards up").toBeNull();
   expect(invite(), "the \"<\" should return to the reading").toBeNull();
-  expect(bar(), "the bar after review").toEqual(["Keep a thought", "Keep a screenshot", "Keep your voice", "Chat"]);
+  expect(bar(), "the bar after review").toEqual(["Save an inspiration", "Save a screenshot", "Save your voice", "Chat"]);
 });
 
 it("keeps → for the card while reviewing, and gives it back to Principles when the last card is answered", async () => {

@@ -647,15 +647,9 @@
   text-align: center;
 }
 
-.chat-opening p {
-  /* The glow box is four times the body, so without pulling the line back
-     up through its lower falloff the sentence sits a creature and a half
-     below the creature. */
-  margin: calc(var(--sp-20) - 96px) 0 0;
-  max-width: 44ch;
-  color: var(--muted);
-  line-height: 1.6;
-}
+/* `.chat-opening p` went with the line it set: the empty chat shows the
+   creature alone (founder, 2026-11-12: "strip all unnecessary descriptive
+   text across the experience"). */
 
 /* A THIRD COPY OF THE GUTTER, AND A THIRD COPY OF THE MEASURE — both gone.
    This carried `max-width: 680px` and its own `clamp(20px, 6vw, 28px)` while
@@ -684,6 +678,12 @@
   letter-spacing: 0.06em;
   color: var(--muted);
 }
+
+/* One stable place for the next reply, from save acknowledgement to delivery.
+   This is status, never a fabricated assistant message or progress percentage. */
+.chat-waiting { display: flex; align-items: center; gap: var(--sp-12); align-self: flex-start; width: min(100%, 34rem); min-height: 5rem; }
+.chat-waiting .chat-said { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; font-size: var(--t-meta); color: var(--muted); }
+.chat-waiting .chat-thinking { margin-block: var(--sp-8); min-height: 2.8em; letter-spacing: normal; }
 
 .chat-thinking-dots {
   display: flex;
@@ -1281,4 +1281,32 @@
   font-size: var(--t-ui);
   line-height: 1;
 }
+}
+
+@layer chrome {
+/* ═══ THE OPENING THAT ASKS (founder, 2026-11-12) ═══════════════════════════
+   Opened from a bubble's "Chat about this", the creature stands under the
+   same question in home's own bubble, its tail pointing down at it, so the
+   chat reads as the question carried over rather than a page that blinked
+   open. */
+.chat-opening--asks { gap: var(--sp-16); }
+.chat-opening--asks .chat-opening-ask { max-width: min(32ch, 100%); }
+/* The creature's box is four times its body (its glow), so it is drawn back
+   up under the tail rather than standing a body and a half below it. */
+.chat-opening--asks .chat-opening-beings { margin-top: calc(var(--sp-8) - 96px); }
+}
+
+@layer chrome {
+/* ═══ AN INSPIRATION THE CREATURE HOLDS UP (founder, 2026-11-12) ═══════════
+   WAKA's first turn in a chat opened from the review card: your inspiration,
+   whole, on a raised card in WAKA's column, its small label over it; the
+   question follows as the next line of the same turn. */
+.chat-message--shared .chat-shared {
+  margin: 0; padding: var(--sp-14) var(--sp-16); border-radius: var(--sp-16);
+  background: var(--waka-raised); color: var(--ink); max-width: 100%; box-sizing: border-box;
+}
+.chat-message--shared .chat-shared { display: flex; align-items: center; gap: var(--sp-12); }
+.chat-message--shared .chat-shared + .chat-shared { margin-top: var(--sp-8); }
+.chat-message--shared .chat-shared:has(figcaption) { display: block; }
+.chat-message--shared .chat-shared figcaption { margin: 0 0 var(--sp-6); font-size: var(--t-meta); color: var(--muted); }
 }

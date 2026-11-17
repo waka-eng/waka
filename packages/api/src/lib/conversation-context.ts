@@ -1,3 +1,4 @@
+import {embeddingPolicySql,parseEmbeddingPolicy,type EmbeddingIndexPolicy} from './embedding-policy.js';
 import {createHash} from 'node:crypto';
 import {and,asc,desc,eq,inArray,sql} from 'drizzle-orm';
 import {alias} from 'drizzle-orm/pg-core';
@@ -35,7 +36,7 @@ export function conversationPromptSources(sources:ConversationSource[]):Conversa
  * scored nothing has nothing to boost. Nothing short of pinning makes "the
  * agent can read it" true.
  */
-export async function readConversationContext(db:Reader,profileId:string,question:string,referenceIds?:ConversationReference[],initialPrincipleId?:string|null,initialInspirationId?:string|null,queryVector?:number[],onRetrievalTrace?:(trace:ConversationRetrievalTrace)=>void){
+export async function readConversationContext(db:Reader,profileId:string,question:string,referenceIds?:ConversationReference[],initialPrincipleId?:string|null,initialInspirationId?:string|null,queryVector?:number[],onRetrievalTrace?:(trace:ConversationRetrievalTrace)=>void,embeddingPolicy?:EmbeddingIndexPolicy){
   return measurePerformanceStage('context_read','conversation',async()=>{
   const byKind=(kind:ConversationReference['kind'])=>referenceIds?.filter(row=>row.kind===kind).map(row=>row.id);
   const pIds=byKind('principle'),rIds=byKind('top_of_mind_entry'),iIds=byKind('inspiration');
@@ -47,9 +48,9 @@ export async function readConversationContext(db:Reader,profileId:string,questio
   });
   let i=await readConversationMaterial(db,profileId,conversationSearchTerms(question),iIds);
   if(queryVector&&!referenceIds){
-    const semantic=await readSemanticConversationCandidates(db,profileId,queryVector,undefined,i.map(row=>row.id));
+    const semantic=await readSemanticConversationCandidates(db,profileId,queryVector,undefined,i.map(row=>row.id),embeddingPolicy);
     onRetrievalTrace?.(semantic.trace);
-    const ids=rankConversationCandidates(i.map(row=>row.id),semantic.candidates,semantic.similarities);
+    const ids=rankConversationCandidates(i.map(row=>row.id),semantic.candidates,semantic.similarities,embeddingPolicy);
     i=await readConversationMaterial(db,profileId,[],ids);
   }
   /* THE PIN, APPLIED LAST so it survives both retrieval paths above — lexical
@@ -153,26 +154,29 @@ export async function currentConversationReferenceGroups(db:Reader,scope:Convers
    chat with me vs my agent or both perspectives." See `conversations.
    perspective`. The chat stays the person's; this decides which memory the
    reply stands on. */
-export interface ConversationMemory{perspective:ConversationPerspective;personId:string;agentId:string|null}
+export interface ConversationMemory{perspective:ConversationPerspective;personId:string;agentId:string|null;embeddingPolicies?:EmbeddingIndexPolicy[]}
 /** The memory a chat reads, re-checked every time: an agent that has since
  * been removed, or that is not this person's, falls back to their own. */
-export async function conversationMemory(db:Reader,profileId:string,conversation:{perspective?:string|null;agentProfileId?:string|null}):Promise<ConversationMemory>{
+export async function conversationMemory(db:Reader,profileId:string,conversation:{perspective?:string|null;agentProfileId?:string|null},policy?:EmbeddingIndexPolicy):Promise<ConversationMemory>{
   const wanted=conversation.perspective==='agent'||conversation.perspective==='both'?conversation.perspective:'mine';
-  if(wanted==='mine'||!conversation.agentProfileId)return {perspective:'mine',personId:profileId,agentId:null};
-  const agentId=await accountAgent(db,profileId,conversation.agentProfileId);
-  return agentId?{perspective:wanted,personId:profileId,agentId}:{perspective:'mine',personId:profileId,agentId:null};
+  if(wanted==='mine'||!conversation.agentProfileId)return {perspective:'mine',personId:profileId,agentId:null,...(policy?{embeddingPolicies:[policy]}:{})};
+  const agent=await ownedAgent(db,profileId,conversation.agentProfileId,Boolean(policy));
+  return agent?{perspective:wanted,personId:profileId,agentId:agent.id,...(policy?{embeddingPolicies:[policy,parseEmbeddingPolicy(agent.id,agent.policy)]}:{})}:{perspective:'mine',personId:profileId,agentId:null,...(policy?{embeddingPolicies:[policy]}:{})};
 }
 /** `agentId`, when it is an agent of the same account as `profileId` and
  * `profileId` is that account's person; otherwise null. The one ownership
  * rule for a chat's agent: checked when the chat is started, and again every
  * time it is read. */
 export async function accountAgent(db:Reader,profileId:string,agentId:string):Promise<string|null>{
-  /* One self-join: it runs on every read, reply and reference of an agent chat. */
+  return (await ownedAgent(db,profileId,agentId,false))?.id??null;
+}
+async function ownedAgent(db:Reader,profileId:string,agentId:string,withPolicy:boolean){
+  /* One self-join: policy rides the existing owned-agent query. */
   const person=alias(profiles,'person');
-  const [agent]=await db.select({id:profiles.id}).from(profiles)
+  const [agent]=await db.select({id:profiles.id,...(withPolicy?{policy:embeddingPolicySql(agentId)}:{})}).from(profiles)
     .innerJoin(person,and(eq(person.id,profileId),eq(person.type,'human'),eq(person.accountId,profiles.accountId)))
     .where(and(eq(profiles.id,agentId),eq(profiles.type,'agent')));
-  return agent?.id??null;
+  return agent??null;
 }
 /** Every profile whose sources this chat may cite. */
 export function memoryProfiles(memory:ConversationMemory):string[]{
@@ -193,17 +197,19 @@ function interleave(kind:ConversationSource['kind'],a:ConversationSource[],b:Con
   return out;
 }
 export async function readPerspectiveContext(db:Reader,memory:ConversationMemory,question:string,initialPrincipleId?:string|null,initialInspirationId?:string|null,queryVector?:number[],onRetrievalTrace?:(trace:ConversationRetrievalTrace)=>void){
+  const policy=(id:string)=>memory.embeddingPolicies?.find(p=>p.profileId===id);
+  if(memory.perspective==='both'&&new Set(memory.embeddingPolicies?.map(p=>p.activeSpace)).size>1)queryVector=undefined;
   if(memory.perspective==='mine'||!memory.agentId)
-    return readConversationContext(db,memory.personId,question,undefined,initialPrincipleId,initialInspirationId,queryVector,onRetrievalTrace);
+    return readConversationContext(db,memory.personId,question,undefined,initialPrincipleId,initialInspirationId,queryVector,onRetrievalTrace,policy(memory.personId));
   const tag=(owner:'person'|'agent',rows:ConversationSource[])=>rows.map(row=>({...row,owner}));
   /* The pins belong to the person's own memory; the agent's is read plain.
      A chat on the agent's memory alone carries no pins at all — the routes
      refuse them — so nothing pinned can be shown that the model never saw. */
-  const agent=await readConversationContext(db,memory.agentId,question,undefined,null,null,queryVector,memory.perspective==='agent'?onRetrievalTrace:undefined);
+  const agent=await readConversationContext(db,memory.agentId,question,undefined,null,null,queryVector,memory.perspective==='agent'?onRetrievalTrace:undefined,policy(memory.agentId));
   if(memory.perspective==='agent')
     /* The context is still the person's chat's: `profileId` names them, not the agent. */
     return {...agent,profileId:memory.personId,principles:tag('agent',agent.principles),reading:tag('agent',agent.reading),inspirations:tag('agent',agent.inspirations)};
-  const mine=await readConversationContext(db,memory.personId,question,undefined,initialPrincipleId,initialInspirationId,queryVector,onRetrievalTrace);
+  const mine=await readConversationContext(db,memory.personId,question,undefined,initialPrincipleId,initialInspirationId,queryVector,onRetrievalTrace,policy(memory.personId));
   return {...mine,
     principles:interleave('principle',tag('person',mine.principles),tag('agent',agent.principles)),
     reading:interleave('top_of_mind_entry',tag('person',mine.reading),tag('agent',agent.reading)),

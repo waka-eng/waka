@@ -28,7 +28,7 @@ it.each(['monitoring-audit.mjs','production-release-audit.mjs','initialize-monit
  expect(r.status).toBe(1);
  const report=script==='monitoring-state.mjs'?r.artifacts['production-monitoring-before.json']:JSON.parse(r.stdout);
  expect(report.passed).toBe(false);expect(report.failure).toMatchObject({kind:'aws_read_failed',awsExceptionCode:'AccessDeniedException'});
- expect(report.failure.operation).toBe(script==='production-release-audit.mjs'?'lambda:get-function-configuration':'sts:get-caller-identity');
+ expect(report.failure.operation).toBe('sts:get-caller-identity');
  expect(r.stderr).toContain(report.failure.phase);expect(r.stderr).toContain(report.failure.operation);expect(r.stderr).toContain('Safe JSON:');expect(r.stderr).toContain('Next:');
  if(script==='monitoring-state.mjs')expect(r.stdout).toBe('');
  for(const value of [r.stdout,r.stderr,JSON.stringify(r.artifacts)]){expect(value).not.toContain('PRIVATE');expect(value).not.toContain('SECRET');expect(value).not.toContain('https:');expect(value).not.toContain('arn:');}

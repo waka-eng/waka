@@ -22,11 +22,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setDefaultModelProviderForTests, getDefaultModelProvider } from "./model-provider.js";
 import { ModelDidNotAnswerError,type ModelProvider } from "./model-provider.js";
+import {toJsonSchema} from './generation-schema.js';
 import { stripJsonFence } from "./openrouter-http.js";
 import {
   createOpenRouterModelProvider,
   toChatRequest,
-  toJsonSchema,
 } from "./openrouter-model-provider.js";
 import { buildSignalMatchJudgementRequest, buildReviewQuestionRequest,buildPrincipleRelationRequest,buildPrincipleGroundingRequest } from "../queue/gemini.js";
 

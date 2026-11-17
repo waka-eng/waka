@@ -166,7 +166,7 @@ async function openByAddress(id: string): Promise<void> {
 /** Step to the next memory with the card's own caret — the panel effect's path. */
 async function stepOn(): Promise<void> {
   const next = [...world.container.querySelectorAll<HTMLElement>(".jar-panel-foot-c button")]
-    .find((b) => /^Next note$/.test(b.getAttribute("aria-label") ?? ""));
+    .find((b) => /^Next inspiration$/.test(b.getAttribute("aria-label") ?? ""));
   if (!next) throw new Error("the card offers no way on");
   await act(async () => next.click());
   await world.step(10);
@@ -278,7 +278,7 @@ it("tells an emptied memory card to write something, and offers nothing it canno
   const box = editBox()!;
   const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
   await act(async () => { set.call(box, ""); box.dispatchEvent(new Event("input", { bubbles: true })); });
-  expect(box.placeholder).toBe("Write something, or add a photo or file, to keep this note.");
+  expect(box.placeholder).toBe("Write something, or add a photo or file, to save this inspiration.");
   expect(card()!.querySelector<HTMLButtonElement>(".jar-panel-save")!.disabled, "and Save stays dim").toBe(true);
 });
 

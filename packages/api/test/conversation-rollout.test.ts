@@ -10,8 +10,9 @@ it('gates enablement to approved production/dev stages and retains an operator o
   expect(sst).toContain('WAKA_CONVERSATION_REPLIES: (isDevelopmentDomain || $app.stage === "production") && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0"');
   expect(sst).toContain('WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash-1017"');
 });
-it('pins the deployed and evaluated chat model to the same DeepSeek version',()=>{
-  expect(workflow).toContain('.chatModel == "deepseek/deepseek-v4.1-flash-1017"');
+it('audits the new dev native chat pin while retaining the deliberate manual OR baseline',()=>{
+  expect(workflow).toContain('.chatModel == "gpt-6.1-terra"');
+  expect(workflow).toContain('node scripts/dev-gpt-config-audit.mjs');
   expect(ci).toContain('WAKA_MODEL_CHAT: deepseek/deepseek-v4.1-flash-1017');
   expect(ci).toContain('--expected-model=deepseek/deepseek-v4.1-flash-1017');
   expect(sst).toContain('OPENROUTER_GENERATION_MODEL: "deepseek/deepseek-v4.1-flash-1017"');

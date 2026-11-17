@@ -396,7 +396,7 @@ const ACTS: Act[] = [
   },
   /* ═══ `reflect` IS DELETED, AND NOT BECAUSE A BUTTON MOVED ═════════════
      "answering a memory, and the reflection refuses". It opened a card,
-     pressed `reflect`, typed into `.jar-reflect-box` and pressed `Keep`
+     pressed `reflect`, typed into `.jar-reflect-box` and pressed `Save`
      against a broken `POST /api/inspirations/:id/reflections`.
 
      THE VERB IS NOT ON THE CARD, AND THE CAPABILITY IS NOT IN THE PRODUCT.

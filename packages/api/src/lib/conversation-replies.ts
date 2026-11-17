@@ -1,22 +1,30 @@
+import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyContextIdentity,embeddingCandidateRules} from './embedding-policy.js';
+import {hasCurrentConversationIndex} from './conversation-retrieval.js';
+import {resolveConversationOpening} from './conversation-opening.js';
 import {chargeChatRequest} from './chat-rate-limit.js';
 import {randomUUID} from 'node:crypto';
 import {and,asc,desc,eq,gte,inArray,sql} from 'drizzle-orm';
-import {backgroundJobs,conversationMessages,conversationReplyRequests,conversations,generationRevisions,inspirationEmbeddings,inspirationRevisions,profiles,type BackgroundJob,type ConversationReference} from '../db/index.js';
+import {alias} from 'drizzle-orm/pg-core';
+import {backgroundJobs,conversationMessages,conversationReplyRequests,conversations,generationRevisions,inspirationRevisions,profiles,type BackgroundJob,type ConversationReference} from '../db/index.js';
 import type {getDb} from './db.js';
 import {CONVERSATION_LIMITS,conversationHash,conversationMemory,conversationRepliesEnabled,currentConversationReferences,currentConversationReferenceGroups,memoryProfiles,readPerspectiveContext,conversationPromptSources,type ConversationMemory} from './conversation-context.js';
 import {getDefaultModelProvider,type ConversationReplyInput} from './model-provider.js';
 import {parseConversationReply} from '../queue/gemini.js';
 import {conversationSearchQuery} from './conversation-material.js';
 import {conversationUsesSavedSources} from './conversation-corrections.js';
-import {GEMINI_EMBEDDING_DIMENSIONS,GEMINI_EMBEDDING_MODEL,GeminiEmbeddingHttpClient,validateEmbeddingVector,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
+import {validateEmbeddingVector,type GeminiEmbeddingClient} from './inspiration-embeddings.js';
+import {configuredEmbeddingClient,readableEmbeddingSpace} from './embedding-provider.js';
 import type {ConversationRetrievalTrace} from './conversation-retrieval.js';
 import {enqueueConversationReply,STALE_LOCK_SECONDS,wakeCommittedBackgroundJobs} from './queue.js';
 import {attachmentNote,readMessageAttachments} from './conversation-attachments.js';
+import {createConversationTiming,createConversationApiTiming,type ConversationAdmissionObserver} from './conversation-timing.js';
+import {measurePerformanceStage} from './performance-stages.js';
 type Db=ReturnType<typeof getDb>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
-type Reader=Pick<Db,'select'>;
+type Reader=Pick<Db,'select'|'execute'>;
 type Request=typeof conversationReplyRequests.$inferSelect;
 const HOUR=3600000;
+const REPLY_HISTORY_MESSAGES=8;
 export class ConversationReplyError extends Error{constructor(readonly status:404|409|410|429|503,message:string){super(message);}}
 async function owned(db:Reader,profileId:string,id:string){
   const [row]=await db.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
@@ -29,10 +37,20 @@ async function memoryOf(db:Reader,profileId:string,id:string){
   return conversationMemory(db,profileId,row??{});
 }
 async function lockConversation(tx:Tx,profileId:string,id:string){
-  await tx.select({id:conversations.id}).from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id))).for('update');
-  return owned(tx,profileId,id);
+  const [row]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id))).for('update');
+  if(!row)throw new ConversationReplyError(404,'Conversation not found.');if(row.deletedAt)throw new ConversationReplyError(410,'This conversation was deleted.');return row;
 }
-async function lockMemory(tx:Tx,profileId:string){
+async function lockMemory(tx:Tx,profileId:string,conversation?:{perspective:string;agentProfileId:string|null}){
+  if(conversation?.agentProfileId&&['agent','both'].includes(conversation.perspective)){
+    const owners=sql`SELECT id FROM profiles WHERE id=${profileId}::uuid UNION SELECT agent.id FROM profiles agent JOIN profiles person ON person.id=${profileId}::uuid AND person.type='human' AND person.account_id=agent.account_id WHERE agent.id=${conversation.agentProfileId}::uuid AND agent.type='agent'`;
+    await tx.execute(sql`INSERT INTO generation_revisions(profile_id) ${owners} ON CONFLICT DO NOTHING`);
+    await tx.select().from(generationRevisions).where(sql`${generationRevisions.profileId} IN (${owners})`).orderBy(asc(generationRevisions.profileId)).for('update');return;
+  }
+  // Most profiles already have their fence. Acquire that same row lock without
+  // first sending an INSERT that can only conflict. The missing-row path still
+  // serializes concurrent creators before any current-source proof is used.
+  const [existing]=await tx.select().from(generationRevisions).where(eq(generationRevisions.profileId,profileId)).for('update');
+  if(existing)return;
   await tx.insert(generationRevisions).values({profileId}).onConflictDoNothing();
   await tx.select().from(generationRevisions).where(eq(generationRevisions.profileId,profileId)).for('update');
 }
@@ -49,7 +67,7 @@ async function effectiveStatus(db:Reader,row:Request){
   return statusWithJob(row.status,job);
 }
 export async function projectConversationMessages(db:Reader,profileId:string,id:string,messages:Array<typeof conversationMessages.$inferSelect>,memory?:ConversationMemory){
-  const requests=await requestsFor(db,profileId,id);
+  const requests=messages.some(message=>message.role==='assistant')?await requestsFor(db,profileId,id):[];
   const byMessage=new Map<string,Request>();
   for(const request of requests)if(request.status==='ready'&&request.assistantMessageId&&!byMessage.has(request.assistantMessageId))byMessage.set(request.assistantMessageId,request);
   const groups=await currentConversationReferenceGroups(db,memory??await memoryOf(db,profileId,id),messages.map(message=>message.role==='assistant'?byMessage.get(message.id)?.references??[]:[]));
@@ -82,7 +100,7 @@ export function conversationReplyWindow(messages:ReadonlyArray<{role:'user'|'ass
   const searchHistory:Array<{role:string;content:string;attachments:ReadonlyArray<{name:string|null}>}>=[];
   // Keep complete messages: truncating a human sentence can drop its negation
   // or correction. Missing earlier context is disclosed to the provider.
-  for(const row of messages.slice(-8).reverse()){
+  for(const row of messages.slice(-REPLY_HISTORY_MESSAGES).reverse()){
     if(row.role==='assistant'&&row.memoryChanged)continue;
     const note=attachmentNote(row.attachments);
     const content=row.content+(row.followUpQuestion?'\n'+row.followUpQuestion:'')+(note?(row.content?'\n':'')+note:'');
@@ -93,22 +111,39 @@ export function conversationReplyWindow(messages:ReadonlyArray<{role:'user'|'ass
   return {history,cut,searchQuery:conversationSearchQuery(searchHistory)};
 }
 async function inputFor(db:Reader,profileId:string,id:string,userMessageId:string,queryVector?:number[]){
-  const conversation=await owned(db,profileId,id),messages=await db.select().from(conversationMessages)
-    .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id))).orderBy(asc(conversationMessages.position));
+  const [owner]=await db.select({conversation:conversations,locale:profiles.preferredLocale,profileType:profiles.type,embeddingPolicy:embeddingPolicySql(profileId)}).from(conversations)
+    .innerJoin(profiles,eq(profiles.id,conversations.profileId)).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
+  if(!owner)throw new ConversationReplyError(404,'Conversation not found.');
+  const conversation=owner.conversation;if(conversation.deletedAt)throw new ConversationReplyError(410,'This conversation was deleted.');
+  // One overflow row preserves contextChanged without transferring the whole
+  // transcript at every admission/currentness/publication proof.
+  const messages=(await db.select().from(conversationMessages)
+    .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id)))
+    .orderBy(desc(conversationMessages.position)).limit(REPLY_HISTORY_MESSAGES+1)).reverse();
   const anchor=messages.find(row=>row.id===userMessageId&&row.role==='user');
   if(!anchor||anchor.position!==conversation.revision)return null;
-  const memory=await conversationMemory(db,profileId,conversation);
-  const projected=await projectConversationMessages(db,profileId,id,messages.slice(-8),memory);
+  const memory=await conversationMemory(db,profileId,conversation,parseEmbeddingPolicy(profileId,owner.embeddingPolicy));
+  const projected=await projectConversationMessages(db,profileId,id,messages.slice(-REPLY_HISTORY_MESSAGES),memory);
   const window=conversationReplyWindow(projected),history=window.history,searchQuery=window.searchQuery;
-  const contextChanged=messages.length>8||window.cut||projected.some(row=>row.memoryChanged);
+  const contextChanged=messages.length>REPLY_HISTORY_MESSAGES||window.cut||projected.some(row=>row.memoryChanged);
   let retrievalTrace:ConversationRetrievalTrace|undefined;
-  const context=conversationUsesSavedSources(history)?await readPerspectiveContext(db,memory,searchQuery,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]};
-  const [profile]=await db.select({locale:profiles.preferredLocale,type:profiles.type}).from(profiles).where(eq(profiles.id,profileId));
+  const useSavedSources=conversationUsesSavedSources(history);
+  const context=useSavedSources?await readPerspectiveContext(db,memory,searchQuery,conversation.initialPrincipleId,conversation.initialInspirationId,queryVector,trace=>{retrievalTrace=trace;}):{principles:[],reading:[],inspirations:[]};
   // New chats belong to their selected profile. `mine` means that profile's
   // memory; when it is an agent, its work must not become the human's biography.
-  const sources=[...context.principles,...context.reading,...context.inspirations]
-    .map(source=>profile?.type==='agent'?{...source,owner:'agent' as const}:source);
-  const perspective=profile?.type==='agent'?'agent':memory.perspective;
+  const opening=memory.perspective==='mine'&&(useSavedSources||conversation.opening?.kind==='prompt')?await resolveConversationOpening(db,profileId,conversation.opening,{display:false}):null;
+  const openingSources=opening?.available?opening.context:[];
+  // Same total/per-source/per-kind budgets, with the bound opening first.
+  const seen=new Set<string>(),kindCounts={principle:0,top_of_mind_entry:0,inspiration:0},kindRemaining={principle:8000,top_of_mind_entry:4000,inspiration:4000};let remaining=CONVERSATION_LIMITS.contextCharacters;
+  const selected=opening?.available?[...openingSources,...context.principles,...context.reading,...context.inspirations].flatMap(source=>{
+    const key=source.kind+':'+source.id,cap={principle:10,top_of_mind_entry:5,inspiration:6}[source.kind];
+    if(seen.has(key)||kindCounts[source.kind]>=cap||remaining<=0||kindRemaining[source.kind]<=0)return [];
+    seen.add(key);kindCounts[source.kind]++;const text=source.text.slice(0,Math.min(1600,remaining,kindRemaining[source.kind]));remaining-=text.length;kindRemaining[source.kind]-=text.length;
+    return [{...source,text,truncated:source.truncated||text.length<source.text.length}];
+  }):[...context.principles,...context.reading,...context.inspirations];
+  const sources=selected
+    .map(source=>owner.profileType==='agent'?{...source,owner:'agent' as const}:source);
+  const perspective=owner.profileType==='agent'?'agent':memory.perspective;
   /* Pinning a keep into `sources` puts it in front of the model; pointing
    * `focusSourceNumber` at it is what tells the model that THIS is the one the
    * person is talking about. Without the second half, "the agent can read it"
@@ -131,46 +166,68 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     sources.findIndex(source=>source.kind==='principle'&&source.id===conversation.initialPrincipleId),
     sources.findIndex(source=>source.kind==='inspiration'&&source.id===conversation.initialInspirationId),
   ].find(index=>index>=0)??-1;
-  const input:ConversationReplyInput={...(perspective!=='mine'?{perspective}:{}),preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
-  return {input,searchQuery,sources,memory,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
+  const applicationOpening=opening?{provenance:'application' as const,available:opening.available,...(opening.available?opening.binding.kind==='source'?{why:opening.binding.why,...(opening.binding.question?{text:opening.ask}:{}),sourceNumbers:openingSources.map(row=>sources.findIndex(source=>source.kind===row.kind&&source.id===row.id)+1).filter(number=>number>0)}:{text:opening.ask,...(opening.binding.kind==='activity'?{observedAt:opening.binding.asOf}:{})}:{})}:undefined;
+  const input:ConversationReplyInput={...(applicationOpening?{applicationOpening}:{}),...(perspective!=='mine'?{perspective}:{}),preferredLocale:owner.locale==='ko-KR'?'ko-KR':'en-US',messageDate:anchor.createdAt.toISOString().slice(0,10),contextChanged:contextChanged||Boolean(opening&&!opening.available),...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:conversationPromptSources(sources)};
+  return {input,searchQuery,sources,memory,retrievalTrace,revision:conversation.revision,hash:conversationHash({input,...(embeddingPolicyContextIdentity((memory.embeddingPolicies??[]).filter(p=>memoryProfiles(memory).includes(p.profileId)))?{embeddingPolicies:embeddingPolicyContextIdentity((memory.embeddingPolicies??[]).filter(p=>memoryProfiles(memory).includes(p.profileId)))}:{}),identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){
-  const now=new Date(),boundary=new Date(now.getTime()-HOUR);
-  const [conversation]=await db.select({id:conversations.id,revision:conversations.revision,deletedAt:conversations.deletedAt,accountId:profiles.accountId,
-    messages:sql<Array<{id:string;role:string}>>`COALESCE((SELECT jsonb_agg(jsonb_build_object('id',m.id,'role',m.role) ORDER BY m.position DESC)
-      FROM (SELECT id,role,position FROM conversation_messages WHERE profile_id=${profileId}::uuid AND conversation_id=${id}::uuid ORDER BY position DESC LIMIT 2) m),'[]'::jsonb)`})
-    .from(conversations).innerJoin(profiles,eq(profiles.id,conversations.profileId)).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
-  if(!conversation)throw new ConversationReplyError(404,'Conversation not found.');
-  if(conversation.deletedAt)throw new ConversationReplyError(410,'This conversation was deleted.');
-  const message=conversation.messages.find(row=>row.role==='user');
-  const [row]=message?await db.select({id:conversationReplyRequests.id,jobId:conversationReplyRequests.jobId,status:conversationReplyRequests.status,failureCode:conversationReplyRequests.failureCode,
-    recentCount:sql<number>`(SELECT count(*)::int FROM conversation_reply_requests r WHERE r.profile_id=${profileId}::uuid AND r.conversation_id=${id}::uuid AND r.user_message_id=${message.id}::uuid AND r.created_at>${boundary.toISOString()}::timestamptz)`,
-    recentOldest:sql<string|null>`(SELECT min(r.created_at)::text FROM conversation_reply_requests r WHERE r.profile_id=${profileId}::uuid AND r.conversation_id=${id}::uuid AND r.user_message_id=${message.id}::uuid AND r.created_at>${boundary.toISOString()}::timestamptz)`})
+  const now=new Date(),boundary=new Date(now.getTime()-HOUR),owner=alias(profiles,'conversation_owner');
+  // Select the user only from the last TWO positions, as before. These lateral
+  // readers share one snapshot/round trip, not parallel work on a one-slot pool.
+  const recent=db.select({id:conversationMessages.id,role:conversationMessages.role,position:conversationMessages.position}).from(conversationMessages)
+    .where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id)))
+    .orderBy(desc(conversationMessages.position)).limit(2).as('recent_messages');
+  const message=db.select({id:recent.id}).from(recent).where(eq(recent.role,'user')).orderBy(desc(recent.position)).limit(1).as('last_user');
+  const latest=db.select({id:conversationReplyRequests.id,jobId:conversationReplyRequests.jobId,status:conversationReplyRequests.status,failureCode:conversationReplyRequests.failureCode,
+    recentCount:sql<number>`(SELECT count(*)::int FROM conversation_reply_requests r WHERE r.profile_id=${profileId}::uuid AND r.conversation_id=${id}::uuid AND r.user_message_id=${message.id} AND r.created_at>${boundary.toISOString()}::timestamptz)`.as('recent_count'),
+    recentOldest:sql<string|null>`(SELECT min(r.created_at)::text FROM conversation_reply_requests r WHERE r.profile_id=${profileId}::uuid AND r.conversation_id=${id}::uuid AND r.user_message_id=${message.id} AND r.created_at>${boundary.toISOString()}::timestamptz)`.as('recent_oldest')})
     .from(conversationReplyRequests).where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,id),eq(conversationReplyRequests.userMessageId,message.id)))
-    .orderBy(desc(conversationReplyRequests.createdAt),desc(conversationReplyRequests.id)).limit(1):[];
+    .orderBy(desc(conversationReplyRequests.createdAt),desc(conversationReplyRequests.id)).limit(1).as('latest_reply');
+  const accountBudget=db.select({count:sql<number>`coalesce(sum(1 + CASE WHEN ${conversationReplyRequests.retrievalDispatchedAt} IS NOT NULL THEN 1 ELSE 0 END),0)::int`.as('call_count'),oldest:sql<string|null>`min(${conversationReplyRequests.dispatchedAt})::text`.as('oldest_dispatch')}).from(conversationReplyRequests)
+    .innerJoin(profiles,eq(profiles.id,conversationReplyRequests.profileId)).where(and(eq(profiles.accountId,owner.accountId),gte(conversationReplyRequests.dispatchedAt,boundary))).as('account_budget');
+  const [state]=await db.select({conversation:{id:conversations.id,revision:conversations.revision,deletedAt:conversations.deletedAt},messageId:message.id,
+    request:{id:latest.id,status:latest.status,failureCode:latest.failureCode,recentCount:latest.recentCount,recentOldest:latest.recentOldest},
+    budget:{count:accountBudget.count,oldest:accountBudget.oldest},
+    job:{id:backgroundJobs.id,status:backgroundJobs.status,runAfter:backgroundJobs.runAfter,lockedAt:backgroundJobs.lockedAt,attempts:backgroundJobs.attempts,maxAttempts:backgroundJobs.maxAttempts}})
+    .from(conversations).innerJoin(owner,eq(owner.id,conversations.profileId))
+    .leftJoinLateral(message,sql`true`).leftJoinLateral(latest,sql`true`).leftJoinLateral(accountBudget,sql`true`)
+    .leftJoin(backgroundJobs,and(eq(backgroundJobs.profileId,profileId),eq(backgroundJobs.id,latest.jobId)))
+    .where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
+  if(!state)throw new ConversationReplyError(404,'Conversation not found.');
+  const {conversation,messageId}=state;if(conversation.deletedAt)throw new ConversationReplyError(410,'This conversation was deleted.');
+  const row=state.request?.id?state.request:undefined,job=state.job?.id?state.job:undefined;
   const messageRetryAfter=row&&row.recentCount>=CONVERSATION_LIMITS.attemptsPerMessage&&row.recentOldest?new Date(Date.parse(row.recentOldest)+HOUR).toISOString():null;
-  const [budget]=await db.select({count:sql<number>`coalesce(sum(1 + CASE WHEN ${conversationReplyRequests.retrievalDispatchedAt} IS NOT NULL THEN 1 ELSE 0 END),0)::int`,oldest:sql<string|null>`min(${conversationReplyRequests.dispatchedAt})::text`}).from(conversationReplyRequests)
-    .innerJoin(profiles,eq(profiles.id,conversationReplyRequests.profileId)).where(and(eq(profiles.accountId,conversation.accountId!),gte(conversationReplyRequests.dispatchedAt,boundary)));
+  const budget=state.budget!;
   const accountRetryAfter=budget.count>=CONVERSATION_LIMITS.modelCalls&&budget.oldest?new Date(Date.parse(budget.oldest)+HOUR).toISOString():null;
   const retryAfter=[messageRetryAfter,accountRetryAfter].filter((value):value is string=>value!==null).sort().at(-1)??null;
-  const [job]=row?.jobId?await db.select({status:backgroundJobs.status,runAfter:backgroundJobs.runAfter,lockedAt:backgroundJobs.lockedAt,attempts:backgroundJobs.attempts,maxAttempts:backgroundJobs.maxAttempts}).from(backgroundJobs).where(and(eq(backgroundJobs.profileId,profileId),eq(backgroundJobs.id,row.jobId))):[];
   const phase=row?statusWithJob(row.status,job):'idle';
-  return {profileId,conversationId:id,messageId:message?.id??null,requestId:row?.id??null,phase,revision:conversation.revision,
+  return {profileId,conversationId:id,messageId,requestId:row?.id??null,phase,revision:conversation.revision,
     runAfter:phase==='pending'&&job?.status==='pending'&&job.runAfter.getTime()>now.getTime()?job.runAfter.toISOString():null,
-    failureCode:row?.failureCode??null,retryAfter,canRetry:conversationRepliesEnabled()&&Boolean(message)&&conversation.revision<200&&!retryAfter&&['idle','failed','stopped','stale'].includes(phase),generationEnabled:conversationRepliesEnabled()};
+    failureCode:row?.failureCode??null,retryAfter,canRetry:conversationRepliesEnabled()&&Boolean(messageId)&&conversation.revision<200&&!retryAfter&&['idle','failed','stopped','stale'].includes(phase),generationEnabled:conversationRepliesEnabled()};
 }
-export async function readConversationReplyState(db:Db,profileId:string,id:string){return db.transaction(tx=>replyState(tx,profileId,id),{isolationLevel:'repeatable read',accessMode:'read only'});}
+/** The single SELECT is the snapshot boundary. Splitting it into multiple reads
+ * would require restoring an explicit repeatable-read transaction. */
+export async function readConversationReplyState(db:Db,profileId:string,id:string){return measurePerformanceStage('reply_state','conversation',()=>replyState(db,profileId,id));}
 export async function requestConversationReply(db:Db,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null},quotaAccountId?:string){
-  const result=await db.transaction(tx=>requestConversationReplyInTransaction(tx,profileId,id,input,quotaAccountId));await wakeCommittedBackgroundJobs();return result;
+  const timing=createConversationApiTiming('retry');timing.mark('transaction');
+  try{
+    const result=await db.transaction(async tx=>{try{return await requestConversationReplyInTransaction(tx,profileId,id,input,quotaAccountId,timing.observe);}finally{timing.bodyFinished();}});
+    timing.mark('resolved');timing.mark('wake');await wakeCommittedBackgroundJobs();timing.finish(true);return result;
+  }finally{timing.finish();}
 }
 /** Also used by Send's transaction: the message and its reply intent commit together. */
-export async function requestConversationReplyInTransaction(tx:Tx,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null},quotaAccountId?:string){
+export async function requestConversationReplyInTransaction(tx:Tx,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null},quotaAccountId?:string,onAdmission?:ConversationAdmissionObserver){
+  const observed=(value:Awaited<ReturnType<typeof replyState>>,admission:'new'|'replay')=>{
+    try{const result=onAdmission?.({requestId:value.requestId,revision:value.revision,admission});if(result&&typeof (result as PromiseLike<unknown>).then==='function')void Promise.resolve(result).catch(()=>{});}catch{/* diagnostic callback only */}
+    return value;
+  };
+  return measurePerformanceStage('reply_admission','conversation',async()=>{
   if(!conversationRepliesEnabled())throw new ConversationReplyError(503,'Replies are not enabled here yet. Your messages are saved.');
     const conversation=await lockConversation(tx,profileId,id),rows=await requestsFor(tx,profileId,id),latest=rows.find(row=>row.userMessageId===input.messageId);
     // The predecessor is a compare-and-swap token. Replaying a lost retry
     // joins its successor even if it has already failed or finished.
-    if((latest?.id??null)!==input.afterRequestId)return replyState(tx,profileId,id);
-    if(latest&&!['failed','stopped','stale'].includes(await effectiveStatus(tx,latest)))return replyState(tx,profileId,id);
+    if((latest?.id??null)!==input.afterRequestId)return observed(await replyState(tx,profileId,id),'replay');
+    if(latest&&!['failed','stopped','stale'].includes(await effectiveStatus(tx,latest)))return observed(await replyState(tx,profileId,id),'replay');
     if(conversation.revision>=200)throw new ConversationReplyError(429,'This conversation is full. Start another one.');
     const work=await inputFor(tx,profileId,id,input.messageId);if(!work)throw new ConversationReplyError(409,'The conversation changed. Check saved messages.');
     const recent=rows.filter(row=>row.userMessageId===input.messageId&&row.createdAt.getTime()>Date.now()-HOUR);
@@ -182,7 +239,8 @@ export async function requestConversationReplyInTransaction(tx:Tx,profileId:stri
     await tx.update(conversationReplyRequests).set({jobId:job.jobId}).where(eq(conversationReplyRequests.id,requestId));
     const accepted=await replyState(tx,profileId,id);
     if(quotaAccountId)await chargeChatRequest(tx,quotaAccountId);
-    return accepted;
+    return observed(accepted,'new');
+  });
 }
 export async function stopConversationReply(db:Db,profileId:string,id:string,requestId:string){
   return db.transaction(async tx=>{
@@ -205,18 +263,19 @@ export async function readConversationReference(db:Db,profileId:string,id:string
 /** At most one query embedding and one answer per attempt, with both slots
  * accounted before transport. Uncertain attempts are not automatically replayed. */
 export async function processConversationReply(db:Db,job:BackgroundJob,id:string,requestId:string,beforeCommit:(tx:Tx)=>Promise<void>,deps:{embeddingClient?:GeminiEmbeddingClient|null}={}){
+  const timing=createConversationTiming();let answerAttempted=false,published=false;
+  try{
   const retrievalStarted=performance.now();
-  const embeddingClient=deps.embeddingClient===undefined
-    ?process.env.GEMINI_API_KEY||process.env.SST_RESOURCE_GeminiApiKey?new GeminiEmbeddingHttpClient(GEMINI_EMBEDDING_MODEL,{timeoutMs:5000,exchangeTimeoutMs:10000}):null
-    :deps.embeddingClient;
+
   const finish=async(status:'failed'|'stale',failureCode:string)=>db.update(conversationReplyRequests).set({status,failureCode,finishedAt:new Date()})
     .where(and(eq(conversationReplyRequests.profileId,job.profileId),eq(conversationReplyRequests.id,requestId),inArray(conversationReplyRequests.status,['pending','running'])));
-  const initial=await db.transaction(async tx=>{
+  const initial=await timing.measure('prepare',()=>db.transaction(async tx=>{
     const [conversation]=await tx.select().from(conversations).where(and(eq(conversations.profileId,job.profileId),eq(conversations.id,id))).for('update');
     if(!conversation||conversation.deletedAt)return null;
-    await lockMemory(tx,job.profileId);await beforeCommit(tx);
+    await lockMemory(tx,job.profileId,conversation);await beforeCommit(tx);
     const [request]=await tx.select().from(conversationReplyRequests).where(and(eq(conversationReplyRequests.profileId,job.profileId),eq(conversationReplyRequests.id,requestId),eq(conversationReplyRequests.conversationId,id))).for('update');
     if(!request||!['pending','running'].includes(request.status))return null;
+    timing.correlate(request.id,request.conversationRevision);
     const refuse=async(status:'failed'|'stale',failureCode:string)=>{await tx.update(conversationReplyRequests).set({status,failureCode,finishedAt:new Date()}).where(eq(conversationReplyRequests.id,requestId));return null;};
     if(request.dispatchedAt)return refuse('failed','outcome_unknown');
     if(!conversationRepliesEnabled())return refuse('failed','disabled');
@@ -228,25 +287,33 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
     const [usage]=await tx.execute<{count:number}>(sql`SELECT coalesce(sum(1 + CASE WHEN r.retrieval_dispatched_at IS NOT NULL THEN 1 ELSE 0 END),0)::int AS count FROM conversation_reply_requests r JOIN profiles p ON p.id=r.profile_id
       WHERE p.account_id=${owner.accountId}::uuid AND r.dispatched_at>=now()-interval '1 hour'`);
     if(usage.count>=CONVERSATION_LIMITS.modelCalls)return refuse('failed','budget');
-    const [indexed]=conversationUsesSavedSources(next.input.history)&&embeddingClient?.model===GEMINI_EMBEDDING_MODEL&&usage.count+2<=CONVERSATION_LIMITS.modelCalls
-      /* Indexed where the chat actually reads: the agent's memory for an agent chat. */
-      ?await tx.select({id:inspirationEmbeddings.id}).from(inspirationEmbeddings).where(and(inArray(inspirationEmbeddings.profileId,memoryProfiles(next.memory)),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,GEMINI_EMBEDDING_MODEL),eq(inspirationEmbeddings.dimensions,GEMINI_EMBEDDING_DIMENSIONS))).limit(1):[];
+    const policies=next.memory.embeddingPolicies??[],owners=memoryProfiles(next.memory),selected=policies.filter(p=>owners.includes(p.profileId));
+    const cohort=selected.length>0&&new Set(selected.map(p=>p.activeSpace)).size===1;
+    const policy=selected[0],embeddingSpace=readableEmbeddingSpace(policy);
+    const embeddingState=!cohort?{client:null,availability:'compatibility_held' as const}:deps.embeddingClient===undefined?configuredEmbeddingClient({timeoutMs:embeddingCandidateRules(policy)?.chat.lookupDeadlineMs??5000,exchangeTimeoutMs:embeddingCandidateRules(policy)?.chat.exchangeTimeoutMs??10000},policy):{client:deps.embeddingClient,availability:deps.embeddingClient?'ready' as const:'not_configured' as const};
+    const embeddingClient=embeddingState.client;
+    let indexed=false;
+    if(conversationUsesSavedSources(next.input.history)&&embeddingClient?.model===embeddingSpace.model&&usage.count+2<=CONVERSATION_LIMITS.modelCalls){
+      // Each legacy owner is independent and ordered. No cross-space query.
+      for(const owner of owners)if(await hasCurrentConversationIndex(tx,owner,selected.find(p=>p.profileId===owner))){indexed=true;break;}
+    }
     const semantic=Boolean(indexed);
     await tx.update(conversationReplyRequests).set({status:'running',dispatchedAt:sql`clock_timestamp()`,retrievalDispatchedAt:semantic?sql`clock_timestamp()`:null,failureCode:null}).where(eq(conversationReplyRequests.id,requestId));
-    return {...next,userMessageId:request.userMessageId!,semantic};
-  });
+    return {...next,userMessageId:request.userMessageId!,semantic,embeddingState};
+  }));
   if(!initial)return;
+  const embeddingState=initial.embeddingState,embeddingClient=embeddingState.client;
   let queryVector:number[]|undefined;
   if(initial.semantic){
-    try{queryVector=validateEmbeddingVector(await embeddingClient!.embed(initial.searchQuery,'RETRIEVAL_QUERY'));}
+    try{queryVector=validateEmbeddingVector(await timing.measure('lookup',()=>embeddingClient!.embed(initial.searchQuery,'RETRIEVAL_QUERY')));}
     catch{ /* Bounded lexical context remains usable when semantic lookup fails. */ }
   }
   // The network call above owns no DB locks. Stop, deletion and edits during
   // lookup must be checked before spending the answer slot, not only afterward.
-  const work=initial.semantic?await db.transaction(async tx=>{
+  const work=initial.semantic?await timing.measure('revalidate',()=>db.transaction(async tx=>{
     const [conversation]=await tx.select().from(conversations).where(and(eq(conversations.profileId,job.profileId),eq(conversations.id,id))).for('update');
     if(!conversation||conversation.deletedAt)return null;
-    await lockMemory(tx,job.profileId);await beforeCommit(tx);
+    await lockMemory(tx,job.profileId,conversation);await beforeCommit(tx);
     const [request]=await tx.select().from(conversationReplyRequests).where(and(eq(conversationReplyRequests.profileId,job.profileId),eq(conversationReplyRequests.id,requestId))).for('update');
     if(!request||request.status!=='running')return null;
     const unchanged=await inputFor(tx,job.profileId,id,initial.userMessageId);
@@ -255,18 +322,19 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
     if(!selected)return null;
     await tx.update(conversationReplyRequests).set({contextHash:selected.hash,contextSources:selected.sources.map(({kind,id,hash})=>({kind,id,hash}))}).where(eq(conversationReplyRequests.id,requestId));
     return selected;
-  }):initial;
+  })):initial;
   if(!work)return;
   console.info('[conversation-retrieval]',JSON.stringify({requestId,profileId:job.profileId,
-    mode:queryVector?'hybrid':initial.semantic?'lexical_fallback':'lexical',preparationMs:Math.round(performance.now()-retrievalStarted),
+    mode:queryVector?'hybrid':initial.semantic||embeddingState.availability==='compatibility_held'?'lexical_fallback':'lexical',embeddingAvailability:embeddingState.availability,preparationMs:Math.round(performance.now()-retrievalStarted),
     ...work.retrievalTrace,sources:work.sources.map(({kind,id,revision})=>({kind,id,revision}))}));
   let result;
-  try{result=parseConversationReply(await (await getDefaultModelProvider()).answerConversation(work.input),work.input);}
+  try{answerAttempted=true;result=await timing.measure('answer',async()=>parseConversationReply(await (await getDefaultModelProvider()).answerConversation(work.input),work.input));}
   catch{await finish('failed','provider_failed');return;}
-  try{await db.transaction(async tx=>{
+  let staged=false;
+  try{await timing.measure('publication',()=>db.transaction(async tx=>{
     const [conversation]=await tx.select().from(conversations).where(and(eq(conversations.profileId,job.profileId),eq(conversations.id,id))).for('update');
     if(!conversation||conversation.deletedAt)return;
-    await lockMemory(tx,job.profileId);
+    await lockMemory(tx,job.profileId,conversation);
     // The final proof and write must serialize with every memory actually
     // selected by this chat. Do not hold these locks across provider calls,
     // or wait back on an agent editor that may already own a source row.
@@ -295,5 +363,7 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
     await tx.insert(conversationMessages).values({id:assistantId,profileId:job.profileId,conversationId:id,position:conversation.revision+1,role:'assistant',content:result.answer});
     await tx.update(conversations).set({revision:conversation.revision+1,updatedAt:new Date()}).where(eq(conversations.id,id));
     await tx.update(conversationReplyRequests).set({status:'ready',assistantMessageId:assistantId,references,followUpQuestion:result.followUpQuestion,finishedAt:new Date()}).where(eq(conversationReplyRequests.id,requestId));
-  });}catch{await finish('failed','publication_unconfirmed');}
+    staged=true;
+  }));published=staged;}catch{await finish('failed','publication_unconfirmed');}
+  }finally{timing.finish({answerAttempted,published});}
 }

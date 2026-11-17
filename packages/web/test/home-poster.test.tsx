@@ -845,7 +845,10 @@ describe("returning home keeps the reading", () => {
       layout = await mountWorld(FACTS);
       const said = () => layout.container.querySelector('.jar-char-bubble')?.textContent ?? '';
       const reading = said();
-      expect(reading).toContain('On your mind lately');
+      /* The reading itself, with no "On your mind lately" label over it
+         since 2026-11-12. */
+      expect(layout.container.querySelector('.jar-char-bubble .waka-reading-preview'), 'the bubble is not the reading').not.toBeNull();
+      expect(reading).not.toContain('On your mind lately');
       await act(async () => { vi.advanceTimersByTime(6000); });
       await layout.step(5);
       expect(said()).toBe(reading);

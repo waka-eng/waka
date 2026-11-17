@@ -217,15 +217,16 @@ describe("the doc's [checked] structural claims", () => {
   it("keeps the ground's refusal ahead of the match", () => {
     // The doc claims a candidate near a dismissed anchor is refused BEFORE
     // the match is even looked at — so a refused pattern cannot re-enter as
-    // evidence for something else, and a refused candidate never spends a
-    // judge call. The behavior is proven on a real database in
+    // evidence for something else. Native refusal retains its old behavior;
+    // model2 proximity requires a meaning judgment before refusal. The
+    // behavior is proven on a real database in
     // signal-suppression.db.test.ts; this pins the code shape the ordering
     // claim rests on, the way the queue's `changed` check is pinned below.
     const source = readFileSync(
       resolve(REPO_ROOT, "packages/api/src/lib/signal-match-or-mint.ts"),
       "utf8",
     );
-    const refusal = source.indexOf("findSuppressionAnchor(candidate, anchors)");
+    const refusal = source.indexOf("findSuppressionAnchor(candidate, anchors,input.embeddingPolicy)");
     const match = source.indexOf("findBestMatch(candidate.embedding");
     expect(refusal).toBeGreaterThan(-1);
     expect(match).toBeGreaterThan(-1);

@@ -46,7 +46,7 @@ const retry=()=>[...world!.container.querySelectorAll<HTMLButtonElement>('.jar-h
 const expectLoading=()=>{
   expect(forming()?.textContent).toContain('Thinking…');
   expect(forming()?.getAttribute('role')).toBe('status');
-  expect(world!.container.textContent).not.toContain('Nothing to say yet. Keep a few more things.');
+  expect(world!.container.textContent).not.toContain('Nothing to say yet. Save a few more things.');
   expect(world!.container.textContent).not.toContain('Capture your first inspiration');
   expect(world!.container.querySelector('.waka-corners')).not.toBeNull();
 };
@@ -75,7 +75,7 @@ it('shows the real empty state only after the owned response confirms no reading
 it('does not tell someone to capture their first inspiration until both reads confirm the empty state',async()=>{
   facts.inspirations=[];world=await mountWorld(facts);expectLoading();
   await act(async()=>reads.requests[0]!.resolve(null));
-  expect(settled()?.textContent).toContain('Nothing kept yet.');
+  expect(settled()?.textContent).toContain('Nothing saved yet.');
   expect(world.container.textContent).not.toContain('Thinking…');
 });
 it('shows a read failure, preserves a Capture draft, and coalesces explicit read-only retries',async()=>{
@@ -83,7 +83,7 @@ it('shows a read failure, preserves a Capture draft, and coalesces explicit read
   await act(async()=>reads.requests[0]!.reject(new Error('Unavailable')));
   expect(forming()?.textContent).toContain('Couldn’t load what’s on your mind');
   expect(forming()?.getAttribute('role')).toBe('alert');
-  expect(world.container.textContent).not.toContain('Nothing to say yet. Keep a few more things.');
+  expect(world.container.textContent).not.toContain('Nothing to say yet. Save a few more things.');
   const capture=keepBox(world.container);
   const textarea=capture;
   await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(textarea,'Keep my unfinished spark');textarea.dispatchEvent(new Event('input',{bubbles:true}));});
@@ -177,6 +177,6 @@ it.each(['queued','processing','waiting','failed','unknown'] as const)('keeps %s
 it('shows the paused-reading notice with Retry on the board even when principles also failed',async()=>{
   vi.mocked(fetchPrincipleStatus).mockResolvedValue({phase:'failed',eligible:true,signalCount:3,topOfMindCount:1,readingPaused:true});
   world=await mountWorld(facts);await act(async()=>reads.requests[0]!.resolve(board()));await world.step(4);
-  expect(world.container.textContent).toContain('WAKA is paused for now. Everything you kept is safe.');
+  expect(world.container.textContent).toContain('WAKA is paused for now. Everything you saved is safe.');
   expect([...world.container.querySelectorAll<HTMLButtonElement>('.jar-board-acts button')].some(row=>row.textContent?.trim()==='Try again')).toBe(true);
 });

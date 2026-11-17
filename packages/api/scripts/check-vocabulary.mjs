@@ -383,7 +383,7 @@ const FORBIDDEN = [
 const ALLOWED = [
   {
     name: "pattern",
-    files: ["src/queue/gemini.ts", "src/queue/review-question.test.ts", "src/lib/openrouter-model-provider.ts", "src/lib/openrouter-model-provider.test.ts"],
+    files: ["src/queue/gemini.ts", "src/queue/review-question.test.ts", "src/lib/generation-schema.ts", "src/lib/openrouter-model-provider.test.ts"],
     disposition: "permanent",
     why: "the external OpenAPI/JSON Schema regular-expression keyword, used in provider output schemas and their translation tests. The provider owns this field name; it is not WAKA's layer-2 signal concept",
   },

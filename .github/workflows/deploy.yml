@@ -55,6 +55,8 @@ jobs:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       VITE_POSTHOG_PROJECT_TOKEN: ${{ vars.VITE_POSTHOG_PROJECT_TOKEN_PRODUCTION }}
       VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST_PRODUCTION }}
+      WAKA_SIGNUP_ADMISSION: ${{ vars.WAKA_SIGNUP_ADMISSION_PRODUCTION || 'closed' }}
+      WAKA_TURNSTILE_SITE_KEY: ${{ vars.WAKA_TURNSTILE_SITE_KEY_PRODUCTION }}
       WAKA_OPENROUTER_DATA_COLLECTION: ${{ vars.WAKA_OPENROUTER_DATA_COLLECTION_PRODUCTION }}
       WAKA_OPENROUTER_REQUIRE_ZDR: ${{ vars.WAKA_OPENROUTER_REQUIRE_ZDR_PRODUCTION }}
       WAKA_OPERATIONS_ALERT_TOPIC_ARN: ${{ vars.WAKA_OPERATIONS_ALERT_TOPIC_ARN_PRODUCTION }}
@@ -91,10 +93,16 @@ jobs:
 
       - name: Validate deployment environment
         env:
+          # Owner-approved temporary shared key; the SST target stays production.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
           WAKA_DISCORD_WEBHOOK_URL: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "${WAKA_SIGNUP_ADMISSION:-closed}" != "closed" ]]; then
+            printf 'This reviewed candidate requires signup admission closed.\n' >&2
+            exit 1
+          fi
           required=(
             AWS_ACCESS_KEY_ID
             AWS_SECRET_ACCESS_KEY
@@ -106,6 +114,7 @@ jobs:
             DB_CONNECTION_URL
             GEMINI_API_KEY
             OPENROUTER_API_KEY
+            OPENAI_API_KEY
             WAKA_DISCORD_WEBHOOK_URL
           )
           missing=()
@@ -135,6 +144,7 @@ jobs:
         if: ${{ inputs.preview_only }}
         env:
           SST_SECRET_OpenRouterApiKey: ${{ secrets.OPENROUTER_API_KEY }}
+          SST_SECRET_OpenAiApiKey: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
           SST_SECRET_DiscordWebhookUrl: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
         run: node scripts/preview-production.mjs
 
@@ -196,6 +206,12 @@ jobs:
           pnpm sst secret set GeminiApiKey "$GEMINI_API_KEY" --stage "$SST_STAGE"
           pnpm sst secret set OpenRouterApiKey "$OPENROUTER_API_KEY" --stage "$SST_STAGE"
           printf '%s' "$WAKA_DISCORD_WEBHOOK_URL" | pnpm sst secret set DiscordWebhookUrl --stage "$SST_STAGE"
+
+      - name: Set production OpenAI secret through stdin
+        if: ${{ !inputs.preview_only }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
+        run: node scripts/set-openai-secret.mjs
 
       - name: Apply production database migrations
         if: ${{ !inputs.preview_only }}
@@ -271,6 +287,8 @@ jobs:
 
       - name: Verify production runtime and cleanup wiring without secrets
         if: ${{ !inputs.preview_only }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
         run: node scripts/production-release-audit.mjs > production-release-audit.json
 
       - name: Arm missing-probe detection after natural healthy baseline

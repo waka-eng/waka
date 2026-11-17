@@ -61,6 +61,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     fetchCurrentViewer: vi.fn(async () => null),
+    fetchSignupAdmission: vi.fn(async()=>({mode:"off"})),
     login: vi.fn(),
     signup: vi.fn(),
     logout: vi.fn(async () => undefined),
@@ -261,13 +262,15 @@ describe("auth boundary", () => {
     window.localStorage.removeItem("waka.auth.seenHere");
     let container = await renderAuthRoutes({ initialPath: "/login" });
     expect(container.querySelector("#login-title")?.textContent).toBe("Welcome.");
-    expect(container.textContent).not.toContain("Sign in to return to what you kept.");
+    /* No subtitle under the headline (founder, 2026-11-12: "strip all
+       unnecessary descriptive text across the experience"). */
+    expect(container.querySelector(".login-subtitle")).toBeNull();
     await act(async () => mountedRoot?.unmount()); mountedRoot = null; container.remove();
 
     window.localStorage.setItem("waka.auth.seenHere", "1");
     container = await renderAuthRoutes({ initialPath: "/login" });
     expect(container.querySelector("#login-title")?.textContent).toBe("Welcome back.");
-    expect(container.textContent).toContain("Sign in to return to what you kept.");
+    expect(container.querySelector(".login-subtitle")).toBeNull();
   });
 
   it("supports expected keyboard navigation for login and signup tabs", async () => {
@@ -335,7 +338,7 @@ describe("auth boundary", () => {
     });
     await flushReactWork();
 
-    expect(container.textContent).toContain("Start keeping what moves you.");
+    expect(container.textContent).toContain("Start saving what moves you.");
     expect(container.textContent).toContain("Continue with Google");
     const selector = container.querySelector<HTMLSelectElement>(
       'select[name="preferredLocale"]',
@@ -364,7 +367,7 @@ describe("auth boundary", () => {
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
-    expect(container.textContent).toContain("Sign in to return to what you kept.");
+    expect(container.querySelector("#login-title")).not.toBeNull();
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
@@ -375,7 +378,7 @@ describe("auth boundary", () => {
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
-    expect(container.textContent).toContain("Sign in to return to what you kept.");
+    expect(container.querySelector("#login-title")).not.toBeNull();
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });

@@ -1480,20 +1480,24 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    `translate`, NOT `transform`. Some of these pages are centred with a
    transform of their own; the separate property composes with it instead of
    replacing it, so the rise can never knock a page off its centre. */
+/* NOTHING RISES FROM THE BOTTOM (founder, 2026-11-10: "I don't like the
+   animation of things that open from the bottom"). A page fades in where it
+   stands and fades out the same way; the 28px rise is gone. The out keeps
+   its 180ms, which `leaveAsModal` holds the close for. */
 [data-motion="modal"] {
-  animation: waka-modal-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: waka-modal-in 180ms ease-out both;
 }
 [data-motion="modal"][data-leaving] {
-  animation: waka-modal-out 180ms cubic-bezier(0.4, 0, 1, 1) both;
+  animation: waka-modal-out 180ms ease-in both;
   pointer-events: none;
 }
 @keyframes waka-modal-in {
-  from { opacity: 0; translate: 0 28px; }
-  to { opacity: 1; translate: 0 0; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes waka-modal-out {
-  from { opacity: 1; translate: 0 0; }
-  to { opacity: 0; translate: 0 28px; }
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   [data-motion="modal"],
@@ -1626,8 +1630,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
      on an editable page produces. Both of these are editable pages. */
 .waka-over--note .waka-note-page {
   margin-block: 0;
-  font-size: var(--t-body);
-  line-height: 1.7;
+  font-size: var(--t-writing);
+  line-height: 1.6;
 }
 
 /**
@@ -1904,10 +1908,14 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
      of being stretched into an oval by the cross-axis default. */
   display: flex;
   align-items: center;
-  padding: 0 var(--sp-14);
-  border: 1px solid var(--field-edge);
-  border-radius: 12px;
-  background: transparent;
+  /* A SOFT RAISED PILL, NO EDGE (founder, 2026-11-10: "search is so
+     ugly"). The 1px outlined box read as a form field from another product;
+     now it is the home bar's own material, the raised ground and a full
+     round end, one look on Saved and Past chats alike. */
+  padding: 0 var(--sp-16);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: var(--waka-raised);
   color: var(--ink);
   font-family: var(--waka-face);
   font-size: var(--t-input);
@@ -1923,7 +1931,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    still inside this control and the person is still mid-search. */
 .waka-over-find:focus-within {
   outline: none;
-  border-color: color-mix(in srgb, var(--ink) 80%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 28%, transparent);
 }
 
 /* ═══ THE SEARCH GLYPH, DRAWN RATHER THAN IMPORTED ══════════════════════
@@ -2218,6 +2226,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   align-items: center;
   gap: var(--sp-20);
   padding-block: var(--sp-16);
+  /* CENTRED IN THE PAGE, TOP TO BOTTOM (founder, 2026-11-12: "center it
+     like vertically"): auto margins in the page's column, which yield to a
+     ground taller than the page instead of hiding its top. */
+  margin-block: auto;
 }
 
 /* ═══ THE CREATURE WAITS WITH YOU ════════════════════════════════════════
@@ -2311,6 +2323,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-ground-card {
   display: flex;
   flex-direction: column;
+  /* CENTRED UNDER THE CREATURE, ALWAYS (founder, 2026-11-12: "center this
+     thing always"): the card itself on the page's axis, and every line in
+     it, label to foot, on the same axis as the bubble above it. */
+  align-self: center;
+  margin-inline: auto;
+  text-align: center;
   gap: var(--sp-16);
   box-sizing: border-box;
   width: min(24rem, 100%);
@@ -2329,15 +2347,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   background: radial-gradient(closest-side, color-mix(in srgb, var(--jar-live) 16%, transparent), transparent);
 }
 
-.waka-ground-definition, .waka-ground-how, .waka-ground-label { margin: 0; }
-.waka-ground-definition { color: var(--ink); font-size: var(--t-body); line-height: 1.5; }
-.waka-ground-how { color: var(--muted); font-size: var(--t-ui); line-height: 1.6; }
+.waka-ground-label { margin: 0; }
 .waka-ground-label { color: var(--muted); font-size: var(--t-fine); }
-.waka-ground-example { display: grid; gap: var(--sp-8); }
-.waka-ground-example blockquote {
-  margin: 0; color: var(--ink); font-family: var(--waka-face);
-  font-size: var(--t-body); line-height: 1.5;
-}
 
 .waka-ground-seats {
   display: flex;
@@ -2402,20 +2413,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   100% { color: var(--muted); text-shadow: none; }
 }
 
-.waka-ground-foot {
-  order: -1;
-  margin: 0;
-  color: color-mix(in srgb, var(--jar-live) 70%, transparent);
-  font-family: var(--waka-face);
-  font-size: var(--t-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
 /* THE FIRST PRINCIPLE, MET. One line above it, and the card comes up in
    light — the same light the ground's seats were waiting in. Once. */
-.waka-held-first,
-.waka-held-says {
+.waka-held-first {
   color: var(--waka-on-light);
 }
 
@@ -4820,8 +4820,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    under it. It keeps everything in one layer (the founder's worry about a
    button above the bubble: "so many layers of items"), it reads as part of
    what was said rather than a control bolted on, and two acts split the row
-   with a second hairline. The first act is the one the eye lands on; a
-   second (`--quiet`) is the same row a step lighter. */
+   with a second hairline. The first act is the one the eye lands on. */
 .jar-char-bubble-act {
   appearance: none;
   -webkit-appearance: none;
@@ -4857,6 +4856,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 .jar-char-bubble-act:first-child { border-bottom-left-radius: 20px; }
 .jar-char-bubble-act:last-child { border-bottom-right-radius: 20px; }
+/* SHARE AND EDIT ARE ICONS AT THE ROW'S END (2026-11-12): a thumb's square
+   each, so the words keep the width. */
+.jar-char-bubble-act--icon { flex: 0 0 var(--bubble-act-h); padding: 0; }
+.jar-char-bubble-act--icon svg { width: 18px; height: 18px; }
 
 .jar-char-bubble-act + .jar-char-bubble-act {
   border-left: 1px solid color-mix(in srgb, var(--waka-on-light) 11%, transparent);
@@ -4869,11 +4872,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* "Dive into review" wears the foot row's own type, exactly like "Let's chat
    about it" — founder, 2026-10-15: "dive into review should have same font as
    lets chat about it." It briefly had full ink and weight 500; it does not. */
-
-.jar-char-bubble-act--quiet {
-  font-weight: 300;
-  color: color-mix(in srgb, var(--waka-on-light) 58%, transparent);
-}
 
 .jar-char-bubble-act:disabled {
   color: color-mix(in srgb, var(--waka-on-light) 45%, transparent);
@@ -5189,11 +5187,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   color: inherit;
   text-wrap: pretty;
 }
-/* THE LABEL OVER IT ("On your mind lately", "Kept") and the softer second
-   line under a question: one quieter voice, the same ink softened. */
-.jar-char-bubble-of,
-.jar-char-bubble-body .onb-say-soft,
-.waka-note-says-softer {
+/* THE LABEL OVER IT ("Kept"): a quieter voice, the same ink softened. */
+.jar-char-bubble-of {
   font-size: var(--bubble-label);
   line-height: var(--bubble-lh);
   letter-spacing: normal;
@@ -5977,13 +5972,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   font-size: var(--t-body);
   font-weight: 500;
   color: var(--ink);
-}
-
-.waka-about-lead {
-  margin: 0;
-  font-size: var(--t-body);
-  line-height: 1.5;
-  color: var(--muted);
 }
 
 .waka-about-steps {
@@ -6895,27 +6883,30 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 .waka-reading-preview { flex-shrink: 0; width: 100%; }
 .jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  /* THREE LINES, everywhere (design F1): "Why?" and "Talk about this" carry
-     the rest, and pressing the sentence opens it in full. */
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
+  /* NEVER CUT OFF (founder, 2026-11-12: "on your mind lately should never be
+     cut off like this"). It was three lines and an ellipsis; now the whole
+     read stands in the bubble. A read longer than the screen allows scrolls
+     inside the bubble rather than losing its end, and Why? and Chat about
+     this stay under it. */
+  display: block;
+  max-height: 40dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-/* MEASURED at 874×402: two complete lines leave both actions inside the bubble. */
+/* MEASURED at 874×402: a short window keeps both actions inside the bubble. */
 @media (max-height: 500px) {
-  .jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading { -webkit-line-clamp: 2; line-clamp: 2; }
+  .jar-char-bubble--reading .waka-reading-preview .jar-char-bubble-reading { max-height: 30dvh; }
 }
-.waka-reading-sheet { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: max(var(--sp-16), env(safe-area-inset-top)) var(--sp-16) max(var(--sp-16), env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--paper) 85%, transparent); }
+/* The read in full is a page now (2026-11-12); this only holds it. */
+.waka-reading-sheet { position: fixed; inset: 0; z-index: 120; display: grid; place-items: stretch; padding: 0; background: none; }
 .waka-reading-full { display: flex; flex-direction: column; width: min(36rem, 100%); max-height: 100%; overflow: hidden; padding: var(--sp-24); border: 1px solid var(--line); border-radius: var(--sp-24); background: var(--paper); color: var(--ink); font-family: var(--waka-face); }
 .waka-reading-full header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-16); }
 .waka-reading-full-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; }
 .waka-reading-full h2 { margin: 0; font-size: var(--t-body); font-weight: 500; }
 .waka-reading-full button { min-height: var(--sp-44); padding: var(--sp-8); background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
-.waka-reading-full p { margin: var(--sp-16) 0 0; font-size: var(--t-bubble-reading); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.waka-reading-full footer { flex-shrink: 0; margin-top: var(--sp-16); }
-.waka-reading-full footer button { text-decoration: underline; }
+/* The read at the size everything written is set at (founder, 2026-11-12:
+   "sooo big"): `--t-writing`, not the bubble's reading size. */
+.waka-reading-full p { margin: var(--sp-16) 0 0; font-size: var(--t-writing); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .waka-dock--tabs .waka-dock-item { position: relative; }
 .waka-dock--tabs .waka-dock-item[aria-current="page"]::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: var(--sp-16); height: 2px; border-radius: var(--r-pill); background: currentColor; }
 
@@ -6969,18 +6960,20 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 @layer chrome {
 /* Reading evidence stays inside its sheet. */
 .waka-reading-details { margin-top: var(--sp-16); }
-.waka-reading-details summary { min-height: var(--sp-44); padding-block: var(--sp-12); cursor: pointer; overflow-wrap: anywhere; }
-.waka-reading-details details details { margin-inline-start: var(--sp-12); }
-.waka-reading-full .waka-reading-meta { font-size: var(--t-ui); color: var(--muted); }
-.waka-reading-details textarea { display: block; width: 100%; min-height: 100px; margin-top: var(--sp-8); padding: var(--sp-12); background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: var(--sp-12); font: inherit; font-size: var(--t-input); }
-.waka-reading-sources { margin: var(--sp-8) 0; padding-inline-start: var(--sp-20); }
-.waka-reading-sources button { text-align: start; overflow-wrap: anywhere; }
+/* EDITING IS THE READ, NOW WRITABLE (2026-11-12): no box, no label, the
+   words where they stood at the size everything written is set at; Cancel
+   quiet and Save in full ink on one line under them. */
+.waka-reading-details textarea { display: block; width: 100%; min-height: 40dvh; margin: 0; padding: 0; background: none; color: var(--ink); border: 0; resize: none; font: inherit; font-size: var(--t-writing); line-height: 1.6; }
+.waka-reading-details > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-20); }
+.waka-reading-details > div > textarea { flex-basis: 100%; }
+.waka-reading-full .waka-reading-details > div > button:not(.waka-surface-back) { padding-inline: 0; color: var(--muted); font-size: var(--t-ui); }
+.waka-reading-full .waka-reading-details > div > button:last-child:not(:disabled):not(.waka-surface-back) { color: var(--ink); }
 
 
 }
 
 @layer chrome {
-/* A bounded preview leaves all choices visible; Open inspiration shows the full original. */
+/* A bounded preview leaves all choices visible; a tap on the card reads the full original. */
 .waka-inspiration-review-text { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--t-body); line-height: 1.55; margin: var(--sp-12) 0; }
 .waka-inspiration-relevance { font-size: var(--t-meta); line-height: 1.5; opacity: .85; margin-bottom: var(--sp-16); }
 .waka-inspiration-relevance button { font: inherit; text-decoration: underline; text-underline-offset: 3px; min-height: var(--sp-44); }
@@ -6993,11 +6986,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 @layer chrome {
   /* MEASURED 390×844: long originals clipped the answer controls at the old
-     46dvh cap. At 320×568, three preview lines and the remaining viewport
-     keep both answers and Exit review visible. */
+     46dvh cap. At 320×568, three preview lines keep both answers visible.
+     The cap itself now holds on a short window too (founder, 2026-11-12:
+     "this shouldn't cover the character"): lifting it to 100dvh - 140px let
+     the card climb over the creature on a 700-740px laptop window. */
   @media (max-height: 740px) {
     .waka-inspiration-review-text { -webkit-line-clamp: 3; }
-    .jar-char-say:has(.waka-inspiration-review-text) { max-height: calc(100dvh - 140px); }
   }
 }
 
@@ -7016,9 +7010,13 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   width: min(560px, calc(100vw - var(--sp-32) - env(safe-area-inset-left) - env(safe-area-inset-right)));
   pointer-events: auto;
 }
-.waka-home-bar-row { display: flex; align-items: center; gap: var(--sp-8); }
+.waka-home-bar-row { display: flex; align-items: center; justify-content: center; gap: var(--sp-8); }
+/* A BUTTON, NOT A FIELD (founder, 2026-11-10: "make this bar shorter so it
+   doesn't feel like a text [field] like chat"). The pill hugs its words and
+   two glyphs and stands centred beside Chat; the words are full ink with no
+   trailing "…", so nothing about it says "type here". */
 .waka-home-bar-pill {
-  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--sp-2);
+  flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--sp-2);
   height: var(--sp-64); box-sizing: border-box; padding: var(--sp-6) var(--sp-8) var(--sp-6) var(--sp-6);
   border-radius: var(--r-pill); background: var(--waka-raised);
 }
@@ -7030,11 +7028,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* "Keep a thought…": the whole left of the pill is the press, its words
    placeholder-dim; they come up to full ink under a pointer or focus. */
 .waka-home-bar-field {
-  flex: 1 1 auto; min-width: 0; justify-content: flex-start; padding-inline: var(--sp-16) var(--sp-8);
-  color: var(--muted); font-size: var(--t-input); text-align: left;
+  flex: 0 1 auto; min-width: 0; justify-content: flex-start; padding-inline: var(--sp-16) var(--sp-8);
+  color: var(--ink); font-size: var(--t-input); text-align: left;
 }
 .waka-home-bar-field > span { overflow: hidden; text-overflow: ellipsis; }
-.waka-home-bar-field:hover, .waka-home-bar-field:focus-visible { color: var(--ink); }
 .waka-home-bar-glyph { flex: none; width: var(--sp-48); }
 .waka-home-bar-door svg, .waka-home-bar-chat svg { width: var(--sp-20); height: var(--sp-20); stroke-width: 1.6; }
 .waka-home-bar-door:disabled, .waka-home-bar-chat:disabled { opacity: .38; cursor: default; }
@@ -7065,19 +7062,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 
 @layer chrome {
-/* ═══ THE READ'S SENTENCE IS ITS OWN "READ IN FULL" (design F1) ══════════ */
-.waka-reading-open {
-  appearance: none; display: block; width: 100%; padding: 0; border: 0; background: none;
-  color: inherit; font: inherit; text-align: inherit; cursor: pointer;
-}
 /* ═══ "WHY?" — BECAUSE YOU KEPT THESE (design F2) ═══════════════════════════
    One quoted save per row, left-aligned, hairlines between, in the
    bubble's own ink: the person's words, not the machine's. */
-.waka-says-why { display: flex; flex-direction: column; align-self: stretch; max-height: 40dvh; overflow-y: auto; }
-.waka-says-why-row {
-  display: block; padding: var(--sp-8) 0; border-top: 1px solid color-mix(in srgb, var(--waka-on-light) 11%, transparent);
-  font-size: var(--t-body); line-height: 1.4; text-align: start; overflow-wrap: anywhere;
-}
 
 /* ═══ SAVES → PATTERNS → PRINCIPLES (design F4) ═════════════════════════════
    Pulled up over the home, under the corners and behind the home bar, on
@@ -7085,48 +7072,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    desk. Saves are raised cards; a pattern or principle wears the bubble's
    paper (it is something said about you); one still forming is dashed and
    says so. */
-.waka-stream {
-  position: fixed; z-index: 59; left: 0; right: 0;
-  /* It stops above the home bar rather than running under it: the bar is
-     not drawn over words you are reading. */
-  bottom: calc(var(--sp-28) + var(--sp-64) + var(--sp-8) + env(safe-area-inset-bottom));
-  /* To the top of the screen: its own header is the top row (nav system),
-     12px under the safe area, as on every page. */
-  top: 0; padding-top: calc(var(--sp-12) + env(safe-area-inset-top)); box-sizing: border-box;
-  display: flex; flex-direction: column; align-items: center;
-  background: var(--paper); color: var(--ink); font-family: var(--waka-face);
-}
-/* THE FIELD STANDS ON THE SHEET'S OWN COLUMN, above the scroll, so a long
-   list never carries it away. The field's anatomy is the archive's. */
-.waka-stream-find { flex: none; width: min(36rem, 100%); box-sizing: border-box; padding: var(--sp-12) var(--sp-16) var(--sp-4); }
-/* A HEADING THAT IS A DOOR is lit (light is the meaning channel); the one
-   that goes nowhere, Patterns, stays muted. 44px to press, no box. */
-.waka-stream-label:has(> .waka-stream-door) { margin: var(--sp-4) 0 var(--sp-2); }
-.waka-stream-door {
-  display: inline-flex; align-items: center; gap: var(--sp-4); min-height: var(--sp-44); padding: 0; border: 0; background: none;
-  color: var(--ink); font: inherit; cursor: pointer;
-}
-.waka-stream-scroll {
-  flex: 1; min-height: 0; width: min(36rem, 100%); box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
-  padding: 0 var(--sp-16) var(--sp-32);
-  -webkit-mask-image: linear-gradient(180deg, currentColor 85%, transparent);
-  mask-image: linear-gradient(180deg, currentColor 85%, transparent);
-}
-.waka-stream-label { margin: var(--sp-14) 0 var(--sp-8); font-size: var(--t-ui); font-weight: 400; color: var(--muted); }
-.waka-stream-list { display: flex; flex-direction: column; gap: var(--sp-8); margin: 0; padding: 0; list-style: none; }
-.waka-stream-save {
-  appearance: none; display: flex; flex-direction: column; gap: var(--sp-4); width: 100%;
-  padding: var(--sp-12) var(--sp-16); border: 0; border-radius: var(--sp-16);
-  background: var(--waka-raised); color: var(--ink); font: inherit; text-align: start; cursor: pointer;
-}
-.waka-stream-meta { font-size: var(--t-ui); color: var(--muted); }
-.waka-stream-more { display: block; min-height: var(--sp-44); margin: var(--sp-8) auto 0; padding: 0 var(--sp-16); border: 0; background: none; color: var(--ink); font: inherit; font-size: var(--t-ui); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.waka-stream-words { font-size: var(--t-input); line-height: 1.4; overflow-wrap: anywhere; }
-.waka-stream-statement {
-  display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-12) var(--sp-16); border-radius: var(--sp-16);
-  background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep)); color: var(--waka-on-light);
-}
-.waka-stream-statement[data-forming] { background: none; color: var(--ink); border: 1px dashed var(--muted); }
 }
 
 @layer chrome {
@@ -7143,12 +7088,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .jar-seek.jar-inspiration-composer .jar-composer-body > .jar-composer-text {
   flex: 1 1 auto; min-height: calc(var(--sp-44) * 3); max-height: none; height: auto !important;
   margin: var(--sp-8) 0 0; padding: 0; border: 0; border-radius: 0; background: none; resize: none;
-  font-size: var(--t-input); line-height: 1.6; color: var(--ink); overflow-y: auto;
+  font-size: var(--t-writing); line-height: 1.6; color: var(--ink); overflow-y: auto;
 }
 .jar-seek.jar-inspiration-composer .jar-composer-body[data-hero] > .jar-composer-text {
   /* With a picture the note is a line that grows with what is typed, not a
      page: the field sizes to its words. */
-  flex: none; min-height: calc(var(--t-input) * 1.6); max-height: 24dvh; field-sizing: content;
+  flex: none; min-height: calc(var(--t-writing) * 1.6); max-height: 24dvh; field-sizing: content;
 }
 /* ═══ THE NOTE BAR IS ONE PILL, THE HOME BAR'S SHAPE ═════════════════════════
    Raised, round, 64px at rest, and its buttons are dim or full ink, never
@@ -7174,7 +7119,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    tools and Send leave the field about 155px, just enough for "What's on your
    mind?" on one line (measured: 149px in Jost at 16px). The tools keep their
    44px; the gaps and the act's padding give way. */
-.waka-note-bar[data-field] .waka-note-bar-row { align-items: flex-end; }
+/* WITH A FIELD (a chat), TWO LINES (founder, 2026-11-10): the words across
+   the whole width on top, the tools and Send on the row under them. The
+   pill becomes a rounded box, 24px corners, and grows upward as the words do. */
+.waka-note-bar[data-field] { border-radius: var(--sp-24); padding: var(--sp-6) var(--sp-4) var(--sp-4); }
+.waka-note-bar[data-field] > .waka-note-bar-field { align-self: stretch; padding: var(--sp-12) var(--sp-14) var(--sp-4); }
+.waka-note-bar[data-field] .waka-note-bar-row { min-height: var(--waka-corner); }
 /* The tools hold the start; whatever is left pushes the primary word to the end. */
 .waka-note-bar-tools { display: flex; align-items: center; flex: none; margin-inline-end: auto; }
 .waka-note-bar-field { flex: 1 1 auto; min-width: 0; align-self: center; padding: var(--sp-10) 0 var(--sp-10) var(--sp-4); }
@@ -7196,6 +7146,17 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-note-bar .waka-note-bar-tools .waka-dock-tool.waka-dock-tool--live { width: auto; padding: 0 var(--sp-12); font-size: var(--t-input); }
 .jar-inspiration-composer .waka-note-bar .waka-dock-save { flex: none; min-height: var(--sp-44); border: 0; background: none; color: var(--ink); font-size: var(--t-input); }
 .jar-inspiration-composer .waka-note-bar .waka-dock-save:disabled { opacity: 0.4; }
+/* WHERE THE PAGE IS THE FIELD, THE BAR IS NO PILL (2026-11-10). Founder,
+   on the notepad's full-width pill holding three icons and Keep: "this
+   bottom bar is useless and ugly". A pill says "type here", and on the
+   notepad and a saved note the whole page is where you type; so the bar
+   there is a bare toolbar on the page's own ground, its icons and its word
+   lined up with the text's edges. Chat keeps the pill: its field is in it. */
+.waka-note-bar:not([data-field]) {
+  min-height: 0; padding: var(--sp-4) 0; border-radius: 0; background: none;
+}
+.waka-note-bar:not([data-field]) .waka-note-bar-tools { margin-inline-start: calc(-1 * var(--sp-12)); }
+.waka-note-bar:not([data-field]) .waka-note-bar-row > :last-child { margin-inline-end: calc(-1 * var(--sp-12)); }
 
 /* THE CREATURE, SMALL, BESIDE WHAT IT SAYS — the real `Companion`, never drawn here. */
 .waka-note-line { display: flex; align-items: center; gap: var(--sp-10); margin: var(--sp-8) 0 var(--sp-14); }
@@ -7213,21 +7174,27 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   border-radius: 16px 16px 16px 4px;
   background: color-mix(in srgb, var(--jar-live) 84%, var(--jar-deep)); color: var(--waka-on-light);
 }
-/* ═══ THE "<"'S QUESTION, IN THE SAME BUBBLE ═════════════════════════════════
-   "Leave this note?" with Keep as draft and Discard as the bubble's foot row
-   (`.jar-char-bubble-acts`, the one the founder chose for every bubble). The
-   creature sits by the tail, at the bubble's foot. */
-.waka-note-ask { align-items: flex-end; }
-.waka-note-says--ask { display: flex; flex-direction: column; }
-.waka-note-ask-q { margin: 0 0 var(--sp-4); }
-.jar-inspiration-composer .waka-note-ask .jar-char-bubble-act {
-  min-width: 0; min-height: var(--bubble-act-h); padding: 0 var(--sp-12); border: 0; border-radius: 0; background: none;
-  color: color-mix(in srgb, var(--waka-on-light) 78%, transparent); font-size: var(--bubble-act);
+/* ═══ THE "<"'S QUESTION, A SMALL MODAL IN THE MIDDLE (founder, 2026-11-10) ═══
+   A raised card over a dimmed page: the question, then Discard (dim) and
+   Save as draft (full ink) as words at its foot, never filled. */
+.waka-note-ask { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: var(--sp-16); }
+.waka-note-ask-scrim { position: absolute; inset: 0; background: color-mix(in srgb, var(--jar-deep) 62%, transparent); animation: waka-note-ask-in 160ms ease-out both; }
+.waka-note-ask-card:focus { outline: none; }
+.waka-note-ask-card {
+  position: relative; box-sizing: border-box; width: min(100%, 22rem); padding: var(--sp-24) var(--sp-24) var(--sp-12);
+  border-radius: var(--sp-24); background: var(--waka-raised); animation: waka-note-ask-in 160ms ease-out both;
 }
-.jar-inspiration-composer .waka-note-ask .jar-char-bubble-act + .jar-char-bubble-act { border-left: 1px solid color-mix(in srgb, var(--waka-on-light) 11%, transparent); }
-.jar-inspiration-composer .waka-note-ask .jar-char-bubble-act:first-child { border-bottom-left-radius: 4px; }
-.jar-inspiration-composer .waka-note-ask .jar-char-bubble-act:last-child { border-bottom-right-radius: 16px; }
-.jar-inspiration-composer .waka-note-ask .jar-char-bubble-act:focus-visible { outline: 2px solid var(--waka-on-light); outline-offset: -3px; }
+@keyframes waka-note-ask-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .waka-note-ask-scrim, .waka-note-ask-card { animation: none; } }
+.waka-note-ask-q { margin: 0; color: var(--ink); font-size: var(--t-lead); line-height: 1.4; }
+.waka-note-ask-acts { display: flex; justify-content: flex-end; gap: var(--sp-4); margin-top: var(--sp-16); margin-inline-end: calc(-1 * var(--sp-12)); }
+.jar-inspiration-composer .waka-note-ask-act {
+  min-width: 0; min-height: var(--waka-corner); padding: 0 var(--sp-12); border: 0; border-radius: var(--r-pill); background: none;
+  color: var(--ink); font-size: var(--t-input);
+}
+.jar-inspiration-composer .waka-note-ask-act--quiet { color: var(--muted); }
+.jar-inspiration-composer .waka-note-ask-act:disabled { opacity: 0.4; }
+.waka-note-ask-failed { margin: var(--sp-8) 0 0; color: var(--muted); font-size: var(--t-ui); }
 .waka-note-arrival { display: flex; gap: var(--sp-8); margin: 0 0 var(--sp-12) 50px; }
 .jar-inspiration-composer .waka-note-arrival-act { min-height: var(--sp-44); padding: 0 var(--sp-14); border: 1px solid var(--line); border-radius: var(--r-pill); background: none; color: var(--ink); font-size: var(--t-ui); }
 
@@ -7237,7 +7204,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   border-radius: 18px; overflow: hidden; background: var(--waka-raised);
 }
 .waka-note-hero img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.waka-note-hero[data-blurred] img { filter: blur(1.5px); }
 .jar-inspiration-composer .waka-note-hero-x {
   position: absolute; right: var(--sp-4); top: var(--sp-4); display: grid; place-items: center;
   width: var(--sp-44); height: var(--sp-44); padding: 0; border: 0; border-radius: 50%;
@@ -7250,12 +7216,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-note-read-body { flex: 1; min-width: 0; }
 .waka-note-read-label { margin: 0 0 var(--sp-4); color: var(--muted); font-size: var(--t-meta); }
 .waka-note-read-text { margin: 0; font-size: var(--t-input); line-height: 1.45; overflow-wrap: anywhere; }
-.waka-note-read .waka-note-retry { margin-top: var(--sp-4); padding-left: 0; }
-.waka-note-read-ask { margin: 0 0 var(--sp-4); font-size: var(--t-input); line-height: 1.45; }
-.waka-note-read-quiet { margin: 0; color: var(--muted); font-size: var(--t-ui); }
+.waka-note-read .waka-note-read-quiet { margin: 0; color: var(--muted); font-size: var(--t-ui); }
 .waka-note-read-fix { width: 100%; min-height: var(--sp-64); box-sizing: border-box; padding: var(--sp-8); border: 1px solid var(--line); border-radius: var(--sp-12); background: none; color: var(--ink); font: inherit; font-size: var(--t-input); }
 .jar-inspiration-composer .waka-note-read-act { flex: none; min-height: var(--sp-44); padding: 0 var(--sp-10); border: 0; background: none; color: var(--muted); font-size: var(--t-ui); }
-.waka-note-retry { margin: var(--sp-12) 0 0; padding-left: var(--sp-14); color: var(--muted); font-size: var(--t-meta); line-height: 1.5; }
 }
 
 @layer chrome {
@@ -7334,8 +7297,6 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
 }
 
 @layer chrome {
-/* The creature's question and its softer second line, one bubble. */
-.waka-note-says-softer { display: block; margin-top: var(--sp-2); }
 /* With a picture the words are a line, so the pill keeps to the page's foot. */
 .jar-composer-body[data-hero] > .waka-note-bar { margin-top: auto; }
 }
@@ -7419,7 +7380,7 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
 .waka-listening-words {
   box-sizing: border-box; max-width: 640px; margin: 0 auto;
   color: color-mix(in srgb, var(--ink) 52%, transparent);
-  font-size: clamp(20px, 1.6vw, 22px); line-height: 1.5; text-wrap: pretty;
+  font-size: var(--t-writing); line-height: 1.6; text-wrap: pretty;
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .waka-listening-earlier { color: color-mix(in srgb, var(--ink) 52%, transparent); }
@@ -7438,7 +7399,6 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
   display: flex; flex-direction: column; align-items: center; gap: var(--sp-4);
   padding: var(--sp-8) var(--sp-16) var(--sp-16); text-align: center;
 }
-.waka-listening-notice { max-width: 640px; margin: 0; color: var(--muted); font-size: var(--t-meta); line-height: 1.4; text-wrap: balance; }
 /* ONE DONE (review, 2026-11-09): `.chat-page .waka-listening-done` outranks
    the chat's `.chat-page button` reset (0,1,1), so Done reads the same in a
    chat as on the notepad and a saved note. */
@@ -7537,6 +7497,40 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
 }
 .waka-over.waka-over--note { padding-top: 0; }
 .jar-seek.jar-inspiration-composer > .waka-surface-head, .waka-over--note .waka-surface-head { margin-bottom: var(--sp-12); }
+/* THE NOTEPAD'S "<" STANDS WHERE EVERY PAGE'S DOES (founder, 2026-11-10:
+   "most experiences the back button is here but when I'm saving a new
+   inspiration it's all the way there"). Its header spanned the window, so
+   on a desktop its "<" sat at the screen's edge while Saved, Past chats and a
+   chat put theirs at their 650px column's edge. Now it takes that column. */
+.jar-seek.jar-inspiration-composer > .waka-surface-head,
+/* ONE "<" EVERYWHERE (founder, 2026-11-12: "the back button should always be
+   the same, no matter if it's saving an inspiration or the chat or anything
+   that requires the back button"). Measured in a browser: every page put its
+   "<" at 16,12 on a phone and on the list's 602px column at 1280 (339,12),
+   except these, which hugged the page or screen edge on a desktop (the
+   saved note at 28, Your days at 20, the strip and the login head at 16)
+   or sat 24px off the column (the review reader at 315). They take the
+   same row now. */
+.waka-over--note .waka-over-one > .waka-surface-head,
+main.waka-page > .waka-surface-head,
+.waka-surface-strip > .waka-surface-head,
+.waka-review-reader > .waka-surface-head { width: min(100%, 602px, calc(100vw - 88px)); margin-inline: auto; }
+/* EXACTLY THE LIST'S ROW (founder, 2026-11-12: "the placement of the back
+   button and [the word on the right] should be exactly the same here").
+   The Inspirations list's header is its 650px column less that column's
+   24px padding each side (602px, and 88px in from a narrower window); at
+   700px and under the column drops its padding and the row is the page's
+   16px gutter. The notepad's row now takes those same two widths.
+   MEASURED at 390, 738 and 1280 in a browser, against the list's own rules:
+   [16,374], [68,670] and [339,941] for both rows; 700px is where the list's
+   column drops its padding, the same 700 its own rule was measured at. */
+@media (max-width: 700px) {
+  .jar-seek.jar-inspiration-composer > .waka-surface-head { width: min(100%, calc(100vw - 32px)); }
+  .waka-over--note .waka-over-one > .waka-surface-head,
+  main.waka-page > .waka-surface-head,
+  .waka-surface-strip > .waka-surface-head,
+  .waka-review-reader > .waka-surface-head { width: 100%; }
+}
 
 /* A SURFACE WITH NO DOM PAGE OF ITS OWN (a principle in the sky, the
    creature's questions) gets the same row in a strip at the top. */
@@ -7561,7 +7555,6 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 /* The count is part of the title's one line: "Kept (36)". */
 .waka-surface-title .waka-over-count { display: inline; margin: 0; font: inherit; color: inherit; }
 
-.waka-stream > .waka-surface-head { width: min(36rem, 100%); padding-inline: var(--sp-16); }
 
 /* A SHEET'S HEADER is its first row on the sheet's own padding. */
 .waka-account > .waka-surface-head, .waka-settings > .waka-surface-head { margin: 0 0 var(--sp-8); }
@@ -7592,7 +7585,13 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
    the screen on the 16px gutter, above the centred card. */
 .login-shell > .login-head {
   position: absolute; top: calc(var(--sp-12) + env(safe-area-inset-top));
-  left: max(var(--sp-16), env(safe-area-inset-left)); right: max(var(--sp-16), env(safe-area-inset-right)); width: auto;
+  /* On the same 602px column as every page's "<" (2026-11-12). */
+  left: 0; right: 0; margin-inline: auto; width: min(calc(100% - 2 * var(--sp-16)), 602px, calc(100vw - 88px));
+}
+/* MEASURED at 390 and 1280: 700px is where the list's column drops its
+   padding (the rule above measured it); under it, the 16px gutter. */
+@media (max-width: 700px) {
+  .login-shell > .login-head { width: calc(100% - 2 * max(var(--sp-16), env(safe-area-inset-left))); }
 }
 .login-shell { position: relative; }
 }
@@ -7618,4 +7617,172 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
    the screen's top row is the card's own "<", as on every sheet. */
 .waka-corners:has(.waka-account) .waka-corner-place > .waka-corner { visibility: hidden; }
 .waka-corner-place > .waka-account { top: 0; }
+}
+
+@layer chrome {
+/* ═══ THE REVIEW CARD IS A CARD YOU SWIPE (founder, 2026-11-12, picking
+   "Swipe the card" of six) ═══════════════════════════════════════════════
+   The question stands above it (`.waka-review-ask`); the card is the
+   inspiration itself on the bubble's paper, big enough to read, the next
+   card a darker sheet behind it. Dragged, it tilts toward its answer and a
+   dark tag names it. A tap reads it all over the review. */
+.waka-review-ask { margin: 0 0 var(--sp-8); text-align: center; font-size: var(--t-lead); font-weight: 500; line-height: 1.35; color: var(--ink); }
+.jar-pick--reading .jar-pick-slip {
+  /* ONE PAPER, FIXED (founder, 2026-11-12: "this color is good, but the
+     bright white is horrible"): the bubble's warm paper from the two root
+     tokens, so nothing scoped to the world can lift it toward white. */
+  --bubble-fill: color-mix(in srgb, var(--moon-warm) 84%, var(--moon-ground));
+  background-color: var(--bubble-fill);
+  /* IT FITS UNDER THE CREATURE (founder, 2026-11-12: "this shouldn't cover
+     the character ... the bottom of this card is not even showing"). The
+     answers hang in `.jar-char-say`, which stops at 46% of the window so it
+     never reaches the creature; the card was taller than that, so the block
+     scrolled and hid its own answer row. It sizes to its words now, five
+     lines at most, and a tap on the card opens the rest. */
+  display: flex; flex-direction: column; gap: var(--sp-8);
+  padding: var(--sp-20) var(--sp-20) var(--sp-16);
+  border: 0; border-radius: 22px; text-align: start;
+  background: var(--bubble-fill); color: var(--waka-on-light);
+  box-shadow: 0 18px 40px color-mix(in srgb, var(--jar-deep) 70%, transparent);
+}
+.jar-pick--reading .jar-pick-slip .jar-pick-statement { color: var(--waka-on-light); font-size: var(--t-writing); line-height: 1.55; text-align: start; text-wrap: pretty; }
+.jar-pick--reading .jar-pick-slip .waka-inspiration-review-text { -webkit-line-clamp: 5; margin: 0; }
+/* Three lines on a short window. Here, after the five-line rule it narrows,
+   because two equal selectors in one layer go to the later one (code
+   review, 2026-11-12: the earlier copy never won). MEASURED 320×568 in the
+   rule this replaces. */
+@media (max-height: 740px) {
+  .jar-pick--reading .jar-pick-slip .waka-inspiration-review-text { -webkit-line-clamp: 3; }
+}
+.jar-pick--reading .jar-pick-slip .jar-pick-source { margin: 0; color: color-mix(in srgb, var(--waka-on-light) 62%, transparent); }
+.jar-pick--reading .jar-pick-slip .waka-inspiration-review-action { align-self: flex-start; color: var(--waka-on-light); }
+.jar-pick--reading .jar-pick-behind {
+  inset: var(--sp-16) var(--sp-14) 0; border: 0; border-radius: 22px;
+  background: color-mix(in srgb, var(--jar-live) 16%, var(--jar-deep));
+}
+/* The answer forming as you drag: a dark tag on the paper. */
+.jar-pick--reading .jar-pick-tag { background: var(--jar-deep); color: var(--ink); box-shadow: none; }
+/* The middle seat: Chat about this, between the two answers. */
+.jar-pick-acts-middle { grid-column: 2; justify-self: center; }
+.jar-pick-act--chat {
+  justify-content: center; width: var(--sp-48); height: var(--sp-48); min-height: 0; padding: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 50%; color: var(--ink);
+}
+.jar-pick-act--chat svg { width: var(--sp-20); height: var(--sp-20); }
+
+/* ═══ OPEN: THE WHOLE INSPIRATION, OVER THE REVIEW ════════════════════════
+   A full page on the ground over the card, the shared header's "<" back to
+   it, the words in a readable column, and the question with Not really and
+   Yes at its foot so an answer never needs the way back first. */
+.waka-review-reader {
+  position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column;
+  box-sizing: border-box; padding: calc(var(--sp-12) + env(safe-area-inset-top)) var(--sp-16) calc(var(--sp-28) + env(safe-area-inset-bottom));
+  background: var(--bg); color: var(--ink); font-family: var(--waka-face);
+}
+.waka-review-reader-page { flex: 1; min-height: 0; overflow-y: auto; width: min(40rem, 100%); margin: var(--sp-16) auto 0; }
+.waka-review-reader-text { margin: 0; font-size: var(--t-writing); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.waka-review-reader-foot { width: min(40rem, 100%); margin: var(--sp-16) auto 0; text-align: center; }
+.waka-review-reader-ask { margin: 0 0 var(--sp-8); color: var(--muted); font-size: var(--t-ui); }
+}
+
+@layer chrome {
+/* ═══ A SAVED PICTURE, SMALL (founder, 2026-11-12) ══════════════════════════
+   Where a list said "Photo", it shows the picture: a soft square tile, the
+   picture covering it, a quiet raised ground until it lands. */
+.waka-saved-photo {
+  display: inline-block; flex: none; overflow: hidden; width: var(--sp-48); height: var(--sp-48);
+  border-radius: var(--sp-12); background: var(--waka-raised);
+}
+.waka-saved-photo > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* In Inspirations: the words on the left, the picture at the row's end. */
+.waka-list-row:has(> .waka-list-photo) {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-16); align-items: center;
+}
+.waka-list-row > .waka-list-photo { grid-column: 2; grid-row: 1 / span 3; }
+}
+
+@layer chrome {
+/* ═══ INSPIRATIONS PULLED UP FROM THE HANDLE (founder, 2026-11-12) ══════════
+   It rises from the bottom like something pulled up, stops above the home
+   bar (which stays, under it, z-60 over the page's 56), and drops back down
+   on close (`SHEET_DROP_MS` in `SavesOverlay.tsx`). Its top corners round so
+   it reads as a sheet over home rather than a new page. */
+.waka-page.waka-page--sheet {
+  bottom: calc(var(--sp-28) + var(--sp-64) + var(--sp-8) + env(safe-area-inset-bottom));
+  padding-top: calc(var(--sp-12) + env(safe-area-inset-top));
+  padding-bottom: var(--sp-12);
+  border-radius: 0 0 var(--sp-24) var(--sp-24);
+  animation: waka-sheet-up 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.waka-page.waka-page--sheet[data-leaving] { animation: waka-sheet-down 220ms cubic-bezier(0.4, 0, 1, 1) both; pointer-events: none; }
+@keyframes waka-sheet-up { from { translate: 0 100%; } to { translate: 0 0; } }
+@keyframes waka-sheet-down { from { translate: 0 0; } to { translate: 0 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .waka-page.waka-page--sheet, .waka-page.waka-page--sheet[data-leaving] { animation: none; }
+}
+}
+
+@layer chrome {
+/* SEND, STOP AND SAVE ARE GLYPHS (founder, 2026-11-12), the tools' size,
+   in a 44px press, full ink or dim, never filled. */
+.waka-note-bar .waka-note-bar-row .waka-note-bar-action { display: inline-flex; align-items: center; justify-content: center; min-width: var(--waka-corner); padding: 0; }
+.waka-note-bar .waka-note-bar-action svg { width: 1.4em; height: 1.4em; }
+}
+
+@layer chrome {
+/* ═══ THE SPARK THAT SAYS PRINCIPLES ARE TO THE RIGHT (founder, 2026-11-12) ═
+   At the right edge on the creature's own line (`--jar-char-mid`, the same
+   value the creature's press sits on), a 44px press holding one small
+   four-point spark. It rests dim and glints every few seconds: light is the
+   only meaning channel, so the hint is a light, not an arrow or a word. */
+.waka-principles-spark {
+  position: absolute; z-index: 3;
+  right: max(var(--sp-6), env(safe-area-inset-right));
+  top: var(--jar-char-mid, 50%); transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: var(--waka-corner); height: var(--waka-corner); padding: 0;
+  border: 0; border-radius: 50%; background: none; color: var(--jar-live);
+  cursor: pointer; pointer-events: auto;
+}
+.waka-principles-spark svg { animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
+@keyframes waka-spark-glint {
+  0%, 70%, 100% { opacity: 0.3; transform: scale(0.7) rotate(0deg); }
+  80% { opacity: 1; transform: scale(1.15) rotate(20deg); }
+  90% { opacity: 0.6; transform: scale(0.9) rotate(35deg); }
+}
+.waka-principles-spark:hover svg, .waka-principles-spark:focus-visible svg { animation-play-state: paused; opacity: 1; transform: scale(1); }
+.waka-principles-spark:focus-visible { outline: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .waka-principles-spark svg { animation: none; opacity: 0.6; }
+}
+}
+
+
+@layer chrome {
+/* ═══ SHEETS ARE PAGES, SO THEIR "<" IS EVERY PAGE'S (founder, 2026-11-12) ═══
+   Share, search, what changed, a principle's share card, the read in full and
+   where a read came from were centred cards, so their "<" floated mid-screen
+   (measured at y≈380). Now each is a page like the notepad: the whole window,
+   its header the first row 12px under the safe area on the same column, the
+   rest in that column under it, on the page's own ground. */
+.jar-seek:is(.jar-thing-share, .jar-inspiration-search, .jar-reading-comparison, .jar-principle-share),
+.jar-seek:is(.jar-thing-share, .jar-inspiration-search, .jar-reading-comparison, .jar-principle-share)[data-visual-viewport],
+.waka-reading-full {
+  position: fixed; z-index: 62; inset: 0; box-sizing: border-box;
+  width: auto; max-width: none; max-height: none; margin: 0; transform: none;
+  display: flex; flex-direction: column; gap: var(--sp-16);
+  padding: calc(var(--sp-12) + env(safe-area-inset-top)) max(var(--sp-16), env(safe-area-inset-right))
+    calc(var(--sp-28) + env(safe-area-inset-bottom)) max(var(--sp-16), env(safe-area-inset-left));
+  border: 0; border-radius: 0; background: var(--bg); overflow-y: auto;
+}
+:is(.jar-thing-share, .jar-inspiration-search, .jar-reading-comparison, .jar-principle-share, .waka-reading-full) > .waka-surface-head {
+  flex: none; width: min(100%, 602px, calc(100vw - 88px)); margin: 0 auto;
+}
+:is(.jar-thing-share, .jar-inspiration-search, .jar-reading-comparison, .jar-principle-share, .waka-reading-full) > :not(.waka-surface-head) {
+  width: min(100%, 602px); margin-inline: auto; box-sizing: border-box;
+}
+/* MEASURED at 390 and 1280, the list's own 700px: the 16px gutter under it. */
+@media (max-width: 700px) {
+  :is(.jar-thing-share, .jar-inspiration-search, .jar-reading-comparison, .jar-principle-share, .waka-reading-full) > .waka-surface-head { width: 100%; }
+}
 }

@@ -1,3 +1,7 @@
+import {embedDiscoveryCandidates,commitDiscoveryEmbeddings} from './embedding-discovery.js';
+import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
+import {embeddingPolicySql,parseEmbeddingPolicy,embeddingRetrievalMinimum,embeddingCandidateRules,type EmbeddingIndexPolicy} from "./embedding-policy.js";
+import {createEmbeddingClient,embeddingInSpace,readableEmbeddingSpace,embeddingInputHash} from './embedding-provider.js';
 /**
  * Layer 2 — turning one inspiration into evidence for the profile's signals.
  *
@@ -37,11 +41,13 @@
  * `signal-derivation-thresholds.ts` for the failure it produced.
  */
 
-import { and, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import {
   inspirationEmbeddings,
   inspirations,
+  attachments,
+  reflections,
   profiles,
   signals,
 } from "../db/index.js";
@@ -49,8 +55,10 @@ import { cosineSimilarity } from "../scoring/vector.js";
 import { getDb } from "./db.js";
 import {
   ensureInspirationEmbedding,
-  GeminiEmbeddingHttpClient,
+  buildCanonicalInspirationEmbeddingInput,
+  type CanonicalAttachmentInput,
 } from "./inspiration-embeddings.js";
+import {effectiveAttachmentText} from './attachment-material.js';
 import { normalizeSupportedLocale } from "./locales.js";
 import { assertMaterialCurrent, loadInspirationMaterial, relatedMaterialIdentity, resolveMaterialQuote } from "./inspiration-material.js";
 import { reviewSignalSupport, SupportSourceUnavailableError } from "./signal-support-review.js";
@@ -212,7 +220,6 @@ export async function deriveSignalsForInspiration(
     if (error instanceof SupportSourceUnavailableError) return emptyResult(error.status);
     throw error;
   }
-  const embeddingClient = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
 
   // Existing support is its own question, before bounded discovery. Applying
   // it rechecks current inputs under locks and persists any reading request.
@@ -250,7 +257,7 @@ export async function deriveSignalsForInspiration(
   }
   const [profileRows, existingStatements, existingCategories] = await Promise.all([
     db
-      .select({ preferredLocale: profiles.preferredLocale })
+      .select({ preferredLocale: profiles.preferredLocale,embeddingPolicy:embeddingPolicySql(profileId) })
       .from(profiles)
       .where(eq(profiles.id, profileId))
       .limit(1),
@@ -284,6 +291,9 @@ export async function deriveSignalsForInspiration(
       .limit(MAX_EXISTING_CATEGORIES),
   ]);
 
+  const embeddingPolicy=parseEmbeddingPolicy(profileId,profileRows[0]?.embeddingPolicy);
+  const embeddingClient=deps.embeddingClient??createEmbeddingClient(undefined,embeddingPolicy);
+
   /*
     The capture's own vector, BEFORE extraction — the reorder is the feature.
     It was always computed in this pass (layer-1 recall keeps it warm even
@@ -300,12 +310,14 @@ export async function deriveSignalsForInspiration(
     inputScope: "personal",
     db,
     client: embeddingClient,
+    embeddingPolicy,
     beforeCommit: deps.beforeCommit,
   });
   if (inspirationEmbedding.status === "stale_source") {
     throw new Error("Source material changed during embedding");
   }
   if (inspirationEmbedding.status === "missing_inspiration") return emptyResult("missing_inspiration");
+  if(inspirationEmbedding.status=== "ineligible")return emptyResult("no_candidates");
   const relatedInspirations = inspirationEmbedding.embedding
     ? await findRelatedInspirations(db, {
         /* recurrence is retrieved over the keeper's earlier captures */
@@ -313,6 +325,7 @@ export async function deriveSignalsForInspiration(
         inspirationId: inspiration.id,
         embedding: inspirationEmbedding.embedding.embedding,
         model: inspirationEmbedding.embedding.model,
+        policy: embeddingPolicy,
       })
     : [];
 
@@ -374,7 +387,7 @@ export async function deriveSignalsForInspiration(
     .filter((candidate) => candidate.statement.length > 0);
 
   const validateSources = async (tx: WakaTx) => {
-    await assertMaterialCurrent(tx, material, relatedInspirations);
+    await assertMaterialCurrent(tx, material, relatedInspirations,embeddingPolicy);
     await deps.beforeCommit?.(tx);
   };
   const canComplete = !supportReview?.retryable && !material.attachmentRows.some((row) => row.status !== "ready" && row.status !== "unavailable");
@@ -390,14 +403,14 @@ export async function deriveSignalsForInspiration(
     return emptyResult("no_candidates");
   }
 
-  const embedded: ResolvedCandidate[] = [];
-  for (const candidate of statements) {
-    // Identical wording is one candidate. Similar vectors can still encode
-    // opposite positions or different time scopes; matching checks meaning.
-    if (embedded.some(seen => seen.statement === candidate.statement)) continue;
-    const embedding = await embeddingClient.embed(candidate.statement);
-    embedded.push({ ...candidate, embedding });
+  const unique=statements.filter((candidate,index)=>statements.findIndex(row=>row.statement===candidate.statement)===index);
+  let discovery:Array<{embedding:number[];attemptId:string}>|undefined;
+  if(embeddingClient.model===EMBEDDING_2_SPACE.id){
+    if(!deps.processingRequest||!deps.beforeCommit)throw new Error('Model2 discovery requires a current job request');
+    discovery=await embedDiscoveryCandidates(db,{profileId,sourceKind:'inspiration',sourceId:inspiration.id,materialHash:material.identity.hash,request:deps.processingRequest,policy:embeddingPolicy,statements:unique.map(row=>row.statement),prove:tx=>assertMaterialCurrent(tx,material,relatedInspirations,embeddingPolicy),claim:deps.beforeCommit},embeddingClient);
   }
+  const embedded:ResolvedCandidate[]=[];
+  for(const [index,candidate] of unique.entries())embedded.push({...candidate,embedding:discovery?.[index]?.embedding??await embeddingClient.embed(candidate.statement)});
 
   const outcome = await db.transaction(async (tx) => {
       await acquireSignalDerivationLock(tx, profileId);
@@ -422,6 +435,7 @@ export async function deriveSignalsForInspiration(
         inspirationId: inspiration.id,
         candidates: embedded,
         embeddingModel: embeddingClient.model,
+        embeddingPolicy,
         provider,
         preferredLocale: normalizeSupportedLocale(profileRows[0]?.preferredLocale),
         now,
@@ -435,6 +449,7 @@ export async function deriveSignalsForInspiration(
       if (deps.processingRequest) await finishInspirationDerivation(tx, processingInput(material.identity.revision), {
         reading, complete: canComplete, requestReading: () => requestReading(tx),
       });
+      await commitDiscoveryEmbeddings(tx,profileId,discovery?.map(row=>row.attemptId)??[]);
       return applied;
     });
 
@@ -463,38 +478,62 @@ async function findRelatedInspirations(
     inspirationId: string;
     embedding: number[];
     model: string;
+    policy: EmbeddingIndexPolicy;
   },
 ): Promise<RelatedInspirationContext[]> {
+  const rules=embeddingCandidateRules(input.policy)?.related,space={model:input.model,dimensions:input.embedding.length},native=readableEmbeddingSpace();
+  if((space.model===native.model&&space.dimensions!==native.dimensions)||!embeddingInSpace(input.embedding,space.dimensions,space))throw new Error('Related capture embedding space is invalid');
   const rows = await db
     .select({
       id: inspirations.id,
       text: inspirations.text,
       createdAt: inspirations.createdAt,
       embedding: inspirationEmbeddings.embedding,
+      dimensions:inspirationEmbeddings.dimensions,
+      inputHash:inspirationEmbeddings.inputHash,
     })
     .from(inspirationEmbeddings)
-    .innerJoin(inspirations, eq(inspirations.id, inspirationEmbeddings.inspirationId))
+    .innerJoin(inspirations, and(eq(inspirations.id, inspirationEmbeddings.inspirationId),eq(inspirations.profileId,inspirationEmbeddings.profileId)))
     .where(
       and(
         eq(inspirationEmbeddings.profileId, input.profileId),
         eq(inspirationEmbeddings.model, input.model),
+        eq(inspirationEmbeddings.dimensions,space.dimensions),
         eq(inspirationEmbeddings.inputScope, "personal"),
         isNull(inspirations.memoryExcludedAt),
       ),
     )
     .orderBy(desc(inspirations.createdAt))
-    .limit(RELATED_INSPIRATION_SCAN_LIMIT);
+    .limit(rules?.scan??RELATED_INSPIRATION_SCAN_LIMIT);
 
-  return rows
-    .filter((row) => row.id !== input.inspirationId)
+  const ranked=rows
+    .filter((row) => row.id !== input.inspirationId&&embeddingInSpace(row.embedding,row.dimensions,space))
     .map((row) => ({
       row,
       similarity: cosineSimilarity(input.embedding, row.embedding) ?? -1,
     }))
-    .filter((scored) => scored.similarity >= RELATED_INSPIRATION_MIN_COSINE)
+    .filter((scored) => scored.similarity >= embeddingRetrievalMinimum(input.policy,'related',RELATED_INSPIRATION_MIN_COSINE))
     .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, RELATED_INSPIRATION_CONTEXT_LIMIT)
-    .map(({ row }) => ({ id: row.id, text: row.text, createdAt: row.createdAt }));
+    .slice(0,rules?.topK??RELATED_INSPIRATION_CONTEXT_LIMIT);
+  if(!ranked.length)return [];
+  // One bounded current-material statement for at most the existing five
+  // selected sources, rather than two extra child reads for every scan row.
+  // Reuse the indexer's canonical builder; no alternate hash or normalized store.
+  const parentId=sql`${sql.identifier('inspirations')}.${sql.identifier('id')}`;
+  const current=await db.select({id:inspirations.id,text:inspirations.text,kind:inspirations.kind,createdAt:inspirations.createdAt,
+    answers:sql<Array<{question:string;answer:string|null;skipped:boolean;createdAt:string}>>`coalesce((SELECT jsonb_agg(jsonb_build_object(
+      'question',${reflections.question},'answer',${reflections.answer},'skipped',${reflections.skipped},'createdAt',${reflections.createdAt}) ORDER BY ${reflections.createdAt},${reflections.id})
+      FROM ${reflections} WHERE ${reflections.profileId}=${input.profileId}::uuid AND ${reflections.inspirationId}=${parentId}),'[]'::jsonb)`,
+    media:sql<CanonicalAttachmentInput[]>`coalesce((SELECT jsonb_agg(jsonb_build_object('type',${attachments.type},'enrichmentText',${effectiveAttachmentText}) ORDER BY ${attachments.createdAt},${attachments.id})
+      FROM ${attachments} WHERE ${attachments.profileId}=${input.profileId}::uuid AND ${attachments.inspirationId}=${parentId}),'[]'::jsonb)`,
+  }).from(inspirations).where(and(eq(inspirations.profileId,input.profileId),isNull(inspirations.memoryExcludedAt),inArray(inspirations.id,ranked.map(item=>item.row.id))));
+  const byId=new Map(current.map(row=>[row.id,row]));
+  return ranked.flatMap(({row})=>{
+    const source=byId.get(row.id);if(!source)return [];
+    const canonical=buildCanonicalInspirationEmbeddingInput({text:source.text,kind:source.kind,
+      reflections:source.answers.map(answer=>({...answer,createdAt:new Date(answer.createdAt)})),attachments:source.media});
+    return embeddingInputHash(input.model,canonical)===row.inputHash?[{id:source.id,text:source.text,createdAt:source.createdAt}]:[];
+  });
 }
 
 /**

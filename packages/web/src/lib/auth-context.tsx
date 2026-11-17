@@ -63,6 +63,7 @@ import { normalizeSupportedLocale, writeStoredLocale } from "./locales";
 import type { SupportedLocale } from "./locales";
 import { isMobileBuild } from './platform';
 import { resetAnalyticsIdentity } from './analytics';
+import {ThumbnailProvider} from './thumbnail-reads';
 
 // ---------------------------------------------------------------------------
 // Storage helpers
@@ -536,7 +537,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     ],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={value}><ThumbnailProvider owner={!isLoading&&viewer?`${viewer.account.id}:${viewer.profile.id}`:null}>{children}</ThumbnailProvider></AuthContext.Provider>;
 }
 
 // ---------------------------------------------------------------------------

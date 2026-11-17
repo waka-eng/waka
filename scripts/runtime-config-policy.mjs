@@ -1,5 +1,6 @@
 /** Check exported stage configuration without printing credentials or making
  * network calls. Passing origins is not proof of proxy topology or isolation. */
+import modelProfile from '../infra/model-profile.json' with {type:'json'};
 export function verifyRuntimeConfiguration(config,stage){
   const expected={development:'https://dev.waka.im',dev:'https://dev.waka.im',production:'https://waka.im'}[stage];
   if(!expected)throw new Error('An explicit development/dev/production stage is required');
@@ -13,6 +14,7 @@ export function verifyRuntimeConfiguration(config,stage){
     if(env.NODE_ENV!=='production'||env.WAKA_INSECURE_COOKIES==='1')throw new Error(`${name} cookie security configuration is unsafe`);
     if(env.WAKA_STAGE!==stage)throw new Error(`${name} stage tag does not match the requested stage`);
     if(env.OPENROUTER_GENERATION_MODEL!=='deepseek/deepseek-v4.1-flash-1017')throw new Error(`${name} generation model is not the approved pin`);
+    if(!Object.entries(modelProfile).every(([key,value])=>env[key]===value))throw new Error(`${name} native GPT profile does not match the reviewed task/provider configuration`);
     if(env.WAKA_ENRICHMENT_ALLOWED_HOSTS?.trim())throw new Error(`${name} enrichment allowlist must not include fixture/private-address overrides`);
   }
   const raw=config.api.WAKA_TRUSTED_PROXY_HOPS;

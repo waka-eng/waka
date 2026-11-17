@@ -58,16 +58,18 @@ const remount = async (onChat?: (said: string) => void) => {
 const seats = () => [...host.querySelectorAll(".waka-ground-seat")];
 const line = () => host.querySelector(".waka-ground-bubble .jar-char-bubble-reading")?.textContent ?? "";
 
-it("explains principles with a labeled example instead of empty placeholders", async () => {
+it("says nothing but the creature's line before any pattern exists", async () => {
   vi.mocked(fetchSignals).mockResolvedValue([]);
   await ground();
   expect(seats()).toHaveLength(0);
-  expect(host.querySelector(".waka-ground-definition")?.textContent).toBe("A principle is a guide for making choices.");
-  expect(host.querySelector(".waka-ground-example")?.textContent).toContain("Example principle");
-  expect(host.querySelector(".waka-ground-example")?.textContent).toContain("Make room for small experiments.");
-  expect(host.querySelector(".waka-ground-how")?.textContent).toContain("WAKA turns them into principles");
+  /* No example principle, and no card explaining principles (founder,
+     2026-11-12: "strip all unnecessary descriptive text across the
+     experience"). */
+  expect(host.querySelector(".waka-ground-example"), "an example principle came back").toBeNull();
+  expect(host.querySelector(".waka-ground-card"), "the explaining card came back").toBeNull();
+  expect(host.querySelector(".waka-ground-definition, .waka-ground-how, .waka-ground-foot")).toBeNull();
   expect(host.querySelectorAll(".waka-ground-seat--held")).toHaveLength(0);
-  expect(line()).toContain("Keep a few more things. Your first principle comes from patterns in them.");
+  expect(line()).toContain("Save a few more things. Your first principle comes from patterns in them.");
 });
 
 it("puts each holding pattern's own words in a seat and says what is left, in words", async () => {
@@ -76,7 +78,7 @@ it("puts each holding pattern's own words in a seat and says what is left, in wo
   const held = [...host.querySelectorAll(".waka-ground-seat--held")].map((node) => node.textContent);
   /* Longest-held first: it is the likeliest ground for the first principle. */
   expect(held).toEqual(["You keep reversible doors open.", "You choose small first moves."]);
-  expect(line()).toBe("I’ve found patterns that could shape your first principle. Keep more to help it form.");
+  expect(line()).toBe("I’ve found patterns that could shape your first principle. Save more to help it form.");
   expect(line(), "states render, numerals never").not.toMatch(/\d/);
 });
 
@@ -194,8 +196,10 @@ it("holds only the top three, and the creature, not a title, says these are your
     <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Agi" title="Principles" onClose={() => {}} onOpen={() => {}} />,
   ));
   expect([...host.querySelectorAll(".waka-held-words")].map((node) => node.textContent)).toEqual(["One.", "Two.", "Three."]);
-  expect(host.querySelector(".waka-held-hero .waka-held-says")?.textContent)
-    .toBe("Principles are what stayed true for you over a long time.");
+  /* The creature stands over the list without explaining it (founder,
+     2026-11-12: "strip all unnecessary descriptive text across the
+     experience"). */
+  expect(host.querySelector(".waka-held-hero .waka-held-says"), "the explaining bubble came back").toBeNull();
   expect(host.querySelector(".waka-held-hero [data-crossing-target]")).not.toBeNull();
   /* NO LARGE TITLE (founder: "remove your principles text at the top"); the
      shared header's small centred name is every page's (nav system R4). */
@@ -211,9 +215,8 @@ it("says these are your agent's principles on an agent's wall", async () => {
   await act(async () => root.render(
     <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Bot" title="Your agent’s principles" whose="agent" onClose={() => {}} onOpen={() => {}} />,
   ));
-  const said = host.querySelector(".waka-held-hero .waka-held-says")?.textContent ?? "";
-  expect(said).toBe("Principles are what stayed true for your agent over a long time.");
-  expect(said).not.toContain("These are your principles");
+  expect(host.querySelector(".waka-surface-title")?.textContent).toBe("Your agent’s principles");
+  expect(host.textContent).not.toContain("These are your principles");
 });
 
 it("on an agent's wall, the waiting ground and the first-principle greeting speak of the agent", async () => {
@@ -223,8 +226,8 @@ it("on an agent's wall, the waiting ground and the first-principle greeting spea
   vi.mocked(fetchSignals).mockResolvedValue([]);
   vi.mocked(fetchPrinciples).mockResolvedValue([]);
   await agentPage();
-  expect(line()).toBe("Your agent’s first principle comes from patterns in what it keeps.");
-  expect(host.querySelector(".waka-ground-foot")?.textContent).toBe("Your agent’s first principle");
+  expect(line()).toBe("Your agent’s first principle comes from patterns in what it saves.");
+  expect(host.querySelector(".waka-ground-foot"), "the decorative foot came back").toBeNull();
   expect(host.querySelector(".waka-ground")?.getAttribute("aria-label")).toBe("What your agent’s first principle will grow from");
 
   vi.mocked(fetchPrinciples).mockResolvedValue([{ ...PRINCIPLE, citedSignals: [{ examples: [{}, {}] }] } as unknown as ApiPrinciple]);
@@ -232,7 +235,7 @@ it("on an agent's wall, the waiting ground and the first-principle greeting spea
   root = createRoot(host);
   await agentPage();
   expect(host.querySelector(".waka-held-first")?.textContent).toBe("Here it is. Your agent’s first principle.");
-  expect(host.querySelector(".waka-held-proof")?.textContent).toContain("From what it kept");
+  expect(host.querySelector(".waka-held-proof")?.textContent).toContain("From what it saved");
   expect(host.textContent).not.toMatch(/your (first )?principle|you kept/i);
 });
 
@@ -271,8 +274,8 @@ it("explains an agent’s empty memory in Korean without offering to write into 
       onClose={() => {}} onOpen={() => {}} onNewSave={add} onChat={() => {}} />,
   ));
   expect(line()).toBe("에이전트의 첫 원칙은 에이전트가 남긴 것의 패턴에서 나와요.");
-  expect(host.querySelector(".waka-ground-how")?.textContent).toContain("에이전트가 남긴 것에서 패턴이 반복되면");
-  expect(host.querySelector(".waka-ground-example")?.textContent).toContain("원칙 예시");
+  expect(host.querySelector(".waka-ground-how"), "the explaining line came back").toBeNull();
+  expect(host.querySelector(".waka-ground-example")).toBeNull();
   expect(host.querySelector(".waka-ground-bubble button")).toBeNull();
   expect(fetchSignals).toHaveBeenCalledWith({ profile: PROFILE, status: "active", limit: 20 });
   expect(add).not.toHaveBeenCalled();

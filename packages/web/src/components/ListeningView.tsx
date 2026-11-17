@@ -74,8 +74,6 @@ export function ListeningView(props: {
   locale: SupportedLocale;
   /** The words heard so far — the draft as dictation writes it. */
   words: string;
-  /** Where speech goes, said once in full (the browser's own service). */
-  notice?: string;
   onDone: () => void;
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
@@ -169,7 +167,6 @@ export function ListeningView(props: {
         </p>
       </div>
       <div className="waka-listening-foot">
-        {props.notice ? <p className="waka-listening-notice">{props.notice}</p> : null}
         <button ref={done} type="button" className="waka-listening-done" onClick={props.onDone}>{say('worldComposerDictateStop')}</button>
       </div>
     </div>

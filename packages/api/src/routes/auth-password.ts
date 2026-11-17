@@ -32,6 +32,8 @@ import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 
+import {readSignupGrant,beginSignupCreation,consumeSignupAdmission,signupAdmissionResponse,SignupAdmissionError,type SignupGrant} from "../lib/signup-admission.js";
+import {insertHumanProfile} from "../lib/new-human-profile.js";
 import { accounts, profiles } from "../db/index.js";
 import {
   buildSessionCookie,
@@ -181,6 +183,10 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
 
   const { email, password, name, preferredLocale } = parsed.data;
   const db = getDb();
+  let admission:SignupGrant|null;
+  try{admission=readSignupGrant(c,'password');await beginSignupCreation(db,admission,'password');}
+  catch(error){return signupAdmissionResponse(c,error);}
+
 
   // 2. Email uniqueness check. We do this BEFORE hashing the password so we
   //    don't burn ~100ms of bcrypt CPU on a duplicate request. The unique
@@ -207,6 +213,7 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
   let created: { account: AccountRow; profile: ProfileRow };
   try {
     created = await db.transaction(async (tx) => {
+      await consumeSignupAdmission(tx,admission,'password');
       const [account] = await tx
         .insert(accounts)
         .values({
@@ -216,15 +223,9 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
         })
         .returning(accountColumns);
 
-      const [profile] = await tx
-        .insert(profiles)
-        .values({
-          accountId: account!.id,
-          type: "human",
-          name: name ?? "",
-          preferredLocale: preferredLocale ?? DEFAULT_LOCALE,
-        })
-        .returning(profileColumns);
+      const profile = await insertHumanProfile(tx,{
+        accountId: account!.id,name:name??"",preferredLocale:preferredLocale??DEFAULT_LOCALE,
+      });
 
       /* inserted with this account's id one statement up; the narrow only
          teaches the types what the insert already wrote */
@@ -240,6 +241,7 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
         409,
       );
     }
+    if(admission||err instanceof SignupAdmissionError)return signupAdmissionResponse(c,err);
     throw err;
   }
 

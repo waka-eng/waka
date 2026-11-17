@@ -93,6 +93,7 @@ function verbsOffered(): string[] {
  * product wires it". `RULED:` means there is no way back and here is why.
  */
 const REGISTER: Record<string, string> = {
+  prepareConversationOpening: "RULED: a read-only POST resolves current owned source proofs without persisting anything; close discards its projection. First Send commits the descriptor with the conversation, whose deleteConversation exit erases it.",
   createProfileKey: "revokeProfileKey",
   revokeProfileKey: "RULED: revocation is permanent; create a new key for the same profile to reconnect",
   revokeSession: "RULED: disconnect ends a credential without deleting memory; reconnect requires fresh consent through the login instructions in Settings",
@@ -248,6 +249,7 @@ const REGISTER: Record<string, string> = {
 
   // you, and what can speak as you
   signup: "RULED: the account's own end is deleteAccount, behind a typed confirmation",
+  fetchSignupAdmission: "RULED: configured bootstrap issues a short-lived signed nonce cookie, not an account or memory write. Leave the surface or let the nonce expire; explicit retry gets a fresh nonce and never replays or refunds verification or creation claims.",
   /* `endConnection` WENT WITH THE CONNECTIONS LIST (2026-10-11), and that
      leaves `login` without the partner it named. The honest reading is not
      that signing in has no way back — it is that ending a SESSION FROM

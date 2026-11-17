@@ -2,13 +2,14 @@ import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {verifyRuntimeConfiguration} from './runtime-config-policy.mjs';
+import modelProfile from '../infra/model-profile.json' with {type:'json'};
 
 const stages=new Set(['queue_wait','material_read','context_read','embedding','model','publication_validation']);
 const numeric=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
 const modelOperations=new Set(['conversation','signal_extraction','signal_match','signal_support','top_of_mind','principles','principle_relation','principle_grounding','declaration','reflection','review_question','review_derivation','embedding','other']);
-const fields=['PUBLIC_WEB_URL','PUBLIC_API_URL','NODE_ENV','WAKA_INSECURE_COOKIES','WAKA_STAGE',
+const fields=[...new Set([...Object.keys(modelProfile),'PUBLIC_WEB_URL','PUBLIC_API_URL','NODE_ENV','WAKA_INSECURE_COOKIES','WAKA_STAGE',
   'OPENROUTER_GENERATION_MODEL','WAKA_ENRICHMENT_ALLOWED_HOSTS','WAKA_TRUSTED_PROXY_HOPS',
-  'WAKA_MODEL_CHAT','WAKA_OPENROUTER_DATA_COLLECTION','WAKA_OPENROUTER_REQUIRE_ZDR'];
+  'WAKA_OPENROUTER_DATA_COLLECTION','WAKA_OPENROUTER_REQUIRE_ZDR'])];
 const query='{environment:{'+fields.map(key=>`${key}:Environment.Variables.${key}`).join(',')+'},database:Environment.Variables.DB_CONNECTION_URL,logGroup:LoggingConfig.LogGroup}';
 
 export function validateDevAuditTargets(api,worker){
@@ -106,7 +107,7 @@ export function auditDevOperations({api,worker,now=Date.now(),awsRead,maxLogPage
     catch{report.failures.push('runtime_policy_failed');}
     report.configuration.apiWorkerDatabaseIdentical=typeof environments.api.database==='string'&&!!environments.api.database&&
       environments.api.database===environments.worker.database;
-    report.configuration.chatModelsMatch=['api','worker'].every(role=>environments[role].environment?.WAKA_MODEL_CHAT==='deepseek/deepseek-v4.1-flash-1017');
+    report.configuration.chatModelsMatch=['api','worker'].every(role=>environments[role].environment?.WAKA_MODEL_CHAT===modelProfile.WAKA_MODEL_CHAT);
     report.configuration.restrictivePrivacyOverrides=['api','worker'].every(role=>
       environments[role].environment?.WAKA_OPENROUTER_DATA_COLLECTION==='deny'&&environments[role].environment?.WAKA_OPENROUTER_REQUIRE_ZDR==='1');
     if(!report.configuration.apiWorkerDatabaseIdentical)report.failures.push('runtime_database_mismatch');

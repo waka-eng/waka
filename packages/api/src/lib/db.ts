@@ -15,6 +15,7 @@
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { developmentPreparedQueries, preparedPostgresClient } from './postgres-transport.js';
 
 import * as schema from "../db/index.js";
 
@@ -161,14 +162,15 @@ export function getDb() {
       ? 1
       : 5;
 
-  // `prepare: false` keeps the driver compatible with Neon's pgbouncer
-  // pooler in transaction mode. Lambda remains deliberately single-connection
+  // Named protocol preparation is a separately verified development opt-in.
+  // All other runtimes retain the unprepared transport. Lambda stays single-connection
   // to avoid multiplying connections across concurrent invocations. The local
   // monolith also runs the background worker, so it needs a small pool: with
   // max=1, a room pass serialized every page read behind its own DB work.
   const connectionString = getConnectionString();
+  const prepared = developmentPreparedQueries();
   const sql = postgres(connectionString, {
-    prepare: false,
+    prepare: prepared,
     max: poolMax,
     // See `requiredTlsMode`: false for a database on this machine, TLS
     // demanded of every other one, and a throw for a URL that asked for
@@ -176,6 +178,6 @@ export function getDb() {
     ssl: requiredTlsMode(connectionString),
   });
 
-  cachedDb = drizzle(sql, { schema });
+  cachedDb = drizzle(prepared ? preparedPostgresClient(sql) : sql, { schema });
   return cachedDb;
 }

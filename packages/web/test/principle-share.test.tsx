@@ -48,7 +48,7 @@ it('starts with an exportable preview and keeps editing and customization option
   expect(words.open).toBe(false);expect(customize.open).toBe(false);
   expect(words.querySelector('summary')?.textContent).toBe('Edit');
   await act(async()=>words.querySelector('summary')!.click());expect(words.open).toBe(true);
-  expect(host.textContent).toContain('Edits here change the card only.');
+  expect(host.textContent).toContain('Changes the card only.');
 });
 it('edits only the card and never renders private evidence or the hidden name',async()=>{
   await mount();await settle();await type('My card words');await settle();
