@@ -40,7 +40,7 @@ it('exempts no field from the floor by its inline style', () => {
 function restatements(): Map<string, string[]> {
   const byMedia = new Map<string, string[]>();
   for (const rule of scoped(read('chrome.css'))) {
-    if (!rule.media || !/font-size:\s*var\(--t-lead\)\s*!important/.test(rule.body)) continue;
+    if (!rule.media || !/font-size:\s*var\(--t-(?:lead|writing)\)\s*!important/.test(rule.body)) continue;
     byMedia.set(rule.media, [...(byMedia.get(rule.media) ?? []), ...rule.selector.split(',').map((s) => s.trim())]);
   }
   return byMedia;
@@ -179,11 +179,12 @@ it('lets --t-input and --t-lead never resolve under 16px', () => {
   const system = blank(read('system.css'));
   expect(system).toMatch(/--t-input:\s*max\(16px,/);
   expect(system).toMatch(/--t-lead:\s*clamp\(16px,/);
+  expect(system).toMatch(/--t-writing:\s*var\(--t-input\)/);
 });
 
 /** The sizes an `!important` font declaration may set: the floor itself, and
     the one larger step the fields above it restate (both proven >= 16 above). */
-const FLOORED = /^var\(--t-(input|lead)\)$/;
+const FLOORED = /^var\(--t-(input|lead|writing)\)$/;
 
 /** Every `!important` font size in `css` that is not a floored one, checked
     DECLARATION BY DECLARATION, so a block that carries the allowed line can

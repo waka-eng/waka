@@ -87,7 +87,7 @@
    an act, so it is the plainest mark there is; `file` is a page with its
    corner folded — the shape both phone systems use for "a document" — and
    it stands beside a name on every tile, so it never has to carry one. */
-export function HomeActionIcon({kind,className}:{kind:'home'|'capture'|'chat'|'write'|'bubble'|'record'|'photo'|'plus'|'file'|'play'|'pause'|'keep'|'erase'|'send'|'stop'|'share'|'more';className?:string}){
+export function HomeActionIcon({kind,className}:{kind:'home'|'capture'|'chat'|'write'|'bubble'|'record'|'photo'|'plus'|'file'|'play'|'pause'|'keep'|'erase'|'send'|'stop'|'share'|'more'|'edit';className?:string}){
   return <svg className={className} data-home-action-icon={kind} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
     {kind==='capture'?<><path className="jar-spark-core" d="m12 5 1.8 5.2L19 12l-5.2 1.8L12 19l-1.8-5.2L5 12l5.2-1.8z" fill="currentColor" strokeWidth=".8"/>
         <g className="jar-spark-rays" strokeWidth="1.4"><path d="m3 3 2 2m14 14 2 2M3 21l2-2M19 5l2-2"/></g></>
@@ -109,6 +109,8 @@ export function HomeActionIcon({kind,className}:{kind:'home'|'capture'|'chat'|'w
       /* `write` AND `bubble` ARRIVED 2026-11-08 with the home bar (design E1):
          three lines of words for Write, and the plainest speech balloon for
          the round Chat beside the pill — drawn as the frames draw them. */
+      /* `edit` IS A PENCIL: the read's Edit in the bubble's foot (2026-11-12). */
+      :kind==='edit'?<><path d="M4.5 19.5h4l10-10-4-4-10 10z"/><path d="m13 7 4 4"/></>
       :kind==='write'?<path d="M4 6h16M4 12h16M4 18h10"/>
       :kind==='bubble'?<path d="M4 5h16v11H9l-5 4z"/>
       :kind==='plus'?<path d="M12 5v14M5 12h14"/>

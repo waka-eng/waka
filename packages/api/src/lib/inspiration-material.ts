@@ -1,3 +1,4 @@
+import {embeddingPolicyMatchesSql,type EmbeddingIndexPolicy} from "./embedding-policy.js";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { attachments, inspirations, reflections, type InspirationEmbeddingScope } from "../db/index.js";
 import { getDb } from "./db.js";
@@ -76,12 +77,12 @@ export function resolveMaterialQuote(quote: string | null | undefined, material:
   return { quote: null, quoteSource: null, quoteReflectionId: null, quoteSourceHash: null };
 }
 
-export async function assertMaterialCurrent(db: Db, snapshot: InspirationMaterial, related: RelatedInspirationContext[]) {
+export async function assertMaterialCurrent(db: Db, snapshot: InspirationMaterial, related: RelatedInspirationContext[],embeddingPolicy?:EmbeddingIndexPolicy) {
   return measurePerformanceStage('publication_validation','inspiration',async()=>{
   const ids = [...new Set([snapshot.inspiration.id, ...related.map((row) => row.id)])].sort();
   // Consistent parent lock order also prevents new child FK links until commit.
   for (const id of ids) await db.select({ id: inspirations.id }).from(inspirations)
-    .where(and(eq(inspirations.profileId, snapshot.inspiration.profileId), eq(inspirations.id, id))).for("update");
+    .where(and(eq(inspirations.profileId, snapshot.inspiration.profileId), eq(inspirations.id, id),embeddingPolicy?embeddingPolicyMatchesSql(embeddingPolicy):undefined)).for("update").then(rows=>{if(embeddingPolicy&&!rows.length)throw new Error("Embedding policy changed");});
   const current = await loadInspirationMaterial(db, snapshot.inspiration.profileId, snapshot.inspiration.id, snapshot.identity.scope, true);
   if (!current || current.identity.hash !== snapshot.identity.hash ||
     (snapshot.identity.revision !== undefined && current.identity.revision !== snapshot.identity.revision)) throw new Error("Source material changed; retry current inputs");

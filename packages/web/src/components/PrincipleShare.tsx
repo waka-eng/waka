@@ -185,7 +185,9 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
                     it is choosing for, so the option and the artifact read
                     alike. */}
                   {earlier.map(row=><option key={row.id} value={row.id}>{dateStamp(Date.parse(row.createdAt),locale)} · {row.statement}</option>)}</select></label>
-                <p className="jar-review-context">{say('worldShareRecordedWords')}</p>
+                {/* STRIPPED: "These words and dates come from saved records."
+                    and, under the preview, "Using your device's font."
+                    Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
                 {before?<blockquote>{before.statement}</blockquote>:null}<blockquote>{after.statement}</blockquote>
               </>}
           </>:null}
@@ -198,7 +200,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
           {storageFailed?<p role="alert">{say('worldShareStorageFailed')} <button type="button" onClick={()=>{try{recoverPrincipleArtifactDrafts(scope,id);update(draft.value);}catch{setStorageFailed(true);}}}>{say('worldShareKeepDraft')}</button></p>:null}
         </div><div className="jar-share-preview" aria-busy={!ready&&!renderError}>
           {preview&&!renderError&&content?<img src={preview.url} alt={preview.words}/>:null}
-          {!content?(change?null:<p role="status">{say('worldShareMissing')}</p>):renderError?<p role="alert">{say(renderError==='too_long'?(change?'worldShareChangeTooLong':'worldShareTooLong'):renderError==='empty'?'worldShareEmpty':'worldShareRenderFailed')}{renderError==='unavailable'?<button type="button" onClick={()=>setRenderAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button>:null}</p>:!ready?<p role="status">{say('worldShareRendering')}</p>:preview?.fallbackFont?<p className="jar-review-context">{say('worldShareFallbackFont')}</p>:null}
+          {!content?(change?null:<p role="status">{say('worldShareMissing')}</p>):renderError?<p role="alert">{say(renderError==='too_long'?(change?'worldShareChangeTooLong':'worldShareTooLong'):renderError==='empty'?'worldShareEmpty':'worldShareRenderFailed')}{renderError==='unavailable'?<button type="button" onClick={()=>setRenderAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button>:null}</p>:!ready?<p role="status">{say('worldShareRendering')}</p>:null}
         </div></div>
       </>:null}
       </div>

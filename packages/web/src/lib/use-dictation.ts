@@ -32,24 +32,10 @@
  * Firefox does not, which is why `dictationAvailable()` exists and why the
  * caller must fall back rather than disable.
  *
- * IT IS NOT LOCAL IN CHROME. Chrome streams audio to Google's servers to
- * transcribe it. That is a real privacy fact about a product whose whole
- * promise is that your material is yours, and the honest handling of it is
- * not to hide it: `worldComposerDictateCloud` says so once, in the bar,
- * the first time somebody dictates. It is the same material a save sends to
- * this product's own server a moment later, so the exposure is a different
- * recipient rather than a new kind — but a different recipient is exactly
- * the thing a person is entitled to be told about.
- *
- * ONCE MEANS ONCE, AND FOR A WHILE IT DID NOT. `firstTime` latched: it went
- * true on the first dictation and was never written false, so the caller's
- * `firstTime && listening` was true for every dictation of the page and the
- * notice showed on all of them. See the flag's own doc comment for the fix
- * and for what was weighed — a sentence about audio leaving the device has a
- * real argument for repeating, and it loses to the founder's law that
- * nothing prints what the person already knows (`docs/six-laws.md`, Law 4:
- * *"remove things not 100% necessary"*). A notice on its fortieth showing is
- * furniture, and furniture is not a disclosure.
+ * IT IS NOT LOCAL IN CHROME: Chrome streams audio to Google's servers to
+ * transcribe it. The line that said so on the listening view went at the
+ * founder's word (2026-11-10, "remove"), and with it this hook's
+ * `firstTime`, which only that line read.
  *
  * ── THE TWO HARD PARTS, BOTH ABOUT NOT LOSING WORDS ──────────────────────
  *
@@ -132,27 +118,6 @@ export function dictationAvailable(): boolean {
 
 export interface Dictation {
   listening: boolean;
-  /**
-   * TRUE FOR THE FIRST DICTATION OF THIS PAGE AND FALSE FOR EVERY ONE AFTER
-   * IT — which is what this flag was always documented to mean, and was not.
-   *
-   * It used to LATCH: `if (!told.current) { told.current = true;
-   * setFirstTime(true); }` and nothing ever wrote `false` again, so a flag
-   * named "first time" was true from the first dictation until the tab
-   * closed. The caller shows the cloud disclosure while `firstTime &&
-   * listening`, and `listening` is true on every dictation, so the sentence
-   * about audio leaving the device appeared on all of them. Two comments in
-   * `Home.tsx` said "said once, the first time"; one of them had even worked
-   * out that the latch made that false and designed the bar's priority order
-   * around it rather than fixing it here.
-   *
-   * THE CALLER STILL HAS TO GATE ON `listening`, and that is deliberate.
-   * This says WHICH session is the first; the caller decides for how long a
-   * line about it stays on screen, and the notepad's answer is "while the
-   * microphone is open", so the disclosure is up for exactly as long as the
-   * thing it discloses is happening.
-   */
-  firstTime: boolean;
   error: string;
   start: () => void;
   stop: () => void;
@@ -170,7 +135,6 @@ export function useDictation(
   locale: string,
 ): Dictation {
   const [listening, setListening] = useState(false);
-  const [firstTime, setFirstTime] = useState(false);
   const [error, setError] = useState("");
   const session = useRef<Recognition | null>(null);
   /** The words that were in the note when the microphone opened. */
@@ -180,7 +144,6 @@ export function useDictation(
   /** Which session is the current one. `start()` and `abort()` bump it;
       see the header for why `stop()` deliberately does not. */
   const run = useRef(0);
-  const told = useRef(false);
   const write = useRef(onText);
   write.current = onText;
   const read = useRef(anchor);
@@ -223,26 +186,6 @@ export function useDictation(
     base.current = read.current();
     settled.current = "";
     setError("");
-    /* ONLY THE FIRST SESSION IS THE FIRST SESSION. The `else` is the whole
-       fix: this said `if (!told.current) { told.current = true;
-       setFirstTime(true); }` and left the flag standing at `true` forever
-       after, so a caller reading `firstTime && listening` — which is what
-       `Home` does, because the line belongs on screen only while the
-       microphone is open — showed the cloud disclosure on every dictation of
-       the page. The `told` ref and not the state because `start` must read the
-       answer in the same tick it writes it, and state is the render after.
-
-       WHAT WAS REJECTED: remembering in `localStorage`, so the sentence is
-       said once per person rather than once per page load. It is arguably the
-       truer reading of "once" and it was turned down twice over. A disclosure
-       is the one thing in this product that must not depend on storage that
-       can be cleared, carried between accounts on a shared machine, or
-       missing in a private window — and this hook holds no profile scope, so
-       it would have had to invent a key the rest of the product scopes through
-       `profileStorageKey`. A page load is also the unit a person experiences
-       as "this sitting"; hearing it again tomorrow is not noise. */
-    if (!told.current) { told.current = true; setFirstTime(true); }
-    else setFirstTime(false);
 
     live.onresult = (event) => {
       /* A LATE FINAL FROM A SUPERSEDED SESSION IS NOT THIS SESSION'S WORDS.
@@ -304,5 +247,5 @@ export function useDictation(
     }
   }, [locale]);
 
-  return { listening, firstTime, error, start, stop, abort };
+  return { listening, error, start, stop, abort };
 }

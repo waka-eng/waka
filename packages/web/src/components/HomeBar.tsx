@@ -14,8 +14,8 @@
  * full ink. The Chat circle is the same raised ground as the pill, not a
  * brighter one.
  *
- * ABOVE THE BAR, ONE THING AT A TIME: "Saves ⌃" — the pull that brings the
- * saves, patterns and principles up — or, for a moment after a save lands,
+ * ABOVE THE BAR, ONE THING AT A TIME: "{n} inspirations ⌃", the handle
+ * that opens Inspirations (absent at none), or, for a moment after a save lands,
  * "Saved" in its place (F3). The confirmation takes the pull's spot so the
  * screen never stacks two lines over the bar.
  *
@@ -30,8 +30,8 @@
  * "{n} KEPT ⌃" ABOVE IT (founder: "should be x kept"). The pull says how many
  * you have kept once that is known; before then, and at none, just "Kept".
  *
- * Past chats and Search are not here. Search is the field at the top of the
- * Saves sheet; past chats are reached from the chat page, through Chat.
+ * Past chats and Search are not here. Search is the field at the top of
+ * Inspirations; past chats are reached from the chat page, through Chat.
  */
 import { useRef } from 'react';
 

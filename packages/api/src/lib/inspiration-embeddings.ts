@@ -1,3 +1,5 @@
+import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyMatchesSql,embeddingPolicyIdentity,type EmbeddingIndexPolicy} from './embedding-policy.js';
+import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
 /**
  * Gemini embeddings for the two things signal generation compares.
  *
@@ -23,15 +25,15 @@ import {
   inspirationEmbeddings,
   inspirations,
   reflections,
-  type Attachment,
   type Inspiration,
   type InspirationEmbedding,
   type InspirationEmbeddingScope,
-  type Reflection,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import {measurePerformanceStage} from './performance-stages.js';
 import { effectiveAttachmentText } from './attachment-material.js';
+import {buildCanonicalInspirationEmbeddingInput,type CanonicalReflectionInput,type CanonicalAttachmentInput} from './inspiration-embedding-source.js';
+export {buildCanonicalInspirationEmbeddingInput,readInspirationEmbeddingSource,type CanonicalReflectionInput,type CanonicalAttachmentInput,type CanonicalInspirationEmbeddingInput} from './inspiration-embedding-source.js';
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
@@ -45,97 +47,8 @@ export const GEMINI_EMBEDDING_DIMENSIONS = 768;
 export const MAX_GEMINI_EMBEDDING_VALUES = 4096;
 export type WakaDb = PostgresJsDatabase<typeof dbSchema>;
 
-/**
- * Marks the canonical input format. The bytes below are what the hash is taken
- * over, so changing any of them changes every hash and regenerates every stored
- * vector — which is the intent when the format changes, and the reason the
- * format is versioned rather than tweaked in place.
- */
-const CANONICAL_INPUT_VERSION = "waka.inspiration_embedding_input.v1";
-
-export type CanonicalReflectionInput = Pick<
-  Reflection,
-  "question" | "answer" | "skipped" | "createdAt"
->;
-
-export type CanonicalAttachmentInput = Pick<Attachment, "type" | "enrichmentText">;
-
-export interface CanonicalInspirationEmbeddingInput {
-  text: string;
-  kind: string | null;
-  /**
-   * Human-authored Q&A on the capture. The strongest context an inspiration
-   * carries: the person saying, in their own words, why this mattered.
-   */
-  reflections?: CanonicalReflectionInput[];
-  /**
-   * What was saved alongside the text — a link's page body, an image's
-   * description. Without it a bare link embeds as a URL, which resembles every
-   * other URL and nothing else.
-   */
-  attachments?: CanonicalAttachmentInput[];
-}
-
-function normalizeTextForEmbedding(value: string): string {
-  return value
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .join("\n")
-    .trim();
-}
-
-/**
- * Pure canonical input builder for inspiration embeddings.
- *
- * Deliberately small and ordered: the same capture must produce the same bytes
- * on every host, or the hash stops meaning "this content already has a vector".
- */
-export function buildCanonicalInspirationEmbeddingInput(
-  inspiration: CanonicalInspirationEmbeddingInput,
-): string {
-  const text = normalizeTextForEmbedding(inspiration.text);
-  const kind = inspiration.kind?.trim() || "null";
-
-  const reflectionLines = (inspiration.reflections ?? [])
-    .filter(
-      (reflection) =>
-        !reflection.skipped &&
-        normalizeTextForEmbedding(reflection.answer ?? "").length > 0,
-    )
-    .map((reflection, index) => {
-      const question = normalizeTextForEmbedding(reflection.question);
-      const answer = normalizeTextForEmbedding(reflection.answer ?? "");
-      return [
-        `reflection_${index + 1}_question:`,
-        question,
-        `reflection_${index + 1}_answer:`,
-        answer,
-      ].join("\n");
-    });
-
-  const attachmentLines = (inspiration.attachments ?? [])
-    .filter(
-      (attachment) => normalizeTextForEmbedding(attachment.enrichmentText ?? "").length > 0,
-    )
-    .map((attachment, index) => {
-      const enrichment = normalizeTextForEmbedding(attachment.enrichmentText ?? "");
-      return [`attachment_${index + 1}_${attachment.type}:`, enrichment].join("\n");
-    });
-
-  return [
-    CANONICAL_INPUT_VERSION,
-    `kind:${kind}`,
-    "text:",
-    text,
-    "attachments:",
-    attachmentLines.length > 0 ? attachmentLines.join("\n") : "none",
-    "reflections:",
-    reflectionLines.length > 0 ? reflectionLines.join("\n") : "none",
-  ].join("\n");
-}
-
+// Canonical-v1 construction lives in the pure source reader and is re-exported
+// above for the existing native callers. Its bytes/version remain unchanged.
 /** Stable SHA-256 hex hash helper for canonical embedding inputs. */
 export function hashEmbeddingInput(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");
@@ -197,11 +110,13 @@ export type EmbeddingTaskType = "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY";
 
 export interface GeminiEmbeddingClient {
   readonly model: string;
+  readonly dimensions?: number;
   embed(input: string, taskType?: EmbeddingTaskType): Promise<number[]>;
 }
 
 export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
   readonly model: string;
+  readonly dimensions=GEMINI_EMBEDDING_DIMENSIONS;
 
   constructor(model = GEMINI_EMBEDDING_MODEL, private readonly deadlines?:{timeoutMs:number;exchangeTimeoutMs:number}) {
     this.model = model;
@@ -260,12 +175,13 @@ export interface EnsureInspirationEmbeddingParams {
   inputScope?: InspirationEmbeddingScope;
   db?: WakaDb;
   client?: GeminiEmbeddingClient;
+  embeddingPolicy?:EmbeddingIndexPolicy;
   beforeCommit?: (tx: Parameters<Parameters<WakaDb["transaction"]>[0]>[0]) => Promise<void>;
 }
 
 export type EnsureInspirationEmbeddingResult =
   | {
-      status: "missing_inspiration" | "not_public";
+      status: "missing_inspiration" | "not_public" | "ineligible";
       embedding: null;
       generated: false;
       inputHash: null;
@@ -273,8 +189,8 @@ export type EnsureInspirationEmbeddingResult =
   | {
       status: "stale_source";
       embedding: null;
-      generated: true;
-      inputHash: string;
+      generated: boolean;
+      inputHash: string|null;
     }
   | {
       status: "unchanged" | "created" | "updated";
@@ -295,14 +211,14 @@ async function loadProfileScopedInspiration(
   db: WakaDb,
   profileId: string,
   inspirationId: string,
-  lock = false,
+  lock:boolean|'nowait' = false,expected?:EmbeddingIndexPolicy,
 ): Promise<Inspiration | null> {
   const query = db
     .select()
     .from(inspirations)
-    .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, profileId)))
+    .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, profileId),expected?embeddingPolicyMatchesSql(expected):undefined))
     .limit(1);
-  const rows = await (lock ? query.for("update") : query);
+  const rows = await (lock ? query.for("update",lock==='nowait'?{noWait:true}:{}) : query);
 
   return rows[0] ?? null;
 }
@@ -334,7 +250,7 @@ async function loadProfileScopedReflections(
   db: WakaDb,
   profileId: string,
   inspirationId: string,
-  lock = false,
+  lock:boolean|'nowait' = false,
 ): Promise<CanonicalReflectionInput[]> {
   const query = db
     .select({
@@ -351,14 +267,14 @@ async function loadProfileScopedReflections(
       ),
     )
     .orderBy(asc(reflections.createdAt), asc(reflections.id));
-  return lock ? query.for("share") : query;
+  return lock ? query.for("share",lock==='nowait'?{noWait:true}:{}) : query;
 }
 
 async function loadProfileScopedAttachments(
   db: WakaDb,
   profileId: string,
   inspirationId: string,
-  lock = false,
+  lock:boolean|'nowait' = false,
 ): Promise<CanonicalAttachmentInput[]> {
   const query = db
     .select({
@@ -373,7 +289,7 @@ async function loadProfileScopedAttachments(
       ),
     )
     .orderBy(asc(attachments.createdAt), asc(attachments.id));
-  return lock ? query.for("share") : query;
+  return lock ? query.for("share",lock==='nowait'?{noWait:true}:{}) : query;
 }
 
 async function buildCanonicalInputForInspiration(
@@ -381,7 +297,7 @@ async function buildCanonicalInputForInspiration(
   profileId: string,
   inspiration: Inspiration,
   inputScope: InspirationEmbeddingScope,
-  lock = false,
+  lock:boolean|'nowait' = false,
 ): Promise<string> {
   const [reflectionRows, attachmentRows] = await Promise.all([
     inputScope === "personal" ? loadProfileScopedReflections(db, profileId, inspiration.id, lock) : [],
@@ -395,22 +311,23 @@ async function buildCanonicalInputForInspiration(
   });
 }
 
-async function acquireEmbeddingAdvisoryLock(
-  db: WakaDb,
-  params: Pick<EnsureInspirationEmbeddingParams, "profileId" | "inspirationId"> & {
-    model: string;
-    inputScope: InspirationEmbeddingScope;
-  },
-): Promise<void> {
-  await db.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${[
-      "waka.inspiration_embedding",
-      params.profileId,
-      params.inspirationId,
-      params.model,
-      params.inputScope,
-    ].join(":")}, 0))`,
-  );
+
+async function acquireEmbeddingAdvisoryLock(db:WakaDb,params:{profileId:string;inspirationId:string;model?:string;inputScope:InspirationEmbeddingScope}){
+ const [row]=await db.execute<{policy:unknown}>(sql`WITH metadata AS MATERIALIZED(SELECT ${embeddingPolicySql(params.profileId)} AS policy)
+ SELECT pg_advisory_xact_lock(hashtextextended(${'waka.inspiration_embedding:'+params.profileId+':'+params.inspirationId+':'}::text||${params.model?sql`${params.model}::text`:sql`(policy->>'activeSpace')`}||${':'+params.inputScope}::text,0)),policy FROM metadata`);
+ return parseEmbeddingPolicy(params.profileId,row.policy);
+}
+
+async function ensureModel2Inspiration(params:EnsureInspirationEmbeddingParams,policy?:EmbeddingIndexPolicy):Promise<EnsureInspirationEmbeddingResult>{
+ const db=params.db??getDb(),scope=params.inputScope??'personal';
+ const {indexEmbeddingSource}=await import('./embedding-indexer.js');
+ const result=await indexEmbeddingSource(db,{profileId:params.profileId,sourceKind:'inspiration',sourceId:params.inspirationId,space:EMBEDDING_2_SPACE.id,scope},{client:params.client,expectedPolicy:policy,beforeCommit:params.beforeCommit});
+ if(result.status==='inactive')return{status:'stale_source',embedding:null,generated:false,inputHash:null};
+ if(result.status==='missing'||result.status==='ineligible')return{status:result.status==='missing'?'missing_inspiration':'ineligible',embedding:null,generated:false,inputHash:null};
+ const stored=await loadExistingEmbedding(db,params.profileId,params.inspirationId,EMBEDDING_2_SPACE.id,scope);
+ const {embeddingInSpace}=await import('./embedding-provider.js');
+ if(!stored||stored.inputHash!==result.inputHash||!embeddingInSpace(stored.embedding,stored.dimensions,{model:EMBEDDING_2_SPACE.id,dimensions:768}))return{status:'stale_source',embedding:null,generated:result.generated,inputHash:result.inputHash};
+ return{status:result.generated?'updated':'unchanged',embedding:stored,generated:result.generated,inputHash:stored.inputHash};
 }
 
 async function sourceMatchesSnapshot(
@@ -440,21 +357,28 @@ export async function ensureInspirationEmbedding(
   params: EnsureInspirationEmbeddingParams,
 ): Promise<EnsureInspirationEmbeddingResult> {
   const db: WakaDb = params.db ?? getDb();
-  const client = params.client ?? new GeminiEmbeddingHttpClient();
+  // Lazy import keeps the storage/canonical module below the factory in the
+  // initialization graph; standalone callers still use the same selection.
+  const {createEmbeddingClient,embeddingInSpace,embeddingSpaceForClient}=await import('./embedding-provider.js');
+  if(params.embeddingPolicy?.activeSpace===EMBEDDING_2_SPACE.id||params.client?.model===EMBEDDING_2_SPACE.id)return ensureModel2Inspiration(params,params.embeddingPolicy);
   const inputScope = params.inputScope ?? "personal";
-
-  return db.transaction(async (tx) => {
-    await acquireEmbeddingAdvisoryLock(tx, {
+  let deferred:EmbeddingIndexPolicy|undefined;
+  const result:EnsureInspirationEmbeddingResult=await db.transaction(async (tx) => {
+    const policy=await acquireEmbeddingAdvisoryLock(tx, {
       profileId: params.profileId,
       inspirationId: params.inspirationId,
-      model: client.model,
+      model: params.client?.model,
       inputScope,
     });
+    if(params.embeddingPolicy&&embeddingPolicyIdentity(params.embeddingPolicy)!==embeddingPolicyIdentity(policy))return{status:'stale_source',embedding:null,generated:false,inputHash:null};
+    const client=params.client??createEmbeddingClient(undefined,policy),space=embeddingSpaceForClient(client);
+    if(client.model===EMBEDDING_2_SPACE.id){deferred=policy;return{status:'stale_source',embedding:null,generated:false,inputHash:null};}
 
     const inspiration = await loadProfileScopedInspiration(
       tx,
       params.profileId,
       params.inspirationId,
+      false,policy,
     );
     if (!inspiration) {
       return {
@@ -483,7 +407,7 @@ export async function ensureInspirationEmbedding(
       inputScope,
     );
 
-    if (existing && !needsEmbeddingRegeneration(existing, inputHash, client.model)) {
+    if (existing && !needsEmbeddingRegeneration(existing, inputHash, client.model)&&embeddingInSpace(existing.embedding,existing.dimensions,space)) {
       return { status: "unchanged", embedding: existing, generated: false, inputHash };
     }
 
@@ -492,7 +416,7 @@ export async function ensureInspirationEmbedding(
       tx,
       params.profileId,
       params.inspirationId,
-      true,
+      true,policy,
     );
     if (
       !(await sourceMatchesSnapshot(tx, params.profileId, freshSource, { inputHash }, inputScope))
@@ -538,4 +462,5 @@ export async function ensureInspirationEmbedding(
 
     return { status, embedding: stored, generated: true, inputHash };
   });
+  return deferred?ensureModel2Inspiration(params,deferred):result;
 }

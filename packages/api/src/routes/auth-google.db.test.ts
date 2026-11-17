@@ -19,7 +19,7 @@ import { createSessionRow } from '../lib/session.js';
 let t: TestDatabase;
 beforeAll(async () => { t = await createTestDatabase(); state.db = t.db as ReturnType<typeof getDb>; });
 beforeEach(async () => { await t.truncateAll(); });
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.unstubAllGlobals();vi.unstubAllEnvs(); });
 afterAll(async () => { await t?.cleanup(); });
 const request = (path: string, token?: string, body?: unknown) => app.request(path, {
   method: body ? 'POST' : 'GET',
@@ -109,4 +109,22 @@ it('rolls back the identity link and every earlier revocation if revoking keys f
     await t.sql`DROP TRIGGER reject_key_revocation ON agent_keys`;
     await t.sql`DROP FUNCTION reject_key_revocation()`;
   }
+});
+
+it('uses the same new-human helper for Google signup and missing-human repair, with concurrent repair coalesced',async()=>{
+ vi.stubEnv('WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2','1');vi.stubEnv('WAKA_STAGE','development');vi.stubEnv('SST_RESOURCE_App',JSON.stringify({name:'waka',stage:'development'}));
+ const email=randomUUID()+'@example.test';expect((await link(email)).status).toBe(302);
+ const[first]=await t.sql`SELECT p.id,e.active_space,e.active_epoch::text AS epoch FROM accounts a JOIN profiles p ON p.account_id=a.id LEFT JOIN profile_embedding_indexes e ON e.profile_id=p.id WHERE a.email=${email}`;
+ expect(first).toMatchObject({active_space:'waka.embedding.gemini-2.text-retrieval.v1.768.raw',epoch:'1'});
+ const recovery=randomUUID()+'@example.test';const[a]=await t.sql`INSERT INTO accounts(email,google_sub) VALUES(${recovery},${'google-'+recovery}) RETURNING id`;
+ const attempts=await Promise.all([link(recovery),link(recovery)]);expect(attempts.map(r=>r.status)).toEqual([302,302]);
+ const repaired=await t.sql`SELECT p.id,e.active_space,e.active_epoch::text AS epoch FROM profiles p LEFT JOIN profile_embedding_indexes e ON e.profile_id=p.id WHERE p.account_id=${a.id} AND p.type='human'`;
+ expect(repaired).toHaveLength(1);expect(repaired[0]).toMatchObject({active_space:'waka.embedding.gemini-2.text-retrieval.v1.768.raw',epoch:'1'});
+ expect(await t.sql`SELECT id FROM embedding_index_attempts WHERE account_id=${a.id}`).toHaveLength(0);
+});
+it('does not enroll an existing native Google login even with the future enrollment flag enabled',async()=>{
+ const email=randomUUID()+'@example.test';expect((await link(email)).status).toBe(302);
+ vi.stubEnv('WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2','1');vi.stubEnv('WAKA_STAGE','development');vi.stubEnv('SST_RESOURCE_App',JSON.stringify({name:'waka',stage:'development'}));
+ expect((await link(email)).status).toBe(302);
+ expect(await t.sql`SELECT e.profile_id FROM profile_embedding_indexes e JOIN profiles p ON p.id=e.profile_id JOIN accounts a ON a.id=p.account_id WHERE a.email=${email}`).toHaveLength(0);
 });

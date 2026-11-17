@@ -93,6 +93,7 @@ function verbsOffered(): string[] {
  * product wires it". `RULED:` means there is no way back and here is why.
  */
 const REGISTER: Record<string, string> = {
+  prepareConversationOpening: "RULED: a read-only POST resolves current owned source proofs without persisting anything; close discards its projection. First Send commits the descriptor with the conversation, whose deleteConversation exit erases it.",
   createProfileKey: "revokeProfileKey",
   revokeProfileKey: "RULED: revocation is permanent; create a new key for the same profile to reconnect",
   revokeSession: "RULED: disconnect ends a credential without deleting memory; reconnect requires fresh consent through the login instructions in Settings",

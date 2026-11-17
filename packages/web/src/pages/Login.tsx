@@ -657,7 +657,6 @@ export default function LoginPage(): JSX.Element {
      first visit is greeted without the claim that it is a return. */
   const [returning] = useState(hasSignedInHere);
   const headline = t(locale, mode === "login" ? (returning ? "loginWelcome" : "loginWelcomeFirst") : "loginBegin");
-  const subtitle = t(locale, mode === "login" ? (returning ? "loginSubtitle" : "loginSubtitleFirst") : "signupSubtitle");
 
   const activateLoginTab = (): void => {
     setMode("login");
@@ -721,7 +720,9 @@ export default function LoginPage(): JSX.Element {
         <h1 id="login-title" className="login-title">
           {headline}
         </h1>
-        <p className="login-subtitle">{subtitle}</p>
+        {/* STRIPPED: the subtitle under the headline ("Sign in to return
+            to what you saved." and its siblings); the headline and the tabs
+            say it. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
 
         {/* THE DOOR SAYS WHY IT IS THE DOOR.
             A person whose network is down is bounced here by `RequireAuth`

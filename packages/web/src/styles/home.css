@@ -533,7 +533,6 @@
 .jar-reading-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:var(--sp-4) var(--sp-12); margin-top:var(--sp-8); pointer-events:auto; }
 .jar-reading-actions button { min-height:var(--sp-44); padding:var(--sp-8) 0; border:0; background:none; color:var(--w-muted); font:inherit; font-size:var(--t-body); text-align:left; cursor:pointer; }
 .jar-forming.jar-forming--personal { font-size:var(--t-body); font-style:normal; color:var(--w-muted); line-height:1.6; }
-.jar-first-capture-hint { margin:var(--sp-8) 0; color:var(--w-muted); font-size:var(--t-ui); line-height:1.6; }
 
 
 .jar-reading-actions button:hover,.jar-reading-actions button:focus-visible { color:var(--jar-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
@@ -1746,12 +1745,6 @@
   font-size: var(--t-ui);
   line-height: 1.5;
   color: var(--jar-muted);
-}
-/* How an agent's wall gets material — under the wait it explains, quieter. */
-.jar-wall-empty-how {
-  display: block;
-  margin-top: var(--sp-8);
-  font-size: var(--t-meta);
 }
 
 /* ---------- walls: side-by-side columns on the horizontal axis (v10) ----------

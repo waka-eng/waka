@@ -26,6 +26,6 @@ it('keeps recognizable titles with matching message snippets and ignores stale s
  await act(async()=>answer(2,[{...row,match:'A later message about the forest path.'}]));
  expect(host.textContent).toContain('Planning a walk');expect(host.textContent).toContain('forest path');
  await act(async()=>answer(1,[]));expect(host.textContent).toContain('forest path');
- await search('absent');await act(async()=>answer(3,[]));expect(host.textContent).toContain('No matching chats');
+ await search('absent');await act(async()=>answer(3,[]));expect(host.textContent).toContain('No matches.');
  await search('');await act(async()=>answer(4,[row]));expect(calls[4]!.url).not.toContain('&q=');expect(host.textContent).toContain('Planning a walk');
 });

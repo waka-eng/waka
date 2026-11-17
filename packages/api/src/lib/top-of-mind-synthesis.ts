@@ -55,7 +55,8 @@ import {
   attachments,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
-import { GEMINI_EMBEDDING_MODEL, hashEmbeddingInput } from "./inspiration-embeddings.js";
+import {embeddingCandidateRules,type EmbeddingIndexPolicy} from "./embedding-policy.js";
+import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash} from './embedding-provider.js';
 import { getDb } from "./db.js";
 import { computeSignalConfidence, selectIndependentEvidence, type ConfidenceEvidence } from "./signal-lifecycle.js";
 import {loadSignalEvidence} from './review-evidence.js';
@@ -371,6 +372,7 @@ async function selectSignals(
   db: WakaDb,
   profileId: string,
   now: Date,
+  embeddingPolicy?:EmbeddingIndexPolicy,
 ): Promise<SelectionOutcome> {
   const rows = await db
     .select({
@@ -506,22 +508,25 @@ async function selectSignals(
 
   /* the board's twelve slots are worth one bounded read of the candidate
      vectors — jsonb rows, cosine in process, no model anywhere */
+  const embeddingSpace=readableEmbeddingSpace(embeddingPolicy);
   const embeddingRows = await db
-    .select({ signalId: signalEmbeddings.signalId, inputHash: signalEmbeddings.inputHash, embedding: signalEmbeddings.embedding })
+    .select({ signalId: signalEmbeddings.signalId, inputHash: signalEmbeddings.inputHash, embedding: signalEmbeddings.embedding,dimensions:signalEmbeddings.dimensions })
     .from(signalEmbeddings)
     .where(
-      and(eq(signalEmbeddings.profileId, profileId), eq(signalEmbeddings.model, GEMINI_EMBEDDING_MODEL), inArray(
+      and(eq(signalEmbeddings.profileId, profileId), eq(signalEmbeddings.model, embeddingSpace.model),eq(signalEmbeddings.dimensions,embeddingSpace.dimensions), inArray(
         signalEmbeddings.signalId,
         scored.map((s) => s.id),
       )),
     );
   const embeddingById = new Map<string, number[]>();
-  const currentHash = new Map(scored.map(row=>[row.id,hashEmbeddingInput(row.statement)]));
+  const currentHash = new Map(scored.map(row=>[row.id,embeddingInputHash(embeddingSpace,row.statement)]));
   for (const row of embeddingRows) {
-    if (row.inputHash===currentHash.get(row.signalId)&&!embeddingById.has(row.signalId)) embeddingById.set(row.signalId, row.embedding);
+    if (row.inputHash===currentHash.get(row.signalId)&&embeddingInSpace(row.embedding,row.dimensions,embeddingSpace)&&!embeddingById.has(row.signalId)) embeddingById.set(row.signalId, row.embedding);
   }
 
-  const diverse = diversifyRanked(scored, embeddingById, SELECTION_DIVERSITY_MAX_COSINE);
+  // Model2 smoke scores cannot establish redundancy. Preserve all ranked
+  // claims within existing selection caps; publication still requires review.
+  const diverse = embeddingCandidateRules(embeddingPolicy)?.reading.cosinePruning===false?scored:diversifyRanked(scored, embeddingById, SELECTION_DIVERSITY_MAX_COSINE);
   const recentFocus = diverse.filter(row=>row.lastEvidenceAt !== null &&
     row.lastEvidenceAt.getTime()>=now.getTime()-TOP_OF_MIND_FOCUS_DAYS*MS_PER_DAY &&
     (row.status==='active'||row.evidenceCount>=TOP_OF_MIND_EMERGING_MIN_EVIDENCE))
@@ -529,7 +534,8 @@ async function selectSignals(
   const chosen = chooseSelection(
     diverse.filter((s) => s.status === "active"),
     diverse.filter((s) => s.status === "emerging"),
-    recentFocus.slice(0,TOP_OF_MIND_FOCUS_LIMIT),
+    recentFocus.slice(0,embeddingCandidateRules(embeddingPolicy)?.reading.maxFocus??TOP_OF_MIND_FOCUS_LIMIT),
+    embeddingPolicy,
   );
 
   const finalList = keepContestedTogether(
@@ -652,9 +658,11 @@ export function chooseSelection<T>(
   active: T[],
   emerging: T[],
   recentFocus: T[] = [],
+  embeddingPolicy?:EmbeddingIndexPolicy,
 ): { signals: T[]; provisional: boolean } {
-  const focus=recentFocus.slice(0,TOP_OF_MIND_FOCUS_LIMIT);
-  const primary=[...focus,...active.filter(row=>!focus.includes(row))].slice(0,TOP_OF_MIND_SIGNAL_LIMIT);
+  const rules=embeddingCandidateRules(embeddingPolicy)?.reading;
+  const focus=recentFocus.slice(0,rules?.maxFocus??TOP_OF_MIND_FOCUS_LIMIT);
+  const primary=[...focus,...active.filter(row=>!focus.includes(row))].slice(0,rules?.maxSignals??TOP_OF_MIND_SIGNAL_LIMIT);
   const backfill=emerging.filter(row=>!primary.includes(row)).slice(0,Math.max(0,TOP_OF_MIND_MIN_SIGNALS-primary.length));
   const selected=[...primary,...backfill];
   return {signals:selected,provisional:selected.some(row=>emerging.includes(row))};
@@ -1135,7 +1143,7 @@ export async function refreshTopOfMindForProfile(
       .from(profiles)
       .where(eq(profiles.id, input.profileId))
       .limit(1),
-    selectSignals(db, input.profileId, now),
+    selectSignals(db, input.profileId, now,revision.embeddingPolicy),
     loadLiveArtifact(db, input.profileId),
   ]);
   const preferredLocale = normalizeSupportedLocale(profileRows[0]?.preferredLocale);

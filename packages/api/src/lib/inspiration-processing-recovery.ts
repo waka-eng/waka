@@ -5,6 +5,7 @@ import { readInspirationProcessingStatus } from './inspiration-processing-status
 import { enqueueDeriveSignals, enqueueTopOfMindRefresh, recoverPendingSignalSupport, STALE_LOCK_SECONDS, wakeCommittedBackgroundJobs } from './queue.js';
 import { recoverAttachmentAnalysis } from './attachment-analysis-retry.js';
 import { effectiveAttachmentStatus } from './attachment-material.js';
+import { renewKnownFailedEmbeddingWork } from './embedding-index-recovery.js';
 import { parseTopOfMindRefreshResult } from './top-of-mind-refresh-status.js';
 
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
@@ -26,6 +27,7 @@ export async function recoverInspirationProcessing(db: ReturnType<typeof getDb>,
   profileId: string; inspirationId: string; receiptId?: string;
 }) {
   const recovered = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT embedding_index_shared_fence(${input.profileId}::uuid)`);
     const [owner] = await tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.id, input.profileId)).for('key share', { noWait: true });
     if (!owner) return null;
     await tx.select({ id: generationRevisions.profileId }).from(generationRevisions)
@@ -64,11 +66,14 @@ export async function recoverInspirationProcessing(db: ReturnType<typeof getDb>,
         const [job] = await tx.select({ id: backgroundJobs.id }).from(backgroundJobs)
           .where(and(eq(backgroundJobs.profileId, input.profileId), eq(backgroundJobs.type, 'derive_signals'),
             eq(backgroundJobs.idempotencyKey, `derive_signals:${input.inspirationId}`))).limit(1);
-        if (await recoverableJob(tx, input.profileId, job?.id ?? null)) await enqueueDeriveSignals(input.profileId, input.inspirationId, 'edited', tx);
+        if (await recoverableJob(tx, input.profileId, job?.id ?? null)) {
+          await renewKnownFailedEmbeddingWork(tx, { profileId: input.profileId, kind: 'inspiration', sourceId: input.inspirationId });
+          await enqueueDeriveSignals(input.profileId, input.inspirationId, 'edited', tx);
+        }
       }
     }
     return readInspirationProcessingStatus(tx, input);
-  });
+  }, { isolationLevel: 'read committed' });
   if (recovered) await wakeCommittedBackgroundJobs();
   return recovered;
 }

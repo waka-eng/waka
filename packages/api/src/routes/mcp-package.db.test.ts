@@ -26,6 +26,8 @@ import { inspirationsRoutes } from './inspirations.js';
 import { signalsRoutes } from './signals.js';
 import { topOfMindRoutes } from './top-of-mind.js';
 import { principlesRoutes, principlesMarkdownRoutes } from './principles.js';
+import {createRecallRoutes} from './recall.js';
+import {hashEmbeddingInput} from '../lib/inspiration-embeddings.js';
 
 const state = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('../lib/db.js', () => ({ getDb: () => state.db }));
@@ -79,6 +81,7 @@ beforeAll(async () => {
   app.route('/api/top-of-mind', topOfMindRoutes);
   app.route('/api/principles', principlesRoutes);
   app.route('/api/principles.md', principlesMarkdownRoutes);
+  app.route('/api/recall',createRecallRoutes({embedClient:{model:'gemini-embedding-001',embed:async()=>[1,...Array<number>(767).fill(0)]}}));
   server = serve({ fetch: async req=>{
     httpRequests++;
     const result=await app.fetch(req);
@@ -166,6 +169,16 @@ it.each(['Noah', 'Anotherone', 'Me', 'Read-only', 'Old capture', 'Old read-only'
     const full=body(await call('waka_get_inspiration',{id:fullSource.id}));expect(full.attachments[0].type).toBe('link');expect(full.attachments[0].id).toBeTruthy();expect(full.reflections[0].answer).toBe('Exact multiline\nanswer');expect(JSON.stringify(full)).not.toContain('PRIVATE_CANARY_URL');
     const [sig]=await t.sql`SELECT id FROM signals WHERE profile_id=${subject.id} LIMIT 1`;
     const signal=body(await call('waka_get_signal',{id:sig.id}));expect(signal).toMatchObject({locked:true,unsupported:false,evidenceCount:1});expect(signal.evidence[0]).toMatchObject({current:true});
+    // Actual immutable0.2 package strips coverage metadata. Partial semantic
+    // coverage with no scores must therefore reach its error path, never the
+    // advertised "honest empty" text. No real provider is called.
+    const [far]=await t.sql`SELECT statement FROM signals WHERE id=${sig.id}`;
+    await t.sql`INSERT INTO signal_embeddings(profile_id,signal_id,model,dimensions,input_hash,embedding) VALUES(${subject.id},${sig.id},'gemini-embedding-001',768,${hashEmbeddingInput(far.statement)},${JSON.stringify([0,1,...Array<number>(766).fill(0)])}::jsonb) ON CONFLICT(signal_id,model) DO UPDATE SET embedding=excluded.embedding,input_hash=excluded.input_hash`;
+    const [unindexed]=await t.sql`INSERT INTO signals(profile_id,statement) VALUES(${subject.id},'A relevant synthetic claim without a compatible vector.') RETURNING id`;
+    await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id,material_revision,statement_revision) SELECT ${subject.id},${subject.id},${unindexed.id},${fullSource.id},personal_revision,1 FROM inspiration_revisions WHERE profile_id=${subject.id} AND inspiration_id=${fullSource.id}`;
+    const partial=await fetch(origin+'/api/recall?q=Relevant%20synthetic%20memory',{headers:{Authorization:`Bearer ${subject.secret}`}});expect(partial.status).toBe(503);expect(await partial.json()).toMatchObject({code:'recall_index_incomplete'});
+    const recalled=await call('waka_recall',{query:'Relevant synthetic memory'});
+    expect(recalled.isError).toBe(true);expect(recalled.content[0].text).not.toMatch(/honest empty|Nothing in the memory/);
     await t.sql`UPDATE inspirations SET text=${`Updated owned source for ${subject.name}`} WHERE id=${signal.evidence[0].inspirationId}`;
     const stale=body(await call('waka_get_signal',{id:sig.id}));expect(stale).toMatchObject({supportPending:true,evidenceCount:0});expect(stale.evidence[0]).toMatchObject({current:false,quote:null,reason:null});
     const count=async()=>(await t.sql`SELECT count(*)::int AS n FROM consultations WHERE profile_id=${subject.id} AND surface='principles'`)[0]!.n;

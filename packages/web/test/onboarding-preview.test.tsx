@@ -116,9 +116,9 @@ async function settle(ms: number): Promise<void> {
 }
 
 async function answer(words: string): Promise<void> {
-  press("Keep a thought");
+  press("Save an inspiration");
   type(words);
-  press("Keep");
+  press("Save");
   await flush();
   await settle(2200);
 }
@@ -165,15 +165,15 @@ describe("the preview on a dev server", () => {
   it("walks an onboarded account through every step and saves nothing", async () => {
     const page = await render("/onboarding?preview=1");
     expect(page.querySelector(".onb-preview-mark")?.textContent).toBe("Preview");
-    expect(page.textContent).toContain("How many notes have you saved and never looked at again?");
+    expect(page.textContent).toContain("How many things have you saved and never looked at again?");
     expect(fetchInspirationSnapshot).not.toHaveBeenCalled();
     for (let i = 0; i < 3; i += 1) press("Next");
     press("Start");
     await settle(400);
     for (const words of ["One", "Two", "Three"]) {
-      press("Keep a thought");
+      press("Save an inspiration");
       type(words);
-      press("Keep");
+      press("Save");
       await wait(2700);
       await flush();
     }

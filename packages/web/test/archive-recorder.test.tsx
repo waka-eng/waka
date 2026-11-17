@@ -178,7 +178,7 @@ it("stops a recording whose Record and the archive's leaving land in one commit"
   function Toggle() {
     const [shown, setShown] = useState(true);
     hide = () => setShown(false);
-    return shown ? <SavesOverlay locale="en-US" title="Kept" onBack={() => undefined} /> : null;
+    return shown ? <SavesOverlay locale="en-US" title="Saved" onBack={() => undefined} /> : null;
   }
   const Host = () => <ArchiveRecorderProvider><Toggle /></ArchiveRecorderProvider>;
   const /* The note bar renders in place (nav system); its parts are found in the page. */ slot = document.body as HTMLElement as HTMLSpanElement;

@@ -36,7 +36,8 @@
  *     them in as the attacker.
  */
 
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import {insertHumanProfile} from "../lib/new-human-profile.js";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 
@@ -283,16 +284,14 @@ async function resolveHumanProfile(
     return found.id;
   }
 
-  const inserted = await db
-    .insert(profiles)
-    .values({
-      accountId,
-      type: "human",
-      name: claims.name ?? "",
-      avatarUrl: claims.picture ?? null,
-    })
-    .returning({ id: profiles.id });
-  return inserted[0]!.id;
+  return db.transaction(async tx=>{
+    // Serialize missing-human repair for this account. A concurrent winner is
+    // an existing profile and must never be enrolled by a later login.
+    await tx.execute(sql`SELECT id FROM accounts WHERE id=${accountId}::uuid FOR UPDATE`);
+    const [winner]=await tx.select({id:profiles.id}).from(profiles).where(and(eq(profiles.accountId,accountId),eq(profiles.type,"human"))).limit(1);
+    if(winner)return winner.id;
+    return (await insertHumanProfile(tx,{accountId,name:claims.name??"",avatarUrl:claims.picture??null})).id;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -626,15 +625,9 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
             })
             .returning({ id: accounts.id, email: accounts.email });
 
-          const [profile] = await tx
-            .insert(profiles)
-            .values({
-              accountId: account!.id,
-              type: "human",
-              name: claims.name ?? "",
-              avatarUrl: claims.picture ?? null,
-            })
-            .returning({ id: profiles.id });
+          const profile = await insertHumanProfile(tx,{
+            accountId:account!.id,name:claims.name??"",avatarUrl:claims.picture??null,
+          });
 
           return {
             accountId: account!.id,

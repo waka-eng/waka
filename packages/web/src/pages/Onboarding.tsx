@@ -343,11 +343,12 @@ function NameStep({ onNamed }: { onNamed: () => void }): JSX.Element {
             product losing interest the moment you are through. See the
             long note at the same line in `Login.tsx`. */}
         <Companion size={88} />
-        <p className="login-eyebrow">{t(locale, "onboardingEyebrow")}</p>
+        {/* STRIPPED: the "Welcome to WAKA" eyebrow over the title and the
+            subtitle under it; the fields are labelled. Founder, 2026-11-12:
+            "strip all unnecessary descriptive text across the experience". */}
         <h1 id="onboarding-title" className="login-title">
           {t(locale, "onboardingTitle")}
         </h1>
-        <p className="login-subtitle">{t(locale, "onboardingSubtitle")}</p>
         {error ? <div className="form-error" role="alert">{error}</div> : null}
         <form className="login-form" onSubmit={handleSubmit} noValidate>
           <label className="field">

@@ -5,7 +5,7 @@
  * `/share` can be opened by any page on the web with words of its choosing,
  * so what it hands the home must never touch the person's notepad — whose
  * draft is kept on this device — without a press. It arrives in the
- * creature's bubble with a short preview: "Add a note" puts it in the notepad
+ * creature's bubble with a short preview: "Add words" puts it in the notepad
  * (after anything already written there), "Not this" drops it, and only Save
  * keeps it.
  *
@@ -61,12 +61,12 @@ async function press(label: string) {
 it('offers the share in the bubble and leaves the notepad alone until asked', async () => {
   share('a line someone sent me', 'https://example.com/post');
   world = await mountWorld(FACTS); await settle();
-  expect(bubbleText()).toContain('Got the link you shared. Want to say why?');
+  expect(bubbleText()).toContain('Want to say why?');
   expect(bubbleText()).toContain('a line someone sent me');
   expect(field(), 'the notepad opened with the share before any press').toBeNull();
   expect(sessionStorage.getItem(SHARED_KEY), 'the share was left to be taken twice').toBeNull();
   expect(created.calls).toEqual([]);
-  await press('Add a note');
+  await press('Add words');
   expect(field()!.value).toBe('a line someone sent me\nhttps://example.com/post');
   expect(created.calls, 'the share was saved without a press').toEqual([]);
 });
@@ -74,7 +74,7 @@ it('offers the share in the bubble and leaves the notepad alone until asked', as
 it('drops the share on Not this, and the draft never sees it', async () => {
   share('words from a page I did not choose');
   world = await mountWorld(FACTS); await settle();
-  expect(bubbleText()).toContain('Got what you shared.');
+  expect(bubbleText()).toContain('Want to say why?');
   await press('Not this');
   expect(bubbleText()).not.toContain('words from a page');
   expect(field()).toBeNull();
@@ -92,7 +92,7 @@ it('puts the share after what is already in the notepad, not over it', async () 
   world.unmount();
   share('https://example.com/later');
   world = await mountWorld(FACTS); await settle();
-  await press('Add a note');
+  await press('Add words');
   expect(field()?.value).toBe('half a thought\n\nhttps://example.com/later');
 });
 
@@ -108,5 +108,5 @@ it('offers a waiting share on human Home after a retired profile link, without p
   world = await mountWorld(FACTS, { initialEntries: ['/w/agent-noah'] }); await settle();
   expect(bubbleText()).toContain('words for my memory');
   expect(field()?.value ?? '').not.toContain('words for my memory');
-  expect([...world.container.querySelectorAll('button')].some(node => node.textContent?.trim() === 'Add a note')).toBe(true);
+  expect([...world.container.querySelectorAll('button')].some(node => node.textContent?.trim() === 'Add words')).toBe(true);
 });

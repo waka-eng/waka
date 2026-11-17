@@ -8,6 +8,7 @@ import postgres from 'postgres';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import { acquireSignalDerivationLock, applyCandidates } from './signal-match-or-mint.js';
 import { writeSignalEmbedding } from './signal-embeddings.js';
+import {hashEmbeddingInput} from './inspiration-embeddings.js';
 import { deriveSignalsForInspiration } from './signal-derivation.js';
 import type { ModelProvider } from './model-provider.js';
 
@@ -23,7 +24,10 @@ async function fixture(cachedStatement = original, dismissed = false) {
   const [signal] = await t.sql`INSERT INTO signals(profile_id,statement,locked_at,status,dismissed_at)
     VALUES (${profile.id},${original},now(),${dismissed ? 'retired' : 'emerging'},${dismissed ? new Date().toISOString() : null}) RETURNING id`;
   await t.db.transaction(tx => writeSignalEmbedding(tx as never, { profileId: profile.id as string, signalId: signal.id as string,
-    statement: cachedStatement, embedding: vector, model }));
+    statement: original, embedding: vector, model }));
+  // Simulate a stale/corrupt persisted row directly. The guarded writer now
+  // refuses to insert a vector for words the source no longer carries.
+  if(cachedStatement!==original)await t.sql`UPDATE signal_embeddings SET input_hash=${hashEmbeddingInput(cachedStatement)} WHERE signal_id=${signal.id} AND model=${model}`;
   return { accountId: account.id as string, profileId: profile.id as string, inspirationId: source.id as string, signalId: signal.id as string };
 }
 function run(f: Awaited<ReturnType<typeof fixture>>, statement: string, judge: ModelProvider['judgeSignalMatch']) {

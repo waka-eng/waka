@@ -1,3 +1,6 @@
+import {embedDiscoveryCandidates,commitDiscoveryEmbeddings} from './embedding-discovery.js';
+import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
+import {createEmbeddingClient} from './embedding-provider.js';
 import {and,asc,eq,inArray,sql} from 'drizzle-orm';
 import {backgroundJobs,profiles,reviewAnswerProcessing,reviewSignalSupport,signalReviewEvidence,signals,type BackgroundJob,type BackgroundJobResult} from '../db/index.js';
 import {getDb} from './db.js';
@@ -6,8 +9,7 @@ import {getDefaultModelProvider,type ModelProvider,type ReviewAnswerDerivationIn
 import {readGenerationRevision,assertGenerationRevision} from './generation-revision.js';
 import {REVIEW_SUPPORT_POLICY,recordReviewSupport,writeReviewEvidence} from './review-evidence.js';
 import {refreshSignalLifecycle,reconcileSignalsAfterEvidenceLoss} from './signal-lifecycle.js';
-import {acquireSignalDerivationLock,applyCandidates} from './signal-match-or-mint.js';
-import {GeminiEmbeddingHttpClient} from './inspiration-embeddings.js';
+import {acquireSignalDerivationLock,applyCandidates,type ResolvedCandidate} from './signal-match-or-mint.js';
 import type {StatementEmbeddingClient} from './signal-embeddings.js';
 import {enqueueReviewAnswerDerivation,enqueueTopOfMindRefresh,reserveReviewModelRun,type EnqueueResult} from './queue.js';
 import {BackgroundJobHeldError} from './background-job-hold.js';
@@ -138,15 +140,23 @@ export async function deriveSignalsForReviewAnswer(input:{profileId:string;sessi
   const [reembedding]=await db.select({id:backgroundJobs.id}).from(backgroundJobs).where(and(eq(backgroundJobs.profileId,input.profileId),eq(backgroundJobs.type,'reembed_signal'),inArray(backgroundJobs.status,['pending','running']))).limit(1);
   if(reembedding)throw new BackgroundJobHeldError(new Date(Date.now()+5000),'Signal wording is being indexed');
   const request=modelInput(material,[],true);await beforeModel();const discovered=parseReviewAnswerDerivation(await provider.deriveReviewAnswer(request),request);
-  const embedding=deps.embeddingClient??new GeminiEmbeddingHttpClient();
-  const candidates=await Promise.all(discovered.statements.map(async row=>({statement:row.statement,reason:null,quote:null,quoteSource:null,relatedEvidence:[],embedding:await embedding.embed(row.statement)})));
+  const embedding=deps.embeddingClient??createEmbeddingClient(undefined,generation.embeddingPolicy);
+  let discovery:Array<{embedding:number[];attemptId:string}>|undefined;
+  if(embedding.model===EMBEDDING_2_SPACE.id&&discovered.statements.length){
+    if(!deps.job||!deps.beforeCommit||!generation.embeddingPolicy)throw new Error('Model2 review discovery requires a current job');
+    discovery=await embedDiscoveryCandidates(db,{profileId:input.profileId,sourceKind:'review_answer',sourceId:input.answerId,materialHash:material.hash,request:{jobId:deps.job.id,requestVersion:deps.job.requestVersion.toString()},policy:generation.embeddingPolicy,statements:discovered.statements.map(row=>row.statement),prove:async tx=>{await assertReviewAnswerMaterial(tx,material!);await assertGenerationRevision(tx,generation!,true);},claim:deps.beforeCommit},embedding);
+  }
+  // Native001 retains its original bounded parallel dispatch. Model2 alone
+  // uses sequential durable reservations, with no replay of unknown dispatch.
+  const candidates:ResolvedCandidate[]=discovery?discovered.statements.map((row,index)=>({statement:row.statement,reason:null,quote:null,quoteSource:null,relatedEvidence:[],embedding:discovery[index]!.embedding})):
+    await Promise.all(discovered.statements.map(async row=>({statement:row.statement,reason:null,quote:null,quoteSource:null,relatedEvidence:[],embedding:await embedding.embed(row.statement)})));
   const result=await db.transaction(async tx=>{
     await acquireSignalDerivationLock(tx,input.profileId);
     const applied=await applyCandidates(tx,{profileId:input.profileId,inspirationId:null,evidenceOwnerProfileId:input.profileId,
       reviewSource:{answerId:input.answerId,withdrawnSignalIds:new Set(decisions.filter(row=>row.lastExplicit==='unsupported').map(row=>row.signalId)),attach:(transaction,signalId)=>writeReviewEvidence(transaction,material!,signalId)},
-      candidates,embeddingModel:embedding.model,provider,preferredLocale:material!.locale,now:new Date(),beforeWrites:()=>guard(tx,material!,generation!)});
+      candidates,embeddingModel:embedding.model,embeddingPolicy:generation!.embeddingPolicy,provider,preferredLocale:material!.locale,now:new Date(),beforeWrites:()=>guard(tx,material!,generation!)});
     const ids=[...applied.matchedSignalIds,...applied.mintedSignalIds];
     const reading=ids.length?await enqueueTopOfMindRefresh(input.profileId,'signals_changed',tx):undefined;
-    await finish(tx,material!,deps,{derived:true,discovered:true,reading,signalIds:ids});return applied;
+    await finish(tx,material!,deps,{derived:true,discovered:true,reading,signalIds:ids});await commitDiscoveryEmbeddings(tx,input.profileId,discovery?.map(row=>row.attemptId)??[]);return applied;
   });return {status:'derived' as const,...result};
 }

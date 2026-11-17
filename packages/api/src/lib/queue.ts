@@ -1,3 +1,5 @@
+import {indexEmbeddingSource,EmbeddingIndexNeedsRetry} from './embedding-indexer.js';
+import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
 /**
  * Postgres is the queue.
  *
@@ -951,7 +953,7 @@ export async function drainBackgroundJobs(
       // retry and an unrelated failure in between changes nothing.
       const malformedRetrySpent = err instanceof MalformedModelOutputError
         && job.malformedRetryVersion !== null && job.malformedRetryVersion === job.requestVersion;
-      const exhausted = job.attempts >= job.maxAttempts || malformedRetrySpent;
+      const exhausted = job.attempts >= job.maxAttempts || malformedRetrySpent || err instanceof EmbeddingIndexNeedsRetry;
       const failedAt = clock();
       await store.markFailedOrPending(job, err, exhausted, failedAt);
       if (exhausted) result.failed += 1;
@@ -1240,6 +1242,22 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
         outcome: result.entryCount === 0 ? "empty"
           : result.reason === "no_change" ? "unchanged" : "changed",
       };
+    }
+
+    case "index_embedding": {
+      const payload=job.payload;
+      if(!payload||typeof payload!=='object'||Array.isArray(payload))return dropPoisonPayload(job);
+      const row=payload as Record<string,unknown>;
+      if(Object.keys(row).sort().join('|')!=='sourceId|sourceKind|space'||!['inspiration','signal'].includes(String(row.sourceKind))||typeof row.sourceId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.sourceId)||row.space!==EMBEDDING_2_SPACE.id)return dropPoisonPayload(job);
+      const db=getDb();
+      await indexEmbeddingSource(db,{profileId:job.profileId,sourceKind:row.sourceKind as 'inspiration'|'signal',sourceId:row.sourceId,space:row.space},{beforeCommit:tx=>assertBackgroundJobOwnership(tx,job,true)});
+      // A public source has two scoped cells. One bounded call per claim;
+      // remaining current work earns a normal metered rerun, not a loop here.
+      await db.transaction(async tx=>{
+        await assertBackgroundJobOwnership(tx,job,true);
+        await tx.execute(sql`UPDATE background_jobs SET rerun_requested=true WHERE id=${job.id}::uuid AND profile_id=${job.profileId}::uuid AND EXISTS(SELECT 1 FROM embedding_index_work w JOIN profile_embedding_indexes p ON p.profile_id=w.profile_id WHERE w.profile_id=${job.profileId}::uuid AND w.source_kind=${row.sourceKind as string} AND w.source_id=${row.sourceId as string}::uuid AND w.space=${EMBEDDING_2_SPACE.id} AND p.active_space=w.space AND w.requested_version>w.completed_version)`);
+      });
+      return;
     }
 
     case "reembed_signal": {

@@ -61,7 +61,8 @@ it('recovers personal note edits after reload without moving their memory owner'
   await act(async()=>save!.click());await settle();
   expect(S.text).toBe('Edited words survive refresh.');
   expect(readNoteEdit(scope,'agent-note')).toBeNull();
-  expect(world.container.textContent).toContain('Saved');
+  /* No idle "Saved" since 2026-11-12; a saved note says nothing. */
+  expect(world.container.textContent).not.toContain('Unsaved changes');
 });
 it('does not recover another profile or other-account drafts and warns about changed server text',async()=>{
   writeNoteEdit({accountId:'other',profileId:S.agent},'agent-note',S.text,'PRIVATE',null);
@@ -69,7 +70,7 @@ it('does not recover another profile or other-account drafts and warns about cha
   await boot();expect(page()?.value).toBe(S.text);world.unmount();
   writeNoteEdit(scope,'agent-note',S.text,'Recovered local edit',null);S.text='Changed elsewhere';
   await boot();expect(page()?.value).toBe('Recovered local edit');
-  expect(world.container.textContent).toContain('This note changed elsewhere');
+  expect(world.container.textContent).toContain('This inspiration changed elsewhere');
   await act(async()=>page()!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));await settle();
   expect(vi.mocked(updateInspiration)).not.toHaveBeenCalled();
 });

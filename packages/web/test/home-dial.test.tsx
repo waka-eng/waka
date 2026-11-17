@@ -229,7 +229,7 @@ const pastDays = () =>
     .sort((a, b) => b - a);
 
 function inspirationRow(): HTMLElement {
-  const row = [...layout.container.querySelectorAll<HTMLElement>(".waka-home-bar-door")].find((item) => item.getAttribute("aria-label") === "Keep a thought");
+  const row = [...layout.container.querySelectorAll<HTMLElement>(".waka-home-bar-door")].find((item) => item.getAttribute("aria-label") === "Save an inspiration");
   if (!row) throw new Error("no Inspiration row in the bar");
   return row;
 }
@@ -656,7 +656,7 @@ describe("the mouth while the dial is away from now", () => {
   it("offers capture in the past, returns to now, and focuses the existing composer", async () => {
     await windToDay(endOfDayOf(keptMs[2]));
     expect(one(".jar-mouth-slot").hasAttribute("inert")).toBe(true);
-    /* THE BAR'S "Keep a thought" IS THE ONE DOOR NOW: the pill that duplicated
+    /* THE BAR'S "Save an inspiration" IS THE ONE DOOR NOW: the pill that duplicated
        it above the bar went (audit f2afcbe2). Same act: back to now, the
        notepad. */
     const shortcut = inspirationRow();
@@ -664,7 +664,7 @@ describe("the mouth while the dial is away from now", () => {
     await layout.step(40);
 
     const field = one(".jar-mouth-field");
-    expect(field.getAttribute("placeholder")).toBe("Add a note…");
+    expect(field.getAttribute("placeholder")).toBe("Write an inspiration…");
     expect(document.activeElement).toBe(field);
   });
 

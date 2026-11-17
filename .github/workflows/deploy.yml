@@ -91,6 +91,7 @@ jobs:
 
       - name: Validate deployment environment
         env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_PRODUCTION }}
           WAKA_DISCORD_WEBHOOK_URL: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
         shell: bash
         run: |
@@ -106,6 +107,7 @@ jobs:
             DB_CONNECTION_URL
             GEMINI_API_KEY
             OPENROUTER_API_KEY
+            OPENAI_API_KEY
             WAKA_DISCORD_WEBHOOK_URL
           )
           missing=()
@@ -135,6 +137,7 @@ jobs:
         if: ${{ inputs.preview_only }}
         env:
           SST_SECRET_OpenRouterApiKey: ${{ secrets.OPENROUTER_API_KEY }}
+          SST_SECRET_OpenAiApiKey: ${{ secrets.OPENAI_API_KEY_PRODUCTION }}
           SST_SECRET_DiscordWebhookUrl: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
         run: node scripts/preview-production.mjs
 
@@ -196,6 +199,12 @@ jobs:
           pnpm sst secret set GeminiApiKey "$GEMINI_API_KEY" --stage "$SST_STAGE"
           pnpm sst secret set OpenRouterApiKey "$OPENROUTER_API_KEY" --stage "$SST_STAGE"
           printf '%s' "$WAKA_DISCORD_WEBHOOK_URL" | pnpm sst secret set DiscordWebhookUrl --stage "$SST_STAGE"
+
+      - name: Set production OpenAI secret through stdin
+        if: ${{ !inputs.preview_only }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_PRODUCTION }}
+        run: node scripts/set-openai-secret.mjs
 
       - name: Apply production database migrations
         if: ${{ !inputs.preview_only }}
@@ -271,6 +280,8 @@ jobs:
 
       - name: Verify production runtime and cleanup wiring without secrets
         if: ${{ !inputs.preview_only }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_PRODUCTION }}
         run: node scripts/production-release-audit.mjs > production-release-audit.json
 
       - name: Arm missing-probe detection after natural healthy baseline

@@ -13,11 +13,11 @@
  * does. The page itself is the shipped one.
  */
 import { act } from 'react';
+import { useLocation } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, type MountedWorld } from './helpers/render-home';
-import { HomeStream } from '../src/components/HomeStream';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [{ id: 'near', text: 'A save in the window', daysAgo: 1 }] }));
 const ASKED = vi.hoisted(() => ({ far: 0, further: 0 }));
@@ -49,14 +49,18 @@ beforeEach(() => { localStorage.clear(); });
 afterEach(() => { world?.unmount(); world = undefined; });
 async function settle() { for (let turn = 0; turn < 6; turn += 1) { await world!.step(20); await act(async () => { await Promise.resolve(); }); } }
 
-it('answers Why? with a cited save the field had not loaded', async () => {
-  world = await mountWorld(FACTS); await settle();
+/* Why? is answered in a chat now (founder, 2026-11-12): WAKA says the read,
+   then each save it came from, the ones outside the loaded window included. */
+it('answers Why? in a chat, with a cited save the field had not loaded', async () => {
+  let here = '';
+  function Where() { here = useLocation().pathname; return null; }
+  world = await mountWorld(FACTS, { routerTools: <Where /> }); await settle();
   const why = [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-act')].find(b => b.textContent === 'Why?');
   expect(why, 'the read offers no Why?').toBeTruthy();
   await act(async () => why!.click());
   for (let turn = 0; turn < 6; turn += 1) { await settle(); await act(async () => { await new Promise(resolve => setTimeout(resolve, 15)); }); }
-  expect([...world.container.querySelectorAll('.waka-says-why-row')].map(row => row.textContent))
-    .toEqual(['“A save in the window”', '“An older save, outside the window”', '“Another, older still”']);
+  expect(here, 'Why? did not open a new chat').toBe('/chat/new');
+  expect(world.container.querySelector('.waka-says-why'), 'Why? still opened the list in the bubble').toBeNull();
 });
 
 it('reads each cited save outside the window once, however the answers land', async () => {
@@ -66,32 +70,13 @@ it('reads each cited save outside the window once, however the answers land', as
   expect(ASKED, 'a read was asked for again while another was in flight').toEqual({ far: 1, further: 1 });
 });
 
-it('offers the rest from the Saves page when the archive holds more than was loaded', async () => {
+it('counts the whole archive on the handle, and opens the archive that pages it in', async () => {
   world = await mountWorld(FACTS); await settle();
-  /* "{n} kept" counts the whole archive, not the loaded window (founder:
-     "should be x kept"). */
-  expect(world.container.querySelector('.waka-home-bar-pull')?.textContent?.trim(), 'the pull counts only what was loaded').toBe('200 kept');
+  expect(world.container.querySelector('.waka-home-bar-pull')?.textContent?.trim(), 'the pull counts only what was loaded').toBe('200 inspirations');
   await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-home-bar-pull')!.click()); await settle();
-  const more = world.container.querySelector<HTMLButtonElement>('.waka-stream-more');
-  expect(more, 'the Saves page hides that there are more').toBeTruthy();
-  await act(async () => more!.click());
-  expect(world.container.querySelector('.waka-stream'), 'the Saves page stayed up').toBeNull();
-  await settle();
-  /* The archive's own page: its labelled way home is up and the home bar is
-     gone. (This mount has no signed-in scope, so the archive draws nothing
-     inside; that it is the place is what is asked here.) */
+  /* One Saved page (founder, 2026-11-10): the handle goes straight to the
+     archive, its labelled way home up and the home bar gone. */
+  expect(world.container.querySelector('.waka-stream'), 'a second Saved sheet came up').toBeNull();
   expect(world.container.querySelector('.waka-surface-back')?.getAttribute('aria-label'), 'it did not open the archive').toBe('Close');
-  expect(world.container.querySelector('.waka-home-bar')).toBeNull();
-});
-
-it('says there are more saves than the list holds, and goes to the archive that pages them in', async () => {
-  const host = document.createElement('div'); document.body.append(host); const root = createRoot(host);
-  const seeAll = vi.fn();
-  const saves = [{ id: 'a', preview: 'One', isPublic: false, kind: 'note' as const, source: 'app' as const, capturedMs: Date.now(), updatedMs: Date.now(), attachments: [], reflectionCount: 0 }];
-  await act(async () => root.render(<HomeStream locale="en-US" inspirations={saves} signals={[]} principles={[]} onOpenSave={() => {}} onClose={() => {}} query="" onQueryChange={() => {}} more={{ onSeeAll: seeAll }} />));
-  const more = document.querySelector<HTMLButtonElement>('.waka-stream-more');
-  expect(more?.textContent).toBe('See all');
-  await act(async () => more!.click());
-  expect(seeAll).toHaveBeenCalledOnce();
-  await act(async () => root.unmount()); host.remove();
+  expect(world.container.querySelector('.waka-home-bar'), 'the home bar left the sheet pulled up from it').not.toBeNull();
 });

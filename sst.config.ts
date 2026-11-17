@@ -89,6 +89,8 @@ export default $config({
 
   async run() {
     const { default: scheduledWorkerEvent } = await import('./infra/background-worker-event.json');
+    const isDevelopmentDomain = $app.stage === "development" || $app.stage === "dev";
+    const isModelProfileStage = isDevelopmentDomain || $app.stage === "production";
     // -----------------------------------------------------------------------
     // Secrets
     //
@@ -121,9 +123,13 @@ export default $config({
     /** Gemini API key for the classifier queue worker. */
     const geminiApiKey = new sst.Secret("GeminiApiKey");
 
-    /** OpenRouter key — generation's second road (deepseek-v4-flash by
-        default; embeddings stay on Gemini regardless). */
+    /** Retained OpenRouter routes, including GIF and owned versioned model2
+        embeddings. Native001 and direct Google media keep their own key. */
     const openRouterApiKey = new sst.Secret("OpenRouterApiKey");
+    // One reviewed task/provider profile for explicit dev and production stages.
+    // The source candidate does not provision credentials or authorize a deploy.
+    const openAiApiKey = isModelProfileStage ? new sst.Secret("OpenAiApiKey") : undefined;
+    const { default: modelProfile } = await import('./infra/model-profile.json');
 
     // -----------------------------------------------------------------------
     // Storage
@@ -245,7 +251,6 @@ export default $config({
     const publicDomain = PUBLIC_DOMAINS[$app.stage];
     const publicWebUrl = publicDomain ? `https://${publicDomain}` : undefined;
     const publicApiUrl = publicWebUrl;
-    const isDevelopmentDomain = $app.stage === "development" || $app.stage === "dev";
     const runtimeLinks = [
       googleClientId,
       googleClientSecret,
@@ -273,6 +278,7 @@ export default $config({
       // An explicit deployment override can pause new replies without dropping data.
       WAKA_CONVERSATION_REPLIES: (isDevelopmentDomain || $app.stage === "production") && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0",
       WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash-1017",
+      ...(openAiApiKey ? { ...modelProfile, OPENAI_API_KEY: openAiApiKey.value } : {}),
       ATTACHMENTS_BUCKET: attachmentsBucket.name,
       ATTACHMENTS_REGION: AWS_REGION,
       WAKA_VAULT_BUCKET: vaultBucket.name,
@@ -333,6 +339,7 @@ export default $config({
       environment: {
         ...runtimeEnvironment,
         WAKA_BACKGROUND_JOB_CRON_LIMIT: "25",
+        ...(isDevelopmentDomain ? { WAKA_DB_PREPARED_QUERIES: "1" } : {}),
         WAKA_BACKGROUND_JOB_WAKE_GROUP: jobWakeGroup.name,
         WAKA_BACKGROUND_JOB_WAKE_ROLE: jobWakeRole.arn,
       },
@@ -399,6 +406,10 @@ export default $config({
         // Which function to wake when work is enqueued. Absent (local, tests)
         // means the in-process drain owns it instead.
         WAKA_BACKGROUND_WORKER_FUNCTION: backgroundWorker.name,
+        ...(isDevelopmentDomain ? { WAKA_DB_PREPARED_QUERIES: "1" } : {}),
+        // Production enrollment remains OFF pending policy/coverage/rollout gates.
+        ...((isDevelopmentDomain || $app.stage === "production")
+          ? { WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: isDevelopmentDomain ? "1" : "0" } : {}),
         WAKA_BACKGROUND_JOB_WAKE_GROUP: jobWakeGroup.name,
       },
       // Waking the worker is the whole point of the push model; without this
@@ -733,6 +744,7 @@ export default $config({
       ...monitoringOutputs,
       apiFunctionName: api.name,
       backgroundWorkerFunctionName: backgroundWorker.name,
+      principleRefreshFunctionName: principleRefresh.nodes.function.name,
       apiUrl: api.url,
       webUrl: web.url,
       attachmentsBucket: attachmentsBucket.name,

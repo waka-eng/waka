@@ -286,3 +286,9 @@ describe('attachment event delivery authority',()=>{
   expect(subscriber).toContain('Principal: { Service: "lambda.amazonaws.com" }');
  });
 });
+
+it('configures empty-human enrollment only on API, with production explicitly off',()=>{
+ const api=sstConfig.slice(sstConfig.indexOf('const api ='));
+ expect(api).toContain('{ WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: isDevelopmentDomain ? "1" : "0" }');
+ expect(sstConfig.match(/WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2/g)).toHaveLength(1);
+});

@@ -2,7 +2,12 @@
  * stage configurations and never reads credentials or deployed resources. */
 import {expect,it} from 'vitest';
 import {verifyRuntimeConfiguration} from '../../../scripts/runtime-config-policy.mjs';
-const env={PUBLIC_WEB_URL:'https://dev.waka.im',PUBLIC_API_URL:'https://dev.waka.im',NODE_ENV:'production',WAKA_STAGE:'development',OPENROUTER_GENERATION_MODEL:'deepseek/deepseek-v4.1-flash-1017',DB_CONNECTION_URL:'PRIVATE_DB_SECRET'};
+import gpt from '../../../infra/model-profile.json';
+const env={...gpt,PUBLIC_WEB_URL:'https://dev.waka.im',PUBLIC_API_URL:'https://dev.waka.im',NODE_ENV:'production',WAKA_STAGE:'development',OPENROUTER_GENERATION_MODEL:'deepseek/deepseek-v4.1-flash-1017',DB_CONNECTION_URL:'PRIVATE_DB_SECRET'};
+it('accepts only the complete stage-neutral native GPT profile and refuses model/provider drift',()=>{
+ const native={...env,...gpt};expect(verifyRuntimeConfiguration({api:native,worker:native},'development').approvedGenerationModel).toBe(true);
+ for(const patch of [{WAKA_MODEL_CHAT:'foreign'},{WAKA_MODEL_SYNTHESIZE:'gpt-6.1-terra'},{WAKA_GENERATION_PROVIDER:'unknown'}])expect(()=>verifyRuntimeConfiguration({api:{...native,...patch},worker:native},'development')).toThrow();
+});
 it('verifies only supplied facts and leaves topology, privacy, limits and isolation unproven',()=>{
   const result=verifyRuntimeConfiguration({api:env,worker:env},'development');
   expect(result).toMatchObject({trustedOrigins:true,secureCookies:true,proxyTopologyDeclared:false,proxyTopologyVerified:false,databaseIsolationVerified:false,providerPrivacyVerified:false,monetaryLimitsVerified:false});
@@ -23,4 +28,10 @@ it('compares parsed origins rather than equivalent capitalization or trailing sl
 });
 it('does not interpret an absent AWS-projected proxy setting as an explicit zero',()=>{
   expect(verifyRuntimeConfiguration({api:{...env,WAKA_TRUSTED_PROXY_HOPS:null},worker:env},'development').proxyTopologyDeclared).toBe(false);
+});
+
+it('requires the identical reviewed task/provider profile in production without claiming external readiness',()=>{
+ const production={...env,WAKA_STAGE:'production',PUBLIC_WEB_URL:'https://waka.im',PUBLIC_API_URL:'https://waka.im'};
+ expect(verifyRuntimeConfiguration({api:production,worker:production},'production')).toMatchObject({approvedGenerationModel:true,monetaryLimitsVerified:false,providerPrivacyVerified:false});
+ for(const patch of [{WAKA_GENERATION_PROVIDER:'openrouter'},{WAKA_MODEL_IMAGE:'foreign'},{WAKA_AUDIO_PROVIDER:'openrouter'},{WAKA_MODEL_PRINCIPLES:'gpt-6.1-sol'}])expect(()=>verifyRuntimeConfiguration({api:production,worker:{...production,...patch}},'production')).toThrow('reviewed task/provider');
 });

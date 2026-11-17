@@ -92,8 +92,11 @@ function clock(row: ConversationSummary, locale: SupportedLocale): string {
   return Number.isNaN(when.getTime()) ? "" : timeOf(when.getTime(), locale);
 }
 
-export function ConversationsOverlay({ locale, profileId, title, onBack, backKind = "close", gesture = null, onOpen, viewState, topRequest }: {
+export function ConversationsOverlay({ locale, profileId, title, onBack, backKind = "close", gesture = null, onOpen, viewState, topRequest, still = false }: {
   topRequest?: number;
+  /** Arrived from a chat: no fade, so the header and the bar that both
+      pages share hold still while only the middle changes. */
+  still?: boolean;
   viewState?: ListViewState;
   locale: SupportedLocale;
   /** Whose conversations — so an agent's talks are its own. */
@@ -235,7 +238,7 @@ export function ConversationsOverlay({ locale, profileId, title, onBack, backKin
           changes — Escape still leaves, and there is no scrim to press
           away on, because `.waka-page` is the ground rather than a film
           over one. */}
-      <DialogSurface {...listScroll} className="waka-over" motion="modal" aria-label={title} modal={false} escapeLeavesAsModal={false} onClose={onBack}>
+      <DialogSurface {...listScroll} className="waka-over" motion={still ? undefined : "modal"} aria-label={title} modal={false} escapeLeavesAsModal={false} onClose={onBack}>
         <SurfaceHeader locale={locale} gesture={gesture} back={{ kind: backKind, onBack }} title={title}
           right={<button type="button" className="waka-over-new" onClick={() => onOpen(null)}>{say("worldConversationNew")}</button>} />
         <div className="waka-over-find">
@@ -262,7 +265,7 @@ export function ConversationsOverlay({ locale, profileId, title, onBack, backKin
         ) : rows.length === 0 && search ? (
           <p className="waka-over-status" role="status">{say("worldChatsNoMatches")}</p>
         ) : rows.length === 0 ? (
-          <p className="waka-over-status">{say("worldConversationFirst")}</p>
+          <p className="waka-over-status">{say("worldChatsEmpty")}</p>
         ) : (
           /* ═══ THE SAME LIST THE ARCHIVE IS ═══════════════════════════
               Founder: "chat and inspirations should have same look and feel

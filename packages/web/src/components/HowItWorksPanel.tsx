@@ -14,7 +14,9 @@ export function HowItWorksPanel({ locale, onClose }: { locale: SupportedLocale; 
     <div className="waka-about" role="group" aria-label={say("worldHowItWorksTitle")}>
       <SurfaceHeader locale={locale} back={{ kind: "close", onBack: onClose }} title={say("worldHowItWorksTitle")} />
       <div className="waka-about-content">
-      <p className="waka-about-lead">{say("worldHowItWorksLead")}</p>
+      {/* STRIPPED: the lead line restating the title, and the "One
+          companion, your memory" entry below. Founder, 2026-11-12:
+          "strip all unnecessary descriptive text across the experience". */}
       <ol className="waka-about-steps">
         {STEPS.map(step => <li key={step.title}>
           <h3>{say(step.title)}</h3>
@@ -23,7 +25,6 @@ export function HowItWorksPanel({ locale, onClose }: { locale: SupportedLocale; 
       </ol>
       <dl className="waka-about-details">
         <div><dt>{say("worldHowPrinciplesTitle")}</dt><dd>{say("worldHowPrinciplesBody")}</dd></div>
-        <div><dt>{say("worldHowProfilesTitle")}</dt><dd>{say("worldHowProfilesBody")}</dd></div>
       </dl>
       </div>
     </div>

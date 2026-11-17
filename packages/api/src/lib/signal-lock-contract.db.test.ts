@@ -117,7 +117,7 @@ describe("regeneration updates a locked signal's support, never its words", () =
     // The edit invalidates the machine wording's vector. Finish its queued
     // vector work before probing later matching; no live provider is used.
     await reembedSignalStatement(t.db as never, { profileId, signalId, statement: ownersWords }, {
-      embeddingClient: { model: EMBEDDING_MODEL, embed: async () => NEAR_EMBEDDING },
+      embeddingClient: { model: EMBEDDING_MODEL, dimensions:NEAR_EMBEDDING.length, embed: async () => NEAR_EMBEDDING },
     });
 
     // Three more captures land on the same pattern. The model proposes its
@@ -155,7 +155,7 @@ describe("regeneration updates a locked signal's support, never its words", () =
       statement: "내가 고쳐 쓴 문장.",
     });
     await reembedSignalStatement(t.db as never, { profileId, signalId, statement: '내가 고쳐 쓴 문장.' }, {
-      embeddingClient: { model: EMBEDDING_MODEL, embed: async () => NEAR_EMBEDDING },
+      embeddingClient: { model: EMBEDDING_MODEL, dimensions:NEAR_EMBEDDING.length, embed: async () => NEAR_EMBEDDING },
     });
 
     // Locked: the next pass attaches but may not restate.

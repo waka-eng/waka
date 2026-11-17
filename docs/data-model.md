@@ -350,6 +350,27 @@ The retained context API revalidates that selection; the current UI does not
 expose the former memory drawer or a separate citation list. Conversation deletion erases
 both sets of reference metadata while retaining the budget timestamps.
 
+### Application-authored conversation opening
+
+A conversation may bind one `opening` descriptor when it is created. This is
+application-authored context, not a generated assistant turn or a human message.
+The descriptor contains a version, locale, closed prompt key or owned source
+identities and current content/state hashes. It contains no copied capture,
+reading, quote or arbitrary client-authored assistant/system words. A Why opening
+also binds the ordered, server-resolved evidence identities. The human's first
+message stays exact and retains position one.
+
+Creation, opening binding, first message and reply intent commit atomically.
+Retries compare the immutable descriptor as well as the first message; an old
+client or journal without an opening remains compatible. Read and model context
+resolve the descriptor through the same ownership/current-source gates as chat
+citations. Changed/deleted sources make the opening unavailable; the same identity
+must never silently acquire new words. Opening sources participate in the reply's
+existing source/revision publication fences. A closed public prompt is resolved
+from its locale catalogue; dated activity openings are reconstructed from owned
+records at the bound observation time and fail closed if that view changes.
+Conversation deletion erases the descriptor; profile/account deletion cascades it.
+
 Client-generated conversation/message IDs make retry idempotent. A replay with
 different content conflicts rather than overwriting words. Deleting a
 conversation erases its messages and keeps only a content-free conversation
@@ -1839,3 +1860,147 @@ unsupported words remain available as qualified detail, not standing matches.
 The migration itself (schema, API, web, MCP phases and gates) belongs in a
 `docs/goals/` goal document that references this file — for this layer,
 `goals/principles.md`.
+
+
+## Embedding index migration (local preparation)
+
+An **embedding space** is the versioned combination of provider model, exact
+query/document formatting, dimensions and normalization policy. The provider's
+wire model name is different from that stored coordinate-space identity. Existing
+`model` keys in the two vector tables retain that identity; no row is relabeled.
+Native `gemini-embedding-001` remains active. Proposed OpenRouter
+`google/gemini-embedding-2` is incompatible and needs its own current-source
+vectors and separately accepted threshold policy before activation. Text-only
+Embedding2 preparation uses768 raw provider values, exact versioned text prefixes
+and SHA256 of formatted UTF8 input; it changes no human words or existing hashes.
+
+Three internal operational tables coordinate this transition, not new memory
+layers: `profile_embedding_indexes` holds selected/building spaces, policy epochs
+and a historical cutover frontier; `embedding_index_attempts` holds content-free
+paid reservations/outcomes; `embedding_index_work` holds per-owned-source requested
+and completed versions. No source text, query, credentials or duplicate vector
+body lives in these records. Pending work is not evidence that all profile memory
+is unavailable. Existing current supported signals and lexical conversation
+context remain usable when another source is indexing.
+
+Normal source/child/signal mutations coalesce current-space indexing work. A
+completion proves the exact source/work/policy version before atomically writing
+a vector and settling that version. It cannot clear a later edit or another
+source's work. Cache hits can settle work without HTTP; deletions/ineligibility
+settle without new inference. A new uncited source has durable indexing intent
+independent of extraction. Bulk shadow indexing remains outside the interactive
+queue; existing account limits and scheduling policy are not increased.
+
+Initial cutover requires a complete current-hash/geometry inventory and a separate
+accepted threshold policy under bounded owner fences. Ongoing coverage is derived
+from per-source progress, not a sticky profile-wide dirty flag or an expensive
+full-corpus scan after every job. Required current matching/suppression vectors
+must not be missing when discovery decides to mint or suppress. A failed/unknown
+paid request remains explicit and is not an unsafe automatic duplicate call.
+Unchanged old vectors remain retained; existing source-edit/delete privacy
+redaction is not relaxed. Rollback after new writes requires fresh old-space
+coverage and availability, not an assumption of immediate semantic rollback.
+No live data migration or route activation is authorized by this schema contract.
+
+Discovery reservations name their actual source: `inspiration` or
+`review_answer`. A review answer's ledger scope is `statement`, describing the
+generated candidate input, not a stored copy of the answer. Its input hash is
+the exact formatted candidate bytes; source lineage is proved separately.
+Work/control rows remain capture/signal-only. A stable job request, source
+material identity, policy epoch and bounded member ordinal bind each discovery
+dispatch. Regenerating different wording or order cannot bypass a reserved or
+uncertain dispatch. A closed dispatch family separates canonical `index` work
+from generated `discovery` work. Its unresolved identity is owner/source, space,
+input scope and family, independent of input hash, material version, request,
+manifest or live-versus-migration purpose. Newer source words can remain held
+behind an older uncertain dispatch; this does not hide other current memory. Review reservations require current owned review material,
+generation/policy and live claim proofs. They are excluded from bulk indexing.
+
+The proposed model2 policy is **unvalidated** and cannot activate a profile.
+Its retrieval-only floor is0.80; all nonidentical matching/refusal candidates
+still need a semantic judgment, regardless of cosine. Gardener candidates use
+that floor but require their existing meaning judge. Model2 reading selection
+does not discard claims using cosine-only redundancy. Model2 chat proposes
+0.80 minimum/0.85 uncorroborated/0.90 strong/0.02 relative gap with no cosine
+diversity penalty. These are bounded local integration settings for review,
+not calibrated truth thresholds or an inference from the small smoke corpus.
+
+Explicit human processing Retry may renew a definite HTTP-failed canonical
+Embedding2 work version and enqueue ordinary metered work. This is not a ledger
+reset: old attempts remain, and reads/background retries never renew versions.
+Key-scoped/read-only/foreign sessions cannot invoke recovery. A second click
+joins the newly queued work; it cannot renew a version without a definite HTTP
+failure on that version. A bounded privileged signal metadata helper requires
+account, source, exact work version and policy epoch. Reserved, received or
+unknown outcomes block renewal across changed material, request or manifest.
+Only exact current-result reconciliation can progress without another dispatch;
+a lost result requires a separate explicit recovery/spending decision. No
+operator is authorized merely by this source contract.
+
+### Read-only embedding coverage (C0)
+
+The limited-dev compiled policy `embedding2.dev-candidates.v1` selects bounded
+candidates, never agreement, truth, independence or a suppression verdict. Its
+task-specific retrieval floor is0.75 (chat6, recall8, related captures5), with
+nearest-match/refusal semantic review and at most8 gardener pair judgments.
+Owner-locked words, current evidence and mandatory reading review remain binding;
+model2 cosine alone never prunes reading claims. This is a reviewed risk choice
+using a small agent-authored smoke corpus, not human calibration or broad quality
+proof. Native001 thresholds and missing-control defaults remain unchanged.
+
+Cutover (C1) is a separate privileged, keyless metadata operation. Its actual
+coverage core runs in one explicit READ COMMITTED transaction after sorted
+exclusive owner, profile, generation and control barriers. It re-reads owned
+canonical hashes, raw768 geometry, complete work/tombstone domain and frontier,
+and all-manifest unresolved attempts. A C0 receipt is never its certificate.
+Only exact native-before policy/epoch/generation/frontier tuples and the compiled
+policy authorize the atomic cohort transition. A server whole-transaction
+deadline is mandatory; unsupported servers hold without weakening that boundary.
+
+Lost cutover acknowledgment requires fresh whole-cohort before/after tuple
+reconciliation, not mutation replay. All-before cannot prove rollback while an
+original invocation may still execute. An empty-profile path proves zero domain
+under the same barriers before metadata enrollment. A default-off dev-only
+new-human helper may enroll only a freshly inserted empty human profile in its
+creation transaction. Existing logins, groups, retained stacks, production and
+direct-SQL missing-control/native defaults do not change. Ongoing provider spend
+and live cutover/enrollment need separate scope; shadow-build approval is consumed.
+
+C0 verifies a bounded, owned set of current personal/public inspiration and signal
+cells, including required refusal anchors and stale/tombstoned work or extra
+target-space vectors. It reads the actual canonical input, formatted hash,
+768 finite values with finite nonzero norm, and matching work version/outcome.
+Counts, a ledger receipt or zero pending work cannot substitute for those proofs.
+Oversized domains, fields, aggregate bytes, statement budgets or elapsed time
+refuse rather than certify a subset. No vector normalization is performed.
+
+The operation uses an explicit READ ONLY REPEATABLE READ snapshot. A complete
+result is true for that snapshot, even if a writer commits later; it is not a
+cached activation certificate. All sources, work, vectors and optional exact
+manifest reconciliation are bound to one account and its owned profiles.
+Foreign-manifest reconciliation refuses without returning foreign counts.
+Current-vector completeness and paid-attempt/provider/invoice certainty are
+separate facts; C0 neither clears an unknown attempt nor repairs data.
+A single owned account/profile/target-space aggregate always reports reserved,
+received and unknown attempts across all live/migration manifests, even without
+optional exact-manifest reconciliation. Deleted-source attempts remain visible.
+Valid source coverage can coexist with an unresolved attempt; a future cutover
+must independently require this aggregate's total to be zero under its fences,
+or hold for exact resolution. Neither aggregate proves billing outcome.
+
+C0 has no provider key, HTTP, queue, wake, write or activation capability. It must
+not call the shared-index-fence function, which may insert missing control rows.
+Reports contain only numeric counts/closed flags; target UUIDs and frontier
+metadata, if needed, stay in a private0600 artifact. Raw words, hashes identifying
+individual inputs, vectors and source identifiers are never report/error fields.
+The proposed sibling keyless operator requires its own exact review before any
+live read. Existing paid operators, native defaults and model2 calibration holds
+remain unchanged.
+
+A future cutover must re-run this verifier under its own current exclusive
+fences. Its transaction cannot inherit an old REPEATABLE READ snapshot: an
+inactive-space vector edit need not advance active generation. Explicit READ
+COMMITTED (fresh proof statements after fences) or another proved fail-closed
+snapshot protocol is required before future activation is implemented. A lost
+cutover acknowledgment requires exact before/after policy/epoch/frontier tuple
+reconciliation, never activation replay based on missing stdout.

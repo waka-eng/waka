@@ -1,7 +1,7 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `fetchFn` supplies Gemini responses so
  * no audio leaves the machine and no model calls are purchased. Real WAV
  * parsing, request construction, validation and error classification run. */
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach,describe, expect, it, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { AUDIO_TRANSCRIPTION_MODEL, inspectTranscriptionAudio, MAX_TRANSCRIPT_CHARS, MAX_TRANSCRIPTION_BYTES, transcribeAudio } from './audio-transcription.js';
 
@@ -18,8 +18,15 @@ const response = (transcript: unknown, finishReason = 'STOP') => new Response(JS
 }), { headers: { 'Content-Type': 'application/json' } });
 const run = (fetchFn: typeof fetch, extra: Partial<Parameters<typeof transcribeAudio>[0]> = {}) =>
   transcribeAudio({ bytes: wave(), contentType: 'audio/wav', apiKey: 'test-key', fetchFn, ...extra });
+afterEach(()=>vi.unstubAllEnvs());
 
 describe('bounded transcription', () => {
+  it('dispatches the configured OR transcription only after actual audio inspection',async()=>{
+    vi.stubEnv('WAKA_AUDIO_PROVIDER','openrouter');const fetchFn=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({text:'여백을 남겨요. Leave room.'})));
+    const result=await run(fetchFn,{openRouterApiKey:'SYNTHETIC_OR'});expect(result).toMatchObject({model:'google/gemini-3.5-transcribe',transcript:'여백을 남겨요. Leave room.',durationSeconds:1});
+    expect(String(fetchFn.mock.calls[0][0])).toBe('https://openrouter.ai/api/v1/audio/transcriptions');expect(fetchFn).toHaveBeenCalledOnce();
+    fetchFn.mockClear();await expect(run(fetchFn,{bytes:Buffer.from('not audio'),openRouterApiKey:'SYNTHETIC_OR'})).rejects.toMatchObject({transient:false});expect(fetchFn).not.toHaveBeenCalled();
+  });
   it('accepts a real MediaRecorder WebM without a declared container duration', async () => {
     const bytes = await readFile(new URL('../../test/fixtures/audio/browser-tone.webm', import.meta.url));
     const inspected = await inspectTranscriptionAudio(bytes, 'audio/webm;codecs=opus');

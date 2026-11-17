@@ -160,7 +160,7 @@ async function newNote(): Promise<void> {
 async function savedNote(onNoteOpen = vi.fn()): Promise<void> {
   await act(async () =>
     root.render(
-      <Archive locale="en-US" title="Kept" onBack={vi.fn()} onNoteOpen={onNoteOpen} />,
+      <Archive locale="en-US" title="Saved" onBack={vi.fn()} onNoteOpen={onNoteOpen} />,
     ),
   );
   for (let turn = 0; turn < 12 && !host.querySelector(".waka-list-row"); turn += 1) {

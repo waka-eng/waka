@@ -141,7 +141,7 @@ const savesStarted = () => vi.mocked(fetchInspirationSaveRequest).mock.calls.len
 async function openNotepad(words = ''): Promise<void> {
   world = await mountWorld(FACTS); await settle();
   const inspiration = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')]
-    .find(row => row.getAttribute('aria-label') === 'Keep a thought');
+    .find(row => row.getAttribute('aria-label') === 'Save an inspiration');
   expect(inspiration, 'the bar offers no Inspiration row').toBeTruthy();
   await act(async () => inspiration!.click()); await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad did not open').toBeTruthy();
@@ -214,9 +214,9 @@ it('releases the microphone when the notepad closes', async () => {
      the words (`saveAsDraft`) and takes the page down. */
   await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click());
   await settle();
-  /* A note with words asks first (founder, 2026-11-09); Keep as draft is
+  /* A note with words asks first (founder, 2026-11-09); Save as draft is
      what "<" used to do on its own. */
-  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-note-ask .jar-char-bubble-act')].find(node => node.textContent === 'Keep as draft')!.click());
+  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-note-ask .waka-note-ask-act')].find(node => node.textContent === 'Save as draft')!.click());
   await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad is still open').toBeFalsy();
   expect(live.started, 'the engine is still transcribing into a page nobody is looking at').toBe(false);
@@ -237,7 +237,7 @@ it('releases the microphone when the notepad closes', async () => {
  * files marked below." That is a true sentence about a thing still on screen,
  * which is why the fix does not clear it — it re-ranks.
  */
-it('says the cloud disclosure in full under the words, even when the bar was already holding a line', async () => {
+it('opens the listening view with no line about where speech goes, even when the bar was already holding a line', async () => {
   await openNotepad('dusk on the hill');
 
   const unreadable = new File(['bytes'], 'notes.txt', { type: 'text/plain' });
@@ -253,8 +253,9 @@ it('says the cloud disclosure in full under the words, even when the bar was alr
 
   await pressMic();
   expect(engine().started, 'the microphone never opened, so nothing was disclosed either way').toBe(true);
-  /* One full line under the words now, never cut short in the bar. */
-  expect(world.container.querySelector('.waka-listening-notice')?.textContent).toBe('Your browser sends speech to its own service to turn it into text.');
+  /* Founder, 2026-11-10, on that line: "remove". */
+  expect(world.container.querySelector('.waka-listening')).not.toBeNull();
+  expect(world.container.textContent).not.toContain('its own service');
 });
 
 
@@ -348,7 +349,7 @@ it('does not splice a finished session\'s last words into the next one', async (
    the tap itself; when the world must wind back first, it never starts the
    microphone later (outside the gesture) — the notepad opens with the mic
    ready to tap. */
-const sayIt = () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')].find(row => row.getAttribute('aria-label') === 'Keep your voice')!;
+const sayIt = () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')].find(row => row.getAttribute('aria-label') === 'Save your voice')!;
 
 it('starts listening inside the tap when the world is already at now', async () => {
   world = await mountWorld(FACTS); await settle();
@@ -391,10 +392,10 @@ it('dims Say it, and starts nothing, where the notepad could not keep the words'
 it('starts Your voice from home on a blank page, not inside the kept draft', async () => {
   await openNotepad('xdfsdf');
   await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-surface-back')!.click()); await settle();
-  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-note-ask .jar-char-bubble-act')].find(node => node.textContent === 'Keep as draft')!.click());
+  await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-note-ask .waka-note-ask-act')].find(node => node.textContent === 'Save as draft')!.click());
   await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'the notepad is still open').toBeFalsy();
-  const voice = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')].find(row => row.getAttribute('aria-label') === 'Keep your voice');
+  const voice = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-home-bar-door')].find(row => row.getAttribute('aria-label') === 'Save your voice');
   expect(voice, 'home offers no Your voice').toBeTruthy();
   await act(async () => voice!.click()); await settle();
   expect(world.container.querySelector('.jar-inspiration-composer'), 'Your voice did not open the notepad').toBeTruthy();

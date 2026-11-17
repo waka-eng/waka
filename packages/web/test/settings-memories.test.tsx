@@ -20,8 +20,11 @@ it.each([0,1,3])('offers no agent management with %i retained stacks',async coun
  expect(fetchProfiles).not.toHaveBeenCalled();
  expect(host.querySelector('[data-settings-target="personal"]')).not.toBeNull();
 });
-it('explains one WAKA companion and human-owned memory without switching instructions',async()=>{
+it('explains how WAKA works without decorative entries or switching instructions',async()=>{
  await act(async()=>root.render(<HowItWorksPanel locale="en-US" onClose={()=>{}}/>));
- expect(host.textContent).toContain('One companion, your memory');
+ /* Founder, 2026-11-12: "strip all unnecessary descriptive text across the
+    experience". */
+ expect(host.textContent).not.toContain('One companion, your memory');
+ expect(host.textContent).toContain('Repeated patterns become principles.');
  expect(host.textContent).not.toMatch(/your agents|Switch at/);
 });

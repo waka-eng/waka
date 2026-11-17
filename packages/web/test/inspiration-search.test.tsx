@@ -32,7 +32,7 @@ it('opens an archive result directly, with a recognizable preview, date and refl
   expect(host.querySelector('[role="status"]')?.textContent).toContain('Searching');
   await tick();
   expect(fetchInspirationPage).toHaveBeenCalledWith({ profile: 'profile-1', q: 'garden', limit: 50 }, expect.any(AbortSignal));
-  expect(host.textContent).toContain('Jan 4, 2026'); expect(host.textContent).toContain('Has your note');
+  expect(host.textContent).toContain('Jan 4, 2026'); expect(host.textContent).toContain('Has your inspiration');
   await act(async () => button('Thought older-than-field').click());
   expect(pick).toHaveBeenCalledWith(row('older-than-field'));
 });
@@ -40,10 +40,10 @@ it('does not call an error no matches, and can retry the first page', async () =
   vi.mocked(fetchInspirationPage).mockRejectedValueOnce(new Error('Offline')).mockResolvedValueOnce({ inspirations: [] });
   await act(async () => root.render(<Search />)); await tick();
   expect(host.querySelector('[role="alert"]')).not.toBeNull();
-  expect(host.textContent).not.toContain('Nothing says that');
+  expect(host.textContent).not.toContain('No matching inspirations');
   await act(async () => button('Try again').click()); await tick();
   expect(host.querySelector('[role="alert"]')).toBeNull();
-  expect(host.querySelector('[role="status"]')?.textContent?.toLowerCase()).toContain('nothing');
+  expect(host.querySelector('[role="status"]')?.textContent?.toLowerCase()).toContain('no matching inspirations');
 });
 it('keeps the first page through a failed next page, retries and deduplicates results', async () => {
   vi.mocked(fetchInspirationPage).mockResolvedValueOnce({ inspirations: [row('one')], nextCursor: 'page-2' })
@@ -77,4 +77,17 @@ it('removes an old profile result before the next profile read arrives', async (
   await act(async () => root.render(<Search profile="profile-2" />));
   expect(host.textContent).not.toContain('private-old'); await tick();
   expect(vi.mocked(fetchInspirationPage).mock.calls[1]?.[0]).toMatchObject({ profile: 'profile-2' });
+});
+
+it.each(['en-US', 'ko-KR'] as const)('explains the trimmed minimum without requesting short queries in %s', async locale => {
+  vi.mocked(fetchInspirationPage).mockResolvedValue({ inspirations: [] });
+  const props = { profileId: 'profile-1', locale, onQuery: vi.fn(), onPick: pick, onClose: vi.fn() };
+  for (const query of ['  ', ' g ']) {
+    await act(async () => root.render(<InspirationSearch {...props} query={query} />));
+    expect(host.querySelector('[role="status"]')).not.toBeNull();
+    await tick(); expect(fetchInspirationPage).not.toHaveBeenCalled();
+  }
+  await act(async () => root.render(<InspirationSearch {...props} query=" ga " />));
+  await tick();
+  expect(fetchInspirationPage).toHaveBeenCalledExactlyOnceWith({ profile: 'profile-1', q: 'ga', limit: 50 }, expect.any(AbortSignal));
 });

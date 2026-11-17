@@ -54,6 +54,7 @@ export const backgroundJobTypeValues = [
   "generate_review_question",
   "generate_conversation_reply",
   "derive_review_answer",
+  "index_embedding",
 ] as const;
 export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
 export const backgroundJobTypeEnum = pgEnum("background_job_type", backgroundJobTypeValues);
@@ -133,6 +134,9 @@ export interface GenerateReviewQuestionPayload {
   contextHash?:string;question?:string;connection?:string|null;sourceIds?:string[];
 }
 export interface DeriveReviewAnswerPayload {answerId:string;sessionId:string;signalIds?:string[]}
+/** Current source identity only; words are read under current owner/policy proofs. */
+export interface IndexEmbeddingPayload {sourceKind:'inspiration'|'signal';sourceId:string;space:string}
+
 
 export type BackgroundJobPayload =
   | EnrichAttachmentPayload
@@ -146,6 +150,7 @@ export type BackgroundJobPayload =
   | GenerateReflectionQuestionPayload
   | GenerateReviewQuestionPayload
   | DeriveReviewAnswerPayload
+  | IndexEmbeddingPayload
   | {conversationId:string;replyRequestId:string}
   | {reviewContextInvalidated:true};
 

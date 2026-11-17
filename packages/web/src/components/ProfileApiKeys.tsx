@@ -71,12 +71,11 @@ export function ProfileApiKeys({ profile, locale }: {
   const install = mcpSetupCommands({ profile, apiUrl, packageOrigin, installed: false, client, scope: 'user' })[0]!;
   return <div className="waka-api-keys">
     <div className="waka-session-list-heading">
-      <h3>{formatMessage(locale, 'profileApiKeysForProfile', { name: profile.name })}</h3>
       <button type="button" className="waka-settings-erase" disabled={loading || busy !== null} onClick={() => void load()}>{say('profileConnectionsRefresh')}</button>
     </div>
     <p className="waka-settings-note">{say(personal ? 'profilePersonalMcpHint' : 'profileApiKeysHint')}</p>
-    <h4 className="waka-mcp-instruction-title">{say('profileApiKeysCreateStep')}</h4>
-    <p className="waka-settings-note">{say('profileApiKeysCreateHint')}</p>
+    {/* STRIPPED: "Name the app or device using this key."; the field's
+        placeholder already says it. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
     {personal ? <label className="waka-mcp-choice"><span>{say('profileMcpAccess')}</span>
       <select value={access} disabled={busy !== null || fresh !== null} onChange={event=>setAccess(event.target.value as typeof access)}>
         <option value="read_only">{say('profileMcpReadOnly')}</option><option value="read_capture">{say('profileMcpReadCapture')}</option>
@@ -106,27 +105,23 @@ export function ProfileApiKeys({ profile, locale }: {
     <details ref={setupDetails} className="waka-mcp-key-setup">
       <summary>{say('profileApiKeysConfigTitle')}</summary>
       <label className="waka-mcp-choice"><span>{say('profileMcpClient')}</span><select value={client} onChange={event => setClient(event.target.value as McpClient)}>
-        <option value="claude">Claude Code / JSON</option><option value="codex">Codex</option>
+        <option value="claude">{mcpClientName('claude')}</option><option value="codex">{mcpClientName('codex')}</option>
       </select></label>
-      <h4 className="waka-mcp-instruction-title">{say('profileMcpPromptTitle')}</h4>
       <McpInstallPrompt locale={locale} profile={profile} apiUrl={apiUrl} packageOrigin={packageOrigin} client={client} scope="project" authMethod="key" memoryAccess={fresh?.access ?? (personal ? access : "read_capture")} />
       <details className="waka-mcp-key-setup">
         <summary>{say('profileMcpManualInstall')}</summary>
         <ol className="waka-mcp-key-steps">
           <li>
-            <h4 className="waka-mcp-instruction-title">{say('profileApiKeysPrepareTitle')}</h4>
             <p className="waka-settings-note">{say('profileMcpRequirements')}</p>
             <p className="waka-settings-note">{say('profileConnectionInstallHint')}</p>
             <McpCopyBlock locale={locale} text={install} copyLabel={say('profileMcpCopyInstall')} />
           </li>
           <li>
-            <h4 className="waka-mcp-instruction-title">{say('profileApiKeysConfigStep')}</h4>
             <p className="waka-settings-note">{say(client === 'codex' ? 'profileMcpCodexProjectConfigHint' : 'profileMcpClaudeConfigHint')}</p>
             <p className="waka-settings-note">{say('profileApiKeysConfigHint')}</p>
             <McpCopyBlock locale={locale} text={config} copyLabel={say('profileApiKeysCopyConfig')} />
           </li>
           <li>
-            <h4 className="waka-mcp-instruction-title">{say('profileApiKeysVerifyTitle')}</h4>
             <p className="waka-settings-note">{formatMessage(locale, 'profileConnectionVerifyHint', { client: mcpClientName(client) })}</p>
             <McpCopyBlock locale={locale} prompt copyLabel={say('profileMcpCopyTest')}
               text={formatMessage(locale, 'profileConnectionTestPrompt', { name: profile.name, id: profile.id })} />
