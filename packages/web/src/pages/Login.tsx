@@ -246,7 +246,10 @@ function PasswordForm({
           setUncertain(true);setFormError(t(locale,"signupOutcomeUnknown"));
 
         } else {
-          setAdmissionReady(false);setAdmissionRevision(v=>v+1);
+          // OFF has no widget to restore readiness. Ordinary correctable
+          // errors keep the legacy native form usable; policy/unknown paths
+          // above still hold new attempts.
+          if(!admissionOff){setAdmissionReady(false);setAdmissionRevision(v=>v+1);}
           if (err.fieldErrors) {
             setFieldErrors(err.fieldErrors as SignupFieldErrors);
           }

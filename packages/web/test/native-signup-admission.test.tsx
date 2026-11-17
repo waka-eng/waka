@@ -14,6 +14,7 @@ vi.mock('../src/lib/platform',()=>({isMobileBuild:true,platformServices:async()=
 vi.mock('../src/lib/platform/google-sign-in',()=>({hasNativeGoogleSignIn:async()=>false}));
 vi.mock('../src/lib/auth-context',()=>({useAuth:()=>f,hasSignedInHere:()=>false}));
 import LoginPage,{SignupForm,LoginForm} from '../src/pages/Login';
+import {ApiError} from '../src/lib/api';
 import {t} from '../src/lib/locales';
 let root:Root,host:HTMLDivElement,calls:Array<{url:string;method:string}>,mode:unknown;
 (globalThis as typeof globalThis&{IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
@@ -39,6 +40,17 @@ it('holds a failed public read without loading the widget or dispatching mutatio
 it('preserves OFF native password signup after exactly one readonly configuration GET',async()=>{
  mode={mode:'off'};f.signup.mockResolvedValue({account:{id:'synthetic-new-account'}});await render(createElement(SignupForm,{locale:'en-US'}));await fill({email:'synthetic@example.test',password:'synthetic-password-123',name:'Synthetic'});
  await act(async()=>host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(f.signup).toHaveBeenCalledOnce();expect(calls).toHaveLength(1);expect(calls[0]!.method).toBe('GET');expect(f.openBrowser).not.toHaveBeenCalled();
+});
+it('keeps native OFF signup usable after duplicate email, then submits the corrected email',async()=>{
+ mode={mode:'off'};f.signup.mockRejectedValueOnce(new ApiError({status:409,message:'Email already exists'})).mockResolvedValueOnce({account:{id:'synthetic-corrected-account'}});
+ await render(createElement(SignupForm,{locale:'en-US'}));await fill({email:'duplicate@example.test',password:'synthetic-password-123',name:'Synthetic'});
+ await act(async()=>host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(f.signup).toHaveBeenCalledOnce();expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(false);
+ await fill({email:'corrected@example.test'});await act(async()=>host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(f.signup.mock.calls.map(c=>c[0].email)).toEqual(['duplicate@example.test','corrected@example.test']);expect(calls).toHaveLength(1);expect(f.openBrowser).not.toHaveBeenCalled();
+});
+it.each([new ApiError({status:503,message:'unknown'}),new ApiError({status:403,message:'policy closed',code:'signup_closed'})])('does not reopen native OFF signup after unknown/policy refusal %#',async error=>{
+ mode={mode:'off'};f.signup.mockRejectedValueOnce(error);await render(createElement(SignupForm,{locale:'en-US'}));await fill({email:'synthetic@example.test',password:'synthetic-password-123',name:'Synthetic'});
+ const form=host.querySelector('form')!;await act(async()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);await act(async()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(f.signup).toHaveBeenCalledOnce();
 });
 it('refuses an untrusted origin before public fetch or OS browser dispatch',async()=>{
  vi.stubEnv('VITE_API_URL','https://untrusted.example');await render(createElement(SignupForm,{locale:'en-US'}));expect(calls).toHaveLength(0);expect(f.openBrowser).not.toHaveBeenCalled();expect(host.textContent).toContain(t('en-US','signupVerificationUnavailable'));
