@@ -562,7 +562,7 @@ it('reopens the same scoped loaded window before restoring an older scroll posit
 });
 it('treats the first reply-read failure as transient rather than flashing an error',async()=>{
   stored.generationEnabled=true;vi.mocked(fetchConversationReply).mockRejectedValueOnce(new Error('Transient'));await mount();
-  expect(host.textContent).not.toContain('Couldn’t get a reply');await tick(1000);expect(host.textContent).not.toContain('Couldn’t get a reply');
+  expect(host.textContent).not.toContain('Couldn’t check for a reply');await tick(1000);expect(host.textContent).not.toContain('Couldn’t check for a reply');
 });
 /* A CHECK THAT FAILED IS NOT AN ANSWER. The reply under your own last message
    may still be running, so Send stays off while progress cannot be read — but
@@ -574,14 +574,14 @@ it('stops after two failed progress reads, as dev, keeping the reply in flight u
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'the first failure was not retried once').toBe(2);
   await tick(15000);await tick(15000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'failed reads were polled past two').toBe(2);
-  expect(host.textContent).toContain('Couldn’t get a reply');
+  expect(host.textContent).toContain('Couldn’t check for a reply');
   expect(host.textContent,'it claims to retry after stopping').not.toContain('Trying again');
   await type('Still there?');
   const send=()=>[...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!;
   expect(send().disabled,'a failed progress read let a second message cross a reply that may be running').toBe(true);
   vi.mocked(fetchConversationReply).mockImplementation(async()=>structuredClone({...replyState,revision:1}));
   await click('Try again');await tick(0);
-  expect(host.textContent).not.toContain('Couldn’t get a reply');
+  expect(host.textContent).not.toContain('Couldn’t check for a reply');
   expect(send().disabled,'Send stayed off after the server answered').toBe(false);
 });
 /* Only a 404 is terminal: the watch stops, says so, offers a reload, and Send
@@ -597,7 +597,7 @@ it('treats a 429 reply read as "try later", not gone: retried once, then Check a
 it.each([400,403])('treats a %i reply read as an error, not gone, and stops after two in a row: Check again, Send off',async(status)=>{
   stored={...stored,generationEnabled:true,revision:1,messages:[{id:crypto.randomUUID(),profileId:scope.profileId,conversationId:id,position:1,role:'user',content:'Hello?',createdAt:'2026-10-03T01:00:00Z'}]};
   vi.mocked(fetchConversationReply).mockRejectedValue(new ApiError({status,message:'Bad'}));await mount();await tick(0);
-  expect(host.textContent).toContain('Couldn’t get a reply');
+  expect(host.textContent).toContain('Couldn’t check for a reply');
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
   await tick(2000);
   const calls=vi.mocked(fetchConversationReply).mock.calls.length;
@@ -616,7 +616,7 @@ it('on a 401 reply read stops asking but says it could not check, with Check aga
   await tick(15000);await tick(15000);
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'a 401 saved being polled').toBe(calls);
   expect(host.textContent).not.toContain('This reply can’t be found anymore.');
-  expect(host.textContent,'a 401 left the reply silently unconfirmed').toContain('Couldn’t get a reply');
+  expect(host.textContent,'a 401 left the reply silently unconfirmed').toContain('Couldn’t check for a reply');
   expect(host.textContent,'it claims to be retrying while it has stopped').not.toContain('Trying again');
   expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
   await type('Still there?');
@@ -684,7 +684,7 @@ it('stops asking after the old window of older-than-shown answers, says it could
   await later(30000);
   clockSpy.mockRestore();
   expect(vi.mocked(fetchConversationReply).mock.calls.length,'the older-state wait outlived about a minute (focus reset it)').toBe(calls);
-  expect(host.textContent).toContain('Couldn’t get a reply');
+  expect(host.textContent).toContain('Couldn’t check for a reply');
   expect([...host.querySelectorAll('button')].some(b=>b.textContent==='Try again')).toBe(true);
   await type('Still there?');
   expect([...host.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='Send')!.disabled).toBe(true);
