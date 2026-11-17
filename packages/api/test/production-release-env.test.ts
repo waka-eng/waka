@@ -71,7 +71,7 @@ it('preview has no route into any production mutation and supplies only the miss
  const preview=production.jobs.deploy.steps.find((s:any)=>s.run==='node scripts/preview-production.mjs');
  expect(preview.if).toBe('${{ inputs.preview_only }}');
  expect(preview.env.SST_SECRET_OpenRouterApiKey).toBe('${{ secrets.OPENROUTER_API_KEY }}');
- expect(preview.env.SST_SECRET_OpenAiApiKey).toBe('${{ secrets.OPENAI_API_KEY_PRODUCTION }}');
+ expect(preview.env.SST_SECRET_OpenAiApiKey).toBe('${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}');
  expect(readFileSync(resolve(root,'scripts/preview-production.mjs'),'utf8')).not.toMatch(/secret set|set-openai-secret\.mjs|db:migrate|sst deploy|change-resource-record-sets/);
 });
 

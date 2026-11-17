@@ -107,10 +107,12 @@ it('executes actual API/worker environment expressions; default/prod and other c
  expect(source.match(/WAKA_DB_PREPARED_QUERIES:/g)).toHaveLength(2);
 });
 
-it('keeps production key exposure step-scoped and refuses a missing key before production operations',()=>{
+it('binds the owner-approved temporary dev key only to four production consumers and refuses its absence',()=>{
  const workflow=readFileSync(resolve(root,'.github/workflows/deploy.yml'),'utf8'),steps=workflow.split(/\n      - name: /).slice(1);
- const exposed=steps.filter(step=>step.includes('secrets.OPENAI_API_KEY_PRODUCTION'));
+ const exposed=steps.filter(step=>step.includes('secrets.OPENAI_API_KEY_DEVELOPMENT'));
  expect(exposed.map(step=>step.split('\n')[0])).toEqual(['Validate deployment environment','Preview checked production infrastructure','Set production OpenAI secret through stdin','Verify production runtime and cleanup wiring without secrets']);
+ expect(workflow.match(/secrets\.OPENAI_API_KEY_DEVELOPMENT/g)).toHaveLength(4);
+ expect(workflow).not.toContain('secrets.OPENAI_API_KEY_PRODUCTION');
  expect(workflow.slice(0,workflow.indexOf('\n    steps:'))).not.toContain('OPENAI_API_KEY');
  expect(workflow).not.toContain('secrets.OPENAI_API_KEY }}');
  expect(workflow).toContain('run: node scripts/set-openai-secret.mjs');

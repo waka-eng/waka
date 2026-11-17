@@ -106,12 +106,17 @@ approval alone does not sign in. No hard-cap or enforced-invoice claim is made.
 
 ## Credential and privacy readiness
 
-Production workflow requires explicit `OPENAI_API_KEY_PRODUCTION`, step-scoped to
-validation, read-only preview, stdin setup and private runtime comparison. No
-production value/presence/entitlement is attested here. Existing generic-name
-metadata is insufficient. Keep all auth/session/DB and same-stage provider secrets
-unchanged; never put a value in a command argument, release artifact or support
-log. Source/metadata acceptance is not a successful model request or account check.
+The owner explicitly authorized temporary production reuse of the current dev
+OpenAI key on 2026-11-17. All four production workflow consumers bind directly to
+the existing `OPENAI_API_KEY_DEVELOPMENT` secret: validation, read-only preview,
+stdin setup and private runtime comparison. This is one explicit shared-key
+choice, with no automatic fallback or new extraction/copy mechanism. Production
+still targets its own SST secret namespace; auth/session/Google/DB and all other
+provider bindings remain unchanged. Missing-key validation and exact runtime
+comparison remain required. No provider entitlement or paid capability is
+attested by this source change. Never put a value in a command argument, local
+env file, release artifact or support log. Later dedicated-key rotation remains
+separate from this temporary release binding.
 
 Disclose captured/derived/reflection/attachment text and relevant media sent to
 each actual provider. OpenAI `store:false` prevents Responses application state;

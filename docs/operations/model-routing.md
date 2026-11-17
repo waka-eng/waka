@@ -31,17 +31,23 @@ sampling controls; Terra-low tasks also omit sampling controls.
 SST creates the existing `OpenAiApiKey` secret for development/dev/production and
 injects `OPENAI_API_KEY` into API, BackgroundWorker and PrincipleRefresh through
 the same profile. Web, cleanup, monitoring, probe and budget functions receive no
-model key. The production credential must be independently ready before any
-production operation; its existence or entitlement is not established by source.
+model key. Release preflight must establish credential readiness; provider
+entitlement is not established by source or by sharing a key reference.
 
-GitHub uses explicit `OPENAI_API_KEY_DEVELOPMENT` and
-`OPENAI_API_KEY_PRODUCTION` names, mapped to setup/audit `OPENAI_API_KEY` only.
+For the owner-authorized 2026-11-17 release, development and production explicitly
+reference the existing `OPENAI_API_KEY_DEVELOPMENT` GitHub secret temporarily.
+Production has four step-scoped consumers: validation, read-only preview, stdin
+setup and private runtime comparison. There is no automatic fallback to another
+secret name and no key copy into source, local env files or artifacts. The
+existing setter still receives `SST_STAGE=production` for production and writes
+only that stage's SST namespace; DB/auth/Google/other-provider credentials keep
+their production bindings. A later dedicated production-key change is separate.
 Development exposure remains limited to validation, stdin setup and private
 runtime comparison. Production additionally supplies `SST_SECRET_OpenAiApiKey`
 to the existing read-only preview step. Install/web-build/job/global environment
 receives neither OpenAI value. Validation fails before stage reads, secret writes,
 migrations or deployment if the required production credential is absent.
-Name-presence metadata for a generic key does not attest either suffixed key.
+Secret-name metadata alone does not establish a value or provider entitlement.
 
 [`set-openai-secret.mjs`](../../scripts/set-openai-secret.mjs) is the one stdin
 mechanism for all three exact stages. It rejects aliases/whitespace/unknown
