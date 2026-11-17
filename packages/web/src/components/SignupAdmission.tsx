@@ -33,7 +33,7 @@ export function NativePasswordSignup({locale,children}:{locale:SupportedLocale;c
   catch{setFailed(true);}finally{opening.current=false;}
  }
  if(mode==='off')return <>{children}</>;
- return <div className="signup-admission">
+ return <div>
   <p className="waka-settings-note" role="status">{t(locale,mode==='loading'?'signupVerificationChecking':mode==='handoff'&&!failed?'signupNativeBrowserHint':'signupVerificationUnavailable')}</p>
   {mode==='handoff'&&<button type="button" className="btn-primary btn-doorway" onClick={()=>void open()}>{t(locale,'signupOpenBrowser')}</button>}
  </div>;
@@ -74,9 +74,9 @@ export function SignupAdmission({flow,locale,onReady}:{flow:'password'|'google';
   return ()=>{stopped=true;clearTimeout(expiry);controller.abort();if(adapter&&id)adapter.remove(id);};
  },[flow,revision]);
  if(config?.mode==='off')return null;
- return <div className="signup-admission">
+ return <div>
   <p className="waka-settings-note" role="status">{t(locale,state==='verified'?'signupVerified':state==='failed'?'signupVerificationUnavailable':state==='checking'||state==='loading'?'signupVerificationChecking':'signupVerificationRequired')}</p>
   <div ref={host}/>
-  {state==='failed'&&<button type="button" className="btn-text" onClick={()=>setRevision(v=>v+1)}>{t(locale,'signupVerificationRetry')}</button>}
+  {state==='failed'&&<button type="button" className="login-link" onClick={()=>setRevision(v=>v+1)}>{t(locale,'signupVerificationRetry')}</button>}
  </div>;
 }
