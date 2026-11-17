@@ -96,13 +96,15 @@ jobs:
           # Owner-approved temporary shared key; the SST target stays production.
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
           WAKA_DISCORD_WEBHOOK_URL: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
+          WAKA_TURNSTILE_SECRET: ${{ vars.WAKA_SIGNUP_ADMISSION_PRODUCTION == 'turnstile' && secrets.TURNSTILE_SECRET_PRODUCTION || '' }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${WAKA_SIGNUP_ADMISSION:-closed}" != "closed" ]]; then
-            printf 'This reviewed candidate requires signup admission closed.\n' >&2
-            exit 1
-          fi
+          export LC_ALL=C
+          case "${WAKA_SIGNUP_ADMISSION:-closed}" in
+            closed|turnstile) ;;
+            *) printf 'Production signup admission must be closed or turnstile.\n' >&2; exit 1 ;;
+          esac
           required=(
             AWS_ACCESS_KEY_ID
             AWS_SECRET_ACCESS_KEY
@@ -117,6 +119,9 @@ jobs:
             OPENAI_API_KEY
             WAKA_DISCORD_WEBHOOK_URL
           )
+          if [[ "${WAKA_SIGNUP_ADMISSION:-closed}" == "turnstile" ]]; then
+            required+=(WAKA_TURNSTILE_SITE_KEY WAKA_TURNSTILE_SECRET)
+          fi
           missing=()
           for name in "${required[@]}"; do
             if [[ -z "${!name:-}" ]]; then
@@ -126,6 +131,16 @@ jobs:
           if (( ${#missing[@]} > 0 )); then
             printf 'Missing required production deployment environment: %s\n' "${missing[*]}" >&2
             exit 1
+          fi
+          if [[ "${WAKA_SIGNUP_ADMISSION:-closed}" == "turnstile" ]]; then
+            for name in WAKA_TURNSTILE_SITE_KEY WAKA_TURNSTILE_SECRET; do
+              signup_value="${!name}"
+              if [[ ! "$signup_value" =~ ^[[:graph:]]+$ || ${#signup_value} -lt 10 || ${#signup_value} -gt 256 || "$signup_value" =~ ^[123]x0 ]]; then
+                printf 'Production signup verification configuration is invalid.\n' >&2
+                exit 1
+              fi
+              unset signup_value
+            done
           fi
 
       - name: Validate explicit stage options
@@ -146,6 +161,7 @@ jobs:
           SST_SECRET_OpenRouterApiKey: ${{ secrets.OPENROUTER_API_KEY }}
           SST_SECRET_OpenAiApiKey: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
           SST_SECRET_DiscordWebhookUrl: ${{ secrets.WAKA_DISCORD_WEBHOOK_URL }}
+          SST_SECRET_TurnstileSecret: ${{ vars.WAKA_SIGNUP_ADMISSION_PRODUCTION == 'turnstile' && secrets.TURNSTILE_SECRET_PRODUCTION || '' }}
         run: node scripts/preview-production.mjs
 
       - name: Save sanitized infrastructure preview
@@ -212,6 +228,12 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
         run: node scripts/set-openai-secret.mjs
+
+      - name: Set production signup secret through stdin
+        if: ${{ !inputs.preview_only && env.WAKA_SIGNUP_ADMISSION == 'turnstile' }}
+        env:
+          WAKA_TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET_PRODUCTION }}
+        run: node scripts/set-openai-secret.mjs --turnstile
 
       - name: Apply production database migrations
         if: ${{ !inputs.preview_only }}
@@ -289,6 +311,7 @@ jobs:
         if: ${{ !inputs.preview_only }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}
+          WAKA_TURNSTILE_SECRET: ${{ vars.WAKA_SIGNUP_ADMISSION_PRODUCTION == 'turnstile' && secrets.TURNSTILE_SECRET_PRODUCTION || '' }}
         run: node scripts/production-release-audit.mjs > production-release-audit.json
 
       - name: Arm missing-probe detection after natural healthy baseline

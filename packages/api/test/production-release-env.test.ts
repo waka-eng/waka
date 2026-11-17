@@ -37,7 +37,7 @@ it('gates EVERY production mutation under successful reusable CI and the same SH
   const guard=job.steps.findIndex((s:any)=>s.run==='node scripts/verify-release-commit.mjs');expect(guard).toBeGreaterThan(0);
   expect(job.steps[guard].env.RELEASE_CHECK_RESULT).toBe('${{ needs.check.result }}');
   const mutations=job.steps.map((s:any,i:number)=>({s,i})).filter(({s}:any)=>/secret set|set-openai-secret\.mjs|db:migrate|sst deploy|update-distribution|change-resource-record-sets/.test(s.run??''));
-  expect(mutations).toHaveLength(6);
+  expect(mutations).toHaveLength(7);
   for(const {s,i} of mutations){expect(i).toBeGreaterThan(guard);expect(s.if??'').not.toMatch(/always|failure|cancelled/);expect(s.if).toContain('!inputs.preview_only');}
   for(const j of Object.values(ci.jobs) as any[])for(const step of j.steps??[])if(step.uses==='actions/checkout@v4')expect(step.with.ref).toBe('${{ inputs.checkout_sha || github.sha }}');
 });
@@ -72,6 +72,7 @@ it('preview has no route into any production mutation and supplies only the miss
  expect(preview.if).toBe('${{ inputs.preview_only }}');
  expect(preview.env.SST_SECRET_OpenRouterApiKey).toBe('${{ secrets.OPENROUTER_API_KEY }}');
  expect(preview.env.SST_SECRET_OpenAiApiKey).toBe('${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}');
+ expect(preview.env.SST_SECRET_TurnstileSecret).toBe("${{ vars.WAKA_SIGNUP_ADMISSION_PRODUCTION == 'turnstile' && secrets.TURNSTILE_SECRET_PRODUCTION || '' }}");
  expect(readFileSync(resolve(root,'scripts/preview-production.mjs'),'utf8')).not.toMatch(/secret set|set-openai-secret\.mjs|db:migrate|sst deploy|change-resource-record-sets/);
 });
 
@@ -85,7 +86,7 @@ it('auto-releases only main pushes, with exact-event CI and no duplicate direct 
  const alias=steps.find((s:any)=>s.name==='Release legacy CloudFront alias');
  expect(alias.if).toContain("github.event_name == 'workflow_dispatch'");
  expect(alias.if).toContain('inputs.release_legacy_alias');
- for(const s of steps.filter((s:any)=>/secret set|set-openai-secret\.mjs|db:migrate|sst deploy|change-resource-record-sets/.test(s.run??'')))expect(s.if).toBe('${{ !inputs.preview_only }}');
+ for(const s of steps.filter((s:any)=>/secret set|set-openai-secret\.mjs|db:migrate|sst deploy|change-resource-record-sets/.test(s.run??'')))expect(s.if).toBe(s.name==='Set production signup secret through stdin'?"${{ !inputs.preview_only && env.WAKA_SIGNUP_ADMISSION == 'turnstile' }}":'${{ !inputs.preview_only }}');
  // Absent inputs on push take the actual-deploy path; preview remains explicit.
  const deployFor=(event:string,branch:string,preview=false)=>event==='push'?branch==='main':event==='workflow_dispatch'&&!preview;
  expect(deployFor('push','main')).toBe(true);expect(deployFor('push','dev')).toBe(false);expect(deployFor('push','release/candidate')).toBe(false);
