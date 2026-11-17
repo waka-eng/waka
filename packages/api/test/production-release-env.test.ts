@@ -69,6 +69,8 @@ it('rejects invalid privacy/destination settings without manufacturing missing c
 
 it('preview has no route into any production mutation and supplies only the missing proposed secret in memory',()=>{
  const preview=production.jobs.deploy.steps.find((s:any)=>s.run==='node scripts/preview-production.mjs');
+ expect(production.jobs.deploy.env.WAKA_SIGNUP_ADMISSION).toBe("${{ vars.WAKA_SIGNUP_ADMISSION_PRODUCTION || 'closed' }}");
+ expect(production.jobs.deploy.env.WAKA_TURNSTILE_SITE_KEY).toBe("${{ vars.WAKA_SIGNUP_ADMISSION_PRODUCTION == 'turnstile' && vars.WAKA_TURNSTILE_SITE_KEY_PRODUCTION || '' }}");
  expect(preview.if).toBe('${{ inputs.preview_only }}');
  expect(preview.env.SST_SECRET_OpenRouterApiKey).toBe('${{ secrets.OPENROUTER_API_KEY }}');
  expect(preview.env.SST_SECRET_OpenAiApiKey).toBe('${{ secrets.OPENAI_API_KEY_DEVELOPMENT }}');

@@ -45,9 +45,12 @@ export function auditProductionRelease({outputs,expected,read}){
   environments[role]=env;resources[role]=name;
   const mode=expected.signupMode;
   const configured=mode==='turnstile'&&[expected.turnstileSiteKey,expected.turnstileSecret].every(v=>typeof v==='string'&&/^[\x21-\x7e]{10,256}$/.test(v)&&!(/^[123]x0/.test(v)));
-  const signupMatches=role==='api'?
-   env.WAKA_SIGNUP_ADMISSION===mode&&(mode==='closed'?env.WAKA_TURNSTILE_SECRET===undefined&&env.WAKA_TURNSTILE_SITE_KEY===undefined:configured&&env.PUBLIC_WEB_URL==='https://waka.im'&&env.WAKA_TURNSTILE_SITE_KEY===expected.turnstileSiteKey&&env.WAKA_TURNSTILE_SECRET===expected.turnstileSecret):
-   env.WAKA_SIGNUP_ADMISSION===undefined&&env.WAKA_TURNSTILE_SECRET===undefined&&env.WAKA_TURNSTILE_SITE_KEY===undefined&&env.SST_RESOURCE_TurnstileSecret===undefined;
+  const noChallengeMaterial=['WAKA_TURNSTILE_SECRET','WAKA_TURNSTILE_SITE_KEY','SST_RESOURCE_TurnstileSecret'].every(key=>env[key]===undefined);
+  const apiModeMatches=env.WAKA_SIGNUP_ADMISSION===mode&&(
+   mode==='closed'||mode==='off' ? noChallengeMaterial&&(mode==='closed'||env.PUBLIC_WEB_URL==='https://waka.im') :
+   configured&&env.PUBLIC_WEB_URL==='https://waka.im'&&env.WAKA_TURNSTILE_SITE_KEY===expected.turnstileSiteKey&&env.WAKA_TURNSTILE_SECRET===expected.turnstileSecret
+  );
+  const signupMatches=role==='api'?apiModeMatches:env.WAKA_SIGNUP_ADMISSION===undefined&&noChallengeMaterial;
   checks.signupAdmissionIsolated=(checks.signupAdmissionIsolated??true)&&signupMatches;
   checks[role+'Identity']=typeof account==='string'&&/^\d{12}$/.test(account)&&fn.FunctionName===name&&fn.FunctionArn===`arn:aws:lambda:us-west-2:${account}:function:${name}`;
   let app;try{app=JSON.parse(env.SST_RESOURCE_App??'null');}catch{}

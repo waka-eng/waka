@@ -8,8 +8,22 @@ const nonce='n'.repeat(43),valid=()=>({success:true,hostname:'waka.im',action:'s
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 it('closes missing/invalid production settings without throwing, and leaves local absence off',()=>{
  expect(signupConfiguration({})).toEqual({mode:'off'});expect(signupConfiguration({WAKA_STAGE:'production'})).toEqual({mode:'closed'});
- for(const patch of [{WAKA_SIGNUP_ADMISSION:'off'},{WAKA_TURNSTILE_SECRET:''},{WAKA_TURNSTILE_SITE_KEY:''},{PUBLIC_WEB_URL:'https://waka.im.evil.test'},{PUBLIC_WEB_URL:'https://waka.im/path'},{SST_RESOURCE_App:'private malformed'},{SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'development'})},{WAKA_SIGNUP_VERIFY_HOUR:'0'},{WAKA_SIGNUP_CREATE_DAY:'201'},{WAKA_TURNSTILE_SECRET:'1x0000000000000000000000000000000AA'}])expect(signupConfiguration({...env,...patch})).toEqual({mode:'closed'});
+ for(const patch of [{WAKA_SIGNUP_ADMISSION:'off'},{WAKA_SIGNUP_ADMISSION:undefined},{WAKA_SIGNUP_ADMISSION:'invalid'},{WAKA_TURNSTILE_SECRET:''},{WAKA_TURNSTILE_SITE_KEY:''},{PUBLIC_WEB_URL:'https://waka.im.evil.test'},{PUBLIC_WEB_URL:'https://waka.im/path'},{SST_RESOURCE_App:'private malformed'},{SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'development'})},{WAKA_SIGNUP_VERIFY_HOUR:'0'},{WAKA_SIGNUP_CREATE_DAY:'201'},{WAKA_TURNSTILE_SECRET:'1x0000000000000000000000000000000AA'}])expect(signupConfiguration({...env,...patch})).toEqual({mode:'closed'});
  expect(ready().limits).toEqual({verifyHour:20,verifyDay:100,createHour:10,createDay:50});
+});
+it('allows explicit challenge-free production signup only with exact trusted stage, origin and no challenge binding',()=>{
+ const off={...env,WAKA_SIGNUP_ADMISSION:'off',WAKA_TURNSTILE_SITE_KEY:undefined,WAKA_TURNSTILE_SECRET:undefined};
+ expect(signupConfiguration(off)).toEqual({mode:'off',creation:{stage:'production',limits:{createHour:10,createDay:50}}});
+ expect(signupConfiguration({...off,WAKA_SIGNUP_CREATE_HOUR:'2',WAKA_SIGNUP_CREATE_DAY:'3'})).toMatchObject({creation:{limits:{createHour:2,createDay:3}}});
+ for(const patch of [
+  {WAKA_STAGE:undefined},{WAKA_STAGE:'developmnt'},{SST_RESOURCE_App:undefined},{SST_RESOURCE_App:'null'},
+  {SST_RESOURCE_App:'{"name":"other","stage":"production"}'},{SST_RESOURCE_App:'{"name":"waka","stage":"development"}'},
+  {PUBLIC_WEB_URL:undefined},{PUBLIC_WEB_URL:'https://waka.im/'},{PUBLIC_WEB_URL:'http://waka.im'},
+  {PUBLIC_WEB_URL:'https://waka.im:443'},{PUBLIC_WEB_URL:'https://waka.im.evil.test'},
+  {SST_RESOURCE_TurnstileSecret:'{}'},{WAKA_TURNSTILE_SITE_KEY:''},{WAKA_TURNSTILE_SECRET:''},
+  {WAKA_SIGNUP_CREATE_HOUR:'0'},{WAKA_SIGNUP_CREATE_DAY:'201'},{WAKA_SIGNUP_CREATE_HOUR:'3',WAKA_SIGNUP_CREATE_DAY:'2'},
+ ]) expect(signupConfiguration({...off,...patch})).toEqual({mode:'closed'});
+ expect(signupConfiguration({WAKA_STAGE:'development',WAKA_SIGNUP_ADMISSION:'off'})).toEqual({mode:'off'});
 });
 it('uses one fixed bounded POST without IP, redirect, retry or raw output',async()=>{
  const fetcher=vi.fn(async()=>new Response(JSON.stringify(valid()))),log=vi.spyOn(console,'log');

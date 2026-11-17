@@ -132,7 +132,10 @@ export default $config({
     const { default: modelProfile } = await import('./infra/model-profile.json');
     // Source-only conditional admission. No widget/site/credential is created
     // by this declaration; missing/invalid production mode closes NEW signup.
-    const signupAdmissionMode = process.env.WAKA_SIGNUP_ADMISSION || ($app.stage === "production" ? "closed" : "off");
+    const requestedSignupMode = process.env.WAKA_SIGNUP_ADMISSION;
+    const signupAdmissionMode = $app.stage === "production"
+      ? (requestedSignupMode === "off" || requestedSignupMode === "turnstile" ? requestedSignupMode : "closed")
+      : (requestedSignupMode || "off");
     const turnstileSecret = isModelProfileStage && signupAdmissionMode === "turnstile" ? new sst.Secret("TurnstileSecret") : undefined;
 
 

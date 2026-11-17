@@ -65,6 +65,53 @@ async function googleStart(cookie='',mobile=false){
 }
 const callback=(s:Awaited<ReturnType<typeof googleStart>>)=>request('callback/google?code=synthetic-code&state='+encodeURIComponent(s.state),s.cookie);
 
+function productionSignupWithoutChallenge() {
+ vi.stubEnv('WAKA_SIGNUP_ADMISSION','off');
+ vi.stubEnv('WAKA_TURNSTILE_SITE_KEY',undefined);
+ vi.stubEnv('WAKA_TURNSTILE_SECRET',undefined);
+}
+
+it('creates password and Google accounts without browser proof while preserving the shared production creation limit',async()=>{
+ productionSignupWithoutChallenge();
+ vi.stubEnv('WAKA_SIGNUP_CREATE_HOUR','2');
+ vi.stubEnv('WAKA_SIGNUP_CREATE_DAY','2');
+ for (const flow of ['password','google']) {
+  expect(await (await request('signup-admission?flow='+flow)).json()).toEqual({mode:'off'});
+ }
+ expect((await signup('')).status).toBe(201);
+ expect(new URL((await callback(await googleStart())).headers.get('location')!).pathname).toBe('/');
+ expect(await t.sql`SELECT id FROM accounts`).toHaveLength(2);
+ expect(await t.sql`SELECT id FROM profiles WHERE type='human'`).toHaveLength(2);
+ expect(await t.sql`SELECT flow,state,nonce_hash=token_hash AS server_reservation FROM signup_admissions ORDER BY flow`).toEqual([
+  {flow:'google',state:'consumed',server_reservation:true},
+  {flow:'password',state:'consumed',server_reservation:true},
+ ]);
+ // Returning Google sign-in ignores new-account capacity. Password and a new
+ // Google identity both stop at the exact same durable ceiling.
+ expect(new URL((await callback(await googleStart())).headers.get('location')!).pathname).toBe('/');
+ const blocked=await signup('');
+ expect(blocked.status).toBe(429);
+ expect(blocked.headers.get('retry-after')).toBe('86400');
+ claims={email:randomUUID()+'@example.test',sub:'google-'+randomUUID()};
+ expect(new URL((await callback(await googleStart())).headers.get('location')!).searchParams.get('error')).toBe('signup_capacity');
+ expect(await t.sql`SELECT id FROM accounts`).toHaveLength(2);
+ expect(verifyCalls).toBe(0);
+});
+
+it('keeps creation capacity across a Turnstile rollback without charging server reservations as verifications',async()=>{
+ productionSignupWithoutChallenge();
+ vi.stubEnv('WAKA_SIGNUP_CREATE_HOUR','1');
+ expect((await signup('')).status).toBe(201);
+ vi.stubEnv('WAKA_SIGNUP_ADMISSION','turnstile');
+ vi.stubEnv('WAKA_TURNSTILE_SITE_KEY','synthetic-site-key');
+ vi.stubEnv('WAKA_TURNSTILE_SECRET','synthetic-secret-key');
+ vi.stubEnv('WAKA_SIGNUP_VERIFY_HOUR','1');
+ const proof=await grant('password');
+ expect(verifyCalls).toBe(1);
+ expect((await signup(proof.cookie)).status).toBe(429);
+ expect(await t.sql`SELECT id FROM accounts`).toHaveLength(1);
+});
+
 it('consumes a password proof once with a native-empty human, preserving count after deletion',async()=>{
  const g=await grant('password'),email=randomUUID()+'@example.test';expect((await signup(g.cookie,email)).status).toBe(201);
  expect((await t.sql`SELECT state,creation_started_at IS NOT NULL AS reserved FROM signup_admissions`)[0]).toMatchObject({state:'consumed',reserved:true});expect(await t.sql`SELECT * FROM profile_embedding_indexes`).toHaveLength(0);
