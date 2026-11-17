@@ -3,9 +3,10 @@
 import {readFileSync} from 'node:fs';
 import {expect,it,vi} from 'vitest';
 import {auditDevOperations,devAuditReadFailure,readDevLogPages,summarizeDevEvents,validateDevAuditTargets} from '../../../scripts/dev-operations-audit.mjs';
+import modelProfile from '../../../infra/model-profile.json';
 const api='waka-development-ApiFunction-efwcwxdn',worker='waka-development-BackgroundWorkerFunction-xxbrbmcx';
-const environment={PUBLIC_WEB_URL:'https://dev.waka.im',PUBLIC_API_URL:'https://dev.waka.im',NODE_ENV:'production',WAKA_STAGE:'development',WAKA_TRUSTED_PROXY_HOPS:null,
-  OPENROUTER_GENERATION_MODEL:'deepseek/deepseek-v4.1-flash-1017',WAKA_MODEL_CHAT:'deepseek/deepseek-v4.1-flash-1017'};
+const environment={...modelProfile,PUBLIC_WEB_URL:'https://dev.waka.im',PUBLIC_API_URL:'https://dev.waka.im',NODE_ENV:'production',WAKA_STAGE:'development',WAKA_TRUSTED_PROXY_HOPS:null,
+  OPENROUTER_GENERATION_MODEL:'deepseek/deepseek-v4.1-flash-1017'};
 it('refuses production, missing or flag-bearing targets before AWS access',()=>{
   const awsRead=vi.fn();
   for(const name of ['waka-production-ApiFunction-aaa',undefined,'--profile=PRIVATE'])
@@ -23,6 +24,25 @@ it('bounds reads, scopes development and leaves broad operational gates unproven
   expect(result.logPagesComplete).toBe(false);
   expect(JSON.stringify(result)).not.toContain('PRIVATE');
   for(const [args] of awsRead.mock.calls)expect(args.slice(0,2)).toEqual(args[0]==='lambda'?['lambda','get-function-configuration']:args[0]==='logs'?['logs','filter-log-events']:['cloudwatch','get-metric-statistics']);
+});
+it('projects the complete public canonical profile once in each of the same two config reads',()=>{
+  const awsRead=vi.fn((args:string[])=>args[0]==='lambda'?{environment,database:'PRIVATE_DB',logGroup:'/aws/lambda/'+args[3]}:{events:[]});
+  const result=auditDevOperations({api,worker,awsRead});expect(result.failures).toEqual([]);
+  const configs=awsRead.mock.calls.filter(([args])=>args[0]==='lambda');expect(configs).toHaveLength(2);
+  for(const [args] of configs){
+    const query=args[args.indexOf('--query')+1]!;
+    const projected=query.match(/^\{environment:\{([^}]*)\},database:Environment\.Variables\.DB_CONNECTION_URL,logGroup:LoggingConfig\.LogGroup\}$/)?.[1];expect(projected).toBeDefined();
+    const pairs=projected!.split(',').map(value=>value.split(':'));const keys=pairs.map(([key])=>key!);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys.sort()).toEqual([...Object.keys(modelProfile),'PUBLIC_WEB_URL','PUBLIC_API_URL','NODE_ENV','WAKA_INSECURE_COOKIES','WAKA_STAGE','OPENROUTER_GENERATION_MODEL','WAKA_ENRICHMENT_ALLOWED_HOSTS','WAKA_TRUSTED_PROXY_HOPS','WAKA_OPENROUTER_DATA_COLLECTION','WAKA_OPENROUTER_REQUIRE_ZDR'].sort());
+    for(const [key,value] of pairs)expect(value).toBe('Environment.Variables.'+key);
+  }
+  expect(JSON.stringify(result)).not.toContain('PRIVATE_DB');
+});
+it.each([['api','missing'],['worker','missing'],['api','drift'],['worker','drift']])('refuses a %s canonical-profile %s without exposing it or changing read scope', (role,change)=>{
+  const modified:Record<string,string|null|undefined>={...environment};if(change==='missing')delete modified.WAKA_MODEL_PRINCIPLES;else modified.WAKA_MODEL_PRINCIPLES='PRIVATE_UNREVIEWED_MODEL';
+  const awsRead=vi.fn((args:string[])=>args[0]==='lambda'?{environment:args[3]===(role==='api'?api:worker)?modified:environment,database:'PRIVATE_DB',logGroup:'/aws/lambda/'+args[3]}:{events:[]});
+  const result=auditDevOperations({api,worker,awsRead});expect(result.failures).toEqual(['runtime_policy_failed']);expect(result.configuration.chatModelsMatch).toBe(true);expect(awsRead.mock.calls.filter(([args])=>args[0]==='lambda')).toHaveLength(2);expect(JSON.stringify(result)).not.toContain('PRIVATE');
 });
 it('continues through empty pages and suppresses duplicate events without exposing IDs or cursors',()=>{
   const event={eventId:'PRIVATE_EVENT',message:JSON.stringify({event:'model_usage',Stage:'development',Provider:'openrouter',ModelRequests:1,UnpricedRequests:0,CostUsd:.004})};
