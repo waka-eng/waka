@@ -1,12 +1,19 @@
-# Model routing and native GPT rollout
+# Model routing and production preparation
 
-The candidate development profile is [gpt61-development.json](../../infra/gpt61-development.json).
+The single reviewed task/provider profile is [model-profile.json](../../infra/model-profile.json).
+SST uses it for explicit `development`, `dev` and `production` stages; other
+stages retain their existing selection. A source candidate is not a live rollout.
 Its native provider is OpenAI Responses: Terra-low for text and supported vision,
 Sol-medium for reading drafts, Terra-low for mandatory publication review.
 The existing prompt builders and application parsers are shared. No tool use,
 streaming, Pro mode, server-side conversation history or automatic paid fallback
 is added. Existing completion caps, human locks, ownership, citations, currentness,
 opening recovery, idempotency, Stop and quota fences remain authoritative.
+
+The current owner-approved AI allowance is a $10/month COMBINED dev+production
+spending target with alerts and existing quotas, not an automatic hard stop.
+Native unknown costs stay unknown. Per-key limits and project alerts do not prove
+a global invoice cap; no provider reroute or shared budget service is added.
 
 This document describes source configuration. It is not proof that credentials,
 account access, a model-quality comparison or a deployment has passed.
@@ -21,21 +28,45 @@ the existing `WAKA_MODEL_*` names; native IDs must be `gpt-6.1-terra` or
 `gpt-6.1-sol`, without an OR prefix. Sol never receives disabled reasoning or
 sampling controls; Terra-low tasks also omit sampling controls.
 
-Development SST alone creates `OpenAiApiKey` and injects `OPENAI_API_KEY` into
-API, BackgroundWorker and PrincipleRefresh. The production branch of the same
-source keeps its existing model profile and does not create or expose that secret.
-The key is not linked to web, cleanup, monitoring, probe or budget functions.
-The new GitHub secret is `OPENAI_API_KEY_DEVELOPMENT`, mapped to runtime/setup
-`OPENAI_API_KEY`; no global production key or new GitHub environment is needed.
-New development Actions key exposure is step-scoped to validation, secret setup
-and private runtime comparison; dependency install and web build do not receive it.
+SST creates the existing `OpenAiApiKey` secret for development/dev/production and
+injects `OPENAI_API_KEY` into API, BackgroundWorker and PrincipleRefresh through
+the same profile. Web, cleanup, monitoring, probe and budget functions receive no
+model key. The production credential must be independently ready before any
+production operation; its existence or entitlement is not established by source.
 
-`set-development-openai-secret.mjs` passes the value through stdin using the
-pinned SST contract, with dev-only stage refusal, bounded closed diagnostics,
-no key argv and no raw child output. It must only run under authorized setup;
-the source PR does not itself set GitHub/SST secrets. Existing same-stage provider,
-DB/auth and owner-file values must be preserved. Do not reuse local S3-limited
-AWS credentials as deployment credentials.
+GitHub uses explicit `OPENAI_API_KEY_DEVELOPMENT` and
+`OPENAI_API_KEY_PRODUCTION` names, mapped to setup/audit `OPENAI_API_KEY` only.
+Development exposure remains limited to validation, stdin setup and private
+runtime comparison. Production additionally supplies `SST_SECRET_OpenAiApiKey`
+to the existing read-only preview step. Install/web-build/job/global environment
+receives neither OpenAI value. Validation fails before stage reads, secret writes,
+migrations or deployment if the required production credential is absent.
+Name-presence metadata for a generic key does not attest either suffixed key.
+
+[`set-openai-secret.mjs`](../../scripts/set-openai-secret.mjs) is the one stdin
+mechanism for all three exact stages. It rejects aliases/whitespace/unknown
+stages, missing or oversized keys, sends no key in argv, strips OpenAI key env
+names from the child, and bounds private child diagnostics. It replaces the
+former development-only helper; there is no alias or second setter. Source tests
+use synthetic keys and fake children. Running it still requires an authorized
+same-stage setup; this change performs no secret write. Preserve DB/auth/provider
+credentials and never reuse local S3-only credentials for deployment.
+
+Fresh-human enrollment now has one stage-neutral name,
+`WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2`. Enabled enrollment requires exact
+`WAKA_STAGE` and trusted `SST_RESOURCE_App` name/stage agreement for one of the
+three supported stages. SST sets API dev/development to `1`, production to literal
+`0`, and omits it from workers and PrincipleRefresh. There is no legacy flag alias,
+missing-control flip, existing-profile migration or paid call in the helper.
+The old name is ignored/off if only that name is supplied. Deployment of the new
+API supplies the new name atomically; the preserved owner local launcher and
+loaded backend were not updated or restarted. A future local source update must
+review its launcher separately before expecting new-human model2 enrollment.
+
+Production model2 policy/cutover/default enablement remains held. The exact
+compiled `embedding2.dev-candidates.v1` is an explicitly limited dev policy,
+not independent calibration or evidence of broad production quality. See the
+[production readiness gates](production-readiness.md).
 
 ## Responses contract and privacy
 
@@ -76,22 +107,26 @@ without recounting the approved monitoring cost envelope.
   current Google credentials remain. STT has no asserted provider completion-token
   limit: input duration/bytes and accepted transcript length are bounded, which
   is not a dollar cap.
-- `OpenRouterEmbeddingCandidate` implements768 dimensions and explicit
-  document/query `input_type` mapping, but is not selected by any runtime factory.
-  Its distinct `unverified` model namespace cannot be mistaken for existing
-  calibrated storage. No stored vector is relabeled, rewritten or backfilled.
-  Direct/OR vector-space equivalence and compatible-reader filtering must be
-  proven before activation. The existing recall model/dimension filter gap is
-  a gate for that later change; this PR does not pretend to solve it without DB
-  evidence. A few sample equal vectors alone do not prove broad calibration.
+- Owned active/building model2 uses the existing `OpenRouterEmbedding2Candidate`
+  via pinned Google AI Studio `google/gemini-embedding-2`, exact formatted input,
+  768 finite nonzero raw geometry and a distinct namespace. No normalization,
+  row relabeling or provider fallback is added. Profiles without control remain
+  native `gemini-embedding-001`. Production existing profiles need independently
+  scoped inventory/build/current coverage/atomic cutover; an env flag is not a
+  coverage certificate. The older `OpenRouterEmbeddingCandidate` remains an
+  unselected, unverified namespace and is not a substitute.
 
 ## Dev acceptance and rollback
 
 The existing exact-SHA CI guard and serialized, no-auto-unlock dev deployment
 remain. The official migration/schema gates are retained; this change adds no
-SQL migration. The new read-only dev audit privately compares all task/profile,
+SQL migration. The existing read-only dev audit privately compares all task/profile,
 key, stage/SST identity, function ARN, DB target and API-worker pointer bindings
-for all three model runtimes. It emits booleans and safe resource names only.
+for all three model runtimes. Production release audit now compares the same
+canonical task/provider profile, credential, exact account/function/SST identity
+and stores for API, BackgroundWorker and PrincipleRefresh, requiring production
+new-human enrollment OFF. It preserves all cleanup no-model-key/queue/IAM gates.
+Both audits emit booleans and safe resource names only.
 Runtime metadata acceptance does not establish live model quality or entitlement.
 
 Use controlled synthetic requests only after Main reviews a concrete request,

@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -35,6 +35,7 @@ let t: TestDatabase, directory: string, legacyDirectory: string, origin: string;
 let server: ReturnType<typeof serve>;
 let subjects: Array<{ id: string; name: string; type: string; secret: string; keyId: string; readonly?:boolean; legacy?:boolean }>;
 let loseNextSaveAck=false;
+let httpRequests=0;
 beforeAll(async () => {
   process.env.WAKA_BACKGROUND_JOB_AUTODRAIN='0';
   t = await createTestDatabase(); state.db = t.db;
@@ -82,6 +83,7 @@ beforeAll(async () => {
   app.route('/api/principles.md', principlesMarkdownRoutes);
   app.route('/api/recall',createRecallRoutes({embedClient:{model:'gemini-embedding-001',embed:async()=>[1,...Array<number>(767).fill(0)]}}));
   server = serve({ fetch: async req=>{
+    httpRequests++;
     const result=await app.fetch(req);
     if(loseNextSaveAck&&req.method==='POST'&&new URL(req.url).pathname==='/api/inspirations'&&result.status===201){loseNextSaveAck=false;return new Response('PRIVATE_CANARY_MALFORMED_ACK');}
     return result;
@@ -223,3 +225,41 @@ it.each(['Noah', 'Anotherone', 'Me', 'Read-only', 'Old capture', 'Old read-only'
     if (child.exitCode === null && child.signalCode === null) { child.kill(); await once(child, 'close'); }
   }
 }, 15000);
+
+it('a missing production key in its isolated key-only home cannot reuse dev or production browser credentials', async () => {
+  const profileId = subjects.find(row => row.name === 'Me')!.id;
+  const home = join(directory, 'synthetic-home');
+  const browserHomes = [join(home, '.waka', 'profiles', profileId), join(home, '.waka', 'production', 'profiles', profileId)];
+  const credentials = JSON.stringify({ apiUrl: origin, token: 'PRIVATE_SYNTHETIC_BROWSER_TOKEN', expiresAt: '2099-01-01T00:00:00Z', email: 'fixture@example.test', profile: { id: profileId, name: 'Fixture', type: 'human' } });
+  for (const path of browserHomes) { await mkdir(path, { recursive: true }); await writeFile(join(path, 'credentials.json'), credentials, { mode: 0o600 }); }
+  const keyHome = join(home, '.waka', 'production', 'key-only', 'profiles', profileId);
+  await mkdir(keyHome, { recursive: true });
+  const before = httpRequests;
+  const child = spawn(process.execPath, [join(directory, 'package/server.mjs')], {
+    cwd: directory, env: { PATH: process.env.PATH, HOME: home, WAKA_HOME: keyHome, WAKA_API_URL: origin, WAKA_PROFILE_ID: profileId }, stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  child.stderr.resume();
+  const lines = createInterface({ input: child.stdout });
+  let id = 0;
+  const rpc = (method: string, params: unknown) => new Promise<any>((resolve, reject) => {
+    const requestId = ++id;
+    const done = (line: string) => {
+      const message = JSON.parse(line); if (message.id !== requestId) return;
+      clearTimeout(timer); lines.off('line', done);
+      if (message.error) reject(new Error('Synthetic MCP protocol failure')); else resolve(message.result);
+    };
+    const timer = setTimeout(() => { lines.off('line', done); reject(new Error('Synthetic MCP response timed out')); }, 5000);
+    lines.on('line', done); child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: requestId, method, params }) + '\n');
+  });
+  try {
+    await rpc('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'isolated-key-home', version: '1.0' } });
+    child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+    const result = await rpc('tools/call', { name: 'waka_list_inspirations', arguments: {} });
+    expect(result.isError).toBe(true); expect(result.content[0].text).toContain('Not logged in');
+    expect(JSON.stringify(result)).not.toContain('PRIVATE_SYNTHETIC_BROWSER_TOKEN');
+    expect(httpRequests).toBe(before);
+    for (const path of browserHomes) expect(await readFile(join(path, 'credentials.json'), 'utf8')).toBe(credentials);
+  } finally {
+    lines.close(); if (child.exitCode === null && child.signalCode === null) { child.kill(); await once(child, 'close'); }
+  }
+});

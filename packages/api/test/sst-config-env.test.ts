@@ -287,8 +287,20 @@ describe('attachment event delivery authority',()=>{
  });
 });
 
-it('configures approved empty-human enrollment explicitly on and only in API dev configuration',()=>{
+it('configures empty-human enrollment only on API, with production explicitly off',()=>{
  const api=sstConfig.slice(sstConfig.indexOf('const api ='));
- expect(api).toContain('...(isDevelopmentDomain ? { WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: "1" } : {})');
- expect(sstConfig.match(/WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2/g)).toHaveLength(1);
+ expect(api).toContain('{ WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: isDevelopmentDomain ? "1" : "0" }');
+ expect(sstConfig.match(/WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2/g)).toHaveLength(1);
+});
+
+
+it('keeps challenge configuration conditional and API-only, production closed by default',()=>{
+ const shared=sstConfig.slice(sstConfig.indexOf('const runtimeEnvironment'),sstConfig.indexOf('const router'));
+ const worker=sstConfig.slice(sstConfig.indexOf('const backgroundWorker ='),sstConfig.indexOf('const api ='));
+ const api=sstConfig.slice(sstConfig.indexOf('const api ='),sstConfig.indexOf('const principleRefresh ='));
+ expect(sstConfig).toContain('signupAdmissionMode === "turnstile" ? new sst.Secret("TurnstileSecret") : undefined');
+ expect(sstConfig).toContain('process.env.WAKA_SIGNUP_ADMISSION || ($app.stage === "production" ? "closed" : "off")');
+ expect(api).toContain('WAKA_TURNSTILE_SECRET: turnstileSecret.value');expect(api).toContain('WAKA_SIGNUP_ADMISSION: signupAdmissionMode');
+ expect(shared+worker).not.toContain('WAKA_TURNSTILE_SECRET');
+ expect(sstConfig.match(/WAKA_TURNSTILE_SECRET:/g)).toHaveLength(1);
 });

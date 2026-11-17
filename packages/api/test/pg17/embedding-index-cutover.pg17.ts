@@ -112,7 +112,7 @@ it('proves existing empty domain under fences; minCells1 never embeds and new no
 });
 it('enrolls only a fresh human in its creation transaction when the closed dev flag is enabled; rollback erases the whole new profile',async()=>{
  const env={...process.env};try{
-  process.env.WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2='1';process.env.WAKA_STAGE='development';process.env.SST_RESOURCE_App=JSON.stringify({name:'waka',stage:'development'});
+  process.env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2='1';process.env.WAKA_STAGE='development';process.env.SST_RESOURCE_App=JSON.stringify({name:'waka',stage:'development'});
   const[a]=await t.sql`INSERT INTO accounts(email) VALUES(${randomUUID()+'@example.test'}) RETURNING id`;
   const p=await t.db.transaction(tx=>insertHumanProfile(tx,{accountId:a.id,name:'New exact human'}));
   expect((await t.sql`SELECT active_space,active_epoch::text AS epoch FROM profile_embedding_indexes WHERE profile_id=${p.id}`)[0]).toMatchObject({active_space:EMBEDDING_2_SPACE.id,epoch:'1'});

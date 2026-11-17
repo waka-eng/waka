@@ -52,6 +52,10 @@
  */
 
 import { Hono, type Context } from "hono";
+import {bodyLimit} from "hono/body-limit";
+import {z} from "zod";
+import {getDb} from "../lib/db.js";
+import {signupPublicConfiguration,issueSignupNonce,verifySignupAdmission,signupAdmissionResponse} from "../lib/signup-admission.js";
 
 import { buildSessionClearCookie, SESSION_COOKIE_NAME } from "../lib/auth.js";
 import { type AuthEnv, humanSessionsOnly, requireAuth } from "../lib/middleware.js";
@@ -148,6 +152,21 @@ authRoutes.route('/mobile', mobileAuthRoutes);
  *
  * No session required, because these are how a session is obtained:
  */
+const admissionPayload=z.object({flow:z.enum(['password','google']),nonce:z.string().length(43),token:z.string().min(1).max(2048)}).strict();
+authRoutes.get('/signup-admission',c=>{
+ const flow=c.req.query('flow');if(flow!=='password'&&flow!=='google')return c.json({error:'Invalid verification request'},400);
+ return c.json(signupPublicConfiguration(c));
+});
+authRoutes.post('/signup-admission/nonce',bodyLimit({maxSize:256,onError:c=>c.json({error:'Invalid verification request'},400)}),async c=>{
+ const body=z.object({flow:z.enum(['password','google'])}).strict().safeParse(await c.req.json().catch(()=>null));
+ if(!body.success)return c.json({error:'Invalid verification request'},400);
+ try{return c.json(issueSignupNonce(c,body.data.flow));}catch(error){return signupAdmissionResponse(c,error);}
+});
+authRoutes.post('/signup-admission',bodyLimit({maxSize:8192,onError:c=>c.json({error:'Invalid verification request'},400)}),async c=>{
+ try{const body=admissionPayload.safeParse(await c.req.json().catch(()=>null));if(!body.success)return c.json({error:'Invalid verification request'},400);
+  return c.json(await verifySignupAdmission(c,getDb(),body.data.flow,body.data.token,body.data.nonce));
+ }catch(error){return signupAdmissionResponse(c,error);}
+});
 authRoutes.post("/signup", signupHandler);
 authRoutes.post("/login", loginHandler);
 

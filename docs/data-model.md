@@ -32,6 +32,17 @@ profile boundary. See [the monitoring privacy boundary](operations/monitoring.md
 
 An **account** is the auth identity: one login (email/Google), one person.
 
+`signup_admissions` is bounded authentication infrastructure, not memory or
+feedback. Before creating an account, enabled signup admission claims a unique
+human-challenge token digest and nonce, then consumes one short-lived grant with
+the account and human-profile transaction. It stores no raw challenge, Google
+claims, email, password or IP. Reservation counts survive account deletion;
+rejected/unknown attempts are not free retries. Its stage-database counts are
+abuse bounds, not a monetary limit. Existing sign-in and verified-account recovery
+do not depend on challenge readiness. Global capacity can temporarily refuse
+legitimate new users during attack; ingress/DDoS protection remains separate.
+
+
 A **profile** is the unit that owns memory. Every profile — human or
 agent — owns a full four-layer stack: inspirations → signals → top of
 mind → principles. There is exactly one top of mind **per profile**;

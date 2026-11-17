@@ -90,6 +90,7 @@ export default $config({
   async run() {
     const { default: scheduledWorkerEvent } = await import('./infra/background-worker-event.json');
     const isDevelopmentDomain = $app.stage === "development" || $app.stage === "dev";
+    const isModelProfileStage = isDevelopmentDomain || $app.stage === "production";
     // -----------------------------------------------------------------------
     // Secrets
     //
@@ -122,12 +123,18 @@ export default $config({
     /** Gemini API key for the classifier queue worker. */
     const geminiApiKey = new sst.Secret("GeminiApiKey");
 
-    /** OpenRouter key — generation's second road (deepseek-v4-flash by
-        default; embeddings stay on Gemini regardless). */
+    /** Retained OpenRouter routes, including GIF and owned versioned model2
+        embeddings. Native001 and direct Google media keep their own key. */
     const openRouterApiKey = new sst.Secret("OpenRouterApiKey");
-    // Dev-only rollout. Production does not require, link or receive this key.
-    const openAiApiKey = isDevelopmentDomain ? new sst.Secret("OpenAiApiKey") : undefined;
-    const { default: developmentGpt } = await import('./infra/gpt61-development.json');
+    // One reviewed task/provider profile for explicit dev and production stages.
+    // The source candidate does not provision credentials or authorize a deploy.
+    const openAiApiKey = isModelProfileStage ? new sst.Secret("OpenAiApiKey") : undefined;
+    const { default: modelProfile } = await import('./infra/model-profile.json');
+    // Source-only conditional admission. No widget/site/credential is created
+    // by this declaration; missing/invalid production mode closes NEW signup.
+    const signupAdmissionMode = process.env.WAKA_SIGNUP_ADMISSION || ($app.stage === "production" ? "closed" : "off");
+    const turnstileSecret = isModelProfileStage && signupAdmissionMode === "turnstile" ? new sst.Secret("TurnstileSecret") : undefined;
+
 
     // -----------------------------------------------------------------------
     // Storage
@@ -276,7 +283,7 @@ export default $config({
       // An explicit deployment override can pause new replies without dropping data.
       WAKA_CONVERSATION_REPLIES: (isDevelopmentDomain || $app.stage === "production") && process.env.WAKA_CONVERSATION_REPLIES !== "0" ? "1" : "0",
       WAKA_MODEL_CHAT: "deepseek/deepseek-v4.1-flash-1017",
-      ...(openAiApiKey ? { ...developmentGpt, OPENAI_API_KEY: openAiApiKey.value } : {}),
+      ...(openAiApiKey ? { ...modelProfile, OPENAI_API_KEY: openAiApiKey.value } : {}),
       ATTACHMENTS_BUCKET: attachmentsBucket.name,
       ATTACHMENTS_REGION: AWS_REGION,
       WAKA_VAULT_BUCKET: vaultBucket.name,
@@ -401,11 +408,21 @@ export default $config({
       // (vitest / smoke runs) where the SST env is not present.
       environment: {
         ...runtimeEnvironment,
+        WAKA_SIGNUP_ADMISSION: signupAdmissionMode,
+        ...Object.fromEntries(["WAKA_SIGNUP_VERIFY_HOUR","WAKA_SIGNUP_VERIFY_DAY","WAKA_SIGNUP_CREATE_HOUR","WAKA_SIGNUP_CREATE_DAY"]
+          .filter(name => process.env[name] !== undefined && process.env[name] !== "")
+          .map(name => [name,process.env[name]])),
+        ...(turnstileSecret ? {
+          WAKA_TURNSTILE_SITE_KEY: process.env.WAKA_TURNSTILE_SITE_KEY || "",
+          WAKA_TURNSTILE_SECRET: turnstileSecret.value,
+        } : {}),
         // Which function to wake when work is enqueued. Absent (local, tests)
         // means the in-process drain owns it instead.
         WAKA_BACKGROUND_WORKER_FUNCTION: backgroundWorker.name,
         ...(isDevelopmentDomain ? { WAKA_DB_PREPARED_QUERIES: "1" } : {}),
-        ...(isDevelopmentDomain ? { WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: "1" } : {}),
+        // Production enrollment remains OFF pending policy/coverage/rollout gates.
+        ...((isDevelopmentDomain || $app.stage === "production")
+          ? { WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: isDevelopmentDomain ? "1" : "0" } : {}),
         WAKA_BACKGROUND_JOB_WAKE_GROUP: jobWakeGroup.name,
       },
       // Waking the worker is the whole point of the push model; without this
@@ -637,7 +654,7 @@ export default $config({
       ] });
       monitoringOutputs = { monitorRelayFunctionName: relay.name, monitorProbeFunctionName: probe.name,
         monitorDeliveryTable: deliveryTable.name, monitorDeliveryDlqUrl: deliveryDlq.url, monitorProbeRuleName: probeCron.nodes.rule.name,
-        monitorPrincipleFunctionName: principleRefresh.nodes.function.name, monitorCleanupFunctionName: objectEventSubscriber.nodes.function.name, monitorAttachmentDlqName: objectEventDlq.nodes.queue.name,
+        monitorPrincipleFunctionName: principleRefresh.nodes.function.name, monitorAttachmentDlqName: objectEventDlq.nodes.queue.name,
         monitorDailyRuleName: dailyDrain.nodes.rule.name, monitorPrincipleRuleName: principleRefresh.nodes.rule.name,
         monitorWakeGroup: jobWakeGroup.name, monitorWakeRole: jobWakeRole.arn };
 
@@ -738,6 +755,8 @@ export default $config({
 
     return {
       ...monitoringOutputs,
+      // Existing output name is now available in dev for the keyless audit too.
+      monitorCleanupFunctionName: objectEventSubscriber.nodes.function.name,
       apiFunctionName: api.name,
       backgroundWorkerFunctionName: backgroundWorker.name,
       principleRefreshFunctionName: principleRefresh.nodes.function.name,

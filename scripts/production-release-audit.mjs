@@ -1,6 +1,7 @@
 /** Read-only deployment acceptance. Secrets never leave the in-memory reader. */
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import modelProfile from '../infra/model-profile.json' with {type:'json'};
 import {readAuditAwsJson,readAuditOutputs,auditFailure,printAuditReport} from './audit-diagnostics.mjs';
 const list=value=>Array.isArray(value)?value:[value];
 const document=value=>typeof value==='string'?JSON.parse(decodeURIComponent(value)):value;
@@ -35,22 +36,32 @@ export function isolatedCleanupRole({roleArn,queueArn,bucket,read}){
 }
 export function auditProductionRelease({outputs,expected,read}){
  const checks={},resources={};
- const api=read(['lambda','get-function-configuration','--function-name',outputs.apiFunctionName]);
- const worker=read(['lambda','get-function-configuration','--function-name',outputs.backgroundWorkerFunctionName]);
- const a=api.Environment?.Variables??{},w=worker.Environment?.Variables??{};
- for(const [role,env] of [['api',a],['worker',w]]){
+ const account=read(['sts','get-caller-identity']).Account;
+ const environments={};
+ for(const [role,output] of [['api','apiFunctionName'],['worker','backgroundWorkerFunctionName'],['principleRefresh','principleRefreshFunctionName']]){
+  const name=outputs[output];
+  if(typeof name!=='string'||!name){checks[role+'Identity']=false;checks.signupAdmissionIsolated=false;continue;}
+  const fn=read(['lambda','get-function-configuration','--function-name',name]),env=fn.Environment?.Variables??{};
+  environments[role]=env;resources[role]=name;
+  checks.signupAdmissionIsolated=(checks.signupAdmissionIsolated??true)&&env.WAKA_TURNSTILE_SECRET===undefined&&env.WAKA_TURNSTILE_SITE_KEY===undefined&&(role==='api'?env.WAKA_SIGNUP_ADMISSION==='closed':env.WAKA_SIGNUP_ADMISSION===undefined);
+  checks[role+'Identity']=typeof account==='string'&&/^\d{12}$/.test(account)&&fn.FunctionName===name&&fn.FunctionArn===`arn:aws:lambda:us-west-2:${account}:function:${name}`;
+  let app;try{app=JSON.parse(env.SST_RESOURCE_App??'null');}catch{}
+  checks[role+'StageProduction']=env.WAKA_STAGE==='production'&&app?.name==='waka'&&app?.stage==='production';
   checks[role+'DatabaseMatches']=!!expected.database&&env.DB_CONNECTION_URL===expected.database;
   checks[role+'OpenRouterMatches']=!!expected.openRouter&&env.OPENROUTER_API_KEY===expected.openRouter;
+  checks[role+'OpenAiMatches']=!!expected.openAi&&env.OPENAI_API_KEY===expected.openAi;
+  checks[role+'ModelProfileMatches']=Object.entries(modelProfile).every(([key,value])=>env[key]===value);
   checks[role+'ChatEnabled']=env.WAKA_CONVERSATION_REPLIES==='1';
-  checks[role+'ChatModelMatches']=env.WAKA_MODEL_CHAT==='deepseek/deepseek-v4.1-flash-1017';
-  checks[role+'StageProduction']=env.WAKA_STAGE==='production';
+  checks[role+'ChatModelMatches']=env.WAKA_MODEL_CHAT===modelProfile.WAKA_MODEL_CHAT;
   checks[role+'AdminClosed']=!['WAKA_ENABLE_ADMIN_ROUTES','WAKA_SHOW_INTERNAL_STATUS','WAKA_ENABLE_BACKGROUND_JOBS_ADMIN'].some(k=>['1','true'].includes(env[k]));
   checks[role+'AttachmentsPreserved']=env.ATTACHMENTS_BUCKET===expected.attachments;
   checks[role+'VaultPreserved']=env.WAKA_VAULT_BUCKET===expected.vault;
+  checks[role+'NewHumanEnrollmentOff']=role==='api'?env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2==='0':env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2===undefined;
+  checks.signupAdmissionIsolated=checks.signupAdmissionIsolated===true&&checks[role+'Identity']===true&&checks[role+'StageProduction']===true;
  }
+ const a=environments.api??{};
  checks.workerPointer=a.WAKA_BACKGROUND_WORKER_FUNCTION===outputs.backgroundWorkerFunctionName;
  checks.outputStoresPreserved=outputs.attachmentsBucket===expected.attachments&&outputs.vaultBucket===expected.vault;
- resources.api=outputs.apiFunctionName;resources.worker=outputs.backgroundWorkerFunctionName;
  const notifications=read(['s3api','get-bucket-notification-configuration','--bucket',expected.attachments]);
  const events=(notifications.QueueConfigurations??[]).filter(n=>n.Events?.includes('s3:ObjectCreated:*')&&/^arn:aws:sqs:us-west-2:\d+:waka-production-/.test(n.QueueArn));
  checks.completedPutNotification=events.length===1;
@@ -79,8 +90,10 @@ export function auditProductionRelease({outputs,expected,read}){
    checks.cleanupDatabaseMatches=!!expected.database&&env.DB_CONNECTION_URL===expected.database;
    checks.cleanupBucketMatches=env.ATTACHMENTS_BUCKET===expected.attachments;
    checks.cleanupRegionMatches=env.ATTACHMENTS_REGION==='us-west-2';
+   checks.cleanupNoSignupSecrets=['WAKA_TURNSTILE_SECRET','WAKA_TURNSTILE_SITE_KEY','WAKA_SIGNUP_ADMISSION'].every(key=>env[key]===undefined);
+   checks.signupAdmissionIsolated=checks.signupAdmissionIsolated===true&&checks.cleanupNoSignupSecrets;
    checks.cleanupNoModelKeys=!env.OPENROUTER_API_KEY&&!env.GEMINI_API_KEY&&!env.OPENAI_API_KEY;
-   checks.cleanupIsolated=['cleanupFunctionBinding','cleanupStackIdentity','cleanupTimeout','cleanupDatabaseMatches','cleanupBucketMatches','cleanupRegionMatches','cleanupNoModelKeys'].every(key=>checks[key]===true);
+   checks.cleanupIsolated=['cleanupFunctionBinding','cleanupStackIdentity','cleanupTimeout','cleanupDatabaseMatches','cleanupBucketMatches','cleanupRegionMatches','cleanupNoModelKeys','cleanupNoSignupSecrets'].every(key=>checks[key]===true);
   }
   if(checks.redrive){
    const dlqName=redrive.deadLetterTargetArn.split(':').at(-1),dlqUrl=read(['sqs','get-queue-url','--queue-name',dlqName,'--queue-owner-aws-account-id',account]).QueueUrl;
@@ -88,12 +101,13 @@ export function auditProductionRelease({outputs,expected,read}){
    resources.queue=name;resources.dlq=dlqName;
   }
  }
+ checks.signupAdmissionIsolated=checks.signupAdmissionIsolated===true&&checks.cleanupNoSignupSecrets===true&&checks.cleanupIsolated===true;
  return {stage:'production',observedAt:new Date().toISOString(),checks,resources,passed:Object.values(checks).every(v=>v===true),actualLatePutExercise:false,externalAlertDeliveryVerified:false,finiteErasureSlaEstablished:false};
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
   const outputs=readAuditOutputs();
-  const report=auditProductionRelease({outputs,expected:{database:process.env.DB_CONNECTION_URL,openRouter:process.env.OPENROUTER_API_KEY,attachments:'waka-production-attachmentsbucket-rceuztkc',vault:'waka-production-vaultbucket-baskzfwm'},read:readAuditAwsJson});
+  const report=auditProductionRelease({outputs,expected:{database:process.env.DB_CONNECTION_URL,openRouter:process.env.OPENROUTER_API_KEY,openAi:process.env.OPENAI_API_KEY,attachments:'waka-production-attachmentsbucket-rceuztkc',vault:'waka-production-vaultbucket-baskzfwm'},read:readAuditAwsJson});
   printAuditReport(report,'production-release-audit.json');
  }catch(error){printAuditReport(auditFailure('release_audit',error,{actualLatePutExercise:false,externalAlertDeliveryVerified:false,finiteErasureSlaEstablished:false}),'production-release-audit.json');}
 }

@@ -51,6 +51,20 @@ Browser login has a separate `WAKA_HOME` per profile. Existing agent connections
 can be retested or disconnected from the connection list. Key activity alone
 is never presented as verified MCP access. Nothing polls for a connection.
 
+Production setup uses the parsed API origin `https://waka.im` to generate
+`waka-production-<profileId>`. Development and custom endpoints retain their
+existing names; the archive download host never selects a credential namespace.
+The same profile ID in two environments therefore does not overwrite a connection.
+Browser commands use `$HOME/.waka/production/profiles/<profileId>`. Production
+key configurations instead specify
+`/REPLACE_WITH_YOUR_HOME/.waka/production/key-only/profiles/<profileId>`.
+Replace that home placeholder with your absolute home directory locally, along
+with `YOUR_API_KEY`; MCP environment values do not expand `~` or `$HOME`.
+Keep this key-only directory empty of browser credentials. This isolates a missing
+key from normal existing dev/production browser credentials; it is not a universal
+key-required security mode if someone deliberately places credentials there.
+Setup never moves, copies or deletes existing credential files or MCP entries.
+
 - Browser approval creates a separate 30-day session for the chosen profile.
   The consent page locks an explicitly requested profile and describes its
   permissions. Revoking the connection removes that session; it does not erase
@@ -172,3 +186,32 @@ patches, matching the app. Primary advisories include
 These HTTP middleware paths are not a demonstrated stdio exploit. The refreshed
 production dependency graph audits clean; older immutable archives are retained,
 not silently replaced. No extra runtime dependency or paid service is added.
+
+### Focused production backport preparation (2026-11-14 record)
+
+This section records the accepted focused release. The new integration and
+model rollout gates are described in [production readiness](operations/production-readiness.md);
+it does not treat the production and dev trees as interchangeable.
+
+The same environment-independent 0.2.0 archive can serve production after the
+matching API version 2 backend is deployed. Pointing it at the older API alone
+does not provide the upgraded contract: capture/detail/status capability checks
+fail clearly, and the new recall response requires the server's explicit state.
+Existing installed immutable URLs continue to use their old client until upgraded.
+
+The focused candidate carries unchanged migrations 0086 and 0087 in order.
+0086 adds only the nullable `conversations.opening` column and its descriptor
+constraint as an inert prerequisite; no opening routes, UI, resolver or model
+context are activated. Drizzle's timestamp high-water rule would otherwise skip
+0086 forever after applying 0087 first. The journal and 0087 snapshot remain
+identical to dev, so a later reviewed promotion shares the same migration history.
+0087 adds keeper-key access and count-only recall limits. Existing key hashes,
+locked wording, captures and conversation IDs are retained. Code rollback must
+retain both additive migrations; it must not drop columns/tables or reset data.
+Old authentication rejects the disjoint read-only token prefix on rollback.
+
+Production model/provider routing, SST, workflows, secrets, monitoring and budget
+configuration stay at the production baseline. Local PG17 rehearsals and packed
+synthetic API tests are preparation evidence, not a production migration-ledger,
+provider-availability or user-connection attestation. Publication and deployment
+require separate review of the exact candidate, CI and production effects.

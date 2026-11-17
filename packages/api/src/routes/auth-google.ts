@@ -36,6 +36,7 @@
  *     them in as the attacker.
  */
 
+import {bindGoogleSignup,readGoogleSignupGrant,beginSignupCreation,consumeSignupAdmission,SignupAdmissionError} from "../lib/signup-admission.js";
 import {insertHumanProfile} from "../lib/new-human-profile.js";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { type Context, Hono } from "hono";
@@ -319,6 +320,7 @@ googleAuthRoutes.get("/login", async (c) => {
   const state = randomToken(32);
   const codeVerifier = randomToken(32);
   const codeChallenge = await sha256Base64Url(codeVerifier);
+  await bindGoogleSignup(c,()=>getDb(),state,codeVerifier);
 
   setCookie(c, STATE_COOKIE_NAME, state, tempCookieOptions());
   setCookie(c, PKCE_COOKIE_NAME, codeVerifier, tempCookieOptions());
@@ -382,14 +384,16 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
   const mobileBinding = await readMobileBinding(mobileCookie);
 
   function failTo(reason: string): Response {
+    const continueMobile=!!mobileBinding&&reason.startsWith("signup_");
     // Best-effort cleanup so a stale state cookie doesn't poison a retry.
     deleteCookie(c, STATE_COOKIE_NAME, { path: "/" });
     deleteCookie(c, PKCE_COOKIE_NAME, { path: "/" });
     deleteCookie(c, RETURN_TO_COOKIE_NAME, { path: "/" });
-    deleteCookie(c, MOBILE_BINDING_COOKIE, { path: '/' });
-    if (mobileBinding) return c.redirect(mobileCallback(mobileBinding, { error: reason === 'oauth_denied' ? 'cancelled' : 'failed' }), 302);
+    if(!continueMobile)deleteCookie(c, MOBILE_BINDING_COOKIE, { path: '/' });
+    if (mobileBinding&&!continueMobile) return c.redirect(mobileCallback(mobileBinding, { error: reason === 'oauth_denied' ? 'cancelled' : 'failed' }), 302);
     const target = new URL("/login", webOrigin);
     target.searchParams.set("error", reason);
+    if(continueMobile)target.searchParams.set("mobile","1");
     if (returnTo !== POST_LOGIN_PATH) target.searchParams.set("returnTo", returnTo);
     return c.redirect(target.toString(), 302);
   }
@@ -613,8 +617,12 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
       //    together: an account with no profile could sign in and own
       //    nothing. Wrap the unique-violation case in case two callbacks
       //    raced past both lookups above.
+      let admission;
+      try{admission=readGoogleSignupGrant(c,stateFromUrl,pkceCookie);await beginSignupCreation(db,admission,'google');}
+      catch(error){return failTo(error instanceof SignupAdmissionError?error.code==='signup_verify_required'?'signup_verification_required':error.code:'signup_outcome_unknown');}
       try {
         identity = await db.transaction(async (tx) => {
+          await consumeSignupAdmission(tx,admission,'google');
           const [account] = await tx
             .insert(accounts)
             .values({
@@ -656,6 +664,7 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
             profileId: await resolveHumanProfile(db, winner.id, claims),
           };
         } else {
+          if(admission||err instanceof SignupAdmissionError)return failTo(err instanceof SignupAdmissionError?err.code:'signup_outcome_unknown');
           throw err;
         }
       }

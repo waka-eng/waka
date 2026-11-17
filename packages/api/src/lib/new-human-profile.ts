@@ -8,11 +8,11 @@ import {EMBEDDING_2_CANDIDATE_POLICY} from './embedding-policy.js';
 type Db=PostgresJsDatabase<typeof import('../db/index.js')>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
 export function newHumanEmbeddingEnrollmentEnabled(env:Record<string,string|undefined>){
- const flag=env.WAKA_DEV_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2;
+ const flag=env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2;
  if(flag===undefined||flag==='0')return false;
- if(flag!=='1'||env.WAKA_STAGE!=='development')throw Error('New-human embedding enrollment configuration is invalid');
+ if(flag!=='1'||!['development','dev','production'].includes(env.WAKA_STAGE??''))throw Error('New-human embedding enrollment configuration is invalid');
  let app:unknown;try{app=JSON.parse(env.SST_RESOURCE_App??'null');}catch{}
- if(!app||typeof app!=='object'||(app as {name?:unknown}).name!=='waka'||(app as {stage?:unknown}).stage!=='development')throw Error('New-human embedding enrollment configuration is invalid');
+ if(!app||typeof app!=='object'||(app as {name?:unknown}).name!=='waka'||(app as {stage?:unknown}).stage!==env.WAKA_STAGE)throw Error('New-human embedding enrollment configuration is invalid');
  return true;
 }
 export async function insertHumanProfile(tx:Tx,input:{accountId:string;name:string;preferredLocale?:typeof profiles.$inferInsert.preferredLocale;avatarUrl?:string|null}){
