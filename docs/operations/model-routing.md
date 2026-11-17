@@ -61,15 +61,16 @@ credentials and never reuse local S3-only credentials for deployment.
 Fresh-human enrollment now has one stage-neutral name,
 `WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2`. Enabled enrollment requires exact
 `WAKA_STAGE` and trusted `SST_RESOURCE_App` name/stage agreement for one of the
-three supported stages. SST sets API dev/development to `1`, production to literal
-`0`, and omits it from workers and PrincipleRefresh. There is no legacy flag alias,
+three supported stages. SST sets API dev/development/production to `1` and omits it from workers and
+PrincipleRefresh. Only genuinely newly inserted empty human profiles enroll. There is no legacy flag alias,
 missing-control flip, existing-profile migration or paid call in the helper.
 The old name is ignored/off if only that name is supplied. Deployment of the new
 API supplies the new name atomically; the preserved owner local launcher and
 loaded backend were not updated or restarted. A future local source update must
 review its launcher separately before expecting new-human model2 enrollment.
 
-Production model2 policy/cutover/default enablement remains held. The exact
+Existing production profiles still require their separately reviewed, current
+coverage and atomic cutover. Enabling the new-human default does not migrate them. The exact
 compiled `embedding2.dev-candidates.v1` is an explicitly limited dev policy,
 not independent calibration or evidence of broad production quality. See the
 [production readiness gates](production-readiness.md).
@@ -130,8 +131,8 @@ SQL migration. The existing read-only dev audit privately compares all task/prof
 key, stage/SST identity, function ARN, DB target and API-worker pointer bindings
 for all three model runtimes. Production release audit now compares the same
 canonical task/provider profile, credential, exact account/function/SST identity
-and stores for API, BackgroundWorker and PrincipleRefresh, requiring production
-new-human enrollment OFF. It preserves all cleanup no-model-key/queue/IAM gates.
+and stores for API, BackgroundWorker and PrincipleRefresh, requiring production API
+new-human enrollment enabled and absent from all other consumers. It preserves all cleanup no-model-key/queue/IAM gates.
 Both audits emit booleans and safe resource names only.
 Runtime metadata acceptance does not establish live model quality or entitlement.
 

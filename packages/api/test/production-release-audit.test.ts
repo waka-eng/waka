@@ -3,21 +3,21 @@ import {resolve} from 'node:path';
 import {executeAuditCli} from './helpers/audit-cli';
 import modelProfile from '../../../infra/model-profile.json';
 const load=()=>import(/* @vite-ignore */resolve(__dirname,'../../../scripts/production-release-audit.mjs'));
-function fixture(){
- const expected={database:'PRIVATE_DB_DO_NOT_PRINT',openRouter:'PRIVATE_KEY_DO_NOT_PRINT',openAi:'PRIVATE_OPENAI_DO_NOT_PRINT',attachments:'bucket',vault:'vault'};
+function fixture(signupMode='closed'){
+ const expected={database:'PRIVATE_DB_DO_NOT_PRINT',openRouter:'PRIVATE_KEY_DO_NOT_PRINT',openAi:'PRIVATE_OPENAI_DO_NOT_PRINT',attachments:'bucket',vault:'vault',signupMode,turnstileSiteKey:'synthetic-public-site-key',turnstileSecret:'PRIVATE_HUMAN_SECRET_DO_NOT_PRINT'};
  const outputs={apiFunctionName:'waka-production-api',backgroundWorkerFunctionName:'waka-production-worker',principleRefreshFunctionName:'waka-production-principle',attachmentsBucket:'bucket',vaultBucket:'vault'};
  const arn='arn:aws:sqs:us-west-2:123456789012:waka-production-events',roleArn='arn:aws:iam::123456789012:role/waka-production-consumer';
  const functionArn='arn:aws:lambda:us-west-2:123456789012:function:AttachmentObjectEventsSubscriberXvxecaFunctionFunction-xztsmknd';
  const consumerEnv={DB_CONNECTION_URL:expected.database,ATTACHMENTS_BUCKET:'bucket',ATTACHMENTS_REGION:'us-west-2',SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'production'})};
  const mapping={State:'Enabled',BatchSize:1,FunctionResponseTypes:['ReportBatchItemFailures'],EventSourceArn:arn,FunctionArn:functionArn};
- const env={...modelProfile,OPENAI_API_KEY:expected.openAi,SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'production'}),DB_CONNECTION_URL:expected.database,OPENROUTER_API_KEY:expected.openRouter,WAKA_CONVERSATION_REPLIES:'1',WAKA_STAGE:'production',ATTACHMENTS_BUCKET:'bucket',WAKA_VAULT_BUCKET:'vault',WAKA_BACKGROUND_WORKER_FUNCTION:'waka-production-worker'};
+ const env={...modelProfile,OPENAI_API_KEY:expected.openAi,SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'production'}),DB_CONNECTION_URL:expected.database,OPENROUTER_API_KEY:expected.openRouter,WAKA_CONVERSATION_REPLIES:'1',WAKA_STAGE:'production',ATTACHMENTS_BUCKET:'bucket',WAKA_VAULT_BUCKET:'vault',WAKA_BACKGROUND_WORKER_FUNCTION:'waka-production-worker',PUBLIC_WEB_URL:'https://waka.im'};
  const policy={Version:'2012-10-17',Statement:[{Effect:'Allow',Principal:{Service:'s3.amazonaws.com'},Action:'sqs:SendMessage',Resource:arn,Condition:{ArnEquals:{'aws:SourceArn':'arn:aws:s3:::bucket'},StringEquals:{'aws:SourceAccount':'123456789012'}}}]};
  const iam={Statement:[{Effect:'Allow',Action:['sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes','sqs:GetQueueUrl','sqs:ChangeMessageVisibility'],Resource:arn},{Effect:'Allow',Action:'s3:DeleteObject',Resource:'arn:aws:s3:::bucket/*'},{Effect:'Allow',Action:['logs:CreateLogStream','logs:PutLogEvents'],Resource:'*'}]};
  const trust={Statement:[{Effect:'Allow',Action:'sts:AssumeRole',Principal:{Service:'lambda.amazonaws.com'}}]};
  const managed=[{PolicyArn:'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'}];
  const read=(args:string[])=>{
   if(args[0]==='sts')return {Account:'123456789012'};
-  if(args[1]==='get-function-configuration')return args.some(x=>x.includes(':function:'))?{FunctionArn:functionArn,Role:roleArn,Timeout:30,Environment:{Variables:consumerEnv}}:{FunctionName:args.at(-1),FunctionArn:`arn:aws:lambda:us-west-2:123456789012:function:${args.at(-1)}`,Environment:{Variables:{...env,...(args.at(-1)===outputs.apiFunctionName?{WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2:'0',WAKA_SIGNUP_ADMISSION:'closed'}:{})}}};
+  if(args[1]==='get-function-configuration')return args.some(x=>x.includes(':function:'))?{FunctionArn:functionArn,Role:roleArn,Timeout:30,Environment:{Variables:consumerEnv}}:{FunctionName:args.at(-1),FunctionArn:`arn:aws:lambda:us-west-2:123456789012:function:${args.at(-1)}`,Environment:{Variables:{...env,...(args.at(-1)===outputs.apiFunctionName?{WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2:'1',WAKA_SIGNUP_ADMISSION:expected.signupMode,...(expected.signupMode==='turnstile'?{WAKA_TURNSTILE_SITE_KEY:expected.turnstileSiteKey,WAKA_TURNSTILE_SECRET:expected.turnstileSecret}:{})}:{})}}};
   if(args[1]==='get-bucket-notification-configuration')return {QueueConfigurations:[{Events:['s3:ObjectCreated:*'],QueueArn:arn}]};
   if(args[1]==='get-queue-url')return {QueueUrl:args.includes('waka-production-dlq')?'dlq':'queue'};
   if(args[1]==='get-queue-attributes')return {Attributes:args.includes('dlq')?{MessageRetentionPeriod:'1209600'}:{Policy:JSON.stringify(policy),VisibilityTimeout:'180',MessageRetentionPeriod:'1209600',RedrivePolicy:JSON.stringify({maxReceiveCount:5,deadLetterTargetArn:'arn:aws:sqs:us-west-2:123456789012:waka-production-dlq'})}};
@@ -98,17 +98,28 @@ it('accepts the observed generated consumer name while requiring exact ARN, queu
  ]){const g=fixture();edit(g);expect(auditProductionRelease(g).passed).toBe(false);}
 });
 
-it('checks every model runtime identity/profile and keeps production enrollment off',async()=>{
+it('checks every model runtime identity/profile and enables enrollment only in the API',async()=>{
  const {auditProductionRelease}=await load();
  for(const role of ['apiFunctionName','backgroundWorkerFunctionName','principleRefreshFunctionName'] as const)for(const patch of [
   {WAKA_GENERATION_PROVIDER:'openrouter'},{WAKA_MODEL_IMAGE:'foreign'},{WAKA_MODEL_SYNTHESIZE:'gpt-6.1-terra'},
-  {WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2:'1'},{SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'development'})},
+  {WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2:role==='apiFunctionName'?'0':'1'},{SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'development'})},
  ]){const f=fixture(),read=f.read;expect(auditProductionRelease({...f,read:(args:string[])=>{const row=read(args);if(args[1]==='get-function-configuration'&&args.at(-1)===f.outputs[role])return {...row,Environment:{Variables:{...row.Environment!.Variables,...patch}}};return row;}}).passed).toBe(false);}
  const f=fixture(),read=f.read;expect(auditProductionRelease({...f,read:(args:string[])=>{const row=read(args);return args.at(-1)===f.outputs.principleRefreshFunctionName?{...row,FunctionArn:'arn:aws:lambda:us-west-2:999999999999:function:foreign'}:row;}}).passed).toBe(false);
 });
 
-it('requires production signup closed and human secrets absent in API/worker/principle/cleanup',async()=>{
+it('keeps closed-mode human secrets absent in API/worker/principle/cleanup',async()=>{
  const {auditProductionRelease}=await load();const baseline=auditProductionRelease(fixture());expect(baseline.checks.signupAdmissionIsolated).toBe(true);expect(baseline.checks.cleanupNoSignupSecrets).toBe(true);
  for(const role of ['apiFunctionName','backgroundWorkerFunctionName','principleRefreshFunctionName'] as const)for(const patch of [{WAKA_TURNSTILE_SECRET:'SYNTHETIC_PRIVATE_HUMAN_KEY'},{WAKA_TURNSTILE_SITE_KEY:'synthetic-site'},{WAKA_SIGNUP_ADMISSION:'turnstile'}]){const f=fixture(),read=f.read;const report=auditProductionRelease({...f,read:(args:string[])=>{const row=read(args);return args.at(-1)===f.outputs[role]&&'Environment' in row?{...row,Environment:{Variables:{...row.Environment!.Variables,...patch}}}:row;}});expect(report.passed).toBe(false);expect(report.checks.signupAdmissionIsolated).toBe(false);expect(JSON.stringify(report)).not.toContain('SYNTHETIC_PRIVATE');}
  const f=fixture();Object.assign(f.consumerEnv,{WAKA_TURNSTILE_SECRET:'SYNTHETIC_PRIVATE_HUMAN_KEY'});const r=auditProductionRelease(f);expect(r.checks.cleanupNoSignupSecrets).toBe(false);expect(r.checks.cleanupIsolated).toBe(false);expect(r.passed).toBe(false);
+});
+
+// Actual stage configuration changes what the API must carry; other roles stay keyless.
+it('requires exact production human-verification inputs and preserves worker/cleanup isolation',async()=>{
+ const {auditProductionRelease}=await load();const accepted=auditProductionRelease(fixture('turnstile'));
+ expect(accepted.passed).toBe(true);expect(Object.keys(accepted.checks)).toHaveLength(56);expect(accepted.checks.apiNewHumanEnrollmentEnabled).toBe(true);expect(accepted.checks).not.toHaveProperty('apiNewHumanEnrollmentOff');expect(JSON.stringify(accepted)).not.toContain('PRIVATE_HUMAN');
+ for(const patch of [{WAKA_TURNSTILE_SECRET:undefined},{WAKA_TURNSTILE_SECRET:'wrong'},{WAKA_TURNSTILE_SITE_KEY:'foreign'},{WAKA_SIGNUP_ADMISSION:'closed'},{PUBLIC_WEB_URL:'https://dev.waka.im'}]){const f=fixture('turnstile'),read=f.read;const r=auditProductionRelease({...f,read:(args:string[])=>{const row=read(args);return args.at(-1)===f.outputs.apiFunctionName?{...row,Environment:{Variables:{...row.Environment!.Variables,...patch}}}:row;}});expect(r.checks.signupAdmissionIsolated).toBe(false);expect(r.passed).toBe(false);expect(JSON.stringify(r)).not.toContain('PRIVATE_HUMAN');}
+ for(const signupMode of ['off','invalid'])expect(auditProductionRelease(fixture(signupMode)).passed).toBe(false);
+ const dummy=fixture('turnstile');dummy.expected.turnstileSecret='1x0000000000000000000000000000000AA';expect(auditProductionRelease(dummy).checks.signupAdmissionIsolated).toBe(false);
+ for(const role of ['backgroundWorkerFunctionName','principleRefreshFunctionName'] as const)for(const key of ['WAKA_TURNSTILE_SECRET','SST_RESOURCE_TurnstileSecret']){const f=fixture('turnstile'),read=f.read;const r=auditProductionRelease({...f,read:(args:string[])=>{const row=read(args);return args.at(-1)===f.outputs[role]?{...row,Environment:{Variables:{...row.Environment!.Variables,[key]:f.expected.turnstileSecret}}}:row;}});expect(r.passed).toBe(false);expect(r.checks.signupAdmissionIsolated).toBe(false);}
+ const cleanup=fixture('turnstile');Object.assign(cleanup.consumerEnv,{WAKA_TURNSTILE_SECRET:cleanup.expected.turnstileSecret});expect(auditProductionRelease(cleanup).checks.cleanupNoSignupSecrets).toBe(false);
 });

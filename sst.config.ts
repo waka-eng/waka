@@ -420,9 +420,10 @@ export default $config({
         // means the in-process drain owns it instead.
         WAKA_BACKGROUND_WORKER_FUNCTION: backgroundWorker.name,
         ...(isDevelopmentDomain ? { WAKA_DB_PREPARED_QUERIES: "1" } : {}),
-        // Production enrollment remains OFF pending policy/coverage/rollout gates.
+        // Only freshly inserted empty human profiles enroll. Existing profiles
+        // retain their selected space until their separately fenced cutover.
         ...((isDevelopmentDomain || $app.stage === "production")
-          ? { WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: isDevelopmentDomain ? "1" : "0" } : {}),
+          ? { WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2: "1" } : {}),
         WAKA_BACKGROUND_JOB_WAKE_GROUP: jobWakeGroup.name,
       },
       // Waking the worker is the whole point of the push model; without this

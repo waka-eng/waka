@@ -97,7 +97,7 @@ it('executes actual API/worker environment expressions; default/prod and other c
   expect(env.WAKA_DB_PREPARED_QUERIES).toBe(isDevelopmentDomain?'1':undefined);
   expect(env.WAKA_TURNSTILE_SECRET).toBe(challenge&&name==='api'?'SYNTHETIC_CHALLENGE_SECRET':undefined);
   expect(env.WAKA_SIGNUP_ADMISSION).toBe(name==='api'?(challenge?'turnstile':'off'):undefined);
-  expect(env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2).toBe(name==='api'?(isDevelopmentDomain?'1':'0'):undefined);
+  expect(env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2).toBe(name==='api'?'1':undefined);
  }
  expect(initializer('runtimeEnvironment')).not.toContain('WAKA_DB_PREPARED_QUERIES');
  expect(initializer('principleRefresh')).not.toContain('WAKA_DB_PREPARED_QUERIES');
@@ -132,4 +132,21 @@ it('creates the challenge secret only for an explicitly configured supported sta
 it('adds exactly one24th dev aggregate for signup-off and model/human-secret isolation including cleanup',async()=>{
  const {auditDevelopmentGpt}=await import(/* @vite-ignore */resolve(root,'scripts/dev-gpt-config-audit.mjs'));const base=auditFixture();expect(Object.keys(auditDevelopmentGpt(base).checks)).toHaveLength(24);
  for(const role of ['api','worker','principle','cleanup'])for(const patch of [{WAKA_TURNSTILE_SECRET:'SYNTHETIC_PRIVATE_HUMAN_KEY'},{WAKA_TURNSTILE_SITE_KEY:'synthetic-site'},{WAKA_SIGNUP_ADMISSION:'turnstile'}]){const f=auditFixture(),read=f.read;const report=auditDevelopmentGpt({...f,read:(args:string[])=>{const row=read(args);return args.at(-1)===role&&'Environment' in row?{...row,Environment:{Variables:{...row.Environment!.Variables,...patch}}}:row;}});expect(report.passed).toBe(false);expect(report.checks.signupAdmissionIsolated).toBe(false);expect(JSON.stringify(report)).not.toContain('SYNTHETIC_PRIVATE');}
+});
+
+it('scopes configured production human-verification credentials to preflight, preview, stdin setup and audit',async()=>{
+ const workflow=readFileSync(resolve(root,'.github/workflows/deploy.yml'),'utf8'),steps=workflow.split(/\n      - name: /).slice(1);
+ expect(steps.filter(s=>s.includes('secrets.TURNSTILE_SECRET_PRODUCTION')).map(s=>s.split('\n')[0])).toEqual(['Validate deployment environment','Preview checked production infrastructure','Set production signup secret through stdin','Verify production runtime and cleanup wiring without secrets']);
+ expect(workflow.slice(0,workflow.indexOf('\n    steps:'))).not.toContain('TURNSTILE_SECRET_PRODUCTION');
+ const body=steps.find(s=>s.startsWith('Validate deployment environment'))!.split('        run: |\n')[1]!.split('\n').filter(line=>line.startsWith('          ')).map(line=>line.slice(10)).join('\n');
+ const env=Object.fromEntries(['AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_REGION','AUTH_GOOGLE_ID','AUTH_GOOGLE_SECRET','AUTH_SECRET','JWT_SECRET','DB_CONNECTION_URL','GEMINI_API_KEY','OPENROUTER_API_KEY','OPENAI_API_KEY','WAKA_DISCORD_WEBHOOK_URL'].map(name=>[name,'SYNTHETIC_PRIVATE_VALUE']));
+ const run=(patch:Record<string,string>)=>spawnSync('/bin/bash',['-c',body],{env:{...env,...patch},encoding:'utf8'});
+ expect(run({WAKA_SIGNUP_ADMISSION:'closed'}).status).toBe(0);expect(run({WAKA_SIGNUP_ADMISSION:'off'}).status).toBe(1);
+ const configured={WAKA_SIGNUP_ADMISSION:'turnstile',WAKA_TURNSTILE_SITE_KEY:'synthetic-public-site',WAKA_TURNSTILE_SECRET:'SYNTHETIC_PRIVATE_HUMAN_SECRET'};expect(run(configured).status).toBe(0);
+ for(const patch of [{WAKA_TURNSTILE_SECRET:''},{WAKA_TURNSTILE_SITE_KEY:''},{WAKA_TURNSTILE_SECRET:'1x0000000000000000000000000000000AA'},{WAKA_TURNSTILE_SITE_KEY:'space not allowed'}]){const r=run({...configured,...patch});expect(r.status).toBe(1);expect(r.stdout+r.stderr).not.toContain('SYNTHETIC_PRIVATE');}
+ const {setTurnstileSecret}=await import(/* @vite-ignore */resolve(root,'scripts/set-openai-secret.mjs'));let input='';const child=Object.assign(new EventEmitter(),{stdin:new PassThrough(),stdout:new PassThrough(),stderr:new PassThrough()});child.stdin.on('data',b=>input+=String(b));child.stdin.on('finish',()=>queueMicrotask(()=>child.emit('close',0)));const launch=vi.fn(()=>child);
+ for(const name of ['WAKA_TURNSTILE_SECRET','TURNSTILE_SECRET_PRODUCTION','SST_SECRET_TurnstileSecret'])vi.stubEnv(name,configured.WAKA_TURNSTILE_SECRET);
+ expect((await setTurnstileSecret({key:configured.WAKA_TURNSTILE_SECRET,stage:'production',launch})).secret).toBe('TurnstileSecret');expect(input).toBe(configured.WAKA_TURNSTILE_SECRET);
+ const [,args,options]=launch.mock.calls[0] as unknown as [string,string[],any];expect(args).toEqual(['sst','secret','set','TurnstileSecret','--stage','production']);expect(JSON.stringify(args)).not.toContain('SYNTHETIC_PRIVATE');for(const name of ['WAKA_TURNSTILE_SECRET','TURNSTILE_SECRET_PRODUCTION','SST_SECRET_TurnstileSecret'])expect(options.env).not.toHaveProperty(name);
+ const refused=vi.fn();await expect(setTurnstileSecret({key:'1x0000000000000000000000000000000AA',stage:'production',launch:refused})).rejects.toThrow('missing or malformed');expect(refused).not.toHaveBeenCalled();
 });

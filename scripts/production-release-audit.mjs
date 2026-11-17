@@ -43,7 +43,12 @@ export function auditProductionRelease({outputs,expected,read}){
   if(typeof name!=='string'||!name){checks[role+'Identity']=false;checks.signupAdmissionIsolated=false;continue;}
   const fn=read(['lambda','get-function-configuration','--function-name',name]),env=fn.Environment?.Variables??{};
   environments[role]=env;resources[role]=name;
-  checks.signupAdmissionIsolated=(checks.signupAdmissionIsolated??true)&&env.WAKA_TURNSTILE_SECRET===undefined&&env.WAKA_TURNSTILE_SITE_KEY===undefined&&(role==='api'?env.WAKA_SIGNUP_ADMISSION==='closed':env.WAKA_SIGNUP_ADMISSION===undefined);
+  const mode=expected.signupMode;
+  const configured=mode==='turnstile'&&[expected.turnstileSiteKey,expected.turnstileSecret].every(v=>typeof v==='string'&&/^[\x21-\x7e]{10,256}$/.test(v)&&!(/^[123]x0/.test(v)));
+  const signupMatches=role==='api'?
+   env.WAKA_SIGNUP_ADMISSION===mode&&(mode==='closed'?env.WAKA_TURNSTILE_SECRET===undefined&&env.WAKA_TURNSTILE_SITE_KEY===undefined:configured&&env.PUBLIC_WEB_URL==='https://waka.im'&&env.WAKA_TURNSTILE_SITE_KEY===expected.turnstileSiteKey&&env.WAKA_TURNSTILE_SECRET===expected.turnstileSecret):
+   env.WAKA_SIGNUP_ADMISSION===undefined&&env.WAKA_TURNSTILE_SECRET===undefined&&env.WAKA_TURNSTILE_SITE_KEY===undefined&&env.SST_RESOURCE_TurnstileSecret===undefined;
+  checks.signupAdmissionIsolated=(checks.signupAdmissionIsolated??true)&&signupMatches;
   checks[role+'Identity']=typeof account==='string'&&/^\d{12}$/.test(account)&&fn.FunctionName===name&&fn.FunctionArn===`arn:aws:lambda:us-west-2:${account}:function:${name}`;
   let app;try{app=JSON.parse(env.SST_RESOURCE_App??'null');}catch{}
   checks[role+'StageProduction']=env.WAKA_STAGE==='production'&&app?.name==='waka'&&app?.stage==='production';
@@ -56,7 +61,7 @@ export function auditProductionRelease({outputs,expected,read}){
   checks[role+'AdminClosed']=!['WAKA_ENABLE_ADMIN_ROUTES','WAKA_SHOW_INTERNAL_STATUS','WAKA_ENABLE_BACKGROUND_JOBS_ADMIN'].some(k=>['1','true'].includes(env[k]));
   checks[role+'AttachmentsPreserved']=env.ATTACHMENTS_BUCKET===expected.attachments;
   checks[role+'VaultPreserved']=env.WAKA_VAULT_BUCKET===expected.vault;
-  checks[role+'NewHumanEnrollmentOff']=role==='api'?env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2==='0':env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2===undefined;
+  checks[role+(role==='api'?'NewHumanEnrollmentEnabled':'NewHumanEnrollmentOff')]=role==='api'?env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2==='1':env.WAKA_ENROLL_NEW_EMPTY_HUMAN_EMBEDDING_2===undefined;
   checks.signupAdmissionIsolated=checks.signupAdmissionIsolated===true&&checks[role+'Identity']===true&&checks[role+'StageProduction']===true;
  }
  const a=environments.api??{};
@@ -90,7 +95,7 @@ export function auditProductionRelease({outputs,expected,read}){
    checks.cleanupDatabaseMatches=!!expected.database&&env.DB_CONNECTION_URL===expected.database;
    checks.cleanupBucketMatches=env.ATTACHMENTS_BUCKET===expected.attachments;
    checks.cleanupRegionMatches=env.ATTACHMENTS_REGION==='us-west-2';
-   checks.cleanupNoSignupSecrets=['WAKA_TURNSTILE_SECRET','WAKA_TURNSTILE_SITE_KEY','WAKA_SIGNUP_ADMISSION'].every(key=>env[key]===undefined);
+   checks.cleanupNoSignupSecrets=['WAKA_TURNSTILE_SECRET','WAKA_TURNSTILE_SITE_KEY','WAKA_SIGNUP_ADMISSION','SST_RESOURCE_TurnstileSecret'].every(key=>env[key]===undefined);
    checks.signupAdmissionIsolated=checks.signupAdmissionIsolated===true&&checks.cleanupNoSignupSecrets;
    checks.cleanupNoModelKeys=!env.OPENROUTER_API_KEY&&!env.GEMINI_API_KEY&&!env.OPENAI_API_KEY;
    checks.cleanupIsolated=['cleanupFunctionBinding','cleanupStackIdentity','cleanupTimeout','cleanupDatabaseMatches','cleanupBucketMatches','cleanupRegionMatches','cleanupNoModelKeys','cleanupNoSignupSecrets'].every(key=>checks[key]===true);
@@ -107,7 +112,7 @@ export function auditProductionRelease({outputs,expected,read}){
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
   const outputs=readAuditOutputs();
-  const report=auditProductionRelease({outputs,expected:{database:process.env.DB_CONNECTION_URL,openRouter:process.env.OPENROUTER_API_KEY,openAi:process.env.OPENAI_API_KEY,attachments:'waka-production-attachmentsbucket-rceuztkc',vault:'waka-production-vaultbucket-baskzfwm'},read:readAuditAwsJson});
+  const report=auditProductionRelease({outputs,expected:{database:process.env.DB_CONNECTION_URL,openRouter:process.env.OPENROUTER_API_KEY,openAi:process.env.OPENAI_API_KEY,attachments:'waka-production-attachmentsbucket-rceuztkc',vault:'waka-production-vaultbucket-baskzfwm',signupMode:process.env.WAKA_SIGNUP_ADMISSION||'closed',turnstileSiteKey:process.env.WAKA_TURNSTILE_SITE_KEY,turnstileSecret:process.env.WAKA_TURNSTILE_SECRET},read:readAuditAwsJson});
   printAuditReport(report,'production-release-audit.json');
  }catch(error){printAuditReport(auditFailure('release_audit',error,{actualLatePutExercise:false,externalAlertDeliveryVerified:false,finiteErasureSlaEstablished:false}),'production-release-audit.json');}
 }

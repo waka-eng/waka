@@ -33,8 +33,8 @@ ref or deployed production state changed.
 ## Signup admission and AI target
 
 Source preparation now includes one conditional Turnstile adapter and one
-`signup_admissions` table. No vendor account, widget, secret or live verification
-was created. Production defaults to `closed` for NEW accounts; local/dev defaults
+`signup_admissions` table. Vendor provisioning is an operational step outside
+SST; it is not inferred from source tests. Production defaults to `closed` for NEW accounts; local/dev defaults
 to `off`. `turnstile` requires exact trusted stage/App/origin, a real same-stage
 sitekey/secret and a valid signing secret. Invalid/missing production settings
 close new signup only. Existing password login and verified Google recovery do
@@ -64,8 +64,8 @@ verification offers a browser handoff to the checked API origin's
 `/login?signup=1`. The hint selects a tab only. No email, password, nonce, grant or
 session is passed, and no cookies are copied. After web signup the user returns
 and signs in normally. Origin/cookie checks stay unchanged. Actual native-device
-handoff and human acceptance remain unpassed; production stays closed until
-activation and human-use gates pass.
+handoff remains unpassed. The owner performs real signup/sign-in verification;
+that pending human test does not block a technically accepted activation.
 Existing installed bundles do not gain this handoff from a web deployment.
 When verification is configured, legacy cookie-less/native-Origin refusals
 include the same stage-checked public browser signup URL and return/sign-in
@@ -221,9 +221,12 @@ recovery-time/data-loss target or paid backup upgrade was selected.
    envelope. All-before is not rollback while the original may still be in flight.
    Stop new mutations on uncertainty; do not reset ledgers or invent a new namespace.
 7. Fresh empty profiles need under-fence zero-corpus proof; existing/newly nonempty
-   profiles cannot be skipped. Production new-human enrollment is literalOFF in
-   this candidate. A later explicit source/config/release gate may turn it on for
-   genuinely newly inserted human paths, never existing missing-control profiles.
+   profiles cannot be skipped. Production API new-human enrollment is literal1 in
+   this activation candidate, with the existing transactional empty-human helper.
+   Existing missing-control profiles are never flipped. Deploying signup and this
+   default together prevents ordinary new signup from creating native001 profiles.
+   A final fresh census must still detect old in-flight recovery/profile creations;
+   any native arrivals require their own bounded coverage/cutover, not a default flip.
 8. Prefer a forward correction after successful additive migration. A previous
    application SHA can require its matching metadata compatibility; old native
    vectors may have been correctly privacy-invalidated. Returning to001 requires
@@ -242,18 +245,23 @@ PrincipleRefresh and cleanup receive neither Turnstile secret nor sitekey.
 `WAKA_SIGNUP_ADMISSION_<STAGE>` and `WAKA_TURNSTILE_SITE_KEY_<STAGE>` are explicit
 GitHub variables (DEVELOPMENT/PRODUCTION suffixes); they are not proof of a
 configured vendor site. The private runtime `WAKA_TURNSTILE_SECRET` comes only
-from the API's conditional same-stage SST `TurnstileSecret`. A separately approved
-private stdin setup is needed before enabling; do not pass it in argv or use a
-public dummy key. This candidate performs no setup and both deployment preflight and audits intentionally
-reject activation until a later exact review changes that expectation.
+from the API's conditional same-stage SST `TurnstileSecret`. The production-environment GitHub secret is `TURNSTILE_SECRET_PRODUCTION`;
+`WAKA_TURNSTILE_SITE_KEY_PRODUCTION` and `WAKA_SIGNUP_ADMISSION_PRODUCTION` are
+the public variables. The workflow accepts only `closed` or configured `turnstile`.
+Configured preflight requires real keys; preview supplies the proposed secret only
+in memory; the existing bounded stdin setter writes the fixed `TurnstileSecret`
+only for actual configured deployment. No credential is passed in argv. Secret
+exposure is limited to preflight, preview, stdin setup and the runtime comparison.
 
 Dev runtime acceptance retains the old23 check names and adds ONE aggregate,
 `signupAdmissionIsolated` (24 total). It attests API off plus absent human
 secret/sitekey, no signup configuration on worker/PrincipleRefresh/cleanup, and
 keyless cleanup. The existing `monitorCleanupFunctionName` output is now emitted
 in dev as well, adding one read-only function-config read to this audit.
-Production acceptance adds `signupAdmissionIsolated` and
-`cleanupNoSignupSecrets` while preserving every prior check; API must be closed
-and all four roles lack Turnstile material. Values stay in memory; only booleans
+Production acceptance retains56 checks: `apiNewHumanEnrollmentOff` becomes
+`apiNewHumanEnrollmentEnabled`; the other55 names stay. `signupAdmissionIsolated`
+requires either closed/API-keyless or exact configured production API-only
+sitekey/secret/origin. Worker, PrincipleRefresh and cleanup must lack signup
+material, including the SST secret binding. `cleanupNoSignupSecrets` remains. Values stay in memory; only booleans
 and existing safe resource names leave the auditor. Actual deployed24/production
 audit evidence is still required; source tests do not substitute for it.
