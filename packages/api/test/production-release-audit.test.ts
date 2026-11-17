@@ -118,8 +118,32 @@ it('requires exact production human-verification inputs and preserves worker/cle
  const {auditProductionRelease}=await load();const accepted=auditProductionRelease(fixture('turnstile'));
  expect(accepted.passed).toBe(true);expect(Object.keys(accepted.checks)).toHaveLength(56);expect(accepted.checks.apiNewHumanEnrollmentEnabled).toBe(true);expect(accepted.checks).not.toHaveProperty('apiNewHumanEnrollmentOff');expect(JSON.stringify(accepted)).not.toContain('PRIVATE_HUMAN');
  for(const patch of [{WAKA_TURNSTILE_SECRET:undefined},{WAKA_TURNSTILE_SECRET:'wrong'},{WAKA_TURNSTILE_SITE_KEY:'foreign'},{WAKA_SIGNUP_ADMISSION:'closed'},{PUBLIC_WEB_URL:'https://dev.waka.im'}]){const f=fixture('turnstile'),read=f.read;const r=auditProductionRelease({...f,read:(args:string[])=>{const row=read(args);return args.at(-1)===f.outputs.apiFunctionName?{...row,Environment:{Variables:{...row.Environment!.Variables,...patch}}}:row;}});expect(r.checks.signupAdmissionIsolated).toBe(false);expect(r.passed).toBe(false);expect(JSON.stringify(r)).not.toContain('PRIVATE_HUMAN');}
- for(const signupMode of ['off','invalid'])expect(auditProductionRelease(fixture(signupMode)).passed).toBe(false);
+ expect(auditProductionRelease(fixture('invalid')).passed).toBe(false);
  const dummy=fixture('turnstile');dummy.expected.turnstileSecret='1x0000000000000000000000000000000AA';expect(auditProductionRelease(dummy).checks.signupAdmissionIsolated).toBe(false);
  for(const role of ['backgroundWorkerFunctionName','principleRefreshFunctionName'] as const)for(const key of ['WAKA_TURNSTILE_SECRET','SST_RESOURCE_TurnstileSecret']){const f=fixture('turnstile'),read=f.read;const r=auditProductionRelease({...f,read:(args:string[])=>{const row=read(args);return args.at(-1)===f.outputs[role]?{...row,Environment:{Variables:{...row.Environment!.Variables,[key]:f.expected.turnstileSecret}}}:row;}});expect(r.passed).toBe(false);expect(r.checks.signupAdmissionIsolated).toBe(false);}
  const cleanup=fixture('turnstile');Object.assign(cleanup.consumerEnv,{WAKA_TURNSTILE_SECRET:cleanup.expected.turnstileSecret});expect(auditProductionRelease(cleanup).checks.cleanupNoSignupSecrets).toBe(false);
+});
+
+it('accepts explicit production off only on the canonical API with no challenge material', async () => {
+ const {auditProductionRelease}=await load();
+ const off=fixture('off');
+ const accepted=auditProductionRelease(off);
+ expect(accepted.passed).toBe(true);
+ expect(Object.keys(accepted.checks).sort()).toEqual(Object.keys(auditProductionRelease(fixture()).checks).sort());
+ expect(Object.keys(accepted.checks)).toHaveLength(56);
+ for (const patch of [
+  {PUBLIC_WEB_URL:'https://dev.waka.im'},{PUBLIC_WEB_URL:undefined},{WAKA_SIGNUP_ADMISSION:undefined},
+  {WAKA_STAGE:'development'},{SST_RESOURCE_App:'{"name":"other","stage":"production"}'},
+  {WAKA_TURNSTILE_SECRET:''},{WAKA_TURNSTILE_SITE_KEY:''},{SST_RESOURCE_TurnstileSecret:'SYNTHETIC_PRIVATE_BINDING'},
+ ]) {
+  const r=auditProductionRelease({...off,read:(args:string[])=>{
+   const row=off.read(args);
+   return args.at(-1)===off.outputs.apiFunctionName&&'Environment' in row
+    ? {...row,Environment:{Variables:{...row.Environment!.Variables,...patch}}}
+    : row;
+  }});
+  expect(r.checks.signupAdmissionIsolated).toBe(false);
+  expect(r.passed).toBe(false);
+  expect(JSON.stringify(r)).not.toContain('SYNTHETIC_PRIVATE');
+ }
 });

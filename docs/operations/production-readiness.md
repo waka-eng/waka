@@ -247,7 +247,11 @@ GitHub variables (DEVELOPMENT/PRODUCTION suffixes); they are not proof of a
 configured vendor site. The private runtime `WAKA_TURNSTILE_SECRET` comes only
 from the API's conditional same-stage SST `TurnstileSecret`. The production-environment GitHub secret is `TURNSTILE_SECRET_PRODUCTION`;
 `WAKA_TURNSTILE_SITE_KEY_PRODUCTION` and `WAKA_SIGNUP_ADMISSION_PRODUCTION` are
-the public variables. The workflow accepts only `closed` or configured `turnstile`.
+the public variables. The workflow accepts `closed`, configured `turnstile`, or
+explicit `off`. Production `off` opens password and Google account creation
+without a challenge, with the existing shared creation ceiling (10 per hour and
+50 per day by default). The API requires matching production stage identity,
+`https://waka.im`, and absent Turnstile bindings for this mode.
 Configured preflight requires real keys; preview supplies the proposed secret only
 in memory; the existing bounded stdin setter writes the fixed `TurnstileSecret`
 only for actual configured deployment. No credential is passed in argv. Secret
@@ -260,8 +264,9 @@ keyless cleanup. The existing `monitorCleanupFunctionName` output is now emitted
 in dev as well, adding one read-only function-config read to this audit.
 Production acceptance retains56 checks: `apiNewHumanEnrollmentOff` becomes
 `apiNewHumanEnrollmentEnabled`; the other55 names stay. `signupAdmissionIsolated`
-requires either closed/API-keyless or exact configured production API-only
-sitekey/secret/origin. Worker, PrincipleRefresh and cleanup must lack signup
+requires a keyless API in `closed` or `off` (with the canonical origin in
+`off`), or exact configured production API-only sitekey/secret/origin.
+Worker, PrincipleRefresh and cleanup must lack signup
 material, including the SST secret binding. `cleanupNoSignupSecrets` remains. Values stay in memory; only booleans
 and existing safe resource names leave the auditor. Actual deployed24/production
 audit evidence is still required; source tests do not substitute for it.

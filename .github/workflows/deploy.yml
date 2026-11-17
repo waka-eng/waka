@@ -56,7 +56,7 @@ jobs:
       VITE_POSTHOG_PROJECT_TOKEN: ${{ vars.VITE_POSTHOG_PROJECT_TOKEN_PRODUCTION }}
       VITE_POSTHOG_HOST: ${{ vars.VITE_POSTHOG_HOST_PRODUCTION }}
       WAKA_SIGNUP_ADMISSION: ${{ vars.WAKA_SIGNUP_ADMISSION_PRODUCTION || 'closed' }}
-      WAKA_TURNSTILE_SITE_KEY: ${{ vars.WAKA_TURNSTILE_SITE_KEY_PRODUCTION }}
+      WAKA_TURNSTILE_SITE_KEY: ${{ vars.WAKA_SIGNUP_ADMISSION_PRODUCTION == 'turnstile' && vars.WAKA_TURNSTILE_SITE_KEY_PRODUCTION || '' }}
       WAKA_OPENROUTER_DATA_COLLECTION: ${{ vars.WAKA_OPENROUTER_DATA_COLLECTION_PRODUCTION }}
       WAKA_OPENROUTER_REQUIRE_ZDR: ${{ vars.WAKA_OPENROUTER_REQUIRE_ZDR_PRODUCTION }}
       WAKA_OPERATIONS_ALERT_TOPIC_ARN: ${{ vars.WAKA_OPERATIONS_ALERT_TOPIC_ARN_PRODUCTION }}
@@ -102,8 +102,8 @@ jobs:
           set -euo pipefail
           export LC_ALL=C
           case "${WAKA_SIGNUP_ADMISSION:-closed}" in
-            closed|turnstile) ;;
-            *) printf 'Production signup admission must be closed or turnstile.\n' >&2; exit 1 ;;
+            closed|turnstile|off) ;;
+            *) printf 'Production signup admission must be closed, turnstile or off.\n' >&2; exit 1 ;;
           esac
           required=(
             AWS_ACCESS_KEY_ID

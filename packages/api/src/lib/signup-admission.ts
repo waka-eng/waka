@@ -9,7 +9,12 @@ import type {getDb} from './db.js';
 type Db=ReturnType<typeof getDb>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
 export type SignupFlow='password'|'google';
-export type SignupConfig={mode:'off'|'closed'}|{mode:'turnstile';stage:string;origin:string;hostname:string;siteKey:string;secret:string;signing:string;limits:{verifyHour:number;verifyDay:number;createHour:number;createDay:number}};
+type CreationLimits = { createHour: number; createDay: number };
+type CreationConfig = { stage: string; limits: CreationLimits };
+export type SignupConfig =
+ | { mode: 'off'; creation?: CreationConfig }
+ | { mode: 'closed' }
+ | (CreationConfig & { mode: 'turnstile'; origin: string; hostname: string; siteKey: string; secret: string; signing: string; limits: CreationLimits & { verifyHour: number; verifyDay: number } });
 const ENDPOINT='https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const TTL=300,LOCK='waka.signup-admission.v1';
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
@@ -27,6 +32,17 @@ export function signupConfiguration(env:Record<string,string|undefined>=process.
   if(stage!==undefined&&!['development','dev','production','local','test'].includes(stage))return {mode:'closed'};
   if(env.NODE_ENV==='production'&&!app&&!['development','dev','local','test'].includes(stage??''))return {mode:'closed'};
   if((mode===undefined||mode==='off')&&stage!=='production'&&app?.stage!=='production')return {mode:'off'};
+  const read=(name:string,fallback:number,max:number)=>{const raw=env[name];if(raw===undefined)return fallback;if(!/^[1-9]\d*$/.test(raw))throw 0;const n=Number(raw);if(!Number.isSafeInteger(n)||n>max)throw 0;return n;};
+  const creationLimits=()=>({createHour:read('WAKA_SIGNUP_CREATE_HOUR',10,50),createDay:read('WAKA_SIGNUP_CREATE_DAY',50,200)});
+  if (mode === 'off' && stage === 'production') {
+   if (app?.stage !== 'production' || env.PUBLIC_WEB_URL !== 'https://waka.im' ||
+       ['WAKA_TURNSTILE_SECRET', 'WAKA_TURNSTILE_SITE_KEY', 'SST_RESOURCE_TurnstileSecret'].some(key => env[key] !== undefined)) {
+    return { mode: 'closed' };
+   }
+   const limits = creationLimits();
+   if (limits.createHour > limits.createDay) return { mode: 'closed' };
+   return { mode: 'off', creation: { stage, limits } };
+  }
   if(mode!=='turnstile')return {mode:'closed'};
   const origin={development:'https://dev.waka.im',dev:'https://dev.waka.im',production:'https://waka.im'}[stage??''];
   const url=new URL(env.PUBLIC_WEB_URL??'');
@@ -35,8 +51,7 @@ export function signupConfiguration(env:Record<string,string|undefined>=process.
   if(!/^[\x21-\x7e]{10,256}$/.test(siteKey)||!/^[\x21-\x7e]{10,256}$/.test(secret)||!signing)return {mode:'closed'};
   // Official public testing keys are never an activation path in production.
   if(stage==='production'&&(/^[123]x0/.test(siteKey)||/^[123]x0/.test(secret)))return {mode:'closed'};
-  const read=(name:string,fallback:number,max:number)=>{const raw=env[name];if(raw===undefined)return fallback;if(!/^[1-9]\d*$/.test(raw))throw 0;const n=Number(raw);if(!Number.isSafeInteger(n)||n>max)throw 0;return n;};
-  const limits={verifyHour:read('WAKA_SIGNUP_VERIFY_HOUR',20,100),verifyDay:read('WAKA_SIGNUP_VERIFY_DAY',100,500),createHour:read('WAKA_SIGNUP_CREATE_HOUR',10,50),createDay:read('WAKA_SIGNUP_CREATE_DAY',50,200)};
+  const limits={verifyHour:read('WAKA_SIGNUP_VERIFY_HOUR',20,100),verifyDay:read('WAKA_SIGNUP_VERIFY_DAY',100,500),...creationLimits()};
   if(limits.verifyHour>limits.verifyDay||limits.createHour>limits.createDay)return {mode:'closed'};
   return {mode:'turnstile',stage:stage!,origin,hostname:url.hostname,siteKey,secret,signing,limits};
  }catch{return {mode:'closed'};}
@@ -75,9 +90,15 @@ async function fenced<T>(db:Db,body:(tx:Tx)=>Promise<T>){return db.transaction(a
  const [lock]=await tx.execute<{locked:boolean}>(sql`SELECT pg_try_advisory_xact_lock(hashtextextended(${LOCK},0)) AS locked`);
  if(!lock?.locked)throw new SignupAdmissionError('signup_busy',429,1);return body(tx);
  },{isolationLevel:'read committed'});}
-async function capacity(tx:Tx,config:Ready,creation=false){
- const [n]=await tx.execute<{hour:number;day:number}>(creation?sql`SELECT count(*) FILTER(WHERE creation_started_at>clock_timestamp()-interval '1 hour')::int AS hour,count(*)::int AS day FROM signup_admissions WHERE stage=${config.stage} AND creation_started_at>clock_timestamp()-interval '1 day'`:sql`SELECT count(*) FILTER(WHERE created_at>clock_timestamp()-interval '1 hour')::int AS hour,count(*)::int AS day FROM signup_admissions WHERE stage=${config.stage} AND created_at>clock_timestamp()-interval '1 day'`);
- if(!n||n.hour>=(creation?config.limits.createHour:config.limits.verifyHour)||n.day>=(creation?config.limits.createDay:config.limits.verifyDay))throw new SignupAdmissionError('signup_capacity',429,n&&n.day>=(creation?config.limits.createDay:config.limits.verifyDay)?86400:3600);
+async function capacity(tx:Tx,config:CreationConfig,verification?:Ready['limits']){
+ const [n]=await tx.execute<{hour:number;day:number}>(verification?sql`SELECT count(*) FILTER(WHERE created_at>clock_timestamp()-interval '1 hour')::int AS hour,count(*)::int AS day FROM signup_admissions WHERE stage=${config.stage} AND created_at>clock_timestamp()-interval '1 day' AND nonce_hash<>token_hash`:sql`SELECT count(*) FILTER(WHERE creation_started_at>clock_timestamp()-interval '1 hour')::int AS hour,count(*)::int AS day FROM signup_admissions WHERE stage=${config.stage} AND creation_started_at>clock_timestamp()-interval '1 day'`);
+ const hour=verification?.verifyHour??config.limits.createHour;
+ const day=verification?.verifyDay??config.limits.createDay;
+ if(!n||n.hour>=hour||n.day>=day)throw new SignupAdmissionError('signup_capacity',429,n&&n.day>=day?86400:3600);
+}
+async function pruneAdmissions(tx:Tx){
+ // Retain claims past proof expiry and the longest capacity window.
+ await tx.execute(sql`DELETE FROM signup_admissions WHERE nonce_hash IN(SELECT nonce_hash FROM signup_admissions WHERE created_at<clock_timestamp()-interval '7 days' ORDER BY created_at LIMIT 500)`);
 }
 /** No provider retry, including uncertain HTTP. Full response shapes come from
  * fake transports in tests; vendor dummy responses cannot bypass field checks. */
@@ -104,10 +125,8 @@ export async function verifySignupAdmission(c:Context,db:Db,flow:SignupFlow,toke
  if(!proof||proof.nonce!==nonce||typeof token!=='string'||!token||token.length>2048)throw new SignupAdmissionError('signup_verify_required');
  const nonceHash=digest(proof.nonce),tokenHash=digest(token);
  await fenced(db,async tx=>{
-  // Bounded expiry pruning, not a new maintenance job. Retain claims well past
-  // token validity; final challenge_ts and signed nonce expiry also fail closed.
-  await tx.execute(sql`DELETE FROM signup_admissions WHERE nonce_hash IN(SELECT nonce_hash FROM signup_admissions WHERE created_at<clock_timestamp()-interval '7 days' ORDER BY created_at LIMIT 500)`);
-  await capacity(tx,config);
+  await pruneAdmissions(tx);
+  await capacity(tx,config,config.limits);
   const rows=await tx.execute(sql`INSERT INTO signup_admissions(nonce_hash,token_hash,stage,flow,state,expires_at) VALUES(${nonceHash},${tokenHash},${config.stage},${flow},'reserved',to_timestamp(${proof.expires})) ON CONFLICT DO NOTHING RETURNING nonce_hash`);
   if(rows.length!==1)throw new SignupAdmissionError('signup_admission_used');
  });
@@ -116,18 +135,33 @@ export async function verifySignupAdmission(c:Context,db:Db,flow:SignupFlow,toke
  if(updated.length!==1||outcome!=='verified')throw new SignupAdmissionError(outcome==='unknown'?'signup_verify_unknown':'signup_verify_failed',outcome==='unknown'?503:403);
  writeCookie(c,config,'grant',flow,proof);return {verified:true};
 }
-export type SignupGrant={config:Ready;proof:Proof;nonceHash:string};
+export type SignupGrant =
+ | { kind: 'challenge'; config: Ready; proof: Proof; nonceHash: string }
+ | { kind: 'server'; config: CreationConfig; nonceHash: string };
+function serverGrant(config: CreationConfig | undefined): SignupGrant | null {
+ return config ? { kind: 'server', config, nonceHash: randomBytes(32).toString('hex') } : null;
+}
 export function readSignupGrant(c:Context,flow:SignupFlow):SignupGrant|null{
- const config=signupConfiguration();if(config.mode==='off')return null;
+ const config=signupConfiguration();if(config.mode==='off')return serverGrant(config.creation);
  const ready=requireReady(config);requireSignupOrigin(c,ready);
  const proof=unpack(ready,'grant',flow,getCookie(c,cookieName('grant',flow)));if(!proof)throw new SignupAdmissionError('signup_verify_required');
- return {config:ready,proof,nonceHash:digest(proof.nonce)};
+ return {kind:'challenge',config:ready,proof,nonceHash:digest(proof.nonce)};
 }
 /** Reserve before bcrypt. A failed/uncertain creation still uses this slot;
  * the grant cannot buy repeated hashing or recreate an ambiguous account. */
 export async function beginSignupCreation(db:Db,grant:SignupGrant|null,flow:SignupFlow){if(!grant)return;
  await fenced(db,async tx=>{
-  await capacity(tx,grant.config,true);
+  await capacity(tx,grant.config);
+  if (grant.kind === 'server') {
+   await pruneAdmissions(tx);
+   // Equal digests mark a server reservation in the existing schema. These
+   // rows share the creation ceiling but do not spend Turnstile verify slots.
+   const rows = await tx.execute(sql`INSERT INTO signup_admissions(nonce_hash,token_hash,stage,flow,state,expires_at,creation_started_at)
+     VALUES(${grant.nonceHash},${grant.nonceHash},${grant.config.stage},${flow},'creating',clock_timestamp()+interval '5 minutes',clock_timestamp())
+     ON CONFLICT DO NOTHING RETURNING nonce_hash`);
+   if (rows.length !== 1) throw new SignupAdmissionError('signup_admission_used');
+   return;
+  }
   const rows=await tx.execute(sql`UPDATE signup_admissions SET state='creating',creation_started_at=clock_timestamp() WHERE nonce_hash=${grant.nonceHash} AND stage=${grant.config.stage} AND flow=${flow} AND state=${flow==='google'?'oauth_bound':'verified'} AND expires_at>clock_timestamp() AND (${flow}='password' OR (oauth_state_hash=${grant.proof.oauth?digest(grant.proof.oauth.state):null} AND oauth_pkce_hash=${grant.proof.oauth?digest(grant.proof.oauth.pkce):null})) RETURNING nonce_hash`);
   if(rows.length!==1)throw new SignupAdmissionError('signup_admission_used');
  });
@@ -148,10 +182,10 @@ export async function bindGoogleSignup(c:Context,getDatabase:()=>Db,state:string
 /** Called only on the NEW-account path after verified Google claims. No Origin
  * header exists on a provider redirect; state/PKCE + the signed flow grant are CSRF. */
 export function readGoogleSignupGrant(c:Context,state:string,pkce:string):SignupGrant|null{
- const config=signupConfiguration();if(config.mode==='off')return null;
+ const config=signupConfiguration();if(config.mode==='off')return serverGrant(config.creation);
  const ready=requireReady(config),proof=unpack(ready,'grant','google',getCookie(c,cookieName('grant','google')));
  if(!proof?.oauth||proof.oauth.state!==mac(ready,'oauth-state','google',state)||proof.oauth.pkce!==mac(ready,'oauth-pkce','google',pkce))throw new SignupAdmissionError('signup_verify_required');
- return {config:ready,proof,nonceHash:digest(proof.nonce)};
+ return {kind:'challenge',config:ready,proof,nonceHash:digest(proof.nonce)};
 }
 /** Global capacity lock precedes the admission row and new account/profile locks.
  * No HTTP; consume and identity INSERTs commit or roll back together. */
@@ -159,8 +193,11 @@ export async function consumeSignupAdmission(tx:Tx,grant:SignupGrant|null,flow:S
  await tx.execute(sql`SET LOCAL statement_timeout='2000ms'`);
  await tx.execute(sql`SET LOCAL lock_timeout='100ms'`);
  const [lock]=await tx.execute<{locked:boolean}>(sql`SELECT pg_try_advisory_xact_lock(hashtextextended(${LOCK},0)) AS locked`);if(!lock?.locked)throw new SignupAdmissionError('signup_busy',429,1);
+ const proof = grant.kind === 'server'
+  ? sql`nonce_hash=token_hash`
+  : sql`(${flow}='password' OR (oauth_state_hash=${grant.proof.oauth?digest(grant.proof.oauth.state):null} AND oauth_pkce_hash=${grant.proof.oauth?digest(grant.proof.oauth.pkce):null}))`;
  const rows=await tx.execute(sql`UPDATE signup_admissions SET state='consumed',consumed_at=clock_timestamp(),creation_started_at=coalesce(creation_started_at,clock_timestamp()) WHERE nonce_hash=${grant.nonceHash} AND stage=${grant.config.stage} AND flow=${flow} AND state='creating' AND expires_at>clock_timestamp()
- AND (${flow}='password' OR (oauth_state_hash=${grant.proof.oauth?digest(grant.proof.oauth.state):null} AND oauth_pkce_hash=${grant.proof.oauth?digest(grant.proof.oauth.pkce):null})) RETURNING nonce_hash`);
+ AND ${proof} RETURNING nonce_hash`);
  if(rows.length!==1)throw new SignupAdmissionError('signup_admission_used');
 }
 export function signupAdmissionResponse(c:Context,error:unknown){
