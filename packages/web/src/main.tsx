@@ -36,6 +36,7 @@ import { ArchiveRecordingBoundary } from "./lib/archive-recording-boundary";
 import { installPreloadRecovery } from "./lib/preload-recovery";
 import { LoadingHome } from "./components/LoadingHome";
 import LoginPage from "./pages/Login";
+import { legalPaths } from "./components/LegalLinks";
 import { MobileShell } from './components/MobileShell';
 import { AnalyticsNavigation } from './components/AnalyticsNavigation';
 import { startAnalytics } from './lib/analytics';
@@ -61,6 +62,7 @@ import "./styles/system.css";
 import "./styles/chrome.css";
 // The landing, the menu and the claim queue — the three-surface IA.
 import "./styles/claims.css";
+import "./styles/legal.css";
 
 /*
   THE WORLD IS HOME.
@@ -85,6 +87,7 @@ const HomePage = lazy(() => import("./pages/Home"));
 const Days = lazy(() => import("./pages/Days").then(module => ({ default: module.Days })));
 const OnboardingPage = lazy(() => import("./pages/Onboarding"));
 const PublicProfilePage = lazy(() => import("./pages/PublicProfile"));
+const LegalDocument = lazy(() => import("./pages/LegalDocument"));
 const MobileChecks = import.meta.env.VITE_BUILD_TARGET === 'mobile' && import.meta.env.VITE_MOBILE_DIAGNOSTICS === '1' ? lazy(() => import('./pages/MobileChecks')) : null;
 
 /**
@@ -166,6 +169,8 @@ ReactDOM.createRoot(root).render(
               do not know anything is wrong. `SurfaceBoundary` says what
               broke and offers the way back. */}
           <Route path="/login" element={<SurfaceBoundary surface="the door"><LoginPage /></SurfaceBoundary>} />
+          <Route path={legalPaths.terms} element={<SurfaceBoundary surface="terms"><Suspense fallback={<LoadingHome />}><LegalDocument document="terms" /></Suspense></SurfaceBoundary>} />
+          <Route path={legalPaths.privacy} element={<SurfaceBoundary surface="privacy"><Suspense fallback={<LoadingHome />}><LegalDocument document="privacy" /></Suspense></SurfaceBoundary>} />
           {/* What the phone's share sheet and the bookmarklet send. In front
               of the sign-in gate: it only hands the share to this tab and
               steps to `/`, which signs in and onboards as usual. */}

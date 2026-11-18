@@ -8,6 +8,7 @@ import { fetchSessions, revokeSession, type ApiSession } from "../lib/api/sessio
 import { supportedLocales } from "../lib/i18n";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { SurfaceHeader } from "./SurfaceHeader";
+import { LegalLinks } from "./LegalLinks";
 
 export interface SettingsPanelProps {
   locale: SupportedLocale;
@@ -139,6 +140,8 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
       <Group id="sessions" open={open} setOpen={setOpen} label={say("profileSessionsTitle")}>
         <ProfileConnections locale={props.locale} />
       </Group>
+
+      {open === null ? <LegalLinks /> : null}
 
       {open === null ? <button type="button" className="waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
         {say("worldSignOutLower")}
