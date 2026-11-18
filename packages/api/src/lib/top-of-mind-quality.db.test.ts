@@ -5,6 +5,7 @@ import { refreshTopOfMindForProfile } from './top-of-mind-synthesis.js';
 import {EMBEDDING_2_SPACE,hashEmbedding2Input} from './embedding-2-space.js';
 import {EMBEDDING_2_CANDIDATE_POLICY} from './embedding-policy.js';
 import { writeSignalEmbedding } from './signal-embeddings.js';
+import { createFeedbackForProfile } from '../routes/feedback.js';
 import type { ModelProvider, TopOfMindSynthesisInput, TopOfMindSynthesisResult, TopOfMindReviewInput, TopOfMindReviewResult } from './model-provider.js';
 
 // Real SQL evidence/ownership/revision checks; only the model is replaced so
@@ -62,6 +63,68 @@ it('keeps the current wording when a purported change is only a paraphrase', asy
   expect((await refresh()).reason).toBe('no_change');
   expect((await stored()).map(row => row.body)).toEqual([fresh]);
 });
+
+it.each(['independent', 'duplicate', 'disputed', 'late_old_date'] as const)(
+  'selects the lead from current new evidence (%s), preserving unchanged pinned wording',
+  async mode => {
+    const first = await refresh();
+    const [boundary] = await t.sql`SELECT created_at FROM top_of_minds WHERE id=${first.topOfMindId}`;
+    const at = (seconds: number) => new Date(new Date(boundary!.created_at).getTime() + seconds * 1000);
+    await t.sql`UPDATE top_of_mind_entries SET pinned_at=${at(1).toISOString()} WHERE top_of_mind_id=${first.topOfMindId}`;
+    synthesize.mockClear();
+    const reviewed = vi.fn(approveReadingReview);
+    review = reviewed;
+    const audit = await refresh('manual', at(30));
+    expect(audit.reason).toBe('no_change');
+    // Publication timestamps use the DB clock; place the real audit after
+    // the fixture captures so reading from it would hide both new witnesses.
+    expect(await t.sql`UPDATE top_of_minds SET created_at=${at(30).toISOString()}
+      WHERE id=${audit.topOfMindId} AND reason='no_change' RETURNING id`).toHaveLength(1);
+    expect(synthesize).toHaveBeenCalledTimes(1);
+    expect(reviewed).not.toHaveBeenCalled();
+
+    async function addSignal(statement: string, inspirationRows: Array<[string, number]>) {
+      const [signal] = await t.sql`INSERT INTO signals(profile_id,statement,last_evidence_at)
+        VALUES (${profileId},${statement},${at(Math.max(...inspirationRows.map(([, seconds]) => seconds))).toISOString()}) RETURNING id`;
+      for (const [inspirationText, seconds] of inspirationRows) {
+        const [source] = await t.sql`INSERT INTO inspirations(profile_id,text,created_at)
+          VALUES (${profileId},${inspirationText},${at(seconds).toISOString()}) RETURNING id`;
+        await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
+          VALUES (${profileId},${profileId},${signal.id},${source.id})`;
+      }
+      await t.sql`UPDATE signals SET status='active' WHERE id=${signal.id}`;
+      return signal.id as string;
+    }
+
+    const growth = await addSignal('Interest in predictable exits', [
+      ['Last week a known exit helped the onboarding trial.', -100],
+      ['We added an obvious exit in the save flow.', mode === 'late_old_date' ? -1 : 5],
+      [mode === 'duplicate' ? 'WE added an obvious exit in the save flow!' : 'On the next trial I restored the Back control.', 10],
+    ]);
+    const incidental = await addSignal('Interest in shorthand', [
+      ['I once tried a shorter title in a prototype.', -100],
+      ['The copy editor used a short heading in the sandbox.', -60],
+      ['I noticed a much newer label in the save flow.', 20],
+    ]);
+    if (mode === 'disputed') {
+      expect(await createFeedbackForProfile(t.db as never, {
+        profileId, targetType: 'signal', targetId: growth, value: 'not_true',
+      })).not.toBeNull();
+    }
+    synthesize.mockClear();
+    const result = await refresh('manual', at(60));
+    expect((synthesize.mock.calls[0]![0].signals).slice(0, 2).map(row => row.id)).toEqual(
+      mode === 'independent' ? [growth, incidental] : [incidental, growth],
+    );
+    expect(result.reason).toBe('no_change');
+    expect(synthesize).toHaveBeenCalledTimes(1);
+    expect(reviewed).not.toHaveBeenCalled();
+    expect(await stored()).toEqual([{ body: fresh }]);
+    const [pinned] = await t.sql`SELECT pinned_at FROM top_of_mind_entries
+      WHERE top_of_mind_id=${result.topOfMindId}`;
+    expect(new Date(pinned!.pinned_at).toISOString()).toBe(at(1).toISOString());
+  },
+);
 
 it('publishes a reviewed meaningful change even when synthesis incorrectly says noChange', async () => {
   await refresh();

@@ -636,8 +636,13 @@ Up to `TOP_OF_MIND_SIGNAL_LIMIT` (12) go to synthesis. Up to
 An emerging focus needs `TOP_OF_MIND_EMERGING_MIN_EVIDENCE` (2) independent
 current units on an established profile. Ranked active patterns fill the
 remaining slots. These are selection allowances, not signal promotion or
-Principle thresholds; a single incidental save cannot displace the board.
-The automatic 24-hour shift floor is unchanged.
+Principle thresholds. One qualifying signal can lead when at least two
+distinct current captures linked to it arrived since the previous nonempty
+machine reading. Resaved material and disputed patterns earn no preference.
+No-change records and human edits leave this evidence cutoff in place.
+The cutoff uses capture timestamps, so a late commit with an older capture
+timestamp can miss the preference. The automatic 24-hour shift floor is
+unchanged.
 
 **Cold start.** Below a floor of `TOP_OF_MIND_MIN_SIGNALS` (3) active
 signals, selection borrows the strongest emerging ones — active first, only
@@ -1273,8 +1278,12 @@ multiple statements from one originating event do not establish independent
 choices. Distillation distinguishes those cases before semantic grounding.
 
 Before matching/publication, structurally eligible generated candidates receive
-one semantic grounding batch against only their cited statements. Its limits
-are three candidates, 48 statements, 18,000 characters and 512 output tokens.
+one semantic grounding batch against their cited statements and up to 12 original
+excerpts from current owned citations. The shortlist starts with the earliest and
+latest direct citations of each cited signal. It can surface a contrary choice
+already present in that evidence. A repeated excerpt or a reflection on the
+same capture supplies no additional choice. The existing limits are three
+candidates, 48 statements, 18,000 characters and 512 output tokens.
 Any malformed or unoffered citation rejects its whole candidate; removing a
 bad reference does not validate the instruction originally proposed with it.
 Every candidate must receive exactly one boolean verdict; a missing, duplicated,
