@@ -1,5 +1,5 @@
 /** Only freshly inserted human profiles. Existing login/recovery winners never
- * enter this helper. Direct SQL and absent-control readers remain native001. */
+ * enter this helper. Without a control row, semantic access stays unavailable. */
 import {sql} from 'drizzle-orm';
 import type {PostgresJsDatabase} from 'drizzle-orm/postgres-js';
 import {profiles} from '../db/index.js';

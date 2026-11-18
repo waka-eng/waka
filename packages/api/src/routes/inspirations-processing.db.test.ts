@@ -10,7 +10,7 @@ import { enqueueDeriveSignals, enqueueTopOfMindRefresh } from '../lib/queue.js';
 import * as queue from '../lib/queue.js';
 import type { AuthEnv } from '../lib/middleware.js';
 import {EMBEDDING_2_SPACE} from '../lib/embedding-2-space.js';
-import {PROVISIONAL_EMBEDDING_2_POLICY} from '../lib/embedding-policy.js';
+import {EMBEDDING_2_CANDIDATE_POLICY} from '../lib/embedding-policy.js';
 
 const state = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('../lib/db.js', () => ({ getDb: () => state.db }));
@@ -53,7 +53,7 @@ describe('source processing status and recovery', () => {
     }finally{wake.mockRestore();}
   });
   it('bounds the unresolved-status lookup by the leading account identity in its actual index plan', async () => {
-    const f=await fixture();await t.sql`INSERT INTO profile_embedding_indexes(profile_id,active_space,active_epoch,active_threshold_policy) VALUES(${f.profileId},${EMBEDDING_2_SPACE.id},1,${PROVISIONAL_EMBEDDING_2_POLICY}) ON CONFLICT(profile_id) DO UPDATE SET active_space=excluded.active_space,active_epoch=1,active_threshold_policy=excluded.active_threshold_policy`;
+    const f=await fixture();await t.sql`INSERT INTO profile_embedding_indexes(profile_id,active_space,active_epoch,active_threshold_policy) VALUES(${f.profileId},${EMBEDDING_2_SPACE.id},1,${EMBEDDING_2_CANDIDATE_POLICY}) ON CONFLICT(profile_id) DO UPDATE SET active_space=excluded.active_space,active_epoch=1,active_threshold_policy=excluded.active_threshold_policy`;
     const debug=t.sql.options.debug;let observed:{text:string;params:unknown[]}|undefined;
     t.sql.options.debug=(_id,text,params)=>{if(text.includes('embedding_index_attempts')&&!observed)observed={text,params:[...params]};};
     try {expect((await f.app.request(f.url)).status).toBe(200);} finally {t.sql.options.debug=debug;}

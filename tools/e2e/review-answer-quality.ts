@@ -9,8 +9,8 @@ import type {ReviewAnswerDerivationInput,ReviewAnswerDerivationResult} from '../
 
 assert.ok(process.argv.includes('--live'),'Pass --live for at most ten paid requests.');
 const configured=parse(await readFile('.env.local'));
-for(const key of ['OPENROUTER_API_KEY','GEMINI_API_KEY'])if(!process.env[key]&&configured[key])process.env[key]=configured[key];
-assert.ok(process.env.OPENROUTER_API_KEY||process.env.GEMINI_API_KEY,'A model key is required');
+for(const key of ['OPENROUTER_API_KEY'])if(!process.env[key]&&configured[key])process.env[key]=configured[key];
+assert.ok(process.env.OPENROUTER_API_KEY,'A model key is required');
 delete process.env.DB_CONNECTION_URL;
 const {getDefaultModelProvider}=await import('../../packages/api/src/lib/model-provider.js');
 const {buildReviewAnswerDerivationRequest}=await import('../../packages/api/src/queue/gemini.js');
@@ -20,7 +20,7 @@ let calls=0,costUsd=0;
 const requests:unknown[]=[],results:unknown[]=[],failures:string[]=[];
 globalThis.fetch=async(input,init)=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
-  assert.ok(['https://openrouter.ai','https://generativelanguage.googleapis.com'].includes(url.origin));
+  assert.equal(url.origin,'https://openrouter.ai');
   assert.ok(calls<maxCalls&&costUsd<maxCostUsd,'Evaluation call/cost limit reached');calls++;
   const began=performance.now(),response=await network(input,init);
   const body=await response.clone().json() as {model?:string;modelVersion?:string;usage?:{cost?:number};

@@ -37,26 +37,15 @@ export function embeddingPolicyMatchesSql(policy:EmbeddingIndexPolicy){
 export function embeddingPolicyIdentity(policy:EmbeddingIndexPolicy){return[policy.profileId,policy.activeSpace,policy.activeEpoch.toString(),policy.activeThresholdPolicy].join(':');}
 /** Legacy epoch0 context/provider bytes remain unchanged. Build state is not an input. */
 export function embeddingPolicyContextIdentity(policies:EmbeddingIndexPolicy[]){return policies.every(p=>p.activeSpace==='gemini-embedding-001'&&p.activeEpoch===0n&&p.activeThresholdPolicy===NATIVE_EMBEDDING_POLICY)?undefined:policies.map(embeddingPolicyIdentity).sort();}
-export function assertKnownEmbeddingPolicy(policy:EmbeddingIndexPolicy){
- if(policy.activeSpace==='gemini-embedding-001'&&policy.activeThresholdPolicy===NATIVE_EMBEDDING_POLICY)return;
- if(policy.activeSpace===EMBEDDING_2_SPACE.id&&[PROVISIONAL_EMBEDDING_2_POLICY,EMBEDDING_2_CANDIDATE_POLICY].includes(policy.activeThresholdPolicy))return;
- throw Error('Embedding policy is unavailable');
+/** Only the compiled reviewed model2 policy authorizes semantic work or C1. */
+export function embeddingPolicyValidated(space:string,policy:string){
+ return space===EMBEDDING_2_SPACE.id&&policy===EMBEDDING_2_CANDIDATE_POLICY;
 }
-/** Only the compiled reviewed identity authorizes C1; no caller checker. */
-export function embeddingPolicyValidated(space:string,policy:string){return space==='gemini-embedding-001'&&policy===NATIVE_EMBEDDING_POLICY||space===EMBEDDING_2_SPACE.id&&policy===EMBEDDING_2_CANDIDATE_POLICY;}
-/** Captured policy, not model name, selects the numeric task rule. Native null
- * preserves the caller's exact historical constants/rank. Provisional remains
- * readable for historical fixtures but never authorizes cutover. */
 export function embeddingCandidateRules(policy:EmbeddingIndexPolicy|undefined){
- if(!policy)return null;
- assertKnownEmbeddingPolicy(policy);
- if(policy.activeSpace==='gemini-embedding-001')return null;
- if(policy.activeThresholdPolicy===EMBEDDING_2_CANDIDATE_POLICY)return EMBEDDING_2_CANDIDATE_RULES;
- return {...EMBEDDING_2_CANDIDATE_RULES,
-  chat:{...EMBEDDING_2_CANDIDATE_RULES.chat,minimum:.80,uncorroborated:.85,relativeFloor:.90,relativeGap:.02},
-  recall:{...EMBEDDING_2_CANDIDATE_RULES.recall,minimum:.80},related:{...EMBEDDING_2_CANDIDATE_RULES.related,minimum:.80},gardener:{...EMBEDDING_2_CANDIDATE_RULES.gardener,minimum:.80}};
+ return policy&&embeddingPolicyValidated(policy.activeSpace,policy.activeThresholdPolicy)
+  ?EMBEDDING_2_CANDIDATE_RULES:null;
 }
 export function embeddingRetrievalMinimum(policy:EmbeddingIndexPolicy|undefined,task:'chat'|'recall'|'related'|'gardener',legacy:number){return embeddingCandidateRules(policy)?.[task].minimum??legacy;}
 export function embeddingNeedsMeaningReview(model:string){return model===EMBEDDING_2_SPACE.id;}
 /** Single PK InitPlan for a reader whose owner is already authorized. */
-export function activeEmbeddingSpaceSql(profileId:string){return sql<string>`coalesce((SELECT active_space FROM profile_embedding_indexes WHERE profile_id=${profileId}::uuid),'gemini-embedding-001')`;}
+export function activeEmbeddingSpaceSql(profileId:string){return sql<string|null>`(SELECT active_space FROM profile_embedding_indexes WHERE profile_id=${profileId}::uuid AND active_space=${EMBEDDING_2_SPACE.id} AND active_threshold_policy=${EMBEDDING_2_CANDIDATE_POLICY})`;}

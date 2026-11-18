@@ -8,7 +8,7 @@ const policy:EmbeddingIndexPolicy={profileId:'10000000-0000-4000-8000-0000000000
 it('requires exact space and compiled identity; provisional/arbitrary accepted strings cannot activate',()=>{
  expect(embeddingPolicyValidated(policy.activeSpace,policy.activeThresholdPolicy)).toBe(true);
  for(const s of ['embedding2.unvalidated','embedding2.semantic-review-only.provisional.v1','accepted','EMBEDDING2.DEV-CANDIDATES.V1'])expect(embeddingPolicyValidated(policy.activeSpace,s)).toBe(false);
- expect(()=>embeddingCandidateRules({...policy,activeThresholdPolicy:'accepted'})).toThrow('unavailable');
+ expect(embeddingCandidateRules({...policy,activeThresholdPolicy:'accepted'})).toBeNull();
  expect(embeddingCandidateRules(nativeEmbeddingPolicy(policy.profileId))).toBeNull();
  expect(Object.isFrozen(EMBEDDING_2_CANDIDATE_RULES.chat)).toBe(true);
 });

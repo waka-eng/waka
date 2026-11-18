@@ -1,3 +1,4 @@
+import {enableFixtureEmbedding2,deferFixtureIndexJobs,seedFixtureSignalVector} from '../../test/helpers/embedding2.js';
 import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 /** Real save/read/recovery routes and queue processing in disposable Postgres.
  * Only authentication, model responses and embeddings are injected. This is
@@ -7,7 +8,7 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import type { AuthEnv } from '../lib/middleware.js';
-import { GeminiEmbeddingHttpClient } from '../lib/inspiration-embeddings.js';
+import {OpenRouterEmbedding2Candidate} from '../lib/openrouter-media.js';
 import type { InspirationProcessingStatus } from '../lib/inspiration-processing-status.js';
 import { setDefaultModelProviderForTests, type ModelProvider, type SignalCandidateExtractionInput,
   type SignalSupportAssessmentInput, type TopOfMindSynthesisInput } from '../lib/model-provider.js';
@@ -41,7 +42,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   vi.restoreAllMocks(); extract.mockReset(); assess.mockReset(); synthesize.mockReset();
   await t.truncateAll();
-  vi.spyOn(GeminiEmbeddingHttpClient.prototype, 'embed').mockResolvedValue([1, ...new Array<number>(767).fill(0)]);
+  vi.spyOn(OpenRouterEmbedding2Candidate.prototype, 'embed').mockResolvedValue([1, ...new Array<number>(767).fill(0)]);
   extract.mockImplementation(async (input: SignalCandidateExtractionInput) => ({
     statements: input.reflections.some((answer) => answer.answer === answers[1]!.answer)
       ? [{ statement, quote: answers[1]!.answer }] : [],
@@ -56,7 +57,7 @@ beforeEach(async () => {
   synthesize.mockImplementation(async (input: TopOfMindSynthesisInput) => ({
     entries: [{ type: 'hypothesis', body: wording, citedSignalIds: input.signals.map((signal) => signal.id) }],
   }));
-  setDefaultModelProviderForTests({ extractSignalCandidates: extract, assessSignalSupport: assess,
+  setDefaultModelProviderForTests({ extractSignalCandidates: extract, assessSignalSupport: assess,judgeSignalMatch:async()=>({relation:"independent"}),
     reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: synthesize } as unknown as ModelProvider);
 });
 afterAll(async () => {
@@ -68,6 +69,7 @@ afterAll(async () => {
 async function actor() {
   const [account] = await t.sql`INSERT INTO accounts(email) VALUES (${`journey-${++sequence}@example.test`}) RETURNING id`;
   const [profile] = await t.sql`INSERT INTO profiles(account_id, type, name) VALUES (${account.id}, 'human', 'Owner') RETURNING id`;
+  await enableFixtureEmbedding2(t,profile.id as string);
   const profileId = profile.id as string;
   const authMiddleware: MiddlewareHandler<AuthEnv> = async (c, next) => {
     c.set('session', { sessionId: randomUUID(), account: { id: account.id as string, email: 'journey@example.test' },
@@ -121,6 +123,7 @@ async function saveThreeAnswers() {
     VALUES (${f.profileId}, 'Pausing before a difficult decision made the options clearer.') RETURNING id`;
   const [signal] = await t.sql`INSERT INTO signals(profile_id,statement)
     VALUES (${f.profileId}, 'A pause can clarify difficult decisions') RETURNING id`;
+  await seedFixtureSignalVector(t,f.profileId,signal.id as string,'A pause can clarify difficult decisions');
   await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
     VALUES (${f.profileId},${f.profileId},${signal.id},${other.id})`;
   return { ...f, path, source, saved, keys, status };
@@ -171,6 +174,7 @@ describe('personal learning journey', () => {
       extract.mockRejectedValueOnce(new Error('Synthetic provider failure'));
       // Exhaust one attempt to exercise the real explicit recovery endpoint.
       await t.sql`UPDATE background_jobs SET max_attempts = 1 WHERE type = 'derive_signals'`;
+      await deferFixtureIndexJobs(t);
       const failed = await drainBackgroundJobs({ limit: 1, now: new Date(Date.now() + 1000) });
       expect(failed.failed).toBe(1);
       expect(await f.status()).toMatchObject({ phase: 'failed', canRetry: true, result: null });
@@ -233,7 +237,7 @@ describe('personal learning journey', () => {
     const addedAnswer = 'A short sketch helps me plan.';
     const addedStatement = 'Sketching helps me plan';
     extract.mockResolvedValue({ statements: [{ statement: addedStatement, quote: addedAnswer }] , category: null });
-    vi.mocked(GeminiEmbeddingHttpClient.prototype.embed).mockImplementation(async (text) =>
+    vi.mocked(OpenRouterEmbedding2Candidate.prototype.embed).mockImplementation(async (text) =>
       [text === addedStatement ? 0 : 1, text === addedStatement ? 1 : 0, ...new Array<number>(766).fill(0)]);
     const saved = await f.post(`${f.path}/reflections`, { question: 'Anything else?', answer: addedAnswer });
     expect(saved.status).toBe(201);

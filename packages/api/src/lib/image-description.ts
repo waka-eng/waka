@@ -13,19 +13,13 @@
  */
 
 import { z } from 'zod';
-import { callOpenRouter, getOpenRouterApiKey, OpenRouterHttpError } from './openrouter-http.js';
+import { callOpenRouter, getOpenRouterApiKey, OpenRouterHttpError, GOOGLE_AI_STUDIO_ROUTING } from './openrouter-http.js';
 import {ModelConfigurationError,configuredGenerationProvider} from './model-routing.js';
 import {openAiRequest,callOpenAi,OpenAiHttpError} from './openai-http.js';
-import {
-  buildGeminiJsonHeaders,
-  buildGeminiModelEndpoint,
-  fetchModelWithTimeout,
-  formatSafeGeminiError,
-  safeGeminiErrorDetails,
-} from "./gemini-http.js";
+import {heifInferenceJpeg,HeifImageError} from './heif-image.js';
 
 export const IMAGE_DESCRIPTION_MODEL = "deepseek/deepseek-v4.1-flash-1017";
-const GEMINI_IMAGE_DESCRIPTION_MODEL = "gemini-3.1-flash-lite";
+const GEMINI_IMAGE_DESCRIPTION_MODEL = "google/gemini-3.1-flash-lite";
 
 /** Bounded like every other enrichment text: enough to read, not to bloat. */
 export const MAX_IMAGE_DESCRIPTION_CHARS = 2000;
@@ -194,19 +188,13 @@ function base64FromBytes(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-interface GeminiGenerateResponse {
-  candidates?: Array<{
-    content?: { parts?: Array<{ text?: string }> };
-    finishReason?: string;
-  }>;
-}
-
 const descriptionSchema = z.object({ description: z.string().trim().min(1) });
 
-async function describeWithDeepSeek(input: { bytes: Uint8Array; contentType: string; apiKey: string; fetchFn?: typeof fetch }): Promise<string> {
+async function describeWithOpenRouter(input: { bytes: Uint8Array; contentType: string; apiKey: string; fetchFn?: typeof fetch }, heif:boolean): Promise<string> {
   let payload: unknown;
   try {
-    payload = await callOpenRouter({ model: IMAGE_DESCRIPTION_MODEL,
+    payload = await callOpenRouter({ model: heif?GEMINI_IMAGE_DESCRIPTION_MODEL:IMAGE_DESCRIPTION_MODEL,
+      ...(heif?{provider:GOOGLE_AI_STUDIO_ROUTING}:{}),
       messages: [{ role: 'system', content: `${DESCRIPTION_PROMPT}\nReturn only JSON with a description string.` },
         { role: 'user', content: [{ type: 'text', text: 'Describe the attached image.' },
           { type: 'image_url', image_url: { url: `data:${input.contentType};base64,${base64FromBytes(input.bytes)}` } }] }],
@@ -214,7 +202,7 @@ async function describeWithDeepSeek(input: { bytes: Uint8Array; contentType: str
       response_format: { type: 'json_schema', json_schema: { name: 'image_description', schema: {
         type: 'object', properties: { description: { type: 'string' } }, required: ['description'], additionalProperties: false,
       } } },
-    }, 'image description', { apiKey: input.apiKey, fetchFn: input.fetchFn });
+    }, 'image description', { apiKey: input.apiKey, fetchFn: input.fetchFn, requireStop:heif });
   } catch (error) {
     const status = error instanceof OpenRouterHttpError ? error.status : undefined;
     throw new ImageDescriptionError(status ? `Image description failed (HTTP ${status})` : 'Image description transport failed',
@@ -233,8 +221,6 @@ async function describeWithDeepSeek(input: { bytes: Uint8Array; contentType: str
 export async function describeImage(input: {
   bytes: Uint8Array;
   contentType: string;
-  /** Gemini fallback credential; never sent to OpenRouter. */
-  apiKey?: string;
   openRouterApiKey?: string;
   openAiApiKey?:string;
   /** Injectable so the request shape can be asserted without a network. */
@@ -272,71 +258,15 @@ export async function describeImage(input: {
       throw new ImageDescriptionError('Direct image description failed',{transient:!(error instanceof ModelConfigurationError)&&(status===undefined||isRetryableStatus(status))});
     }
   }
-  // GIF retains its existing OR path (animated GIF is not promised by the
-  // native image contract). HEIC/HEIF retains the current direct Google route.
-  const openRouterApiKey = input.openRouterApiKey ?? getOpenRouterApiKey();
-  // OpenRouter only accepts PNG/JPEG/WebP/GIF. Keep iPhone HEIC/HEIF
-  // enrichment working on the existing Gemini path; do not send unsupported bytes.
-  if (openRouterApiKey && contentType !== 'image/heic' && contentType !== 'image/heif') {
-    return describeWithDeepSeek({ ...input, contentType, apiKey: openRouterApiKey });
+  const apiKey = input.openRouterApiKey ?? getOpenRouterApiKey();
+  if (!apiKey) throw new ImageDescriptionError('OPENROUTER_API_KEY is required for image description', {transient:false});
+  const heif=contentType==='image/heic'||contentType==='image/heif';
+  let bytes=input.bytes;
+  if(heif){
+    try {bytes=await heifInferenceJpeg(bytes,MAX_IMAGE_BYTES);}
+    catch(error){
+      throw new ImageDescriptionError('HEIF inference image conversion failed', {transient:error instanceof HeifImageError&&error.transient});
+    }
   }
-  const apiKey = input.apiKey ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new ImageDescriptionError('GEMINI_API_KEY is not set for image fallback', { transient: false });
-
-  const response = await fetchModelWithTimeout(
-    input.fetchFn ?? fetch,
-    buildGeminiModelEndpoint(GEMINI_IMAGE_DESCRIPTION_MODEL, "generateContent"),
-    {
-      method: "POST",
-      headers: buildGeminiJsonHeaders(apiKey),
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: DESCRIPTION_PROMPT },
-              {
-                inline_data: {
-                  mime_type: input.contentType.split(";")[0]!.trim().toLowerCase(),
-                  data: base64FromBytes(input.bytes),
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          // Transcription is a reading task, not a creative one.
-          temperature: 0,
-          maxOutputTokens: 800,
-        },
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    const details = await safeGeminiErrorDetails(response);
-    // 402, 408, 429 and 5xx are worth another attempt; a 400 means this
-    // image and this request will never be accepted.
-    const transient = isRetryableStatus(response.status);
-    throw new ImageDescriptionError(
-      formatSafeGeminiError("Image description failed", details),
-      { transient },
-    );
-  }
-
-  const body = (await response.json()) as GeminiGenerateResponse;
-  const text = (body.candidates?.[0]?.content?.parts ?? [])
-    .map((part) => part.text ?? "")
-    .join("")
-    .trim();
-
-  if (!text) {
-    // A safety block or an empty candidate: the model looked and declined.
-    // Nothing about retrying changes what it saw.
-    throw new ImageDescriptionError("model returned no description", {
-      transient: false,
-    });
-  }
-
-  return text.slice(0, MAX_IMAGE_DESCRIPTION_CHARS);
+  return describeWithOpenRouter({...input,apiKey,bytes,contentType:heif?'image/jpeg':contentType},heif);
 }

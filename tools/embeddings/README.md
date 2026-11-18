@@ -1,6 +1,6 @@
 # Embedding2 migration operators (prepared, not enabled)
 
-Native `gemini-embedding-001` remains active. This change prepares a distinct
+Historical `gemini-embedding-001` remains a before-state identity. These operators prepare a distinct
 OpenRouter Embedding2 space, source-current readers, versioned work and recovery.
 It does not activate a profile, change a key, relabel old vectors or authorize
 provider calls, a data migration or production publication.

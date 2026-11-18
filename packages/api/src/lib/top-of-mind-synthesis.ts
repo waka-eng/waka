@@ -39,7 +39,6 @@ import { assertSignalSupportSettled, loadSignalStatementRevisions } from './sign
 import { BackgroundJobHeldError } from './background-job-hold.js';
 
 import {
-  signalEmbeddings,
   profiles,
   signals,
   topOfMindEntries,
@@ -54,9 +53,7 @@ import {
   reflections,
   attachments,
 } from "../db/index.js";
-import { cosineSimilarity } from "../scoring/vector.js";
 import {embeddingCandidateRules,type EmbeddingIndexPolicy} from "./embedding-policy.js";
-import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash} from './embedding-provider.js';
 import { getDb } from "./db.js";
 import { computeSignalConfidence, selectIndependentEvidence, type ConfidenceEvidence } from "./signal-lifecycle.js";
 import {loadSignalEvidence} from './review-evidence.js';
@@ -110,7 +107,6 @@ export const SELECTION_DISPUTED_MULTIPLIER = 0.4;
  * Deliberately conservative: genuinely different signals about one theme
  * (0.5–0.7 apart) are untouched until the funnel earns a lower bar.
  */
-export const SELECTION_DIVERSITY_MAX_COSINE = 0.8;
 
 /** Evidence count at which the support term saturates. */
 export const SELECTION_EVIDENCE_SATURATION = 6;
@@ -506,34 +502,15 @@ async function selectSignals(
     };
   };
 
-  /* the board's twelve slots are worth one bounded read of the candidate
-     vectors — jsonb rows, cosine in process, no model anywhere */
-  const embeddingSpace=readableEmbeddingSpace(embeddingPolicy);
-  const embeddingRows = await db
-    .select({ signalId: signalEmbeddings.signalId, inputHash: signalEmbeddings.inputHash, embedding: signalEmbeddings.embedding,dimensions:signalEmbeddings.dimensions })
-    .from(signalEmbeddings)
-    .where(
-      and(eq(signalEmbeddings.profileId, profileId), eq(signalEmbeddings.model, embeddingSpace.model),eq(signalEmbeddings.dimensions,embeddingSpace.dimensions), inArray(
-        signalEmbeddings.signalId,
-        scored.map((s) => s.id),
-      )),
-    );
-  const embeddingById = new Map<string, number[]>();
-  const currentHash = new Map(scored.map(row=>[row.id,embeddingInputHash(embeddingSpace,row.statement)]));
-  for (const row of embeddingRows) {
-    if (row.inputHash===currentHash.get(row.signalId)&&embeddingInSpace(row.embedding,row.dimensions,embeddingSpace)&&!embeddingById.has(row.signalId)) embeddingById.set(row.signalId, row.embedding);
-  }
-
-  // Model2 smoke scores cannot establish redundancy. Preserve all ranked
-  // claims within existing selection caps; publication still requires review.
-  const diverse = embeddingCandidateRules(embeddingPolicy)?.reading.cosinePruning===false?scored:diversifyRanked(scored, embeddingById, SELECTION_DIVERSITY_MAX_COSINE);
-  const recentFocus = diverse.filter(row=>row.lastEvidenceAt !== null &&
+  // No supported embedding policy uses cosine pruning for this surface.
+  // Publication still requires the existing synthesis review.
+  const recentFocus = scored.filter(row=>row.lastEvidenceAt !== null &&
     row.lastEvidenceAt.getTime()>=now.getTime()-TOP_OF_MIND_FOCUS_DAYS*MS_PER_DAY &&
     (row.status==='active'||row.evidenceCount>=TOP_OF_MIND_EMERGING_MIN_EVIDENCE))
     .sort((a,b)=>(b.lastEvidenceAt?.getTime()??0)-(a.lastEvidenceAt?.getTime()??0)||b.score-a.score||a.id.localeCompare(b.id));
   const chosen = chooseSelection(
-    diverse.filter((s) => s.status === "active"),
-    diverse.filter((s) => s.status === "emerging"),
+    scored.filter((s) => s.status === "active"),
+    scored.filter((s) => s.status === "emerging"),
     recentFocus.slice(0,embeddingCandidateRules(embeddingPolicy)?.reading.maxFocus??TOP_OF_MIND_FOCUS_LIMIT),
     embeddingPolicy,
   );
@@ -607,43 +584,6 @@ export function keepContestedTogether<T extends { id: string }>(
     }
   }
   return finalList;
-}
-
-/**
- * Greedy diversity over a ranked list: walk strongest-first, hold back any
- * candidate whose current embedding sits at or above `maxCosine` to one
- * already accepted. Empty slots stay empty rather than repeating a theme.
- * A signal without an embedding (dropped on edit) is not suppressed.
- * Deterministic by construction: same rows, same order, every run.
- */
-export function diversifyRanked<T extends { id: string }>(
-  ranked: T[],
-  embeddingById: Map<string, number[]>,
-  maxCosine: number,
-): T[] {
-  const accepted: T[] = [];
-  const acceptedVectors: number[][] = [];
-  for (const candidate of ranked) {
-    const vector = embeddingById.get(candidate.id) ?? null;
-    let nearAccepted = false;
-    if (vector !== null) {
-      for (const held of acceptedVectors) {
-        /* cosineSimilarity answers null for degenerate vectors — mismatched
-           dimensions, a zero norm — and null is "not near", never a skip */
-        const similarity = cosineSimilarity(vector, held);
-        if (similarity !== null && similarity >= maxCosine) {
-          nearAccepted = true;
-          break;
-        }
-      }
-    }
-    if (nearAccepted) {
-      continue;
-    }
-    accepted.push(candidate);
-    if (vector !== null) acceptedVectors.push(vector);
-  }
-  return accepted;
 }
 
 /**

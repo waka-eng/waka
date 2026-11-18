@@ -38,7 +38,7 @@ import {
 import { cosineSimilarity } from "../scoring/vector.js";
 import {embeddingNeedsMeaningReview,embeddingCandidateRules,type EmbeddingIndexPolicy} from './embedding-policy.js';
 import {EmbeddingIndexError} from './embedding-index-coordination.js';
-import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash,type EmbeddingSpace} from './embedding-provider.js';
+import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash,embeddingSpaceForClient,type EmbeddingSpace} from './embedding-provider.js';
 import { getDb } from "./db.js";
 import type { normalizeSupportedLocale } from "./locales.js";
 import type { ModelProvider } from "./model-provider.js";
@@ -177,10 +177,9 @@ export async function applyCandidates(
   input: ApplyCandidatesInput,
 ): Promise<Pick<SignalDerivationResult, "matchedSignalIds" | "mintedSignalIds" | "promotedSignalIds">> {
   if((input.inspirationId===null)!==Boolean(input.reviewSource))throw new Error('One derivation source is required');
-  const native=readableEmbeddingSpace(input.embeddingPolicy);
-  if(embeddingNeedsMeaningReview(input.embeddingModel)&&(!input.embeddingPolicy||input.embeddingPolicy.activeSpace!==input.embeddingModel))throw new EmbeddingIndexError("identity");
-  const space={model:input.embeddingModel,dimensions:input.candidates[0]?.embedding.length??native.dimensions};
-  if((space.model===native.model&&space.dimensions!==native.dimensions)||input.candidates.some(row=>!embeddingInSpace(row.embedding,space.dimensions,space)))throw new Error('Candidate embedding space is invalid');
+  if(embeddingNeedsMeaningReview(input.embeddingModel)&&readableEmbeddingSpace(input.embeddingPolicy)?.model!==input.embeddingModel)throw new EmbeddingIndexError("identity");
+  const space=embeddingSpaceForClient({model:input.embeddingModel,dimensions:input.candidates[0]?.embedding.length});
+  if(input.candidates.some(row=>!embeddingInSpace(row.embedding,space.dimensions,space)))throw new Error('Candidate embedding space is invalid');
   const targets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
   const anchors = await loadSuppressionAnchors(tx, input.profileId, space, input.inputPolicy);
   const prior = JSON.stringify({ targets, anchors });

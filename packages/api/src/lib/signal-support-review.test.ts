@@ -23,11 +23,8 @@ afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe.each(["gemini", "openrouter"] as const)("%s support assessment transport", (road) => {
   function mockReply(payload: unknown) {
-    vi.stubEnv("GEMINI_API_KEY", "unit-test");
     vi.stubEnv("OPENROUTER_API_KEY", "unit-test");
-    const body = road === "gemini"
-      ? { candidates: [{ content: { parts: [{ text: JSON.stringify(payload) }] } }] }
-      : { choices: [{ message: { content: JSON.stringify(payload) }, finish_reason: "stop" }] };
+    const body = { choices: [{ message: { content: JSON.stringify(payload) }, finish_reason: "stop" }] };
     const fetch = vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
     vi.stubGlobal("fetch", fetch);
     return fetch;
@@ -53,7 +50,6 @@ describe.each(["gemini", "openrouter"] as const)("%s support assessment transpor
   });
 
   it("a refusal/broken envelope never returns an unsupported verdict", async () => {
-    vi.stubEnv("GEMINI_API_KEY", "unit-test");
     vi.stubEnv("OPENROUTER_API_KEY", "unit-test");
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
     await expect(provider().assessSignalSupport(input)).rejects.toThrow();

@@ -75,7 +75,7 @@ const ACKNOWLEDGED: Record<string, string> = {
 const SPENDS_THE_SHARED_KEY: Record<string, string> = {
   // Native client and the central constructors: a new route cannot evade
   // the same spend boundary by obtaining a client through the factory.
-  GeminiEmbeddingHttpClient: "src/lib/inspiration-embeddings.ts",
+  OpenRouterEmbedding2Candidate: "src/lib/openrouter-media.ts",
   createEmbeddingClient: "src/lib/embedding-provider.ts",
   configuredEmbeddingClient: "src/lib/embedding-provider.ts",
   ensureInspirationEmbedding: "src/lib/inspiration-embeddings.ts",

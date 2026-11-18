@@ -1,8 +1,10 @@
+import {enableFixtureEmbedding2,deferFixtureIndexJobs} from '../../test/helpers/embedding2.js';
+import {OpenRouterEmbedding2Candidate} from './openrouter-media.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import { reembedSignal, reembedSignalStatement } from './signal-embeddings.js';
-import { GeminiEmbeddingHttpClient, GEMINI_EMBEDDING_MODEL, hashEmbeddingInput } from './inspiration-embeddings.js';
+import { GEMINI_EMBEDDING_MODEL, hashEmbeddingInput } from './inspiration-embeddings.js';
 import { postgresBackgroundJobStore, processBackgroundJob } from './queue.js';
 import { Hono } from 'hono';
 import type {AuthEnv} from './middleware.js';
@@ -37,7 +39,7 @@ async function vector(f: Awaited<ReturnType<typeof fixture>>, statement: string,
 const stored = async (id: string) => (await t.sql`SELECT model, input_hash, embedding FROM signal_embeddings WHERE signal_id = ${id} ORDER BY model`);
 
 describe('statement embedding races', () => {
-  it.each(['success','rollback'] as const)('invalidates both native and inactive2 vectors only for the changed owned statement: %s', async mode => {
+  it.each(['success','rollback'] as const)('invalidates model2 while preserving retired native rows and unaffected statements: %s', async mode => {
     const f=await fixture(),foreign=await fixture();
     const [unchanged]=await t.sql`INSERT INTO signals(profile_id,statement) VALUES(${f.profileId},'Untouched local wording') RETURNING id`;
     const local={profileId:f.profileId,signalId:unchanged.id as string,statement:'Untouched local wording'},values=[1,...Array<number>(767).fill(0)];
@@ -55,7 +57,7 @@ describe('statement embedding races', () => {
     try{
       const res=await app.request('/api/signals/'+f.signalId,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({statement:'Changed exact human wording'})});
       expect(res.status).toBe(mode==='success'?200:500);
-      expect(await stored(f.signalId)).toEqual(mode==='success'?[]:before);
+      expect(await stored(f.signalId)).toEqual(mode==='success'?before.filter(row=>row.model===GEMINI_EMBEDDING_MODEL):before);
       expect(await stored(foreign.signalId)).toEqual(foreignBefore);expect(await stored(local.signalId)).toEqual(localBefore);
       const [words]=await t.sql`SELECT statement,locked_at FROM signals WHERE id=${f.signalId}`;
       expect(words).toEqual(mode==='success'?{statement:'Changed exact human wording',locked_at:expect.anything()}:{statement:f.statement,locked_at:null});
@@ -72,18 +74,24 @@ describe('statement embedding races', () => {
   });
 
   it.each(['success', 'failure'] as const)('a reclaimed queue worker cannot mutate the cache on provider %s', async (outcome) => {
-    const f = await fixture(); await vector(f, 'Stale cached words', [0, 1], GEMINI_EMBEDDING_MODEL);
+    const f = await fixture();
+    await enableFixtureEmbedding2(t,f.profileId);
+    await t.sql`SELECT embedding_index_request(${f.profileId},'signal',${f.signalId},'statement')`;
+    const values=[0,1,...Array<number>(766).fill(0)];
+    await vector(f,'Stale cached words',values,EMBEDDING_2_SPACE.id);
+    await deferFixtureIndexJobs(t);
     const [row] = await t.sql`INSERT INTO background_jobs(profile_id, type, payload)
       VALUES (${f.profileId}, 'reembed_signal', ${JSON.stringify({ signalId: f.signalId })}::jsonb) RETURNING id`;
     const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
     expect(job?.id).toBe(row.id);
-    vi.spyOn(GeminiEmbeddingHttpClient.prototype, 'embed').mockImplementation(async () => {
+    vi.spyOn(OpenRouterEmbedding2Candidate.prototype, 'embed').mockImplementation(async () => {
       await t.sql`UPDATE background_jobs SET locked_at = now() + interval '2 seconds', attempts = attempts + 1 WHERE id = ${row.id}`;
       if (outcome === 'failure') throw new Error('Provider unavailable');
-      return [1, 0];
+      return [1, ...Array<number>(767).fill(0)];
     });
-    await expect(processBackgroundJob(job!)).rejects.toThrow(/ownership changed/i);
-    expect(await stored(f.signalId)).toMatchObject([{ input_hash: hashEmbeddingInput('Stale cached words'), embedding: [0, 1] }]);
+    await expect(processBackgroundJob(job!)).rejects.toMatchObject({code:outcome==='success'?'commit_unconfirmed':'outcome_unknown'});
+    expect(OpenRouterEmbedding2Candidate.prototype.embed).toHaveBeenCalledOnce();
+    expect(await stored(f.signalId)).toMatchObject([{ input_hash: embeddingInputHash(EMBEDDING_2_SPACE.id,'Stale cached words'), embedding: values }]);
   });
 
   it('yields to a concurrent human edit instead of waiting back on its source lock', async () => {

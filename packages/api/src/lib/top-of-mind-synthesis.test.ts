@@ -14,8 +14,6 @@ import {
   assessShiftFloor,
   TOP_OF_MIND_MIN_SHIFT_HOURS,
   describeTimeShape,
-  diversifyRanked,
-  SELECTION_DIVERSITY_MAX_COSINE,
   assembleEntries,
   chooseSelection,
   SELECTION_DISPUTED_MULTIPLIER,
@@ -373,46 +371,6 @@ describe("describeTimeShape — a pattern's life, worded for the synthesis", () 
     expect(shape).toBe("held for over a year; last fed 4 weeks ago");
   });
 });
-
-describe("diversifyRanked — no two voices on the board saying one thing", () => {
-  /* orthogonal-ish toy vectors: A≈B (cos ~0.98), C far from both */
-  const A = [1, 0.1, 0];
-  const B = [1, 0.15, 0];
-  const C = [0, 0, 1];
-  const vectors = new Map<string, number[]>([
-    ["a", A],
-    ["b", B],
-    ["c", C],
-  ]);
-  const ranked = [{ id: "a" }, { id: "b" }, { id: "c" }];
-
-  it("holds a near-duplicate back so a distinct voice rises", () => {
-    const out = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
-    expect(out.map((s) => s.id)).toEqual(["a", "c"]);
-  });
-
-  it("keeps the board shorter instead of refilling it with echoes", () => {
-    const out = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
-    expect(out).toHaveLength(2);
-    expect(out.slice(0, 2).map((s) => s.id)).toEqual(["a", "c"]);
-  });
-
-  it("a signal without an embedding is never held back", () => {
-    const out = diversifyRanked(
-      [{ id: "a" }, { id: "ghost" }, { id: "b" }],
-      vectors,
-      SELECTION_DIVERSITY_MAX_COSINE,
-    );
-    expect(out.map((s) => s.id)).toEqual(["a", "ghost"]);
-  });
-
-  it("is deterministic over identical input", () => {
-    const once = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
-    const twice = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
-    expect(once).toEqual(twice);
-  });
-});
-
 
 describe("assessShiftFloor — the board shifts at most once a day", () => {
   const NOW = new Date("2026-08-31T12:00:00Z");
