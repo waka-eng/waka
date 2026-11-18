@@ -66,7 +66,8 @@ import {
 } from "./model-provider.js";
 import { acquireTopOfMindArtifactLock } from "./top-of-mind-family-lock.js";
 import { effectiveAttachmentText, effectiveAttachmentStatus } from './attachment-material.js';
-import { distinctReadingOrigins, readingQualityIssue, reviewReadingEntries, type TopOfMindQualityContext } from './top-of-mind-quality.js';
+import { distinctReadingOrigins, readingSourceFingerprint, readingQualityIssue, reviewReadingEntries, type TopOfMindQualityContext } from './top-of-mind-quality.js';
+import { loadOwnedReadingOriginals, READING_ORIGINAL_LIMIT } from './reading-originals.js';
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -365,10 +366,11 @@ interface SelectionOutcome {
 }
 
 async function selectSignals(
-  db: WakaDb,
+  db: WakaTx,
   profileId: string,
   now: Date,
-  embeddingPolicy?:EmbeddingIndexPolicy,
+  embeddingPolicy:EmbeddingIndexPolicy|undefined,
+  readingBoundary:Date|undefined,
 ): Promise<SelectionOutcome> {
   const rows = await db
     .select({
@@ -508,10 +510,18 @@ async function selectSignals(
     row.lastEvidenceAt.getTime()>=now.getTime()-TOP_OF_MIND_FOCUS_DAYS*MS_PER_DAY &&
     (row.status==='active'||row.evidenceCount>=TOP_OF_MIND_EMERGING_MIN_EVIDENCE))
     .sort((a,b)=>(b.lastEvidenceAt?.getTime()??0)-(a.lastEvidenceAt?.getTime()??0)||b.score-a.score||a.id.localeCompare(b.id));
+  const focusLimit=embeddingCandidateRules(embeddingPolicy)?.reading.maxFocus??TOP_OF_MIND_FOCUS_LIMIT;
+  let focus = recentFocus.slice(0, focusLimit);
+  if (readingBoundary && focus.length > 0) {
+    const candidates = recentFocus.slice(0, TOP_OF_MIND_SIGNAL_LIMIT)
+      .filter(row => latestVerdict.get(row.id) !== 'not_true' && !opposing.has(row.id));
+    const growing = await growingRecentSignal(db, profileId, candidates, evidenceBySignal, readingBoundary, now);
+    if (growing) focus = [growing, ...focus.filter(row => row.id !== growing.id)].slice(0, focusLimit);
+  }
   const chosen = chooseSelection(
     scored.filter((s) => s.status === "active"),
     scored.filter((s) => s.status === "emerging"),
-    recentFocus.slice(0,embeddingCandidateRules(embeddingPolicy)?.reading.maxFocus??TOP_OF_MIND_FOCUS_LIMIT),
+    focus,
     embeddingPolicy,
   );
 
@@ -527,10 +537,60 @@ async function selectSignals(
   return { signals: finalList.map((s) => strip(s, inList)), evidence: evidenceBySignal, provisional: chosen.provisional, contested:standingContested };
 }
 
+/** Prefer at most one growing signal within the existing focus budget.
+ * Review replies remain useful evidence in the ordinary score. Their linked
+ * origins can rule out duplicate saves but cannot make an old capture new. */
+async function growingRecentSignal<T extends { id: string }>(
+  db: WakaTx,
+  profileId: string,
+  recent: T[],
+  evidence: ReadonlyMap<string, ConfidenceEvidence[]>,
+  boundary: Date,
+  now: Date,
+): Promise<T | undefined> {
+  const candidates = [];
+  const ids = new Set<string>();
+  const isNew = (at: Date) => at > boundary && at <= now;
+  for (const signal of recent) {
+    const origins = new Set<string>();
+    const newDirect = new Set<string>();
+    for (const { lineage, createdAt } of evidence.get(signal.id) ?? []) {
+      for (const id of lineage?.originIds ?? []) origins.add(id);
+      if (origins.size > TOP_OF_MIND_SIGNAL_LIMIT) break;
+      if (lineage?.kind === 'inspiration' && isNew(createdAt)) newDirect.add(lineage.unitId);
+    }
+    if (origins.size > TOP_OF_MIND_SIGNAL_LIMIT || newDirect.size < 2
+      || new Set([...ids, ...origins]).size > READING_ORIGINAL_LIMIT) continue;
+    for (const id of origins) ids.add(id);
+    candidates.push({ signal, origins: [...origins], newDirect });
+  }
+  if (!candidates.length) return undefined;
+
+  const originals = new Map((await loadOwnedReadingOriginals(db, profileId, [...ids], true)).map(row => [row.id, row]));
+  for (const { signal, origins, newDirect } of candidates) {
+    if (origins.some(id => !originals.get(id)?.complete)) continue;
+    const seen = new Set<string>();
+    let newIndependent = 0;
+    const ordered = origins.map(id => originals.get(id)!)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+    for (const row of ordered) {
+      const exact = readingSourceFingerprint([row.text, ...row.reflections, ...row.media]);
+      if (!exact) continue;
+      // Shared capture or ready attachment text can reveal the same article
+      // even when an extra reflection changes the full fingerprint.
+      const fingerprints = [exact, ...[row.text, ...row.media].flatMap(text => readingSourceFingerprint([text]) ?? [])];
+      const repeated = fingerprints.some(value => seen.has(value));
+      for (const value of fingerprints) seen.add(value);
+      if (!repeated && newDirect.has(row.id)) newIndependent++;
+      if (newIndependent === 2) return signal;
+    }
+  }
+}
+
 /** Batch the current original material for selected and carried citations.
  * Synthesis reads signals; publication review reads bounded original excerpts.
  * Ownership predicates and the generation revision fence cover every read. */
-async function loadReadingQualityContext(db: WakaDb, profileId: string,
+async function loadReadingQualityContext(db: WakaTx, profileId: string,
   locale: TopOfMindQualityContext['locale'], selection: SelectionOutcome,
   current: LiveArtifactSnapshot | null): Promise<TopOfMindQualityContext> {
   const signalIds = new Set([...selection.signals.map(row => row.id),
@@ -1051,43 +1111,38 @@ export async function refreshTopOfMindForProfile(
   const db = deps.db ?? getDb();
   const now = deps.now ?? new Date();
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
-  const revision = await readGenerationRevision(db, { profileId: input.profileId });
-  if (!revision) return { status: "nothing_to_synthesize", topOfMindId: null, version: 0,
+  const snapshot = await db.transaction(async tx => {
+    const revision = await readGenerationRevision(tx, { profileId: input.profileId });
+    if (!revision) return null;
+    await assertSignalSupportSettled(tx, input.profileId, now);
+
+    // Cadence still uses the last recorded shift. The evidence window
+    // separately requires a nonempty machine reading.
+    if (input.reason === 'signals_changed') {
+      const [lastShift] = await tx.select({ createdAt: topOfMinds.createdAt }).from(topOfMinds)
+        .where(and(eq(topOfMinds.profileId, input.profileId), ne(topOfMinds.reason, 'no_change')))
+        .orderBy(desc(topOfMinds.createdAt)).limit(1);
+      const verdict = assessShiftFloor(lastShift?.createdAt ?? null, now);
+      if (verdict.held) throw new ShiftFloorHeldError(verdict.heldUntil);
+    }
+    const [[profile], liveBefore] = await Promise.all([
+      tx.select({ preferredLocale: profiles.preferredLocale }).from(profiles).where(eq(profiles.id, input.profileId)).limit(1),
+      loadLiveArtifact(tx, input.profileId),
+    ]);
+    const [boundary] = liveBefore ? await tx.select({ createdAt: topOfMinds.createdAt }).from(topOfMinds)
+      .where(and(eq(topOfMinds.profileId, input.profileId), inArray(topOfMinds.reason, ['initial', 'regenerated']),
+        sql`${topOfMinds.version} <= ${liveBefore.version} AND EXISTS (
+          SELECT 1 FROM ${topOfMindEntries} WHERE ${topOfMindEntries.topOfMindId} = ${topOfMinds.id}
+            AND ${topOfMindEntries.dismissedAt} IS NULL AND btrim(${topOfMindEntries.body}) <> '')`))
+      .orderBy(desc(topOfMinds.version)).limit(1) : [];
+    const preferredLocale = normalizeSupportedLocale(profile?.preferredLocale);
+    const selection = await selectSignals(tx, input.profileId, now, revision.embeddingPolicy, boundary?.createdAt);
+    const quality = await loadReadingQualityContext(tx, input.profileId, preferredLocale, selection, liveBefore);
+    return { revision, preferredLocale, selection, liveBefore, quality };
+  }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
+  if (!snapshot) return { status: 'nothing_to_synthesize', topOfMindId: null, version: 0,
     reason: null, entryCount: 0, droppedCitations: 0, lockViolations: 0 };
-  await assertSignalSupportSettled(db, input.profileId, now);
-
-  /* THE FLOOR, before any other work. Only the automatic path waits: a
-     `manual` refresh is the person (their own "Read it again", a language
-     change) and never holds. The last CONTENT shift is the newest version
-     whose reason is not the honest no_change — no_change rows record that a
-     read happened, not that the board moved, so they are invisible here. */
-  if (input.reason === "signals_changed") {
-    const [lastShift] = await db
-      .select({ createdAt: topOfMinds.createdAt })
-      .from(topOfMinds)
-      .where(
-        and(
-          eq(topOfMinds.profileId, input.profileId),
-          ne(topOfMinds.reason, "no_change"),
-        ),
-      )
-      .orderBy(desc(topOfMinds.createdAt))
-      .limit(1);
-    const verdict = assessShiftFloor(lastShift?.createdAt ?? null, now);
-    if (verdict.held) throw new ShiftFloorHeldError(verdict.heldUntil);
-  }
-
-  const [profileRows, selection, liveBefore] = await Promise.all([
-    db
-      .select({ preferredLocale: profiles.preferredLocale })
-      .from(profiles)
-      .where(eq(profiles.id, input.profileId))
-      .limit(1),
-    selectSignals(db, input.profileId, now,revision.embeddingPolicy),
-    loadLiveArtifact(db, input.profileId),
-  ]);
-  const preferredLocale = normalizeSupportedLocale(profileRows[0]?.preferredLocale);
-  const quality = await loadReadingQualityContext(db, input.profileId, preferredLocale, selection, liveBefore);
+  const { revision, preferredLocale, selection, liveBefore, quality } = snapshot;
   const lockedBefore = (liveBefore?.entries ?? []).filter(
     (entry) => (entry.lockedAt !== null || entry.pinnedAt !== null) && entry.dismissedAt === null,
   );

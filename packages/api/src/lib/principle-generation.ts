@@ -19,7 +19,7 @@
 import { and, asc, eq, getTableColumns, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 import { createHash } from "node:crypto";
-import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
+import { readGenerationRevision, assertGenerationRevision, type GenerationRevision } from "./generation-revision.js";
 import { personalEntrySupportCurrent, personalPrincipleSupportCurrent, personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
 import { citationStatementCurrent, evidenceSupportCurrent, loadSignalStatementRevisions } from './signal-support-state.js';
 import {
@@ -36,7 +36,9 @@ import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { selectIndependentEvidence } from './signal-lifecycle.js';
 import {loadSignalEvidence} from './review-evidence.js';
-import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput,renderPrincipleDistillContext} from './principle-input.js';
+import { loadOwnedReadingOriginals, READING_ORIGINAL_LIMIT } from './reading-originals.js';
+import { readingSourceFingerprint } from './top-of-mind-quality.js';
+import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput,renderPrincipleDistillContext,renderPrincipleGroundingContext} from './principle-input.js';
 import {parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
 import {principleMaterialKey} from './principle-material-key.js';
 import {principleWork} from './principle-work.js';
@@ -46,6 +48,7 @@ import {
   getDefaultModelProvider,
   type ModelProvider,
   type PrincipleCandidate,
+  type PrincipleGroundingInput,
 } from "./model-provider.js";
 
 type WakaDb = ReturnType<typeof getDb>;
@@ -104,6 +107,8 @@ export interface CitationEvidence {
   tomVersionIds: string[];
   /** Current evidence identity; dates alone cannot distinguish edited sources. */
   supportKey?: string;
+  /** Bounded direct capture IDs already authorized by current signal edges. */
+  originalIds?: string[];
 }
 
 export interface EligibilityVerdict {
@@ -204,7 +209,16 @@ async function loadCitationEvidence(
   // must widen it with its own date, not collapse it to the day of noticing.
   // (A room mind's public-member evidence branch retired with the room engine.)
   const witnesses=(await loadSignalEvidence(db,profileId,signalIds)).witnesses;
-  for(const [id,rows] of witnesses)out.get(id)!.evidenceAt=selectIndependentEvidence(rows).map(row=>row.createdAt);
+  for (const [id, rows] of witnesses) {
+    const bucket = out.get(id)!;
+    bucket.evidenceAt = selectIndependentEvidence(rows).map(row => row.createdAt);
+    // Review-only witnesses retain their normal support, but this excerpt path
+    // reads only direct citations with an owned personal material revision.
+    const direct = rows.filter(row => row.lineage?.kind === 'inspiration')
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+        || a.lineage!.unitId.localeCompare(b.lineage!.unitId));
+    bucket.originalIds = [...new Set([direct[0], direct.at(-1)].flatMap(row => row?.lineage?.unitId ?? []))];
+  }
 
   {
     // Metadata only. Personal revisions include authorized reflection/media
@@ -324,6 +338,56 @@ export async function loadPrincipleMaterial(db: WakaDb | WakaTx, profileId: stri
     eligibility: computeCitationEligibility([...evidence.values()], new Date()) };
 }
 
+/** At most one owned original-material SELECT, only for valid candidates.
+ * The fixed shortlist uses the earliest and latest direct citations per signal.
+ * Interleave them so one signal cannot fill the budget ahead of all others. */
+async function addGroundingOriginals(
+  db: WakaDb,
+  revision: GenerationRevision,
+  evidence: ReadonlyMap<string, CitationEvidence>,
+  input: PrincipleGroundingInput,
+): Promise<void> {
+  const linked = new Map<string, string[]>();
+  for (const offset of [0, 1]) {
+    for (const signal of input.signals) {
+      const id = evidence.get(signal.id)?.originalIds?.[offset];
+      if (!id || (!linked.has(id) && linked.size === READING_ORIGINAL_LIMIT)) continue;
+      linked.set(id, [...(linked.get(id) ?? []), signal.id]);
+    }
+  }
+  if (!linked.size) return;
+
+  const rows = await db.transaction(async tx => {
+    const current = await readGenerationRevision(tx, { profileId: revision.profileId });
+    if (current?.revision !== revision.revision) throw new Error('Generation inputs changed; retry current inputs');
+    return loadOwnedReadingOriginals(tx, revision.profileId, [...linked.keys()]);
+  }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
+
+  const byId = new Map(rows.map(row => [row.id, row]));
+  const seen = new Set<string>();
+  const originals: NonNullable<PrincipleGroundingInput['originals']> = [];
+  for (const [id, signalIds] of linked) {
+    const row = byId.get(id);
+    if (!row) continue;
+    const capture = row.text.trim() ? row.text.slice(0, 400) : undefined;
+    const answer = row.reflections[0];
+    const reflection = answer?.slice(0, 400);
+    // Omit repeated visible excerpts. Longer, clipped originals may differ
+    // beyond this prefix; the review never treats a prefix as a full match.
+    const fingerprint = readingSourceFingerprint([capture ?? '']) ?? readingSourceFingerprint([reflection ?? '']);
+    if (!fingerprint || seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    originals.push({ signalIds, kind: row.kind, capture, reflection,
+      partial: row.text.length > 400 || (answer?.length ?? 0) > 400 || row.reflections.length > 1 });
+    if (renderPrincipleGroundingContext({ ...input, originals }).length > PRINCIPLE_GROUNDING_LIMITS.characters) {
+      originals.pop();
+      break;
+    }
+    if (originals.length === 12) break;
+  }
+  if (originals.length) input.originals = originals;
+}
+
 export async function refreshPrinciplesForProfile(
   input: { profileId: string },
   deps: PrincipleGenerationDependencies = {},
@@ -343,12 +407,15 @@ export async function refreshPrinciplesForProfile(
       .where(and(eq(principleGenerationSteps.profileId,input.profileId),eq(principleGenerationSteps.jobId,deps.jobId),eq(principleGenerationSteps.kind,'publication'),eq(principleGenerationSteps.status,'ready'))).limit(1);
     if(done?.response)return done.response as RefreshPrinciplesResult;
   }
-  const revision = await readGenerationRevision(db, { profileId: input.profileId });
-  if (!revision) return none;
-
-  // The cheap gate: active signals with their longevity stats. Nearly every
-  // night ends here, with zero model calls.
-  const material=await loadPrincipleMaterial(db,input.profileId);
+  // The cheap gate: active signals with their longevity stats. Capture the
+  // evidence links and generation revision together before any model input.
+  const snapshot = await db.transaction(async tx => {
+    const revision = await readGenerationRevision(tx, { profileId: input.profileId });
+    if (!revision) return null;
+    return { revision, material: await loadPrincipleMaterial(tx, input.profileId) };
+  }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
+  if (!snapshot) return none;
+  const { revision, material } = snapshot;
   const { activeSignals, evidence } = material;
   if(deps.expectedMaterialKey&&deps.expectedMaterialKey!==principleMaterialKey(material))return {...none,status:'superseded'};
   if (activeSignals.length < bar("SIGNALS")) return none;
@@ -407,8 +474,9 @@ export async function refreshPrinciplesForProfile(
     currentEntries: currentEntries.map((row) => ({ body: row.body })),
   },new Set(focus.flatMap(row=>row.id?[row.id]:[])));
   const billingProfileId=deps.billingProfileId??input.profileId;
-  // Hosted non-OpenRouter work keeps its previous checkpoint identity.
-  const inputHash=createHash('sha256').update(JSON.stringify({profileId:input.profileId,policy:'principle-work-v1',
+  // The grounding contract changed. Completed job publications still short-circuit
+  // above; unfinished work must not reuse a verdict on the old input.
+  const inputHash=createHash('sha256').update(JSON.stringify({profileId:input.profileId,policy:'principle-work-v2',
     provider:provider.name??'injected',models:provider.pinnedModel?[provider.pinnedModel]:provider.name==='openrouter'
       ?[process.env.WAKA_MODEL_PRINCIPLES?.trim()||OPENROUTER_GENERATION_MODEL,process.env.WAKA_MODEL_PRINCIPLE_JUDGE?.trim()||OPENROUTER_GENERATION_MODEL]
       :['gemini-3.1-flash-lite'],limits:{input:PRINCIPLE_INPUT_LIMITS,comparison:PRINCIPLE_COMPARISON_LIMITS,grounding:PRINCIPLE_GROUNDING_LIMITS},
@@ -446,9 +514,11 @@ export async function refreshPrinciplesForProfile(
   }
   if(valid.length){
     const citedIds=new Set(valid.flatMap(row=>row.citedSignalIds));
-    const groundingInput={preferredLocale,signals:distillInput.signals.filter(row=>citedIds.has(row.id)).map(row=>({id:row.id,statement:row.statement})),
+    const groundingInput: PrincipleGroundingInput = {preferredLocale,signals:distillInput.signals.filter(row=>citedIds.has(row.id)).map(row=>({id:row.id,statement:row.statement})),
       candidates:valid.map((row,index)=>({id:`candidate-${index}`,statement:row.statement,citedSignalIds:row.citedSignalIds}))};
-    const grounding=await work.run('grounding',()=>provider.assessPrincipleGrounding(groundingInput),value=>parsePrincipleGrounding(value,groundingInput));
+    await addGroundingOriginals(db, revision, evidence, groundingInput);
+    const groundingKey = createHash('sha256').update(renderPrincipleGroundingContext(groundingInput)).digest('hex');
+    const grounding=await work.run(`grounding:${groundingKey}`,()=>provider.assessPrincipleGrounding(groundingInput),value=>parsePrincipleGrounding(value,groundingInput));
     valid=valid.filter((_,index)=>{const supported=grounding.assessments[index]!.supported;if(!supported)result.dropped++;return supported;});
   }
   if (valid.length === 0) {

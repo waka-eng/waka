@@ -355,6 +355,13 @@ export interface PrincipleGroundingInput {
   preferredLocale: SupportedLocale;
   signals: Array<{id:string;statement:string}>;
   candidates: Array<{id:string;statement:string;citedSignalIds:string[]}>;
+  originals?: Array<{
+    signalIds: string[];
+    kind: string | null;
+    capture?: string;
+    reflection?: string;
+    partial: boolean;
+  }>;
 }
 export interface PrincipleGroundingResult {
   assessments: Array<{candidateId:string;supported:boolean}>;
