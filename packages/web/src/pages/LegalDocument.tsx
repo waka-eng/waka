@@ -43,7 +43,7 @@ export default function LegalDocument({ document: kind }: { document: keyof type
       <div className="waka-legal-column">
         <a href="/" className="waka-legal-home">WAKA</a>
         <article aria-labelledby="legal-title">
-          <p className="waka-legal-status">Draft for review</p>
+          <p className="waka-legal-status">Last updated <time dateTime="2026-11-18">November 18, 2026</time></p>
           <h1 id="legal-title">{title}</h1>
           {blocks.map((block, index) => <Fragment key={index}>{renderBlock(block)}</Fragment>)}
         </article>
