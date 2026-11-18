@@ -8,6 +8,7 @@ import { attachmentObjects } from '../db/index.js';
 import { getDb } from './db.js';
 import { recordOperationalFault } from './operational-fault.js';
 import { unreferencedAttachmentKeys } from './conversation-attachments.js';
+import { purgeAttachmentVersions } from './attachment-version-purge.js';
 
 export type DeleteAttachmentObjects = (keys: string[]) => Promise<void>;
 
@@ -31,6 +32,9 @@ export async function deleteAttachmentObjectBatch(keys: string[]): Promise<strin
   const client = makeAttachmentsS3Client();
   const failed = new Set<string>();
   try {
+    if (process.env.WAKA_STAGE === 'production' && !attachmentsEndpoint()) {
+      return await purgeAttachmentVersions(client, bucket, unique);
+    }
     for (let start = 0; start < unique.length; start += 1000) {
       const result = await client.send(new DeleteObjectsCommand({ Bucket: bucket,
         Delete: { Objects: unique.slice(start, start + 1000).map((Key) => ({ Key })), Quiet: true } }),
