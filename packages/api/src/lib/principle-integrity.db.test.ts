@@ -16,19 +16,23 @@ async function fixture(){
   const [account]=await t.sql`INSERT INTO accounts(email) VALUES(${`principle-integrity-${++n}@example.test`}) RETURNING id`;
   const [profile]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${account.id},'agent','Agent') RETURNING id`;
   const ids:string[]=[];
+  const sources:string[][]=[];
   for(let i=0;i<3;i++){
+    const sourceIds: string[] = [];
     const [signal]=await t.sql`INSERT INTO signals(profile_id,statement) VALUES(${profile.id},${`Distinct choice ${i}`}) RETURNING id`;
     for(let j=0;j<3;j++){
       const [source]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${profile.id},${`Experience ${i} in context ${j}`}) RETURNING id`;
+      sourceIds.push(source.id as string);
       await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id) VALUES(${profile.id},${profile.id},${signal.id},${source.id})`;
     }
     await t.sql`UPDATE signals SET status='active' WHERE id=${signal.id}`;
     ids.push(signal.id);
+    sources.push(sourceIds);
   }
   const [reading]=await t.sql`INSERT INTO top_of_minds(profile_id) VALUES(${profile.id}) RETURNING id`;
   const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${reading.id},'pattern','A current theme') RETURNING id`;
   for(const id of ids)await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES(${entry.id},${id})`;
-  return {profileId:profile.id as string,ids};
+  return {profileId:profile.id as string,ids,sources};
 }
 async function principle(f:Awaited<ReturnType<typeof fixture>>,state:'held'|'aspirational'|'contested'='held',human=false){
   const [row]=await t.sql`INSERT INTO principles(profile_id,statement,state,origin,rank,locked_at,held_since)
@@ -54,6 +58,63 @@ it.each(['foreign','retired'] as const)('rejects a whole proposal with a %s cita
   expect(result).toMatchObject({minted:0,dropped:1});
   expect(provider.assessPrincipleGrounding).not.toHaveBeenCalled();
   expect(await loadPrincipleViews(t.db as never,f.profileId)).toEqual([]);
+});
+
+it('grounds only in current cited originals and rejects a cached verdict after an owned edit', async () => {
+  const f = await fixture(), foreign = await fixture();
+  const first = 'I chose a small trial for the first launch.';
+  const opposite = 'For the safety release, I chose a full rollout.';
+  const changed = 'After finding a defect I chose a small trial instead.';
+  const reflection = 'I could reverse the first launch without losing work.';
+  const [early, , latest] = f.sources[0]!;
+  const [duplicate] = f.sources[1]!;
+  const revalidate = () => t.sql`UPDATE signal_evidence e SET material_revision=r.personal_revision
+    FROM inspiration_revisions r WHERE r.inspiration_id=e.inspiration_id AND r.profile_id=e.owner_profile_id
+      AND e.profile_id=${f.profileId}`;
+  await t.sql`UPDATE signals SET last_evidence_at=now() WHERE id=${f.ids[0]!}`;
+  await t.sql`UPDATE inspirations SET text=${first} WHERE id=${early!}`;
+  await t.sql`UPDATE inspirations SET text=${first.toUpperCase()} WHERE id=${duplicate!}`;
+  await t.sql`UPDATE inspirations SET text=${opposite} WHERE id=${latest!}`;
+  await t.sql`UPDATE inspirations SET text='Foreign content sentinel' WHERE id=${foreign.sources[0]![0]!}`;
+  await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${f.profileId},'Uncited content sentinel')`;
+  await t.sql`INSERT INTO reflections(profile_id,inspiration_id,question,answer,skipped)
+    VALUES (${f.profileId},${early!},'Why?',${reflection},false),
+      (${f.profileId},${early!},'Another?', 'Skipped content sentinel',true)`;
+  await revalidate();
+
+  const provider = model(f.ids);
+  provider.assessPrincipleGrounding.mockImplementation(async input => ({
+    assessments: input.candidates.map(row => ({ candidateId: row.id, supported: false })),
+  }));
+  const deps = { db: t.db as never, modelProvider: provider as unknown as ModelProvider };
+  const pause = async () => { throw new Error('Hold before publication for retry'); };
+  const refresh = (beforeCommit?: typeof pause) => refreshPrinciplesForProfile({ profileId: f.profileId }, { ...deps, beforeCommit });
+  await expect(refresh(pause)).rejects.toThrow('Hold before publication');
+  const originalInput = provider.assessPrincipleGrounding.mock.calls[0]![0];
+  const offered = originalInput.originals!;
+  expect(offered).toContainEqual({ signalIds: [f.ids[0]], kind: null, inspirationText: first, reflection, partial: false });
+  expect(offered).toContainEqual({ signalIds: [f.ids[0]], kind: null, inspirationText: opposite, reflection: undefined, partial: false });
+  expect(offered.filter(row => row.inspirationText?.toLowerCase() === first.toLowerCase())).toHaveLength(1);
+  expect(JSON.stringify(offered)).not.toMatch(/sentinel|in context 1/);
+  await expect(refresh(pause)).rejects.toThrow('Hold before publication');
+  expect(provider.distillPrinciples).toHaveBeenCalledTimes(1);
+  expect(provider.assessPrincipleGrounding).toHaveBeenCalledTimes(1);
+  expect(provider.judgePrincipleRelation).not.toHaveBeenCalled();
+
+  await t.sql`UPDATE inspirations SET text=${changed} WHERE id=${latest!}`;
+  await revalidate();
+  expect(await refresh()).toMatchObject({ minted: 0, dropped: 1 });
+  expect(provider.distillPrinciples).toHaveBeenCalledTimes(2);
+  expect(provider.assessPrincipleGrounding).toHaveBeenCalledTimes(2);
+  const currentInput = provider.assessPrincipleGrounding.mock.calls[1]![0];
+  expect(currentInput.originals!.map(row => row.inspirationText)).toContain(changed);
+  expect(currentInput.originals!.map(row => row.inspirationText)).not.toContain(opposite);
+  const receipts = await t.sql`SELECT input_hash, step_key FROM principle_generation_steps
+    WHERE profile_id=${f.profileId} AND step_key LIKE 'grounding:%' AND status='ready'`;
+  expect(receipts).toHaveLength(2);
+  expect(new Set(receipts.map(row => row.input_hash)).size).toBe(2);
+  expect(new Set(receipts.map(row => row.step_key)).size).toBe(2);
+  expect(await loadPrincipleViews(t.db as never, f.profileId)).toEqual([]);
 });
 
 it('does not promote edited owner wording using citations attached to its previous wording',async()=>{
