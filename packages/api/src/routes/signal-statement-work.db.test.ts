@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import { createSignalRoutes } from './signals.js';
+import { EMBEDDING_2_SPACE } from '../lib/embedding-2-space.js';
 import type { AuthEnv } from '../lib/middleware.js';
 import { setDefaultModelProviderForTests, type ModelProvider, type SignalSupportAssessmentInput } from '../lib/model-provider.js';
 import { postgresBackgroundJobStore, processBackgroundJob } from '../lib/queue.js';
@@ -31,7 +32,8 @@ async function fixture() {
   }
   const vector = [1, ...new Array<number>(767).fill(0)];
   await t.sql`INSERT INTO signal_embeddings(profile_id, signal_id, model, dimensions, input_hash, embedding)
-    VALUES (${profile.id}, ${signal.id}, 'synthetic-test-model', 768, 'old-hash', ${JSON.stringify(vector)}::jsonb)`;
+    VALUES (${profile.id}, ${signal.id}, 'gemini-embedding-001', 768, 'historical-hash', ${JSON.stringify(vector)}::jsonb),
+      (${profile.id}, ${signal.id}, ${EMBEDDING_2_SPACE.id}, 768, 'model2-hash', ${JSON.stringify(vector)}::jsonb)`;
   const app = new Hono<AuthEnv>();
   app.onError(() => new Response(JSON.stringify({ error: 'statement write failed' }), { status: 500 }));
   app.route('/api/signals', createSignalRoutes({ getDatabase: () => t.db as never,
@@ -57,7 +59,10 @@ describe('statement edits keep their required work', () => {
       expect((await f.edit()).status).toBe(500);
       expect(await t.sql`SELECT statement, locked_at FROM signals WHERE id = ${f.signalId}`).toEqual([{ statement: 'Original statement', locked_at: null }]);
       expect(await t.sql`SELECT id FROM signal_statements`).toHaveLength(0);
-      expect(await t.sql`SELECT signal_id FROM signal_embeddings`).toHaveLength(1);
+      expect(await t.sql`SELECT model,input_hash FROM signal_embeddings WHERE signal_id=${f.signalId} ORDER BY model`).toEqual([
+        {model:'gemini-embedding-001',input_hash:'historical-hash'},
+        {model:EMBEDDING_2_SPACE.id,input_hash:'model2-hash'},
+      ]);
       expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
       expect(await t.sql`SELECT id FROM inspiration_processing`).toHaveLength(0);
     } finally {
@@ -76,7 +81,9 @@ describe('statement edits keep their required work', () => {
     expect(jobs.filter((job) => job.type === 'refresh_top_of_mind')).toHaveLength(1);
     expect(await t.sql`SELECT id FROM inspiration_processing`).toHaveLength(0);
     expect(jobs.filter((job) => job.type === 'derive_signals')).toHaveLength(0);
-    expect(await t.sql`SELECT signal_id FROM signal_embeddings`).toHaveLength(0);
+    expect(await t.sql`SELECT model,input_hash FROM signal_embeddings WHERE signal_id=${f.signalId}`).toEqual([
+      {model:'gemini-embedding-001',input_hash:'historical-hash'},
+    ]);
     expect((await t.sql`SELECT statement, locked_at FROM signals WHERE id = ${f.signalId}`)[0])
       .toMatchObject({ statement: 'My revised statement', locked_at: expect.anything() });
   });
