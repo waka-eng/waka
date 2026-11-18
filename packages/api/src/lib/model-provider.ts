@@ -358,7 +358,7 @@ export interface PrincipleGroundingInput {
   originals?: Array<{
     signalIds: string[];
     kind: string | null;
-    capture?: string;
+    inspirationText?: string;
     reflection?: string;
     partial: boolean;
   }>;

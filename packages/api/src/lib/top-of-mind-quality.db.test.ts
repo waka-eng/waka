@@ -83,12 +83,12 @@ it.each(['independent', 'duplicate', 'disputed', 'late_old_date'] as const)(
     expect(synthesize).toHaveBeenCalledTimes(1);
     expect(reviewed).not.toHaveBeenCalled();
 
-    async function addSignal(statement: string, captures: Array<[string, number]>) {
+    async function addSignal(statement: string, inspirationRows: Array<[string, number]>) {
       const [signal] = await t.sql`INSERT INTO signals(profile_id,statement,last_evidence_at)
-        VALUES (${profileId},${statement},${at(Math.max(...captures.map(([, seconds]) => seconds))).toISOString()}) RETURNING id`;
-      for (const [capture, seconds] of captures) {
+        VALUES (${profileId},${statement},${at(Math.max(...inspirationRows.map(([, seconds]) => seconds))).toISOString()}) RETURNING id`;
+      for (const [inspirationText, seconds] of inspirationRows) {
         const [source] = await t.sql`INSERT INTO inspirations(profile_id,text,created_at)
-          VALUES (${profileId},${capture},${at(seconds).toISOString()}) RETURNING id`;
+          VALUES (${profileId},${inspirationText},${at(seconds).toISOString()}) RETURNING id`;
         await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
           VALUES (${profileId},${profileId},${signal.id},${source.id})`;
       }

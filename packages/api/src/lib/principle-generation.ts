@@ -369,15 +369,15 @@ async function addGroundingOriginals(
   for (const [id, signalIds] of linked) {
     const row = byId.get(id);
     if (!row) continue;
-    const capture = row.text.trim() ? row.text.slice(0, 400) : undefined;
+    const inspirationText = row.text.trim() ? row.text.slice(0, 400) : undefined;
     const answer = row.reflections[0];
     const reflection = answer?.slice(0, 400);
     // Omit repeated visible excerpts. Longer, clipped originals may differ
     // beyond this prefix; the review never treats a prefix as a full match.
-    const fingerprint = readingSourceFingerprint([capture ?? '']) ?? readingSourceFingerprint([reflection ?? '']);
+    const fingerprint = readingSourceFingerprint([inspirationText ?? '']) ?? readingSourceFingerprint([reflection ?? '']);
     if (!fingerprint || seen.has(fingerprint)) continue;
     seen.add(fingerprint);
-    originals.push({ signalIds, kind: row.kind, capture, reflection,
+    originals.push({ signalIds, kind: row.kind, inspirationText, reflection,
       partial: row.text.length > 400 || (answer?.length ?? 0) > 400 || row.reflections.length > 1 });
     if (renderPrincipleGroundingContext({ ...input, originals }).length > PRINCIPLE_GROUNDING_LIMITS.characters) {
       originals.pop();

@@ -92,9 +92,9 @@ it('grounds only in current cited originals and rejects a cached verdict after a
   await expect(refresh(pause)).rejects.toThrow('Hold before publication');
   const originalInput = provider.assessPrincipleGrounding.mock.calls[0]![0];
   const offered = originalInput.originals!;
-  expect(offered).toContainEqual({ signalIds: [f.ids[0]], kind: null, capture: first, reflection, partial: false });
-  expect(offered).toContainEqual({ signalIds: [f.ids[0]], kind: null, capture: opposite, reflection: undefined, partial: false });
-  expect(offered.filter(row => row.capture?.toLowerCase() === first.toLowerCase())).toHaveLength(1);
+  expect(offered).toContainEqual({ signalIds: [f.ids[0]], kind: null, inspirationText: first, reflection, partial: false });
+  expect(offered).toContainEqual({ signalIds: [f.ids[0]], kind: null, inspirationText: opposite, reflection: undefined, partial: false });
+  expect(offered.filter(row => row.inspirationText?.toLowerCase() === first.toLowerCase())).toHaveLength(1);
   expect(JSON.stringify(offered)).not.toMatch(/sentinel|in context 1/);
   await expect(refresh(pause)).rejects.toThrow('Hold before publication');
   expect(provider.distillPrinciples).toHaveBeenCalledTimes(1);
@@ -107,8 +107,8 @@ it('grounds only in current cited originals and rejects a cached verdict after a
   expect(provider.distillPrinciples).toHaveBeenCalledTimes(2);
   expect(provider.assessPrincipleGrounding).toHaveBeenCalledTimes(2);
   const currentInput = provider.assessPrincipleGrounding.mock.calls[1]![0];
-  expect(currentInput.originals!.map(row => row.capture)).toContain(changed);
-  expect(currentInput.originals!.map(row => row.capture)).not.toContain(opposite);
+  expect(currentInput.originals!.map(row => row.inspirationText)).toContain(changed);
+  expect(currentInput.originals!.map(row => row.inspirationText)).not.toContain(opposite);
   const receipts = await t.sql`SELECT input_hash, step_key FROM principle_generation_steps
     WHERE profile_id=${f.profileId} AND step_key LIKE 'grounding:%' AND status='ready'`;
   expect(receipts).toHaveLength(2);
