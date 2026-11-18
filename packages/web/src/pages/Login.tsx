@@ -49,6 +49,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { SurfaceHeader } from "../components/SurfaceHeader";
+import { LegalLinks } from "../components/LegalLinks";
 
 import { Companion } from "../components/Companion";
 import {NativePasswordSignup,SignupAdmission} from "../components/SignupAdmission";
@@ -850,6 +851,7 @@ export default function LoginPage(): JSX.Element {
         <OrDivider locale={locale} />
 
         <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} needsVerification={oauthErrorCode === "signup_verification_required" || oauthErrorCode === "signup_capacity" || oauthErrorCode === "signup_admission_used" || oauthErrorCode === "signup_busy" || oauthErrorCode === "signup_closed"} />
+        <LegalLinks />
 
         {/* BACK TO WHAT THEY WERE READING — see `wayBackFrom` for why this is
             the only arrival this page can honestly offer a way out of, and

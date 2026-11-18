@@ -1,0 +1,81 @@
+@layer chrome {
+  .waka-legal-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--sp-16);
+    align-items: center;
+    font-size: var(--t-body);
+  }
+
+  .login-card .waka-legal-links {
+    justify-content: center;
+  }
+
+  .waka-legal-links a,
+  .waka-legal-home {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--sp-44);
+  }
+
+  .waka-legal-links a,
+  .waka-legal-page a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+
+  .waka-legal-links a:focus-visible,
+  .waka-legal-page a:focus-visible {
+    text-decoration-thickness: 0.14em;
+  }
+
+  .waka-legal-page {
+    min-height: 100dvh;
+    padding: var(--sp-24) var(--sp-24) var(--sp-64);
+    background: var(--w-ground);
+    color: var(--w-ink);
+    font-family: var(--waka-face);
+    font-size: var(--t-lead);
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+
+  .waka-legal-column {
+    max-width: 42rem;
+    margin: 0 auto;
+  }
+
+  .waka-legal-status {
+    margin: var(--sp-24) 0 var(--sp-8);
+    color: var(--w-muted);
+    font-size: var(--t-body);
+  }
+
+  .waka-legal-page h1,
+  .waka-legal-page h2,
+  .waka-legal-page h3 {
+    line-height: 1.2;
+  }
+
+  .waka-legal-page h1 {
+    margin: 0 0 var(--sp-24);
+    font-size: var(--t-reading);
+  }
+
+  .waka-legal-page h2,
+  .waka-legal-page h3 {
+    margin: var(--sp-32) 0 var(--sp-12);
+    font-size: var(--t-lead);
+  }
+
+  .waka-legal-page li + li {
+    margin-top: var(--sp-8);
+  }
+
+  .waka-legal-page .waka-legal-links {
+    margin-top: var(--sp-32);
+    border-top: 1px solid var(--w-edge);
+    padding-top: var(--sp-8);
+  }
+}
