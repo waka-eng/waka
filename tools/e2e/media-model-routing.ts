@@ -19,9 +19,7 @@ const output = value('--output');
 assert.ok(directory && output, '--fixtures and --output are required');
 const configured = parse(await readFile('.env.local'));
 if (!process.env.OPENROUTER_API_KEY && configured.OPENROUTER_API_KEY) process.env.OPENROUTER_API_KEY = configured.OPENROUTER_API_KEY;
-if (!process.env.GEMINI_API_KEY && configured.GEMINI_API_KEY) process.env.GEMINI_API_KEY = configured.GEMINI_API_KEY;
 assert.ok(process.env.OPENROUTER_API_KEY, 'OPENROUTER_API_KEY is required');
-assert.ok(process.env.GEMINI_API_KEY, 'GEMINI_API_KEY is required for the active transcription model');
 // Same restrictions as the app; an unavailable eligible endpoint must fail.
 for (const name of ['WAKA_OPENROUTER_DATA_COLLECTION', 'WAKA_OPENROUTER_REQUIRE_ZDR']) {
   if (process.env[name] === undefined && configured[name] !== undefined) process.env[name] = configured[name];

@@ -72,7 +72,7 @@ const SYNTHESIS_INPUT: TopOfMindSynthesisInput = {
 function geminiResponse(payload: unknown): Response {
   return new Response(
     JSON.stringify({
-      candidates: [{ content: { parts: [{ text: JSON.stringify(payload) }] } }],
+      choices: [{ finish_reason:'stop', message:{content:JSON.stringify(payload)} }],
     }),
     { status: 200, headers: { "content-type": "application/json" } },
   );
@@ -84,15 +84,15 @@ function requestBodyOf(fetchFn: ReturnType<typeof vi.fn>): any {
 }
 
 describe("model provider abstraction", () => {
-  const originalGeminiApiKey = process.env.GEMINI_API_KEY;
+  const originalOpenRouterApiKey = process.env.OPENROUTER_API_KEY;
 
   afterEach(() => {
     setDefaultModelProviderForTests(null);
     vi.unstubAllGlobals();
-    if (originalGeminiApiKey === undefined) {
-      delete process.env.GEMINI_API_KEY;
+    if (originalOpenRouterApiKey === undefined) {
+      delete process.env.OPENROUTER_API_KEY;
     } else {
-      process.env.GEMINI_API_KEY = originalGeminiApiKey;
+      process.env.OPENROUTER_API_KEY = originalOpenRouterApiKey;
     }
   });
 
@@ -106,38 +106,38 @@ describe("model provider abstraction", () => {
   it("keeps Gemini as the default implementation behind the provider interface", () => {
     const provider = createGeminiModelProvider();
 
-    expect(provider.name).toBe("gemini");
+    expect(provider.name).toBe("openrouter");
     expect(typeof provider.extractSignalCandidates).toBe("function");
     expect(typeof provider.synthesizeTopOfMind).toBe("function");
   });
 });
 
 describe("extractSignalCandidates", () => {
-  const originalGeminiApiKey = process.env.GEMINI_API_KEY;
+  const originalOpenRouterApiKey = process.env.OPENROUTER_API_KEY;
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    if (originalGeminiApiKey === undefined) {
-      delete process.env.GEMINI_API_KEY;
+    if (originalOpenRouterApiKey === undefined) {
+      delete process.env.OPENROUTER_API_KEY;
     } else {
-      process.env.GEMINI_API_KEY = originalGeminiApiKey;
+      process.env.OPENROUTER_API_KEY = originalOpenRouterApiKey;
     }
   });
 
   it('labels a saved recording as transcript material without attributing its speaker to the owner', async () => {
-    process.env.GEMINI_API_KEY = 'test-key';
+    process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchFn = vi.fn().mockResolvedValue(geminiResponse({ statements: [], category: null }));
     vi.stubGlobal('fetch', fetchFn);
     await createGeminiModelProvider().extractSignalCandidates({ ...EXTRACTION_INPUT,
       attachments: [{ kind: 'audio_transcription', label: 'Recording', text: 'Words in the recording.' }],
     });
-    const prompt: string = requestBodyOf(fetchFn).contents[0].parts[0].text;
+    const prompt: string = requestBodyOf(fetchFn).messages.find((item:{role:string})=>item.role==="user").content;
     expect(prompt).toContain('Transcript of a recording');
     expect(prompt).toContain('speaker'); expect(prompt).not.toContain('Description of an image');
   });
 
   it("returns grounded statements and drops blanks", async () => {
-    process.env.GEMINI_API_KEY = "test-key";
+    process.env.OPENROUTER_API_KEY = "test-key";
     const fetchFn = vi.fn().mockResolvedValue(
       geminiResponse({
         statements: [
@@ -166,7 +166,7 @@ describe("extractSignalCandidates", () => {
   });
 
   it("caps the model at three candidates however many it returns", async () => {
-    process.env.GEMINI_API_KEY = "test-key";
+    process.env.OPENROUTER_API_KEY = "test-key";
     const fetchFn = vi.fn().mockResolvedValue(
       geminiResponse({
         statements: Array.from({ length: 6 }, (_, index) => ({
@@ -184,18 +184,19 @@ describe("extractSignalCandidates", () => {
   });
 
   it("decodes deterministically and fences the capture so it reads as data", async () => {
-    process.env.GEMINI_API_KEY = "test-key";
+    process.env.OPENROUTER_API_KEY = "test-key";
     const fetchFn = vi.fn().mockResolvedValue(geminiResponse({ statements: [], category: null }));
     vi.stubGlobal("fetch", fetchFn);
 
     await createGeminiModelProvider().extractSignalCandidates(EXTRACTION_INPUT);
 
     const body = requestBodyOf(fetchFn);
-    expect(body.generationConfig.temperature).toBe(0);
-    expect(body.generationConfig.responseMimeType).toBe("application/json");
-    expect(body.generationConfig.responseSchema.properties.statements.type).toBe("ARRAY");
+    expect(body.temperature).toBe(0);
+    expect(body).toMatchObject({model:"google/gemini-3.1-flash-lite",provider:{only:["google-ai-studio"],allow_fallbacks:false,require_parameters:true}});
+    expect(body.response_format.type).toBe("json_schema");
+    expect(body.response_format.json_schema.schema.properties.statements.type).toBe("array");
 
-    const prompt: string = body.contents[0].parts[0].text;
+    const prompt: string = body.messages.find((item:{role:string})=>item.role==="user").content;
     expect(prompt).toContain("<<<capture>>>");
     expect(prompt).toContain("<<<end capture>>>");
     // The injection attempt travels inside the fence rather than as a sibling
@@ -208,9 +209,9 @@ describe("extractSignalCandidates", () => {
   });
 
   it("treats a safety block as an empty answer rather than a failure", async () => {
-    process.env.GEMINI_API_KEY = "test-key";
+    process.env.OPENROUTER_API_KEY = "test-key";
     const fetchFn = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ promptFeedback: { blockReason: "SAFETY" } }), {
+      new Response(JSON.stringify({ choices:[{finish_reason:"content_filter",message:{content:null}}] }), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),
@@ -226,9 +227,9 @@ describe("extractSignalCandidates", () => {
     /* the old posture returned zero statements, which marked the capture as
        derived-with-nothing FOREVER; observed live 2026-08-30 when a routed
        backend truncated JSON mid-key. A thrown attempt retries instead. */
-    process.env.GEMINI_API_KEY = "test-key";
+    process.env.OPENROUTER_API_KEY = "test-key";
     const fetchFn = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ candidates: "not-an-array" }), {
+      new Response(JSON.stringify({ choices: "not-an-array" }), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),
@@ -241,7 +242,7 @@ describe("extractSignalCandidates", () => {
   });
 
   it("throws on a provider error so the queue can back off and retry", async () => {
-    process.env.GEMINI_API_KEY = "test-key";
+    process.env.OPENROUTER_API_KEY = "test-key";
     const fetchFn = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: { status: "RESOURCE_EXHAUSTED" } }), {
         status: 429,
@@ -258,19 +259,19 @@ describe("extractSignalCandidates", () => {
 });
 
 describe("synthesizeTopOfMind", () => {
-  const originalGeminiApiKey = process.env.GEMINI_API_KEY;
+  const originalOpenRouterApiKey = process.env.OPENROUTER_API_KEY;
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    if (originalGeminiApiKey === undefined) {
-      delete process.env.GEMINI_API_KEY;
+    if (originalOpenRouterApiKey === undefined) {
+      delete process.env.OPENROUTER_API_KEY;
     } else {
-      process.env.GEMINI_API_KEY = originalGeminiApiKey;
+      process.env.OPENROUTER_API_KEY = originalOpenRouterApiKey;
     }
   });
 
   it("returns the whole artifact with its citations", async () => {
-    process.env.GEMINI_API_KEY = "test-key";
+    process.env.OPENROUTER_API_KEY = "test-key";
     const fetchFn = vi.fn().mockResolvedValue(
       geminiResponse({
         entries: [
@@ -299,7 +300,7 @@ describe("synthesizeTopOfMind", () => {
   });
 
   it("carries the model's no-change verdict back to the caller", async () => {
-    process.env.GEMINI_API_KEY = "test-key";
+    process.env.OPENROUTER_API_KEY = "test-key";
     const fetchFn = vi
       .fn()
       .mockResolvedValue(geminiResponse({ noChange: true, entries: [] }));
@@ -312,37 +313,38 @@ describe("synthesizeTopOfMind", () => {
   });
 
   it("asks for the artifact deterministically and constrains the entry type", async () => {
-    process.env.GEMINI_API_KEY = "test-key";
+    process.env.OPENROUTER_API_KEY = "test-key";
     const fetchFn = vi.fn().mockResolvedValue(geminiResponse({ entries: [] }));
     vi.stubGlobal("fetch", fetchFn);
 
     await createGeminiModelProvider().synthesizeTopOfMind(SYNTHESIS_INPUT);
 
     const body = requestBodyOf(fetchFn);
-    expect(body.generationConfig.temperature).toBe(0);
-    expect(body.generationConfig.responseSchema.properties.entries.items.properties.type.enum)
+    expect(body.temperature).toBe(0);
+    expect(body).toMatchObject({model:"google/gemini-3.1-flash-lite",provider:{only:["google-ai-studio"],allow_fallbacks:false,require_parameters:true}});
+    expect(body.response_format.json_schema.schema.properties.entries.items.properties.type.enum)
       .toEqual(["pattern", "tension", "question", "hypothesis", "action"]);
-    expect(body.contents[0].parts[0].text).toContain("<<<signals>>>");
+    expect(body.messages.find((item:{role:string})=>item.role==="user").content).toContain("<<<signals>>>");
   });
 
   it.each([{}, { relation: 'uncertain' }])('does not treat a malformed Gemini relation %j as independent', async payload => {
-    process.env.GEMINI_API_KEY = 'test-key';
+    process.env.OPENROUTER_API_KEY = 'test-key';
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(geminiResponse(payload)));
     await expect(createGeminiModelProvider().judgeSignalMatch({ preferredLocale: 'en-US',
       candidateStatement: 'I prefer mornings.', existingStatement: 'I prefer early hours.' })).rejects.toThrow(ModelDidNotAnswerError);
   });
   it('does not let a declined Gemini judgment bypass an owner dismissal', async () => {
-    process.env.GEMINI_API_KEY = 'test-key';
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ promptFeedback: { blockReason: 'SAFETY' } }),
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices:[{finish_reason:'content_filter',message:{content:null}}] }),
       { status: 200, headers: { 'content-type': 'application/json' } })));
     await expect(createGeminiModelProvider().judgeSignalMatch({ preferredLocale: 'en-US',
       candidateStatement: 'I prefer mornings.', existingStatement: 'I prefer early hours.' })).rejects.toThrow(ModelDidNotAnswerError);
   });
 
   it("refuses to report an unusable response as a decision", async () => {
-    process.env.GEMINI_API_KEY = "test-key";
+    process.env.OPENROUTER_API_KEY = "test-key";
     const fetchFn = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ promptFeedback: { blockReason: "SAFETY" } }), {
+      new Response(JSON.stringify({ choices:[{finish_reason:"content_filter",message:{content:null}}] }), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),

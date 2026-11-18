@@ -24,6 +24,13 @@ import {
 import { MODEL_DECLINED } from "./model-provider.js";
 import {recordModelUsage} from './model-usage.js';
 
+export const GOOGLE_AI_STUDIO_ROUTING={
+  only:['google-ai-studio'],
+  order:['google-ai-studio'],
+  allow_fallbacks:false,
+  require_parameters:true,
+} satisfies OpenRouterChatRequest['provider'];
+
 export const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 /** The shared text-task default (owner request, 2026-10-22).
@@ -57,14 +64,15 @@ export function buildOpenRouterHeaders(apiKey: string): Record<string, string> {
 export interface OpenRouterChatRequest {
   model: string;
   messages: Array<{ role: "system" | "user"; content: string | Array<
-    { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+    { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } } |
+    { type: 'input_audio'; input_audio: { data: string; format: string } }
   > }>;
   temperature?: number;
   max_tokens?: number;
   /** OpenRouter's unified reasoning control; providers that cannot honor it
       ignore it, which is the behavior we want */
   reasoning?: { enabled?: boolean; effort?: 'low' | 'medium'; exclude?: boolean };
-  provider?:{data_collection?:'deny';zdr?:true};
+  provider?:{data_collection?:'deny';zdr?:true;require_parameters?:true;only?:string[];order?:string[];allow_fallbacks?:false};
   response_format?:
     | { type: "json_object" }
     | { type: "json_schema"; json_schema: { name: string; strict?: boolean; schema: unknown } };
@@ -132,8 +140,9 @@ export class OpenRouterHttpError extends Error {
 export async function callOpenRouter(
   request: OpenRouterChatRequest,
   label: string,
-  options: { apiKey?: string; fetchFn?: typeof fetch } = {},
+  options: { apiKey?: string; fetchFn?: typeof fetch; signal?:AbortSignal; requireStop?:boolean } = {},
 ): Promise<unknown | null | typeof MODEL_DECLINED> {
+  options.signal?.throwIfAborted();
   const apiKey = options.apiKey ?? getOpenRouterApiKey();
   if (!apiKey) {
     throw new Error("OpenRouter API key is not configured (OPENROUTER_API_KEY).");
@@ -148,6 +157,8 @@ export async function callOpenRouter(
     method: "POST",
     headers: buildOpenRouterHeaders(apiKey),
     body: JSON.stringify(dispatched),
+    signal: options.signal,
+    redirect: "error",
   });}catch(error){recordModelUsage('openrouter',label,null,performance.now()-started,'unknown');throw error;}
 
   if (!response.ok) {
@@ -193,7 +204,9 @@ export async function callOpenRouter(
     return MODEL_DECLINED;
   }
 
-  const content = envelope.data.choices?.[0]?.message?.content;
+  const choice = envelope.data.choices?.[0];
+  if (options.requireStop && (envelope.data.choices?.length !== 1 || choice?.finish_reason !== 'stop')) return null;
+  const content = choice?.message?.content;
   if(['length','error'].includes(envelope.data.choices?.[0]?.finish_reason??'')){
     console.warn('[openrouter] incomplete response refused',{label,finishReason:envelope.data.choices?.[0]?.finish_reason});return null;
   }

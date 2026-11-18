@@ -1,7 +1,7 @@
 import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
 import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyMatchesSql,embeddingPolicyIdentity,type EmbeddingIndexPolicy} from './embedding-policy.js';
 import {settleEmbeddingIndexWork,EmbeddingIndexError} from './embedding-index-coordination.js';
-import {createEmbeddingClient,embeddingInSpace,embeddingSpaceForClient,embeddingInputHash} from './embedding-provider.js';
+import {createEmbeddingClient,embeddingInSpace,embeddingSpaceForClient,embeddingInputHash,readableEmbeddingSpace} from './embedding-provider.js';
 /**
  * A signal's vector — the only four things that ever happen to one.
  *
@@ -59,13 +59,14 @@ export async function writeSignalEmbedding(
     embeddingPolicy?:EmbeddingIndexPolicy;
   },
 ): Promise<void> {
+  embeddingSpaceForClient({model:input.model,dimensions:input.embedding.length});
   const hash=embeddingInputHash(input.model,input.statement);
   const put=async()=>{const rows=await tx.execute(sql`INSERT INTO signal_embeddings(profile_id,signal_id,model,dimensions,input_hash,embedding)
    SELECT ${input.profileId}::uuid,${input.signalId}::uuid,${input.model},${input.embedding.length},${hash},${JSON.stringify(input.embedding)}::jsonb
    WHERE EXISTS(SELECT 1 FROM signals WHERE profile_id=${input.profileId}::uuid AND id=${input.signalId}::uuid AND statement=${input.statement}) ${input.embeddingPolicy?sql`AND ${embeddingPolicyMatchesSql(input.embeddingPolicy)}`:sql``}
    ON CONFLICT(signal_id,model) DO UPDATE SET dimensions=excluded.dimensions,input_hash=excluded.input_hash,embedding=excluded.embedding,updated_at=clock_timestamp() RETURNING id`);if(rows.length!==1)throw new EmbeddingIndexError('stale');};
   if(input.model!==EMBEDDING_2_SPACE.id){await put();return;}
-  const policy=input.embeddingPolicy;if(!policy||policy.activeSpace!==input.model||!embeddingInSpace(input.embedding,input.embedding.length,{model:input.model,dimensions:768}))throw new EmbeddingIndexError('identity');
+  const policy=input.embeddingPolicy;if(!policy||readableEmbeddingSpace(policy)?.model!==input.model||!embeddingInSpace(input.embedding,input.embedding.length,{model:input.model,dimensions:768}))throw new EmbeddingIndexError('identity');
   const [work]=await tx.execute<{id:string;version:string}>(sql`SELECT id,requested_version::text AS version FROM embedding_index_work WHERE profile_id=${input.profileId}::uuid AND source_kind='signal' AND source_id=${input.signalId}::uuid AND input_scope='statement' AND space=${input.model}`);if(!work)throw new EmbeddingIndexError('missing');
   await settleEmbeddingIndexWork(tx,{profileId:input.profileId,workId:work.id,version:BigInt(work.version),space:input.model,activeEpoch:policy.activeEpoch,inputHash:hash,outcome:'current'},{
    prove:async transaction=>{const rows=await transaction.execute(sql`SELECT id FROM signals WHERE profile_id=${input.profileId}::uuid AND id=${input.signalId}::uuid AND statement=${input.statement} AND ${embeddingPolicyMatchesSql(policy)} FOR UPDATE NOWAIT`);if(rows.length!==1)throw new EmbeddingIndexError('stale');await transaction.execute(sql`SELECT profile_id FROM generation_revisions WHERE profile_id=${input.profileId}::uuid FOR UPDATE NOWAIT`);},
@@ -98,6 +99,7 @@ export async function dropSignalEmbedding(
       and(
         eq(signalEmbeddings.profileId, input.profileId),
         eq(signalEmbeddings.signalId, input.signalId),
+        eq(signalEmbeddings.model, EMBEDDING_2_SPACE.id),
       ),
     );
 }

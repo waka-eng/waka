@@ -33,5 +33,5 @@ it('does not interpret an absent AWS-projected proxy setting as an explicit zero
 it('requires the identical reviewed task/provider profile in production without claiming external readiness',()=>{
  const production={...env,WAKA_STAGE:'production',PUBLIC_WEB_URL:'https://waka.im',PUBLIC_API_URL:'https://waka.im'};
  expect(verifyRuntimeConfiguration({api:production,worker:production},'production')).toMatchObject({approvedGenerationModel:true,monetaryLimitsVerified:false,providerPrivacyVerified:false});
- for(const patch of [{WAKA_GENERATION_PROVIDER:'openrouter'},{WAKA_MODEL_IMAGE:'foreign'},{WAKA_AUDIO_PROVIDER:'openrouter'},{WAKA_MODEL_PRINCIPLES:'gpt-6.1-sol'}])expect(()=>verifyRuntimeConfiguration({api:production,worker:{...production,...patch}},'production')).toThrow('reviewed task/provider');
+ for(const patch of [{WAKA_GENERATION_PROVIDER:'openrouter'},{WAKA_MODEL_IMAGE:'foreign'},{WAKA_AUDIO_PROVIDER:'gemini'},{WAKA_MODEL_PRINCIPLES:'gpt-6.1-sol'}])expect(()=>verifyRuntimeConfiguration({api:production,worker:{...production,...patch}},'production')).toThrow('reviewed task/provider');
 });

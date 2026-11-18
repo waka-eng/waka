@@ -46,7 +46,7 @@ it('executed release audit preserves detailed gates and names actual failures in
 });
 it('fails mismatched provider/DB, leaked admin flags, missing notifications and event mapping readiness',async()=>{
  const {auditProductionRelease}=await load();
- for(const patch of [{DB_CONNECTION_URL:'wrong'},{OPENROUTER_API_KEY:'wrong'},{OPENAI_API_KEY:'wrong'},{WAKA_MODEL_PRINCIPLES:'foreign'},{WAKA_AUDIO_PROVIDER:'openrouter'},{WAKA_CONVERSATION_REPLIES:'0'},{WAKA_ENABLE_ADMIN_ROUTES:'true'},{WAKA_MODEL_CHAT:'unapproved'}]){
+ for(const patch of [{DB_CONNECTION_URL:'wrong'},{OPENROUTER_API_KEY:'wrong'},{OPENAI_API_KEY:'wrong'},{WAKA_MODEL_PRINCIPLES:'foreign'},{WAKA_AUDIO_PROVIDER:'gemini'},{WAKA_CONVERSATION_REPLIES:'0'},{WAKA_ENABLE_ADMIN_ROUTES:'true'},{WAKA_MODEL_CHAT:'unapproved'}]){
   const f=fixture();Object.assign(f.env,patch);expect(auditProductionRelease(f).passed).toBe(false);
  }
  const f=fixture(),read=f.read;

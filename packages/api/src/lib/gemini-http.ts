@@ -1,5 +1,4 @@
 import {recordModelUsage} from './model-usage.js';
-const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 25_000;
 
 /**
@@ -109,17 +108,6 @@ export async function fetchModelWithTimeout(
     if (exchangeTimer) clearTimeout(exchangeTimer);
     upstreamSignal?.removeEventListener("abort", abortFromUpstream);
   }
-}
-
-export function buildGeminiModelEndpoint(model: string, method: "generateContent" | "embedContent"): string {
-  return `${GEMINI_BASE_URL}/models/${encodeURIComponent(model)}:${method}`;
-}
-
-export function buildGeminiJsonHeaders(apiKey: string): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    "x-goog-api-key": apiKey,
-  };
 }
 
 export interface SafeGeminiErrorDetails {

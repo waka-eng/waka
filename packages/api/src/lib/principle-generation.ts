@@ -37,7 +37,7 @@ import { normalizeSupportedLocale } from "./locales.js";
 import { selectIndependentEvidence } from './signal-lifecycle.js';
 import {loadSignalEvidence} from './review-evidence.js';
 import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput,renderPrincipleDistillContext} from './principle-input.js';
-import {GEMINI_GENERATION_MODEL,parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
+import {parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
 import {principleMaterialKey} from './principle-material-key.js';
 import {principleWork} from './principle-work.js';
 import {OPENROUTER_GENERATION_MODEL} from './openrouter-http.js';
@@ -407,10 +407,11 @@ export async function refreshPrinciplesForProfile(
     currentEntries: currentEntries.map((row) => ({ body: row.body })),
   },new Set(focus.flatMap(row=>row.id?[row.id]:[])));
   const billingProfileId=deps.billingProfileId??input.profileId;
+  // Hosted non-OpenRouter work keeps its previous checkpoint identity.
   const inputHash=createHash('sha256').update(JSON.stringify({profileId:input.profileId,policy:'principle-work-v1',
-    provider:provider.name??'injected',models:provider.name==='openrouter'
+    provider:provider.name??'injected',models:provider.pinnedModel?[provider.pinnedModel]:provider.name==='openrouter'
       ?[process.env.WAKA_MODEL_PRINCIPLES?.trim()||OPENROUTER_GENERATION_MODEL,process.env.WAKA_MODEL_PRINCIPLE_JUDGE?.trim()||OPENROUTER_GENERATION_MODEL]
-      :[GEMINI_GENERATION_MODEL],limits:{input:PRINCIPLE_INPUT_LIMITS,comparison:PRINCIPLE_COMPARISON_LIMITS,grounding:PRINCIPLE_GROUNDING_LIMITS},
+      :['gemini-3.1-flash-lite'],limits:{input:PRINCIPLE_INPUT_LIMITS,comparison:PRINCIPLE_COMPARISON_LIMITS,grounding:PRINCIPLE_GROUNDING_LIMITS},
     prompts:[PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION],context:renderPrincipleDistillContext(distillInput),material:principleMaterialKey(material),distillInput,
     standing:existing.map(row=>({id:row.id,statement:row.statement,revision:String(row.statementRevision),rank:row.rank,state:row.state,origin:row.origin,locked:row.lockedAt!==null,supported:row.supportCurrent,conflictsWithId:row.conflictsWithId}))})).digest('hex');
   const work=principleWork({db,profileId:input.profileId,billingProfileId,inputHash,revision,jobId:deps.jobId,beforeProgress:deps.beforeProgress});

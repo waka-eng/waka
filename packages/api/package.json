@@ -31,6 +31,8 @@
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.45.2",
     "hono": "4.13.16",
+    "jpeg-js": "0.4.4",
+    "libheif-js": "1.23.5",
     "music-metadata": "11.16.1",
     "postgres": "^3.4.5",
     "undici": "6.29.1",

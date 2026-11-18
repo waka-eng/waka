@@ -40,13 +40,15 @@ it('queues metadata with the answer and mints one grounded signal, not a copied 
   expect(receipt).toMatchObject({discovery_hash:expect.any(String),reading_job_id:expect.any(String)});expect(receipt.derived_at).not.toBeNull();expect(Number.isFinite(new Date(receipt.derived_at).getTime())).toBe(true);
   await f.run();expect(derive).toHaveBeenCalledTimes(1);expect(embedding.embed).toHaveBeenCalledTimes(1);expect(await t.sql`SELECT id FROM signals`).toHaveLength(1);
 });
-it('retains native001 candidate concurrency while the first fake embedding is pending',async()=>{
- const f=await fixture();derive.mockImplementationOnce(async input=>({assessments:[],statements:[{statement:'I leave room to reconsider plans.',quote:input.answer},{statement:'I choose small reversible experiments.',quote:input.answer}]}));
- let started!:()=>void,release!:()=>void;const firstStarted=new Promise<void>(r=>{started=r;}),pending=new Promise<void>(r=>{release=r;});let calls=0;
- const embed=vi.fn(async()=>{if(++calls===1){started();await pending;}return vector;});
- const work=deriveSignalsForReviewAnswer(f.input,{db:t.db as never,modelProvider:provider,embeddingClient:{model:'gemini-embedding-001',embed}});
- await firstStarted;
- try{expect(embed).toHaveBeenCalledTimes(2);}finally{release();await work;}
+it.each(['native001','absent control'] as const)('refuses review discovery before provider work with %s',async unavailable=>{
+ const f=await fixture(),embed=vi.fn(async()=>vector);
+ const embeddingClient=unavailable==='native001'?{model:'gemini-embedding-001',embed}:undefined;
+ await expect(deriveSignalsForReviewAnswer(f.input,{db:t.db as never,modelProvider:provider,embeddingClient}))
+   .rejects.toMatchObject({code:unavailable==='native001'?'invalid_configuration':'compatibility_held'});
+ expect(derive).not.toHaveBeenCalled();
+ expect(embed).not.toHaveBeenCalled();
+ expect(await t.sql`SELECT id FROM signals WHERE profile_id=${f.input.profileId}`).toHaveLength(0);
+ expect(await t.sql`SELECT derived_at FROM review_answer_processing WHERE profile_id=${f.input.profileId} AND derived_at IS NOT NULL`).toHaveLength(0);
 });
 it('withdraws explicit negative support without deleting locked words or undoing it through discovery',async()=>{
   const f=await fixture();await f.run();const [signal]=await t.sql`SELECT id FROM signals`;

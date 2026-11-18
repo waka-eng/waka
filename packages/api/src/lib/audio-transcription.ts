@@ -1,12 +1,11 @@
 import { createHash } from 'node:crypto';
 import { parseBuffer } from 'music-metadata';
 import { z } from 'zod';
-import { buildGeminiJsonHeaders, buildGeminiModelEndpoint, fetchModelWithTimeout } from './gemini-http.js';
 import { webmOpusDurationBound } from './webm-audio-duration.js';
-import {requestAudioTranscript} from './openrouter-media.js';
-import {OpenRouterHttpError,getOpenRouterApiKey} from './openrouter-http.js';
+import {MODEL_DECLINED} from './model-provider.js';
+import {callOpenRouter,GOOGLE_AI_STUDIO_ROUTING,OpenRouterHttpError,getOpenRouterApiKey} from './openrouter-http.js';
 
-export const AUDIO_TRANSCRIPTION_MODEL = 'gemini-2.5-flash';
+export const AUDIO_TRANSCRIPTION_MODEL = 'google/gemini-2.5-flash';
 // Base64 plus JSON stays below the provider's 20 MB inline request limit.
 // Oversized originals remain playable; this limit is not an upload limit.
 export const MAX_TRANSCRIPTION_BYTES = 12 * 1024 * 1024;
@@ -68,66 +67,49 @@ const PROMPT = [
   'Return only JSON with a transcript string.',
 ].join('\n');
 
-/** One bounded attempt. The durable worker, not this adapter, owns retries.
- * Failure codes contain no provider body, captured words or credentials. */
+const audioFormats:Record<string,string>={
+  'audio/wav':'wav',
+  'audio/mpeg':'mp3',
+  'audio/mp4':'m4a',
+  'audio/ogg':'ogg',
+  'audio/webm':'webm',
+};
+
+/** One bounded attempt. The worker owns retries and failure codes stay closed. */
 export async function transcribeAudio(input: {
-  bytes: Uint8Array; contentType: string; apiKey?: string; openRouterApiKey?:string; fetchFn?: typeof fetch; signal?: AbortSignal;
+  bytes: Uint8Array; contentType: string; openRouterApiKey?:string; fetchFn?: typeof fetch; signal?: AbortSignal;
 }) {
   const media = await inspectTranscriptionAudio(input.bytes, input.contentType);
-  const selected=process.env.WAKA_AUDIO_PROVIDER?.trim()||'gemini';
-  if(selected!=='gemini'&&selected!=='openrouter')throw new AudioTranscriptionError('transcription_provider_invalid',false);
+  const selected=process.env.WAKA_AUDIO_PROVIDER?.trim();
+  // Older local launchers may still carry the old provider setting.
+  if(selected&&selected!=='openrouter'&&selected!=='gemini')throw new AudioTranscriptionError('transcription_provider_invalid',false);
   if(input.signal?.aborted)throw new AudioTranscriptionError('transcription_canceled',false);
-  if(selected==='openrouter'){
-    if(!input.openRouterApiKey&&!getOpenRouterApiKey())throw new AudioTranscriptionError('transcription_unconfigured',false);
-    try{return {...media,...await requestAudioTranscript(input.bytes,media.mimeType,{apiKey:input.openRouterApiKey,fetchFn:input.fetchFn,signal:input.signal})};}
-    catch(error){
-      if(input.signal?.aborted)throw new AudioTranscriptionError('transcription_canceled',false);
-      if(error instanceof OpenRouterHttpError)throw new AudioTranscriptionError(`transcription_http_${error.status}`,error.status===408||error.status===429||error.status>=500);
-      throw new AudioTranscriptionError('transcription_openrouter_failed',true);
-    }
-  }
-  const apiKey = input.apiKey ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new AudioTranscriptionError('transcription_unconfigured', false);
-  if (input.signal?.aborted) throw new AudioTranscriptionError('transcription_canceled', false);
-  let response: Response;
+  const apiKey=input.openRouterApiKey??getOpenRouterApiKey();
+  if(!apiKey)throw new AudioTranscriptionError('transcription_unconfigured',false);
+  let payload:unknown;
   try {
-    response = await fetchModelWithTimeout(input.fetchFn ?? fetch,
-      buildGeminiModelEndpoint(AUDIO_TRANSCRIPTION_MODEL, 'generateContent'), {
-        method: 'POST', headers: buildGeminiJsonHeaders(apiKey), signal: input.signal,
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [
-          { text: PROMPT }, { inlineData: { mimeType: media.mimeType, data: Buffer.from(input.bytes).toString('base64') } },
-        ] }], generationConfig: {
-          temperature: 0, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 },
-          responseMimeType: 'application/json',
-          responseSchema: { type: 'OBJECT', properties: { transcript: { type: 'STRING' } }, required: ['transcript'] },
-        } }),
-      },undefined,undefined,'audio transcription');
-  } catch {
-    if (input.signal?.aborted) throw new AudioTranscriptionError('transcription_canceled', false);
-    throw new AudioTranscriptionError('transcription_transport_failed', true);
+    payload=await callOpenRouter({
+      model:AUDIO_TRANSCRIPTION_MODEL,
+      messages:[{role:'user',content:[
+        {type:'text',text:PROMPT},
+        {type:'input_audio',input_audio:{data:Buffer.from(input.bytes).toString('base64'),format:audioFormats[media.mimeType]!}},
+      ]}],
+      temperature:0,
+      max_tokens:8192,
+      reasoning:{enabled:false},
+      provider:GOOGLE_AI_STUDIO_ROUTING,
+      response_format:{type:'json_schema',json_schema:{name:'audio_transcript',strict:true,schema:{
+        type:'object',properties:{transcript:{type:'string'}},required:['transcript'],additionalProperties:false,
+      }}},
+    },'audio transcription',{apiKey,fetchFn:input.fetchFn,signal:input.signal,requireStop:true});
+  } catch (error) {
+    if(input.signal?.aborted)throw new AudioTranscriptionError('transcription_canceled',false);
+    if(error instanceof OpenRouterHttpError)throw new AudioTranscriptionError(`transcription_http_${error.status}`,error.status===408||error.status===429||error.status>=500);
+    throw new AudioTranscriptionError('transcription_openrouter_failed',true);
   }
-  if (!response.ok) throw new AudioTranscriptionError(`transcription_http_${response.status}`,
-    response.status === 408 || response.status === 429 || response.status >= 500);
-  if (input.signal?.aborted) throw new AudioTranscriptionError('transcription_canceled', false);
-
-  let body: unknown;
-  try { body = await response.json(); } catch { throw new AudioTranscriptionError('transcription_invalid_response', true); }
-  const shape = z.object({
-    candidates: z.array(z.object({
-      finishReason: z.string(),
-      content: z.object({ parts: z.array(z.object({ text: z.string().optional(), thought: z.boolean().optional() })) }).optional(),
-    })).max(1).optional(),
-    promptFeedback: z.object({ blockReason: z.string().optional() }).optional(),
-  }).safeParse(body);
-  if (!shape.success) throw new AudioTranscriptionError('transcription_invalid_response', true);
-  const candidate = shape.data.candidates?.[0];
-  if (shape.data.promptFeedback?.blockReason || candidate?.finishReason === 'SAFETY') {
-    throw new AudioTranscriptionError('transcription_blocked', false);
-  }
-  if (!candidate || candidate.finishReason !== 'STOP') throw new AudioTranscriptionError('transcription_incomplete', true);
-  const text = candidate.content?.parts.filter(part => !part.thought).map(part => part.text ?? '').join('') ?? '';
-  let parsed: z.infer<typeof transcriptSchema>;
-  try { parsed = transcriptSchema.parse(JSON.parse(text)); }
-  catch { throw new AudioTranscriptionError('transcription_invalid_output', true); }
-  return { ...media, model: AUDIO_TRANSCRIPTION_MODEL, transcript: parsed.transcript.trim() };
+  if(input.signal?.aborted)throw new AudioTranscriptionError('transcription_canceled',false);
+  if(payload===MODEL_DECLINED)throw new AudioTranscriptionError('transcription_blocked',false);
+  const parsed=transcriptSchema.safeParse(payload);
+  if(!parsed.success)throw new AudioTranscriptionError('transcription_invalid_output',true);
+  return {...media,model:AUDIO_TRANSCRIPTION_MODEL,transcript:parsed.data.transcript.trim()};
 }

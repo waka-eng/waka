@@ -19,7 +19,7 @@ it('versions the exact model/provider/format/dimensions/raw policy separately fr
  expect(hashEmbedding2Input(input,'RETRIEVAL_QUERY')).toBe('ccc98454363c687ae7ee22f2414861ef17b60960e7f1b9fa2666fb0596874bf1');
  expect(hashEmbedding2Input(input,'RETRIEVAL_DOCUMENT')).not.toBe(hashEmbeddingInput(input));
  vi.stubEnv('WAKA_EMBEDDING_PROVIDER',undefined);
- expect(createEmbeddingClient().model).toBe(GEMINI_EMBEDDING_MODEL);expect(readableEmbeddingSpace().model).toBe(GEMINI_EMBEDDING_MODEL);
+ expect(()=>createEmbeddingClient()).toThrow('compatibility_held');expect(readableEmbeddingSpace()).toBeNull();
  expect(new OpenRouterEmbedding2Candidate().model).not.toBe(GEMINI_EMBEDDING_MODEL);
 });
 it.each(['RETRIEVAL_DOCUMENT','RETRIEVAL_QUERY'] as const)('sends exact model2 %s instructions as input text, with no task parameter',async task=>{

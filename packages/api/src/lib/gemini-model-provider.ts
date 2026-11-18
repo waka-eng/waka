@@ -1,5 +1,5 @@
 /**
- * Binds the provider interface to the Gemini client.
+ * Binds the provider interface to the pinned Gemini model through OpenRouter.
  *
  * Thin on purpose: everything interesting about a generation lives either in
  * the prompt (queue/gemini.ts) or in the deterministic pipeline around it
@@ -8,6 +8,7 @@
  */
 
 import {
+  GEMINI_GENERATION_MODEL,
   askReflectionQuestion,
   askReviewQuestion,
   answerConversation,
@@ -26,7 +27,8 @@ import type { ModelProvider } from "./model-provider.js";
 
 export function createGeminiModelProvider(): ModelProvider {
   return {
-    name: "gemini",
+    name: "openrouter",
+    pinnedModel: GEMINI_GENERATION_MODEL,
     askReflectionQuestion,
     askReviewQuestion,
     answerConversation,

@@ -1,5 +1,5 @@
 /**
- * The Gemini wire protocol for WAKA's two generation calls.
+ * WAKA's shared generation prompts, response schemas, and parsers.
  *
  * Scope of this file
  * ------------------
@@ -12,12 +12,6 @@
  * iteration is a single-file diff a reviewer can read without scrolling past
  * background-job plumbing, and the functions are unit-testable by mocking
  * `fetch` alone.
- *
- * Why no SDK?
- * -----------
- * `@google/generative-ai` is ~150 kB doing what amounts to one `fetch` against
- * the documented v1beta `:generateContent` endpoint. On a Lambda cold start
- * that bundle weight is paid on every container boot.
  *
  * Output constraint strategy
  * --------------------------
@@ -86,13 +80,7 @@ import {MAX_INSPIRATION_ATTACHMENTS} from '../lib/inspiration-attachment-input.j
 import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,renderPrincipleDistillContext} from '../lib/principle-input.js';
 
 import { topOfMindEntryTypeValues } from "../db/index.js";
-import {
-  buildGeminiJsonHeaders,
-  buildGeminiModelEndpoint,
-  fetchModelWithTimeout,
-  formatSafeGeminiError,
-  safeGeminiErrorDetails,
-} from "../lib/gemini-http.js";
+import {callOpenRouter,GOOGLE_AI_STUDIO_ROUTING} from '../lib/openrouter-http.js';
 import {
   DeclarationNotConsideredError,
   CONVERSATION_REPLY_OUTPUT_TOKENS,
@@ -134,42 +122,11 @@ import type {
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the Gemini API key.
- *
- *   1. `GEMINI_API_KEY` — set explicitly by `sst.config.ts` from the
- *      `GeminiApiKey` SST Secret. The contract for production / `sst dev`.
- *   2. `SST_RESOURCE_GeminiApiKey` — the JSON envelope SST injects when the
- *      worker is `link`ed to the secret. A fallback so the handler still
- *      works if someone wires the link without re-exporting the env var.
- *
- * Throws when neither is present, so a misconfigured deployment fails loudly
- * on its first generation rather than silently producing nothing forever.
- */
-function getGeminiApiKey(): string {
-  const fromEnv = process.env.GEMINI_API_KEY;
-  if (fromEnv && fromEnv.length > 0) return fromEnv;
-
-  const sstLink = process.env.SST_RESOURCE_GeminiApiKey;
-  if (sstLink) {
-    try {
-      const parsed = JSON.parse(sstLink) as { value?: string };
-      if (parsed?.value) return parsed.value;
-    } catch {
-      // fall through to error
-    }
-  }
-
-  throw new Error(
-    "Gemini API key is not configured (GEMINI_API_KEY / SST_RESOURCE_GeminiApiKey).",
-  );
-}
-
-/**
  * Pinned as a module constant rather than read from env: the prompts below
  * are tuned for this model's behaviour, so a model swap is a code change and
  * therefore visible in review.
  */
-export const GEMINI_GENERATION_MODEL = "gemini-3.1-flash-lite";
+export const GEMINI_GENERATION_MODEL = "google/gemini-3.1-flash-lite";
 
 /** Bounds one capture's contribution to a request. */
 const MAX_INSPIRATION_CHARS = 4_000;
@@ -281,117 +238,15 @@ interface GenerateContentRequest {
   };
 }
 
-/**
- * Every field optional and `.passthrough()` throughout: an upstream addition
- * must not turn an otherwise-usable response into a parse failure. Only the
- * three paths this module actually reads are typed.
- */
-export const generateContentResponseSchema = z
-  .object({
-    candidates: z
-      .array(
-        z
-          .object({
-            content: z
-              .object({
-                parts: z
-                  .array(z.object({ text: z.string().optional() }).passthrough())
-                  .optional(),
-              })
-              .passthrough()
-              .optional(),
-            finishReason: z.string().optional(),
-          })
-          .passthrough(),
-      )
-      .optional(),
-    promptFeedback: z
-      .object({ blockReason: z.string().optional() })
-      .passthrough()
-      .optional(),
-  })
-  .passthrough();
-
-export type GenerateContentResponse = z.infer<typeof generateContentResponseSchema>;
-
-// ---------------------------------------------------------------------------
-// Transport
-// ---------------------------------------------------------------------------
-
-export function buildGenerateContentUrl(): string {
-  return buildGeminiModelEndpoint(GEMINI_GENERATION_MODEL, "generateContent");
-}
-
-/**
- * POST one `:generateContent` call and return the decoded JSON payload, or
- * null when Gemini produced nothing usable (safety block, empty candidate
- * list, unparseable text).
- *
- * Throws on transport-level failures — non-2xx, network error, non-JSON body
- * — because those are transient and the queue's backoff is the right answer.
- * "The model gave us nothing" is not transient, so it comes back as null and
- * each caller decides what an empty answer means for its layer.
- */
-async function callGemini(
+/** The explicit Gemini configuration keeps its model and prompt contract. */
+async function callGeminiViaOpenRouter(
   request: GenerateContentRequest,
   label: string,
 ): Promise<unknown | null | typeof MODEL_DECLINED> {
-  const apiKey = getGeminiApiKey();
-
-  const response = await fetchModelWithTimeout(fetch, buildGenerateContentUrl(), {
-    method: "POST",
-    headers: buildGeminiJsonHeaders(apiKey),
-    body: JSON.stringify(request),
-  },undefined,undefined,label);
-
-  if (!response.ok) {
-    throw new Error(
-      formatSafeGeminiError(
-        `Gemini ${label} failed`,
-        await safeGeminiErrorDetails(response),
-      ),
-    );
-  }
-
-  let rawJson: unknown;
-  try {
-    rawJson = await response.json();
-  } catch (err) {
-    throw new Error(
-      `Gemini ${label} returned non-JSON body: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-
-  const envelope = generateContentResponseSchema.safeParse(rawJson);
-  if (!envelope.success) {
-    console.warn("[gemini] response envelope failed schema validation", {
-      label,
-      issues: envelope.error.issues,
-    });
-    return null;
-  }
-
-  const blockReason = envelope.data.promptFeedback?.blockReason ?? null;
-  if (blockReason) {
-    /* a considered refusal, not a road failure — terminal, so callers keep
-       their safe postures instead of retrying material that will be refused
-       again */
-    console.warn("[gemini] prompt blocked", { label, blockReason });
-    return MODEL_DECLINED;
-  }
-
-  const text = envelope.data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (typeof text !== "string" || text.length === 0) return null;
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    console.warn("[gemini] constrained response was not valid JSON", {
-      label,
-      finishReason: envelope.data.candidates?.[0]?.finishReason ?? null,
-    });
-    return null;
-  }
+  const {toChatRequest}=await import('../lib/openrouter-model-provider.js');
+  const schemaName=label.replace(/[^a-z0-9]+/gi,'_');
+  const chat=toChatRequest(request,GEMINI_GENERATION_MODEL,schemaName);
+  return callOpenRouter({...chat,provider:GOOGLE_AI_STUDIO_ROUTING},label,{requireStop:true});
 }
 
 // ---------------------------------------------------------------------------
@@ -705,7 +560,7 @@ export async function extractSignalCandidates(
     input.attachments.length > 0;
   if (!hasMaterial) return { statements: [], category: null };
 
-  const payload = await callGemini(buildSignalExtractionRequest(input), "signal extraction");
+  const payload = await callGeminiViaOpenRouter(buildSignalExtractionRequest(input), "signal extraction");
   /* a considered refusal is terminal — nothing to learn, and a retry would
      be refused again */
   if (payload === MODEL_DECLINED) return { statements: [], category: null };
@@ -782,7 +637,7 @@ export function parseSignalSupport(payload: unknown): SignalSupportAssessmentRes
 }
 
 export async function assessSignalSupport(input: SignalSupportAssessmentInput): Promise<SignalSupportAssessmentResult> {
-  const payload = await callGemini(buildSignalSupportRequest(input), "signal support assessment");
+  const payload = await callGeminiViaOpenRouter(buildSignalSupportRequest(input), "signal support assessment");
   if (payload === null || payload === MODEL_DECLINED) throw new ModelDidNotAnswerError("signal support assessment");
   return parseSignalSupport(payload);
 }
@@ -881,7 +736,7 @@ export function parseSignalMatchJudgement(payload: unknown): SignalMatchJudgemen
 export async function judgeSignalMatch(
   input: SignalMatchJudgementInput,
 ): Promise<SignalMatchJudgement> {
-  const payload = await callGemini(
+  const payload = await callGeminiViaOpenRouter(
     buildSignalMatchJudgementRequest(input),
     "signal match judgement",
   );
@@ -1318,7 +1173,7 @@ export function parseTopOfMindSynthesis(payload: unknown): TopOfMindSynthesisRes
 export async function synthesizeTopOfMind(
   input: TopOfMindSynthesisInput,
 ): Promise<TopOfMindSynthesisResult> {
-  const payload = await callGemini(
+  const payload = await callGeminiViaOpenRouter(
     buildTopOfMindSynthesisRequest(input),
     "top-of-mind synthesis",
   );
@@ -1382,11 +1237,11 @@ export function parseTopOfMindReview(payload: unknown): TopOfMindReviewResult {
 }
 
 export async function reviewTopOfMind(input: TopOfMindReviewInput): Promise<TopOfMindReviewResult> {
-  const payload = await callGemini(buildTopOfMindReviewRequest(input), 'top-of-mind review');
+  const payload = await callGeminiViaOpenRouter(buildTopOfMindReviewRequest(input), 'top-of-mind review');
   if (payload === null || payload === MODEL_DECLINED) throw new ModelDidNotAnswerError('top-of-mind review');
   const reviewed = parseTopOfMindReview(payload);
   if (!input.comparison) return reviewed;
-  const compared = await callGemini(buildTopOfMindComparisonRequest(input, reviewed), 'top-of-mind comparison');
+  const compared = await callGeminiViaOpenRouter(buildTopOfMindComparisonRequest(input, reviewed), 'top-of-mind comparison');
   return applyTopOfMindComparison(input, reviewed, compared);
 }
 
@@ -1574,7 +1429,7 @@ export function parseDistilledPrinciples(payload: unknown): DistillPrinciplesRes
 export async function distillPrinciples(
   input: DistillPrinciplesInput,
 ): Promise<DistillPrinciplesResult> {
-  const payload = await callGemini(buildPrincipleDistillRequest(input), "principle distillation");
+  const payload = await callGeminiViaOpenRouter(buildPrincipleDistillRequest(input), "principle distillation");
   if (payload === MODEL_DECLINED) return { candidates: [] };
   if (payload === null) throw new ModelDidNotAnswerError("principle distillation");
   return parseDistilledPrinciples(payload);
@@ -1610,7 +1465,7 @@ export function parsePrincipleGrounding(payload:unknown,input:PrincipleGrounding
   return {assessments:input.candidates.map(row=>parsed.data.assessments.find(verdict=>verdict.candidateId===row.id)!)};
 }
 export async function assessPrincipleGrounding(input:PrincipleGroundingInput):Promise<PrincipleGroundingResult>{
-  const payload=await callGemini(buildPrincipleGroundingRequest(input),'principle grounding');
+  const payload=await callGeminiViaOpenRouter(buildPrincipleGroundingRequest(input),'principle grounding');
   if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('principle grounding');
   return parsePrincipleGrounding(payload,input);
 }
@@ -1667,7 +1522,7 @@ export function parsePrincipleRelation(payload:unknown,input:PrincipleRelationIn
 }
 
 export async function judgePrincipleRelation(input:PrincipleRelationInput):Promise<PrincipleRelation> {
-  const payload=await callGemini(buildPrincipleRelationRequest(input),"principle relation");
+  const payload=await callGeminiViaOpenRouter(buildPrincipleRelationRequest(input),"principle relation");
   if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError("principle relation judgement");
   return parsePrincipleRelation(payload,input);
 }
@@ -1738,7 +1593,7 @@ export function parseDeclarationRoute(payload: unknown): DeclarationRoute {
 }
 
 export async function routeDeclaration(input: DeclarationRouteInput): Promise<DeclarationRoute> {
-  const payload = await callGemini(buildDeclarationRouteRequest(input), "declaration routing");
+  const payload = await callGeminiViaOpenRouter(buildDeclarationRouteRequest(input), "declaration routing");
   /* `callGemini` returns null when the envelope failed schema validation or
      the prompt was blocked — in both cases the tests did not run. Reading
      that as "inspiration" was the same lie the route's catch told one frame
@@ -1815,7 +1670,7 @@ export function parseReflectionQuestion(payload: unknown, input: ReflectionQuest
 }
 
 export async function askReflectionQuestion(input: ReflectionQuestionInput): Promise<ReflectionQuestionResult> {
-  const payload = await callGemini(buildReflectionQuestionRequest(input), "reflection follow-up");
+  const payload = await callGeminiViaOpenRouter(buildReflectionQuestionRequest(input), "reflection follow-up");
   if (payload === null || payload === MODEL_DECLINED) throw new ModelDidNotAnswerError("reflection follow-up");
   return parseReflectionQuestion(payload, input);
 }
@@ -1872,7 +1727,7 @@ export function parseReviewQuestion(payload:unknown,input:ReviewQuestionInput):R
   return result;
 }
 export async function askReviewQuestion(input:ReviewQuestionInput):Promise<ReviewQuestionResult>{
-  const payload=await callGemini(buildReviewQuestionRequest(input),'review question');
+  const payload=await callGeminiViaOpenRouter(buildReviewQuestionRequest(input),'review question');
   if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('review question');
   return parseReviewQuestion(payload,input);
 }
@@ -1931,7 +1786,7 @@ export function parseConversationReply(payload:unknown,input:ConversationReplyIn
     ?{...result,followUpQuestion:null}:result;
 }
 export async function answerConversation(input:ConversationReplyInput):Promise<ConversationReplyResult>{
-  const payload=await callGemini(buildConversationReplyRequest(input),'conversation reply');
+  const payload=await callGeminiViaOpenRouter(buildConversationReplyRequest(input),'conversation reply');
   if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('conversation reply');return parseConversationReply(payload,input);
 }
 
@@ -1982,6 +1837,6 @@ export function parseReviewAnswerDerivation(payload:unknown,input:ReviewAnswerDe
   return result;
 }
 export async function deriveReviewAnswer(input:ReviewAnswerDerivationInput):Promise<ReviewAnswerDerivationResult>{
-  const payload=await callGemini(buildReviewAnswerDerivationRequest(input),'review derivation');
+  const payload=await callGeminiViaOpenRouter(buildReviewAnswerDerivationRequest(input),'review derivation');
   if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('review derivation');return parseReviewAnswerDerivation(payload,input);
 }

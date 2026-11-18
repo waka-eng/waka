@@ -1,6 +1,6 @@
 import {embedDiscoveryCandidates,commitDiscoveryEmbeddings} from './embedding-discovery.js';
 import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
-import {createEmbeddingClient} from './embedding-provider.js';
+import {createEmbeddingClient,embeddingSpaceForClient} from './embedding-provider.js';
 import {and,asc,eq,inArray,sql} from 'drizzle-orm';
 import {backgroundJobs,profiles,reviewAnswerProcessing,reviewSignalSupport,signalReviewEvidence,signals,type BackgroundJob,type BackgroundJobResult} from '../db/index.js';
 import {getDb} from './db.js';
@@ -139,15 +139,16 @@ export async function deriveSignalsForReviewAnswer(input:{profileId:string;sessi
   }
   const [reembedding]=await db.select({id:backgroundJobs.id}).from(backgroundJobs).where(and(eq(backgroundJobs.profileId,input.profileId),eq(backgroundJobs.type,'reembed_signal'),inArray(backgroundJobs.status,['pending','running']))).limit(1);
   if(reembedding)throw new BackgroundJobHeldError(new Date(Date.now()+5000),'Signal wording is being indexed');
-  const request=modelInput(material,[],true);await beforeModel();const discovered=parseReviewAnswerDerivation(await provider.deriveReviewAnswer(request),request);
   const embedding=deps.embeddingClient??createEmbeddingClient(undefined,generation.embeddingPolicy);
+  embeddingSpaceForClient(embedding);
+  const request=modelInput(material,[],true);await beforeModel();const discovered=parseReviewAnswerDerivation(await provider.deriveReviewAnswer(request),request);
   let discovery:Array<{embedding:number[];attemptId:string}>|undefined;
   if(embedding.model===EMBEDDING_2_SPACE.id&&discovered.statements.length){
     if(!deps.job||!deps.beforeCommit||!generation.embeddingPolicy)throw new Error('Model2 review discovery requires a current job');
     discovery=await embedDiscoveryCandidates(db,{profileId:input.profileId,sourceKind:'review_answer',sourceId:input.answerId,materialHash:material.hash,request:{jobId:deps.job.id,requestVersion:deps.job.requestVersion.toString()},policy:generation.embeddingPolicy,statements:discovered.statements.map(row=>row.statement),prove:async tx=>{await assertReviewAnswerMaterial(tx,material!);await assertGenerationRevision(tx,generation!,true);},claim:deps.beforeCommit},embedding);
   }
-  // Native001 retains its original bounded parallel dispatch. Model2 alone
-  // uses sequential durable reservations, with no replay of unknown dispatch.
+  // Runtime Model2 discovery uses durable reservations. The other branch
+  // supports injected synthetic fixtures.
   const candidates:ResolvedCandidate[]=discovery?discovered.statements.map((row,index)=>({statement:row.statement,reason:null,quote:null,quoteSource:null,relatedEvidence:[],embedding:discovery[index]!.embedding})):
     await Promise.all(discovered.statements.map(async row=>({statement:row.statement,reason:null,quote:null,quoteSource:null,relatedEvidence:[],embedding:await embedding.embed(row.statement)})));
   const result=await db.transaction(async tx=>{
