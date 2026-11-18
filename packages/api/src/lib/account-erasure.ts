@@ -40,11 +40,8 @@ import { cancelBackgroundJobWakes } from './background-job-wake.js';
  *     seat.
  */
 
-import { DeleteObjectsCommand, type ObjectIdentifier } from "@aws-sdk/client-s3";
-
-import { makeAttachmentsS3Client } from "./s3-client.js";
 import { unreferencedAttachmentKeys } from "./conversation-attachments.js";
-import { attachmentKeyHash, attachmentStorageScope } from './attachment-sweep.js';
+import { attachmentKeyHash, attachmentStorageScope, deleteAttachmentObjectBatch } from './attachment-sweep.js';
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 
 import {
@@ -69,44 +66,6 @@ type WakaDb = ReturnType<typeof getDb>;
 export interface EraseAccountDependencies {
   db?: WakaDb;
   deleteAttachmentObjects?: (keys: string[]) => Promise<void>;
-}
-
-function attachmentBucketName(): string {
-  const direct = process.env.ATTACHMENTS_BUCKET;
-  if (direct?.trim()) return direct.trim();
-  const linked = process.env.SST_RESOURCE_Attachments;
-  if (linked) {
-    try {
-      const parsed = JSON.parse(linked) as { name?: unknown };
-      if (typeof parsed.name === "string" && parsed.name.trim()) return parsed.name.trim();
-    } catch {
-      // The explicit error below is safer than silently skipping private bytes.
-    }
-  }
-  throw new Error("Attachments bucket is not configured for account erasure");
-}
-
-async function deleteAttachmentObjectsFromS3(keys: string[]): Promise<void> {
-  if (keys.length === 0) return;
-  const bucket = attachmentBucketName();
-  const client = makeAttachmentsS3Client();
-  try {
-    for (let offset = 0; offset < keys.length; offset += 1_000) {
-      const objects: ObjectIdentifier[] = keys
-        .slice(offset, offset + 1_000)
-        .map((Key) => ({ Key }));
-      const result = await client.send(
-        new DeleteObjectsCommand({
-          Bucket: bucket,
-          Delete: { Objects: objects, Quiet: true },
-        }),
-        { abortSignal: AbortSignal.timeout(8000) },
-      );
-      if (result.Errors?.length) {
-        throw new Error(`Failed to erase ${result.Errors.length} attachment object(s)`);
-      }
-    }
-  } finally { client.destroy(); }
 }
 
 /**
@@ -136,7 +95,8 @@ export async function eraseAccount(
     const bound = await db.select({ hash: attachmentObjects.keyHash }).from(attachmentObjects)
       .where(and(inArray(attachmentObjects.keyHash, keys.map(attachmentKeyHash)),eq(attachmentObjects.storageScope,scope)));
     if (bound.length !== new Set(keys).size) throw new Error('Attachment storage scope must be verified before account erasure');
-    await deleteAttachmentObjectsFromS3(keys);
+    const failed = await deleteAttachmentObjectBatch(keys);
+    if (failed.length) throw new Error(`Failed to erase ${failed.length} attachment object(s)`);
   });
   const initialProfiles = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.accountId, accountId));
   const deletedKeys = new Set(await readAttachmentKeys(db, initialProfiles.map(row => row.id)));

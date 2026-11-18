@@ -226,6 +226,10 @@ export default $config({
      * prefix.
      */
     const vaultBucket = new sst.aws.Bucket("Vault");
+    const attachmentVersionPurgePermissions = $app.stage === "production" ? [
+      { actions: ["s3:ListBucketVersions"], resources: [attachmentsBucket.arn] },
+      { actions: ["s3:DeleteObjectVersion"], resources: [attachmentsBucket.arn.apply(arn => `${arn}/*`)] },
+    ] : [];
 
     // -----------------------------------------------------------------------
     // Hono API Function
@@ -352,6 +356,7 @@ export default $config({
         WAKA_BACKGROUND_JOB_WAKE_ROLE: jobWakeRole.arn,
       },
       permissions: [
+        ...attachmentVersionPurgePermissions,
         { actions: ["scheduler:CreateSchedule", "scheduler:DeleteSchedule"], resources: [jobWakeGroup.arn.apply(arn => arn.replace(":schedule-group/", ":schedule/") + "/waka-job-*")] },
         { actions: ["iam:PassRole"], resources: [jobWakeRole.arn] },
       ],
@@ -432,6 +437,7 @@ export default $config({
       // Waking the worker is the whole point of the push model; without this
       // the invoke fails and every job waits for the daily safety net.
       permissions: [
+        ...attachmentVersionPurgePermissions,
         { actions: ["scheduler:DeleteSchedule"], resources: [jobWakeGroup.arn.apply(arn => arn.replace(":schedule-group/", ":schedule/") + "/waka-job-*")] },
         {
           actions: ["lambda:InvokeFunction"],
@@ -524,10 +530,12 @@ export default $config({
     const objectEventSubscriber = objectEvents.subscribe({
       handler: "packages/api/src/attachment-object-events.handler",
       timeout: "30 seconds",
-      // DeleteObjects authorizes s3:DeleteObject on object ARNs only.
       // The event handler performs its reference/closure checks in SQL.
       link: [dbConnectionUrl],
-      permissions: [{ actions: ["s3:DeleteObject"], resources: [attachmentsBucket.arn.apply(arn => `${arn}/*`)] }],
+      permissions: [
+        { actions: ["s3:DeleteObject"], resources: [attachmentsBucket.arn.apply(arn => `${arn}/*`)] },
+        ...attachmentVersionPurgePermissions,
+      ],
       // This consumer is assumed by Lambda only; no human/account-root trust.
       transform: { role: { assumeRolePolicy: JSON.stringify({
         Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "sts:AssumeRole",
