@@ -18,21 +18,30 @@ export function isolatedCleanupRole({roleArn,queueArn,bucket,read}){
  const managed=read(['iam','list-attached-role-policies','--role-name',roleName]).AttachedPolicies??[];
  const approvedManaged=new Set(['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole','arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess']);
  if(managed.some(p=>!approvedManaged.has(p.PolicyArn)))return false;
- const names=read(['iam','list-role-policies','--role-name',roleName]).PolicyNames??[],allowedResources=new Set([queueArn,`arn:aws:s3:::${bucket}/*`]);
- const poll=new Set(['sqs:ChangeMessageVisibility','sqs:DeleteMessage','sqs:GetQueueAttributes','sqs:GetQueueUrl','sqs:ReceiveMessage']);
- let hasQueue=false,hasBucket=false;
+ const names=read(['iam','list-role-policies','--role-name',roleName]).PolicyNames??[];
+ const bucketArn=`arn:aws:s3:::${bucket}`;
+ const required=new Map([
+  ['sqs:ChangeMessageVisibility',queueArn],['sqs:DeleteMessage',queueArn],
+  ['sqs:GetQueueAttributes',queueArn],['sqs:GetQueueUrl',queueArn],['sqs:ReceiveMessage',queueArn],
+  ['s3:ListBucketVersions',bucketArn],['s3:DeleteObject',`${bucketArn}/*`],['s3:DeleteObjectVersion',`${bucketArn}/*`],
+ ]);
+ const granted=new Set();
  for(const name of names){
   const p=read(['iam','get-role-policy','--role-name',roleName,'--policy-name',name]);
   for(const s of list(document(p.PolicyDocument)?.Statement??[])){
    if(s.Effect!=='Allow')continue;if(s.NotAction||s.NotResource)return false;
    const actions=list(s.Action),resources=list(s.Resource);
+   if(!actions.length||!resources.length)return false;
    if(actions.every(a=>['logs:CreateLogGroup','logs:CreateLogStream','logs:PutLogEvents','logs:DescribeLogStreams','xray:PutTraceSegments','xray:PutTelemetryRecords'].includes(a)))continue;
-   if(!actions.length||!resources.length||resources.some(r=>!allowedResources.has(r))||actions.some(a=>!poll.has(a)&&a!=='s3:DeleteObject'))return false;
-   if(actions.some(a=>poll.has(a))&&resources.includes(queueArn))hasQueue=true;
-   if(actions.includes('s3:DeleteObject')&&resources.includes(`arn:aws:s3:::${bucket}/*`))hasBucket=true;
+   // IAM applies all actions to all resources in a statement.
+   for(const action of actions){
+    const resource=required.get(action);
+    if(!resource||resources.some(r=>r!==resource))return false;
+    granted.add(action);
+   }
   }
  }
- return hasQueue&&hasBucket;
+ return granted.size===required.size;
 }
 export function auditProductionRelease({outputs,expected,read}){
  const checks={},resources={};

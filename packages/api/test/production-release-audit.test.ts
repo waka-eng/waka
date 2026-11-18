@@ -12,7 +12,13 @@ function fixture(signupMode='closed'){
  const mapping={State:'Enabled',BatchSize:1,FunctionResponseTypes:['ReportBatchItemFailures'],EventSourceArn:arn,FunctionArn:functionArn};
  const env={...modelProfile,OPENAI_API_KEY:expected.openAi,SST_RESOURCE_App:JSON.stringify({name:'waka',stage:'production'}),DB_CONNECTION_URL:expected.database,OPENROUTER_API_KEY:expected.openRouter,WAKA_CONVERSATION_REPLIES:'1',WAKA_STAGE:'production',ATTACHMENTS_BUCKET:'bucket',WAKA_VAULT_BUCKET:'vault',WAKA_BACKGROUND_WORKER_FUNCTION:'waka-production-worker',PUBLIC_WEB_URL:'https://waka.im'};
  const policy={Version:'2012-10-17',Statement:[{Effect:'Allow',Principal:{Service:'s3.amazonaws.com'},Action:'sqs:SendMessage',Resource:arn,Condition:{ArnEquals:{'aws:SourceArn':'arn:aws:s3:::bucket'},StringEquals:{'aws:SourceAccount':'123456789012'}}}]};
- const iam={Statement:[{Effect:'Allow',Action:['sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes','sqs:GetQueueUrl','sqs:ChangeMessageVisibility'],Resource:arn},{Effect:'Allow',Action:'s3:DeleteObject',Resource:'arn:aws:s3:::bucket/*'},{Effect:'Allow',Action:['logs:CreateLogStream','logs:PutLogEvents'],Resource:'*'}]};
+ const iam={Statement:[
+  {Effect:'Allow',Action:['sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes','sqs:GetQueueUrl','sqs:ChangeMessageVisibility'],Resource:arn},
+  {Effect:'Allow',Action:'s3:DeleteObject',Resource:'arn:aws:s3:::bucket/*'},
+  {Effect:'Allow',Action:'s3:ListBucketVersions',Resource:'arn:aws:s3:::bucket'},
+  {Effect:'Allow',Action:'s3:DeleteObjectVersion',Resource:'arn:aws:s3:::bucket/*'},
+  {Effect:'Allow',Action:['logs:CreateLogStream','logs:PutLogEvents'],Resource:'*'},
+ ]};
  const trust={Statement:[{Effect:'Allow',Action:'sts:AssumeRole',Principal:{Service:'lambda.amazonaws.com'}}]};
  const managed=[{PolicyArn:'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'}];
  const read=(args:string[])=>{
@@ -79,6 +85,31 @@ it('refuses unneeded bucket CRUD/read, foreign queues, wildcard model permission
   (f:any)=>{f.managed.push({PolicyArn:'arn:aws:iam::aws:policy/AdministratorAccess'});},
   (f:any)=>{f.trust.Statement[0].Principal={AWS:'*'};},
  ]){const f=fixture();edit(f);expect(auditProductionRelease(f).passed).toBe(false);}
+});
+
+it('requires every cleanup action on its exact resource and rejects cross-scope grants',async()=>{
+ const {auditProductionRelease}=await load();
+ for(const action of fixture().iam.Statement.slice(0,4).flatMap(s=>s.Action)){
+  const f=fixture();
+  f.iam.Statement=f.iam.Statement.map(s=>({...s,Action:[s.Action].flat().filter(a=>a!==action)})).filter(s=>s.Action.length>0);
+  expect(auditProductionRelease(f).checks.cleanupIamIsolated,action).toBe(false);
+ }
+ for(const grant of [
+  {Action:'sqs:ReceiveMessage',Resource:'arn:aws:s3:::bucket'},
+  {Action:'s3:ListBucketVersions',Resource:'arn:aws:s3:::bucket/*'},
+  {Action:'s3:DeleteObjectVersion',Resource:'arn:aws:s3:::bucket'},
+  {Action:'s3:DeleteObjectVersion',Resource:'arn:aws:s3:::vault/*'},
+  {Action:'s3:ListBucketVersions',Resource:'*'},
+  {Action:'s3:DeleteObjectVersion',Resource:'arn:aws:s3:::*/*'},
+  {Action:'s3:DeleteObjectVersion',Resource:['arn:aws:s3:::bucket/*','arn:aws:s3:::bucket']},
+  {Action:['s3:ListBucketVersions','s3:DeleteObjectVersion'],Resource:'arn:aws:s3:::bucket'},
+ ]){
+  const f=fixture(),read=f.read;
+  const augmented={Statement:[...f.iam.Statement,{Effect:'Allow',...grant}]};
+  const report=auditProductionRelease({...f,read:(args:string[])=>args[1]==='get-role-policy'?{PolicyDocument:augmented}:read(args)});
+  expect(report.checks.cleanupIamIsolated,JSON.stringify(grant)).toBe(false);
+  expect(report.passed).toBe(false);
+ }
 });
 
 it('accepts the observed generated consumer name while requiring exact ARN, queue and stack identity',async()=>{
