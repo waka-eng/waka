@@ -18,9 +18,7 @@
  *   WAKA_MODEL_PRINCIPLES · WAKA_MODEL_PRINCIPLE_JUDGE · WAKA_MODEL_ROUTE
  *   WAKA_MODEL_SUPPORT · WAKA_MODEL_REFLECT · WAKA_MODEL_CHAT
  *
- * Embeddings are NOT here and must never be: stored vectors and the four
- * calibrated cosine thresholds live in gemini-embedding-001's space, and a
- * "flexible" embedder would silently invalidate both.
+ * Embeddings use the separate policy-bound Embedding2 adapter.
  */
 import {
   buildDeclarationRouteRequest,

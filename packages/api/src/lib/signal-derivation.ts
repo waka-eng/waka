@@ -1,7 +1,7 @@
 import {embedDiscoveryCandidates,commitDiscoveryEmbeddings} from './embedding-discovery.js';
 import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
 import {embeddingPolicySql,parseEmbeddingPolicy,embeddingRetrievalMinimum,embeddingCandidateRules,type EmbeddingIndexPolicy} from "./embedding-policy.js";
-import {createEmbeddingClient,embeddingInSpace,readableEmbeddingSpace,embeddingInputHash} from './embedding-provider.js';
+import {createEmbeddingClient,embeddingInSpace,embeddingSpaceForClient,embeddingInputHash} from './embedding-provider.js';
 /**
  * Layer 2 — turning one inspiration into evidence for the profile's signals.
  *
@@ -481,8 +481,8 @@ async function findRelatedInspirations(
     policy: EmbeddingIndexPolicy;
   },
 ): Promise<RelatedInspirationContext[]> {
-  const rules=embeddingCandidateRules(input.policy)?.related,space={model:input.model,dimensions:input.embedding.length},native=readableEmbeddingSpace();
-  if((space.model===native.model&&space.dimensions!==native.dimensions)||!embeddingInSpace(input.embedding,space.dimensions,space))throw new Error('Related capture embedding space is invalid');
+  const rules=embeddingCandidateRules(input.policy)?.related,space=embeddingSpaceForClient({model:input.model,dimensions:input.embedding.length});
+  if(!embeddingInSpace(input.embedding,space.dimensions,space))throw new Error('Related capture embedding space is invalid');
   const rows = await db
     .select({
       id: inspirations.id,

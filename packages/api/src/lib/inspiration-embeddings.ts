@@ -17,7 +17,6 @@ import { createHash } from "node:crypto";
 
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { z } from "zod";
 
 import * as dbSchema from "../db/index.js";
 import {
@@ -30,21 +29,11 @@ import {
   type InspirationEmbeddingScope,
 } from "../db/index.js";
 import { getDb } from "./db.js";
-import {measurePerformanceStage} from './performance-stages.js';
 import { effectiveAttachmentText } from './attachment-material.js';
 import {buildCanonicalInspirationEmbeddingInput,type CanonicalReflectionInput,type CanonicalAttachmentInput} from './inspiration-embedding-source.js';
 export {buildCanonicalInspirationEmbeddingInput,readInspirationEmbeddingSource,type CanonicalReflectionInput,type CanonicalAttachmentInput,type CanonicalInspirationEmbeddingInput} from './inspiration-embedding-source.js';
-import {
-  buildGeminiJsonHeaders,
-  buildGeminiModelEndpoint,
-  fetchModelWithTimeout,
-  formatSafeGeminiError,
-  safeGeminiErrorDetails,
-} from "./gemini-http.js";
-
 export const GEMINI_EMBEDDING_MODEL = "gemini-embedding-001";
 export const GEMINI_EMBEDDING_DIMENSIONS = 768;
-export const MAX_GEMINI_EMBEDDING_VALUES = 4096;
 export type WakaDb = PostgresJsDatabase<typeof dbSchema>;
 
 // Canonical-v1 construction lives in the pure source reader and is re-exported
@@ -53,38 +42,6 @@ export type WakaDb = PostgresJsDatabase<typeof dbSchema>;
 export function hashEmbeddingInput(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");
 }
-
-function getGeminiApiKey(): string {
-  const fromEnv = process.env.GEMINI_API_KEY;
-  if (fromEnv && fromEnv.length > 0) return fromEnv;
-
-  const sstLink = process.env.SST_RESOURCE_GeminiApiKey;
-  if (sstLink) {
-    try {
-      const parsed = JSON.parse(sstLink) as { value?: string };
-      if (parsed?.value) return parsed.value;
-    } catch {
-      // fall through to error
-    }
-  }
-
-  throw new Error(
-    "Gemini API key is not configured (GEMINI_API_KEY / SST_RESOURCE_GeminiApiKey).",
-  );
-}
-
-export function buildEmbedContentUrl(model = GEMINI_EMBEDDING_MODEL): string {
-  return buildGeminiModelEndpoint(model, "embedContent");
-}
-
-const embedContentResponseSchema = z.object({
-  embedding: z.object({
-    values: z
-      .array(z.number().finite())
-      .min(GEMINI_EMBEDDING_DIMENSIONS)
-      .max(MAX_GEMINI_EMBEDDING_VALUES),
-  }),
-});
 
 export function validateEmbeddingVector(
   embedding: number[],
@@ -102,10 +59,7 @@ export function validateEmbeddingVector(
   return embedding;
 }
 
-/** The two halves of the asymmetric pairing gemini-embedding-001 was
-    calibrated for: stored memories are DOCUMENTs, a live question is a
-    QUERY. Every stored vector in the system is a document; only recall's
-    incoming question uses the other half. */
+/** Stored inputs are documents. Semantic lookups use the paired query format. */
 export type EmbeddingTaskType = "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY";
 
 export interface GeminiEmbeddingClient {
@@ -114,60 +68,7 @@ export interface GeminiEmbeddingClient {
   embed(input: string, taskType?: EmbeddingTaskType): Promise<number[]>;
 }
 
-export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
-  readonly model: string;
-  readonly dimensions=GEMINI_EMBEDDING_DIMENSIONS;
 
-  constructor(model = GEMINI_EMBEDDING_MODEL, private readonly deadlines?:{timeoutMs:number;exchangeTimeoutMs:number}) {
-    this.model = model;
-  }
-
-  async embed(
-    input: string,
-    taskType: EmbeddingTaskType = "RETRIEVAL_DOCUMENT",
-  ): Promise<number[]> {
-    return measurePerformanceStage('embedding','gemini',async()=>{
-    const apiKey = getGeminiApiKey();
-    const response = await fetchModelWithTimeout(fetch, buildEmbedContentUrl(this.model), {
-      method: "POST",
-      headers: buildGeminiJsonHeaders(apiKey),
-      body: JSON.stringify({
-        model: `models/${this.model}`,
-        content: { parts: [{ text: input }] },
-        taskType,
-        outputDimensionality: GEMINI_EMBEDDING_DIMENSIONS,
-      }),
-    },this.deadlines?.timeoutMs,this.deadlines?.exchangeTimeoutMs);
-
-    if (!response.ok) {
-      throw new Error(
-        formatSafeGeminiError(
-          "Gemini embedding failed",
-          await safeGeminiErrorDetails(response),
-        ),
-      );
-    }
-
-    let rawJson: unknown;
-    try {
-      rawJson = await response.json();
-    } catch (err) {
-      throw new Error(
-        `Gemini embedding returned non-JSON body: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-
-    const parsed = embedContentResponseSchema.safeParse(rawJson);
-    if (!parsed.success) {
-      throw new Error(
-        `Gemini embedding response failed schema validation: ${parsed.error.message}`,
-      );
-    }
-
-    return validateEmbeddingVector(parsed.data.embedding.values);
-    });
-  }
-}
 
 export interface EnsureInspirationEmbeddingParams {
   profileId: string;

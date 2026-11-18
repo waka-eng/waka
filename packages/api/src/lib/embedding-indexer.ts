@@ -3,7 +3,7 @@
 import {sql} from 'drizzle-orm';
 import type {PostgresJsDatabase} from 'drizzle-orm/postgres-js';
 import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
-import {createEmbeddingClient,embeddingInSpace,embeddingInputHash,type EmbeddingSpace} from './embedding-provider.js';
+import {createEmbeddingClient,readableEmbeddingSpace,embeddingInSpace,embeddingInputHash,type EmbeddingSpace} from './embedding-provider.js';
 import {parseEmbeddingPolicy,embeddingPolicySql,embeddingPolicyIdentity,type EmbeddingIndexPolicy} from './embedding-policy.js';
 import type {GeminiEmbeddingClient} from './inspiration-embeddings.js';
 import {readEmbeddingIndexSource} from './embedding-index-source.js';
@@ -62,7 +62,7 @@ export async function indexEmbeddingSource(db:Db,input:IndexSourceInput,deps:Ind
  if(!work)return {status:'missing' as const,generated:false,embedding:null,inputHash:null};
  const policy=parseEmbeddingPolicy(input.profileId,work.policy),migration=deps.migration;
  if(deps.expectedPolicy&&embeddingPolicyIdentity(policy)!==embeddingPolicyIdentity(deps.expectedPolicy))throw new EmbeddingIndexError('stale');
- if(migration?policy.activeSpace!==work.space&&policy.buildingSpace!==work.space:policy.activeSpace!==work.space)return {status:'inactive' as const,generated:false,embedding:null,inputHash:null};
+ if(readableEmbeddingSpace(policy)?.model!==work.space&&!(migration&&policy.activeSpace!==work.space&&policy.buildingSpace===work.space))return {status:'inactive' as const,generated:false,embedding:null,inputHash:null};
  const initial=await source(db,work),hash=initial.eligible?embeddingInputHash(work.space,initial.input):null;
  if(initial.eligible&&Buffer.byteLength(initial.input)>EMBEDDING_INDEX_LIMITS.sourceBytes)throw new EmbeddingIndexNeedsRetry('input_too_large');
  const snapshot:SettleEmbeddingWork={profileId:work.profile_id,workId:work.id,version:BigInt(work.requested_version),space:work.space,activeEpoch:policy.activeEpoch,inputHash:hash,outcome:initial.eligible?'current':'ineligible'};

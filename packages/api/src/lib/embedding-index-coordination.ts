@@ -14,17 +14,18 @@ export class EmbeddingIndexError extends Error{
   super(`Embedding index ${code}`);this.name='EmbeddingIndexError';
  }
 }
-function assertSpace(space:string){if(!['gemini-embedding-001',EMBEDDING_2_SPACE.id].includes(space))throw new EmbeddingIndexError('identity');}
+function assertSpace(space:string){if(space!==EMBEDDING_2_SPACE.id)throw new EmbeddingIndexError('identity');}
 export async function readEmbeddingIndexPolicy(db:Reader,profileId:string):Promise<EmbeddingIndexPolicy>{
  const [row]=await db.execute<{active_space:string;active_epoch:string;active_threshold_policy:string;building_space:string|null}>(sql`SELECT active_space,active_epoch::text,active_threshold_policy,building_space FROM profile_embedding_indexes WHERE profile_id=${profileId}::uuid`);
  if(!row)return {profileId,activeSpace:'gemini-embedding-001',activeEpoch:0n,activeThresholdPolicy:'gemini-embedding-001.thresholds.v1',buildingSpace:null};
- assertSpace(row.active_space);if(row.building_space)assertSpace(row.building_space);
+ if(row.active_space!=='gemini-embedding-001')assertSpace(row.active_space);
+ if(row.building_space&&row.building_space!=='gemini-embedding-001')assertSpace(row.building_space);
  return {profileId,activeSpace:row.active_space,activeEpoch:BigInt(row.active_epoch),activeThresholdPolicy:row.active_threshold_policy,buildingSpace:row.building_space};
 }
 /** Operator/coordination read. Runtime readers will project policy/pending on
  * their existing owner/vector SQL, not call this as an extra per-reader query. */
 export async function readEmbeddingIndexProgress(db:Reader,profileId:string,space:string){
- assertSpace(space);
+ if(space!=='gemini-embedding-001')assertSpace(space);
  const [row]=await db.execute<{pending:boolean;latest:string|null}>(sql`SELECT
   EXISTS(SELECT 1 FROM embedding_index_work WHERE profile_id=${profileId}::uuid AND space=${space} AND requested_version>completed_version) AS pending,
   (SELECT w.requested_version::text FROM embedding_index_work w WHERE w.profile_id=${profileId}::uuid AND w.space=${space} ORDER BY w.requested_version DESC NULLS LAST LIMIT 1) AS latest`);

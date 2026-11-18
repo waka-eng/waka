@@ -44,8 +44,10 @@ export function rankConversationCandidates(lexicalIds:string[],semantic:Semantic
  * the same canonical bytes used by the indexing path. Oversized/unavailable
  * material fails closed for semantic ranking; lexical recall stays available. */
 export async function readSemanticConversationCandidates(db:Reader,profileId:string,queryVector:number[],model?:string,lexicalIds:string[]=[],policy?:EmbeddingIndexPolicy){
-  const selected=readableEmbeddingSpace(policy),space={...selected,model:model??selected.model},minimum=embeddingRetrievalMinimum(policy,'chat',RECALL_MIN_COSINE),rules=embeddingCandidateRules(policy)?.chat;
-  if(policy&&space.model!==policy.activeSpace)throw new Error('Conversation embedding space changed');
+  const space=readableEmbeddingSpace(policy);
+  if(!space)return {candidates:[] as SemanticConversationCandidate[],similarities:new Map<string,number>(),trace:{scanned:0,scanLimited:false,validated:0,rejected:0}};
+  const minimum=embeddingRetrievalMinimum(policy,'chat',RECALL_MIN_COSINE),rules=embeddingCandidateRules(policy)?.chat;
+  if(model&&space.model!==model)throw new Error('Conversation embedding space changed');
   if(!embeddingInSpace(queryVector,space.dimensions,space))throw new Error('Invalid conversation query vector');
   const vectors=await db.select({id:inspirationEmbeddings.inspirationId,vector:inspirationEmbeddings.embedding,inputHash:inspirationEmbeddings.inputHash})
     .from(inspirationEmbeddings).where(and(eq(inspirationEmbeddings.profileId,profileId),eq(inspirationEmbeddings.inputScope,'personal'),eq(inspirationEmbeddings.model,space.model),eq(inspirationEmbeddings.dimensions,space.dimensions)))
@@ -103,7 +105,9 @@ async function currentMaterial(db:Reader,profileId:string,ids?:string[],policy?:
 
 }
 export async function hasCurrentConversationIndex(db:Reader,profileId:string,policy?:EmbeddingIndexPolicy){
- const space=readableEmbeddingSpace(policy),rows=await currentMaterial(db,profileId,undefined,policy,space);
+ const space=readableEmbeddingSpace(policy);
+ if(!space)return false;
+ const rows=await currentMaterial(db,profileId,undefined,policy,space);
  return rows.some(row=>{
   if(row.oversized||!embeddingInSpace(row.vector,row.dimensions??0,space)||row.answers.length>CONVERSATION_RETRIEVAL_LIMITS.children||row.media.length>CONVERSATION_RETRIEVAL_LIMITS.children||row.media.some(item=>item.enrichmentText?.trim()&&item.status!=='ready'))return false;
   const canonical=buildCanonicalInspirationEmbeddingInput({text:row.text,kind:row.kind,reflections:row.answers.map(answer=>({...answer,createdAt:new Date(answer.createdAt)})),attachments:row.media});

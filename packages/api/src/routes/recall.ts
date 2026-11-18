@@ -1,3 +1,4 @@
+import {EMBEDDING_2_SPACE} from '../lib/embedding-2-space.js';
 import {embeddingPolicySql,parseEmbeddingPolicy,embeddingPolicyIdentity,activeEmbeddingSpaceSql,embeddingRetrievalMinimum,embeddingCandidateRules} from '../lib/embedding-policy.js';
 /** Own-profile semantic retrieval. Current support and vector identity are
  * proved again after HTTP; an unavailable embedder never invents a match. */
@@ -9,7 +10,7 @@ import { recordConsultation } from '../lib/consultations.js';
 import { getDb } from '../lib/db.js';
 import { validateEmbeddingVector,
   type GeminiEmbeddingClient } from '../lib/inspiration-embeddings.js';
-import {createEmbeddingClient,readableEmbeddingSpace,embeddingInSpace,embeddingInputHash,EmbeddingProviderUnavailableError} from '../lib/embedding-provider.js';
+import {createEmbeddingClient,readableEmbeddingSpace,embeddingInSpace,embeddingInputHash,embeddingSpaceForClient,EmbeddingProviderUnavailableError} from '../lib/embedding-provider.js';
 import { requireAuth, type AuthEnv } from '../lib/middleware.js';
 import { personalSignalReadable } from '../lib/personal-output.js';
 import { reserveRecallAttempt, RECALL_TIMEOUT_MS } from '../lib/recall-budget.js';
@@ -38,6 +39,9 @@ export function createRecallRoutes(deps:RecallRouteDependencies={}):Hono<AuthEnv
     const scope=await resolveProfileScope(db,session,parsed.data.profile,'read',deps.loadProfile??loadProfileTarget);
     if(!scope.ok)return c.json(scope.body,scope.status);
     const receipt=()=>recordConsultation(db,{profileId:scope.profileId,session,surface:'signals'});
+    // Non-model2 injected clients are used only by hermetic route fixtures.
+    const testSpace=deps.embedClient&&deps.embedClient.model!==EMBEDDING_2_SPACE.id
+      ?embeddingSpaceForClient({model:deps.embedClient.model,dimensions:deps.dimensions}):null;
     // LEFT JOIN retains eligible-but-unindexed memory. It must not become a
     // successful empty result or buy a query vector with no usable candidates.
     const candidates=async(reader:Pick<typeof db,'select'>)=>{
@@ -45,18 +49,19 @@ export function createRecallRoutes(deps:RecallRouteDependencies={}):Hono<AuthEnv
         dimensions:signalEmbeddings.dimensions,model:signalEmbeddings.model,
         policy:sql<unknown>`CASE WHEN row_number() OVER(ORDER BY ${signals.lastEvidenceAt} DESC,${signals.createdAt} DESC,${signals.id} DESC)=1 THEN ${embeddingPolicySql(scope.profileId)} ELSE NULL END`})
         .from(signals).leftJoin(signalEmbeddings,and(eq(signalEmbeddings.signalId,signals.id),eq(signalEmbeddings.profileId,signals.profileId),
-          eq(signalEmbeddings.model,deps.embedClient?.model??activeEmbeddingSpaceSql(scope.profileId)),eq(signalEmbeddings.dimensions,deps.dimensions??768)))
+          eq(signalEmbeddings.model,testSpace?.model??activeEmbeddingSpaceSql(scope.profileId)),eq(signalEmbeddings.dimensions,testSpace?.dimensions??EMBEDDING_2_SPACE.dimensions)))
         .where(and(personalSignalReadable(scope.profileId),inArray(signals.status,['active','emerging'])))
         .orderBy(desc(signals.lastEvidenceAt),desc(signals.createdAt),desc(signals.id)).limit(MATCH_CANDIDATE_SCAN_LIMIT+1);
-      const policy=parseEmbeddingPolicy(scope.profileId,rows[0]?.policy),space={model:deps.embedClient?.model??readableEmbeddingSpace(policy).model,dimensions:deps.dimensions??768};
+      const policy=parseEmbeddingPolicy(scope.profileId,rows[0]?.policy);
+      const space=testSpace??readableEmbeddingSpace(policy);
       const scan=embeddingCandidateRules(policy)?.recall.scan??MATCH_CANDIDATE_SCAN_LIMIT,eligible=rows.slice(0,scan);
-      const usable=eligible.filter((row):row is typeof row&{embedding:number[];inputHash:string}=>row.inputHash===embeddingInputHash(space,row.statement)&&embeddingInSpace(row.embedding,row.dimensions??0,space));
+      const usable=eligible.filter((row):row is typeof row&{embedding:number[];inputHash:string}=>space!==null&&row.inputHash===embeddingInputHash(space,row.statement)&&embeddingInSpace(row.embedding,row.dimensions??0,space));
       return {policy,space,rows:usable,coverage:{scanned:eligible.length,compatible:usable.length,scanLimited:rows.length>scan}};
     };
     const before=await candidates(db);
     const unavailable=async(code:string)=>{await receipt();return c.json({error:'Semantic recall is unavailable. Use the list/detail tools to read current memory.',code,recall:{state:'unavailable',matches:[],coverage:before.coverage}},503);};
     if(!before.coverage.scanned){await receipt();return c.json({recall:{query:parsed.data.q,state:'empty',matches:[],coverage:before.coverage}});}
-    if(!before.rows.length)return unavailable('recall_index_incomplete');
+    if(!before.space||!before.rows.length)return unavailable('recall_index_incomplete');
     let client:GeminiEmbeddingClient;
     const timeoutMs=embeddingCandidateRules(before.policy)?.recall.deadlineMs??RECALL_TIMEOUT_MS;
     try{client=deps.embedClient??createEmbeddingClient({timeoutMs,exchangeTimeoutMs:timeoutMs},before.policy);}

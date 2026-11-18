@@ -26,7 +26,7 @@ if(polish){
 const matrix=polish||process.argv.includes('--matrix'),correctionsOnly=process.argv.includes('--corrections'),maxCalls=process.argv.includes('--first-case')?1:matrix?fixedMatrix.length:correctionsOnly?2:4,maxCostUsd=matrix ? .50 : .10;
 assert.ok(!(matrix&&correctionsOnly),'Choose a matrix or corrections-only run, not both.');
 const configured=parse(await readFile('.env.local').catch(error=>{if(error.code==='ENOENT')return '';throw error;}));
-for(const key of ['OPENROUTER_API_KEY','GEMINI_API_KEY'])if(!process.env[key]&&configured[key])process.env[key]=configured[key];
+for(const key of ['OPENROUTER_API_KEY'])if(!process.env[key]&&configured[key])process.env[key]=configured[key];
 delete process.env.DB_CONNECTION_URL;
 const {getDefaultModelProvider}=await import('../../packages/api/src/lib/model-provider.js');
 const provider=await getDefaultModelProvider(),network=globalThis.fetch;
@@ -38,7 +38,7 @@ persist();
 globalThis.fetch=async(input,init)=>{
   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
   if(expectedModel){if(JSON.parse(String(init?.body)).model!==expectedModel)stopped=true;assert.ok(!stopped,'Unexpected model: refused before dispatch.');}
-  assert.ok(['https://openrouter.ai','https://generativelanguage.googleapis.com'].includes(url.origin));assert.ok(!stopped&&calls<maxCalls&&costUsd<maxCostUsd);calls++;
+  assert.equal(url.origin,'https://openrouter.ai');assert.ok(!stopped&&calls<maxCalls&&costUsd<maxCostUsd);calls++;
   const start=performance.now(),index=requests.length;
   requests.push({phase:'dispatching',startedAt:new Date().toISOString(),costUsd:null});persist();
   let response:Response,body:any;

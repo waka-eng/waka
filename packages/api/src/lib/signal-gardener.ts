@@ -90,7 +90,6 @@ export async function tendSignalGarden(
     beforeCommit?: (tx: WakaTx) => Promise<void>;
   },
 ): Promise<GardenPassSummary> {
-  const provider = input.provider ?? (await getDefaultModelProvider());
   const revision = await readGenerationRevision(db, { profileId: input.profileId });
   if (!revision) return { scanned: 0, suspectPairs: 0, judged: 0, proposed: 0, opposed: 0 };
 
@@ -98,6 +97,9 @@ export async function tendSignalGarden(
      match-or-mint scans by. Dismissed rows are out (their vectors are
      suppression anchors now, a different job), and so is anything retired. */
   const rules=embeddingCandidateRules(revision.embeddingPolicy)?.gardener;
+  const space=readableEmbeddingSpace(revision.embeddingPolicy);
+  if(!space)return { scanned: 0, suspectPairs: 0, judged: 0, proposed: 0, opposed: 0 };
+  const provider = input.provider ?? (await getDefaultModelProvider());
   const rows = await db
     .select({
       id: signals.id,
@@ -119,7 +121,7 @@ export async function tendSignalGarden(
   }
 
   const ids = rows.map((row) => row.id);
-  const space=readableEmbeddingSpace(revision.embeddingPolicy),currentHashes=new Map(rows.map(row=>[row.id,embeddingInputHash(space,row.statement)]));
+  const currentHashes=new Map(rows.map(row=>[row.id,embeddingInputHash(space,row.statement)]));
   const embeddingRows = await db
     .select({ signalId: signalEmbeddings.signalId, embedding: signalEmbeddings.embedding,dimensions:signalEmbeddings.dimensions,inputHash:signalEmbeddings.inputHash })
     .from(signalEmbeddings)

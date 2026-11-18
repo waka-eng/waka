@@ -26,7 +26,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import type { ModelProvider, SignalMatchJudgement } from "./model-provider.js";
-import {hashEmbeddingInput,GEMINI_EMBEDDING_MODEL} from './inspiration-embeddings.js';
+import {EMBEDDING_2_SPACE,hashEmbedding2Input} from './embedding-2-space.js';
+import {enableFixtureEmbedding2} from '../../test/helpers/embedding2.js';
 import { resolveSignalDuplicate, tendSignalGarden } from "./signal-gardener.js";
 
 let t: TestDatabase;
@@ -39,6 +40,7 @@ async function seedProfile(): Promise<string> {
   const [profile] = await t.sql`
     INSERT INTO profiles (account_id, type, name)
     VALUES (${account.id}, 'human', ${`Gardener${seq}`}) RETURNING id`;
+  await enableFixtureEmbedding2(t,profile.id as string);
   return profile.id as string;
 }
 
@@ -57,8 +59,8 @@ async function seedSignal(
   const values=[...embedding,...Array<number>(768-embedding.length).fill(0)];
   await t.sql`
     INSERT INTO signal_embeddings (profile_id, signal_id, model, dimensions, input_hash, embedding)
-    VALUES (${profileId}, ${signal.id}, ${GEMINI_EMBEDDING_MODEL}, 768,
-            ${hashEmbeddingInput(statement)}, ${JSON.stringify(values)}::jsonb)`;
+    VALUES (${profileId}, ${signal.id}, ${EMBEDDING_2_SPACE.id}, 768,
+            ${hashEmbedding2Input(statement,'RETRIEVAL_DOCUMENT')}, ${JSON.stringify(values)}::jsonb)`;
   return signal.id as string;
 }
 

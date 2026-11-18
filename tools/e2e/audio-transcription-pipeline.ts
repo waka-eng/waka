@@ -12,11 +12,11 @@ const url = new URL(process.env.DB_CONNECTION_URL ?? '');
 assert.ok(['127.0.0.1', 'localhost'].includes(url.hostname)); assert.match(url.pathname, /test|disposable/i);
 assert.equal(url.searchParams.has('options'), false);
 const configured = parse(await readFile('.env.local').catch(error=>{if(error.code==='ENOENT')return '';throw error;}));
-const apiKey = process.env.GEMINI_API_KEY ?? configured.GEMINI_API_KEY;
-assert.ok(apiKey, 'GEMINI_API_KEY is required');
-process.env.NODE_ENV = 'test'; process.env.WAKA_BACKGROUND_JOB_AUTODRAIN = '0'; process.env.GEMINI_API_KEY = apiKey;
+const apiKey = process.env.OPENROUTER_API_KEY ?? configured.OPENROUTER_API_KEY;
+assert.ok(apiKey, 'OPENROUTER_API_KEY is required');
+process.env.NODE_ENV = 'test'; process.env.WAKA_BACKGROUND_JOB_AUTODRAIN = '0'; process.env.OPENROUTER_API_KEY = apiKey;
 delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION; delete process.env.AWS_LAMBDA_FUNCTION_NAME;
-delete process.env.OPENROUTER_API_KEY;
+
 process.env.ATTACHMENTS_BUCKET = 'audio-pipeline';
 const files = new Map<string, Buffer>();
 const server = createServer((request, response) => {
@@ -34,21 +34,18 @@ url.searchParams.set('options', `-c search_path=${fixture.schemaName}`); process
 const { getDb } = await import('../../packages/api/src/lib/db.js');
 const { drainBackgroundJobs, enqueueEnrichAttachment } = await import('../../packages/api/src/lib/queue.js');
 const network = globalThis.fetch;
-let calls = 0, estimatedCostUsd = 0;
+let calls = 0, reportedCostUsd = 0;
 globalThis.fetch = async (input, init) => {
   const target = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
-  assert.equal(target.origin, 'https://generativelanguage.googleapis.com');
-  assert.equal(target.pathname, '/v1beta/models/gemini-2.5-flash:generateContent');
-  assert.ok(calls < 2 && estimatedCostUsd < .05, 'Live call/cost cap reached'); calls += 1;
+  assert.equal(target.origin, 'https://openrouter.ai');
+  assert.equal(target.pathname, '/api/v1/chat/completions');
+  assert.equal(JSON.parse(String(init?.body)).model,'google/gemini-2.5-flash');
+  assert.ok(calls < 2 && reportedCostUsd < .05, 'Live call/cost cap reached'); calls += 1;
   const result = await network(input, init);
-  const body = await result.clone().json() as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number;
-    promptTokensDetails?: Array<{ modality: string; tokenCount: number }> } };
-  const usage = body.usageMetadata;
-  if (usage) {
-    const audio = usage.promptTokensDetails?.find(row => row.modality === 'AUDIO')?.tokenCount ?? usage.promptTokenCount ?? 0;
-    estimatedCostUsd += (audio + Math.max(0, (usage.promptTokenCount ?? 0) - audio) * .3 +
-      ((usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0)) * 2.5) / 1e6;
-  }
+  const body = await result.clone().json() as {usage?:{cost?:number}};
+  const cost=body.usage?.cost;
+  assert.ok(typeof cost==='number'&&Number.isFinite(cost)&&cost>=0,'Unpriced response. Stop the evaluation.');
+  reportedCostUsd+=cost;
   return result;
 };
 const cases: Array<Record<string, unknown>> = [];
@@ -79,7 +76,7 @@ try {
   }
   assert.equal(calls, 2);
 } finally {
-  const result = { at: new Date().toISOString(), calls, maxCalls: 2, estimatedCostUsd, estimatedCapUsd: .05, cases,
+  const result = { at: new Date().toISOString(), calls, maxCalls: 2, reportedCostUsd, stopThresholdUsd: .05, cases,
     limitations: ['synthetic speech and silence', 'local object transport, not AWS policy', 'no physical device audio'] };
   await mkdir('work/audio-transcription-eval', { recursive: true });
   await writeFile('work/audio-transcription-eval/pipeline-results.json', JSON.stringify(result, null, 2));

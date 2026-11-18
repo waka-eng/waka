@@ -11,5 +11,5 @@
   "WAKA_MODEL_PRINCIPLE_JUDGE": "gpt-6.1-terra",
   "WAKA_MODEL_ROUTE": "gpt-6.1-terra",
   "WAKA_MODEL_IMAGE": "gpt-6.1-terra",
-  "WAKA_AUDIO_PROVIDER": "gemini"
+  "WAKA_AUDIO_PROVIDER": "openrouter"
 }

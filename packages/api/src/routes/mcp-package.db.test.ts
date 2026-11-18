@@ -29,6 +29,10 @@ import { principlesRoutes, principlesMarkdownRoutes } from './principles.js';
 import {createRecallRoutes} from './recall.js';
 import {hashEmbeddingInput} from '../lib/inspiration-embeddings.js';
 
+const recallFixtureModel='mcp-partial-coverage-fixture';
+const recallEmbed=vi.fn(async()=>[1,...Array<number>(767).fill(0)]);
+
+
 const state = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('../lib/db.js', () => ({ getDb: () => state.db }));
 let t: TestDatabase, directory: string, legacyDirectory: string, origin: string;
@@ -81,7 +85,7 @@ beforeAll(async () => {
   app.route('/api/top-of-mind', topOfMindRoutes);
   app.route('/api/principles', principlesRoutes);
   app.route('/api/principles.md', principlesMarkdownRoutes);
-  app.route('/api/recall',createRecallRoutes({embedClient:{model:'gemini-embedding-001',embed:async()=>[1,...Array<number>(767).fill(0)]}}));
+  app.route('/api/recall',createRecallRoutes({embedClient:{model:recallFixtureModel,embed:recallEmbed}}));
   server = serve({ fetch: async req=>{
     httpRequests++;
     const result=await app.fetch(req);
@@ -173,10 +177,12 @@ it.each(['Noah', 'Anotherone', 'Me', 'Read-only', 'Old capture', 'Old read-only'
     // coverage with no scores must therefore reach its error path, never the
     // advertised "honest empty" text. No real provider is called.
     const [far]=await t.sql`SELECT statement FROM signals WHERE id=${sig.id}`;
-    await t.sql`INSERT INTO signal_embeddings(profile_id,signal_id,model,dimensions,input_hash,embedding) VALUES(${subject.id},${sig.id},'gemini-embedding-001',768,${hashEmbeddingInput(far.statement)},${JSON.stringify([0,1,...Array<number>(766).fill(0)])}::jsonb) ON CONFLICT(signal_id,model) DO UPDATE SET embedding=excluded.embedding,input_hash=excluded.input_hash`;
+    await t.sql`INSERT INTO signal_embeddings(profile_id,signal_id,model,dimensions,input_hash,embedding) VALUES(${subject.id},${sig.id},${recallFixtureModel},768,${hashEmbeddingInput(far.statement)},${JSON.stringify([0,1,...Array<number>(766).fill(0)])}::jsonb) ON CONFLICT(signal_id,model) DO UPDATE SET embedding=excluded.embedding,input_hash=excluded.input_hash`;
     const [unindexed]=await t.sql`INSERT INTO signals(profile_id,statement) VALUES(${subject.id},'A relevant synthetic claim without a compatible vector.') RETURNING id`;
     await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id,material_revision,statement_revision) SELECT ${subject.id},${subject.id},${unindexed.id},${fullSource.id},personal_revision,1 FROM inspiration_revisions WHERE profile_id=${subject.id} AND inspiration_id=${fullSource.id}`;
+    const callsBefore=recallEmbed.mock.calls.length;
     const partial=await fetch(origin+'/api/recall?q=Relevant%20synthetic%20memory',{headers:{Authorization:`Bearer ${subject.secret}`}});expect(partial.status).toBe(503);expect(await partial.json()).toMatchObject({code:'recall_index_incomplete'});
+    expect(recallEmbed).toHaveBeenCalledTimes(callsBefore+1);
     const recalled=await call('waka_recall',{query:'Relevant synthetic memory'});
     expect(recalled.isError).toBe(true);expect(recalled.content[0].text).not.toMatch(/honest empty|Nothing in the memory/);
     await t.sql`UPDATE inspirations SET text=${`Updated owned source for ${subject.name}`} WHERE id=${signal.evidence[0].inspirationId}`;

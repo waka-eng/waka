@@ -1,3 +1,4 @@
+import {enableFixtureEmbedding2,deferFixtureIndexJobs} from '../../test/helpers/embedding2.js';
 import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 /** Real source jobs, review records and queue settlement in isolated Postgres.
  * Provider responses and vectors are synthetic; no model/network calls. */
@@ -5,7 +6,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import { drainBackgroundJobs, enqueueDeriveSignals, postgresBackgroundJobStore, processBackgroundJob } from './queue.js';
 import { setDefaultModelProviderForTests, type ModelProvider, type SignalSupportAssessmentInput, type TopOfMindSynthesisInput } from './model-provider.js';
-import { GeminiEmbeddingHttpClient } from './inspiration-embeddings.js';
+import {OpenRouterEmbedding2Candidate} from './openrouter-media.js';
 import { BackgroundJobHeldError } from './background-job-hold.js';
 import { reviewSignalSupport } from './signal-support-review.js';
 import { applySignalSupportReview } from './signal-support-apply.js';
@@ -21,6 +22,7 @@ afterEach(() => vi.useRealTimers());
 async function fixture(count = 13) {
   const [account] = await t.sql`INSERT INTO accounts(email) VALUES (${`batch-scope-${++sequence}@example.test`}) RETURNING id`;
   const [profile] = await t.sql`INSERT INTO profiles(account_id, type, name) VALUES (${account.id}, 'human', 'Owner') RETURNING id`;
+  await enableFixtureEmbedding2(t,profile.id as string);
   const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${profile.id}, 'Quiet work matters') RETURNING id`;
   const ids: string[] = [];
   for (let n = 0; n < count; n++) {
@@ -39,6 +41,7 @@ const positive = vi.fn(async (input: SignalSupportAssessmentInput) => ({ assessm
 
 async function plan(f: Awaited<ReturnType<typeof fixture>>) {
   const queued = await enqueueDeriveSignals(f.profileId, f.sourceId, 'edited');
+  await deferFixtureIndexJobs(t);
   const parent = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
   expect(parent?.id).toBe(queued.jobId);
   try { await processBackgroundJob(parent!); throw new Error('Coverage must wait for its paid batches'); }
@@ -108,6 +111,7 @@ describe('bounded support coverage', () => {
   it('checks forty claims without exhausting retry attempts or repeating discovery', async () => {
     const [account] = await t.sql`INSERT INTO accounts(email) VALUES (${`batches-${++sequence}@example.test`}) RETURNING id`;
     const [profile] = await t.sql`INSERT INTO profiles(account_id, type, name) VALUES (${account.id}, 'human', 'Owner') RETURNING id`;
+  await enableFixtureEmbedding2(t,profile.id as string);
     const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${profile.id}, 'A changed thought about quiet work') RETURNING id`;
     for (let i = 0; i < 40; i++) {
       const [signal] = await t.sql`INSERT INTO signals(profile_id, statement) VALUES (${profile.id}, ${`Claim ${i}`}) RETURNING id`;
@@ -122,7 +126,8 @@ describe('bounded support coverage', () => {
     setDefaultModelProviderForTests({ assessSignalSupport: assess, extractSignalCandidates: extract,
       reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => ({ entries: [{ type: 'hypothesis', body: 'Quiet work is a current thread', citedSignalIds: [input.signals[0]!.id] }] }),
     } as unknown as ModelProvider);
-    vi.spyOn(GeminiEmbeddingHttpClient.prototype, 'embed').mockResolvedValue([1, ...new Array<number>(767).fill(0)]);
+    vi.spyOn(OpenRouterEmbedding2Candidate.prototype, 'embed').mockResolvedValue([1, ...new Array<number>(767).fill(0)]);
+    await deferFixtureIndexJobs(t);
     const queued = await enqueueDeriveSignals(profile.id as string, source.id as string, 'edited');
     vi.useFakeTimers({ toFake: ['Date'] });
     let now = new Date(), failures = 0;

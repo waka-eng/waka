@@ -288,13 +288,13 @@ export async function processConversationReply(db:Db,job:BackgroundJob,id:string
       WHERE p.account_id=${owner.accountId}::uuid AND r.dispatched_at>=now()-interval '1 hour'`);
     if(usage.count>=CONVERSATION_LIMITS.modelCalls)return refuse('failed','budget');
     const policies=next.memory.embeddingPolicies??[],owners=memoryProfiles(next.memory),selected=policies.filter(p=>owners.includes(p.profileId));
-    const cohort=selected.length>0&&new Set(selected.map(p=>p.activeSpace)).size===1;
+    const cohort=owners.length>0&&owners.every(owner=>readableEmbeddingSpace(selected.find(p=>p.profileId===owner))!==null);
     const policy=selected[0],embeddingSpace=readableEmbeddingSpace(policy);
     const embeddingState=!cohort?{client:null,availability:'compatibility_held' as const}:deps.embeddingClient===undefined?configuredEmbeddingClient({timeoutMs:embeddingCandidateRules(policy)?.chat.lookupDeadlineMs??5000,exchangeTimeoutMs:embeddingCandidateRules(policy)?.chat.exchangeTimeoutMs??10000},policy):{client:deps.embeddingClient,availability:deps.embeddingClient?'ready' as const:'not_configured' as const};
     const embeddingClient=embeddingState.client;
     let indexed=false;
-    if(conversationUsesSavedSources(next.input.history)&&embeddingClient?.model===embeddingSpace.model&&usage.count+2<=CONVERSATION_LIMITS.modelCalls){
-      // Each legacy owner is independent and ordered. No cross-space query.
+    if(conversationUsesSavedSources(next.input.history)&&embeddingSpace&&embeddingClient?.model===embeddingSpace.model&&usage.count+2<=CONVERSATION_LIMITS.modelCalls){
+      // Every owner must have a compatible policy before sharing one query vector.
       for(const owner of owners)if(await hasCurrentConversationIndex(tx,owner,selected.find(p=>p.profileId===owner))){indexed=true;break;}
     }
     const semantic=Boolean(indexed);

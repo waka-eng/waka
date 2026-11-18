@@ -1,9 +1,10 @@
+import {enableFixtureEmbedding2,deferFixtureIndexJobs,seedFixtureSignalVector} from '../../test/helpers/embedding2.js';
 import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 import { enqueueDeriveSignals, enqueueTopOfMindRefresh, postgresBackgroundJobStore, processBackgroundJob } from './queue.js';
 import { setDefaultModelProviderForTests, type ModelProvider, type SignalSupportAssessmentInput, type TopOfMindSynthesisInput } from './model-provider.js';
-import { GeminiEmbeddingHttpClient } from './inspiration-embeddings.js';
+import {OpenRouterEmbedding2Candidate} from './openrouter-media.js';
 
 let t: TestDatabase;
 let originalUrl: string;
@@ -20,8 +21,8 @@ beforeEach(async () => {
   vi.restoreAllMocks(); extract.mockReset(); discover = true; supportVerdict = 'supported';
   extract.mockImplementation(async () => ({ statements: discover ? [{ statement: 'Quiet helps me choose', quote: 'A saved source' }] : [] }));
   await t.truncateAll();
-  vi.spyOn(GeminiEmbeddingHttpClient.prototype, 'embed').mockResolvedValue([1, ...new Array<number>(767).fill(0)]);
-  setDefaultModelProviderForTests({ extractSignalCandidates: extract,
+  vi.spyOn(OpenRouterEmbedding2Candidate.prototype, 'embed').mockResolvedValue([1, ...new Array<number>(767).fill(0)]);
+  setDefaultModelProviderForTests({ extractSignalCandidates: extract,judgeSignalMatch:async()=>({relation:"independent"}),
     assessSignalSupport: async (input: SignalSupportAssessmentInput) => ({ assessments: input.claims.map((claim) => ({ signalId: claim.signalId, verdict: supportVerdict, sourceIds: supportVerdict === 'supported' ? [input.sources[0]!.id] : [] })) }),
     reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: async (input: TopOfMindSynthesisInput) => ({ entries: [{ type: 'hypothesis', body: 'A little quiet may help you choose.', citedSignalIds: input.signals.map(row => row.id) }] }),
   } as unknown as ModelProvider);
@@ -30,6 +31,7 @@ afterAll(async () => { vi.restoreAllMocks(); setDefaultModelProviderForTests(nul
 async function fixture() {
   const [account] = await t.sql`INSERT INTO accounts(email) VALUES (${`complete-${++sequence}@example.test`}) RETURNING id`;
   const [profile] = await t.sql`INSERT INTO profiles(account_id, type, name) VALUES (${account.id}, 'human', 'Owner') RETURNING id`;
+  await enableFixtureEmbedding2(t,profile.id as string);
   const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${profile.id}, 'A saved source') RETURNING id`;
   // Reading completion needs another original, not more signals from the
   // source whose save receipt this suite exercises.
@@ -37,6 +39,7 @@ async function fixture() {
     VALUES (${profile.id}, 'Pausing before a difficult decision clarified the options.') RETURNING id`;
   const [prior] = await t.sql`INSERT INTO signals(profile_id,statement)
     VALUES (${profile.id}, 'Pausing can clarify a decision') RETURNING id`;
+  await seedFixtureSignalVector(t,profile.id as string,prior.id as string,'Pausing can clarify a decision');
   await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
     VALUES (${profile.id},${profile.id},${prior.id},${other.id})`;
   const queued = await enqueueDeriveSignals(profile.id as string, source.id as string, 'created');
@@ -44,6 +47,7 @@ async function fixture() {
 }
 const read = async (id: string) => (await t.sql`SELECT derived_at, completed_at, reading_job_id, reading_request_version::text, result FROM inspiration_processing WHERE id = ${id}`)[0];
 async function runNext() {
+  await deferFixtureIndexJobs(t);
   const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
   expect(job).not.toBeNull();
   const result = await processBackgroundJob(job!);
@@ -70,7 +74,8 @@ describe('saved material reaches an actual reading', () => {
     await t.sql`CREATE FUNCTION refuse_principle_request() RETURNS trigger AS $$ BEGIN
       IF NEW.type::text = 'refresh_principles' THEN RAISE EXCEPTION 'principle queue unavailable'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`;
     await t.sql`CREATE TRIGGER refuse_principle_request BEFORE INSERT ON background_jobs FOR EACH ROW EXECUTE FUNCTION refuse_principle_request()`;
-    const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
+    await deferFixtureIndexJobs(t);
+  const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
     try {
       await expect(processBackgroundJob(job!)).rejects.toMatchObject({ cause: { message: 'principle queue unavailable' } });
       expect(await t.sql`SELECT id FROM top_of_minds`).toHaveLength(0);
@@ -115,7 +120,8 @@ describe('saved material reaches an actual reading', () => {
     setDefaultModelProviderForTests({ assessSignalSupport: async () => { throw new Error('Provider unavailable'); },
       extractSignalCandidates: async () => ({ statements: [] }),
     } as unknown as ModelProvider);
-    const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
+    await deferFixtureIndexJobs(t);
+  const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
     await expect(processBackgroundJob(job!)).rejects.toThrow(/support could not be fully assessed/i);
     expect(await read(next.receipt.id)).toMatchObject({ derived_at: null, completed_at: null, result: null });
     expect((await t.sql`SELECT text FROM inspirations WHERE id = ${f.sourceId}`)[0].text).toBe('Another thought');
@@ -181,7 +187,8 @@ describe('saved material reaches an actual reading', () => {
       newer = (await enqueueDeriveSignals(f.profileId, f.sourceId, 'edited')).receipt.id;
       return { entries: [{ type: 'hypothesis', body: 'An outdated reading', citedSignalIds: [input.signals[0]!.id] }] };
     } } as unknown as ModelProvider);
-    const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
+    await deferFixtureIndexJobs(t);
+  const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
     await expect(processBackgroundJob(job!)).rejects.toThrow(/inputs changed/i);
     expect((await read(f.receipt.id)).completed_at).toBeNull();
     expect((await read(newer)).completed_at).toBeNull();
@@ -193,7 +200,8 @@ describe('saved material reaches an actual reading', () => {
     await t.sql`UPDATE background_jobs SET status = 'succeeded', completed_version = request_version WHERE id = ${f.receipt.jobId}`;
     const pending = await enqueueTopOfMindRefresh(f.profileId, 'manual');
     await t.sql`UPDATE inspiration_processing SET derived_at = now(), reading_job_id = ${pending.jobId}, reading_request_version = ${pending.requestVersion}::bigint WHERE id = ${f.receipt.id}`;
-    const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
+    await deferFixtureIndexJobs(t);
+  const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
     await t.sql`UPDATE background_jobs SET locked_at = now() + interval '2 seconds', attempts = attempts + 1 WHERE id = ${job!.id}`;
     await expect(processBackgroundJob(job!)).rejects.toThrow(/ownership changed/i);
     expect((await read(f.receipt.id)).completed_at).toBeNull();
@@ -201,7 +209,8 @@ describe('saved material reaches an actual reading', () => {
 
   it('recovers a committed derivation without buying extraction or another read request again', async () => {
     const f = await fixture();
-    const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
+    await deferFixtureIndexJobs(t);
+  const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
     await processBackgroundJob(job!);
     const before = await read(f.receipt.id);
     await processBackgroundJob(job!); // simulate recovery before settlement
@@ -241,7 +250,8 @@ describe('saved material reaches an actual reading', () => {
       await enqueueTopOfMindRefresh(f.profileId, 'manual'); await runNext();
       throw new Error('Extraction temporarily unavailable');
     });
-    const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
+    await deferFixtureIndexJobs(t);
+  const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
     await expect(processBackgroundJob(job!)).rejects.toThrow('Extraction temporarily unavailable');
     const early = await read(next.receipt.id);
     expect(early.result).toBeTruthy(); expect(early.completed_at).toBeNull(); expect(early.derived_at).toBeNull();
@@ -252,7 +262,8 @@ describe('saved material reaches an actual reading', () => {
 
   it('publishes no artifact if its processing receipt cannot commit', async () => {
     const f = await fixture(); await runNext();
-    const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
+    await deferFixtureIndexJobs(t);
+  const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
     await t.sql`CREATE FUNCTION refuse_processing_result() RETURNS trigger AS $$ BEGIN
       IF NEW.result IS NOT NULL THEN RAISE EXCEPTION 'receipt unavailable'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`;
     await t.sql`CREATE TRIGGER refuse_processing_result BEFORE UPDATE ON inspiration_processing FOR EACH ROW EXECUTE FUNCTION refuse_processing_result()`;
