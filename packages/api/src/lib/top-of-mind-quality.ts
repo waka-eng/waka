@@ -45,15 +45,15 @@ export function copiesSource(text: string, sources: readonly string[]): boolean 
   });
 }
 
-function sourceFingerprint(id: string, context: TopOfMindQualityContext): string | null {
-  const parts = [...new Set((context.sourceTexts.get(id) ?? []).map(normalize).filter(Boolean))].sort();
+export function readingSourceFingerprint(texts:readonly string[]):string|null {
+  const parts = [...new Set(texts.map(normalize).filter(Boolean))].sort();
   return parts.length ? JSON.stringify(parts) : null;
 }
 
 export function distinctReadingOrigins(ids: readonly string[], context: TopOfMindQualityContext): number {
   const originals = new Set<string>();
   for (const id of new Set(ids.flatMap(id => context.signalOrigins.get(id) ?? []))) {
-    const fingerprint = sourceFingerprint(id, context);
+    const fingerprint = readingSourceFingerprint(context.sourceTexts.get(id) ?? []);
     // Re-saving identical material does not supply a different inspiration.
     if (fingerprint) originals.add(fingerprint);
   }
@@ -112,7 +112,7 @@ export async function reviewReadingEntries(
         for (const group of groups) {
           const id = group[offset];
           if (!id) continue;
-          const fingerprint = sourceFingerprint(id, context);
+          const fingerprint = readingSourceFingerprint(context.sourceTexts.get(id) ?? []);
           if (!fingerprint || seen.has(fingerprint)) continue;
           seen.add(fingerprint); inspirationIds.push(id);
           if (inspirationIds.length === 4) break;

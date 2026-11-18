@@ -1,9 +1,13 @@
-import type {DistillPrinciplesInput} from './model-provider.js';
+import type {DistillPrinciplesInput,PrincipleGroundingInput} from './model-provider.js';
 import {fence} from './prompt-fence.js';
 
 export const PRINCIPLE_INPUT_LIMITS={signals:48,standingContext:24,entries:7,characters:16000} as const;
 export const PRINCIPLE_COMPARISON_LIMITS={items:20,characters:12000,outputTokens:1600} as const;
 export const PRINCIPLE_GROUNDING_LIMITS={items:3,characters:18000,outputTokens:512} as const;
+
+export function renderPrincipleGroundingContext(input: PrincipleGroundingInput): string {
+  return `Locale: ${input.preferredLocale}\n${fence('grounding data', JSON.stringify(input))}`;
+}
 
 /** Shared with the provider builder so the budget measures actual prompt
  * text rather than an optimistic estimate. Human wording is never truncated. */
