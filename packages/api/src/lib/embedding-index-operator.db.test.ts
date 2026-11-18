@@ -7,7 +7,7 @@ import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js'
 import {readEmbeddingShadowInventory,prepareEmbeddingShadowBuild,runEmbeddingShadowBatch,renewEmbeddingSignalFromManifest,embeddingShadowManifestHash,type EmbeddingShadowManifest} from './embedding-index-operator.js';
 import {indexEmbeddingSource} from './embedding-indexer.js';
 import {OpenRouterHttpError} from './openrouter-http.js';
-import {PROVISIONAL_EMBEDDING_2_POLICY} from './embedding-policy.js';
+import {EMBEDDING_2_CANDIDATE_POLICY} from './embedding-policy.js';
 import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
 import {buildCanonicalInspirationEmbeddingInput,hashEmbeddingInput} from './inspiration-embeddings.js';
 let t:TestDatabase;beforeAll(async()=>{t=await createTestDatabase();});afterAll(async()=>{await t?.cleanup();});
@@ -45,7 +45,7 @@ it('refuses a changed manifest, foreign owner, stale epoch or inventory ceiling 
  expect(await t.sql`SELECT id FROM embedding_index_work WHERE profile_id=${f.profileId}`).toHaveLength(0);expect((await t.sql`SELECT building_space FROM profile_embedding_indexes WHERE profile_id=${f.profileId}`)[0].building_space).toBeNull();
 });
 it('binds metadata-only signal renewal to an exact approved account, profile, epoch and current failed work version',async()=>{
- const f=await fixture();await t.sql`UPDATE profile_embedding_indexes SET active_space=${EMBEDDING_2_SPACE.id},active_epoch=1,active_threshold_policy=${PROVISIONAL_EMBEDDING_2_POLICY} WHERE profile_id=${f.profileId}`;
+ const f=await fixture();await t.sql`UPDATE profile_embedding_indexes SET active_space=${EMBEDDING_2_SPACE.id},active_epoch=1,active_threshold_policy=${EMBEDDING_2_CANDIDATE_POLICY} WHERE profile_id=${f.profileId}`;
  const [signal]=await t.sql`SELECT id FROM signals WHERE profile_id=${f.profileId}`;await t.sql`SELECT embedding_index_request(${f.profileId},'signal',${signal.id},'statement')`;
  const client={model:EMBEDDING_2_SPACE.id,embed:vi.fn(async():Promise<number[]>=>{throw new OpenRouterHttpError('Closed synthetic failure',402);})};
  await expect(indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'signal',sourceId:signal.id,space:EMBEDDING_2_SPACE.id},{client})).rejects.toMatchObject({code:'provider_refused'});

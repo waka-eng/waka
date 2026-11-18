@@ -10,7 +10,7 @@ import * as schema from '../db/index.js';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js';
 import {indexEmbeddingSource,EmbeddingIndexNeedsRetry} from './embedding-indexer.js';
 import {EMBEDDING_2_SPACE,hashEmbedding2Input} from './embedding-2-space.js';
-import {PROVISIONAL_EMBEDDING_2_POLICY} from './embedding-policy.js';
+import {EMBEDDING_2_CANDIDATE_POLICY} from './embedding-policy.js';
 import {hashEmbeddingInput,GEMINI_EMBEDDING_MODEL} from './inspiration-embeddings.js';
 import {OpenRouterHttpError} from './openrouter-http.js';
 import {BackgroundJobHeldError} from './background-job-hold.js';
@@ -21,7 +21,7 @@ const values=()=>[2,1,...Array<number>(766).fill(0)];
 const client=(embed=vi.fn(async(_input:string)=>values()))=>({model:EMBEDDING_2_SPACE.id,dimensions:768,embed});
 async function owner(active=false){const[a]=await t.sql`INSERT INTO accounts(email) VALUES(${randomUUID()+'@example.test'}) RETURNING id`;const[p]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${a.id},'human','Synthetic') RETURNING id`;
  await t.sql`INSERT INTO profile_embedding_indexes(profile_id,building_space,building_threshold_policy) VALUES(${p.id},${EMBEDDING_2_SPACE.id},'embedding2.unvalidated')`;
- if(active)await t.sql`UPDATE profile_embedding_indexes SET active_space=${EMBEDDING_2_SPACE.id},active_epoch=1,active_threshold_policy=${PROVISIONAL_EMBEDDING_2_POLICY} WHERE profile_id=${p.id}`;
+ if(active)await t.sql`UPDATE profile_embedding_indexes SET active_space=${EMBEDDING_2_SPACE.id},active_epoch=1,active_threshold_policy=${EMBEDDING_2_CANDIDATE_POLICY} WHERE profile_id=${p.id}`;
  return {accountId:a.id as string,profileId:p.id as string};}
 async function signal(profileId:string){const[s]=await t.sql`INSERT INTO signals(profile_id,statement,status,locked_at) VALUES(${profileId},'Exact owner-locked words.','emerging',now()) RETURNING id,statement,locked_at`;return s;}
 const input=(profileId:string,id:string)=>({profileId,sourceKind:'signal' as const,sourceId:id,space:EMBEDDING_2_SPACE.id});

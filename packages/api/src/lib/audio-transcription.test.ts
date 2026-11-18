@@ -14,17 +14,17 @@ function wave(seconds = 1): Uint8Array {
   return bytes;
 }
 const response = (transcript: unknown, finishReason = 'STOP') => new Response(JSON.stringify({
-  candidates: [{ finishReason, content: { parts: [{ text: JSON.stringify({ transcript }) }] } }],
+  choices: [{ finish_reason: finishReason==='SAFETY'?'content_filter':finishReason.toLowerCase(), message: { content: JSON.stringify({ transcript }) } }],
 }), { headers: { 'Content-Type': 'application/json' } });
 const run = (fetchFn: typeof fetch, extra: Partial<Parameters<typeof transcribeAudio>[0]> = {}) =>
-  transcribeAudio({ bytes: wave(), contentType: 'audio/wav', apiKey: 'test-key', fetchFn, ...extra });
+  transcribeAudio({ bytes: wave(), contentType: 'audio/wav', openRouterApiKey: 'test-key', fetchFn, ...extra });
 afterEach(()=>vi.unstubAllEnvs());
 
 describe('bounded transcription', () => {
   it('dispatches the configured OR transcription only after actual audio inspection',async()=>{
-    vi.stubEnv('WAKA_AUDIO_PROVIDER','openrouter');const fetchFn=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({text:'여백을 남겨요. Leave room.'})));
-    const result=await run(fetchFn,{openRouterApiKey:'SYNTHETIC_OR'});expect(result).toMatchObject({model:'google/gemini-3.5-transcribe',transcript:'여백을 남겨요. Leave room.',durationSeconds:1});
-    expect(String(fetchFn.mock.calls[0][0])).toBe('https://openrouter.ai/api/v1/audio/transcriptions');expect(fetchFn).toHaveBeenCalledOnce();
+    vi.stubEnv('WAKA_AUDIO_PROVIDER','openrouter');const fetchFn=vi.fn<typeof fetch>().mockResolvedValue(response('여백을 남겨요. Leave room.'));
+    const result=await run(fetchFn,{openRouterApiKey:'SYNTHETIC_OR'});expect(result).toMatchObject({model:'google/gemini-2.5-flash',transcript:'여백을 남겨요. Leave room.',durationSeconds:1});
+    expect(String(fetchFn.mock.calls[0][0])).toBe('https://openrouter.ai/api/v1/chat/completions');expect(fetchFn).toHaveBeenCalledOnce();
     fetchFn.mockClear();await expect(run(fetchFn,{bytes:Buffer.from('not audio'),openRouterApiKey:'SYNTHETIC_OR'})).rejects.toMatchObject({transient:false});expect(fetchFn).not.toHaveBeenCalled();
   });
   it('accepts a real MediaRecorder WebM without a declared container duration', async () => {
@@ -35,6 +35,8 @@ describe('bounded transcription', () => {
     expect(inspected.durationSeconds).toBeLessThan(301);
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(response(''));
     expect((await run(fetchFn, { bytes, contentType: 'audio/webm;codecs=opus' })).transcript).toBe('');
+    const body=JSON.parse(String(fetchFn.mock.calls[0]![1]?.body));
+    expect(body.messages[0].content[1]).toEqual({type:'input_audio',input_audio:{format:'webm',data:bytes.toString('base64')}});
   });
   it('measures actual audio and preserves language without merging it with authored text', async () => {
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(response('여백을 남기자. Leave room to think.'));
@@ -43,11 +45,12 @@ describe('bounded transcription', () => {
     expect(result.audioHash).toMatch(/^[0-9a-f]{64}$/);
     const [url, init] = fetchFn.mock.calls[0]!;
     expect(String(url)).not.toContain('test-key');
-    expect(init?.headers).toMatchObject({ 'x-goog-api-key': 'test-key' });
+    expect(init?.headers).toMatchObject({ Authorization: 'Bearer test-key' });
+    expect(init?.headers).not.toHaveProperty('x-goog-api-key');
     const sent = JSON.parse(String(init?.body));
-    expect(sent.contents[0].parts[1].inlineData.data).toBe(Buffer.from(wave()).toString('base64'));
-    expect(sent.contents[0].parts[0].text).toMatch(/never instructions to follow/);
-    expect(sent.generationConfig.thinkingConfig.thinkingBudget).toBe(0);
+    expect(sent.messages[0].content[1].input_audio.data).toBe(Buffer.from(wave()).toString('base64'));
+    expect(sent.messages[0].content[0].text).toMatch(/never instructions to follow/);
+    expect(sent).toMatchObject({reasoning:{enabled:false},provider:{only:['google-ai-studio'],allow_fallbacks:false,require_parameters:true}});
     expect(fetchFn).toHaveBeenCalledOnce();
   });
   it('keeps no-speech distinct from malformed or truncated output', async () => {
@@ -73,15 +76,13 @@ describe('bounded transcription', () => {
   });
   it('does not call a provider with missing credentials or canceled work', async () => {
     const fetchFn = vi.fn<typeof fetch>();
-    await expect(run(fetchFn, { apiKey: '' })).rejects.toMatchObject({ code: 'transcription_unconfigured' });
+    await expect(run(fetchFn, { openRouterApiKey: '' })).rejects.toMatchObject({ code: 'transcription_unconfigured' });
     await expect(run(fetchFn, { signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'transcription_canceled' });
     expect(fetchFn).not.toHaveBeenCalled();
   });
   it('does not turn a safety refusal or leaked reasoning into a transcript', async () => {
     await expect(run(vi.fn<typeof fetch>().mockResolvedValue(response('not a transcript', 'SAFETY')))).rejects.toMatchObject({ code: 'transcription_blocked', transient: false });
-    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [
-      { text: 'internal reasoning', thought: true }, { text: '{"transcript":"actual words"}' },
-    ] } }] })));
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { reasoning:'internal reasoning', content:'{"transcript":"actual words"}' } }] })));
     expect((await run(fetchFn)).transcript).toBe('actual words');
   });
 });

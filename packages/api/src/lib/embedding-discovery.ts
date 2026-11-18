@@ -3,7 +3,7 @@
 import {sql} from 'drizzle-orm';
 import type {PostgresJsDatabase} from 'drizzle-orm/postgres-js';
 import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
-import {embeddingInputHash,embeddingInSpace} from './embedding-provider.js';
+import {embeddingInputHash,embeddingInSpace,readableEmbeddingSpace} from './embedding-provider.js';
 import {embeddingPolicyIdentity,type EmbeddingIndexPolicy} from './embedding-policy.js';
 import {reserveEmbeddingIndexAttempt,EmbeddingIndexError} from './embedding-index-coordination.js';
 import {EmbeddingIndexNeedsRetry} from './embedding-indexer.js';
@@ -21,7 +21,7 @@ export interface DiscoveryEmbeddingInput{
  prove:(tx:Tx)=>Promise<void>;claim:(tx:Tx)=>Promise<void>;
 }
 export async function embedDiscoveryCandidates(db:Db,input:DiscoveryEmbeddingInput,client:StatementEmbeddingClient){
- if(client.model!==EMBEDDING_2_SPACE.id||input.policy.activeSpace!==client.model||input.policy.profileId!==input.profileId||!input.statements.length||input.statements.length>12||input.statements.some(text=>!text||Buffer.byteLength(text)>2000)||!/^[a-f0-9]{64}$/.test(input.materialHash)||!/^\d+$/.test(input.request.requestVersion))throw new EmbeddingIndexError('identity');
+ if(client.model!==EMBEDDING_2_SPACE.id||readableEmbeddingSpace(input.policy)?.model!==client.model||input.policy.profileId!==input.profileId||!input.statements.length||input.statements.length>12||input.statements.some(text=>!text||Buffer.byteLength(text)>2000)||!/^[a-f0-9]{64}$/.test(input.materialHash)||!/^\d+$/.test(input.request.requestVersion))throw new EmbeddingIndexError('identity');
  const group=hashEmbeddingInput(JSON.stringify({sourceKind:input.sourceKind,sourceId:input.sourceId,materialHash:input.materialHash,request:input.request,policy:embeddingPolicyIdentity(input.policy)}));
  const base='discovery:'+group;
  const prior=await db.execute<{request_key:string;input_hash:string;status:string;http_status:number|null;fresh:boolean;inflight_until:string}>(sql`SELECT request_key,input_hash,status,http_status,started_at>clock_timestamp()-interval '30 seconds' AS fresh,(started_at+interval '30 seconds')::text AS inflight_until FROM embedding_index_attempts WHERE profile_id=${input.profileId}::uuid AND request_key LIKE ${base+':%'} ORDER BY request_key`);

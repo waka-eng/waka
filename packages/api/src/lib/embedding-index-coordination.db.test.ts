@@ -237,7 +237,7 @@ it.each(['reflection','attachment'] as const)('invalidates one parent per affect
   ?await t.sql`SELECT question,answer,skipped,created_at FROM reflections WHERE profile_id=${f.profileId} AND inspiration_id=${parent.id}`
   :await t.sql`SELECT type,url,enrichment_status,enrichment_text,transcript_correction,created_at FROM attachments WHERE profile_id=${f.profileId} AND inspiration_id=${parent.id}`;
  const wordBag=(rows:unknown[])=>rows.map(row=>JSON.stringify(row)).sort();const priorWords=wordBag(await words());
- const embed=vi.fn(async(_input:string)=>vector());const client={model:GEMINI_EMBEDDING_MODEL,dimensions:768,embed};
+ const embed=vi.fn(async(_input:string)=>vector());const client={model:"fixture-vector-child-order",dimensions:768,embed};
  const before=await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:parent.id,inputScope:'personal',client});
  expect(embed).toHaveBeenCalledOnce();const inputBefore=embed.mock.calls[0]![0];const hashBefore=hashEmbedding2Input(inputBefore,'RETRIEVAL_DOCUMENT');
  await t.sql`INSERT INTO inspiration_embeddings(profile_id,inspiration_id,model,input_scope,dimensions,input_hash,embedding) VALUES(${f.profileId},${parent.id},${EMBEDDING_2_SPACE.id},'personal',768,${hashBefore},${JSON.stringify(vector())}::jsonb)`;

@@ -523,6 +523,7 @@ export interface ConversationReplyResult {answer:string;followUpQuestion:string|
 
 export interface ModelProvider {
   readonly name: string;
+  readonly pinnedModel?: string;
   answerConversation(input:ConversationReplyInput):Promise<ConversationReplyResult>;
   askReflectionQuestion(input: ReflectionQuestionInput): Promise<ReflectionQuestionResult>;
   askReviewQuestion(input:ReviewQuestionInput):Promise<ReviewQuestionResult>;
@@ -552,7 +553,7 @@ let defaultProvider: ModelProvider | null = null;
 export async function getDefaultModelProvider(): Promise<ModelProvider> {
   if (!defaultProvider) {
     /* An explicit closed provider choice wins, and its key is mandatory.
-       Unset preserves the old OR-key/Gemini selection for existing stages.
+       Unset prefers OpenRouter when its key is present.
        Adding an OpenAI key alone cannot hijack an existing route; retained OR
        media credentials cannot hijack the selected native text provider.
        Stored embeddings remain on their separate calibrated route. */
@@ -568,6 +569,7 @@ export async function getDefaultModelProvider(): Promise<ModelProvider> {
       );
       defaultProvider = timeModelProvider(createOpenRouterModelProvider());
     } else {
+      if(!process.env.OPENROUTER_API_KEY?.trim())throw new Error('Selected Gemini model requires OPENROUTER_API_KEY');
       const { createGeminiModelProvider } = await import("./gemini-model-provider.js");
       defaultProvider = timeModelProvider(createGeminiModelProvider());
     }

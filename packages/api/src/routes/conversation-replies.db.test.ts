@@ -1,3 +1,4 @@
+import {enableFixtureEmbedding2} from '../../test/helpers/embedding2.js';
 import {resolveConversationOpening} from '../lib/conversation-opening.js';
 /** WHAT THIS MOCKS, AND WHY (gate G6): `authMiddleware` supplies owned
  * sessions and `ModelProvider` returns controlled replies. Real routes,
@@ -21,10 +22,10 @@ import {setDefaultModelProviderForTests,type ConversationReplyInput,type Convers
 import {postgresBackgroundJobStore,processBackgroundJob} from '../lib/queue.js';
 import {assembleProfileExport} from '../lib/profile-export.js';
 import {processConversationReply} from '../lib/conversation-replies.js';
-import {ensureInspirationEmbedding,GEMINI_EMBEDDING_MODEL} from '../lib/inspiration-embeddings.js';
+import {ensureInspirationEmbedding} from '../lib/inspiration-embeddings.js';
 import {indexEmbeddingSource} from '../lib/embedding-indexer.js';
 import {EMBEDDING_2_SPACE} from '../lib/embedding-2-space.js';
-import {PROVISIONAL_EMBEDDING_2_POLICY} from '../lib/embedding-policy.js';
+import {EMBEDDING_2_CANDIDATE_POLICY} from '../lib/embedding-policy.js';
 let t:TestDatabase,during:(()=>Promise<void>)|null=null;
 const connection=process.env.DB_CONNECTION_URL!;
 const answer=vi.fn<(input:ConversationReplyInput)=>Promise<ConversationReplyResult>>(async(input)=>{await during?.();return {answer:'A small experiment may help you compare these priorities.',followUpQuestion:'What would you most like that experiment to clarify?',citations:input.sources.length?[{sourceNumber:1,quote:input.sources[0].text.slice(0,80)}]:[]};});
@@ -48,7 +49,7 @@ async function claim(){
   const job=await postgresBackgroundJobStore.claimNext(new Date());expect(job?.type).toBe('generate_conversation_reply');return job!;
 }
 async function model2(f:Awaited<ReturnType<typeof fixture>>){
- await t.sql`UPDATE profile_embedding_indexes SET active_space=${EMBEDDING_2_SPACE.id},active_epoch=1,active_threshold_policy=${PROVISIONAL_EMBEDDING_2_POLICY} WHERE profile_id=${f.profileId}`;
+ await t.sql`UPDATE profile_embedding_indexes SET active_space=${EMBEDDING_2_SPACE.id},active_epoch=1,active_threshold_policy=${EMBEDDING_2_CANDIDATE_POLICY} WHERE profile_id=${f.profileId}`;
  await t.sql`INSERT INTO embedding_index_work(profile_id,space,source_kind,source_id,input_scope) VALUES(${f.profileId},${EMBEDDING_2_SPACE.id},'inspiration',${f.sourceId},'personal') ON CONFLICT DO NOTHING`;
  const vector=[1,...Array<number>(767).fill(0)];await indexEmbeddingSource(t.db,{profileId:f.profileId,sourceKind:'inspiration',sourceId:f.sourceId,space:EMBEDDING_2_SPACE.id},{client:{model:EMBEDDING_2_SPACE.id,embed:async()=>vector}});return vector;
 }
@@ -69,7 +70,7 @@ it('rejects an old native admission after a model2 policy change before any prov
 });
 it('keeps mixed embedding spaces in legacy both chats lexical and fences both owned memories at publication',async()=>{
  const f=await fixture(),vector=await model2(f),[agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.accountId},'agent','Retained agent') RETURNING id`,[source]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${agent.id},'A quiet morning supports an agent experiment.') RETURNING id`;
- await ensureInspirationEmbedding({db:t.db as never,profileId:agent.id,inspirationId:source.id,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+ await t.sql`INSERT INTO inspiration_embeddings(profile_id,inspiration_id,model,input_scope,dimensions,input_hash,embedding) VALUES(${agent.id},${source.id},'gemini-embedding-001','personal',768,'historical',${JSON.stringify(vector)}::jsonb)`;
  await t.sql`UPDATE conversations SET perspective='both',agent_profile_id=${agent.id} WHERE id=${f.id}`;await f.request();const job=await claim(),embed=vi.fn(async()=>vector);
  during=async()=>{await t.sql`UPDATE inspirations SET text='Changed agent memory while the answer was in flight.' WHERE id=${source.id}`;};
  await processConversationReply(t.db as never,job,f.id,(await f.state()).requestId,async()=>{},{embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});
@@ -252,12 +253,12 @@ it('records only actually used correction sources and skips unused query embeddi
   const f=await fixture(),words='Seek intensive experiences whenever possible.';
   const [principle]=await t.sql`INSERT INTO principles(profile_id,statement,type,origin,rank,locked_at) VALUES(${f.profileId},${words},'maxim','declared',0,now()) RETURNING id`;
   const vector=[1,...Array<number>(767).fill(0)];
-  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await model2(f);
   await f.request();const firstState=await f.state(),firstJob=await claim();
-  await processConversationReply(t.db as never,firstJob,f.id,firstState.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await processConversationReply(t.db as never,firstJob,f.id,firstState.requestId,async()=>{}, {embeddingClient:{model:EMBEDDING_2_SPACE.id,embed:async()=>vector}});
   await postgresBackgroundJobStore.markSucceeded(firstJob,null);
   const [first]=await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${f.id} AND role='assistant'`;
-  const embed=vi.fn(async()=>vector),embeddingClient={model:GEMINI_EMBEDDING_MODEL,embed};
+  const embed=vi.fn(async()=>vector),embeddingClient={model:EMBEDDING_2_SPACE.id,embed};
   answer.mockImplementationOnce(async()=>({answer:'The slower pace is for this month only.',followUpQuestion:null,citations:[]}));
   expect((await f.post(`/${f.id}/messages`,{id:randomUUID(),content:'No, I enjoyed it. For this month only I want a slower pace.',revision:2,correctsMessageId:first.id,requestReply:true})).status).toBe(200);
   const state=await f.state(),job=await claim();
@@ -289,8 +290,9 @@ it('coalesces initial requests, stores one grounded reply, and replays without a
 });
 it('looks up semantic context outside locks, records the selected sources and does not replay its embedding',async()=>{
   const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
+  await enableFixtureEmbedding2(t,f.profileId);
   const [extra]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'Unstructured time invites creative noticing.') RETURNING id`;
-  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:extra.id,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:extra.id,client:{model:EMBEDDING_2_SPACE.id,embed:async()=>vector}});
   await f.request();const state=await f.state(),job=await claim();
   const peer=postgres(process.env.DB_CONNECTION_URL!,{max:1,prepare:false,onnotice:()=>{}});
   const embed=vi.fn(async()=>{
@@ -299,39 +301,40 @@ it('looks up semantic context outside locks, records the selected sources and do
     return vector;
   });
   try{
-    await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+    await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});
     expect((await f.state()).phase).toBe('ready');expect(embed).toHaveBeenCalledOnce();
     expect(answer.mock.calls[0]![0].sources.some(source=>source.text.includes('Unstructured time'))).toBe(true);
     const context=await(await f.app.request(`/conversations/${f.id}/context`)).json() as any;
     expect(context.inspirations[0].id).toBe(extra.id);
     const [request]=await t.sql`SELECT context_sources,retrieval_dispatched_at FROM conversation_reply_requests WHERE id=${state.requestId}`;
     expect(request.retrieval_dispatched_at).not.toBeNull();expect(request.context_sources.some((source:{id:string})=>source.id===extra.id)).toBe(true);
-    await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+    await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});
     expect(embed).toHaveBeenCalledOnce();expect(answer).toHaveBeenCalledOnce();
   }finally{await peer.end();}
 });
 it('honors Stop during semantic lookup before calling the reply model',async()=>{
   const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
-  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await model2(f);
   await f.request();const state=await f.state(),job=await claim();
   const embed=vi.fn(async()=>{await f.post(`/${f.id}/replies/${state.requestId}/stop`,{});return vector;});
-  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});
   expect((await f.state()).phase).toBe('stopped');expect(answer).not.toHaveBeenCalled();
   expect(await t.sql`SELECT id FROM conversation_messages WHERE role='user'`).toHaveLength(1);
 });
 it('falls back to lexical context when the bounded embedding request fails',async()=>{
-  const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
-  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  const f=await fixture();
+  await model2(f);
   await f.request();const state=await f.state(),job=await claim();
-  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>{throw new Error('Synthetic outage');}}});
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:EMBEDDING_2_SPACE.id,embed:async()=>{throw new Error('Synthetic outage');}}});
   expect((await f.state()).phase).toBe('ready');expect(answer).toHaveBeenCalledOnce();
 });
-it('keeps lexical grounded publication when OpenRouter embedding compatibility is held, without reserving or dispatching lookup',async()=>{
+it('keeps lexical grounded publication with only historical 001 vectors and spends no query slot',async()=>{
   const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
-  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await t.sql`INSERT INTO inspiration_embeddings(profile_id,inspiration_id,model,input_scope,dimensions,input_hash,embedding)
+    VALUES(${f.profileId},${f.sourceId},'gemini-embedding-001','personal',768,'historical',${JSON.stringify(vector)}::jsonb)`;
   await f.request();const state=await f.state(),job=await claim();
   const network=vi.fn(()=>{throw Error('Unexpected provider HTTP');});
-  vi.stubEnv('WAKA_EMBEDDING_PROVIDER','openrouter');vi.stubGlobal('fetch',network);
+  vi.stubEnv('OPENROUTER_API_KEY','synthetic-test-only');vi.stubGlobal('fetch',network);
   try{
     await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{});
     expect((await f.state()).phase).toBe('ready');expect(answer).toHaveBeenCalledOnce();
@@ -339,22 +342,23 @@ it('keeps lexical grounded publication when OpenRouter embedding compatibility i
     expect((await t.sql`SELECT retrieval_dispatched_at FROM conversation_reply_requests WHERE id=${state.requestId}`)[0]!.retrieval_dispatched_at).toBeNull();
     expect(await t.sql`SELECT id FROM conversation_messages WHERE role='assistant'`).toHaveLength(1);
     expect(network).not.toHaveBeenCalled();
-  }finally{delete process.env.WAKA_EMBEDDING_PROVIDER;vi.unstubAllGlobals();}
+  }finally{vi.unstubAllEnvs();vi.stubEnv('WAKA_CONVERSATION_REPLIES','1');vi.unstubAllGlobals();}
 });
 it('does not purchase a query embedding when only incompatible dimensions are indexed',async()=>{
   const f=await fixture();
+  await enableFixtureEmbedding2(t,f.profileId);
   await t.sql`INSERT INTO inspiration_embeddings(profile_id,inspiration_id,model,input_scope,dimensions,input_hash,embedding)
-    VALUES(${f.profileId},${f.sourceId},${GEMINI_EMBEDDING_MODEL},'personal',1536,'fixture','[]'::jsonb)`;
+    VALUES(${f.profileId},${f.sourceId},${EMBEDDING_2_SPACE.id},'personal',1536,'fixture','[]'::jsonb)`;
   await f.request();const state=await f.state(),job=await claim(),embed=vi.fn(async()=>[1,...Array<number>(767).fill(0)]);
-  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});
   expect((await f.state()).phase).toBe('ready');expect(embed).not.toHaveBeenCalled();expect(answer).toHaveBeenCalledOnce();
 });
 it('fences source edits during lookup before dispatching the answer',async()=>{
   const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
-  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await model2(f);
   await f.request();const state=await f.state(),job=await claim();
   const embed=async()=>{await t.sql`UPDATE inspirations SET text='A different current view.' WHERE id=${f.sourceId}`;return vector;};
-  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});
   expect((await f.state()).phase).toBe('stale');expect(answer).not.toHaveBeenCalled();
 });
 
@@ -416,11 +420,11 @@ it.each([
 });
 it('uses the last available provider slot for an answer rather than exceeding the budget with lookup',async()=>{
   const f=await fixture(),vector=[1,...Array<number>(767).fill(0)];
-  await ensureInspirationEmbedding({db:t.db as never,profileId:f.profileId,inspirationId:f.sourceId,client:{model:GEMINI_EMBEDDING_MODEL,embed:async()=>vector}});
+  await model2(f);
   await t.sql`INSERT INTO conversation_reply_requests(id,profile_id,conversation_id,conversation_revision,context_hash,status,dispatched_at)
     SELECT gen_random_uuid(),${f.profileId}::uuid,${f.id}::uuid,1,'','failed',now() FROM generate_series(1,19)`;
   await f.request();const state=await f.state(),job=await claim(),embed=vi.fn(async()=>vector);
-  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});
   expect((await f.state()).phase).toBe('ready');expect(embed).not.toHaveBeenCalled();expect(answer).toHaveBeenCalledOnce();
   const [request]=await t.sql`SELECT retrieval_dispatched_at FROM conversation_reply_requests WHERE id=${state.requestId}`;
   expect(request.retrieval_dispatched_at).toBeNull();
@@ -459,7 +463,7 @@ it('counts both reserved provider slots of earlier hybrid attempts',async()=>{
   await t.sql`INSERT INTO conversation_reply_requests(id,profile_id,conversation_id,conversation_revision,context_hash,status,dispatched_at,retrieval_dispatched_at)
     SELECT gen_random_uuid(),${f.profileId}::uuid,${f.id}::uuid,1,'','failed',now(),now() FROM generate_series(1,10)`;
   await f.request();const state=await f.state(),job=await claim(),embed=vi.fn(async()=>[1,...Array<number>(767).fill(0)]);
-  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:GEMINI_EMBEDDING_MODEL,embed}});
+  await processConversationReply(t.db as never,job,f.id,state.requestId,async()=>{}, {embeddingClient:{model:EMBEDDING_2_SPACE.id,embed}});
   expect(await f.state()).toMatchObject({phase:'failed',failureCode:'budget'});expect(embed).not.toHaveBeenCalled();expect(answer).not.toHaveBeenCalled();
 });
 it('commits Send and the reply outbox atomically, including an exact lost-response replay',async()=>{

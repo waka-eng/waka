@@ -13,13 +13,13 @@ import {loadReviewAnswerMaterial,assertReviewAnswerMaterial} from './review-answ
 import {readGenerationRevision,assertGenerationRevision} from './generation-revision.js';
 import {reserveEmbeddingIndexAttempt} from './embedding-index-coordination.js';
 import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
-import {PROVISIONAL_EMBEDDING_2_POLICY} from './embedding-policy.js';
+import {EMBEDDING_2_CANDIDATE_POLICY} from './embedding-policy.js';
 import {hashEmbeddingInput} from './inspiration-embeddings.js';
 let t:TestDatabase;beforeAll(async()=>{t=await createTestDatabase();});afterAll(async()=>{await t?.cleanup();});
 const vector=()=>[1,...Array<number>(767).fill(0)];
 async function fixture(){
  const [a]=await t.sql`INSERT INTO accounts(email) VALUES(${randomUUID()+'@example.test'}) RETURNING id`,[p]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${a.id},'human','Synthetic') RETURNING id`;
- await t.sql`INSERT INTO profile_embedding_indexes(profile_id,active_space,active_epoch,active_threshold_policy) VALUES(${p.id},${EMBEDDING_2_SPACE.id},1,${PROVISIONAL_EMBEDDING_2_POLICY})`;
+ await t.sql`INSERT INTO profile_embedding_indexes(profile_id,active_space,active_epoch,active_threshold_policy) VALUES(${p.id},${EMBEDDING_2_SPACE.id},1,${EMBEDDING_2_CANDIDATE_POLICY})`;
  const [source]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${p.id},'A little room for something unplanned.') RETURNING id`;
  const session=(await createReviewSession(t.db as never,p.id,{id:randomUUID(),inspirationIds:[source.id]}))!,answerId=randomUUID();
  await t.sql`INSERT INTO review_answers(id,profile_id,session_id,question_job_id,input_hash,context_hash,question,answer,source_count) VALUES(${answerId},${p.id},${session.id},${randomUUID()},'synthetic','synthetic','What stayed with you?','I leave room to change my plans.',1)`;

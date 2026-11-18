@@ -656,18 +656,9 @@ selection, synthesis makes no model call unless human-kept wording needs to
 be considered for renewed support. The first reading waits for enough
 material to derive a connection; human-kept wording remains available.
 
-**No two voices on the board saying one thing.** After scoring, the ranked
-list takes one greedy diversity pass (`diversifyRanked`): a candidate whose
-embedding sits at or above `SELECTION_DIVERSITY_MAX_COSINE` to an
-already-accepted one yields its slot. Empty slots are not refilled with echoes;
-the source signals remain in memory, neither deleted nor demoted. Only current
-statement hashes from the current embedding model participate in this comparison;
-vectors from different models are not compared in one coordinate space. The bar sits inside the judge
-band on purpose: at 0.8 the pair is
-close enough that derivation would already be asking whether they are the
-same pattern, while genuinely different signals about one theme are
-untouched. Deterministic, cosine in process over the stored vectors, no
-model anywhere.
+Selection keeps the ranked claims within the existing caps. Model2 cosine
+does not prune a claim from the reading. Publication review still checks its
+support and whether the resulting entries say distinct things.
 
 **A tension needs both voices.** When a chosen signal stands in an open
 contested pair (the judge answered `opposed` and the owner has not
@@ -1440,7 +1431,6 @@ The authoritative values. Machine-checked against code — see
 | `SELECTION_RECENCY_WEIGHT` | 0.2 | Selection: recency term |
 | `SELECTION_COMEBACK_WEIGHT` | 0.15 | Selection: comeback term |
 | `SELECTION_DISPUTED_MULTIPLIER` | 0.4 | Damping when the latest verdict is not_true |
-| `SELECTION_DIVERSITY_MAX_COSINE` | 0.8 | Ranked near-duplicates yield their slot; empty slots stay empty |
 | `SELECTION_EVIDENCE_SATURATION` | 6 | Support saturates at this evidence count |
 | `SELECTION_RECENCY_HALF_LIFE_DAYS` | 30 | Selection recency half-life |
 | `COMEBACK_MIN_DORMANT_DAYS` | 21 | Minimum gap for a return to count |
@@ -1499,32 +1489,20 @@ claims or claim full source completion. Discovery runs only after current
 coverage is complete. Reading dependencies created by a batch attach to the
 matching unfinished source receipts, without marking those receipts derived.
 
-One prompt, two roads: generation defaults to DeepSeek V4.1 Flash 1017 on
-OpenRouter when `OPENROUTER_API_KEY` is present, and falls back
-to Gemini without it. Embeddings retain the native Google default: the stored
-vectors and every cosine threshold above live in `gemini-embedding-001`'s space.
+Hosted generation uses the pinned OpenAI task profile. The optional
+OpenRouter generation route keeps its existing task settings. Explicit
+`WAKA_GENERATION_PROVIDER=gemini` keeps Gemini 3.1 Flash Lite and sends it
+through OpenRouter using the same prompt builders and application parsers.
+These two OpenRouter options require an OpenRouter credential.
 
-Embedding construction is centralized in `embedding-provider.ts`, separately from
-readable vector identity (`gemini-embedding-001`, 768 dimensions). All six runtime
-construction paths use it. `WAKA_EMBEDDING_PROVIDER` absent, blank or `gemini`
-preserves native behavior; `openrouter` is **compatibility-held**, and unknown
-values fail closed. No deployment enables that setting. A held transport cannot
-masquerade as an empty native corpus: cached native readers retain their space,
-MCP recall reports unavailable, and chat explicitly uses lexical fallback without
-reserving a query-embedding attempt.
-
-The offline OpenRouter candidate retains a distinct unverified model namespace.
-Its request pins Google AI Studio (`only` and `order`: `google-ai-studio`), disables
-provider fallback, requires parameter support, and preserves existing restrictive
-privacy preferences. Generic `input_type` support is documented; exact Gemini
-query/document mapping and space equivalence still require paired proof. Matching
-model names and dimensions alone do not establish compatible vectors. Native
-Google availability may prevent that proof; no automatic transport fallback,
-relabel, re-embedding or normalization change is permitted by this preparation.
-
+Embedding2 is the sole runtime embedding space. The profile must hold the
+compiled reviewed policy. Missing control, historical 001, and unvalidated
+policy grant no semantic lookup. Chat keeps lexical retrieval, and recall
+with eligible but unindexed memory reports unavailable. Existing 001 rows
+retain their historical identity for inventory and forward-cutover proofs.
 Reader guards require the expected model, dimension metadata, finite nonzero
 geometry and current input hash. This includes cache reuse, match/suppression,
-gardener, reading diversity, recurrence, recall and chat. Recurrence validates the
+gardener, recurrence, recall and chat. Recurrence validates the
 existing top-five selected sources against current canonical text, ordered
 reflections and effective attachment material in one additional SQL statement;
 stale selections are dropped without scanning further to fill the five slots.
@@ -1551,30 +1529,23 @@ reading. Its strict JSON schema requires all properties; optional fields are
 nullable on the wire and normalize back to absent domain values. Other
 providers keep their existing schema encoding. Prompts, selected-language
 rules, citations and human locks retain
-their existing checks. The Gemini fallback is unchanged: without an OpenRouter
-key, all text-provider methods use direct `gemini-3.1-flash-lite`.
+their existing checks.
 
-With an OpenRouter key, PNG/JPEG/WebP/GIF image descriptions and verbatim
-visible-text extraction use `deepseek/deepseek-v4.1-flash-1017`. Private bytes
-travel inline, through the same timeout, privacy and cost-recording transport
-as text calls. HEIC/HEIF images keep direct `gemini-3.1-flash-lite` because
-OpenRouter does not accept those formats; the no-OpenRouter-key fallback also
-uses Gemini. The description stays capped at 800 output tokens/2,000 characters.
+Hosted PNG/JPEG/WebP inference stays on OpenAI and GIF stays on DeepSeek.
+The HEIC/HEIF path decodes the primary image locally and sends JPEG inference
+bytes to Gemini 3.1 Flash Lite via OpenRouter. The decoder processes one image
+at a time per worker process. It allows up to 16 million pixels, at most 8,192
+pixels per side, and at most 8 MiB each for input and output. This is an
+enrichment limit. Larger originals remain stored. The description stays capped
+at 800 output tokens and 2,000 characters.
 
-Saved recording transcription remains direct `gemini-2.5-flash`, by owner
-decision after Voxtral Mini Transcribe 3 dropped the English half of a mixed
-Korean/English fixture. The prototype is inactive; its synthetic measurements
-and adapter patch are retained under `docs/craft/evidence/media-model-routing/`.
-The archived patch uses zero context; restore it with `git apply --unidiff-zero`.
-Existing byte/header/duration inspection still runs before a paid call: at
-most 12 MiB and five minutes (plus the final encoder frame). Neither media
-adapter switches providers after a failed configured request. Retryable
-failures remain owned by the durable queue; no adapter adds a polling loop or
-schedule. Numeric cost and token usage are recorded without transcripts,
-images or provider bodies.
-
-Embeddings remain direct Gemini calls. Browser dictation uses the
-browser/OS speech recognition service and does not select an app LLM.
+Saved recordings use Gemini 2.5 Flash through OpenRouter. Audio byte, header
+and duration inspection still runs before dispatch, with up to 12 MiB and
+five minutes plus the final encoder frame. Gemini media requests pin Google
+AI Studio, require request-parameter support, and preserve OpenRouter privacy
+settings. Retryable failures remain owned by the durable queue. Numeric usage
+telemetry records the actual transport. Browser dictation still uses the
+browser or OS speech recognition service.
 
 | Use | Configured model | Routing override |
 |---|---|---|
@@ -1590,13 +1561,12 @@ browser/OS speech recognition service and does not select an app LLM.
 | Declaration routing (principle vs inspiration) | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_ROUTE` |
 | Reflection follow-ups and Review question/connection writing | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_REFLECT` |
 | Chat replies grounded in saved memory | DeepSeek V4.1 Flash 1017 | `WAKA_MODEL_CHAT` |
-| Image description and visible-text extraction | DeepSeek V4.1 Flash 1017 | OpenRouter; direct Gemini 3.1 Flash Lite for HEIC/HEIF or no OpenRouter key |
-| Saved recording transcription | Gemini 2.5 Flash | Direct Gemini client; Voxtral migration held after mixed-language failure |
-| Inspiration, signal and search-query embeddings | gemini-embedding-001, 768 dimensions | Direct Gemini client; not text generation |
+| Image description and visible-text extraction | Hosted Terra for PNG/JPEG/WebP, DeepSeek V4.1 Flash 1017 for GIF, Gemini 3.1 Flash Lite for HEIC/HEIF | Native OpenAI or OpenRouter by format. HEIC/HEIF inference locally converts the primary image to JPEG. The original remains stored. |
+| Saved recording transcription | Gemini 2.5 Flash | OpenRouter chat completions with audio input and a transcript schema |
+| Inspiration, signal and search-query embeddings | Embedding2, 768 dimensions | OpenRouter with Google AI Studio pinned and the reviewed model2 profile policy |
 
 Review-item selection, confidence arithmetic and the automatic reading cadence
-are deterministic application rules, not separate LLM calls. Existing vectors
-and cosine thresholds remain in the same embedding model's coordinate space.
+are deterministic application rules, not separate LLM calls. Current vector rows and cosine decisions stay in the exact reviewed Embedding2 space.
 
 | Constant | Value | One line |
 |---|---|---|
@@ -1604,10 +1574,9 @@ and cosine thresholds remain in the same embedding model's coordinate space.
 | `OPENROUTER_TOP_OF_MIND_MODEL` | openai/gpt-6.1-terra | Default for Top of Mind synthesis and publication review |
 | `OPENROUTER_MAX_OUTPUT_TOKENS` | 8192 | Shared output ceiling; Terra synthesis spends reasoning and visible JSON within this cap |
 | `OPENROUTER_CHAT_URL` | https://openrouter.ai/api/v1/chat/completions | The second road's endpoint |
-| `GEMINI_GENERATION_MODEL` | gemini-3.1-flash-lite | Text fallback when no OpenRouter key is set |
-| `GEMINI_EMBEDDING_MODEL` | gemini-embedding-001 | All vectors |
+| `GEMINI_GENERATION_MODEL` | google/gemini-3.1-flash-lite | Explicit Gemini text option through OpenRouter |
+| `GEMINI_EMBEDDING_MODEL` | gemini-embedding-001 | Historical vector identity, retired for runtime use |
 | `GEMINI_EMBEDDING_DIMENSIONS` | 768 | Vector width |
-| `MAX_GEMINI_EMBEDDING_VALUES` | 4096 | Sanity ceiling on values accepted back per vector |
 | `MAX_SIGNAL_CANDIDATES` | 3 | Statements one extraction may propose |
 | `MAX_RELATED_INSPIRATION_CITATIONS` | 2 | Earlier captures one statement may cite as co-witnesses |
 | `MAX_CATEGORY_CHARS` | 32 | A capture's own subject, in words — longer is a sentence, not a shelf |
@@ -1847,7 +1816,7 @@ The limited-dev task record `embedding2.dev-candidates.v1` uses0.75 only as a
 candidate floor: chat scans500/validates24/returns6; recall scans500/returns8;
 related-capture context scans500/returns5 using its existing document vector.
 Model2 chat has no additional0.85/0.90 relative floor and no cosine diversity
-penalty. Native ranking is unchanged. Match/suppression still inspect one nearest
+penalty. Match/suppression still inspect one nearest
 target each and require existing semantic judgments for nonidentical claims;
 ordinary extraction retains3 candidates, at most6 such judgments. Gardener reads
 300 signals and judges at most8 pairs; it does not automatically merge. Reading
@@ -1859,13 +1828,13 @@ The24-call smoke and opposed pairs above0.90 justify semantic safeguards, not a
 claim of calibrated precision/recall. Compiled task rules travel with the captured
 policy; no model-only threshold or caller acceptance callback grants activation.
 
-The owner selected stable `google/gemini-embedding-2` on OpenRouter, not transport
-parity with001. The earlier001 parity experiment was withdrawn without execution.
-Native001 remains active while the separate text-only space is prepared.
+The owner selected stable `google/gemini-embedding-2` on OpenRouter. The
+earlier 001 parity experiment was withdrawn without execution.
 `embedding-2-space.ts` fixes query `task: search result | query: ` and document
 `title: none | text: ` prefixes,768 dimensions, unchanged raw output and exact
-formatted-input hash. It sends no task_type/input_type. Runtime factory selection is policy-bound; native001 remains the default and
-model2 activation stays held. No001 cosine threshold is silently inherited;
+formatted-input hash. It sends no task_type/input_type. The runtime factory
+requires the exact reviewed active policy. A profile awaiting activation has
+no readable embedding space, and
 a building space starts unvalidated and cannot authorize cutover. Only the
 separately reviewed compiled candidate identity may pass the C1 policy gate;
 its publication alone does not activate any profile.
@@ -1881,7 +1850,7 @@ must pass on disposablePG17 before any deployment or paid/data-operation approva
 
 Model2 similarities retrieve candidates; they do not establish agreement or
 independence. The synthetic capability check included opposed claims above0.90.
-Both historical provisional and compiled candidate model2 policies require existing semantic judgements
+The compiled model2 policy requires existing semantic judgements
 for non-identical attachment/suppression decisions and does not use cosine alone
 to prune the reading's claims. Exact owner-locked wording, independent support,
 correction/withdrawal and mandatory publication review remain authoritative.
@@ -1891,8 +1860,8 @@ activation still requires its separate concrete boundary.
 
 One active embedding policy snapshot (owner, selected space, epoch and policy
 identity) accompanies each pipeline input and publication proof. It is projected
-by existing owner/source queries; shadow-building metadata cannot invalidate a
-native001 reply. A new capture's pending index work does not globally hide
+by existing owner/source queries; shadow-building metadata cannot invalidate an
+in-flight reply. A new capture's pending index work does not globally hide
 already-current memory. Released MCP response states remain unchanged: compatible
 metadata may explain incomplete semantic coverage, while unavailable required
 vectors cannot be presented as a genuine empty archive or permit mint-through.

@@ -1,3 +1,4 @@
+import {enableFixtureEmbedding2} from '../../test/helpers/embedding2.js';
 import { approveReadingReview } from '../../test/helpers/top-of-mind-review.js';
 /** WHAT THIS MOCKS, AND WHY (gate G6): `ModelProvider` returns synthetic
  * grounded decisions and `fetch` permits only the embedding endpoint with a
@@ -29,16 +30,17 @@ beforeEach(async()=>{
   setDefaultModelProviderForTests({name:'review-queue-fixture',deriveReviewAnswer:derive,
     reviewTopOfMind: approveReadingReview, synthesizeTopOfMind:async(input:TopOfMindSynthesisInput)=>({entries:input.signals.length?[{type:'pattern',body:'I leave room to reconsider plans.',citedSignalIds:[input.signals[0].id]}]:[]}),
     judgeSignalMatch:async()=>({relation:'same'})} as unknown as ModelProvider);
-  vi.stubEnv('GEMINI_API_KEY','synthetic-test-key');
+  vi.stubEnv('OPENROUTER_API_KEY','synthetic-test-key');
   vi.stubGlobal('fetch',vi.fn(async(url:unknown)=>{
-    if(!String(url).startsWith('https://generativelanguage.googleapis.com/')||!String(url).includes(':embedContent'))throw new Error('Unexpected network request');
-    return Response.json({embedding:{values:[1,...Array<number>(767).fill(0)]}});
+    if(String(url)!=='https://openrouter.ai/api/v1/embeddings')throw new Error('Unexpected network request');
+    return Response.json({model:'google/gemini-embedding-2',data:[{index:0,embedding:[1,...Array<number>(767).fill(0)]}]});
   }));
 });
 afterAll(async()=>{setDefaultModelProviderForTests(null);vi.unstubAllGlobals();vi.unstubAllEnvs();await getDb().$client.end();await t?.cleanup();process.env.DB_CONNECTION_URL=connectionString;});
 async function fixture(){
   const [account]=await t.sql`INSERT INTO accounts(email) VALUES(${`review-queue-${++sequence}@example.test`}) RETURNING id`;
   const [profile]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${account.id},'human','Owner') RETURNING id`;
+  await enableFixtureEmbedding2(t,profile.id as string);
   const [origin]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${profile.id},'Room for something unplanned') RETURNING id`;
   const session=(await createReviewSession(t.db as never,profile.id,{id:randomUUID(),inspirationIds:[origin.id]}))!;
   const answerId=randomUUID();

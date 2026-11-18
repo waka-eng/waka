@@ -1,5 +1,8 @@
+import {EMBEDDING_2_SPACE,hashEmbedding2Input} from './embedding-2-space.js';
+import {enableFixtureEmbedding2,deferFixtureIndexJobs} from '../../test/helpers/embedding2.js';
+import {OpenRouterEmbedding2Candidate} from './openrouter-media.js';
 /** WHAT THIS MOCKS, AND WHY: `undici` fetch delegates to the test fetch stub;
- * `GeminiEmbeddingHttpClient` and `setDefaultModelProviderForTests` replace model
+ * `OpenRouterEmbedding2Candidate` and `setDefaultModelProviderForTests` replace model
  * calls. Real queue claims, ownership fences and writes run on local Postgres. */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('undici', async (importOriginal) => ({
@@ -8,7 +11,6 @@ vi.mock('undici', async (importOriginal) => ({
 }));
 import postgres from 'postgres';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
-import { GeminiEmbeddingHttpClient, GEMINI_EMBEDDING_MODEL, hashEmbeddingInput } from './inspiration-embeddings.js';
 import { setDefaultModelProviderForTests, type ModelProvider, type SignalSupportAssessmentInput } from './model-provider.js';
 import { postgresBackgroundJobStore, processBackgroundJob } from './queue.js';
 import { tendSignalGarden } from './signal-gardener.js';
@@ -25,7 +27,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs();
   await t.truncateAll();
-  vi.spyOn(GeminiEmbeddingHttpClient.prototype, 'embed').mockResolvedValue(vector());
+  vi.spyOn(OpenRouterEmbedding2Candidate.prototype, 'embed').mockResolvedValue(vector());
   setDefaultModelProviderForTests({ extractSignalCandidates: async () => ({ statements: [] }) } as unknown as ModelProvider);
 });
 afterAll(async () => {
@@ -35,6 +37,7 @@ afterAll(async () => {
 async function fixture() {
   const [account] = await t.sql`INSERT INTO accounts(email) VALUES (${`worker-fence-${++sequence}@example.test`}) RETURNING id`;
   const [profile] = await t.sql`INSERT INTO profiles(account_id, type, name) VALUES (${account.id}, 'human', 'Owner') RETURNING id`;
+  await enableFixtureEmbedding2(t,profile.id as string);
   const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${profile.id}, 'An inspiration') RETURNING id`;
   return { profileId: profile.id as string, sourceId: source.id as string };
 }
@@ -43,11 +46,12 @@ async function signal(f: Awaited<ReturnType<typeof fixture>>, statement: string,
   if (evidence) await t.sql`INSERT INTO signal_evidence(profile_id, owner_profile_id, signal_id, inspiration_id)
     VALUES (${f.profileId}, ${f.profileId}, ${row.id}, ${f.sourceId})`;
   await t.sql`INSERT INTO signal_embeddings(profile_id, signal_id, model, dimensions, input_hash, embedding)
-    VALUES (${f.profileId}, ${row.id}, ${GEMINI_EMBEDDING_MODEL}, 768, ${hashEmbeddingInput(statement)}, ${JSON.stringify(vector())}::jsonb)`;
+    VALUES (${f.profileId}, ${row.id}, ${EMBEDDING_2_SPACE.id}, 768, ${hashEmbedding2Input(statement,'RETRIEVAL_DOCUMENT')}, ${JSON.stringify(vector())}::jsonb)`;
   return row.id as string;
 }
 async function claimed(profileId: string, type: string, payload: object) {
   const [row] = await t.sql`INSERT INTO background_jobs(profile_id, type, payload) VALUES (${profileId}, ${type}, ${JSON.stringify(payload)}::jsonb) RETURNING id`;
+  await deferFixtureIndexJobs(t);
   const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
   expect(job?.id).toBe(row.id); return job!;
 }
@@ -96,8 +100,8 @@ describe('every background write owns its claim', () => {
   it('a reclaimed derivation cannot persist a capture vector', async () => {
     const f = await fixture();
     const job = await claimed(f.profileId, 'derive_signals', { inspirationId: f.sourceId, reason: 'created' });
-    vi.mocked(GeminiEmbeddingHttpClient.prototype.embed).mockImplementation(async () => { await reclaim(job.id); return vector(); });
-    await expect(processBackgroundJob(job)).rejects.toThrow(/ownership changed/i);
+    vi.mocked(OpenRouterEmbedding2Candidate.prototype.embed).mockImplementation(async () => { await reclaim(job.id); return vector(); });
+    await expect(processBackgroundJob(job)).rejects.toMatchObject({code:'commit_unconfirmed'});
     expect(await t.sql`SELECT id FROM inspiration_embeddings`).toHaveLength(0);
   });
 
@@ -120,7 +124,7 @@ describe('every background write owns its claim', () => {
     const f = await fixture();
     if (stage === 'judge') await signal(f, 'An existing pattern');
     const job = await claimed(f.profileId, 'derive_signals', { inspirationId: f.sourceId, reason: 'created' });
-    vi.mocked(GeminiEmbeddingHttpClient.prototype.embed).mockResolvedValue(vector(0.8, 0.6));
+    vi.mocked(OpenRouterEmbedding2Candidate.prototype.embed).mockResolvedValue(vector(0.8, 0.6));
     setDefaultModelProviderForTests({ extractSignalCandidates: async () => {
       if (stage === 'discovery') await reclaim(job.id);
       return { statements: [{ statement: 'A candidate pattern', quote: 'An inspiration' }] };
@@ -233,7 +237,7 @@ describe('every background write owns its claim', () => {
       VALUES (${owner.profileId}, ${owner.sourceId}, 'file', 'http://127.0.0.1:8791/fixture') RETURNING id`;
     const job = await claimed(caller.profileId, type, { inspirationId: owner.sourceId, attachmentId: attachment.id, reason: 'created' });
     await processBackgroundJob(job);
-    expect(GeminiEmbeddingHttpClient.prototype.embed).not.toHaveBeenCalled();
+    expect(OpenRouterEmbedding2Candidate.prototype.embed).not.toHaveBeenCalled();
     expect((await t.sql`SELECT enrichment_status FROM attachments WHERE id = ${attachment.id}`)[0].enrichment_status).toBeNull();
     expect(await t.sql`SELECT id FROM inspiration_embeddings`).toHaveLength(0);
   });

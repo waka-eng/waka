@@ -257,16 +257,33 @@ describe("the translation", () => {
   });
 });
 
-describe("the road is chosen by the key, and only the key", () => {
+describe("default and explicit generation routes", () => {
   it("routes to OpenRouter when the key is present", async () => {
     const provider = await getDefaultModelProvider();
     expect(provider.name).toBe("openrouter");
   });
 
-  it("stays on the incumbent without it", async () => {
-    delete process.env.OPENROUTER_API_KEY;
+  it("refuses a missing OpenRouter key without selecting direct Google", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    vi.stubEnv("GEMINI_API_KEY", "unused-direct-key");
+    await expect(getDefaultModelProvider()).rejects.toThrow("OPENROUTER_API_KEY");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps explicit Gemini configuration on the pinned model through OpenRouter", async () => {
+    vi.stubEnv("WAKA_GENERATION_PROVIDER", "gemini");
+    fetchMock.mockResolvedValueOnce(chatReply('{"relation":"same"}'));
     const provider = await getDefaultModelProvider();
-    expect(provider.name).toBe("gemini");
+    expect(provider).toMatchObject({name:"openrouter",pinnedModel:"google/gemini-3.1-flash-lite"});
+    await expect(provider.judgeSignalMatch({
+      preferredLocale:"en-US",candidateStatement:"a",existingStatement:"b",
+    })).resolves.toEqual({relation:"same"});
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url,init]=fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      model:"google/gemini-3.1-flash-lite",provider:{only:["google-ai-studio"],allow_fallbacks:false},
+    });
   });
 });
 
