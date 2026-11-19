@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
+import {drizzle} from 'drizzle-orm/postgres-js';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/db.js';
 import { drainAttachmentObjects, attachmentKeyHash, prepareAttachmentObjectCleanup, settleAttachmentObjectCleanup, ATTACHMENT_CLEANUP_CLAIM_MS } from './attachment-sweep.js';
 import { sweepDeletedShelf } from './deleted-shelf.js';
 import { sweepStaleStagedAttachments } from './conversation-attachments.js';
 import { eraseAccount } from './account-erasure.js';
-import { recordAttachmentUpload, recordAttachmentObjectCreated, UPLOAD_FINALIZATION_GRACE_MS } from './attachment-uploads.js';
+import { recordAttachmentUpload, recordAttachmentObjectCreated, ATTACHMENT_UPLOAD_HOUR_LIMITS, AttachmentUploadCapacityError, UPLOAD_FINALIZATION_GRACE_MS } from './attachment-uploads.js';
 import { assertAttachmentKeysUnused } from './inspiration-attachments.js';
 import { createAttachmentRoutes } from '../routes/attachments.js';
 
@@ -108,7 +109,7 @@ it('preserves fail-closed account erasure on object transport failure', async ()
 
 it('preserves fresh issuance grace across duplicate/out-of-order completion events', async () => {
   const f=await fixture(), key=f.key+'-issued', expiresAt=new Date(now.getTime()+300_000);
-  expect(await recordAttachmentUpload(t.db as never,{key,profileId:f.profile,expiresAt,now,storageScope:scope})).toBe(true);
+  expect(await recordAttachmentUpload(t.db as never,{key,accountId:f.account,profileId:f.profile,size:5,expiresAt,now,storageScope:scope})).toBe(true);
   for(const at of [new Date(now.getTime()+1000),now,new Date(now.getTime()+2000)]) expect(await recordAttachmentObjectCreated(t.db as never,key,scope,at)).toBe(true);
   const seen:string[]=[];await drain(async keys=>{seen.push(...keys);return [];},new Date(now.getTime()+UPLOAD_FINALIZATION_GRACE_MS-1));expect(seen).not.toContain(key);
   await drain(async keys=>{seen.push(...keys);return [];},new Date(now.getTime()+UPLOAD_FINALIZATION_GRACE_MS));expect(seen).toContain(key);
@@ -116,7 +117,7 @@ it('preserves fresh issuance grace across duplicate/out-of-order completion even
 
 it('removes a PUT completed after expiry AND a successful earlier absent-object cleanup', async () => {
   const f=await fixture(),key=f.key+'-late';
-  await recordAttachmentUpload(t.db as never,{key,profileId:f.profile,expiresAt:new Date(now.getTime()+300_000),now,storageScope:scope});
+  await recordAttachmentUpload(t.db as never,{key,accountId:f.account,profileId:f.profile,size:5,expiresAt:new Date(now.getTime()+300_000),now,storageScope:scope});
   await t.sql`DELETE FROM accounts WHERE id=${f.account}`;
   const objects=new Set<string>();
   const remove=async(keys:string[])=>{for(const key of keys)objects.delete(key);return [];};
@@ -133,7 +134,7 @@ it('removes a PUT completed after expiry AND a successful earlier absent-object 
 
 it('keeps a finalized issuance live, and fences a later erased upload with a friendly refusal', async()=>{
   const f=await fixture(),key=f.key+'-finalized';
-  await recordAttachmentUpload(t.db as never,{key,profileId:f.profile,expiresAt:new Date(now.getTime()+300_000),now,storageScope:scope});
+  await recordAttachmentUpload(t.db as never,{key,accountId:f.account,profileId:f.profile,size:5,expiresAt:new Date(now.getTime()+300_000),now,storageScope:scope});
   await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key) VALUES(${f.profile},${f.inspiration},'image','https://synthetic.invalid/finalized',${key})`;
   const seen:string[]=[];await drain(async keys=>{seen.push(...keys);return [];},new Date(now.getTime()+UPLOAD_FINALIZATION_GRACE_MS));expect(seen).not.toContain(key);
   await t.sql`DELETE FROM attachments WHERE s3_key=${key}`;
@@ -146,8 +147,53 @@ it('refuses issuance for a removed owner and ignores unknown/wrong-store events'
   expect(await recordAttachmentObjectCreated(t.db as never,key,scope,now)).toBe(false);
   expect(await recordAttachmentObjectCreated(t.db as never,f.key,'different-store',now)).toBe(false);
   await t.sql`DELETE FROM accounts WHERE id=${f.account}`;
-  expect(await recordAttachmentUpload(t.db as never,{key,profileId:f.profile,expiresAt:now,now,storageScope:scope})).toBe(false);
+  expect(await recordAttachmentUpload(t.db as never,{key,accountId:f.account,profileId:f.profile,size:5,expiresAt:now,now,storageScope:scope})).toBe(false);
   expect(await t.sql`SELECT key_hash FROM attachment_objects WHERE key_hash=${attachmentKeyHash(key)}`).toHaveLength(0);
+});
+
+it('charges the UTC hour across owned profiles and does not refund a deleted upload',async()=>{
+  const f=await fixture(), foreign=await fixture();
+  const [agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${f.account},'agent','Scoped agent') RETURNING id`;
+  const at=new Date('2030-01-01T12:59:30Z'), bytes=25*1024*1024;
+  const issue=(db=t.db, profileId=f.profile, issueAt=at)=>recordAttachmentUpload(db as never,{
+    key:`profiles/${f.profile}/attachments/${randomUUID()}`,profileId,accountId:f.account,
+    size:bytes,expiresAt:new Date(issueAt.getTime()+300_000),now:issueAt,storageScope:scope,
+  });
+  expect(await issue(t.db,foreign.profile)).toBe(false);
+  for(let i=0;i<6;i++)expect(await issue(t.db,i%2?agent.id:f.profile)).toBe(true);
+  const [issued]=await t.sql`SELECT key FROM attachment_objects WHERE issued_profile_id=${f.profile} LIMIT 1`;
+  const [attached]=await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key)
+    VALUES(${f.profile},${f.inspiration},'image','https://synthetic.invalid/issued',${issued.key}) RETURNING id`;
+  await t.sql`DELETE FROM attachments WHERE id=${attached.id}`;
+  await drain(async()=>[],at);
+  await expect(issue()).rejects.toMatchObject({retryAfter:30});
+  expect(await t.sql`SELECT issued_count,issued_bytes FROM account_attachment_upload_limits WHERE account_id=${f.account}`)
+    .toEqual([{issued_count:6,issued_bytes:ATTACHMENT_UPLOAD_HOUR_LIMITS.bytes}]);
+  expect(await issue(t.db,f.profile,new Date('2030-01-01T13:00:00Z'))).toBe(true);
+  expect(await t.sql`SELECT issued_count,issued_bytes FROM account_attachment_upload_limits WHERE account_id=${f.account}`)
+    .toEqual([{issued_count:1,issued_bytes:bytes}]);
+  await t.sql`DELETE FROM accounts WHERE id=${f.account}`;
+  expect(await t.sql`SELECT account_id FROM account_attachment_upload_limits WHERE account_id=${f.account}`).toHaveLength(0);
+});
+
+it('atomically admits only one concurrent issuer at the account count boundary',async()=>{
+  const f=await fixture(),at=new Date('2030-01-01T12:30:00Z');
+  const other=postgres(process.env.DB_CONNECTION_URL!,{max:1,connection:{search_path:t.schemaName}});
+  await t.sql`INSERT INTO account_attachment_upload_limits(account_id,hour_started_at,issued_count,issued_bytes)
+    VALUES(${f.account},'2030-01-01T12:00:00Z',19,19)`;
+  const issue=(db:typeof t.db)=>recordAttachmentUpload(db as never,{
+    key:`profiles/${f.profile}/attachments/${randomUUID()}`,profileId:f.profile,accountId:f.account,
+    size:1,expiresAt:new Date(at.getTime()+300_000),now:at,storageScope:scope,
+  });
+  try {
+    const outcomes=await Promise.allSettled([issue(t.db),issue(drizzle(other) as typeof t.db)]);
+    expect(outcomes.filter(row=>row.status==='fulfilled')).toEqual([{status:'fulfilled',value:true}]);
+    const [refused]=outcomes.filter(row=>row.status==='rejected');
+    expect(refused?.reason).toBeInstanceOf(AttachmentUploadCapacityError);
+    expect(await t.sql`SELECT issued_count,issued_bytes FROM account_attachment_upload_limits WHERE account_id=${f.account}`)
+      .toEqual([{issued_count:20,issued_bytes:20}]);
+    expect(await t.sql`SELECT key FROM attachment_objects WHERE issued_profile_id=${f.profile}`).toHaveLength(1);
+  } finally { await other.end(); }
 });
 
 it('commits presign inventory before returning a URL and returns 409 for a closed finalize', async()=>{
@@ -156,10 +202,19 @@ it('commits presign inventory before returning a URL and returns 409 for a close
   const routes=createAttachmentRoutes({getDatabase:()=>t.db as never,attachmentHead:async()=>({ContentLength:8,ContentType:'image/png'}),authMiddleware:async(c,next)=>{
     c.set('session',{sessionId:randomUUID(),account:{id:f.account,email:'synthetic@example.test'},profile:{id:f.profile,accountId:f.account,type:'human',name:'Synthetic',preferredLocale:'en-US'}});await next();
   }});
-  const issued=await routes.request('/presign',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({filename:'synthetic.png',contentType:'image/png',size:8})});
+  const presign = () => routes.request('/presign',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({filename:'synthetic.png',contentType:'image/png',size:8})});
+  const issued=await presign();
   expect(issued.status).toBe(200);const data=await issued.json() as {key:string;uploadUrl:string};
   const [inventory]=await t.sql`SELECT * FROM attachment_objects WHERE key_hash=${attachmentKeyHash(data.key)}`;
   expect(inventory.issued_profile_id).toBe(f.profile);expect(inventory.storage_scope).toBe(scope);expect(inventory.upload_expires_at).not.toBeNull();expect(data.uploadUrl).toContain('X-Amz-Signature');
+  await t.sql`UPDATE account_attachment_upload_limits SET issued_count=20 WHERE account_id=${f.account}`;
+  const limited=await presign();
+  expect(limited.status).toBe(429);
+  expect(Number(limited.headers.get('Retry-After'))).toBeGreaterThan(0);
+  const refusal=await limited.json();
+  expect(refusal).toMatchObject({code:'attachment_upload_capacity'});
+  expect(refusal).not.toHaveProperty('uploadUrl');
+  expect(await t.sql`SELECT key FROM attachment_objects WHERE issued_profile_id=${f.profile}`).toHaveLength(1);
   const conversation=randomUUID();await t.sql`INSERT INTO conversations(id,profile_id) VALUES(${conversation},${f.profile})`;
   await t.sql`DELETE FROM attachments WHERE id=${f.attachment.id}`;await drain(async()=>[]);
   const closed=await routes.request('/',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({conversationId:conversation,messageId:randomUUID(),type:'image',key:f.key,contentType:'image/png',size:8})});
