@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {resolve} from 'node:path';
 import {runInNewContext} from 'node:vm';
@@ -24,4 +25,27 @@ it('checks and deploys the same immutable event SHA',()=>{
  expect(dev.jobs.check.with.checkout_sha).toBe('${{ github.sha }}');
  const checkout=dev.jobs.deploy.steps.find((s:any)=>s.uses?.startsWith('actions/checkout@'));expect(checkout.with.ref).toBe('${{ github.sha }}');
  expect(evaluate(dev.jobs.deploy.if,context('push'))).toBe(true);expect(evaluate(dev.jobs.deploy.if,context('workflow_dispatch'))).toBe(true);
+});
+
+it('runs the database separation check using only step-scoped database bindings', () => {
+  const step = dev.jobs.deploy.steps.find((item: { run?: string }) =>
+    item.run === 'node scripts/check-deployment-databases.mjs');
+  const fixtureSecrets = {
+    DB_CONNECTION_URL_DEV: 'postgres://fixture@development.example.test/waka',
+    DB_CONNECTION_URL: 'postgres://fixture@production.example.test/waka',
+  };
+  const environment = Object.fromEntries(Object.entries(step.env).map(([name, expression]) =>
+    [name, evaluate(expression, { secrets: fixtureSecrets })]));
+  const result = spawnSync(process.execPath, [resolve(root, 'scripts/check-deployment-databases.mjs')], {
+    env: environment,
+    encoding: 'utf8',
+  });
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).toContain('database endpoints differ');
+  expect(step.env).toEqual({
+    DB_CONNECTION_URL: '${{ secrets.DB_CONNECTION_URL_DEV }}',
+    PRODUCTION_DB_CONNECTION_URL: '${{ secrets.DB_CONNECTION_URL }}',
+  });
+  expect(dev.env.DB_CONNECTION_URL).toBeUndefined();
+  expect(dev.jobs.deploy.env?.DB_CONNECTION_URL).toBeUndefined();
 });
