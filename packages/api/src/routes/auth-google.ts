@@ -49,6 +49,7 @@ import {
   wantsSecureCookie,
 } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
+import { databaseSqlState } from "../lib/error-diagnostics.js";
 import { createSessionRow, describeUserAgent } from "../lib/session.js";
 import { MOBILE_BINDING_COOKIE, readMobileBinding, issueMobileCode, mobileCallback } from '../lib/mobile-handoff.js';
 import {
@@ -576,10 +577,8 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
        * open session would otherwise keep the access the password loss was
        * meant to take away.
        *
-       * The rightful owner loses nothing they can notice: they arrived by
-       * Google and leave signed in by Google. Someone who genuinely set that
-       * password and genuinely owns the address recovers it the same way
-       * anyone does, having now proven the address once.
+       * Preserve owned material. Publication choices made by that old
+       * credential do not carry over to the verified owner.
        */
       const linked = await db.transaction(async (tx) => {
         // Re-read under a lock so concurrent callbacks cannot revoke the
@@ -587,7 +586,7 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
         const [current] = await tx.select({ passwordHash: accounts.passwordHash, googleSub: accounts.googleSub })
           .from(accounts).where(eq(accounts.id, found.id)).limit(1).for("update");
         if (!current || current.googleSub && current.googleSub !== claims.sub) return false;
-        const hadPassword = current.passwordHash !== null;
+        const hadPassword = current.googleSub === null && current.passwordHash !== null;
         const now = new Date();
         await tx.update(accounts).set({
           googleSub: claims.sub,
@@ -603,8 +602,17 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
           await tx.update(agentKeys).set({ revokedAt: now }).where(and(inArray(agentKeys.profileId, ownedProfiles), isNull(agentKeys.revokedAt)));
           await tx.delete(cliLoginCodes).where(inArray(cliLoginCodes.profileId, ownedProfiles));
           await tx.delete(mobileLoginCodes).where(inArray(mobileLoginCodes.profileId, ownedProfiles));
+          await tx.update(profiles).set({
+            publicHandle: null,
+            publicProfileEnabled: false,
+            publicTopOfMindEnabled: false,
+            updatedAt: now,
+          }).where(eq(profiles.accountId, found.id));
         }
         return true;
+      }).catch(error => {
+        if (databaseSqlState(error) === '23505') return false;
+        throw error;
       });
       if (!linked) return failTo("account_conflict");
       identity = {
@@ -644,7 +652,7 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
           };
         });
       } catch (err) {
-        const code = (err as { code?: string } | null)?.code;
+        const code = databaseSqlState(err);
         if (code === "23505") {
           // The losing side of a race against a concurrent OAuth login by
           // the same identity. Re-read by google_sub and use whichever row

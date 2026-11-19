@@ -14,10 +14,11 @@ import { preferencesHandler, profileHandler } from './auth-me.js';
 let t: TestDatabase;
 let profileId: string;
 let accountId: string;
+let sessionId: string;
 let sessionLocale: 'en-US' | 'ko-KR' = 'en-US';
 const app = new Hono<AuthEnv>();
 app.use('*', async (c, next) => {
-  c.set('session', { sessionId: 'test', account: { id: accountId, email: 'locale@example.test' },
+  c.set('session', { sessionId, account: { id: accountId, email: 'locale@example.test' },
     profile: { id: profileId, accountId, type: 'human', name: 'Reader', preferredLocale: sessionLocale } });
   await next();
 });
@@ -36,6 +37,9 @@ beforeEach(async () => {
   const [a] = await t.sql`INSERT INTO accounts(email) VALUES ('locale@example.test') RETURNING id`;
   const [p] = await t.sql`INSERT INTO profiles(account_id,type,name,preferred_locale) VALUES (${a.id},'human','Reader','en-US') RETURNING id`;
   accountId = a.id as string; profileId = p.id as string;
+  const [session] = await t.sql`INSERT INTO sessions(profile_id,token_hash,expires_at)
+    VALUES (${profileId},repeat('0',64),now()+interval '1 hour') RETURNING id`;
+  sessionId = session.id as string;
 });
 
 it.each(['/preferences', '/profile'])('%s rolls back the language and onboarding if enqueue fails, then retries successfully', async path => {

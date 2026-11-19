@@ -22,14 +22,15 @@
  * that writes both, which is why it is the one that opens a transaction.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import type { Context } from "hono";
 import { z } from "zod";
 
-import { accounts, profiles } from "../db/index.js";
+import { accounts, profiles, sessions } from "../db/index.js";
 import { eraseAccount } from "../lib/account-erasure.js";
 import { buildSessionClearCookie } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
+import { databaseSqlState } from "../lib/error-diagnostics.js";
 import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { supportedLocaleSchema } from "../lib/locales.js";
 import type { AuthEnv } from "../lib/middleware.js";
@@ -282,6 +283,15 @@ export async function profileHandler(c: Context<AuthEnv>): Promise<Response> {
   let profile = current.profile;
   try {
     const written = await db.transaction(async (tx) => {
+      // Serialize publication changes with credential recovery. A request
+      // admitted before recovery cannot republish after its session is gone.
+      const [owner] = await tx.select({ lockedAccountId: accounts.id }).from(accounts)
+        .where(eq(accounts.id, session.account.id)).for('update');
+      if (!owner) return null;
+      const [active] = await tx.select({ currentSessionId: sessions.id }).from(sessions)
+        .where(and(eq(sessions.id, session.sessionId), eq(sessions.profileId, current.profile.id),
+          gt(sessions.expiresAt, new Date()))).limit(1);
+      if (!active) return null;
       const saved = await saveProfileWithLocaleRefresh(tx, current.profile.id, {
         name: parsed.data.name,
         preferredLocale: parsed.data.preferredLocale,
@@ -304,13 +314,14 @@ export async function profileHandler(c: Context<AuthEnv>): Promise<Response> {
       return { account: updatedAccount, ...saved };
     });
 
+    if (!written) return c.json({ error: "Authentication required" }, 401);
     if (written.wakes.length) await wakeCommittedBackgroundJobs(written.wakes);
     account = written.account ?? account;
     /* the update wrote this session's own profile, which has an account by
        the CHECK constraint; the narrow restates that for the types */
     profile = written.profile ? sessionProfileRow(written.profile) : profile;
   } catch (err) {
-    const code = (err as { code?: string } | null)?.code;
+    const code = databaseSqlState(err);
     if (code === "23505") {
       return c.json(
         {

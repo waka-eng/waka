@@ -153,6 +153,10 @@ import {
   reviewSessions,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import { safeErrorDiagnostic } from './error-diagnostics.js';
+import { OpenRouterHttpError } from './openrouter-http.js';
+import { OpenAiHttpError } from './openai-http.js';
+import { ModelConfigurationError } from './model-routing.js';
 import {recordPerformanceStage} from './performance-stages.js';
 import { z } from 'zod';
 import { BackgroundJobHeldError } from './background-job-hold.js';
@@ -164,7 +168,7 @@ import { applySignalSupportReview } from './signal-support-apply.js';
 import { SupportSourceUnavailableError } from './signal-support-review.js';
 import { isRetiredGroupWork, retiredGroupWork, withoutLegacyGroupDestination } from './retired-group-work.js';
 import { bindInspirationSupportReading } from './inspiration-processing.js';
-import { getDefaultModelProvider, MalformedModelOutputError } from "./model-provider.js";
+import { getDefaultModelProvider, MalformedModelOutputError, ModelDidNotAnswerError } from "./model-provider.js";
 import { InspirationProcessingUnavailableError, recordInspirationProcessingRequest, recordInspirationReadingResult, type InspirationProcessingReceipt } from "./inspiration-processing.js";
 import {
   type AccountModelUsage,
@@ -184,11 +188,11 @@ import { reconcilePrinciplesAfterSignalLoss, refreshPrinciplesForProfile } from 
 import { tendSignalGarden } from "./signal-gardener.js";
 import {
   refreshTopOfMindForProfile,
+  TopOfMindPublicationError,
   type TopOfMindRefreshDependencies,
 } from "./top-of-mind-synthesis.js";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
-const MAX_ERROR_LENGTH = 1_000;
 export const STALE_LOCK_SECONDS = 15 * 60;
 
 let drainScheduled = false;
@@ -211,6 +215,8 @@ export interface DrainBackgroundJobsOptions {
   now?: Date;
   /** Recovery observes only work past grace; ordinary wake-ups remain immediate. */
   overdueOnly?:boolean;
+  /** Invocation budget. Consult before reading the head and again before an attempt is acquired. */
+  canClaim?: () => boolean;
   processor?: (job: BackgroundJob) => Promise<BackgroundJobResult | void>;
   /** Internal wake hint, never permission to claim. Rechecked after the drain
    * against the exact failed transition so later holds/deferrals invalidate it. */
@@ -234,6 +240,7 @@ export interface BackgroundJobRetryWake {
 }
 
 export interface DrainBackgroundJobsResult {
+  deadlineLimited?: true;
   claimed: number;
   succeeded: number;
   retried: number;
@@ -780,7 +787,7 @@ async function wakeBackgroundWorker(wakes: BackgroundJobWakeReference[] = []): P
   } catch (err) {
     recordOperationalFault('worker_wake');
     console.warn("[background-jobs] could not wake the worker; the sweep will catch it", {
-      error: sanitizeError(err),
+      error: jobFailureDiagnostic(err),
     });
   }
 }
@@ -800,7 +807,7 @@ export function scheduleBackgroundJobDrain(delayMs = 0): void {
     drainTimer = null;
     drainDueAt = 0;
     drainBackgroundJobs().catch((err) => {
-      console.error("[background-jobs] drain tick failed", { error: sanitizeError(err) });
+      console.error("[background-jobs] drain tick failed", { error: jobFailureDiagnostic(err) });
     });
   }, normalizedDelay);
 }
@@ -863,7 +870,13 @@ export async function drainBackgroundJobs(
 
   let deferrals = 0;
   let processed = 0;
+  const stopForDeadline = () => {
+    if (!options.canClaim || options.canClaim()) return false;
+    result.deadlineLimited = true;
+    return true;
+  };
   while (processed < limit) {
+    if (stopForDeadline()) break;
     const now = clock();
     const overdueBefore=options.overdueOnly?new Date(now.getTime()-QUEUE_RECOVERY_LIMITS.overdueMs):undefined;
 
@@ -926,6 +939,7 @@ export async function drainBackgroundJobs(
       }
     }
 
+    if (stopForDeadline()) break;
     const job = overdueBefore?await store.claimNext(now,overdueBefore):await store.claimNext(now);
     if (!job) break;
     processed += 1;
@@ -959,7 +973,7 @@ export async function drainBackgroundJobs(
       if (exhausted) result.failed += 1;
       else {
         result.retried += 1;
-        options.onTransientRetry?.({id:job.id,profileId:job.profileId,attempts:job.attempts,updatedAt:failedAt,runAfter:calculateBackoffRunAfter(job.attempts,failedAt)});
+        options.onTransientRetry?.({id:job.id,profileId:job.profileId,attempts:job.attempts,updatedAt:failedAt,runAfter:calculateBackoffRunAfter(job.attempts,failedAt,err)});
       }
     } finally {
       await options.onSettled?.(job);
@@ -1856,14 +1870,14 @@ async function markJobFailedOrPending(
   const status: BackgroundJobStatus = exhausted ? "failed" : "pending";
   const lockedAt = exhausted ? (coerceNullableDate(job.lockedAt)?.toISOString() ?? null) : null;
   const runAfter = (
-    exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now)
+    exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now, err)
   ).toISOString();
   const settled = await getDb().execute(sql`
     UPDATE background_jobs
     SET status = CASE WHEN rerun_requested THEN 'pending'::background_job_status ELSE ${status}::background_job_status END,
         locked_at = CASE WHEN rerun_requested THEN NULL ELSE ${lockedAt}::timestamptz END,
         run_after = CASE WHEN rerun_requested THEN ${now.toISOString()}::timestamptz ELSE ${runAfter}::timestamptz END,
-        last_error = CASE WHEN rerun_requested THEN NULL ELSE ${sanitizeError(err)} END,
+        last_error = CASE WHEN rerun_requested THEN NULL ELSE ${jobFailureDiagnostic(err)} END,
         attempts = CASE WHEN rerun_requested THEN 0 ELSE attempts END,
         rerun_requested = false,
         -- The version this attempt read has now spent its one malformed retry.
@@ -1971,20 +1985,26 @@ function coerceNullableDate(value: Date | string | null): Date | null {
 }
 
 /** 30s, 60s, 120s, … capped at 15 minutes. */
-function calculateBackoffRunAfter(attempts: number, now: Date): Date {
-  const delaySeconds = Math.min(15 * 60, 30 * 2 ** Math.max(0, attempts - 1));
+function calculateBackoffRunAfter(attempts: number, now: Date, error: unknown): Date {
+  // An explicit provider-side outage gets wider spacing within the same
+  // attempt budget. Unknown transport outcomes keep their existing policy.
+  const unavailable = (error instanceof OpenRouterHttpError || error instanceof OpenAiHttpError)
+    && [429, 502, 503, 504].includes(error.status);
+  const delaySeconds = Math.min(15 * 60, (unavailable ? 300 : 30) * 2 ** Math.max(0, attempts - 1));
   return new Date(now.getTime() + delaySeconds * 1_000);
 }
 
-/**
- * Errors are stored on the row and read by whoever is on call, so anything
- * that looks like a credential is stripped before it lands in a column that
- * outlives the incident.
- */
-function sanitizeError(err: unknown): string {
-  const raw = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-  return raw
-    .replace(/(api[_-]?key|token|secret|password)=([^\s&]+)/gi, "$1=[redacted]")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .slice(0, MAX_ERROR_LENGTH);
+/** Persist decision-relevant categories and HTTP status, never messages. */
+function jobFailureDiagnostic(error: unknown): string {
+  if (error instanceof MalformedModelOutputError) return 'malformed_model_output';
+  if (error instanceof OpenRouterHttpError && error.creditRefused) return 'provider_credit_refused';
+  if (error instanceof OpenRouterHttpError || error instanceof OpenAiHttpError) {
+    const status = error.status;
+    if (status === 402) return 'provider_credit_refused';
+    return Number.isInteger(status) && status >= 400 && status <= 599 ? `provider_http_${status}` : 'provider_http_failure';
+  }
+  if (error instanceof TopOfMindPublicationError) return 'reading_publication_checks';
+  if (error instanceof ModelDidNotAnswerError) return 'model_unusable_output';
+  if (error instanceof ModelConfigurationError) return 'model_configuration';
+  return JSON.stringify(safeErrorDiagnostic(error));
 }

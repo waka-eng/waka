@@ -68,6 +68,10 @@ it('grounds only in current cited originals and rejects a cached verdict after a
   const reflection = 'I could reverse the first launch without losing work.';
   const [early, , latest] = f.sources[0]!;
   const [duplicate] = f.sources[1]!;
+  // Make the source order observable across timestamp resolution and UUID ties.
+  await t.sql`UPDATE inspirations SET created_at=now()-interval '1 hour'+rank*interval '1 second'
+    FROM unnest(${f.sources.flat()}::uuid[]) WITH ORDINALITY AS ordered(source_id,rank)
+    WHERE inspirations.id=ordered.source_id`;
   const revalidate = () => t.sql`UPDATE signal_evidence e SET material_revision=r.personal_revision
     FROM inspiration_revisions r WHERE r.inspiration_id=e.inspiration_id AND r.profile_id=e.owner_profile_id
       AND e.profile_id=${f.profileId}`;

@@ -22,6 +22,6 @@ it.each(['failure','cancelled','skipped',''])('refuses the entire mutable job af
 });
 it('checks and deploys the same immutable event SHA',()=>{
  expect(dev.jobs.check.with.checkout_sha).toBe('${{ github.sha }}');
- const checkout=dev.jobs.deploy.steps.find((s:any)=>s.uses==='actions/checkout@v4');expect(checkout.with.ref).toBe('${{ github.sha }}');
+ const checkout=dev.jobs.deploy.steps.find((s:any)=>s.uses?.startsWith('actions/checkout@'));expect(checkout.with.ref).toBe('${{ github.sha }}');
  expect(evaluate(dev.jobs.deploy.if,context('push'))).toBe(true);expect(evaluate(dev.jobs.deploy.if,context('workflow_dispatch'))).toBe(true);
 });

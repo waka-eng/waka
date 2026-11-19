@@ -13,6 +13,8 @@ const fromVite=createRequire(fromVitest.resolve('vite/package.json'));
 const {parse}=fromVite('yaml');
 const production=parse(readFileSync(resolve(root,'.github/workflows/deploy.yml'),'utf8'));
 const ci=parse(readFileSync(resolve(root,'.github/workflows/ci.yml'),'utf8'));
+const releaseWorkflows=['deploy.yml','deploy-dev.yml','maintain-dev-search.yml'].map(file=>
+  parse(readFileSync(resolve(root,'.github/workflows',file),'utf8')));
 const load=(file:string)=>import(/* @vite-ignore */ resolve(root,'scripts',file));
 const sha='a'.repeat(40),other='b'.repeat(40);
 
@@ -30,16 +32,40 @@ it('gates EVERY production mutation under successful reusable CI and the same SH
   expect(production.jobs.check.uses).toBe('./.github/workflows/ci.yml');
   expect(production.jobs.check.with.checkout_sha).toBe('${{ github.sha }}');
   const job=production.jobs.deploy;
-  expect(job.needs).toBe('check');expect(job.if).toBe("${{ needs.check.result == 'success' }}");
+  expect(job.needs).toBe('check');expect(job.if).toBe("${{ needs.check.result == 'success' && github.ref == 'refs/heads/main' }}");
   expect(job.env.SST_STAGE).toBe('production');expect(production.env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
   expect(production.concurrency['cancel-in-progress']).toBe(false);
-  const checkout=job.steps.find((s:any)=>s.uses==='actions/checkout@v4');expect(checkout.with.ref).toBe('${{ github.sha }}');
+  const checkout=job.steps.find((s:any)=>s.uses?.startsWith('actions/checkout@'));expect(checkout.with.ref).toBe('${{ github.sha }}');
   const guard=job.steps.findIndex((s:any)=>s.run==='node scripts/verify-release-commit.mjs');expect(guard).toBeGreaterThan(0);
   expect(job.steps[guard].env.RELEASE_CHECK_RESULT).toBe('${{ needs.check.result }}');
   const mutations=job.steps.map((s:any,i:number)=>({s,i})).filter(({s}:any)=>/secret set|set-openai-secret\.mjs|db:migrate|sst deploy|update-distribution|change-resource-record-sets/.test(s.run??''));
   expect(mutations).toHaveLength(6);
   for(const {s,i} of mutations){expect(i).toBeGreaterThan(guard);expect(s.if??'').not.toMatch(/always|failure|cancelled/);expect(s.if).toContain('!inputs.preview_only');}
-  for(const j of Object.values(ci.jobs) as any[])for(const step of j.steps??[])if(step.uses==='actions/checkout@v4')expect(step.with.ref).toBe('${{ inputs.checkout_sha || github.sha }}');
+  for(const j of Object.values(ci.jobs) as any[])for(const step of j.steps??[])if(step.uses?.startsWith('actions/checkout@'))expect(step.with.ref).toBe('${{ inputs.checkout_sha || github.sha }}');
+});
+it('pins third-party actions and keeps the checkout token out of Git config',()=>{
+  for(const workflow of [ci,...releaseWorkflows]){
+    for(const job of Object.values(workflow.jobs) as any[]){
+      for(const step of job.steps??[]){
+        if(!step.uses||step.uses.startsWith('./'))continue;
+        expect(step.uses).toMatch(/@[a-f0-9]{40}$/);
+        if(step.uses.startsWith('actions/checkout@'))expect(step.with['persist-credentials']).toBe(false);
+      }
+    }
+  }
+});
+it('passes deployment secrets only to named runner steps, outside setup and artifacts',()=>{
+  for(const workflow of releaseWorkflows){
+    expect(JSON.stringify(workflow.env??{})).not.toContain('secrets.');
+    for(const job of Object.values(workflow.jobs) as any[]){
+      expect(JSON.stringify(job.env??{})).not.toContain('secrets.');
+      for(const step of job.steps??[]){
+        if(step.uses||step.run?.includes('pnpm install')){
+          expect(JSON.stringify(step)).not.toContain('secrets.');
+        }
+      }
+    }
+  }
 });
 it('the CLI refuses a mismatched ref without echoing environment secrets',()=>{
   const p=spawnSync(process.execPath,[resolve(root,'scripts/verify-release-commit.mjs')],{cwd:root,encoding:'utf8',env:{...process.env,EXPECTED_RELEASE_SHA:sha,RELEASE_CHECK_RESULT:'success',SECRET_PROBE:'DO_NOT_PRINT'}});

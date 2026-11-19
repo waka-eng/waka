@@ -1,254 +1,257 @@
 # Production readiness and recovery
 
-Status: preparation only, 2026-11-17. Owner selected public signup after abuse and
-human acceptance, current dev features/models including Embedding2, a combined
-$10/month dev+production AI spending target with alerts and existing quotas, disclosed nontraining retention, Google and
-password sign-in, and basic existing managed recovery verification before any
-paid upgrade. This document does not authorize a production deploy, source-data
-transfer, backfill, billing change, restore or credential action.
+The latest recorded production reading update is PR 502 on November 18, 2026.
+The same 11-file change passed dev first in PR 501. The production deploy
+verified the expected runtime, monitoring and budget configuration, five public
+checks, and the existing S3 recovery controls. Review the exact current commit
+and deploy receipt before using this record to authorize a later release.
+[Dev deploy](https://github.com/waka-eng/waka/actions/runs/44314963726) ·
+[Production deploy](https://github.com/waka-eng/waka/actions/runs/44320930483)
 
-## Release and model identity
+## Release controls
 
-[Model routing](model-routing.md) owns the one canonical task/provider profile:
-native OpenAI Terra-low for chat/extract/support/judge/reflection/review/principles/
-principle judge/routing/supported vision; native Sol-medium for synthesis.
-Audio remains direct Gemini 2.5 Flash. GIF retains OpenRouter DeepSeek and HEIC/HEIF
-direct Gemini 3.1 Flash Lite. Model2 embeddings use OpenRouter/pinned Google AI
-Studio; absent control remains native001. Keep retained providers available for
-these explicit paths and reviewed rollback, rather than assuming a GPT key covers
-every operation. No automatic fallback or model retuning is introduced.
+- Release through reviewed PRs and the ordinary exact-commit CI and deployment
+  workflows. Promote the reviewed change from dev and preserve production's
+  MCP namespace, signup, and version-aware erasure settings. Keep database
+  targets, auth secrets, and SST stage namespaces distinct.
+- The production workflow checks out the successful CI commit and restricts the
+  deployment job to `main`. A production preview using this workflow also
+  runs from `main`. A preview of branch code needs its own read-only identity
+  and workflow before any production access is granted.
+- A repository admin must enforce these boundaries on GitHub. Under
+  **Settings → Rules → Rulesets**, make an active branch ruleset targeting only
+  `main`. Require PRs, one independent approval, dismissal of stale approvals,
+  and the exact required GitHub Actions check
+  `Typecheck, unit tests, migrations`. Require the branch to be up to date,
+  prevent deletion and force pushes, and leave the bypass list empty for routine
+  release actors. Confirm the check source from a real passing PR before
+  enabling the rule. Keep an active reviewer independent of the author.
+  [GitHub branch rules](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)
+- Under **Settings → Environments → production**, select the exact allowed
+  branch `main`, with no tag matches. Require an independent production
+  reviewer, enable prevention of self-review, and disable admin bypass. Verify
+  rules and deployment gates by reading them back and observing the next
+  authorized release. An in-workflow ref check does not establish GitHub-level
+  enforcement. [GitHub environment protection](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)
+- Deployment values are scoped to the runner steps that use them. Actions use
+  immutable commits, checkout does not persist a token, and SST secret setup
+  accepts values on stdin. The existing release AWS access key remains pending
+  an OIDC cutover. Runtime, data and provider credentials are still sensitive
+  within each step that consumes them.
 
-**Integration hold:** main `c3958120` and dev `1a06209e` are not interchangeable
-release trees. Main's local merge rehearsal found 12 conflicts and 285 differing
-paths. Production has MCP credential/environment namespace safeguards absent dev:
-production `connectionTarget` uses `waka-production-<profile>`, isolated browser
-`WAKA_HOME`, and the key-only HOME placeholder. Retain those semantics and existing
-tests while forward-porting latest dev copy, Embedding2 recall and journal paths.
-Do not take the dev tree wholesale, discard prod-only protections, or label this
-preparation branch a live production release. Local merge9a7cfff5 and the
-53db0128 follow-up preserve those protections and are the reviewed source input
-for this admission work. Final exact release review is still required; no main
-ref or deployed production state changed.
+### AWS deployment identity cutover
 
-## Signup admission and AI target
+1. Inventory the exact approved release actions by stage, including SST state
+   and assets, Lambda, scoped IAM and PassRole, Route53, deployment audits and
+   production monitoring resources. Reuse the existing AWS account and OIDC
+   provider for `token.actions.githubusercontent.com`. Keep the private
+   monitoring-only role and the local CLI identity separate.
+2. Create separate deployment roles for dev and production with policies
+   scoped to their resources. Production trust uses
+   `aud=sts.amazonaws.com` and an exact
+   `sub=repo:waka-eng/waka:environment:production`. Bind that environment to
+   `main` with the protection above. Dev needs its own environment restricted
+   to `dev` and an exact corresponding subject. Grant only necessary actions
+   to each role. Review IAM role creation and PassRole separately from app
+   resource access. Avoid wildcard repository or environment trust.
+3. Put `id-token: write` on the intended release job alone, use a pinned AWS
+   credential action and an environment-specific role ARN, and verify the
+   assumed account and role before any mutation. Scope production credentials
+   to the protected production environment. Replace cross-stage raw database
+   URL comparisons with canonical target fingerprints before removing
+   repository-scoped production URL access. Keep manual read-only monitoring
+   separate. Plan the first real deploy with temporary rollback
+   access to the existing credential and a confirmed owner. Verify a
+   permitted branch and denied off-branch role assumption before retiring and
+   then removing the static AWS access key and GitHub secrets.
+   [GitHub OIDC with AWS](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws)
 
-Source preparation now includes one conditional Turnstile adapter and one
-`signup_admissions` table. No vendor account, widget, secret or live verification
-was created. Production defaults to `closed` for NEW accounts; local/dev defaults
-to `off`. `turnstile` requires exact trusted stage/App/origin, a real same-stage
-sitekey/secret and a valid signing secret. Invalid/missing production settings
-close new signup only. Existing password login and verified Google recovery do
-not load a challenge or depend on its readiness.
+## Signup and access
 
-The shared password/Google helper claims UNIQUE token and nonce digests BEFORE
-Siteverify, since vendor replay detection is eventually consistent. GET readiness is read-only; nonce-cookie issuance is an Origin-checked POST.
-HTTP is outside SQL locks, fixed endpoint/no redirects/no retries,8s and8KiB. Required proof
-fields are exact hostname, action, cdata and <=300s freshness. No IP is guessed
-from XFF. A signed flow/stage/origin grant is consumed with account+human creation;
-creation-start reservations persist across failure/uncertainty and account erasure.
-Unknown outcomes cannot replay the same grant or silently recreate an account.
+Production signup runs in explicit `off` mode. An unconfigured or invalid
+production deployment closes new signup. Both password and Google share
+50 account creation starts per rolling hour, with no daily cap in this mode.
+Returning sign-ins do not use the new-account allowance. The normal workflow
+uses the default in `packages/api/src/lib/signup-admission.ts`; the API can
+accept a smaller `WAKA_SIGNUP_CREATE_HOUR` when explicitly supplied. Capacity
+from a failed or uncertain creation is not automatically returned. This
+limits aggregate creation and is unrelated to provider spend. Any per-source
+protection must use an ingress identity whose trust is established. Never
+infer source identity from arbitrary forwarded headers.
 
-New Google users without a grant return to verification, then start a second
-ordinary OAuth round. Its state and PKCE are bound to the signed grant; no raw
-proof or Google identity is passed in URL parameters or stored in admission rows.
-Existing identities, verified-email takeover and owned missing-human repair retain
-the existing paths. Native new-account continuation keeps only the existing signed
-mobile binding, verifies on the web, then restarts ordinary mobile OAuth. A routing
-`mobile=1` flag grants no authority without that cookie.
+The retained Turnstile mode is an explicit alternative with an API-only
+same-stage binding, signed grants, and separate verification quotas. Native
+configured signup opens the approved website and returns to ordinary native
+sign-in. Turning it on is a product and operational change. Verify real
+password signup and Google first-time signup separately when changing modes.
+The owner confirmed signup worked on November 18.
 
-Configured password admission is a same-origin web flow. The native resource
-transport intentionally omits WebView cookies and cannot carry this web grant.
-Native signup reads only public readiness: OFF keeps the existing native form;
-closed/unavailable shows that state while sign-in remains usable; configured
-verification offers a browser handoff to the checked API origin's
-`/login?signup=1`. The hint selects a tab only. No email, password, nonce, grant or
-session is passed, and no cookies are copied. After web signup the user returns
-and signs in normally. Origin/cookie checks stay unchanged. Actual native-device
-handoff and human acceptance remain unpassed; production stays closed until
-activation and human-use gates pass.
-Existing installed bundles do not gain this handoff from a web deployment.
-When verification is configured, legacy cookie-less/native-Origin refusals
-include the same stage-checked public browser signup URL and return/sign-in
-instructions; closed configuration never advertises browser signup availability.
-No native build, store release or paused native work is resumed here.
+For Google sign-in, verify the public `waka.im` property in Search Console
+under a Google account that owns the OAuth project and check the resulting
+status in Google Auth Platform. Keep the product description, Google
+account-data use explanation, and English Terms and Privacy links publicly
+reachable before sign-in. Check both the OAuth web and native redirect
+bindings after changing projects or ownership. Verify this separately from
+successful sign-in on a test account.
 
-Beta defaults per stage database are20 verification reservations/hour,100/day,
-and10 creation-start reservations/hour,50/day. Every instance shares the SQL
-reservation, including invalid/unknown attempts. Configuration is strict and
-bounded (verification max100/hour500/day, creation max50/hour200/day); no quotas
-are replenished by deleting an account. Digests are kept at least seven days, then pruned in bounded batches on new
-attempts. Without new attempts they can remain; no scheduled purge or exact
-deletion deadline is claimed. No new job is added. **An attacker can exhaust the global invalid
-attempt budget and temporarily refuse legitimate NEW users.** These bounds do not
-identify a source or replace ingress/DDoS protection. Existing login throttles and
-per-source trust ambiguity remain: do not invent `WAKA_TRUSTED_PROXY_HOPS=1`.
-No invitation-only substitute or UI-only checkbox is called human verification.
-Actual vendor/sitekey/privacy/activation, ingress and human acceptance remain open.
+The Google recovery transaction revokes the inherited password, sessions,
+codes, and profile keys when a verified Google identity reclaims an
+unverified password account. When testing a change, verify access
+revocation and that inherited public visibility is private. Preserve owned
+memory and keep other accounts untouched. Support must establish ownership
+independently before intervening. Never accept credentials by email. Use
+team@waka.im for user requests and restrict credential recovery and erasure
+to their reviewed workflows.
 
-The owner explicitly chose a **$10/month combined dev+production spending TARGET
-with alerts and existing quotas**, not an automatic dollar stop. Earlier local
-preparation wording requiring a strict cap is superseded; old receipts are kept.
-The existing60 shared starts/account/hour,20 chat model slots/account/hour and
-recall10/min+60/hour remain. They are counts, not dollars. No shared spend service,
-new price framework, provider reroute or top-up is requested.
+Profile export is available through web Settings. It reads a consistent
+snapshot with a ceiling of 4,000 records and 2 MiB, including the response
+envelope budget. The download contains profile data and attachment metadata.
+For larger requests, direct the verified account owner to support for an
+approved scoped export. Installed native builds use the web flow for saving
+the file. Attachment file bytes are a separate request.
 
-Main/operator must own alert destinations and a monthly all-provider review across
-OpenAI, OpenRouter and direct Google, including media and native001/retained paths.
-Record actual account/project/key/stage scope, reset periods, thresholds and alert
-recipient/delivery. OpenAI spend alerts do not stop requests; an OR key credit limit
-covers that key only. Existing AWS hosting/monitoring budgets are separate.
-Unknown native costs remain unknown; reported usage is not an invoice and should
-not be described as zero or as guaranteed spending within$10. Review usage and
-respond to alerts by an explicitly approved configuration pause or budget choice;
-do not hide quota exhaustion with account splitting, resets or retries. Actual
-billing/account metadata and alert delivery may still require authenticated access;
-approval alone does not sign in. No hard-cap or enforced-invoice claim is made.
+## Provider costs and privacy
 
-## Credential and privacy readiness
+Production and dev use the shared task profile. OpenAI Responses handles
+Terra text and supported vision, and Sol synthesizes readings. OpenRouter
+handles Embedding2, Gemini 2.5 Flash audio, Gemini 3.1 Flash Lite HEIC/HEIF
+description, and the DeepSeek GIF exception. Historical Embedding 001 data
+does not establish a serving path. An unavailable Embedding2 space must not
+be substituted with the old model. [Model routing](model-routing.md)
 
-Production workflow requires explicit `OPENAI_API_KEY_PRODUCTION`, step-scoped to
-validation, read-only preview, stdin setup and private runtime comparison. No
-production value/presence/entitlement is attested here. Existing generic-name
-metadata is insufficient. Keep all auth/session/DB and same-stage provider secrets
-unchanged; never put a value in a command argument, release artifact or support
-log. Source/metadata acceptance is not a successful model request or account check.
+The owner chose a combined `$10/month` dev plus production AI spending
+target with alerts and existing quotas. Monitor OpenAI project and OpenRouter
+account/key spend, using provider invoices for the combined total. The AWS
+account budget covers infrastructure separately. Establish the actual alert
+recipient and observe delivery. In the checked OpenRouter account, the low
+balance alert was disabled and workspace budget notifications required a
+plan upgrade. Balance and credit limits measure different things from
+combined monthly spend. Review the provider invoices together while selecting
+an alert configuration. [OpenRouter plan controls](https://openrouter.ai/pricing)
+Production temporarily uses the approved shared OpenAI
+development key. Replace it with an independently scoped production key once
+that key is ready. Read back the runtime binding, verify one bounded approved
+inference, and revoke the previous key only after confirming other consumers
+can continue.
 
-Disclose captured/derived/reflection/attachment text and relevant media sent to
-each actual provider. OpenAI `store:false` prevents Responses application state;
-it is not proof of ZDR or zero abuse-monitoring retention. Main's current public
-primary references report Google AI Studio via OpenRouter as trainingNo with 55-day
-retention and not ZDR; this is endpoint policy, not the actual account's eligibility.
-Direct Google audio/HEIC/native001 terms are separate. Preserve restrictive OR
-collection/ZDR preferences exactly; incompatible, invalid or unproven account
-requirements hold processing, not a reason to relax flags or select another route.
-Logs/receipts must exclude memory words, tokens, raw error bodies, cookies and keys.
-The human widget itself contacts Cloudflare and can process browser/network
-metadata under its policy, even though our Siteverify POST omits remoteip. Its
-site configuration, terms/disclosure and real human acceptance remain required
-before activation; no claim that omitting remoteip prevents all vendor IP data.
+Keep OpenRouter collection and ZDR choices stage-specific. OpenAI
+`store:false` describes application state, and provider abuse-monitoring
+retention depends on the actual account and endpoint. Reverify routing and
+retention when changing a provider or settings. Keep policy text aligned
+with use of inspirations, readings, searches, attachments and recordings.
 
-## Supported sign-in and manual recovery
+## Monitoring and incident handling
 
-1. Keep ordinary password and Google state+PKCE sign-in. Google must validate
-   issuer, audience, expiry and verified email. A verified Google identity matching
-   an unverified password email follows the existing transaction: clear that
-   password and revoke old sessions/CLI/mobile codes and all profile keys.
-   Retained agent profiles and foreign accounts remain isolated.
-2. There is no password-reset mail transport/token flow and no new reset promise.
-   First use an existing trusted session or the ordinary Google flow for the same
-   verified identity where available. Never ask for passwords, bearer tokens,
-   recovery cookies or model keys in support chat.
-3. A support request alone is not ownership. Main/operator must establish the exact
-   account via independent existing ownership evidence; an email claim, public
-   profile name, screenshot or remembered memory is insufficient. If proof is
-   unavailable, refuse/escalate and explain that recovery may be impossible.
-4. Any manual credential repair needs a separately reviewed exact account/action
-   and approved execution. Generate a replacement credential privately, lock the
-   actual account, preserve its Google identity and memory, and revoke affected
-   sessions/codes/keys transactionally using existing revocation semantics. No
-   account merge, profile transfer or blanket credential reset. Never revive a
-   revoked credential or overwrite human-locked words as “recovery”.
-5. Unknown commit/ACK is a hold. Reconcile exact owned credential/session metadata
-   read-only before another action; absence of stdout is not rollback. Confirm
-   normal sign-in and old-credential refusal only in separately approved checks.
+- Public liveness checks the website shell and shallow API health. November
+  18 delivery testing recorded one production alarm delivered through the
+  relay and Discord, then recovery to OK. Migrations and the release
+  comparison provide separate evidence of the configured database target.
+- The Oregon Lambda account currently allows 10 concurrent invocations,
+  all unreserved. A per-function AWS reservation needs 100 units left
+  unreserved. Keep AWS reservations unchanged until capacity permits and
+  review worker claim and retry behavior under saturation. [AWS concurrency limits](https://docs.aws.amazon.com/lambda/latest/dg/configuration-concurrency.html)
+- A launch pilot checks real sign-in, save, processing completion, a useful
+  reading, and attachment handling. Check elapsed time and a normal empty
+  reading. Treat a stuck job, authorization failure, or missing output as
+  separate from an unavailable website. Use synthetic records and bounded
+  paid calls where the operator has approved them.
+- CloudWatch app log retention is 30 days. Only read narrowly scoped,
+  necessary logs. Exclude memory text, SQL parameters, tokens, cookies, keys,
+  and raw provider responses from logs and support artifacts. For a suspected
+  historic logging incident, preserve restricted evidence and escalate
+  before changing retention or deleting logs. An account erasure does not
+  erase CloudWatch history.
+- Diagnose failures with the exact check, commit, resource, time and safe
+  error category. Give an incident one operator. For uncertain outcomes,
+  reconcile state before restarting the action. Treat retry of completed
+  provider work as a fresh authorization decision.
 
-No manual repair tool, self-service reset feature or real-user action is created.
-The operator/support contact and real recovery exercise remain acceptance items.
+## Database and object recovery
 
-## Managed database and attachment recovery
+On November 18 the production Neon endpoint was matched to its branch in
+AWS us-east-1 and a 24-hour history window. The restore exercise recovered a
+synthetic row from an isolated historical branch and an attachment version
+whose bytes matched its recorded SHA-256. It did not measure a production
+recovery time or acceptable data loss. Keep that short window in mind when
+triaging an incident.
 
-Read-only Neon Console observations on 2026-11-17 showed a production-labelled
-project/default branch on Launch, AWS east1, PostgreSQL 17, history retention 1 day,
-and branch protection “Not protected”. This is useful configuration evidence,
-not a deployed target binding. The branch is not yet matched to the deployed URI
-fingerprint, no accessible recovery-point timestamp/restore has been proven, and
-no setting was changed. Do not infer an RPO/RTO, free plan or restore permission.
+Attachments and the retired Vault are private S3 buckets in us-west-2.
+Versioning is enabled. Noncurrent versions become eligible for expiry after
+one day and empty delete markers are cleaned up. AWS applies these lifecycle
+rules asynchronously. Current objects have no expiry from these rules. The
+30-day deleted-save shelf is a separate database product feature. Current
+SST bucket definitions leave these recovery settings unmanaged. Read back
+versioning, lifecycle and attachment notifications after any bucket or
+provider update.
 
-Before relying on it, Main must bind the actual deployed target without exporting
-credentials; identify the recovery operator, available point/retention, restore
-permission, ongoing cost and failure escalation. Prefer existing managed recovery
-before a paid upgrade. Historical private snapshots/restore rehearsals and the
-synthetic local copy/restore proof are references only, not fresh live coverage.
-Production resource `retain` is not backup and branch protection is not PITR.
+1. Identify a recovery point within the available window. Restore Neon to
+   an isolated branch first. Reconcile subsequent writes, erasures and
+   credential revocations before selecting anything to move back.
+2. For objects, verify the private key and owner, require exact key equality
+   on version listing, read the version by ID and verify expected bytes.
+   Keep bucket notification and version-aware attachment erasure wired.
+   Erasure purges exact-key versions and existing events handle late uploads.
+   Retired Vault erasure requires a verified ownership and storage scope.
+3. Preserve source, ownership and migration evidence. Treat in-place restore,
+   object promotion and production data repair as separate incident actions
+   requiring approval. Roll back code only where the previous runtime is
+   compatible with the forward migration. Never restore erased data as a
+   side effect of service recovery.
 
-Attachments/vault are private stores with scoped presigned access. Source does not
-itself establish object versioning/retention or an accessible recovery copy. A DB
-snapshot cannot restore physically erased bytes. Verify exact bucket lifecycle,
-versioning/backup and references before promising restoration. Keep erasure/privacy
-obligations in tension with retention explicitly; do not silently keep deleted data
-forever or reintroduce erased material from a recovery copy.
+[Neon branch recovery](https://neon.com/docs/manage/branches) ·
+[S3 object version listing](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectVersions.html)
 
-A separately approved isolated restore should verify migration ledger/schema,
-account/profile/tenant links, exact human-locked words, current source/vector/work
-metadata and attachment bytes/references under a bounded synthetic or expressly
-approved data scope. Do not overwrite live production to test recovery. No strict
-recovery-time/data-loss target or paid backup upgrade was selected.
+## Legacy attachment inventory check
 
-## Migration, Embedding2 and rollback sequence
+Run only against the independently verified production database target, with
+a read-only operator, a bounded connection and the actual region/bucket scope.
+The result contains counts only. The exact `storage_scope` below matches
+the production bucket and AWS region with no custom endpoint. Confirm it
+before running. This includes the deleted-save shelf and pending sweeper
+inventory. It returns no object keys, profile IDs or account IDs.
 
-1. Bind exact release/tree and actual production target/ledger. Current source has
-   90 SQL files through 0089; accepted production c395 officially applied 0086/0087,
-   but no independent current production-ledger read is attested here.
-   Review additive0088 (embedding indexes) and0089 (signup admission), with the
-   unchanged prior journal and matching staged proofs; no reset,
-   down-migration or stale source restoration. Inspect the production integration
-   conflicts above before an exact release can be approved.
-2. Reuse frozen count/build/current-coverage/cutover tools and prior source proofs;
-   do not rebuild an operator framework. Obtain actual owned profiles/types/epochs,
-   input/count/cost caps, global unresolved attempts, backup and privacy gates before
-   any new source transfer or paid build. Production data scope is not the dev 25/34
-   cohort. Each live read/write/provider/wake effect needs the concrete new boundary.
-3. Existing model2 policy `embedding2.dev-candidates.v1` retains its exact limited
-   dev candidate/judge rules. It is not calibrated production evidence or semantic
-   truth. No relabeling of provisional 0.80 or dev policy, no cosine-only agreement/
-   suppression/independence, and no broad paid validation matrix implied. Main must
-   review the production acceptance and genuine missing evidence explicitly.
-4. Fresh C0 is RO/RR current-owned canonical hash, finite768/nonzero geometry,
-   work/tombstone/frontier verification plus global all-manifest unresolved counts.
-   Coverage is separate from provider invoice/outcome truth. Valid but child-heavy
-   >8MiB cohorts intentionally refuse; do not trim material or expand caps silently.
-5. C1 reruns the real verifier inside one explicit READ COMMITTED fenced transaction,
-   exact owned native-before policy/epoch/G/F, sorted exclusive fences/NOWAIT and
-   global unresolved 0. PG17 server whole-transaction deadline support must be proven
-   for the actual production connection/pooler; dev's accepted SET is not prod proof.
-   No cached C0 certificate, nested RR proof, relaxed G equality or mutation replay.
-6. Lost ACK requires exact before/after tuple reconciliation under a fresh read
-   envelope. All-before is not rollback while the original may still be in flight.
-   Stop new mutations on uncertainty; do not reset ledgers or invent a new namespace.
-7. Fresh empty profiles need under-fence zero-corpus proof; existing/newly nonempty
-   profiles cannot be skipped. Production new-human enrollment is literalOFF in
-   this candidate. A later explicit source/config/release gate may turn it on for
-   genuinely newly inserted human paths, never existing missing-control profiles.
-8. Prefer a forward correction after successful additive migration. A previous
-   application SHA can require its matching metadata compatibility; old native
-   vectors may have been correctly privacy-invalidated. Returning to001 requires
-   fresh available coverage, not just changing a flag or restoring stale vectors.
-   Preserve all-space invalidation on wording edits and all unknown-dispatch holds.
+```sql
+BEGIN READ ONLY;
+SET LOCAL statement_timeout = '5s';
+SET LOCAL lock_timeout = '1s';
+WITH refs AS (
+  SELECT profile_id, s3_key AS key FROM attachments
+  WHERE s3_key IS NOT NULL AND s3_key <> ''
+  UNION
+  SELECT d.profile_id, item ->> 's3Key'
+  FROM deleted_inspirations AS d
+  CROSS JOIN LATERAL jsonb_array_elements(d.attachments) AS a(item)
+  WHERE item ->> 's3Key' <> ''
+), gaps AS (
+  SELECT p.account_id, r.key
+  FROM refs AS r
+  JOIN profiles AS p ON p.id = r.profile_id
+  LEFT JOIN attachment_objects AS o
+    ON o.key_hash = encode(sha256(convert_to(r.key, 'UTF8')), 'hex')
+  WHERE o.storage_scope IS DISTINCT FROM
+    '{"bucket":"waka-production-attachmentsbucket-rceuztkc","region":"us-west-2","endpoint":null}'
+)
+SELECT count(DISTINCT account_id) AS affected_accounts,
+       count(DISTINCT key) AS unverified_referenced_keys,
+       (SELECT count(*) FROM attachment_objects
+        WHERE due_at IS NOT NULL AND key IS NOT NULL
+          AND storage_scope IS DISTINCT FROM
+            '{"bucket":"waka-production-attachmentsbucket-rceuztkc","region":"us-west-2","endpoint":null}'
+       ) AS unverified_pending_keys
+FROM gaps;
+ROLLBACK;
+```
 
-Final readiness still needs bounded live auth/tenant/erasure/alarm delivery and
-real first-time human observations, actual providers/privacy/alerts, exact
-integration/target/backup coverage, and the final production/data/spend approval.
-No synthetic/source pass closes those external gates.
+If any count is nonzero, verify historical bucket provenance before backfilling
+scope or deleting bytes. Recheck current references and hold ambiguous keys.
+Test account erasure with both a bound legacy fixture and a foreign or
+unverified object before applying a bounded audited repair. Never fill missing
+scope with the runtime default alone.
 
-## Conditional challenge configuration and acceptance
+## Native distribution
 
-Current source defaults are API dev-off /production-closed. Workers,
-PrincipleRefresh and cleanup receive neither Turnstile secret nor sitekey.
-`WAKA_SIGNUP_ADMISSION_<STAGE>` and `WAKA_TURNSTILE_SITE_KEY_<STAGE>` are explicit
-GitHub variables (DEVELOPMENT/PRODUCTION suffixes); they are not proof of a
-configured vendor site. The private runtime `WAKA_TURNSTILE_SECRET` comes only
-from the API's conditional same-stage SST `TurnstileSecret`. A separately approved
-private stdin setup is needed before enabling; do not pass it in argv or use a
-public dummy key. This candidate performs no setup and both deployment preflight and audits intentionally
-reject activation until a later exact review changes that expectation.
-
-Dev runtime acceptance retains the old23 check names and adds ONE aggregate,
-`signupAdmissionIsolated` (24 total). It attests API off plus absent human
-secret/sitekey, no signup configuration on worker/PrincipleRefresh/cleanup, and
-keyless cleanup. The existing `monitorCleanupFunctionName` output is now emitted
-in dev as well, adding one read-only function-config read to this audit.
-Production acceptance adds `signupAdmissionIsolated` and
-`cleanupNoSignupSecrets` while preserving every prior check; API must be closed
-and all four roles lack Turnstile material. Values stay in memory; only booleans
-and existing safe resource names leave the auditor. Actual deployed24/production
-audit evidence is still required; source tests do not substitute for it.
+A development-signed build can expire and may omit Associated Domains.
+Before distributing WAKA for iPhone, use the real distribution team and
+capabilities, then test sign-in, app links, media permissions, capture and
+updates on supported devices with the distributed build. The web release
+verification is separate.

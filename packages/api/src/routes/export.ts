@@ -6,10 +6,8 @@
  * what "everything" means and what is deliberately excluded.
  *
  * HUMAN-SESSION-ONLY, and only the session's own profile. An agent-bound
- * credential is refused outright: leaving with the archive is the person's
- * act, never delegated — the permission matrix's read rules govern serving
- * surfaces, and egress is stricter than any serve. No `?profile=`
- * parameter exists here on purpose.
+ * credential is refused outright. A human may also select a retained profile
+ * from their own account using the existing profile query.
  *
  * The export is itself a consultation (surface `export`): the largest
  * serve there is goes on the record like the smallest.
@@ -20,7 +18,8 @@ import { Hono, type MiddlewareHandler } from "hono";
 
 import { getDb } from "../lib/db.js";
 import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
-import { assembleProfileExport } from "../lib/profile-export.js";
+import { assembleProfileExport, ProfileExportLimitError } from "../lib/profile-export.js";
+import { databaseSqlState } from "../lib/error-diagnostics.js";
 import { resolveTargetProfile } from './inspirations-tenancy.js';
 import { profileQuerySchema } from './inspirations-validation.js';
 
@@ -56,7 +55,18 @@ export function createExportRoute(deps: ExportRouteDependencies = {}): Hono<Auth
     if (!query.success) return c.json({ error: 'Invalid profile' }, 400);
     const target = await resolveTargetProfile(db, session, query.data.profile, 'read');
     if (!target.ok) return c.json(target.body, target.status);
-    const bundle = await assembleProfileExport(db, target.profileId);
+    let bundle;
+    try {
+      bundle = await assembleProfileExport(db, target.profileId);
+    } catch (error) {
+      if (error instanceof ProfileExportLimitError && error.code === "export_too_large") {
+        return c.json({ error: "This profile is too large to download here", code: error.code }, 413);
+      }
+      if (error instanceof ProfileExportLimitError || databaseSqlState(error) === "57014") {
+        return c.json({ error: "Export did not finish", code: "export_timed_out" }, 503);
+      }
+      throw error;
+    }
     await recordConsultation(db, {
       profileId: target.profileId,
       session,

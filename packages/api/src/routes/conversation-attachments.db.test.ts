@@ -36,6 +36,7 @@ async function person(){
   const [human]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${account.id},'human','Person') RETURNING id`;
   const [agent]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${account.id},'agent','Agent') RETURNING id`;
   const heads=new Map<string,{ContentLength:number;ContentType:string}>();
+  const unavailableHeads=new Set<string>();
   const app=(kind:Kind='human')=>{
     const profileId=kind==='agent'?agent.id:human.id;
     const auth=async(c:any,next:()=>Promise<void>)=>{c.set('session',{sessionId:randomUUID(),...(kind==='key'?{keyScoped:true as const}:{}),account:{id:account.id,email:'p@example.test'},
@@ -43,7 +44,7 @@ async function person(){
     const hono=new Hono<AuthEnv>();
     hono.route('/conversations',createConversationRoutes({getDatabase:()=>t.db as never,authMiddleware:auth as never,deleteAttachmentObjects:async keys=>{swept.push(keys);}}));
     hono.route('/attachments',createAttachmentRoutes({getDatabase:()=>t.db as never,authMiddleware:auth as never,deleteAttachmentObjects:async keys=>{swept.push(keys);},
-      attachmentHead:async(_bucket,key)=>{const head=heads.get(key);if(!head)throw Object.assign(new Error('missing'),{name:'NotFound'});return head;}}));
+      attachmentHead:async(_bucket,key)=>{if(unavailableHeads.has(key))throw new Error('Synthetic transport failure');const head=heads.get(key);if(!head)throw Object.assign(new Error('missing'),{name:'NotFound'});return head;}}));
     return hono;
   };
   const human_=app('human');
@@ -54,7 +55,7 @@ async function person(){
     const object=upload(options.contentType??(options.type==='file'?'application/pdf':'image/png'));
     return post('/attachments',{conversationId,messageId,type:options.type??'image',...object,name:options.name??'photo.png'},options.via);
   };
-  return {app,human:human_,post,upload,stage,heads,profileId:human.id as string,agentId:agent.id as string,accountId:account.id as string};
+  return {app,human:human_,post,upload,stage,heads,unavailableHeads,profileId:human.id as string,agentId:agent.id as string,accountId:account.id as string};
 }
 const json=async(response:Response)=>await response.json() as any;
 
@@ -142,6 +143,31 @@ it('checks the upload itself: owner prefix, HEAD agreement, allowed types, one o
   for(let i=0;i<2;i++)expect((await p.post('/attachments',body(p.upload()))).status).toBe(201);
   expect((await p.post('/attachments',body(p.upload()))).status).toBe(409);
   expect(await t.sql`SELECT id FROM attachments WHERE staged_message_id=${messageId}`).toHaveLength(6);
+});
+
+it('verifies inspiration uploads with the same HEAD policy and serializes the attachment cap',async()=>{
+  const owner=await person(),other=await person();
+  const [source]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${owner.profileId},'Synthetic note') RETURNING id`;
+  const body=(object=owner.upload())=>({inspirationId:source.id,type:'image',...object});
+  const gone=owner.upload(); owner.heads.delete(gone.key);
+  expect((await owner.post('/attachments',body(gone))).status).toBe(404);
+  const unavailable=owner.upload(); owner.unavailableHeads.add(unavailable.key);
+  const unknown=await owner.post('/attachments',body(unavailable));
+  expect(unknown.status).toBe(503);
+  expect(await unknown.json()).toMatchObject({code:'attachment_unverified'});
+  const wrong=owner.upload();
+  owner.heads.set(wrong.key,{ContentLength:wrong.size+1,ContentType:wrong.contentType});
+  expect((await owner.post('/attachments',body(wrong))).status).toBe(400);
+  expect((await owner.post('/attachments',body(other.upload()))).status).toBe(403);
+  expect((await other.post('/attachments',body(other.upload()))).status).toBe(404);
+  expect(await t.sql`SELECT id FROM attachments WHERE inspiration_id=${source.id}`).toHaveLength(0);
+  const first=body();
+  expect((await owner.post('/attachments',first)).status).toBe(201);
+  for(let i=0;i<4;i++)expect((await owner.post('/attachments',body())).status).toBe(201);
+  const last=await Promise.all([owner.post('/attachments',body()),owner.post('/attachments',body())]);
+  expect(last.map(r=>r.status).sort()).toEqual([201,409]);
+  expect((await owner.post('/attachments',first)).status).toBe(201);
+  expect(await t.sql`SELECT id FROM attachments WHERE inspiration_id=${source.id}`).toHaveLength(6);
 });
 
 it('opens chat bytes for the person only, and deleting the chat takes linked and staged rows and sweeps their objects',async()=>{
