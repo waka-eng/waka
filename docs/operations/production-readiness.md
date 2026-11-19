@@ -123,8 +123,12 @@ The owner chose a combined `$10/month` dev plus production AI spending
 target with alerts and existing quotas. Monitor OpenAI project and OpenRouter
 account/key spend, using provider invoices for the combined total. The AWS
 account budget covers infrastructure separately. Establish the actual alert
-recipient and observe delivery. Project alerts and per-key credit limits
-have their own scope. Production temporarily uses the approved shared OpenAI
+recipient and observe delivery. In the checked OpenRouter account, the low
+balance alert was disabled and workspace budget notifications required a
+plan upgrade. Balance and credit limits measure different things from
+combined monthly spend. Review the provider invoices together while selecting
+an alert configuration. [OpenRouter plan controls](https://openrouter.ai/pricing)
+Production temporarily uses the approved shared OpenAI
 development key. Replace it with an independently scoped production key once
 that key is ready. Read back the runtime binding, verify one bounded approved
 inference, and revoke the previous key only after confirming other consumers
