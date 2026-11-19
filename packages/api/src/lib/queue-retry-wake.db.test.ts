@@ -3,6 +3,7 @@
  * run on disposable Postgres. AWS redelivery itself is a documented contract,
  * not a measured cloud claim; handler signaling has separate unit coverage. */
 import {randomUUID} from 'node:crypto';
+import {sql} from 'drizzle-orm';
 import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
 import {getDb} from './db.js';
@@ -67,6 +68,22 @@ it('wakes a real transient retry, obeys its due time and completes it only once 
   expect(processor).toHaveBeenCalledOnce();expect(await pending(retries,later(30))).toBe(false);
   expect(await drainBackgroundJobs({now:later(31),processor})).toMatchObject({claimed:0});expect(processor).toHaveBeenCalledOnce();
 });
+it('settles an actual wrapped PostgreSQL failure without storing or logging its bound value',async()=>{
+  const job=await fixture();
+  const marker='synthetic-private-bound-parameter';
+  const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});
+  const error=vi.spyOn(console,'error').mockImplementation(()=>{});
+  try {
+    const result=await drainBackgroundJobs({now,limit:1,processor:async()=>{
+      await getDb().execute(sql`SELECT ${marker}::int`);
+    }});
+    expect(result).toMatchObject({retried:1});
+    const [row]=await t.sql`SELECT last_error FROM background_jobs WHERE id=${job.id}`;
+    expect(JSON.parse(row!.last_error)).toEqual({category:'database',code:'22P02'});
+    expect(JSON.stringify([warn.mock.calls,error.mock.calls])).not.toContain(marker);
+  } finally { warn.mockRestore();error.mockRestore(); }
+});
+
 it('ignores budget deferral even when the row retains its earlier error',async()=>{
   const job=await fixture(),{retries}=await fail();
   await postgresBackgroundJobStore.deferAccountBacklog({accountId:job.accountId,now:later(31),until:later(90)});

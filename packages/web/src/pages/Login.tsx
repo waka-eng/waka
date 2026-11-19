@@ -241,6 +241,9 @@ function PasswordForm({
            submit with the network dead showed it. */
         if (err.status === 0) {
           setUncertain(true);setFormError(t(locale,"signupOutcomeUnknown"));
+        } else if(err.code === "signup_capacity"){
+          if(!admissionOff){setAdmissionReady(false);setAdmissionRevision(v=>v+1);}
+          setFormError(t(locale,"signupCapacity"));
         } else if(err.code?.startsWith("signup_")&&err.code!=="signup_outcome_unknown"){
           setAdmissionReady(false);setAdmissionRevision(v=>v+1);setFormError(t(locale,"signupVerificationUnavailable"));
         } else if(err.status>=500){
@@ -848,7 +851,7 @@ export default function LoginPage(): JSX.Element {
             button is the same button, in the place an alternative goes. */}
         <OrDivider locale={locale} />
 
-        <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} needsVerification={oauthErrorCode === "signup_verification_required" || oauthErrorCode === "signup_capacity" || oauthErrorCode === "signup_admission_used" || oauthErrorCode === "signup_busy" || oauthErrorCode === "signup_closed"} />
+        <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} needsVerification={oauthErrorCode === "signup_verification_required" || oauthErrorCode === "signup_admission_used" || oauthErrorCode === "signup_busy" || oauthErrorCode === "signup_closed"} />
         {(!returning || mode === "signup") && <p className="field-hint">{t(locale, "loginGoogleDataUse")}</p>}
         <LegalLinks />
 

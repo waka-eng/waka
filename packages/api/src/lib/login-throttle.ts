@@ -128,6 +128,7 @@
  * above — not a wait with a known end.
  */
 
+import { safeErrorDiagnostic } from './error-diagnostics.js';
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { inArray, lt, sql } from "drizzle-orm";
@@ -646,7 +647,7 @@ export async function recordLoginFailure(
  * while an attack is already underway.
  */
 export async function clearLoginFailures(
-  db: WakaDb,
+  db: Pick<WakaDb, 'insert'>,
   reading: LoginThrottleReading,
 ): Promise<void> {
   for (const bucket of reading.buckets) {
@@ -703,6 +704,6 @@ async function pruneExpiredLoginFailures(db: WakaDb, now: Date): Promise<void> {
       .where(lt(loginFailures.windowStartedAt, new Date(now.getTime() - LOGIN_FAILURE_WINDOW_MS)));
   } catch (err) {
     /* Housekeeping must never be the reason a sign-in fails. */
-    console.error("[login-throttle] could not reap expired failure buckets", err);
+    console.error("[login-throttle] could not reap expired failure buckets", safeErrorDiagnostic(err));
   }
 }
