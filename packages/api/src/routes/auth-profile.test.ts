@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { accounts, profiles } from "../db/index.js";
@@ -114,7 +115,9 @@ function makeDb(input: {
     chain.where = vi.fn(() => {
       const isLocaleLock = fields?.preferredLocale && fields?.accountId && fields?.type;
       const isAgents = fields?.preferredLocale && fields?.id;
-      const rows = isLocaleLock ? [{ preferredLocale: PROFILE_ROW.preferredLocale, accountId: PROFILE_ROW.accountId, type: PROFILE_ROW.type }] : isAgents ? [] : selects.shift() ?? [];
+      const guardedRow = fields?.lockedAccountId ? { lockedAccountId: PROFILE_ROW.accountId }
+        : fields?.currentSessionId ? { currentSessionId: 'authenticated-fixture-session' } : null;
+      const rows = guardedRow ? [guardedRow] : isLocaleLock ? [{ preferredLocale: PROFILE_ROW.preferredLocale, accountId: PROFILE_ROW.accountId, type: PROFILE_ROW.type }] : isAgents ? [] : selects.shift() ?? [];
       const result: any = Promise.resolve(rows);
       result.limit = vi.fn(async () => rows);
       result.for = vi.fn(async () => rows);
@@ -132,7 +135,8 @@ function makeDb(input: {
         where: vi.fn(() => ({
           returning: vi.fn(async () => {
             if (input.failWithCode) {
-              throw Object.assign(new Error("constraint"), { code: input.failWithCode });
+              throw new DrizzleQueryError('UPDATE example SET value = $1', ['synthetic-private-value'],
+                Object.assign(new Error('synthetic detail'), { code: input.failWithCode }));
             }
             return table === accounts
               ? [input.updatedAccount ?? ACCOUNT_ROW]

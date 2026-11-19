@@ -28,6 +28,7 @@
  * extend to curation.
  */
 
+import { safeErrorDiagnostic } from '../lib/error-diagnostics.js';
 import { recordConsultation } from "../lib/consultations.js";
 import { and, asc, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { personalPrincipleReadable, personalPrincipleSupportCurrent, personalSignalReadable } from '../lib/personal-output.js';
@@ -390,7 +391,7 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
         statement: parsed.data.statement,
       });
     } catch (err) {
-      console.warn("[principles] declaration could not be routed", err);
+      console.warn("[principles] declaration could not be routed", safeErrorDiagnostic(err));
       return c.json(
         {
           error: "Not considered yet",
@@ -673,7 +674,7 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
         .then((result) => console.log("[principles] test trigger ran", result))
         .catch((err) => {
           console.warn("[principles] test trigger failed", {
-            error: err instanceof Error ? err.message : String(err),
+            error: safeErrorDiagnostic(err),
           });
         });
       return c.json({ status: "running" }, 202);

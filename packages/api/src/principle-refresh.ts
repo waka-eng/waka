@@ -17,6 +17,7 @@ import { and, eq, inArray, ne, sql } from "drizzle-orm";
 
 import { profiles, signals } from "./db/index.js";
 import { getDb } from "./lib/db.js";
+import { safeErrorDiagnostic } from "./lib/error-diagnostics.js";
 import { PRINCIPLE_MIN_SIGNALS } from "./lib/principle-generation.js";
 import {
   enqueueTendSignalGarden,
@@ -28,6 +29,14 @@ const MAX_DRAIN_PASSES = 12;
 const DRAIN_LIMIT = 25;
 
 export async function handler() {
+  try {
+    return await runNightlyRefresh();
+  } catch (error) {
+    throw new Error(JSON.stringify(safeErrorDiagnostic(error)));
+  }
+}
+
+async function runNightlyRefresh() {
   const db = getDb();
   const dayKey = new Date().toISOString().slice(0, 10);
 

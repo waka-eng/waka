@@ -58,7 +58,7 @@ export function googleLoginUrl(returnTo: string, mobile = false): string {
 const OAUTH_ERROR_KEYS = {
   signup_verification_required: "signupVerificationRequired",
   signup_closed: "signupVerificationUnavailable",
-  signup_capacity: "signupVerificationUnavailable",
+  signup_capacity: "signupCapacity",
   signup_busy: "signupVerificationUnavailable",
   signup_admission_used: "signupVerificationUnavailable",
   signup_outcome_unknown: "signupOutcomeUnknown",

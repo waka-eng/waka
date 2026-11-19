@@ -157,7 +157,7 @@ describe("background worker cron handler", () => {
   });
   it('a failed recovery read cannot silently claim work',async()=>{
     vi.mocked(readBackgroundJobRecoveryState).mockRejectedValue(new Error('Unavailable'));
-    await expect(handler({mode:'recovery'})).rejects.toThrow('Unavailable');
+    await expect(handler({mode:'recovery'})).rejects.toThrow('{"category":"unexpected"}');
     expect(runBackgroundJobWorker).not.toHaveBeenCalled();
   });
   it("drains a bounded number of background jobs by default", async () => {
@@ -257,7 +257,7 @@ describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads"
     expect(sweepDeletedShelf).toHaveBeenCalledTimes(1);
     expect(sweepStaleStagedAttachments).toHaveBeenCalledTimes(1);
     expect(runBackgroundJobWorker).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith("[abandoned-lease-sweep] failed", "db down");
+    expect(warn).toHaveBeenCalledWith("[abandoned-lease-sweep] failed", {category: "unexpected"});
     warn.mockRestore();
   });
   it("a failed staged-upload sweep never costs the queue its pass", async () => {
@@ -266,7 +266,7 @@ describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads"
     await expect(handler(scheduled)).resolves.toMatchObject({ passes: 1 });
     expect(runBackgroundJobWorker).toHaveBeenCalledTimes(1);
     expect(sweepDeletedShelf).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith("[staged-attachment-sweep] failed", "bucket down");
+    expect(warn).toHaveBeenCalledWith("[staged-attachment-sweep] failed", {category: "unexpected"});
     warn.mockRestore();
   });
   it("a failed shelf sweep still lets the staged-upload sweep and the queue run", async () => {
@@ -275,7 +275,7 @@ describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads"
     await expect(handler(scheduled)).resolves.toMatchObject({ passes: 1 });
     expect(sweepStaleStagedAttachments).toHaveBeenCalledTimes(1);
     expect(runBackgroundJobWorker).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith("[deleted-shelf-sweep] failed", "db down");
+    expect(warn).toHaveBeenCalledWith("[deleted-shelf-sweep] failed", {category: "unexpected"});
     warn.mockRestore();
   });
 });

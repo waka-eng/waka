@@ -798,6 +798,7 @@
   "signupVerificationRequired": "계정을 만들려면 Cloudflare 인증을 완료하세요. 기존 계정은 로그인할 수 있어요.",
   "signupVerificationChecking": "인증을 확인하고 있어요…",
   "signupVerified": "인증했어요. 계속해서 계정을 만드세요.",
+  "signupCapacity": "지금은 새 계정 가입이 몰리고 있어요. 나중에 다시 시도해 주세요. 기존 계정은 계속 로그인할 수 있어요.",
   "signupVerificationUnavailable": "새 계정 인증을 사용할 수 없거나 만료됐어요. 기존 계정은 로그인할 수 있어요.",
   "signupVerificationRetry": "인증 다시 시도",
   "signupOutcomeUnknown": "계정이 만들어졌을 수 있어요. 다시 가입하기 전에 로그인해서 확인해 주세요.",

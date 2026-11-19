@@ -153,6 +153,10 @@ import {
   reviewSessions,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import { safeErrorDiagnostic } from './error-diagnostics.js';
+import { OpenRouterHttpError } from './openrouter-http.js';
+import { OpenAiHttpError } from './openai-http.js';
+import { ModelConfigurationError } from './model-routing.js';
 import {recordPerformanceStage} from './performance-stages.js';
 import { z } from 'zod';
 import { BackgroundJobHeldError } from './background-job-hold.js';
@@ -164,7 +168,7 @@ import { applySignalSupportReview } from './signal-support-apply.js';
 import { SupportSourceUnavailableError } from './signal-support-review.js';
 import { isRetiredGroupWork, retiredGroupWork, withoutLegacyGroupDestination } from './retired-group-work.js';
 import { bindInspirationSupportReading } from './inspiration-processing.js';
-import { getDefaultModelProvider, MalformedModelOutputError } from "./model-provider.js";
+import { getDefaultModelProvider, MalformedModelOutputError, ModelDidNotAnswerError } from "./model-provider.js";
 import { InspirationProcessingUnavailableError, recordInspirationProcessingRequest, recordInspirationReadingResult, type InspirationProcessingReceipt } from "./inspiration-processing.js";
 import {
   type AccountModelUsage,
@@ -188,7 +192,6 @@ import {
 } from "./top-of-mind-synthesis.js";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
-const MAX_ERROR_LENGTH = 1_000;
 export const STALE_LOCK_SECONDS = 15 * 60;
 
 let drainScheduled = false;
@@ -780,7 +783,7 @@ async function wakeBackgroundWorker(wakes: BackgroundJobWakeReference[] = []): P
   } catch (err) {
     recordOperationalFault('worker_wake');
     console.warn("[background-jobs] could not wake the worker; the sweep will catch it", {
-      error: sanitizeError(err),
+      error: jobFailureDiagnostic(err),
     });
   }
 }
@@ -800,7 +803,7 @@ export function scheduleBackgroundJobDrain(delayMs = 0): void {
     drainTimer = null;
     drainDueAt = 0;
     drainBackgroundJobs().catch((err) => {
-      console.error("[background-jobs] drain tick failed", { error: sanitizeError(err) });
+      console.error("[background-jobs] drain tick failed", { error: jobFailureDiagnostic(err) });
     });
   }, normalizedDelay);
 }
@@ -1863,7 +1866,7 @@ async function markJobFailedOrPending(
     SET status = CASE WHEN rerun_requested THEN 'pending'::background_job_status ELSE ${status}::background_job_status END,
         locked_at = CASE WHEN rerun_requested THEN NULL ELSE ${lockedAt}::timestamptz END,
         run_after = CASE WHEN rerun_requested THEN ${now.toISOString()}::timestamptz ELSE ${runAfter}::timestamptz END,
-        last_error = CASE WHEN rerun_requested THEN NULL ELSE ${sanitizeError(err)} END,
+        last_error = CASE WHEN rerun_requested THEN NULL ELSE ${jobFailureDiagnostic(err)} END,
         attempts = CASE WHEN rerun_requested THEN 0 ELSE attempts END,
         rerun_requested = false,
         -- The version this attempt read has now spent its one malformed retry.
@@ -1976,15 +1979,16 @@ function calculateBackoffRunAfter(attempts: number, now: Date): Date {
   return new Date(now.getTime() + delaySeconds * 1_000);
 }
 
-/**
- * Errors are stored on the row and read by whoever is on call, so anything
- * that looks like a credential is stripped before it lands in a column that
- * outlives the incident.
- */
-function sanitizeError(err: unknown): string {
-  const raw = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-  return raw
-    .replace(/(api[_-]?key|token|secret|password)=([^\s&]+)/gi, "$1=[redacted]")
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .slice(0, MAX_ERROR_LENGTH);
+/** Persist decision-relevant categories and HTTP status, never messages. */
+function jobFailureDiagnostic(error: unknown): string {
+  if (error instanceof MalformedModelOutputError) return 'malformed_model_output';
+  if (error instanceof OpenRouterHttpError && error.creditRefused) return 'provider_credit_refused';
+  if (error instanceof OpenRouterHttpError || error instanceof OpenAiHttpError) {
+    const status = error.status;
+    if (status === 402) return 'provider_credit_refused';
+    return Number.isInteger(status) && status >= 400 && status <= 599 ? `provider_http_${status}` : 'provider_http_failure';
+  }
+  if (error instanceof ModelDidNotAnswerError) return 'model_unusable_output';
+  if (error instanceof ModelConfigurationError) return 'model_configuration';
+  return JSON.stringify(safeErrorDiagnostic(error));
 }

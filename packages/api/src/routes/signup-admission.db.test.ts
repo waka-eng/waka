@@ -90,6 +90,9 @@ it('shares the rolling production limit of 50 creation starts across password an
   SELECT hash,hash,'production',flow,'creating',started,started+interval '5 minutes',started FROM starts`;
  const passwordEmail=randomUUID()+'@example.test';
  expect((await signup('',passwordEmail)).status).toBe(201);
+ // Known duplicate email responses must leave the final slot for a new identity.
+ expect((await signup('',passwordEmail)).status).toBe(409);
+ expect((await signup('',passwordEmail)).status).toBe(409);
  expect(new URL((await callback(await googleStart())).headers.get('location')!).pathname).toBe('/');
  expect(await t.sql`SELECT id FROM accounts`).toHaveLength(2);
  expect(await t.sql`SELECT id FROM profiles WHERE type='human'`).toHaveLength(2);
@@ -102,7 +105,7 @@ it('shares the rolling production limit of 50 creation starts across password an
  expect(new URL((await callback(await googleStart())).headers.get('location')!).pathname).toBe('/');
  const blocked=await signup('');
  expect(blocked.status).toBe(429);
- expect(await blocked.json()).toMatchObject({code:'signup_capacity'});
+ expect(await blocked.json()).toMatchObject({code:'signup_capacity',error:expect.stringContaining('Existing accounts can still sign in')});
  expect(blocked.headers.get('retry-after')).toBe('3600');
  claims={email:randomUUID()+'@example.test',sub:'google-'+randomUUID()};
  expect(new URL((await callback(await googleStart())).headers.get('location')!).searchParams.get('error')).toBe('signup_capacity');
@@ -176,7 +179,7 @@ it('holds lost COMMIT ACK and lets ordinary password login recover without recre
  const g=await grant('password'),email=randomUUID()+'@example.test';let transactions=0;const real=state.db;
  state.db=new Proxy(real,{get(target,key,receiver){if(key==='transaction')return async(...args:Parameters<typeof real.transaction>)=>{const value=await real.transaction(...args);if(++transactions===2)throw Error('synthetic commit ACK lost');return value;};return Reflect.get(target,key,receiver);}});
  const r=await signup(g.cookie,email);expect(r.status).toBe(503);expect(await r.json()).toMatchObject({code:'signup_outcome_unknown'});state.db=real;
- expect(await t.sql`SELECT id FROM accounts WHERE email=${email}`).toHaveLength(1);expect((await signup(g.cookie,email)).status).toBe(403);
+ expect(await t.sql`SELECT id FROM accounts WHERE email=${email}`).toHaveLength(1);expect((await signup(g.cookie,email)).status).toBe(409);
  expect((await request('login','',{email,password:'synthetic-password-123'})).status).toBe(200);
 });
 it('requires a second bound OAuth round for NEW Google identity but no challenge for returning sign-in',async()=>{
