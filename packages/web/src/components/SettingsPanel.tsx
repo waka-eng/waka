@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { bookmarkletHref } from "../lib/bookmarklet";
 import { ProfileApiKeys } from './ProfileApiKeys';
 
+import { changePassword } from "../lib/api/auth";
 import { apiPath, ApiError, getJson } from "../lib/api/http";
 import { isMobileBuild, platformServices } from "../lib/platform";
 import { checkedNativeApiOrigin } from "../lib/platform/api-origin";
@@ -39,7 +40,7 @@ export interface SettingsPanelProps {
 }
 
 /** The current Settings subpage; null is the overview. */
-type Open = null | "personal" | "sessions" | "danger";
+type Open = null | "personal" | "sessions" | "password" | "danger";
 
 export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   /* React will not render a `javascript:` href, by design; the bookmarklet's
@@ -90,7 +91,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
       <SurfaceHeader locale={props.locale}
         back={{ kind: open === null ? "close" : "back", onBack: stepUp }}
         titleRef={heading}
-        title={say(open === "personal" ? "profilePersonalTitle" : open === "sessions" ? "profileSessionsTitle" : open === "danger" ? "profileDelete" : "worldSettingsOpen")} />
+        title={say(open === "personal" ? "profilePersonalTitle" : open === "sessions" ? "profileSessionsTitle" : open === "password" ? "profileChangePassword" : open === "danger" ? "profileDelete" : "worldSettingsOpen")} />
       <div className="waka-settings-content" key={open ?? "overview"}>
       {open === null ? <>
       {/* WHO THIS IS. Not editable, and not a field: the address identifies
@@ -145,6 +146,10 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
         <ProfileConnections locale={props.locale} />
       </Group>
 
+      <Group id="password" open={open} setOpen={setOpen} label={say("profileChangePassword")}>
+        <PasswordChangeForm locale={props.locale} />
+      </Group>
+
       {open === null ? <LegalLinks /> : null}
 
       {open === null ? <button type="button" className="waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
@@ -175,6 +180,57 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
       </div>
     </div>
   );
+}
+
+function PasswordChangeForm({ locale }: { locale: SupportedLocale }): JSX.Element {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [notice, setNotice] = useState<Parameters<typeof t>[1]>();
+  const busy = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+  const say = (key: Parameters<typeof t>[1]) => t(locale, key);
+
+  const submit = async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setSubmitting(true);
+    setNotice(undefined);
+    try {
+      await changePassword({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setNotice("profilePasswordChanged");
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "incorrect_current_password") setNotice("profilePasswordIncorrect");
+      else if (error instanceof ApiError && error.code === "password_not_set") setNotice("profilePasswordNotSet");
+      else if (error instanceof ApiError && error.status === 400) setNotice("profilePasswordInvalid");
+      else if (error instanceof ApiError && error.status === 429) setNotice("profilePasswordWait");
+      else if (error instanceof ApiError && error.status === 401) setNotice("profilePasswordSignIn");
+      else setNotice("profilePasswordUnconfirmed");
+    } finally {
+      busy.current = false;
+      setSubmitting(false);
+    }
+  };
+
+  return <form className="waka-settings-body" aria-busy={submitting}
+    onSubmit={event => { event.preventDefault(); void submit(); }}>
+    <label className="waka-account-field">
+      <span>{say("profileCurrentPassword")}</span>
+      <input type="password" autoComplete="current-password" required maxLength={200}
+        value={currentPassword} disabled={submitting} onChange={event => setCurrentPassword(event.currentTarget.value)} />
+    </label>
+    <label className="waka-account-field">
+      <span>{say("profileNewPassword")}</span>
+      <input type="password" autoComplete="new-password" required minLength={8} maxLength={200}
+        value={newPassword} disabled={submitting} onChange={event => setNewPassword(event.currentTarget.value)} />
+    </label>
+    <p className="waka-settings-note">{say("profilePasswordRevokesSessions")}</p>
+    {notice ? <p className="waka-settings-note" role={notice === "profilePasswordChanged" ? "status" : "alert"}>{say(notice)}</p> : null}
+    <div className="waka-session-actions">
+      <button type="submit" className="waka-settings-erase" disabled={submitting}>{say("profileChangePassword")}</button>
+    </div>
+  </form>;
 }
 
 /** Both destinations use the same setup prompt; keys load only when their tab opens. */

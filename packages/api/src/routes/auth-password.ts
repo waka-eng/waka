@@ -27,14 +27,14 @@
  * `auth-identity.ts` so nothing spreads a row into a body.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, inArray, ne } from "drizzle-orm";
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 
 import {readSignupGrant,beginSignupCreation,consumeSignupAdmission,signupAdmissionResponse,SignupAdmissionError,type SignupGrant} from "../lib/signup-admission.js";
 import {insertHumanProfile} from "../lib/new-human-profile.js";
-import { accounts, profiles } from "../db/index.js";
+import { accounts, profiles, sessions } from "../db/index.js";
 import {
   buildSessionCookie,
   hashPassword,
@@ -76,6 +76,15 @@ import {
 // Validation
 // ---------------------------------------------------------------------------
 
+const newPasswordSchema = z.string()
+  .min(8, "Password must be at least 8 characters")
+  .max(200, "Password is too long")
+  .refine(passwordIsWellFormed,"Password contains invalid Unicode. Re-enter the password.")
+  .refine(passwordFitsByteLimit,`Password must use at most ${PASSWORD_MAX_BYTES} UTF-8 bytes. Choose a shorter password.`);
+const currentPasswordSchema = z.string()
+  .min(1, "Password is required")
+  .max(200, "Password is too long");
+
 /**
  * Signup request schema.
  *
@@ -95,12 +104,7 @@ const signupSchema = z.object({
     .toLowerCase()
     .email("Invalid email address")
     .max(254, "Email is too long"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .max(200, "Password is too long")
-    .refine(passwordIsWellFormed,"Password contains invalid Unicode. Re-enter the password.")
-    .refine(passwordFitsByteLimit,`Password must use at most ${PASSWORD_MAX_BYTES} UTF-8 bytes. Choose a shorter password.`),
+  password: newPasswordSchema,
   name: z
     .string()
     .trim()
@@ -133,10 +137,12 @@ const loginSchema = z.object({
     .toLowerCase()
     .min(1, "Email is required")
     .max(254, "Email is too long"),
-  password: z
-    .string()
-    .min(1, "Password is required")
-    .max(200, "Password is too long"),
+  password: currentPasswordSchema,
+}).strict();
+
+const changePasswordSchema = z.object({
+  currentPassword: currentPasswordSchema,
+  newPassword: newPasswordSchema,
 }).strict();
 
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -522,4 +528,63 @@ export async function loginHandler(c: Context<AuthEnv>): Promise<Response> {
     },
     200,
   );
+}
+
+/** Change an existing password using the current human session and password. */
+export async function changePasswordHandler(c: Context<AuthEnv>): Promise<Response> {
+  const refused = passwordRequestRefusal(c);
+  if (refused) return refused;
+  const parsed = changePasswordSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ error: "Invalid password change", details: validationDetails(parsed.error) }, 400);
+  }
+
+  const session = c.get("session");
+  const accountId = session.account.id;
+  const db = getDb();
+  const reading = await readLoginThrottle(db, {
+    identifier: `password-change:${accountId}`,
+    source: null,
+    deviceId: null,
+  });
+  const verdict = judgeLoginThrottle(reading);
+  if (verdict.refused) {
+    c.header("Retry-After", String(verdict.retryAfterSeconds));
+    return c.json({ error: "Too many attempts. Wait before trying again." }, 429);
+  }
+
+  const [candidate] = await db.select({ passwordHash: accounts.passwordHash }).from(accounts)
+    .where(eq(accounts.id, accountId)).limit(1);
+  if (!candidate) return c.json({ error: "Sign in again" }, 401);
+  if (!candidate.passwordHash) {
+    return c.json({ code: "password_not_set", error: "This account does not have a password" }, 409);
+  }
+  if (!await verifyPassword(parsed.data.currentPassword, candidate.passwordHash)) {
+    await recordLoginFailure(db, reading);
+    return c.json({ code: "incorrect_current_password", error: "The current password is incorrect" }, 403);
+  }
+  const passwordHash = await hashPassword(parsed.data.newPassword);
+
+  const outcome = await db.transaction(async (tx) => {
+    // Match sign-in and Google recovery: a proof made outside this lock is
+    // only valid while both its password and its session are current.
+    const [current] = await tx.select({ passwordHash: accounts.passwordHash }).from(accounts)
+      .where(eq(accounts.id, accountId)).for("update");
+    const now = new Date();
+    const [active] = await tx.select({ id: sessions.id }).from(sessions)
+      .where(and(eq(sessions.id, session.sessionId), eq(sessions.profileId, session.profile.id),
+        gt(sessions.expiresAt, now))).for("update");
+    if (!active || !current) return "signed_out";
+    if (current.passwordHash !== candidate.passwordHash) return "password_changed";
+    await tx.update(accounts).set({ passwordHash, updatedAt: now }).where(eq(accounts.id, accountId));
+    const ownedProfiles = tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.accountId, accountId));
+    await tx.delete(sessions).where(and(inArray(sessions.profileId, ownedProfiles), ne(sessions.id, active.id)));
+    await clearLoginFailures(tx, reading);
+    return "changed";
+  });
+  if (outcome === "signed_out") return c.json({ error: "Sign in again" }, 401);
+  if (outcome === "password_changed") {
+    return c.json({ code: "password_changed", error: "Your password changed during this request" }, 409);
+  }
+  return c.json({ ok: true });
 }
