@@ -188,7 +188,8 @@ async function runHandler(event?:unknown, context?: WorkerContext) {
     // also hold a database connection open, which is the cost this whole
     // design is avoiding.
     deadlineLimited = result.deadlineLimited === true;
-    if (deadlineLimited || (result.claimed === 0 && result.deferred === 0)) break;
+    if (deadlineLimited) break;
+    if (result.claimed === 0 && result.deferred === 0) break;
   }
 
   return { ...total, passes, exhaustedPasses: passes >= MAX_DRAIN_PASSES, ...(deadlineLimited ? { deadlineLimited: true as const } : {}) };
@@ -196,7 +197,9 @@ async function runHandler(event?:unknown, context?: WorkerContext) {
   const collected=await collectReadingWakeReferences(drain);
   const drained=collected.result;
   const requested=readBackgroundJobWakeReferences([...new Map([...wakes,...collected.wakes,...passWakes].map(row=>[row.id,row])).values()].slice(0,50));
-  if (deliveredWake && !drained.deadlineLimited) await retireBackgroundJobWake(deliveredWake);
+  // This scheduled delivery is one-shot even if capacity or time prevents a
+  // claim. Retire it so wake repair can re-arm pending or reclaimable work.
+  if (deliveredWake && preciseWakes) await retireBackgroundJobWake(deliveredWake);
   await recoverBackgroundJobWakes(context?.invokedFunctionArn);
   await cancelBackgroundJobWakes(settledPayloads);
   console.log("[background-worker] drained background jobs", drained);
