@@ -1104,6 +1104,8 @@ async function loadRecentFeedback(
   });
 }
 
+export class TopOfMindPublicationError extends Error {}
+
 export async function refreshTopOfMindForProfile(
   input: RefreshTopOfMindInput,
   deps: TopOfMindRefreshDependencies = {},
@@ -1264,7 +1266,7 @@ export async function refreshTopOfMindForProfile(
           detail => reportRejection('checks', detail.reason, { entryIndex, fields: detail.fields, distinctOrigins: detail.distinctOrigins })) === null;
       });
       if ((synthesis.rejectedEntries || synthesis.entries.some(entry => !keptWording(entry))) && !generated.some(entry => !keptWording(entry))) {
-        generationFailure = new Error(`Top of mind generation failed publication checks: ${rejectionSummary()}`);
+        generationFailure = new TopOfMindPublicationError(`Top of mind generation failed publication checks: ${rejectionSummary()}`);
       }
       droppedCitations = validated.droppedCitations;
       if (droppedCitations > 0) {

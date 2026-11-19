@@ -188,6 +188,7 @@ import { reconcilePrinciplesAfterSignalLoss, refreshPrinciplesForProfile } from 
 import { tendSignalGarden } from "./signal-gardener.js";
 import {
   refreshTopOfMindForProfile,
+  TopOfMindPublicationError,
   type TopOfMindRefreshDependencies,
 } from "./top-of-mind-synthesis.js";
 
@@ -2002,6 +2003,7 @@ function jobFailureDiagnostic(error: unknown): string {
     if (status === 402) return 'provider_credit_refused';
     return Number.isInteger(status) && status >= 400 && status <= 599 ? `provider_http_${status}` : 'provider_http_failure';
   }
+  if (error instanceof TopOfMindPublicationError) return 'reading_publication_checks';
   if (error instanceof ModelDidNotAnswerError) return 'model_unusable_output';
   if (error instanceof ModelConfigurationError) return 'model_configuration';
   return JSON.stringify(safeErrorDiagnostic(error));
