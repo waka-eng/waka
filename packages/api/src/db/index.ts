@@ -62,3 +62,5 @@ export * from './schema-account-recall-limits.js';
 export * from './schema-embedding-indexes.js';
 
 export * from './schema-signup-admissions.js';
+
+export * from './schema-account-attachment-upload-limits.js';

@@ -60,7 +60,7 @@ import { ALLOWED_ATTACHMENT_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES, MAX_INSPI
 import { InspirationAttachmentError, assertAttachmentKeysUnused, lockAttachmentKeys, verifyUploadedAttachment, type AttachmentHead } from '../lib/inspiration-attachments.js';
 import { ConversationAttachmentError, MAX_MESSAGE_ATTACHMENTS, MAX_STAGED_MESSAGE_ATTACHMENTS, discardStagedAttachment, messageAttachmentSelection, serializeMessageAttachment, stagedCapCutoff, unreferencedAttachmentKeys } from '../lib/conversation-attachments.js';
 import { sweepAttachmentObjects, type DeleteAttachmentObjects } from '../lib/attachment-sweep.js';
-import { recordAttachmentUpload } from '../lib/attachment-uploads.js';
+import { AttachmentUploadCapacityError, recordAttachmentUpload } from '../lib/attachment-uploads.js';
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { validationDetails } from "../lib/validation.js";
 import { profileQuerySchema } from './inspirations-validation.js';
@@ -857,6 +857,18 @@ attachmentsRoutes.post("/presign", async (c) => {
     return c.json({ error: "Attachments bucket is not configured" }, 500);
   }
 
+  const signingDate = new Date();
+  const expiresAt = new Date(signingDate.getTime() + PRESIGN_TTL_SECONDS * 1000).toISOString();
+  try {
+    const recorded = await recordAttachmentUpload(getDatabase(), { key, size, accountId: session.account.id,
+      profileId: targetProfileId, expiresAt: new Date(expiresAt) });
+    if (!recorded) return c.json({ error: 'Upload destination was removed' }, 404);
+  } catch (error) {
+    if (!(error instanceof AttachmentUploadCapacityError)) throw error;
+    c.header('Retry-After', String(error.retryAfter));
+    return c.json({ code: 'attachment_upload_capacity', error: 'This account reached its hourly upload limit. Try again later.' }, 429);
+  }
+
   // ContentType and ContentLength are pinned into the signature, so the browser
   // cannot deviate at PUT time without invalidating the URL. No ACL is set —
   // the bucket stays private and reads happen through presigned GETs.
@@ -871,6 +883,7 @@ attachmentsRoutes.post("/presign", async (c) => {
   try {
     uploadUrl = await getSignedUrl(getS3(), command, {
       expiresIn: PRESIGN_TTL_SECONDS,
+      signingDate,
       // Without this the SDK may treat these as unsignable, and a PUT with a
       // different MIME type or byte count would succeed — defeating the
       // validation above.
@@ -882,10 +895,6 @@ attachmentsRoutes.post("/presign", async (c) => {
     console.error("[attachments] presign failed:", err);
     return c.json({ error: "Failed to mint upload URL" }, 500);
   }
-
-  const expiresAt = new Date(Date.now() + PRESIGN_TTL_SECONDS * 1000).toISOString();
-  const recorded = await recordAttachmentUpload(getDatabase(), { key, profileId: targetProfileId, expiresAt: new Date(expiresAt) });
-  if (!recorded) return c.json({ error: 'Upload destination was removed' }, 404);
 
   return c.json(
     {
