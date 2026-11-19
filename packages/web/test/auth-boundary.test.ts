@@ -262,9 +262,9 @@ describe("auth boundary", () => {
     window.localStorage.removeItem("waka.auth.seenHere");
     let container = await renderAuthRoutes({ initialPath: "/login" });
     expect(container.querySelector("#login-title")?.textContent).toBe("Welcome.");
-    /* No subtitle under the headline (founder, 2026-11-12: "strip all
-       unnecessary descriptive text across the experience"). */
-    expect(container.querySelector(".login-subtitle")).toBeNull();
+    expect(container.querySelector(".login-subtitle")?.textContent).toContain("WAKA finds patterns");
+    expect(container.textContent).toContain("Google account ID and verified email");
+    expect(container.querySelector('[href="/legal/privacy"]')).not.toBeNull();
     await act(async () => mountedRoot?.unmount()); mountedRoot = null; container.remove();
 
     window.localStorage.setItem("waka.auth.seenHere", "1");

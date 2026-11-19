@@ -1,3 +1,5 @@
+import { safeErrorDiagnostic } from './lib/error-diagnostics.js';
+import { getModelExchangeTimeoutMs } from './lib/gemini-http.js';
 import { BackgroundJobHeldError } from './lib/background-job-hold.js';
 import { armBackgroundJobLease, cancelBackgroundJobLease, cancelBackgroundJobWakes, backgroundJobWakesEnabled, prepareBackgroundJobWake, recoverBackgroundJobWakes, readBackgroundJobWake, retireBackgroundJobWake } from './lib/background-job-wake.js';
 /**
@@ -61,13 +63,13 @@ export function isScheduledEvent(event:unknown):boolean{
  */
 async function runScheduledSweeps(now=new Date()){
   try{await sweepBackgroundJobRuns(getDb(),now);}
-  catch(error){recordOperationalFault('maintenance');console.warn('[background-job-runs-sweep] failed',error instanceof Error?error.message:String(error));}
+  catch(error){recordOperationalFault('maintenance');console.warn('[background-job-runs-sweep] failed',safeErrorDiagnostic(error));}
   try{const settled=await settleAbandonedExhaustedLeases(getDb(),now);if(settled)console.info('[abandoned-lease-sweep]',JSON.stringify({settled}));}
-  catch(error){recordOperationalFault('maintenance');console.warn('[abandoned-lease-sweep] failed',error instanceof Error?error.message:String(error));}
+  catch(error){recordOperationalFault('maintenance');console.warn('[abandoned-lease-sweep] failed',safeErrorDiagnostic(error));}
   try{const swept=await sweepDeletedShelf(getDb(),now);if(swept)console.info('[deleted-shelf-sweep]',JSON.stringify({swept}));}
-  catch(error){recordOperationalFault('maintenance');console.warn('[deleted-shelf-sweep] failed',error instanceof Error?error.message:String(error));}
+  catch(error){recordOperationalFault('maintenance');console.warn('[deleted-shelf-sweep] failed',safeErrorDiagnostic(error));}
   try{const swept=await sweepStaleStagedAttachments(getDb(),now,sweepAttachmentObjects);if(swept)console.info('[staged-attachment-sweep]',JSON.stringify({swept}));}
-  catch(error){recordOperationalFault('maintenance');console.warn('[staged-attachment-sweep] failed',error instanceof Error?error.message:String(error));}
+  catch(error){recordOperationalFault('maintenance');console.warn('[staged-attachment-sweep] failed',safeErrorDiagnostic(error));}
   try {
     for (let pass=0;pass<10;pass++) {
       const result=await drainAttachmentObjects(getDb());
@@ -79,14 +81,26 @@ async function runScheduledSweeps(now=new Date()){
   recordDailySweep();
 }
 
-export async function handler(event?:unknown, context?: { invokedFunctionArn?: string }) {
+type WorkerContext = { invokedFunctionArn?: string; getRemainingTimeInMillis?: () => number };
+
+export async function handler(event?:unknown, context?: WorkerContext) {
   try { return await runHandler(event, context); }
   catch (error) {
-    if (!(error instanceof Error && error.message === 'BackgroundJobRetryScheduled')) recordOperationalFault('worker_execution');
-    throw error;
+    if (error instanceof Error && error.message === 'BackgroundJobRetryScheduled') throw new Error('BackgroundJobRetryScheduled');
+    recordOperationalFault('worker_execution');
+    if (error instanceof Error && error.message === 'BackgroundJobWakeScheduled') throw new Error('BackgroundJobWakeScheduled');
+    // Lambda logs thrown error messages and causes.
+    throw new Error(JSON.stringify(safeErrorDiagnostic(error)));
   }
 }
-async function runHandler(event?:unknown, context?: { invokedFunctionArn?: string }) {
+async function runHandler(event?:unknown, context?: WorkerContext) {
+  // Keep room for a full configured provider exchange and settlement. This
+  // avoids late claims. A slow multi-call processor can still hit the deadline.
+  const canClaim = context?.getRemainingTimeInMillis ? () => {
+    const remaining = context.getRemainingTimeInMillis!();
+    return Number.isFinite(remaining) && remaining > getModelExchangeTimeoutMs() + 30_000;
+  } : undefined;
+  const deadline = canClaim ? { canClaim } : {};
   const mode = event && typeof event === 'object' ? (event as { mode?: unknown }).mode : undefined;
   const empty = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0, passes: 0, exhaustedPasses: false };
   if (mode === 'wake_recovery') { await recoverBackgroundJobWakes(context?.invokedFunctionArn); return empty; }
@@ -113,7 +127,7 @@ async function runHandler(event?:unknown, context?: { invokedFunctionArn?: strin
   if(event&&typeof event==='object'&&(event as {mode?:unknown}).mode==='recovery'){
     const state=await readBackgroundJobRecoveryState();recordQueueRecovery(state);
     if(!state.overdue){await recoverBackgroundJobWakes(context?.invokedFunctionArn);return {...empty,recovery:state};}
-    const result=await runBackgroundJobWorker({limit:QUEUE_RECOVERY_LIMITS.claims,overdueOnly:true,...lifecycle});
+    const result=await runBackgroundJobWorker({limit:QUEUE_RECOVERY_LIMITS.claims,overdueOnly:true,...lifecycle,...deadline});
     await recoverBackgroundJobWakes(context?.invokedFunctionArn);
     await cancelBackgroundJobWakes(settledPayloads);
     try{console.info('[queue-recovery-result]',JSON.stringify({claimed:result.claimed,succeeded:result.succeeded,retried:result.retried,failed:result.failed,deferred:result.deferred}));}catch{/* Logging cannot retry completed work. */}
@@ -131,11 +145,13 @@ async function runHandler(event?:unknown, context?: { invokedFunctionArn?: strin
   const passWakes: Array<{ id: string; profileId: string; requestVersion: string }> = [];
   const total = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
   let passes = 0;
+  let deadlineLimited = false;
 
   const drain=async()=>{
   while (passes < MAX_DRAIN_PASSES) {
+    if (canClaim && !canClaim()) { deadlineLimited = true; break; }
     const pass = await collectReadingWakeReferences(() => runBackgroundJobWorker({ limit,
-      ...lifecycle,
+      ...lifecycle, ...deadline,
       ...(asyncEnqueue?{onTransientRetry:(retry:BackgroundJobRetryWake)=>{retries.push(retry);}}:{}) }));
     const result = pass.result;
     if (asyncEnqueue) passWakes.push(...pass.wakes);
@@ -171,15 +187,19 @@ async function runHandler(event?:unknown, context?: { invokedFunctionArn?: strin
     // next wake-up rather than slept on: holding the invocation open would
     // also hold a database connection open, which is the cost this whole
     // design is avoiding.
+    deadlineLimited = result.deadlineLimited === true;
+    if (deadlineLimited) break;
     if (result.claimed === 0 && result.deferred === 0) break;
   }
 
-  return { ...total, passes, exhaustedPasses: passes >= MAX_DRAIN_PASSES };
+  return { ...total, passes, exhaustedPasses: passes >= MAX_DRAIN_PASSES, ...(deadlineLimited ? { deadlineLimited: true as const } : {}) };
   };
   const collected=await collectReadingWakeReferences(drain);
   const drained=collected.result;
   const requested=readBackgroundJobWakeReferences([...new Map([...wakes,...collected.wakes,...passWakes].map(row=>[row.id,row])).values()].slice(0,50));
-  if (deliveredWake) await retireBackgroundJobWake(deliveredWake);
+  // This scheduled delivery is one-shot even if capacity or time prevents a
+  // claim. Retire it so wake repair can re-arm pending or reclaimable work.
+  if (deliveredWake && preciseWakes) await retireBackgroundJobWake(deliveredWake);
   await recoverBackgroundJobWakes(context?.invokedFunctionArn);
   await cancelBackgroundJobWakes(settledPayloads);
   console.log("[background-worker] drained background jobs", drained);
@@ -191,8 +211,8 @@ async function runHandler(event?:unknown, context?: { invokedFunctionArn?: strin
     console.info('[background-worker] transient retry remains; requesting bounded async redelivery');
     throw new Error('BackgroundJobRetryScheduled');
   }
-  if(!preciseWakes&&asyncEnqueue&&requested.length&&await hasNearTermRequestedReading(requested)){
-    console.info('[background-worker] requested reading remains near-term; requesting bounded async redelivery');
+  if(!preciseWakes&&asyncEnqueue&&(drained.deadlineLimited||(requested.length&&await hasNearTermRequestedReading(requested)))){
+    console.info('[background-worker] work remains; requesting bounded async redelivery');
     throw new Error('BackgroundJobWakeScheduled');
   }
   return drained;

@@ -270,6 +270,33 @@ describe("the export: everything visible, and only yours", () => {
     expect(n, "a refused door writes no serve record").toBe(0);
   });
 
+  it("returns an ordered complete archive across pages within the size bound", async () => {
+    const owner = await seedPerson("Owner");
+    const other = await seedPerson("Other");
+    await t.sql`INSERT INTO inspirations (profile_id, text, kind, source, created_at)
+      SELECT ${owner.profileId}, 'inspiration ' || n, 'note', 'app',
+             now() + n * interval '1 second' FROM generate_series(1, 140) n`;
+    await t.sql`INSERT INTO inspirations (profile_id, text, kind, source)
+      VALUES (${other.profileId}, 'foreign inspiration', 'note', 'app')`;
+    const res = await appFor(owner).request("/api/export");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { export: { inspirations: Array<{ text: string }> } };
+    expect(body.export.inspirations.map(row => row.text))
+      .toEqual(Array.from({ length: 140 }, (_, index) => "inspiration " + (index + 1)));
+  });
+
+  it("refuses excess bytes without returning a partial archive or recording a serve", async () => {
+    const owner = await seedPerson("Owner");
+    await t.sql`INSERT INTO inspirations (profile_id, text, kind, source)
+      SELECT ${owner.profileId}, repeat('note ', 6800), 'note', 'app'
+      FROM generate_series(1, 64)`;
+    const res = await appFor(owner).request("/api/export");
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: "This profile is too large to download here", code: "export_too_large" });
+    const [{ n }] = await t.sql`SELECT count(*)::int AS n FROM consultations WHERE profile_id = ${owner.profileId}`;
+    expect(n).toBe(0);
+  });
+
   it("puts its own serve on the record", async () => {
     const owner = await seedPerson("Owner");
     await appFor(owner).request("/api/export");

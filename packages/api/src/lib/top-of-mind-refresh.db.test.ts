@@ -135,7 +135,7 @@ describe("top of mind completion receipts", () => {
     expect(await t.sql`SELECT id FROM top_of_minds WHERE profile_id=${profileId}`).toHaveLength(1);
     const [job] = await t.sql`SELECT attempts,last_error FROM background_jobs WHERE id=${jobId}`;
     expect(job!.attempts).toBe(1);
-    expect(job!.last_error).toContain('publication checks');
+    expect(job!.last_error).toBe('reading_publication_checks');
   });
 
   it("separates empty completion from failure and legacy unknown completion", async () => {

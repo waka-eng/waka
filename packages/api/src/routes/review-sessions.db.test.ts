@@ -129,7 +129,7 @@ it('does not log private database parameters or return them on a failed review w
   try{
     const response=await post(p,'/',{id:randomUUID()});expect(response.status).toBe(500);
     expect(await response.text()).not.toContain('PRIVATE_REVIEW_SENTINEL');
-    expect(log).toHaveBeenCalledWith('[review-sessions]',{code:'P0001'});expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_REVIEW_SENTINEL');
+    expect(log).toHaveBeenCalledWith('[review-sessions]',{category:'database',code:'P0001'});expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_REVIEW_SENTINEL');
     expect(await t.sql`SELECT id FROM review_sessions`).toHaveLength(0);
   }finally{log.mockRestore();await t.sql`DROP TRIGGER reject_review_write ON review_sessions`;await t.sql`DROP FUNCTION reject_review_write()`;}
 });

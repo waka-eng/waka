@@ -166,6 +166,9 @@ export async function consumeSignupAdmission(tx:Tx,grant:SignupGrant|null,flow:S
 export function signupAdmissionResponse(c:Context,error:unknown){
  const e=error instanceof SignupAdmissionError?error:new SignupAdmissionError('signup_outcome_unknown',503);
  if(e.retryAfter)c.header('Retry-After',String(e.retryAfter));
+ if(e.code==='signup_capacity')return c.json({
+  error:'New account signup is busy. Try again later. Existing accounts can still sign in.',code:e.code,
+ },e.status);
  const config=signupConfiguration();
  // Older installed apps cannot acquire a web-cookie grant. Give them a safe
  // stage-bound route only when browser signup is actually configured.

@@ -631,6 +631,13 @@
       "when": 1794906105429,
       "tag": "0089_signup_admissions",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1795049985911,
+      "tag": "0090_account_attachment_upload_limits",
+      "breakpoints": true
     }
   ]
 }

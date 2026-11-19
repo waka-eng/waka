@@ -302,8 +302,41 @@ export default $config({
         : {}),
     };
 
-    const router = publicDomain
+    const responseHeaders = publicDomain
+      ? new aws.cloudfront.ResponseHeadersPolicy("PublicResponseHeaders", {
+          securityHeadersConfig: {
+            contentSecurityPolicy: {
+              contentSecurityPolicy: "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
+              override: true,
+            },
+            contentTypeOptions: { override: true },
+            frameOptions: { frameOption: "DENY", override: true },
+            referrerPolicy: { referrerPolicy: "strict-origin-when-cross-origin", override: true },
+            strictTransportSecurity: {
+              accessControlMaxAgeSec: 2592000,
+              includeSubdomains: false,
+              preload: false,
+              override: true,
+            },
+          },
+          customHeadersConfig: {
+            items: [{
+              header: "Permissions-Policy",
+              value: "geolocation=(), payment=(), usb=()",
+              override: true,
+            }],
+          },
+        })
+      : undefined;
+
+    const router = publicDomain && responseHeaders
       ? new sst.aws.Router("Router", {
+          transform: {
+            cdn: (args) => {
+              args.defaultCacheBehavior = $util.all([args.defaultCacheBehavior, responseHeaders.id])
+                .apply(([behavior, responseHeadersPolicyId]) => ({ ...behavior, responseHeadersPolicyId }));
+            },
+          },
           domain: {
             name: publicDomain,
             // Route53 already has live waka.im/dev.waka.im records from the
@@ -335,6 +368,7 @@ export default $config({
     });
     const backgroundWorker = new sst.aws.Function("BackgroundWorker", {
       handler: "packages/api/src/background-worker.handler",
+      logging: { retention: "1 month" },
       // Enqueue wakes may return a retry signal for a still-pending transient
       // failure. Native async deliveries are bounded; Postgres remains the
       // authority for due times, attempts, leases and model budgets.
@@ -363,6 +397,7 @@ export default $config({
 
     const api = new sst.aws.Function("Api", {
       handler: "packages/api/src/lambda.handler",
+      logging: { retention: "1 month" },
       url: router
         ? {
             // Hono owns the exact native-origin policy on the shared domain.
@@ -453,6 +488,7 @@ export default $config({
       enabled: true,
       function: {
         handler: "packages/api/src/principle-refresh.handler",
+        logging: { retention: "1 month" },
         timeout: "14 minutes",
         link: runtimeLinks,
         environment: runtimeEnvironment,
@@ -519,6 +555,7 @@ export default $config({
     }, { dependsOn: [objectEventsSendPolicy] });
     const objectEventSubscriber = objectEvents.subscribe({
       handler: "packages/api/src/attachment-object-events.handler",
+      logging: { retention: "1 month" },
       timeout: "30 seconds",
       // DeleteObjects authorizes s3:DeleteObject on object ARNs only.
       // The event handler performs its reference/closure checks in SQL.

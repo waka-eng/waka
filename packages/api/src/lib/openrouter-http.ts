@@ -131,7 +131,7 @@ export function openRouterPrivacyPreferences(){
 
 /** A status-only failure lets media adapters retain their retry policy. */
 export class OpenRouterHttpError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly creditRefused = status === 402) {
     super(message);
     this.name = 'OpenRouterHttpError';
   }
@@ -163,13 +163,10 @@ export async function callOpenRouter(
 
   if (!response.ok) {
     const billing=await response.clone().json().catch(()=>null);recordModelUsage('openrouter',label,billing,performance.now()-started,'http_error');
-    throw new OpenRouterHttpError(
-      formatSafeGeminiError(
-        `OpenRouter ${label} failed`,
-        await safeGeminiErrorDetails(response),
-      ),
-      response.status,
-    );
+    const details = await safeGeminiErrorDetails(response);
+    const creditRefused = response.status === 402
+      || ['insufficient_credits', 'insufficient_quota', 'payment_required'].includes(details.providerCode?.toLowerCase() ?? '');
+    throw new OpenRouterHttpError(formatSafeGeminiError(`OpenRouter ${label} failed`, details), response.status, creditRefused);
   }
 
   let rawJson: unknown;

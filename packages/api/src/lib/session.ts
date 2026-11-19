@@ -76,8 +76,7 @@ export async function createSessionRow(input: {
   token: string;
   /** Human-readable device label for a connected-devices view. */
   deviceLabel?: string | null;
-}): Promise<void> {
-  const db = getDb();
+}, db: Pick<ReturnType<typeof getDb>, 'insert'> = getDb()): Promise<void> {
   const tokenHash = await hashSessionToken(input.token);
   const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
 

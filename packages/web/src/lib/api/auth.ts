@@ -132,6 +132,12 @@ export async function login(input: LoginRequest): Promise<AuthSessionResponse> {
   return authenticate('/auth/login', input, 'Login failed');
 }
 
+/** Changes the password without replacing the current session. */
+export async function changePassword(input: { currentPassword: string; newPassword: string }): Promise<void> {
+  const result = await postJson<{ ok: true } | null>(apiPath('/auth/me/password'), input, 'Password change failed');
+  if (result?.ok !== true) throw new ApiError({ status: 0, message: 'Password change could not be confirmed' });
+}
+
 async function authenticate(path: string, input: SignupRequest | LoginRequest, message: string): Promise<AuthSessionResponse> {
   const version = isMobileBuild ? nativeSession.beginChange() : 0;
   if (isMobileBuild) await (await platformServices()).credentials.remove('auth.authorization');

@@ -12,8 +12,8 @@ import {EMBEDDING_2_SPACE} from '../lib/embedding-2-space.js';
 import type {getDb} from '../lib/db.js';
 const state=vi.hoisted(()=>({db:undefined as unknown as ReturnType<typeof getDb>}));
 vi.mock('../lib/db.js',()=>({getDb:()=>state.db}));
-import {signupHandler,loginHandler} from './auth-password.js';
-const app=new Hono().post('/signup',signupHandler).post('/login',loginHandler);
+import {authRoutes} from './auth.js';
+const app=new Hono().route('/',authRoutes);
 let fixture:TestDatabase;
 beforeAll(async()=>{fixture=await createTestDatabase();state.db=fixture.db as unknown as ReturnType<typeof getDb>;});
 beforeEach(async()=>{await fixture.truncateAll();});
@@ -47,6 +47,46 @@ it('returns a generic login refusal for malformed Unicode without creating a ses
   expect((await send('/signup',email,'synthetic password')).status).toBe(201);
   expect((await send('/login',email,'password\uD800x')).status).toBe(401);
   expect(await fixture.sql`SELECT id FROM sessions`).toHaveLength(1);
+});
+
+it('rotates the password for the signed-in person and revokes only their other sessions', async () => {
+  vi.stubEnv('PUBLIC_WEB_URL', 'https://fixture.example.test');
+  const email = randomUUID() + '@example.test';
+  const otherEmail = randomUUID() + '@example.test';
+  const oldPassword = 'synthetic-original-password';
+  const newPassword = '새'.repeat(24);
+  const { token } = await (await send('/signup', email, oldPassword)).json() as { token: string };
+  const { token: otherSession } = await (await send('/login', email, oldPassword)).json() as { token: string };
+  const { token: anotherAccount } = await (await send('/signup', otherEmail, oldPassword)).json() as { token: string };
+  const me = (session: string) => app.request('/me', { headers: { Authorization: `Bearer ${session}` } });
+  const change = (currentPassword: string, next: string, origin = 'https://fixture.example.test') =>
+    app.request('/me/password', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword: next }),
+    });
+
+  expect((await app.request('/me/password', { method: 'POST' })).status).toBe(401);
+  expect((await change(oldPassword, newPassword, 'https://different.example.test')).status).toBe(403);
+  expect((await change(oldPassword, '새'.repeat(25))).status).toBe(400);
+  expect(await (await change('wrong-password', newPassword)).json()).toMatchObject({ code: 'incorrect_current_password' });
+  expect((await me(otherSession)).status).toBe(200);
+
+  const response = await change(oldPassword, newPassword);
+  expect(response.status).toBe(200);
+  expect(response.headers.has('Set-Cookie')).toBe(false);
+  expect(await response.json()).toEqual({ ok: true });
+  expect((await me(token)).status).toBe(200);
+  expect((await me(otherSession)).status).toBe(401);
+  expect((await me(anotherAccount)).status).toBe(200);
+  expect((await send('/login', email, oldPassword)).status).toBe(401);
+  expect((await send('/login', email, newPassword)).status).toBe(200);
+  expect((await send('/login', otherEmail, oldPassword)).status).toBe(200);
+
+  await fixture.sql`UPDATE accounts SET password_hash = NULL WHERE email = ${email}`;
+  expect(await (await change(newPassword, oldPassword)).json()).toMatchObject({ code: 'password_not_set' });
+  expect((await fixture.sql`SELECT password_hash FROM accounts WHERE email = ${email}`)[0].password_hash).toBeNull();
+  expect((await me(token)).status).toBe(200);
 });
 
 it('enrolls a new signup only with the closed enrollment flag and leaves an existing login native',async()=>{

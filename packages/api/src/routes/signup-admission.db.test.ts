@@ -65,6 +65,16 @@ async function googleStart(cookie='',mobile=false){
 }
 const callback=(s:Awaited<ReturnType<typeof googleStart>>)=>request('callback/google?code=synthetic-code&state='+encodeURIComponent(s.state),s.cookie);
 
+it('leaves the creation allowance available after rejecting a known password signup',async()=>{
+ const email=randomUUID()+'@example.test',g=await grant('password');
+ vi.stubEnv('WAKA_SIGNUP_CREATE_HOUR','1');
+ await t.sql`INSERT INTO accounts(email) VALUES (${email})`;
+ expect((await signup(g.cookie,email)).status).toBe(409);
+ expect(await t.sql`SELECT nonce_hash FROM signup_admissions WHERE creation_started_at IS NOT NULL`).toHaveLength(0);
+ expect((await signup(g.cookie)).status).toBe(201);
+ expect(await t.sql`SELECT nonce_hash FROM signup_admissions WHERE creation_started_at IS NOT NULL`).toHaveLength(1);
+});
+
 it('consumes a password proof once with a native-empty human, preserving count after deletion',async()=>{
  const g=await grant('password'),email=randomUUID()+'@example.test';expect((await signup(g.cookie,email)).status).toBe(201);
  expect((await t.sql`SELECT state,creation_started_at IS NOT NULL AS reserved FROM signup_admissions`)[0]).toMatchObject({state:'consumed',reserved:true});expect(await t.sql`SELECT * FROM profile_embedding_indexes`).toHaveLength(0);
@@ -116,7 +126,7 @@ it('holds lost COMMIT ACK and lets ordinary password login recover without recre
  const g=await grant('password'),email=randomUUID()+'@example.test';let transactions=0;const real=state.db;
  state.db=new Proxy(real,{get(target,key,receiver){if(key==='transaction')return async(...args:Parameters<typeof real.transaction>)=>{const value=await real.transaction(...args);if(++transactions===2)throw Error('synthetic commit ACK lost');return value;};return Reflect.get(target,key,receiver);}});
  const r=await signup(g.cookie,email);expect(r.status).toBe(503);expect(await r.json()).toMatchObject({code:'signup_outcome_unknown'});state.db=real;
- expect(await t.sql`SELECT id FROM accounts WHERE email=${email}`).toHaveLength(1);expect((await signup(g.cookie,email)).status).toBe(403);
+ expect(await t.sql`SELECT id FROM accounts WHERE email=${email}`).toHaveLength(1);expect((await signup(g.cookie,email)).status).toBe(409);
  expect((await request('login','',{email,password:'synthetic-password-123'})).status).toBe(200);
 });
 it('requires a second bound OAuth round for NEW Google identity but no challenge for returning sign-in',async()=>{

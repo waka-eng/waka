@@ -26,6 +26,8 @@
 import { createRecallRoutes } from "./routes/recall.js";
 import { createSignalDuplicatesRoutes } from "./routes/signal-duplicates.js";
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
+import { safeErrorDiagnostic } from "./lib/error-diagnostics.js";
 import { handle } from "hono/aws-lambda";
 import { mobileCors } from './lib/mobile-cors.js';
 import { recordOperationalFault } from './lib/operational-fault.js';
@@ -59,6 +61,11 @@ import { createInspirationDaysRoutes } from "./routes/inspiration-days.js";
 import { topOfMindRoutes } from "./routes/top-of-mind.js";
 
 export const app = new Hono();
+app.onError((error, c) => {
+  if (error instanceof HTTPException) return error.getResponse();
+  console.error('[api] unhandled request failure', safeErrorDiagnostic(error));
+  return c.text('Internal Server Error', 500);
+});
 
 /**
  * Nothing this API returns may be cached by anything in front of it.

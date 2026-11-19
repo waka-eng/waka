@@ -1,3 +1,4 @@
+import { safeErrorDiagnostic } from './error-diagnostics.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import type { CreateScheduleCommandInput } from '@aws-sdk/client-scheduler';
@@ -60,7 +61,7 @@ async function deleteWake(wake: BackgroundJobWake): Promise<boolean> {
     { abortSignal: AbortSignal.timeout(5000) }); return true; }
   catch (error) {
     if ((error as { name?: string }).name !== 'ResourceNotFoundException') {
-      console.warn('[background-job-wake] cancellation failed', { kind: wake.kind, error: (error as { name?: string }).name ?? 'unknown' });
+      console.warn('[background-job-wake] cancellation failed', { kind: wake.kind, error: safeErrorDiagnostic(error) });
       return false;
     }
     return true;
@@ -92,7 +93,7 @@ export async function armBackgroundJobLease(job: BackgroundJob, targetArn?: stri
     return true;
   } catch (error) {
     recordOperationalFault('wake_schedule');
-    console.warn('[background-job-wake] lease scheduling failed', { jobId: job.id, error: (error as { name?: string }).name ?? 'unknown' });
+    console.warn('[background-job-wake] lease scheduling failed', { jobId: job.id, error: safeErrorDiagnostic(error) });
     throw new BackgroundJobHeldError(new Date(Date.now() + 30_000), 'Recovery scheduling unavailable', 'support');
   }
 }
@@ -104,7 +105,7 @@ export async function cancelBackgroundJobLease(job: BackgroundJob): Promise<void
       WHERE id=${wake.id}::uuid AND profile_id=${wake.profileId}::uuid AND status='running'
         AND locked_at=${wake.lockedAt}::timestamptz AND attempts=${wake.attempt}) AS active`);
     if (!row?.active && await deleteWake(wake)) await clearWakeMarker(wake);
-  } catch (error) { console.warn('[background-job-wake] cancellation check failed', { kind: 'lease', error: (error as { name?: string }).name ?? 'unknown' }); }
+  } catch (error) { console.warn('[background-job-wake] cancellation check failed', { kind: 'lease', error: safeErrorDiagnostic(error) }); }
 }
 
 /** Post-commit cancellation. A shared profile/deadline wake stays while any
@@ -128,7 +129,7 @@ export async function cancelBackgroundJobWakes(payloads: unknown[]): Promise<voi
         if (held?.present) continue;
       }
       if (await deleteWake(wake) && wake.kind === 'pending') await clearWakeMarker(wake);
-    } catch (error) { console.warn('[background-job-wake] cancellation check failed', { kind: wake.kind, error: (error as { name?: string }).name ?? 'unknown' }); }
+    } catch (error) { console.warn('[background-job-wake] cancellation check failed', { kind: wake.kind, error: safeErrorDiagnostic(error) }); }
   }
 }
 
@@ -139,7 +140,10 @@ async function clearWakeMarker(wake: BackgroundJobWake) {
     WHERE id=${wake.id}::uuid AND profile_id=${wake.profileId}::uuid AND payload->'leaseWake'=${JSON.stringify(wake)}::jsonb`);
 }
 export async function retireBackgroundJobWake(wake: BackgroundJobWake): Promise<void> {
-  await deleteWake(wake);
+  // A reclaimable lease uses the same schedule name until its next claim.
+  // Keep the marker and fail this delivery if deletion was unconfirmed,
+  // rather than re-acknowledging a conflict with the consumed schedule.
+  if (!await deleteWake(wake)) throw new Error('Background job wake retirement unconfirmed');
   await clearWakeMarker(wake);
 }
 
