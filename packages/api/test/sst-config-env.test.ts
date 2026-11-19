@@ -127,7 +127,7 @@ describe("SST background job delivery", () => {
     // src/background-worker.test.ts; the shape is pinned here because this is
     // the test that reads the loop.
     expect(workerSource).toMatch(
-      /if \(result\.claimed === 0 && result\.deferred === 0\) break/,
+      /if \([^\n]*\bresult\.claimed === 0 && result\.deferred === 0\)*\) break/,
     );
   });
 });

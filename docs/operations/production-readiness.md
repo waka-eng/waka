@@ -56,8 +56,11 @@ and deploy receipt before using this record to authorize a later release.
    resource access. Avoid wildcard repository or environment trust.
 3. Put `id-token: write` on the intended release job alone, use a pinned AWS
    credential action and an environment-specific role ARN, and verify the
-   assumed account and role before any mutation. Keep manual read-only
-   monitoring separate. Plan the first real deploy with temporary rollback
+   assumed account and role before any mutation. Scope production credentials
+   to the protected production environment. Replace cross-stage raw database
+   URL comparisons with canonical target fingerprints before removing
+   repository-scoped production URL access. Keep manual read-only monitoring
+   separate. Plan the first real deploy with temporary rollback
    access to the existing credential and a confirmed owner. Verify a
    permitted branch and denied off-branch role assumption before retiring and
    then removing the static AWS access key and GitHub secrets.
@@ -139,6 +142,10 @@ with use of inspirations, readings, searches, attachments and recordings.
   18 delivery testing recorded one production alarm delivered through the
   relay and Discord, then recovery to OK. Migrations and the release
   comparison provide separate evidence of the configured database target.
+- The Oregon Lambda account currently allows 10 concurrent invocations,
+  all unreserved. A per-function AWS reservation needs 100 units left
+  unreserved. Keep AWS reservations unchanged until capacity permits and
+  review worker claim and retry behavior under saturation. [AWS concurrency limits](https://docs.aws.amazon.com/lambda/latest/dg/configuration-concurrency.html)
 - A launch pilot checks real sign-in, save, processing completion, a useful
   reading, and attachment handling. Check elapsed time and a normal empty
   reading. Treat a stuck job, authorization failure, or missing output as
