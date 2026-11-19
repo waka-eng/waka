@@ -233,7 +233,6 @@ function PasswordChangeForm({ locale }: { locale: SupportedLocale }): JSX.Elemen
   </form>;
 }
 
-/** Both destinations use the same setup prompt; keys load only when their tab opens. */
 function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
   const pending = useRef<AbortController | null>(null);
   const objectUrl = useRef<string | null>(null);
@@ -289,6 +288,7 @@ function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
   );
 }
 
+/** Both destinations use the same setup prompt; keys load only when their tab opens. */
 function PersonalConnections({ locale, profile }: { locale: SupportedLocale; profile: ApiOwnedProfile }): JSX.Element {
   const [view, setView] = useState<'setup' | 'keys'>('setup');
   return <>
