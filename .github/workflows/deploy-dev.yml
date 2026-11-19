@@ -166,6 +166,7 @@ jobs:
 
       - name: Verify separate configured database targets
         env:
+          DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL_DEV }}
           # Read only in this preflight step, never used for a connection.
           PRODUCTION_DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
         run: node scripts/check-deployment-databases.mjs
