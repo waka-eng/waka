@@ -741,9 +741,7 @@ export default function LoginPage(): JSX.Element {
         <h1 id="login-title" className="login-title">
           {headline}
         </h1>
-        {/* STRIPPED: the subtitle under the headline ("Sign in to return
-            to what you saved." and its siblings); the headline and the tabs
-            say it. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
+        {!returning && <p className="login-subtitle">{t(locale, "loginProductDescription")}</p>}
 
         {/* THE DOOR SAYS WHY IT IS THE DOOR.
             A person whose network is down is bounced here by `RequireAuth`
@@ -851,6 +849,7 @@ export default function LoginPage(): JSX.Element {
         <OrDivider locale={locale} />
 
         <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} needsVerification={oauthErrorCode === "signup_verification_required" || oauthErrorCode === "signup_capacity" || oauthErrorCode === "signup_admission_used" || oauthErrorCode === "signup_busy" || oauthErrorCode === "signup_closed"} />
+        {(!returning || mode === "signup") && <p className="field-hint">{t(locale, "loginGoogleDataUse")}</p>}
         <LegalLinks />
 
         {/* BACK TO WHAT THEY WERE READING — see `wayBackFrom` for why this is

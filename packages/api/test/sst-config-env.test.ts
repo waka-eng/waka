@@ -303,3 +303,34 @@ it('keeps challenge configuration conditional and API-only, production closed by
  expect(shared+worker).not.toContain('WAKA_TURNSTILE_SECRET');
  expect(sstConfig.match(/WAKA_TURNSTILE_SECRET:/g)).toHaveLength(1);
 });
+
+it("adds a host-only security policy to the public router without changing its origin or cache policy", () => {
+  const start = sstConfig.indexOf("    const responseHeaders = publicDomain");
+  const end = sstConfig.indexOf("\n    /**", start);
+  expect(start).toBeGreaterThan(0);
+  expect(end).toBeGreaterThan(start);
+
+  const evaluate = new Function("publicDomain", "aws", "sst", "$util", "WAKA_CERT_ARN",
+    sstConfig.slice(start, end) + "\nreturn router;");
+  const resources: string[] = [];
+  const aws = { cloudfront: { ResponseHeadersPolicy: class {
+    id = "header-policy";
+    constructor(name: string, public args: any) { resources.push(name); }
+  } } };
+  const sst = { aws: { Router: class {
+    constructor(name: string, public args: any) { resources.push(name); }
+  } } };
+  const util = { all: (values: unknown[]) => ({ apply: (read: (input: unknown[]) => unknown) => read(values) }) };
+  expect(evaluate(undefined, aws, sst, util, "cert")).toBeUndefined();
+  expect(resources).toEqual([]);
+
+  const router = evaluate("waka.im", aws, sst, util, "cert");
+  expect(resources).toEqual(["PublicResponseHeaders", "Router"]);
+  const cdn = { defaultCacheBehavior: { targetOriginId: "existing", cachePolicyId: "existing-cache" } };
+  router.args.transform.cdn(cdn);
+  expect(cdn.defaultCacheBehavior).toEqual({
+    targetOriginId: "existing", cachePolicyId: "existing-cache", responseHeadersPolicyId: "header-policy",
+  });
+  expect(sstConfig.slice(start, end)).toContain("includeSubdomains: false");
+  expect(sstConfig.slice(start, end)).toContain("preload: false");
+});
