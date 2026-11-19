@@ -69,7 +69,7 @@ import {
   preferencesHandler,
   profileHandler,
 } from "./auth-me.js";
-import { loginHandler, signupHandler } from "./auth-password.js";
+import { changePasswordHandler, loginHandler, signupHandler } from "./auth-password.js";
 
 /*
  * Re-exported so `@waka/api/routes/auth` — a declared entry point in this
@@ -173,6 +173,7 @@ authRoutes.post("/login", loginHandler);
 /* A session, acting as itself: */
 authRoutes.get("/me", requireAuth, meHandler);
 authRoutes.patch("/me/preferences", requireAuth, preferencesHandler);
+authRoutes.post("/me/password", requireAuth, humanSessionsOnly, bodyLimit({ maxSize: 4096 }), changePasswordHandler);
 
 /*
  * humanSessionsOnly, for the same reason account erasure has it: publishing a

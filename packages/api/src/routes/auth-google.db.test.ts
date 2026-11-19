@@ -71,8 +71,29 @@ it('revokes every old profile credential and sign-in code, while preserving othe
   for (const token of [victim.token, victim.keeper, ...victim.agents.map(agent => agent.secret), ...agentSessions]) {
     expect((await request('/api/inspirations', token)).status).toBe(200);
   }
-  const linked = await link(victim.email);
+  const protectedProfiles = [victim.profileId, ...victim.agents.map(a => a.profileId)];
+  for (const [index, profileId] of protectedProfiles.entries()) {
+    await t.sql`UPDATE profiles SET public_handle=${'previous-handle-'+index},public_profile_enabled=true,
+      public_top_of_mind_enabled=true WHERE id=${profileId}`;
+  }
+  await t.sql`UPDATE profiles SET public_handle='unrelated-handle',public_profile_enabled=true,
+    public_top_of_mind_enabled=true WHERE id=${other.profileId}`;
+  const [privateMaterial] = await t.sql`INSERT INTO inspirations(profile_id,text)
+    VALUES(${victim.profileId},'Synthetic pre-link material') RETURNING id`;
+  expect((await request('/api/public/profiles/previous-handle-0')).status).toBe(200);
+
+  const [linked, concurrent] = await Promise.all([link(victim.email), link(victim.email)]);
   expect(linked.status).toBe(302);
+  expect(concurrent.status).toBe(302);
+  expect(await t.sql`SELECT public_handle,public_profile_enabled,public_top_of_mind_enabled
+    FROM profiles WHERE id = ANY(${protectedProfiles}::uuid[])`).toEqual(
+    protectedProfiles.map(() => ({public_handle:null,public_profile_enabled:false,public_top_of_mind_enabled:false})),
+  );
+  expect((await request('/api/public/profiles/previous-handle-0')).status).toBe(404);
+  expect((await request('/api/public/profiles/unrelated-handle')).status).toBe(200);
+  expect(await t.sql`SELECT id FROM inspirations WHERE id=${privateMaterial.id}`).toHaveLength(1);
+  const otherFresh = concurrent.headers.get('set-cookie')!.match(/waka_session=([^;]+)/)![1]!;
+  expect((await request('/api/auth/me', otherFresh)).status).toBe(200);
   for (const token of [victim.token, victim.keeper, ...victim.agents.map(agent => agent.secret), ...agentSessions]) {
     expect((await request('/api/inspirations', token)).status).toBe(401);
     expect((await request('/api/inspirations', token, { text: 'Old credentials must not write.' })).status).toBe(401);
@@ -89,6 +110,82 @@ it('revokes every old profile credential and sign-in code, while preserving othe
   expect((await link(victim.email)).status).toBe(302);
   expect((await request('/api/auth/me', fresh)).status).toBe(200);
   expect((await request('/api/inspirations', key.secret)).status).toBe(200);
+});
+
+it.each(['profile', 'password'] as const)('holds an already-admitted %s request across recovery', async operation => {
+  const victim = await owner();
+  const real = state.db;
+  let entered!: () => void, resume!: () => void;
+  const beforeTransaction = new Promise<void>(resolve => { entered = resolve; });
+  const wait = new Promise<void>(resolve => { resume = resolve; });
+  state.db = new Proxy(real, {
+    get(target, key, receiver) {
+      if (key !== 'transaction') return Reflect.get(target, key, receiver);
+      return async (...args: Parameters<typeof real.transaction>) => {
+        entered();
+        await wait;
+        return real.transaction(...args);
+      };
+    },
+  });
+  const inFlight = operation === 'password'
+    ? request('/api/auth/login', undefined, {email:victim.email,password:'synthetic-password-123'})
+    : app.request('/api/auth/me/profile', {method:'PATCH', headers:{'Content-Type':'application/json',
+      Authorization:'Bearer '+victim.token}, body:JSON.stringify({
+        name:'Stale change',preferredLocale:'en-US',publicHandle:'stale-public',publicProfileEnabled:true,publicTopOfMindEnabled:true,
+      })});
+  try {
+    await Promise.race([beforeTransaction, Promise.resolve(inFlight).then(() => { throw new Error('Expected guarded transaction'); })]);
+    state.db = real;
+    expect((await link(victim.email)).status).toBe(302);
+  } finally {
+    state.db = real;
+    resume();
+  }
+  const rejected = await inFlight;
+  expect(rejected.status).toBe(401);
+  expect(rejected.headers.getSetCookie()).toHaveLength(0);
+  expect((await request('/api/public/profiles/stale-public')).status).toBe(404);
+});
+
+it('keeps the configured web, Capacitor bearer and JSON nonbrowser password clients usable',async()=>{
+  vi.stubEnv('PUBLIC_WEB_URL','https://waka.im');
+  const email=randomUUID()+'@example.test',password='synthetic-password-123';
+  const body=JSON.stringify({email,password});
+  const content={'Content-Type':'application/json; charset=utf-8'};
+  const signup=await app.request('https://waka.im/api/auth/signup', {
+    method:'POST',headers:{...content,Origin:'https://waka.im'},body,
+  });
+  expect(signup.status).toBe(201);
+  const native=await app.request('https://waka.im/api/auth/login',{
+    method:'POST',headers:{...content,Origin:'capacitor://localhost'},body,
+  });
+  expect(native.status).toBe(200);
+  expect(native.headers.get('Access-Control-Allow-Origin')).toBe('capacitor://localhost');
+  expect(native.headers.get('Access-Control-Allow-Credentials')).toBeNull();
+  const {token}=await native.json() as {token:string};
+  expect((await request('/api/auth/me',token)).status).toBe(200);
+  expect((await request('/api/auth/login',undefined,{email,password})).status).toBe(200);
+});
+
+it('omits bound query values and database detail from API logs and responses', async () => {
+  const marker = 'private-synthetic-signup-value';
+  await t.sql`CREATE FUNCTION refuse_signup_test() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION 'synthetic signup error' USING DETAIL=NEW.email; END $$`;
+  await t.sql`CREATE TRIGGER refuse_signup_test BEFORE INSERT ON accounts FOR EACH ROW EXECUTE FUNCTION refuse_signup_test()`;
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const response = await request('/api/auth/signup', undefined, { email: marker+'@example.test', password: 'synthetic-password-123' });
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe('Internal Server Error');
+    expect(response.headers.getSetCookie()).toHaveLength(0);
+    expect(log).toHaveBeenCalledWith('[api] unhandled request failure', {category:'database',code:'P0001'});
+    expect(JSON.stringify(log.mock.calls)).not.toContain(marker);
+  } finally {
+    log.mockRestore();
+    await t.sql`DROP TRIGGER refuse_signup_test ON accounts`;
+    await t.sql`DROP FUNCTION refuse_signup_test()`;
+  }
 });
 
 it('rolls back the identity link and every earlier revocation if revoking keys fails', async () => {

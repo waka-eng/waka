@@ -53,7 +53,7 @@ const PAUSE_FRESH_MS = 24 * 60 * 60_000;
    a bare "402" that might be a position, a duration or an id. */
 const PROVIDER_REFUSAL = /: HTTP 402(?:\s|$)|providerCode=(?:insufficient_credits|insufficient_quota|payment_required)\b/i;
 function readingPausedFrom(latest: { status: string; lastError: string | null; updatedAt: Date } | null, now = new Date()): boolean {
-  return latest?.status === "failed" && PROVIDER_REFUSAL.test(latest.lastError ?? "")
+  return latest?.status === "failed" && (latest.lastError === "provider_credit_refused" || PROVIDER_REFUSAL.test(latest.lastError ?? ""))
     && now.getTime() - latest.updatedAt.getTime() < PAUSE_FRESH_MS;
 }
 

@@ -22,7 +22,9 @@ account access, a model-quality comparison or a deployment has passed.
 
 `WAKA_GENERATION_PROVIDER` accepts `openai`, `openrouter` or `gemini`. An explicit
 selection requires that provider's key; it never falls back after a missing key,
-HTTP failure or unknown dispatch. Unset preserves the old OR-key/Gemini behavior.
+HTTP failure or unknown dispatch. The optional `gemini` selection uses the
+OpenRouter key for Gemini 3.1 Flash Lite. Hosted dev and production select OpenAI
+explicitly.
 An OpenAI key's mere presence does not select it. Task configuration is read from
 the existing `WAKA_MODEL_*` names; native IDs must be `gpt-6.1-terra` or
 `gpt-6.1-sol`, without an OR prefix. Sol never receives disabled reasoning or
@@ -100,28 +102,26 @@ cover transport/parser failures. Additional log ingestion is variable; existing
 function log retention is unchanged. Do not add a third EMF Provider series
 without recounting the approved monitoring cost envelope.
 
-## Media compatibility gates
+## Media and embedding routes
 
-- Direct Terra handles PNG/JPEG/WebP through the bounded image path. GIF retains
-  its existing OR route because animated GIF support is not promised by the
-  native contract. HEIC/HEIF retains the existing direct-Google route. A common
-  image failure does not trigger a second paid provider request.
-- The dedicated OR audio adapter targets `google/gemini-3.5-transcribe` on
-  `/api/v1/audio/transcriptions`, preserving real-byte/duration validation,
-  original-language text, silence, corrections and bounded worker retry policy.
-  `WAKA_AUDIO_PROVIDER` is still `gemini` in this candidate profile pending a
-  bounded capability check. Setting it to OR requires a reviewed activation;
-  current Google credentials remain. STT has no asserted provider completion-token
-  limit: input duration/bytes and accepted transcript length are bounded, which
-  is not a dollar cap.
-- Owned active/building model2 uses the existing `OpenRouterEmbedding2Candidate`
-  via pinned Google AI Studio `google/gemini-embedding-2`, exact formatted input,
-  768 finite nonzero raw geometry and a distinct namespace. No normalization,
-  row relabeling or provider fallback is added. Profiles without control remain
-  native `gemini-embedding-001`. Production existing profiles need independently
-  scoped inventory/build/current coverage/atomic cutover; an env flag is not a
-  coverage certificate. The older `OpenRouterEmbeddingCandidate` remains an
-  unselected, unverified namespace and is not a substitute.
+- Native OpenAI Terra handles supported PNG, JPEG, and WebP. GIF uses
+  OpenRouter DeepSeek. HEIC and HEIF use OpenRouter Gemini 3.1 Flash Lite
+  with Google AI Studio pinned. The worker decodes a bounded derivative for
+  inference and retains the original file. A transport failure does not
+  trigger a second paid provider request.
+- Audio transcription uses OpenRouter Gemini 2.5 Flash with Google AI Studio
+  pinned. It retains validated original audio, preserves the original
+  language, and bounds accepted transcript length. Input limits and worker
+  retry policies do not establish a dollar cap.
+- Active Embedding2 uses OpenRouter with pinned Google AI Studio
+  `google/gemini-embedding-2`. It preserves the exact input format and 768
+  finite nonzero raw dimensions. It keeps its own namespace. Historical
+  Embedding 001 rows remain subject to ordinary retention and erasure.
+  Runtime never selects that space. Missing or unsupported Embedding2
+  coverage leaves lexical chat available and holds work that needs
+  semantic comparisons. Production existing profiles need independently
+  verified coverage and an atomic activation; new enrollment alone does
+  not prove it.
 
 ## Dev acceptance and rollback
 

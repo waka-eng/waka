@@ -20,6 +20,7 @@
  *     behind it never cross an account boundary.
  */
 
+import { safeErrorDiagnostic } from '../lib/error-diagnostics.js';
 import { recordConsultation } from "../lib/consultations.js";
 import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
@@ -924,13 +925,13 @@ export async function deleteProfileSignal(
        too, and never a failed delete. */
     console.warn("[signals] principles reconcile after delete failed; forcing a reconcile job", {
       profileId: input.profileId,
-      error: err instanceof Error ? err.message : String(err),
+      error: safeErrorDiagnostic(err),
     });
     await enqueuePrinciplesReconcile(input.profileId, input.signalId,
       citing.map((row) => row.principleId)).catch((refreshErr: unknown) => {
       console.warn("[signals] forced principles reconcile enqueue failed", {
         profileId: input.profileId,
-        error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+        error: safeErrorDiagnostic(refreshErr),
       });
     });
   }
@@ -1049,7 +1050,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     await requestRefresh(profileId, "signals_changed").catch((err: unknown) => {
       console.warn("[signals] top-of-mind refresh enqueue failed", {
         profileId,
-        error: err instanceof Error ? err.message : String(err),
+        error: safeErrorDiagnostic(err),
       });
     });
   };

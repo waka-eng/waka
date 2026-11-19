@@ -4,6 +4,8 @@
  * Processors are scripted; deadlines, leases and publications use real SQL.
  */
 import { randomUUID } from 'node:crypto';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
 const state = vi.hoisted(() => ({ db: null as unknown, send: vi.fn() }));
@@ -72,6 +74,23 @@ it('recovers schedule transport failure through later activity without an idle t
   await recoverBackgroundJobWakes('worker'); expect(creates()).toHaveLength(2);
   await recoverBackgroundJobWakes('worker'); expect(creates()).toHaveLength(2);
 });
+
+it('keeps a delivered lease marker until retirement is confirmed', async () => {
+  await fixture();
+  const now = new Date('2026-10-29T12:00:01Z');
+  const job = await postgresBackgroundJobStore.claimNext(now);
+  await armBackgroundJobLease(job!, 'worker');
+  const wake = event();
+  const before = await t.sql`SELECT payload FROM background_jobs`;
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  state.send.mockRejectedValueOnce(new Error('Synthetic unconfirmed delete'));
+  await expect(retireBackgroundJobWake(wake)).rejects.toThrow('Background job wake retirement unconfirmed');
+  expect(await t.sql`SELECT payload FROM background_jobs`).toEqual(before);
+  expect(creates()).toHaveLength(1);
+  await retireBackgroundJobWake(wake);
+  expect(await t.sql`SELECT payload FROM background_jobs`).toEqual([{ payload: {} }]);
+  warn.mockRestore();
+});
 it('arms an active lease once, does not cancel it on missed settlement, and cancels after success', async () => {
   await fixture(); const now = new Date('2026-10-29T12:00:01Z');
   const job = await postgresBackgroundJobStore.claimNext(now); expect(job).not.toBeNull();
@@ -106,6 +125,68 @@ it('does not bypass an account budget when a pending deadline is delivered', asy
   expect(await prepareBackgroundJobWake(wake, now)).toBe(true);
   const processor = vi.fn(async () => {}); expect(await drainBackgroundJobs({ now, processor })).toMatchObject({ claimed: 0, deferred: 1 });
   expect(processor).not.toHaveBeenCalled(); await recoverBackgroundJobWakes('worker'); expect(creates()).toHaveLength(2);
+});
+
+it('limits concurrent hosted claims to four and re-arms a delivered wake while full', async () => {
+  await fixture(6);
+  vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'synthetic-hosted-worker');
+  const now = new Date('2026-10-29T12:00:01Z');
+  await recoverBackgroundJobWakes('worker');
+  const original = event();
+  const url = new URL(process.env.DB_CONNECTION_URL!);
+  url.searchParams.set('options', `-c search_path=${t.schemaName}`);
+  const pool = postgres(url.toString(), { max: 7, prepare: false });
+  let claimResults: Awaited<ReturnType<typeof postgresBackgroundJobStore.claimNext>>[];
+  try {
+    state.db = drizzle(pool);
+    await pool`SELECT current_schema()`;
+    // Block independent connections at the same claim fence, then release.
+    const competing = await t.sql.begin(async tx => {
+      await tx`SELECT pg_advisory_xact_lock(hashtextextended('waka.background-job-claims', 0))`;
+      const results = Array.from({ length: 6 }, () => postgresBackgroundJobStore.claimNext(now));
+      const expired = postgresBackgroundJobStore.claimNext(now, undefined, () => false);
+      await vi.waitFor(async () => {
+        const [row] = await tx`SELECT count(*)::int AS waiting FROM pg_catalog.pg_locks
+          WHERE locktype = 'advisory' AND NOT granted AND database =
+            (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())`;
+        expect(row!.waiting).toBe(7);
+      }, { timeout: 3000, interval: 25 });
+      return { results, expired };
+    });
+    claimResults = await Promise.all(competing.results);
+    expect(await competing.expired).toBeNull();
+  } finally {
+    state.db = t.db;
+    await pool.end({ timeout: 5 });
+  }
+  const claims = claimResults.filter(job => job !== null);
+  expect(claims).toHaveLength(4);
+  expect(new Set(claims.map(job => job.id)).size).toBe(4);
+  expect(await t.sql`SELECT status, attempts, count(*)::int AS count FROM background_jobs
+    GROUP BY status, attempts ORDER BY attempts`).toEqual([
+    { status: 'pending', attempts: 0, count: 2 },
+    { status: 'running', attempts: 1, count: 4 },
+  ]);
+  expect(await t.sql`SELECT id FROM background_job_runs`).toHaveLength(4);
+
+  expect(await prepareBackgroundJobWake(original, now)).toBe(true);
+  const processor = vi.fn(async () => {});
+  expect(await drainBackgroundJobs({ now, processor })).toMatchObject({ claimed: 0, deferred: 0 });
+  expect(processor).not.toHaveBeenCalled();
+  await retireBackgroundJobWake(original);
+  await recoverBackgroundJobWakes('worker');
+  const replacement = event(1);
+  expect(replacement).toMatchObject({ kind: 'pending' });
+  expect(replacement).not.toEqual(original);
+  expect(await prepareBackgroundJobWake(original, now)).toBe(false);
+  expect(await prepareBackgroundJobWake(replacement, now)).toBe(true);
+
+  await postgresBackgroundJobStore.markSucceeded(claims[0]!, null);
+  expect(await postgresBackgroundJobStore.claimNext(now, undefined, () => false)).toBeNull();
+  const next = await postgresBackgroundJobStore.claimNext(now);
+  expect(next?.attempts).toBe(1);
+  expect(await postgresBackgroundJobStore.claimNext(now)).toBeNull();
+  expect(await t.sql`SELECT id FROM background_jobs WHERE status = 'running'`).toHaveLength(4);
 });
 
 it('cancels the old deadline when a whole group moves, and keeps it when members remain', async () => {

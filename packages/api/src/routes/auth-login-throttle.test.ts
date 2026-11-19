@@ -157,6 +157,7 @@ function makeDb(
       const rows = account ? [account.row] : [];
       const result: any = Promise.resolve(rows);
       result.limit = async () => rows;
+      result.for = async () => rows;
       return result;
     };
     return chain;
@@ -176,7 +177,8 @@ function makeDb(
      the shape matters here — the rows come straight back out as the fixture. */
   db.transaction = async (work: (tx: unknown) => Promise<unknown>) =>
     work({
-      insert: (table: unknown) => ({
+      select: db.select,
+      insert: (table: unknown) => table === loginFailures ? db.insert(table) : ({
         values: () => ({
           returning: async () => {
             const row = creates?.row as { account: unknown; profile: unknown } | undefined;

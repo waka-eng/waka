@@ -157,8 +157,26 @@ describe("background worker cron handler", () => {
   });
   it('a failed recovery read cannot silently claim work',async()=>{
     vi.mocked(readBackgroundJobRecoveryState).mockRejectedValue(new Error('Unavailable'));
-    await expect(handler({mode:'recovery'})).rejects.toThrow('Unavailable');
+    await expect(handler({mode:'recovery'})).rejects.toThrow('{"category":"unexpected"}');
     expect(runBackgroundJobWorker).not.toHaveBeenCalled();
+  });
+  it('uses actual invocation time before opening another claim pass',async()=>{
+    vi.stubEnv('WAKA_MODEL_EXCHANGE_TIMEOUT_MS','180000');
+    expect(await handler(undefined,{getRemainingTimeInMillis:()=>209999})).toMatchObject({
+      claimed:0,passes:0,deadlineLimited:true,
+    });
+    expect(runBackgroundJobWorker).not.toHaveBeenCalled();
+    let left=800000;
+    vi.mocked(runBackgroundJobWorker).mockImplementationOnce(async options=>{
+      expect(options?.canClaim?.()).toBe(true);
+      left=209999;
+      expect(options?.canClaim?.()).toBe(false);
+      return {...IDLE_PASS,claimed:1,succeeded:1,deadlineLimited:true};
+    });
+    expect(await handler(undefined,{getRemainingTimeInMillis:()=>left})).toMatchObject({
+      passes:1,succeeded:1,deadlineLimited:true,
+    });
+    expect(runBackgroundJobWorker).toHaveBeenCalledOnce();
   });
   it("drains a bounded number of background jobs by default", async () => {
     await handler();
@@ -257,7 +275,7 @@ describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads"
     expect(sweepDeletedShelf).toHaveBeenCalledTimes(1);
     expect(sweepStaleStagedAttachments).toHaveBeenCalledTimes(1);
     expect(runBackgroundJobWorker).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith("[abandoned-lease-sweep] failed", "db down");
+    expect(warn).toHaveBeenCalledWith("[abandoned-lease-sweep] failed", {category: "unexpected"});
     warn.mockRestore();
   });
   it("a failed staged-upload sweep never costs the queue its pass", async () => {
@@ -266,7 +284,7 @@ describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads"
     await expect(handler(scheduled)).resolves.toMatchObject({ passes: 1 });
     expect(runBackgroundJobWorker).toHaveBeenCalledTimes(1);
     expect(sweepDeletedShelf).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith("[staged-attachment-sweep] failed", "bucket down");
+    expect(warn).toHaveBeenCalledWith("[staged-attachment-sweep] failed", {category: "unexpected"});
     warn.mockRestore();
   });
   it("a failed shelf sweep still lets the staged-upload sweep and the queue run", async () => {
@@ -275,7 +293,7 @@ describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads"
     await expect(handler(scheduled)).resolves.toMatchObject({ passes: 1 });
     expect(sweepStaleStagedAttachments).toHaveBeenCalledTimes(1);
     expect(runBackgroundJobWorker).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith("[deleted-shelf-sweep] failed", "db down");
+    expect(warn).toHaveBeenCalledWith("[deleted-shelf-sweep] failed", {category: "unexpected"});
     warn.mockRestore();
   });
 });
@@ -298,6 +316,21 @@ describe('one-time recovery events', () => {
     await handler({ mode: 'wake_recovery' }, { invokedFunctionArn: 'worker' });
     expect(jobWakes.recoverBackgroundJobWakes).toHaveBeenCalledExactlyOnceWith('worker');
     expect(runBackgroundJobWorker).not.toHaveBeenCalled();
+  });
+  it('re-arms an accepted one-shot wake when the deadline prevents any claim', async () => {
+    vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_ROLE', 'role');
+    vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_GROUP', 'group');
+    const wake = { kind: 'pending', profileId: '00000000-0000-4000-8000-000000000002',
+      runAfter: '2026-10-29T12:00:00.000000Z', token: '00000000-0000-4000-8000-000000000003' };
+    vi.mocked(jobWakes.prepareBackgroundJobWake).mockResolvedValue(true);
+    await expect(handler({ mode: 'job_wake', wake }, {
+      invokedFunctionArn: 'worker', getRemainingTimeInMillis: () => 5_000,
+    })).resolves.toMatchObject({ claimed: 0, deadlineLimited: true });
+    expect(runBackgroundJobWorker).not.toHaveBeenCalled();
+    expect(jobWakes.retireBackgroundJobWake).toHaveBeenCalledExactlyOnceWith(wake);
+    expect(jobWakes.recoverBackgroundJobWakes).toHaveBeenCalledExactlyOnceWith('worker');
+    expect(vi.mocked(jobWakes.retireBackgroundJobWake).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(jobWakes.recoverBackgroundJobWakes).mock.invocationCallOrder[0]!);
   });
   it('uses exact scheduling instead of extra native retry pings when configured', async () => {
     vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_ROLE', 'role'); vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_GROUP', 'group');

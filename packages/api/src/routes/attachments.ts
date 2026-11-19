@@ -35,10 +35,10 @@
  * either break that capture or let a key be replayed across profiles.
  */
 
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-import { attachmentsRegion, makeAttachmentsS3Client } from "../lib/s3-client.js";
+import { makeAttachmentsS3Client } from "../lib/s3-client.js";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
@@ -55,12 +55,12 @@ import {
 import { getDb } from "../lib/db.js";
 import { type AuthEnv, profileAccessError, requireAuth, asAccountProfile } from "../lib/middleware.js";
 import { enqueueEnrichAttachment, wakeCommittedBackgroundJobs } from "../lib/queue.js";
-import { attachmentKeyPrefix, attachmentObjectUrl, getAttachmentsBucket } from '../lib/attachment-storage.js';
-import { ALLOWED_ATTACHMENT_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES, isAllowedFileContentType, isRasterImageContentType } from '../lib/inspiration-attachment-input.js';
+import { attachmentKeyPrefix, getAttachmentsBucket } from '../lib/attachment-storage.js';
+import { ALLOWED_ATTACHMENT_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES, MAX_INSPIRATION_ATTACHMENTS, isAllowedFileContentType, isRasterImageContentType } from '../lib/inspiration-attachment-input.js';
 import { InspirationAttachmentError, assertAttachmentKeysUnused, lockAttachmentKeys, verifyUploadedAttachment, type AttachmentHead } from '../lib/inspiration-attachments.js';
 import { ConversationAttachmentError, MAX_MESSAGE_ATTACHMENTS, MAX_STAGED_MESSAGE_ATTACHMENTS, discardStagedAttachment, messageAttachmentSelection, serializeMessageAttachment, stagedCapCutoff, unreferencedAttachmentKeys } from '../lib/conversation-attachments.js';
 import { sweepAttachmentObjects, type DeleteAttachmentObjects } from '../lib/attachment-sweep.js';
-import { recordAttachmentUpload } from '../lib/attachment-uploads.js';
+import { AttachmentUploadCapacityError, recordAttachmentUpload } from '../lib/attachment-uploads.js';
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { validationDetails } from "../lib/validation.js";
 import { profileQuerySchema } from './inspirations-validation.js';
@@ -169,19 +169,14 @@ const finalizeS3Schema = z.object({
   ...baseFinalizeFields,
   type: z.enum(["image", "file", "audio"]),
   key: z.string().trim().min(1, "key is required").max(1024, "key is too long"),
-  contentType: z
-    .string()
-    .trim()
-    .max(255, "contentType is too long")
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined)),
-  size: z
-    .number()
-    .int("size must be an integer number of bytes")
-    .min(0, "size must be >= 0")
-    .max(MAX_ATTACHMENT_UPLOAD_BYTES, `size exceeds the ${MAX_ATTACHMENT_UPLOAD_BYTES}-byte cap`)
-    .optional(),
-}).strict();
+  contentType: z.string().trim().min(1).max(255)
+    .refine(value => ALLOWED_ATTACHMENT_CONTENT_TYPE.test(value), "This file type cannot be attached"),
+  size: z.number().int().positive().max(MAX_ATTACHMENT_UPLOAD_BYTES),
+}).strict().superRefine((value, context) => {
+  if (value.type !== 'file' && !value.contentType.toLowerCase().startsWith(value.type + '/')) {
+    context.addIssue({ code: 'custom', path: ['contentType'], message: 'This file type does not match the attachment' });
+  }
+});
 
 /**
  * A PHOTO OR FILE FOR A CHAT MESSAGE (0076). Uploaded bytes only — no links,
@@ -248,19 +243,6 @@ export type FinalizeAttachmentRequest = z.infer<typeof finalizeRequestSchema>;
  */
 
 /**
- * Resolve the region.
- *
- * `ATTACHMENTS_REGION` is canonical and MUST equal the bucket's region: SigV4
- * otherwise produces a valid signature for the wrong endpoint and S3 answers a
- * 301 PermanentRedirect. Lambda's own `AWS_REGION` is a fallback.
- */
-function getRegion(): string {
-  /* One resolver, in lib/s3-client.ts. This wrapper stays because the region
-     is read here for more than client construction. */
-  return attachmentsRegion();
-}
-
-/**
  * Lazy S3 client, one per process, reused across warm invocations. Credentials
  * come from the standard provider chain — on Lambda, the execution role SST
  * attaches when the Function is linked to the Bucket.
@@ -305,41 +287,6 @@ function buildKey(profileId: string, filename: string): string {
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 10);
   return `${attachmentKeyPrefix(profileId)}${ts}-${rand}${safeExtension(filename)}`;
-}
-
-/**
- * Build the canonical https URL for an object so the row's `url` column always
- * has a renderable value. The client still mints a presigned GET at view time
- * (the bucket is private), but storing the canonical form keeps the column
- * non-empty and portable across signing schemes.
- */
-
-/**
- * HEAD the object to verify the upload actually landed before writing a row
- * that points at it.
- *
- *   - "exists"        : the object is durable.
- *   - "missing"       : 404 / NotFound — refuse to persist.
- *   - "indeterminate" : transport or credential failure. The caller treats this
- *                       as a soft pass; the alternative is failing every upload
- *                       on a flaky network.
- */
-async function verifyObjectExists(
-  bucket: string,
-  key: string,
-): Promise<"exists" | "missing" | "indeterminate"> {
-  try {
-    await getS3().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
-    return "exists";
-  } catch (err) {
-    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
-    const status = e?.$metadata?.httpStatusCode;
-    if (status === 404 || e?.name === "NotFound" || e?.name === "NoSuchKey") {
-      return "missing";
-    }
-    console.warn("[attachments] HEAD verification inconclusive:", err);
-    return "indeterminate";
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -714,8 +661,8 @@ async function finalizeChatAttachment(c: Context<AuthEnv>, data: z.infer<typeof 
  *   2. For an S3-backed attachment, the key must sit under the acting profile's
  *      prefix. The presign call already enforces this cryptographically;
  *      re-checking means a leaked key alone is useless.
- *   3. The object must exist (S3 HEAD). Best-effort: credential and transport
- *      failures fall through to the insert rather than blocking the member.
+ *   3. A confirmed S3 HEAD must match the signed size and type. A missing or
+ *      inconclusive object cannot become an attachment.
  *
  * Finalizing separately from presigning is what keeps the presign endpoint
  * side-effect-free — it cannot know whether the upload succeeded, so writing
@@ -802,40 +749,21 @@ attachmentsRoutes.post("/", async (c) => {
       enrichmentStatus: initialEnrichmentStatus("image"),
     };
   } else {
-    const { key, type, name, contentType, size } = parsed.data;
-
-    const expectedPrefix = attachmentKeyPrefix(session.profile.id);
-    if (!key.startsWith(expectedPrefix)) {
-      return c.json({ error: "key does not belong to the authenticated profile" }, 403);
-    }
-
-    let bucket: string;
+    const { type, name } = parsed.data;
     try {
-      bucket = getAttachmentsBucket();
-    } catch (err) {
-      console.error("[attachments] bucket misconfigured:", err);
-      return c.json({ error: "Attachments bucket is not configured" }, 500);
+      const object = await verifyUploadedAttachment(parsed.data, session.profile.id, deps.attachmentHead);
+      rowToInsert = {
+        profileId: parent.profileId,
+        inspirationId: parent.id,
+        type,
+        ...object,
+        name: name ?? null,
+        enrichmentStatus: initialEnrichmentStatus(type),
+      };
+    } catch (error) {
+      if (error instanceof InspirationAttachmentError) return c.json({ error: error.message, code: error.code }, error.status);
+      throw error;
     }
-
-    const verdict = await verifyObjectExists(bucket, key);
-    if (verdict === "missing") {
-      return c.json(
-        { error: "S3 object not found at the supplied key. Did the PUT succeed?" },
-        404,
-      );
-    }
-
-    rowToInsert = {
-      profileId: parent.profileId,
-      inspirationId: parent.id,
-      type,
-      url: attachmentObjectUrl(bucket, getRegion(), key),
-      name: name ?? null,
-      s3Key: key,
-      contentType: contentType ?? null,
-      size: size ?? null,
-      enrichmentStatus: initialEnrichmentStatus(type),
-    };
   }
 
   const finalized = await db.transaction(async (tx) => {
@@ -844,10 +772,12 @@ attachmentsRoutes.post("/", async (c) => {
        the first row's owner is deleted. Its key lock is this transaction's
        first statement, ahead of any row the enqueue below locks — the
        order every door keeps. */
+    if (rowToInsert.s3Key) await lockAttachmentKeys(tx, [rowToInsert.s3Key]);
+    const [locked] = await tx.select({ id: inspirations.id }).from(inspirations)
+      .where(and(eq(inspirations.id, parent.id), eq(inspirations.profileId, parent.profileId))).for('update');
+    if (!locked) return { refused: new InspirationAttachmentError(404, 'inspiration_not_found', 'Inspiration not found') };
     if (rowToInsert.s3Key) {
-      // A recovered recording retries the same object after an interrupted response.
-      // Authorize the parent above and hold the key lock before accepting a replay.
-      await lockAttachmentKeys(tx, [rowToInsert.s3Key]);
+      // A recovered recording can replay the same object even at the cap.
       const [existing] = await tx.select(attachmentSelection).from(attachments).where(and(
         eq(attachments.s3Key, rowToInsert.s3Key), eq(attachments.profileId, parent.profileId),
         eq(attachments.inspirationId, parent.id), eq(attachments.type, rowToInsert.type),
@@ -855,6 +785,13 @@ attachmentsRoutes.post("/", async (c) => {
       if (existing) return { row: existing };
       try { await assertAttachmentKeysUnused(tx, [rowToInsert.s3Key]); }
       catch (error) { if (error instanceof InspirationAttachmentError) return { refused: error }; throw error; }
+    }
+    const siblings = await tx.select({ id: attachments.id }).from(attachments)
+      .where(and(eq(attachments.inspirationId, parent.id), eq(attachments.profileId, parent.profileId)))
+      .limit(MAX_INSPIRATION_ATTACHMENTS);
+    if (siblings.length >= MAX_INSPIRATION_ATTACHMENTS) {
+      return { refused: new InspirationAttachmentError(409, 'inspiration_attachment_limit',
+        `An inspiration can have up to ${MAX_INSPIRATION_ATTACHMENTS} attachments.`) };
     }
     const [row] = await tx.insert(attachments).values(rowToInsert).returning(attachmentSelection);
     if (row?.enrichmentStatus === "pending") await enqueueEnrichAttachment(parent.profileId, row.id, parent.id, tx);
@@ -920,6 +857,18 @@ attachmentsRoutes.post("/presign", async (c) => {
     return c.json({ error: "Attachments bucket is not configured" }, 500);
   }
 
+  const signingDate = new Date();
+  const expiresAt = new Date(signingDate.getTime() + PRESIGN_TTL_SECONDS * 1000).toISOString();
+  try {
+    const recorded = await recordAttachmentUpload(getDatabase(), { key, size, accountId: session.account.id,
+      profileId: targetProfileId, expiresAt: new Date(expiresAt) });
+    if (!recorded) return c.json({ error: 'Upload destination was removed' }, 404);
+  } catch (error) {
+    if (!(error instanceof AttachmentUploadCapacityError)) throw error;
+    c.header('Retry-After', String(error.retryAfter));
+    return c.json({ code: 'attachment_upload_capacity', error: 'This account reached its hourly upload limit. Try again later.' }, 429);
+  }
+
   // ContentType and ContentLength are pinned into the signature, so the browser
   // cannot deviate at PUT time without invalidating the URL. No ACL is set —
   // the bucket stays private and reads happen through presigned GETs.
@@ -934,6 +883,7 @@ attachmentsRoutes.post("/presign", async (c) => {
   try {
     uploadUrl = await getSignedUrl(getS3(), command, {
       expiresIn: PRESIGN_TTL_SECONDS,
+      signingDate,
       // Without this the SDK may treat these as unsignable, and a PUT with a
       // different MIME type or byte count would succeed — defeating the
       // validation above.
@@ -945,10 +895,6 @@ attachmentsRoutes.post("/presign", async (c) => {
     console.error("[attachments] presign failed:", err);
     return c.json({ error: "Failed to mint upload URL" }, 500);
   }
-
-  const expiresAt = new Date(Date.now() + PRESIGN_TTL_SECONDS * 1000).toISOString();
-  const recorded = await recordAttachmentUpload(getDatabase(), { key, profileId: targetProfileId, expiresAt: new Date(expiresAt) });
-  if (!recorded) return c.json({ error: 'Upload destination was removed' }, 404);
 
   return c.json(
     {

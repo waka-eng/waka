@@ -27,14 +27,14 @@
  * `auth-identity.ts` so nothing spreads a row into a body.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, inArray, ne } from "drizzle-orm";
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 
 import {readSignupGrant,beginSignupCreation,consumeSignupAdmission,signupAdmissionResponse,SignupAdmissionError,type SignupGrant} from "../lib/signup-admission.js";
 import {insertHumanProfile} from "../lib/new-human-profile.js";
-import { accounts, profiles } from "../db/index.js";
+import { accounts, profiles, sessions } from "../db/index.js";
 import {
   buildSessionCookie,
   hashPassword,
@@ -43,6 +43,7 @@ import {
   wantsSecureCookie,
 } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
+import { databaseSqlState } from "../lib/error-diagnostics.js";
 import {
   buildLoginDeviceCookie,
   clearLoginFailures,
@@ -57,6 +58,7 @@ import {
 } from "../lib/login-throttle.js";
 import { DEFAULT_LOCALE, supportedLocaleSchema } from "../lib/locales.js";
 import type { AuthEnv } from "../lib/middleware.js";
+import { isNativeApiOrigin } from "../lib/mobile-cors.js";
 import { createSessionRow, describeUserAgent } from "../lib/session.js";
 import { validationDetails } from "../lib/validation.js";
 import {passwordFitsByteLimit,passwordIsWellFormed,PASSWORD_MAX_BYTES} from '../lib/password-policy.js';
@@ -73,6 +75,15 @@ import {
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
+
+const newPasswordSchema = z.string()
+  .min(8, "Password must be at least 8 characters")
+  .max(200, "Password is too long")
+  .refine(passwordIsWellFormed,"Password contains invalid Unicode. Re-enter the password.")
+  .refine(passwordFitsByteLimit,`Password must use at most ${PASSWORD_MAX_BYTES} UTF-8 bytes. Choose a shorter password.`);
+const currentPasswordSchema = z.string()
+  .min(1, "Password is required")
+  .max(200, "Password is too long");
 
 /**
  * Signup request schema.
@@ -93,12 +104,7 @@ const signupSchema = z.object({
     .toLowerCase()
     .email("Invalid email address")
     .max(254, "Email is too long"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .max(200, "Password is too long")
-    .refine(passwordIsWellFormed,"Password contains invalid Unicode. Re-enter the password.")
-    .refine(passwordFitsByteLimit,`Password must use at most ${PASSWORD_MAX_BYTES} UTF-8 bytes. Choose a shorter password.`),
+  password: newPasswordSchema,
   name: z
     .string()
     .trim()
@@ -131,10 +137,12 @@ const loginSchema = z.object({
     .toLowerCase()
     .min(1, "Email is required")
     .max(254, "Email is too long"),
-  password: z
-    .string()
-    .min(1, "Password is required")
-    .max(200, "Password is too long"),
+  password: currentPasswordSchema,
+}).strict();
+
+const changePasswordSchema = z.object({
+  currentPassword: currentPasswordSchema,
+  newPassword: newPasswordSchema,
 }).strict();
 
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -142,6 +150,38 @@ export type LoginInput = z.infer<typeof loginSchema>;
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
+
+/** JSON is required even for clients without browser Origin headers. For a
+ * browser, compare to the configured public web origin. Native API clients
+ * use the existing bearer-only origins. Unconfigured local loopback remains
+ * usable without trusting a public request Host or proxy header. */
+function passwordRequestRefusal(c: Context<AuthEnv>): Response | undefined {
+  const mime = c.req.header('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
+  if (mime !== 'application/json') return c.json({ error: 'Content-Type must be application/json' }, 415);
+  const origin = c.req.header('Origin');
+  if (origin === undefined) {
+    const browserSite = c.req.header('Sec-Fetch-Site');
+    if (browserSite === undefined || browserSite === 'same-origin' || browserSite === 'none') return;
+  } else if (isNativeApiOrigin(origin)) {
+    if (!c.req.header('Cookie')) return;
+  } else {
+    try {
+      const configured = process.env.PUBLIC_WEB_URL;
+      if (configured) {
+        const publicUrl = new URL(configured);
+        if (['http:', 'https:'].includes(publicUrl.protocol) && origin === publicUrl.origin) return;
+      } else if (!process.env.SST_RESOURCE_App && process.env.NODE_ENV !== 'production'
+        && ['local', 'test', undefined].includes(process.env.WAKA_STAGE)) {
+        const request = new URL(c.req.url);
+        if (['localhost', '127.0.0.1', '[::1]'].includes(request.hostname) && origin === request.origin) return;
+      }
+    } catch {
+      // An invalid configured origin grants nothing.
+    }
+  }
+  return c.json({ error: 'Request origin is not allowed' }, 403);
+}
+
 
 /**
  * POST /api/auth/signup
@@ -159,6 +199,8 @@ export type LoginInput = z.infer<typeof loginSchema>;
  *      tests) can authenticate too.
  */
 export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
+  const refused = passwordRequestRefusal(c);
+  if (refused) return refused;
   // 1. Parse body. We tolerate non-JSON gracefully so a misbehaving client
   //    gets a 400 with a message rather than an unhandled exception.
   let rawBody: unknown;
@@ -183,14 +225,15 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
 
   const { email, password, name, preferredLocale } = parsed.data;
   const db = getDb();
-  let admission:SignupGrant|null;
-  try{admission=readSignupGrant(c,'password');await beginSignupCreation(db,admission,'password');}
-  catch(error){return signupAdmissionResponse(c,error);}
+  let admission: SignupGrant | null;
+  try {
+    admission = readSignupGrant(c, 'password');
+  } catch (error) {
+    return signupAdmissionResponse(c, error);
+  }
 
-
-  // 2. Email uniqueness check. We do this BEFORE hashing the password so we
-  //    don't burn ~100ms of bcrypt CPU on a duplicate request. The unique
-  //    index below is still the arbiter in case two requests race.
+  // 2. An ordinary duplicate uses neither a creation slot nor a bcrypt
+  //    check. The unique index still guards the race after this lookup.
   const existing = await db
     .select({ id: accounts.id })
     .from(accounts)
@@ -201,7 +244,13 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
     return c.json({ error: "An account with this email already exists" }, 409);
   }
 
-  // 3. Hash. Awaited so we surface bcrypt errors as 500s, not silent failures.
+  // 3. Preserve the shared creation bound before paying for bcrypt.
+  try {
+    await beginSignupCreation(db, admission, 'password');
+  } catch (error) {
+    return signupAdmissionResponse(c, error);
+  }
+  // Surface bcrypt failures as 500s.
   const passwordHash = await hashPassword(password);
 
   // 4. Insert both rows together. ONBOARDING IS NEVER STAMPED HERE (2026-11).
@@ -232,9 +281,8 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
       return { account: account!, profile: sessionProfileRow(profile!) };
     });
   } catch (err) {
-    // postgres.js exposes the SQLSTATE on `err.code`. `23505` = unique
-    // violation. Anything else is a genuine 500.
-    const code = (err as { code?: string } | null)?.code;
+    // Drizzle wraps the driver error. The email uniqueness race is still a 409.
+    const code = databaseSqlState(err);
     if (code === "23505") {
       return c.json(
         { error: "An account with this email already exists" },
@@ -330,6 +378,8 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
  * the limit meant to slow enumeration down would have become the oracle.
  */
 export async function loginHandler(c: Context<AuthEnv>): Promise<Response> {
+  const refused = passwordRequestRefusal(c);
+  if (refused) return refused;
   // 1. Parse body.
   let rawBody: unknown;
   try {
@@ -434,17 +484,25 @@ export async function loginHandler(c: Context<AuthEnv>): Promise<Response> {
   //    the moment somebody proves they know its password, so they are dropped
   //    rather than left to expire — otherwise the person who fumbled their way
   //    to the right password would still be serving out the window.
-  await clearLoginFailures(db, reading);
-
   const token = await signSessionToken({
     profileId: candidate.profile.id,
     email: candidate.account.email,
   });
-  await createSessionRow({
-    profileId: candidate.profile.id,
-    token,
-    deviceLabel: describeUserAgent(c.req.header("user-agent")),
+  const persisted = await db.transaction(async tx => {
+    // bcrypt ran outside the transaction. Recovery/revocation uses the same
+    // account lock, so only a still-current password can mint this session.
+    const [current] = await tx.select({ passwordHash: accounts.passwordHash }).from(accounts)
+      .where(eq(accounts.id, candidate.account.id)).for('update');
+    if (current?.passwordHash !== candidate.passwordHash) return false;
+    await clearLoginFailures(tx, reading);
+    await createSessionRow({
+      profileId: candidate.profile.id,
+      token,
+      deviceLabel: describeUserAgent(c.req.header("user-agent")),
+    }, tx);
+    return true;
   });
+  if (!persisted) return genericFailure();
   c.header("Set-Cookie", buildSessionCookie(token));
 
   /*
@@ -470,4 +528,63 @@ export async function loginHandler(c: Context<AuthEnv>): Promise<Response> {
     },
     200,
   );
+}
+
+/** Change an existing password using the current human session and password. */
+export async function changePasswordHandler(c: Context<AuthEnv>): Promise<Response> {
+  const refused = passwordRequestRefusal(c);
+  if (refused) return refused;
+  const parsed = changePasswordSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ error: "Invalid password change", details: validationDetails(parsed.error) }, 400);
+  }
+
+  const session = c.get("session");
+  const accountId = session.account.id;
+  const db = getDb();
+  const reading = await readLoginThrottle(db, {
+    identifier: `password-change:${accountId}`,
+    source: null,
+    deviceId: null,
+  });
+  const verdict = judgeLoginThrottle(reading);
+  if (verdict.refused) {
+    c.header("Retry-After", String(verdict.retryAfterSeconds));
+    return c.json({ error: "Too many attempts. Wait before trying again." }, 429);
+  }
+
+  const [candidate] = await db.select({ passwordHash: accounts.passwordHash }).from(accounts)
+    .where(eq(accounts.id, accountId)).limit(1);
+  if (!candidate) return c.json({ error: "Sign in again" }, 401);
+  if (!candidate.passwordHash) {
+    return c.json({ code: "password_not_set", error: "This account does not have a password" }, 409);
+  }
+  if (!await verifyPassword(parsed.data.currentPassword, candidate.passwordHash)) {
+    await recordLoginFailure(db, reading);
+    return c.json({ code: "incorrect_current_password", error: "The current password is incorrect" }, 403);
+  }
+  const passwordHash = await hashPassword(parsed.data.newPassword);
+
+  const outcome = await db.transaction(async (tx) => {
+    // Match sign-in and Google recovery: a proof made outside this lock is
+    // only valid while both its password and its session are current.
+    const [current] = await tx.select({ passwordHash: accounts.passwordHash }).from(accounts)
+      .where(eq(accounts.id, accountId)).for("update");
+    const now = new Date();
+    const [active] = await tx.select({ id: sessions.id }).from(sessions)
+      .where(and(eq(sessions.id, session.sessionId), eq(sessions.profileId, session.profile.id),
+        gt(sessions.expiresAt, now))).for("update");
+    if (!active || !current) return "signed_out";
+    if (current.passwordHash !== candidate.passwordHash) return "password_changed";
+    await tx.update(accounts).set({ passwordHash, updatedAt: now }).where(eq(accounts.id, accountId));
+    const ownedProfiles = tx.select({ id: profiles.id }).from(profiles).where(eq(profiles.accountId, accountId));
+    await tx.delete(sessions).where(and(inArray(sessions.profileId, ownedProfiles), ne(sessions.id, active.id)));
+    await clearLoginFailures(tx, reading);
+    return "changed";
+  });
+  if (outcome === "signed_out") return c.json({ error: "Sign in again" }, 401);
+  if (outcome === "password_changed") {
+    return c.json({ code: "password_changed", error: "Your password changed during this request" }, 409);
+  }
+  return c.json({ ok: true });
 }

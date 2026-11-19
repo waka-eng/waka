@@ -1,3 +1,4 @@
+import { databaseSqlState, safeErrorDiagnostic } from '../lib/error-diagnostics.js';
 import {conversationOpeningSchema,openingSelectionSchema,openingIdentity,prepareConversationOpening,projectConversationOpening,resolveConversationOpening} from '../lib/conversation-opening.js';
 import {chargeChatRequest,ChatRateLimitError} from '../lib/chat-rate-limit.js';
 import {Hono} from 'hono';
@@ -115,9 +116,9 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     if(error instanceof ConversationError)return c.json({error:error.message,...(error.code?{code:error.code}:{})},error.status);
     if(error instanceof ConversationReplyError)return c.json({error:error.message},error.status);
     if(error instanceof ConversationAttachmentError)return c.json(error.body(),error.status);
-    const code=(error as {code?:string;cause?:{code?:string}}).cause?.code??(error as {code?:string}).code;
+    const code=databaseSqlState(error);
     if(['23505','40001','40P01','55P03'].includes(code??''))return c.json({error:'The conversation changed. Check your saved messages before retrying.'},409);
-    console.error('[conversations]',{code:typeof code==='string'&&/^[0-9A-Z]{5}$/.test(code)?code:'unknown'});
+    console.error('[conversations]',safeErrorDiagnostic(error));
     return c.json({error:'The conversation could not be updated.'},500);
   });
   routes.use('*',async(c,next)=>{
