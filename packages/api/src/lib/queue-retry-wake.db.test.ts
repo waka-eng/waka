@@ -4,6 +4,7 @@
  * not a measured cloud claim; handler signaling has separate unit coverage. */
 import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
+import {OpenRouterHttpError} from './openrouter-http.js';
 import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
 import {getDb} from './db.js';
@@ -59,6 +60,32 @@ async function fail(){
   return {retries,result};
 }
 const pending=(retries:BackgroundJobRetryWake[],at=now)=>hasNearTermBackgroundJobRetry(retries,t.db as never,at);
+it('leaves a pending job and its attempt budget untouched when the invocation reserve is reached', async () => {
+  const job = await fixture();
+  const processor = vi.fn(async () => {});
+  const canClaim = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+  expect(await drainBackgroundJobs({now,limit:1,processor,canClaim})).toMatchObject({claimed:0,deadlineLimited:true});
+  expect(processor).not.toHaveBeenCalled();
+  expect(await t.sql`SELECT status,attempts,last_error FROM background_jobs WHERE id=${job.id}`)
+    .toEqual([{status:'pending',attempts:0,last_error:null}]);
+  expect(await drainBackgroundJobs({now,limit:1,processor,canClaim:()=>true})).toMatchObject({succeeded:1});
+  expect(processor).toHaveBeenCalledOnce();
+});
+
+it('spaces a confirmed provider outage using the same attempt budget and recovers after it ends',async()=>{
+  const job = await fixture(0,3);
+  const processor = vi.fn<() => Promise<void>>(async () => {throw new OpenRouterHttpError('Synthetic outage detail',503);});
+  expect(await drainBackgroundJobs({now,limit:1,processor})).toMatchObject({retried:1});
+  expect(await drainBackgroundJobs({now:later(299),limit:1,processor})).toMatchObject({claimed:0});
+  expect(await drainBackgroundJobs({now:later(300),limit:1,processor})).toMatchObject({retried:1});
+  const [pending]=await t.sql`SELECT status,attempts,max_attempts,run_after,last_error FROM background_jobs WHERE id=${job.id}`;
+  expect(pending).toMatchObject({status:'pending',attempts:2,max_attempts:3,last_error:'provider_http_503'});
+  expect(new Date(pending!.run_after).toISOString()).toBe(later(900).toISOString());
+  processor.mockImplementation(async()=>{});
+  expect(await drainBackgroundJobs({now:later(900),limit:1,processor})).toMatchObject({succeeded:1});
+  expect(processor).toHaveBeenCalledTimes(3);
+});
+
 it('wakes a real transient retry, obeys its due time and completes it only once across duplicate deliveries',async()=>{
   await fixture();const {retries,result}=await fail();
   expect(result).toMatchObject({retried:1});expect(retries).toHaveLength(1);expect(retries[0].runAfter).toEqual(later(30));expect(await pending(retries)).toBe(true);

@@ -160,6 +160,24 @@ describe("background worker cron handler", () => {
     await expect(handler({mode:'recovery'})).rejects.toThrow('{"category":"unexpected"}');
     expect(runBackgroundJobWorker).not.toHaveBeenCalled();
   });
+  it('uses actual invocation time before opening another claim pass',async()=>{
+    vi.stubEnv('WAKA_MODEL_EXCHANGE_TIMEOUT_MS','180000');
+    expect(await handler(undefined,{getRemainingTimeInMillis:()=>209999})).toMatchObject({
+      claimed:0,passes:0,deadlineLimited:true,
+    });
+    expect(runBackgroundJobWorker).not.toHaveBeenCalled();
+    let left=800000;
+    vi.mocked(runBackgroundJobWorker).mockImplementationOnce(async options=>{
+      expect(options?.canClaim?.()).toBe(true);
+      left=209999;
+      expect(options?.canClaim?.()).toBe(false);
+      return {...IDLE_PASS,claimed:1,succeeded:1,deadlineLimited:true};
+    });
+    expect(await handler(undefined,{getRemainingTimeInMillis:()=>left})).toMatchObject({
+      passes:1,succeeded:1,deadlineLimited:true,
+    });
+    expect(runBackgroundJobWorker).toHaveBeenCalledOnce();
+  });
   it("drains a bounded number of background jobs by default", async () => {
     await handler();
 

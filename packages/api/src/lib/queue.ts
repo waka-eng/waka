@@ -214,6 +214,8 @@ export interface DrainBackgroundJobsOptions {
   now?: Date;
   /** Recovery observes only work past grace; ordinary wake-ups remain immediate. */
   overdueOnly?:boolean;
+  /** Invocation budget. Consult before reading the head and again before an attempt is acquired. */
+  canClaim?: () => boolean;
   processor?: (job: BackgroundJob) => Promise<BackgroundJobResult | void>;
   /** Internal wake hint, never permission to claim. Rechecked after the drain
    * against the exact failed transition so later holds/deferrals invalidate it. */
@@ -237,6 +239,7 @@ export interface BackgroundJobRetryWake {
 }
 
 export interface DrainBackgroundJobsResult {
+  deadlineLimited?: true;
   claimed: number;
   succeeded: number;
   retried: number;
@@ -866,7 +869,13 @@ export async function drainBackgroundJobs(
 
   let deferrals = 0;
   let processed = 0;
+  const stopForDeadline = () => {
+    if (!options.canClaim || options.canClaim()) return false;
+    result.deadlineLimited = true;
+    return true;
+  };
   while (processed < limit) {
+    if (stopForDeadline()) break;
     const now = clock();
     const overdueBefore=options.overdueOnly?new Date(now.getTime()-QUEUE_RECOVERY_LIMITS.overdueMs):undefined;
 
@@ -929,6 +938,7 @@ export async function drainBackgroundJobs(
       }
     }
 
+    if (stopForDeadline()) break;
     const job = overdueBefore?await store.claimNext(now,overdueBefore):await store.claimNext(now);
     if (!job) break;
     processed += 1;
@@ -962,7 +972,7 @@ export async function drainBackgroundJobs(
       if (exhausted) result.failed += 1;
       else {
         result.retried += 1;
-        options.onTransientRetry?.({id:job.id,profileId:job.profileId,attempts:job.attempts,updatedAt:failedAt,runAfter:calculateBackoffRunAfter(job.attempts,failedAt)});
+        options.onTransientRetry?.({id:job.id,profileId:job.profileId,attempts:job.attempts,updatedAt:failedAt,runAfter:calculateBackoffRunAfter(job.attempts,failedAt,err)});
       }
     } finally {
       await options.onSettled?.(job);
@@ -1859,7 +1869,7 @@ async function markJobFailedOrPending(
   const status: BackgroundJobStatus = exhausted ? "failed" : "pending";
   const lockedAt = exhausted ? (coerceNullableDate(job.lockedAt)?.toISOString() ?? null) : null;
   const runAfter = (
-    exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now)
+    exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now, err)
   ).toISOString();
   const settled = await getDb().execute(sql`
     UPDATE background_jobs
@@ -1974,8 +1984,12 @@ function coerceNullableDate(value: Date | string | null): Date | null {
 }
 
 /** 30s, 60s, 120s, … capped at 15 minutes. */
-function calculateBackoffRunAfter(attempts: number, now: Date): Date {
-  const delaySeconds = Math.min(15 * 60, 30 * 2 ** Math.max(0, attempts - 1));
+function calculateBackoffRunAfter(attempts: number, now: Date, error: unknown): Date {
+  // An explicit provider-side outage gets wider spacing within the same
+  // attempt budget. Unknown transport outcomes keep their existing policy.
+  const unavailable = (error instanceof OpenRouterHttpError || error instanceof OpenAiHttpError)
+    && [429, 502, 503, 504].includes(error.status);
+  const delaySeconds = Math.min(15 * 60, (unavailable ? 300 : 30) * 2 ** Math.max(0, attempts - 1));
   return new Date(now.getTime() + delaySeconds * 1_000);
 }
 
