@@ -100,6 +100,13 @@ independently before intervening. Never accept credentials by email. Use
 team@waka.im for user requests and restrict credential recovery and erasure
 to their reviewed workflows.
 
+Profile export is available through web Settings. It reads a consistent
+snapshot with a ceiling of 4,000 records and 2 MiB, including the response
+envelope budget. The download contains profile data and attachment metadata.
+For larger requests, direct the verified account owner to support for an
+approved scoped export. Installed native builds use the web flow for saving
+the file. Attachment file bytes are a separate request.
+
 ## Provider costs and privacy
 
 Production and dev use the shared task profile. OpenAI Responses handles

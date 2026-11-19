@@ -3,6 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { bookmarkletHref } from "../lib/bookmarklet";
 import { ProfileApiKeys } from './ProfileApiKeys';
 
+import { apiPath, ApiError, getJson } from "../lib/api/http";
+import { isMobileBuild, platformServices } from "../lib/platform";
+import { checkedNativeApiOrigin } from "../lib/platform/api-origin";
 import { fetchProfiles, type ApiOwnedProfile } from "../lib/api/profiles";
 import { fetchSessions, revokeSession, type ApiSession } from "../lib/api/sessions";
 import { supportedLocales } from "../lib/i18n";
@@ -127,6 +130,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
             onClick={(event) => event.preventDefault()}>{say("profileBookmarkletName")}</a>
         </div>
       </div>
+      <ProfileExportControl locale={props.locale} />
       </> : null}
 
       <Group id="personal" open={open} setOpen={setOpen} label={say('profilePersonalMcpTitle')}>
@@ -174,6 +178,61 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 }
 
 /** Both destinations use the same setup prompt; keys load only when their tab opens. */
+function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
+  const pending = useRef<AbortController | null>(null);
+  const objectUrl = useRef<string | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<"profileExportTooLarge" | "profileExportFailed">();
+  useEffect(() => () => {
+    pending.current?.abort();
+    if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
+  }, []);
+
+  async function prepare() {
+    if (pending.current || objectUrl.current) return;
+    const request = new AbortController();
+    pending.current = request;
+    setError(undefined);
+    setBusy(true);
+    try {
+      if (isMobileBuild) {
+        await (await platformServices()).openBrowser(checkedNativeApiOrigin());
+      } else {
+        const bundle = await getJson<{ export: unknown }>(apiPath("/export"), "Could not prepare export", request.signal);
+        if (request.signal.aborted) return;
+        if (!bundle?.export || typeof bundle.export !== "object") throw new Error("Invalid profile export");
+        const blob = new Blob([JSON.stringify(bundle)], { type: "application/json" });
+        objectUrl.current = URL.createObjectURL(blob);
+        setUrl(objectUrl.current);
+      }
+    } catch (failure) {
+      if (!request.signal.aborted) {
+        setError(failure instanceof ApiError && failure.code === "export_too_large"
+          ? "profileExportTooLarge" : "profileExportFailed");
+      }
+    } finally {
+      pending.current = null;
+      if (!request.signal.aborted) setBusy(false);
+    }
+  }
+
+  return (
+    <div className="waka-account-field">
+      {url ? (
+        <a href={url} download="waka-profile.json">{t(locale, "profileExportDownload")}</a>
+      ) : (
+        <button type="button" className="waka-settings-row" disabled={busy} onClick={() => void prepare()}>
+          {t(locale, isMobileBuild ? "profileExportInBrowser" : "profileExportPrepare")}
+        </button>
+      )}
+      {isMobileBuild && <small>{t(locale, "profileExportBrowserHint")}</small>}
+      {busy && <small role="status">{t(locale, "profileExportPreparing")}</small>}
+      {error && <p className="waka-account-failed" role="alert">{t(locale, error)}</p>}
+    </div>
+  );
+}
+
 function PersonalConnections({ locale, profile }: { locale: SupportedLocale; profile: ApiOwnedProfile }): JSX.Element {
   const [view, setView] = useState<'setup' | 'keys'>('setup');
   return <>

@@ -9,13 +9,13 @@
  * told people to "Type DELETE" into a box that does not exist: the
  * confirmation is a second press.
  *
- * WHAT THIS MOCKS, AND WHY (gate G6): nothing. The panel only reaches the
- * network when its agents group is opened, and no case here opens it; the
- * catalogue is the real one, so the hint is read in the words people see.
+ * WHAT THIS MOCKS, AND WHY (gate G6): the export test replaces `fetch`
+ * and the browser's object URL methods to verify a local download; other
+ * cases use the real panel and catalogue without network access.
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { SettingsPanel, type SettingsPanelProps } from "../src/components/SettingsPanel";
 
@@ -90,5 +90,27 @@ it("explains permanent deletion and requires a separate confirmation in both lan
        it again on a re-render would close it */
     await act(async () => root.unmount());
     root = createRoot(host);
+  }
+});
+
+it("offers an owned JSON export and releases the temporary file URL on close", async () => {
+  const download = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test-profile-export");
+  const release = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(JSON.stringify({ export: { profile: { name: "Synthetic" } } })));
+  vi.stubGlobal("fetch", fetchMock);
+  try {
+    await render({});
+    const prepare = [...host.querySelectorAll("button")].find(button => button.textContent === "Prepare my data export");
+    expect(prepare).toBeDefined();
+    await act(async () => prepare?.click());
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/export");
+    expect(download).toHaveBeenCalledOnce();
+    expect(host.querySelector('a[download="waka-profile.json"]')?.getAttribute("href")).toBe("blob:test-profile-export");
+    await act(async () => root.render(null));
+    expect(release).toHaveBeenCalledWith("blob:test-profile-export");
+  } finally {
+    vi.unstubAllGlobals();
+    download.mockRestore();
+    release.mockRestore();
   }
 });
