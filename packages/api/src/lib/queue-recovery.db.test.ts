@@ -6,12 +6,69 @@ import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
 import {readBackgroundJobRecoveryState,drainBackgroundJobs,postgresBackgroundJobStore,settleAbandonedExhaustedLeases} from './queue.js';
 import {getDb} from './db.js';
 import {MalformedModelOutputError} from './model-provider.js';
+import {inspectQueueRedrive} from './queue-redrive.js';
 import postgres from 'postgres';
 let t:TestDatabase;
 const now=new Date('2026-10-05T12:00:00Z');
 const connection=process.env.DB_CONNECTION_URL!;
 beforeAll(async()=>{t=await createTestDatabase();const url=new URL(connection);url.searchParams.set('options',`-c search_path=${t.schemaName}`);process.env.DB_CONNECTION_URL=url.toString();});beforeEach(async()=>{await t.truncateAll();});afterAll(async()=>{await getDb().$client.end();await t?.cleanup();process.env.DB_CONNECTION_URL=connection;});
 async function owner(){const [a]=await t.sql`INSERT INTO accounts(email) VALUES(${randomUUID()+'@example.test'}) RETURNING id`;const [p]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${a.id},'human','Synthetic recovery') RETURNING id`;return p.id;}
+
+it('previews and grants at most one extra claim for an exact pre-dispatch reply with a retryable database failure', async () => {
+  const profileId = await owner();
+  const foreignProfile = await owner();
+  const [{ account_id: accountId }] = await t.sql`SELECT account_id FROM profiles WHERE id = ${profileId}`;
+  const [{ account_id: foreignAccount }] = await t.sql`SELECT account_id FROM profiles WHERE id = ${foreignProfile}`;
+  const conversationId = randomUUID(), userMessageId = randomUUID(), replyRequestId = randomUUID();
+  await t.sql`INSERT INTO conversations (id, profile_id, revision) VALUES (${conversationId}, ${profileId}, 1)`;
+  await t.sql`INSERT INTO conversation_messages (id, profile_id, conversation_id, position, role, content)
+    VALUES (${userMessageId}, ${profileId}, ${conversationId}, 1, 'user', 'Synthetic saved turn')`;
+  const failure = '{"category":"database","code":"40001"}';
+  const [{ id: jobId }] = await t.sql`INSERT INTO background_jobs
+    (profile_id, type, status, attempts, max_attempts, payload, idempotency_key, last_error, locked_at)
+    VALUES (${profileId}, 'generate_conversation_reply', 'failed', 3, 3,
+      ${JSON.stringify({ conversationId, replyRequestId })}::jsonb,
+      ${`generate_conversation_reply:${profileId}:${replyRequestId}`}, ${failure}, clock_timestamp())
+    RETURNING id`;
+  await t.sql`INSERT INTO conversation_reply_requests
+    (id, profile_id, conversation_id, user_message_id, job_id, conversation_revision, context_hash)
+    VALUES (${replyRequestId}, ${profileId}, ${conversationId}, ${userMessageId}, ${jobId}, 1, 'fixture')`;
+  const target = { accountId, profileId, jobId, replyRequestId, requestVersion: '1' };
+  const db = getDb();
+  const refused = { eligible: false, queued: false };
+  const initial = await t.sql`SELECT * FROM background_jobs WHERE id = ${jobId}`;
+  expect(await inspectQueueRedrive(db, target)).toEqual({ eligible: true, queued: false });
+  expect(await inspectQueueRedrive(db, { ...target, accountId: foreignAccount }, true)).toEqual(refused);
+  expect(await inspectQueueRedrive(db, { ...target, requestVersion: '2' }, true)).toEqual(refused);
+  await t.sql`UPDATE background_jobs SET last_error = 'provider_http_503' WHERE id = ${jobId}`;
+  expect(await inspectQueueRedrive(db, target, true)).toEqual(refused);
+  await t.sql`UPDATE background_jobs SET last_error = ${failure} WHERE id = ${jobId}`;
+  await t.sql`UPDATE conversation_reply_requests SET status = 'stopped' WHERE id = ${replyRequestId}`;
+  expect(await inspectQueueRedrive(db, target, true)).toEqual(refused);
+  await t.sql`UPDATE conversation_reply_requests SET status = 'pending' WHERE id = ${replyRequestId}`;
+  await t.sql`UPDATE conversation_reply_requests SET retrieval_dispatched_at = now() WHERE id = ${replyRequestId}`;
+  expect(await inspectQueueRedrive(db, target, true)).toEqual(refused);
+  await t.sql`UPDATE conversation_reply_requests SET retrieval_dispatched_at = NULL, dispatched_at = now() WHERE id = ${replyRequestId}`;
+  expect(await inspectQueueRedrive(db, target, true)).toEqual(refused);
+  await t.sql`UPDATE conversation_reply_requests SET dispatched_at = NULL WHERE id = ${replyRequestId}`;
+  await t.sql`UPDATE conversations SET revision = 2 WHERE id = ${conversationId}`;
+  expect(await inspectQueueRedrive(db, target, true)).toEqual(refused);
+  await t.sql`UPDATE conversations SET revision = 1 WHERE id = ${conversationId}`;
+  expect(await t.sql`SELECT * FROM background_jobs WHERE id = ${jobId}`).toEqual(initial);
+
+  const anotherConnection = postgres(connection, { max: 1, prepare: false });
+  try {
+    await anotherConnection.begin(async tx => {
+      await tx`SELECT id FROM ${tx(t.schemaName)}.conversations WHERE id = ${conversationId} FOR UPDATE`;
+      await expect(inspectQueueRedrive(db, target, true)).rejects.toMatchObject({ cause: { code: '55P03' } });
+    });
+  } finally { await anotherConnection.end(); }
+  expect(await t.sql`SELECT * FROM background_jobs WHERE id = ${jobId}`).toEqual(initial);
+  expect(await inspectQueueRedrive(db, target, true)).toEqual({ eligible: true, queued: true });
+  expect(await inspectQueueRedrive(db, target, true)).toEqual(refused);
+  expect((await t.sql`SELECT status, attempts, max_attempts, request_version::text, last_error FROM background_jobs WHERE id = ${jobId}`)[0])
+    .toEqual({ status: 'pending', attempts: 3, max_attempts: 4, request_version: '1', last_error: failure });
+});
 it('counts only due supported work after grace, never scheduled waits or active leases',async()=>{
   const p=await owner();
   await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,run_after,locked_at,attempts,max_attempts) VALUES

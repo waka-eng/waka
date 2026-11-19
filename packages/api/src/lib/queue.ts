@@ -194,6 +194,7 @@ import {
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 export const STALE_LOCK_SECONDS = 15 * 60;
+const HOSTED_LIVE_CLAIM_LIMIT = 4;
 
 let drainScheduled = false;
 let drainTimer: ReturnType<typeof setTimeout> | null = null;
@@ -307,7 +308,7 @@ export interface BackgroundJobStore {
   /** Whose work is next, without taking it. Null when nothing is runnable. */
   headOfQueue(now: Date,overdueBefore?:Date): Promise<RunnableJobHead | null>;
   /** Take the next runnable job and mark it started. */
-  claimNext(now: Date,overdueBefore?:Date): Promise<ClaimedBackgroundJob | null>;
+  claimNext(now: Date, overdueBefore?: Date, canClaim?: () => boolean): Promise<ClaimedBackgroundJob | null>;
   /** What this account has already started since `since`. */
   usageForAccount(accountId: string, since: Date): Promise<AccountModelUsage>;
   /** Push this account's due, unstarted work out to `until`. Returns rows moved. */
@@ -940,8 +941,11 @@ export async function drainBackgroundJobs(
     }
 
     if (stopForDeadline()) break;
-    const job = overdueBefore?await store.claimNext(now,overdueBefore):await store.claimNext(now);
-    if (!job) break;
+    const job = await store.claimNext(now, overdueBefore, options.canClaim);
+    if (!job) {
+      stopForDeadline();
+      break;
+    }
     processed += 1;
     result.claimed += 1;
 
@@ -1733,9 +1737,11 @@ async function settleRetiredGroupWorkInPlace(jobId: string, now: Date): Promise<
  * `locked_at`. It is the meter the per-account budget reads, and a meter that
  * a successful job erases measures nothing.
  */
-async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Promise<ClaimedBackgroundJob | null> {
+async function claimNextBackgroundJob(now = new Date(), overdueBefore?: Date, canClaim?: () => boolean): Promise<ClaimedBackgroundJob | null> {
   const nowIso = now.toISOString();
-  const rows = await getDb().execute(sql<BackgroundJob>`
+  const hosted = Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+  const db = getDb();
+  const claim = (connection: Pick<typeof db, 'execute'>) => connection.execute(sql<BackgroundJob>`
     WITH claimed AS (
     UPDATE background_jobs AS job
     SET
@@ -1762,6 +1768,12 @@ async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Pro
       FOR UPDATE OF locked SKIP LOCKED
     )
     AND ${runnableBackgroundJobPredicate(nowIso,overdueBefore?.toISOString(),'job')}
+    ${hosted ? sql`AND NOT EXISTS (
+      SELECT 1 FROM background_jobs live
+      WHERE live.status = 'running'::background_job_status
+        AND live.locked_at >= ${nowIso}::timestamptz - (${STALE_LOCK_SECONDS} || ' seconds')::interval
+      OFFSET ${HOSTED_LIVE_CLAIM_LIMIT - 1} LIMIT 1
+    )` : sql``}
     RETURNING
       job.id,
       job.profile_id AS "profileId",
@@ -1794,6 +1806,14 @@ async function claimNextBackgroundJob(now = new Date(),overdueBefore?:Date): Pro
     )
     SELECT * FROM claimed
   `);
+  // Each hosted stage uses its own database. All hosted drain entry points
+  // share this fence, and the second statement observes the previous claim's
+  // commit. The transaction ends before a lease is armed or work runs.
+  const rows = hosted ? await db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('waka.background-job-claims', 0))`);
+    if (canClaim && !canClaim()) return [];
+    return claim(tx);
+  }, { isolationLevel: 'read committed' }) : await claim(db);
 
   const result = rows as unknown as ClaimedBackgroundJob[];
   const job = result[0];

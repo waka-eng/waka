@@ -114,3 +114,34 @@ it("offers an owned JSON export and releases the temporary file URL on close", a
     release.mockRestore();
   }
 });
+
+it("clears both fields when a password change is confirmed", async () => {
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+    new Response(JSON.stringify({ ok: true })));
+  vi.stubGlobal("fetch", fetchMock);
+  try {
+    await render({});
+    const open = host.querySelector<HTMLButtonElement>('button[data-settings-target="password"]');
+    expect(open?.textContent).toContain("Change password");
+    await act(async () => open?.click());
+    const current = host.querySelector<HTMLInputElement>('input[autocomplete="current-password"]')!;
+    const replacement = host.querySelector<HTMLInputElement>('input[autocomplete="new-password"]')!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      for (const [field, value] of [[current, "synthetic-current"], [replacement, "synthetic-replacement"]] as const) {
+        setValue.call(field, value);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    await act(async () => current.form!.requestSubmit());
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/auth/me/password");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      currentPassword: "synthetic-current", newPassword: "synthetic-replacement",
+    });
+    expect(host.textContent).toContain("Password changed. Other sessions were signed out.");
+    expect(current.value).toBe("");
+    expect(replacement.value).toBe("");
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
