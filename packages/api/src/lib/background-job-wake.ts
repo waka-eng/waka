@@ -140,7 +140,10 @@ async function clearWakeMarker(wake: BackgroundJobWake) {
     WHERE id=${wake.id}::uuid AND profile_id=${wake.profileId}::uuid AND payload->'leaseWake'=${JSON.stringify(wake)}::jsonb`);
 }
 export async function retireBackgroundJobWake(wake: BackgroundJobWake): Promise<void> {
-  await deleteWake(wake);
+  // A reclaimable lease uses the same schedule name until its next claim.
+  // Keep the marker and fail this delivery if deletion was unconfirmed,
+  // rather than re-acknowledging a conflict with the consumed schedule.
+  if (!await deleteWake(wake)) throw new Error('Background job wake retirement unconfirmed');
   await clearWakeMarker(wake);
 }
 

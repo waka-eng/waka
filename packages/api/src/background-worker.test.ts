@@ -317,6 +317,21 @@ describe('one-time recovery events', () => {
     expect(jobWakes.recoverBackgroundJobWakes).toHaveBeenCalledExactlyOnceWith('worker');
     expect(runBackgroundJobWorker).not.toHaveBeenCalled();
   });
+  it('re-arms an accepted one-shot wake when the deadline prevents any claim', async () => {
+    vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_ROLE', 'role');
+    vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_GROUP', 'group');
+    const wake = { kind: 'pending', profileId: '00000000-0000-4000-8000-000000000002',
+      runAfter: '2026-10-29T12:00:00.000000Z', token: '00000000-0000-4000-8000-000000000003' };
+    vi.mocked(jobWakes.prepareBackgroundJobWake).mockResolvedValue(true);
+    await expect(handler({ mode: 'job_wake', wake }, {
+      invokedFunctionArn: 'worker', getRemainingTimeInMillis: () => 5_000,
+    })).resolves.toMatchObject({ claimed: 0, deadlineLimited: true });
+    expect(runBackgroundJobWorker).not.toHaveBeenCalled();
+    expect(jobWakes.retireBackgroundJobWake).toHaveBeenCalledExactlyOnceWith(wake);
+    expect(jobWakes.recoverBackgroundJobWakes).toHaveBeenCalledExactlyOnceWith('worker');
+    expect(vi.mocked(jobWakes.retireBackgroundJobWake).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(jobWakes.recoverBackgroundJobWakes).mock.invocationCallOrder[0]!);
+  });
   it('uses exact scheduling instead of extra native retry pings when configured', async () => {
     vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_ROLE', 'role'); vi.stubEnv('WAKA_BACKGROUND_JOB_WAKE_GROUP', 'group');
     vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'worker');
