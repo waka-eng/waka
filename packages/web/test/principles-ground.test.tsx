@@ -201,10 +201,13 @@ it("holds only the top three, and the creature, not a title, says these are your
      experience"). */
   expect(host.querySelector(".waka-held-hero .waka-held-says"), "the explaining bubble came back").toBeNull();
   expect(host.querySelector(".waka-held-hero [data-crossing-target]")).not.toBeNull();
-  /* NO LARGE TITLE (founder: "remove your principles text at the top"); the
-     shared header's small centred name is every page's (nav system R4). */
+  /* NO TITLE AND NO "<" ROW (founder: "remove your principles text at the
+     top", and 2026-11-19, of the header: "remove"). The name stays for a
+     screen reader; the star at the left edge walks home. */
   expect(host.querySelector(".waka-over-title"), "the large title came back").toBeNull();
-  expect(host.querySelector(".waka-surface-title")?.textContent).toBe("Principles");
+  expect(host.querySelector(".waka-surface-head"), "the header row came back").toBeNull();
+  expect(host.querySelector(".waka-over")?.getAttribute("aria-label")).toBe("Principles");
+  expect(document.querySelector(".waka-principles-spark--home")?.getAttribute("aria-label")).toBe("Home");
   expect(host.querySelector(".waka-over-what"), "the one-visit line is gone").toBeNull();
 });
 
@@ -215,7 +218,7 @@ it("says these are your agent's principles on an agent's wall", async () => {
   await act(async () => root.render(
     <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Bot" title="Your agent’s principles" whose="agent" onClose={() => {}} onOpen={() => {}} />,
   ));
-  expect(host.querySelector(".waka-surface-title")?.textContent).toBe("Your agent’s principles");
+  expect(host.querySelector(".waka-over")?.getAttribute("aria-label")).toBe("Your agent’s principles");
   expect(host.textContent).not.toContain("These are your principles");
 });
 

@@ -66,6 +66,7 @@ it('asks through the creature, glasses on only while it asks, even without signa
   expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
   /* It asked, so it answers the answer (founder, 2026-11-19). */
   expect(world.container.querySelector('.jar-char-bubble')?.textContent,'the creature said nothing back to a yes').toContain('I’ll keep it close.');
+  expect(world.container.querySelector('.jar-char-bubble .jar-char-bubble-acts'),'a reply offered a chat about itself').toBeNull();
 });
 /* TOP OF MIND IS THE MAIN BUBBLE: a tapped bubble goes back to it after a few seconds. */
 it('returns to top of mind a few seconds after a tap changed the bubble',async()=>{
