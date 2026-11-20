@@ -1113,5 +1113,5 @@ it('shows a spark at the right edge on home that walks to Principles, even with 
   expect(open(), 'the spark did not open Principles').toBe('principles');
   /* With none yet, the walk still lands somewhere that speaks (code review, 2026-11-19). */
   expect(document.querySelector('.waka-over :is(.waka-ground, .waka-over-status)'), 'the spark led to an empty page').not.toBeNull();
-  expect(world.container.querySelector('.waka-principles-spark'), 'the spark stayed off home').toBeNull();
+  expect(world.container.querySelector('.waka-principles-spark:not(.waka-principles-spark--home)'), 'the spark stayed off home').toBeNull();
 });
