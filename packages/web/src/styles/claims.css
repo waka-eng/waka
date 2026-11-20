@@ -7750,6 +7750,13 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   position: fixed; z-index: 57; top: 50%;
   right: auto; left: max(var(--sp-6), env(safe-area-inset-left));
 }
+/* Its lane stays clear: wherever the page's 650px column would reach the
+   star (left edge + 44px), the column's padding grows past it on both sides,
+   so it never sits on a principle (code review, 2026-11-19). On a window
+   wide enough the term goes negative and the usual 24px holds. */
+.waka-page--timeless .waka-over {
+  padding-inline: max(var(--sp-24), calc(var(--sp-6) + var(--waka-corner) - (100vw - 650px) / 2));
+}
 .waka-principles-spark svg { animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
 @keyframes waka-spark-glint {
   0%, 70%, 100% { opacity: 0.55; transform: scale(0.85) rotate(0deg); }

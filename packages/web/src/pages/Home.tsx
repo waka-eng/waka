@@ -5897,6 +5897,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const [keptSaves, setKeptSaves] = useState(0);
   /** Bumped by each review reply, so a second identical reply gets its own stay. */
   const [replyBeat, setReplyBeat] = useState(0);
+  /** The reply as it was said, so a later locale change cannot unmark it. */
+  const replyLineRef = useRef('');
   const lineSince = useRef<{ said: string; at: number }>({ said: '', at: 0 });
   const keptWaiting = Boolean(keptImageId) && (!keptWords || keptWords.status === 'reading');
   useEffect(() => {
@@ -6293,6 +6295,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const rows = await fetchPrinciples(profileId ? { profile: profileId } : {});
     if (memoryScopeRef.current?.profileId === profileId) setPrincipleMemory({ profileId, rows, read: true });
   }, []);
+  /* HOME READS THE PRINCIPLES ONCE PER PROFILE: the sky marks the orbs a
+     principle stands on from them. */
+  const principlesAsked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!memoryProfileId || offline || principlesRead || principlesAsked.current === memoryProfileId) return;
+    principlesAsked.current = memoryProfileId;
+    void reloadPrinciples().catch(() => { principlesAsked.current = null; });
+  }, [memoryProfileId, offline, principlesRead, reloadPrinciples]);
 
   /**
    * CORRECTING ONE — the only writing act left on this band.
@@ -9262,7 +9272,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
               only, no arrow and no word. Always there on your own home
               (founder, 2026-11-19: "yes always shown"); with no principle
               yet, the walk ends on the page that says how they come. */}
-          {homeChromeShown && atWall.kind === 'self' ? (
+          {homeChromeShown && atWall.kind === 'self' && !offline ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
               <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
@@ -9714,7 +9724,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     <button type="button" className="jar-char-bubble-act"
                       onClick={() => { setCharSay(''); openSheet(); }}>{say('worldBubbleSeeAll')}</button>
                   </span>
-                ) : charSay === say('worldReviewReplyKeep') || charSay === say('worldReviewReplyLetGo') ? (
+                ) : charSay === replyLineRef.current ? (
                   /* A REPLY TO YOUR ANSWER ENDS THERE: a chat opening on "I'll
                      keep it close" would have nothing to be about (code
                      review, 2026-11-19). */
@@ -9898,7 +9908,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   verifyReadingRef.current(true);
                   /* THE CREATURE ANSWERS THE ANSWER (founder, 2026-11-19): it
                      asked, so it says something back before the next card. */
-                  setCharSay(say(choice==='relevant'?'worldReviewReplyKeep':'worldReviewReplyLetGo'));setReplyBeat(n=>n+1);
+                  replyLineRef.current=say(choice==='relevant'?'worldReviewReplyKeep':'worldReviewReplyLetGo');
+                  setCharSay(replyLineRef.current);setReplyBeat(n=>n+1);
                   if(choice!=='not_relevant')return;
                   const queueAtSend=queueLoadRef.current;
                   // Removing support can retire a signal already in this sitting.
