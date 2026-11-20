@@ -2206,9 +2206,21 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   pointer-events: none;
 }
 
-.waka-page--timeless > :not(.waka-timeless, .waka-crossing-being) {
+.waka-page--timeless > :not(.waka-timeless, .waka-crossing-being, .waka-principles-spark--home) {
   position: relative;
   z-index: 1;
+}
+/* THE STAR'S LANE STAYS CLEAR (code review, 2026-11-19). The home star is
+   6px in and 44px wide on the window's left edge; the column starts at the
+   page's 16px phone gutter or, on a wide window, where the 650px measure
+   centres. MEASURED in Chromium: at 390 the column's words began at 16,
+   under the star (6 to 50); this puts them at 56. At 1280 it stays 24.
+   Its padding is whatever keeps the words 6px past the star, never under
+   the usual 24px, on both sides so the column stays centred. */
+/* Two classes on the page, so it outranks the phone's one-gutter rule
+   (`.waka-over:not(.waka-over--note)`, later in this layer). */
+.waka-page.waka-page--timeless .waka-over {
+  padding-inline: max(var(--sp-24), calc(var(--sp-6) * 2 + var(--waka-corner) - max(var(--sp-16), (100vw - 650px) / 2)));
 }
 
 /* ═══ THE GROUND, BEFORE THE FIRST PRINCIPLE ═════════════════════════════
@@ -7749,13 +7761,6 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 .waka-principles-spark--home {
   position: fixed; z-index: 57; top: 50%;
   right: auto; left: max(var(--sp-6), env(safe-area-inset-left));
-}
-/* Its lane stays clear: wherever the page's 650px column would reach the
-   star (left edge + 44px), the column's padding grows past it on both sides,
-   so it never sits on a principle (code review, 2026-11-19). On a window
-   wide enough the term goes negative and the usual 24px holds. */
-.waka-page--timeless .waka-over {
-  padding-inline: max(var(--sp-24), calc(var(--sp-6) + var(--waka-corner) - (100vw - 650px) / 2));
 }
 .waka-principles-spark svg { animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
 @keyframes waka-spark-glint {

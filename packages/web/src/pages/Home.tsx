@@ -5907,7 +5907,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     if (lineSince.current.said !== saying) lineSince.current = { said: saying, at: Date.now() };
     const kept = charSay === say('worldBubbleKept');
     const stay = bubbleStayMs({ kept, waitingForWords: kept && keptWaiting, elapsedMs: Date.now() - lineSince.current.at });
-    const id = window.setTimeout(() => { lineSince.current = { said: '', at: 0 }; setCharSay(""); }, stay);
+    const id = window.setTimeout(() => { lineSince.current = { said: '', at: 0 }; replyLineRef.current = ''; setCharSay(""); }, stay);
     return () => window.clearTimeout(id);
   }, [charSay, companionPrompt, keptWaiting, keptSaves, replyBeat]);
   /** What a chat about the save opens with: the note, and the words read. */
