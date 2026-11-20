@@ -6291,9 +6291,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const rows = await fetchPrinciples(profileId ? { profile: profileId } : {});
     if (memoryScopeRef.current?.profileId === profileId) setPrincipleMemory({ profileId, rows, read: true });
   }, []);
-  /* HOME KNOWS WHETHER THERE IS A PRINCIPLE, so the spark at the right edge
-     shows only when there is somewhere to go (founder, 2026-11-12: "the spark
-     should only show when a principle exists"). Read once per profile. */
+  /* HOME KNOWS WHETHER THERE IS A PRINCIPLE. Read once per profile. */
   const principlesAsked = useRef<string | null>(null);
   useEffect(() => {
     if (!memoryProfileId || offline || principlesRead || principlesAsked.current === memoryProfileId) return;
@@ -9266,8 +9264,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
               right, and nothing on home said so. One small four-point spark
               rests dim at the edge and glints every few seconds; a press
               walks there, the same walk the creature's drag takes. Light
-              only, no arrow and no word. */}
-          {homeChromeShown && atWall.kind === 'self' && principles.length > 0 ? (
+              only, no arrow and no word. Always there on your own home
+              (founder, 2026-11-19: "yes always shown"); with no principle
+              yet, the walk ends on the page that says how they come. */}
+          {homeChromeShown && atWall.kind === 'self' ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
               <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
@@ -9896,6 +9896,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 item={inspirationReviewQueue[0]} profileId={storageScope.profileId} locale={locale} more={toReview>1}
                 onChanged={async choice=>{
                   verifyReadingRef.current(true);
+                  /* THE CREATURE ANSWERS THE ANSWER (founder, 2026-11-19): it
+                     asked, so it says something back before the next card. */
+                  setCharSay(say(choice==='relevant'?'worldReviewReplyKeep':'worldReviewReplyLetGo'));
                   if(choice!=='not_relevant')return;
                   const queueAtSend=queueLoadRef.current;
                   // Removing support can retire a signal already in this sitting.
