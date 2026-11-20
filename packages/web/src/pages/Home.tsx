@@ -9275,7 +9275,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           {homeChromeShown && atWall.kind === 'self' && !offline ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
-              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+              <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true" focusable="false">
                 <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
               </svg>
             </button>
