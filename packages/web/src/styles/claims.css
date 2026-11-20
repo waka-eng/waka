@@ -7744,8 +7744,9 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 @layer chrome {
 /* ═══ THE SPARK THAT SAYS PRINCIPLES ARE TO THE RIGHT (founder, 2026-11-12) ═
    At the right edge on the creature's own line (`--jar-char-mid`, the same
-   value the creature's press sits on), a 44px press holding one small
-   four-point spark. It rests dim and glints every few seconds: light is the
+   value the creature's press sits on), a 44px press holding one
+   four-point spark, 32px since the founder asked for it bigger (2026-11-20),
+   sized here for both edges so the two stars cannot drift apart. It rests dim and glints every few seconds: light is the
    only meaning channel, so the hint is a light, not an arrow or a word. */
 .waka-principles-spark {
   position: absolute; z-index: 3;
@@ -7763,7 +7764,7 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   position: fixed; z-index: 57; top: 50%;
   right: auto; left: max(var(--sp-6), env(safe-area-inset-left));
 }
-.waka-principles-spark svg { animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
+.waka-principles-spark svg { width: 32px; height: 32px; animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
 @keyframes waka-spark-glint {
   0%, 70%, 100% { opacity: 0.55; transform: scale(0.85) rotate(0deg); }
   80% { opacity: 1; transform: scale(1.15) rotate(20deg); }

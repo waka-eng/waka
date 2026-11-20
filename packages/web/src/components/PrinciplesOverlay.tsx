@@ -287,7 +287,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
       {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
         aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
         onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
-        <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true" focusable="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
         </svg>
       </button>}
