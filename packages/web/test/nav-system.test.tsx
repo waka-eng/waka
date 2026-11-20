@@ -127,7 +127,8 @@ const SURFACES: Array<[string, () => Promise<void>, 'Back' | 'Close', RegExp | n
   ['Past chats from a chat', openPastChatsFromAChat, 'Close', /^Past chats$/, false],
   ['the notepad', () => openAt('/?compose=1'), 'Close', /^Saving to You · /, false],
   ['a saved note', openSavedNote, 'Back', /^You · /, false],
-  ['Principles', () => openAt('/?open=principles'), 'Close', /^Principles$/, false],
+  /* Principles has no header: the star at its left edge walks home (founder,
+     2026-11-19). Its way out is tested in home-navigation. */
 ];
 
 describe('every page and sheet draws the one header', () => {
@@ -166,7 +167,6 @@ describe('Escape goes exactly where the "<" goes', () => {
     ['a chat opened from Past chats (home)', openChatFromPastChats],
     ['Past chats opened from a chat (home)', openPastChatsFromAChat],
     ['the Kept list (home)', () => openAt('/?open=saves')],
-    ['Principles (home)', () => openAt('/?open=principles')],
     ['an empty notepad (home)', () => openAt('/?compose=1')],
   ];
   it.each(CASES)('%s', async (what, open) => {
@@ -210,7 +210,10 @@ describe('the source keeps one system', () => {
       const heads = (text.match(/<SurfaceHeader\b|<NotePage\b/g) ?? []).length;
       /* Home's third surface is `jar-panel`, the orb panel on the ground:
          furniture with its own step carets, released by Escape (audit S14). */
-      const exempt = path.endsWith('pages/Home.tsx') ? 1 : 0;
+      const exempt = path.endsWith('pages/Home.tsx') ? 1
+        /* Principles' way home is the star at its left edge, mirroring
+           home's star at the right (founder, 2026-11-19). */
+        : path.endsWith('components/PrinciplesOverlay.tsx') ? 1 : 0;
       return heads >= surfaces - exempt ? [] : [path.slice(SRC.length + 1)];
     });
     expect(missing).toEqual([]);

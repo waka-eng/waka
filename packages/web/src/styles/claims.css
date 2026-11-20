@@ -7744,6 +7744,12 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   border: 0; border-radius: 50%; background: none; color: var(--jar-live);
   cursor: pointer; pointer-events: auto;
 }
+/* The same star on Principles' left edge walks home (founder, 2026-11-19).
+   Fixed on the window, one step over the page (`.waka-page`, z 56). */
+.waka-principles-spark--home {
+  position: fixed; z-index: 57; top: 50%;
+  right: auto; left: max(var(--sp-6), env(safe-area-inset-left));
+}
 .waka-principles-spark svg { animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
 @keyframes waka-spark-glint {
   0%, 70%, 100% { opacity: 0.55; transform: scale(0.85) rotate(0deg); }

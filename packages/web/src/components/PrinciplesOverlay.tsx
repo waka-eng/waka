@@ -44,7 +44,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DialogSurface } from "./DialogSurface";
-import { SurfaceHeader } from "./SurfaceHeader";
+import { createPortal } from "react-dom";
 import { ReadingPausedNotice } from "./ReadingPausedNotice";
 import { useReadingPaused } from "../lib/use-reading-paused";
 import { PrinciplesGround } from "./PrinciplesGround";
@@ -130,7 +130,7 @@ const PULL_HOME = 56;
  */
 const MAX_HELD = 3;
 
-export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own", onClose, onOpen, onShare, onChat, onNewSave, newSaveLabel, crossing = null, onCrossed, gesture = null }: {
+export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own", onClose, onOpen, onShare, onChat, onNewSave, newSaveLabel, crossing = null, onCrossed }: {
   locale: SupportedLocale;
   profileId?: string | null;
   /** Whose name goes on the card. The attribution is half of why a card is
@@ -304,7 +304,17 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
             principles text at the top") stays gone; this is the quiet
             meta-size name every page carries, and the creature's bubble is
             still what says it in words. */}
-        <SurfaceHeader locale={locale} gesture={gesture} back={{ kind: "close", onBack: onClose }} title={title} />
+        {/* THE SAME STAR, ON THE OTHER EDGE (founder, 2026-11-19: "there
+            should be the same star on the left to go back. remove the" "<"
+            and "Principles" row). Home's star at the right walks here; this
+            one at the left walks home. Portalled so it sits on the window's
+            edge, not the page column's. */}
+        {createPortal(<button type="button" className="waka-principles-spark waka-principles-spark--home"
+          aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}>
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+            <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
+          </svg>
+        </button>, document.body)}
         {/* A PAUSED READING SAYS SO HERE TOO. Principles are written from
             the reading, so when the model stops answering this page waited
             forever in the creature's patient voice — "the ground is being
