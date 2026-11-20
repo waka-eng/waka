@@ -9724,7 +9724,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     <button type="button" className="jar-char-bubble-act"
                       onClick={() => { setCharSay(''); openSheet(); }}>{say('worldBubbleSeeAll')}</button>
                   </span>
-                ) : charSay === replyLineRef.current ? (
+                ) : charSay !== '' && charSay === replyLineRef.current ? (
                   /* A REPLY TO YOUR ANSWER ENDS THERE: a chat opening on "I'll
                      keep it close" would have nothing to be about (code
                      review, 2026-11-19). */

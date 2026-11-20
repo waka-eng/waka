@@ -2220,7 +2220,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* Two classes on the page, so it outranks the phone's one-gutter rule
    (`.waka-over:not(.waka-over--note)`, later in this layer). */
 .waka-page.waka-page--timeless .waka-over {
-  padding-inline: max(var(--sp-24), calc(var(--sp-6) * 2 + var(--waka-corner) - max(var(--sp-16), (100vw - 650px) / 2)));
+  padding-inline: max(var(--sp-24), calc(max(var(--sp-6), env(safe-area-inset-left)) + var(--sp-6) + var(--waka-corner) - max(var(--sp-16), (100vw - 650px) / 2)));
 }
 
 /* ═══ THE GROUND, BEFORE THE FIRST PRINCIPLE ═════════════════════════════
@@ -7757,7 +7757,8 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   cursor: pointer; pointer-events: auto;
 }
 /* The same star on Principles' left edge walks home (founder, 2026-11-19).
-   Fixed on the window, one step over the page (`.waka-page`, z 56). */
+   Fixed on the window; its z-index ranks it inside the page's own stacking
+   context (`.waka-page` is fixed at z 56), over the page's other children. */
 .waka-principles-spark--home {
   position: fixed; z-index: 57; top: 50%;
   right: auto; left: max(var(--sp-6), env(safe-area-inset-left));

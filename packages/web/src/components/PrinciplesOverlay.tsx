@@ -281,8 +281,9 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           and "Principles" row). Home's star at the right walks here; this
           one at the left walks home. Beside the page, not in it: the
           page's reveal animates a transform that would carry a fixed star
-          with it. First stop for the keyboard; gone while the creature
-          walks either way, when the page is not yet (or no longer) there. */}
+          with it. Gone while the creature walks either way, when the page
+          is not yet (or no longer) there; Escape and the pull left work
+          throughout. */}
       {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
         aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
         onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
@@ -318,7 +319,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
         >
         {/* The page's name, for a screen reader only: no header row (founder,
             2026-11-19), and the creature's bubble says it in words. */}
-        <h1 className="sr-only">{title}</h1>
+        <h2 className="sr-only">{title}</h2>
         {/* A PAUSED READING SAYS SO HERE TOO. Principles are written from
             the reading, so when the model stops answering this page waited
             forever in the creature's patient voice — "the ground is being
