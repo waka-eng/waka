@@ -64,6 +64,8 @@ it('asks through the creature, glasses on only while it asks, even without signa
   await act(async()=>button('Yes').click());await settle();
   expect(reviewInspiration).toHaveBeenCalledWith(original,VIEWER_ID,'relevant',expect.any(String));
   expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
+  /* It asked, so it answers the answer (founder, 2026-11-19). */
+  expect(world.container.querySelector('.jar-char-bubble')?.textContent,'the creature said nothing back to a yes').toContain('I’ll keep it close.');
 });
 /* TOP OF MIND IS THE MAIN BUBBLE: a tapped bubble goes back to it after a few seconds. */
 it('returns to top of mind a few seconds after a tap changed the bubble',async()=>{
@@ -156,6 +158,7 @@ it('removes signals that lost their support after an original is marked irreleva
   expect(listClaims).toHaveBeenCalledTimes(2);
   expect(world.container.textContent).not.toContain(signal.statement);
   expect(world.container.querySelector('.jar-pick-slip')).toBeNull();
+  expect(world.container.querySelector('.jar-char-bubble')?.textContent,'the creature said nothing back to a no').toContain('I’ll let it rest.');
 });
 it('shows no stale signal cards when relevance revalidation fails, and asks again on the next tap',async()=>{
   vi.mocked(listClaims).mockResolvedValueOnce({claims:[],more:false}).mockRejectedValueOnce(new Error('offline'));
