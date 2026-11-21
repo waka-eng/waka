@@ -323,6 +323,8 @@
   "worldCouldntLoadRest": "나머지를 불러오지 못했어요.",
   "worldCompanionChatPrompt": "요즘 하는 생각, 같이 이야기해 볼까요?",
   "worldCompanionPrinciplesPrompt": "요즘 어떤 원칙을 따라 선택하고 있나요?",
+  "worldCompanionSavesPrompt": "저장한 게 {count}개 있어요. 볼래요?",
+  "worldBubbleSeeThem": "볼게요",
   "worldCreatureSpeak": "다른 제안 보기",
   "worldDaysEmpty": "아직 저장한 게 없어요.",
   "worldDaysFail": "지난 날들을 불러오지 못했어요.",

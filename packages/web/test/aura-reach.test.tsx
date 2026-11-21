@@ -78,6 +78,9 @@ async function ask(): Promise<string | null> {
   expect(press(), 'the creature has nothing to press').toBeTruthy();
   await act(async () => { press()!.click(); });
   await settle(4);
+  /* "You have n saved" is the line after the reading once there are saves;
+     the line about the stretch is the one after it. */
+  if (/^You have \d+ saved/.test(speech() ?? '')) { await act(async () => { press()!.click(); }); await settle(4); }
   return speech();
 }
 
@@ -178,7 +181,8 @@ it("still speaks on a dim wall while the press's own flare is up", async () => {
      timer reaches for the loop's line. */
   OLD_WEEKS();
   world = await mountWorld(FACTS); await settle();
-  await act(async () => { press()!.click(); });
+  /* Past "You have n saved" to the line about the stretch. */
+  await act(async () => { press()!.click(); press()!.click(); });
   await act(async () => { await vi.advanceTimersByTimeAsync(400); });
   expect(world.audit().aura.lit, 'the flare had already decayed; this test is not testing it').toBeGreaterThan(0.55);
   const said = speech();

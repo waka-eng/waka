@@ -27,8 +27,8 @@
  * whole act ("Keep a thought", "Keep a screenshot", "Keep your voice") for a
  * screen reader and, on the glyphs, a pointer's tooltip.
  *
- * "{n} KEPT ⌃" ABOVE IT (founder: "should be x kept"). The pull says how many
- * you have kept once that is known; before then, and at none, just "Kept".
+ * "{n} INSPIRATIONS" ABOVE IT, under a lit grabber. The pull says how many
+ * you have kept once that is known; before then, just the word.
  *
  * Past chats and Search are not here. Search is the field at the top of
  * Inspirations; past chats are reached from the chat page, through Chat.
@@ -39,6 +39,9 @@ import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
 import { formatMessage } from '../lib/i18n';
 import { t, type SupportedLocale } from '../lib/locales';
 import { HomeActionIcon } from './HomeActionIcon';
+
+/** How far up the handle is dragged before it opens the inspirations. */
+const PULL_OPEN_PX = 24;
 
 export function HomeBar(props: {
   locale: SupportedLocale;
@@ -61,19 +64,32 @@ export function HomeBar(props: {
   pull?: { onOpen: () => void; kept?: number };
   /** A tap on the creature lit what its line points to: the Save pill or
       Chat. Each new `n` plays the light once. */
-  beckon?: { n: number; to: 'save' | 'chat' };
+  beckon?: { n: number; to: 'save' | 'chat' | 'pull' };
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const photos = useRef<HTMLInputElement>(null);
+  const dragFrom = useRef<number | null>(null);
+  const dragged = useRef(false);
   const save = props.save;
   return (
     <div className="waka-home-bar" data-jar-chrome="1" data-jar-interactive="1">
       {props.saved ? (
         <p className="waka-home-bar-saved" role="status">{say('worldBubbleKept')}</p>
       ) : props.pull ? (
-        <button type="button" className="waka-home-bar-pull" aria-haspopup="dialog" onClick={props.pull.onOpen}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
-            strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M6 15l6-6 6 6" /></svg>
+        /* A LIT GRABBER, TAPPED OR DRAGGED UP (founder meeting, 2026-11-20:
+           the chevron read as decoration and the inspirations went unfound).
+           A drag of a few px upward opens it as a tap does; the click that
+           follows that drag is then swallowed so it does not open twice. */
+        <button type="button" className="waka-home-bar-pull" aria-haspopup="dialog"
+          onClick={() => { if (dragged.current) { dragged.current = false; return; } props.pull?.onOpen(); }}
+          onPointerDown={e => { dragFrom.current = e.clientY; dragged.current = false; e.currentTarget.setPointerCapture?.(e.pointerId); }}
+          onPointerMove={e => {
+            if (dragFrom.current === null || dragFrom.current - e.clientY < PULL_OPEN_PX) return;
+            dragFrom.current = null; dragged.current = true; props.pull?.onOpen();
+          }}
+          onPointerUp={() => { dragFrom.current = null; }} onPointerCancel={() => { dragFrom.current = null; }}>
+          {props.beckon?.to === 'pull' ? <span key={props.beckon.n} className="waka-home-bar-beckon waka-home-bar-beckon--pull" aria-hidden="true" /> : null}
+          <span className="waka-home-bar-grab" aria-hidden="true" />
           <span>{props.pull.kept ? formatMessage(props.locale, 'worldBarKeptCount', { count: props.pull.kept }) : say('worldBarSaves')}</span>
         </button>
       ) : null}

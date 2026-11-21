@@ -323,6 +323,8 @@
   "worldCouldntLoadRest": "Couldn’t load the rest.",
   "worldCompanionChatPrompt": "Want to chat about what’s on your mind?",
   "worldCompanionPrinciplesPrompt": "Which principles are guiding you lately?",
+  "worldCompanionSavesPrompt": "You have {count} saved. {count, plural, one {Want to see it?} other {Want to see them?}}",
+  "worldBubbleSeeThem": "Show me",
   "worldCreatureSpeak": "Show another prompt",
   "worldDaysEmpty": "Nothing saved yet.",
   "worldDaysFail": "Couldn’t load your days.",

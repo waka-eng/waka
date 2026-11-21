@@ -1083,7 +1083,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const posterSaidRef = useRef(new Map<string, string>());
   /** A requested activity line or a short confirmation/error from an action. */
   const [charSay, setCharSayNow] = useState("");
-  type CompanionPrompt = 'reading' | 'review' | 'activity' | 'principles';
+  type CompanionPrompt = 'reading' | 'saves' | 'review' | 'activity' | 'principles';
   const promptScope = `${storageScope?.accountId ?? ''}:${spaceKey(atWall)}`;
   const [promptChoice, setPromptChoice] = useState<{ scope: string; kind: CompanionPrompt }>(() => ({ scope: promptScope, kind: 'reading' }));
   const promptChoiceRef = useRef(promptChoice);
@@ -1133,7 +1133,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      taps); the bar lights only when what the creature then says is asking
      for a save, and only right then (`beckonLit`, when it was decided). */
   const [barBeckon, setBarBeckon] = useState(0);
-  const [beckonLit, setBeckonLit] = useState<{ n: number; at: number; to: 'save' | 'chat' | 'star' }>({ n: 0, at: 0, to: 'save' });
+  const [beckonLit, setBeckonLit] = useState<{ n: number; at: number; to: 'save' | 'chat' | 'star' | 'pull' }>({ n: 0, at: 0, to: 'save' });
   const litTimer = useRef<number | null>(null);
   /* BOTH OF THE PRESS'S TIMERS, not just the glow's. A press starts two:
      `litTimer` for the glow, and the grace timer in `sayTheWeather` that
@@ -1652,7 +1652,15 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      The next tap on the creature asks for it again, quietly (see
      `creatureSpeaks`), so a queue that comes back is asked about then. */
   const reviewRetry = reviewLoadFailed && !offline && atWall.kind === 'self';
-  const companionPrompt = promptChoice.scope !== promptScope || (promptChoice.kind === 'review' && !canOfferReview)
+  /* "YOU HAVE 12 SAVED" (founder meeting, 2026-11-20: people tap the
+     creature and never find their inspirations). One of the lines a tap
+     steps through, on your own wall once there is at least one; its act
+     opens the same modal the handle does, and the handle lights. */
+  const keptCount = inspirations ? inspirations.length + fieldBeyond : 0;
+  const canOfferSaves = atWall.kind === 'self' && keptCount > 0;
+  const promptLines = useMemo<CompanionPrompt[]>(() => ['reading', ...(canOfferReview ? ['review' as const] : []),
+    ...(canOfferSaves ? ['saves' as const] : []), 'activity', 'principles'], [canOfferSaves, canOfferReview]);
+  const companionPrompt = promptChoice.scope !== promptScope || !promptLines.includes(promptChoice.kind)
     ? 'reading' : promptChoice.kind;
   promptChoiceRef.current = { scope: promptScope, kind: companionPrompt };
   const viewOpen = viewNavigation.view?.open ?? null;
@@ -2000,9 +2008,8 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const creatureSpeaks = useCallback(() => {
     if (!atNowView || reviewing) return;
     if (reviewRetry) loadClaims();
-    const choices: CompanionPrompt[] = ['reading', ...(canOfferReview ? ['review' as const] : []), 'activity', 'principles'];
     const current = promptChoiceRef.current.scope === promptScope ? promptChoiceRef.current.kind : 'reading';
-    const next = choices[(choices.indexOf(current) + 1) % choices.length]!;
+    const next = promptLines[(promptLines.indexOf(current) + 1) % promptLines.length]!;
     promptChoiceRef.current = { scope: promptScope, kind: next };
     setPromptChoice(promptChoiceRef.current);
     speechEpoch += 1;
@@ -2015,7 +2022,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     if (litTimer.current !== null) window.clearTimeout(litTimer.current);
     litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
     if (next === 'activity' && sayLineRef.current) sayTheWeatherRef.current(sayLineRef.current);
-  }, [atNowView, reviewing, canOfferReview, reviewRetry, loadClaims, promptScope, setCharSay]);
+  }, [atNowView, reviewing, promptLines, reviewRetry, loadClaims, promptScope, setCharSay]);
   useEffect(() => {
     if (atNowView && !reviewing && promptChoice.scope === promptScope) return;
     speechEpoch += 1;
@@ -3232,7 +3239,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     let done = false;
     const look = () => {
       const to = document.querySelector<HTMLElement>('.jar-char-bubble[data-invites], .jar-char-bubble [data-invites]')?.dataset.invites;
-      if (done || (to !== 'save' && to !== 'chat' && to !== 'star')) return;
+      if (done || (to !== 'save' && to !== 'chat' && to !== 'star' && to !== 'pull')) return;
       done = true; setBeckonLit({ n: barBeckon, at: Date.now(), to });
     };
     const frame = requestAnimationFrame(look);
@@ -9382,10 +9389,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
               line a tap steps through, the current one lit, so the next
               tap reads as the next line before it is pressed. Light only. */}
           {!backgroundHidden && !mouthOpen && !reviewing && atNowView && homeChromeShown ? (() => {
-            const lines: CompanionPrompt[] = ['reading', ...(canOfferReview ? ['review' as const] : []), 'activity', 'principles'];
             return (
               <span className="jar-char-lines" aria-hidden="true" data-jar-chrome="1">
-                {lines.map(kind => <span key={kind} className={kind === companionPrompt ? 'jar-char-line jar-char-line--on' : 'jar-char-line'} />)}
+                {promptLines.map(kind => <span key={kind} className={kind === companionPrompt ? 'jar-char-line jar-char-line--on' : 'jar-char-line'} />)}
               </span>
             );
           })() : null}
@@ -9703,6 +9709,16 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 </div>
               ) : null}
             </>
+          ) : null}
+          {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'saves' ? (
+            <div className="jar-char-bubble" data-invites="pull" data-jar-chrome="1" data-jar-interactive="1">
+              <span className="jar-char-bubble-body">
+                <span className="jar-char-bubble-reading" role="status">{formatMessage(locale, 'worldCompanionSavesPrompt', { count: keptCount })}</span>
+                <span className="jar-char-bubble-acts">
+                  <button type="button" className="jar-char-bubble-act" onClick={openSheet}>{say('worldBubbleSeeThem')}</button>
+                </span>
+              </span>
+            </div>
           ) : null}
           {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'principles' ? (
             <div className="jar-char-bubble" data-invites="star" data-jar-chrome="1" data-jar-interactive="1">

@@ -986,6 +986,20 @@ it('opens the archive from the Saves sheet with nothing lit, and leaves it by it
   }
 });
 
+/* "YOU HAVE N SAVED" (founder meeting, 2026-11-20): a tap on the creature
+   offers the inspirations, and its act opens the same modal the handle does,
+   while the handle lights. */
+it('opens the inspirations from the creature, as the handle does', async () => {
+  world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
+  await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click()); await settle();
+  const bubble = world.container.querySelector<HTMLElement>('.jar-char-bubble[data-invites="pull"]');
+  expect(bubble?.textContent, 'the tap did not offer the inspirations').toMatch(/You have \d+ saved/);
+  expect(world.container.querySelector('.waka-home-bar-pull .waka-home-bar-beckon'), 'the handle did not light').not.toBeNull();
+  await act(async () => bubble!.querySelector<HTMLButtonElement>('.jar-char-bubble-act')!.click()); await settle();
+  expect(open()).toBe('saves');
+  expect(world.container.querySelector('.waka-page--sheet'), 'the creature opened a page, not the modal').not.toBeNull();
+});
+
 it('returns home from chat history without stepping back into a chat', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   await openANewChat(world.container);

@@ -7091,6 +7091,13 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   color: var(--muted); font-family: var(--waka-face); font-size: var(--t-ui); cursor: pointer;
 }
 .waka-home-bar-pull:hover, .waka-home-bar-pull:focus-visible { color: var(--ink); }
+.waka-home-bar-pull { gap: var(--sp-8); padding-top: var(--sp-8); border-radius: 999px; touch-action: none; }
+/* The grabber is lit: light is the meaning channel, so it glows. */
+.waka-home-bar-grab {
+  width: var(--sp-44); height: 5px; border-radius: 3px; background: var(--ink);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--ink) 70%, transparent);
+}
+.waka-home-bar-beckon--pull { inset: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-8)); }
 .waka-home-bar-saved {
   position: absolute; left: 0; right: 0; bottom: calc(100% + var(--sp-12));
   margin: 0; text-align: center; color: var(--ink); font-family: var(--waka-face); font-size: var(--t-ui);

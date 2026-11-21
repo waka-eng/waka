@@ -39,3 +39,24 @@ it('says it in Korean order in Korean', async () => {
   expect(await pullFor('ko-KR', 12)).toBe('메모 12개');
   expect(await pullFor('ko-KR', undefined)).toBe('메모');
 });
+
+/* A LIT GRABBER, TAPPED OR DRAGGED UP (founder meeting, 2026-11-20). */
+it('opens once on a tap, and once on a drag up, never twice for the drag', async () => {
+  let opened = 0;
+  await act(async () => root.render(<HomeBar locale="en-US" onChat={() => undefined} pull={{ onOpen: () => { opened += 1; }, kept: 3 }} />));
+  const pull = host.querySelector<HTMLButtonElement>('.waka-home-bar-pull')!;
+  expect(pull.querySelector('.waka-home-bar-grab'), 'the handle has no grabber').not.toBeNull();
+  await act(async () => pull.click());
+  expect(opened).toBe(1);
+  const at = (type: string, clientY: number) => pull.dispatchEvent(Object.assign(new MouseEvent(type, { bubbles: true, clientY }), { pointerId: 1 }));
+  await act(async () => { at('pointerdown', 400); at('pointermove', 390); });
+  expect(opened, 'a small move opened it').toBe(1);
+  await act(async () => { at('pointermove', 360); at('pointermove', 300); at('pointerup', 300); pull.click(); });
+  expect(opened, 'the drag did not open it exactly once').toBe(2);
+});
+
+it('lights the handle when the creature points at it', async () => {
+  await act(async () => root.render(<HomeBar locale="en-US" onChat={() => undefined} pull={{ onOpen: () => undefined, kept: 3 }} beckon={{ n: 1, to: 'pull' }} />));
+  expect(host.querySelector('.waka-home-bar-pull .waka-home-bar-beckon')).not.toBeNull();
+  expect(host.querySelector('.waka-home-bar-pill .waka-home-bar-beckon'), 'the pill lit for the handle').toBeNull();
+});
