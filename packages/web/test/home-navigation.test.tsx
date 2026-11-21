@@ -294,7 +294,7 @@ it('keeps a one-press way out of the sky and of the ground on your own wall',asy
   expect(caret('.waka-surface-back'),'the sky on your own wall must offer the way down').not.toBeNull();
   await act(async()=>caret('.waka-surface-back')!.click());await settle();
   expect(location.search).toContain('open=principles');
-  await act(async()=>caret('.waka-surface-back')!.click());await settle();
+  await act(async()=>document.querySelector<HTMLButtonElement>('.waka-principles-spark--home')!.click());await settle();
   expect(location.pathname+location.search).toBe('/');
   await navigate(-1);expect(location.search).toContain('view=sky');
   world.unmount();
@@ -804,11 +804,12 @@ it('leaves Principles by Escape, and by its labelled Back in one visible press',
   await key(world.container.querySelector('.waka-over[data-jar-surface]')!, 'Escape');
   expect(open(), 'Escape no longer closes Principles').toBeNull();
 
-  /* Its way out was the bar's Home tab; the tabs went (design E1), so the
-     corner's labelled Back is what returns from it. */
+  /* Its visible way out is the star at its left edge, the mirror of home's
+     star at the right (founder, 2026-11-19); no "<" row. */
   await key(document.body, 'ArrowRight'); expect(open()).toBe('principles');
-  const back = world.container.querySelector<HTMLButtonElement>('.waka-surface-back');
-  expect(back?.getAttribute('aria-label'), 'Principles has no visible way home').toBe('Close');
+  expect(document.querySelector('.waka-over .waka-surface-back'), 'the "<" row came back on Principles').toBeNull();
+  const back = document.querySelector<HTMLButtonElement>('.waka-principles-spark--home');
+  expect(back?.getAttribute('aria-label'), 'Principles has no visible way home').toBe('Home');
   await act(async () => back!.click()); await settle();
   expect(open(), 'Back on Principles left Principles in place').toBeNull();
   expect(homeBarShape(world.container)).toEqual(['Save an inspiration', 'Save a screenshot', 'Save your voice', 'Chat']);
@@ -1151,18 +1152,16 @@ it('steps a saved note back to its list, then the list home, by its "<"', async 
 
 /* A SPARK AT THE RIGHT EDGE (founder, 2026-11-12): home says Principles lie
    to the right with one small light, level with the creature; a press goes
-   there. It stands on home only, and only once there is a principle. */
-it('shows a spark at the right edge on home that walks to Principles, only once a principle exists', async () => {
-  /* None yet: nowhere to go, so no spark (founder, 2026-11-12). */
-  world = await mountWorld(FACTS, { routerTools: <RouterTools/> }); await settle();
-  expect(world.container.querySelector('.waka-principles-spark'), 'a spark with no principle behind it').toBeNull();
-  world.unmount();
-  principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'declared',rank:0,locked:true,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[]}];
+   there. It stands on home, always, even before a first principle (founder,
+   2026-11-19: "yes always shown"). */
+it('shows a spark at the right edge on home that walks to Principles, even with none yet', async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools/> }); await settle();
   const spark = world.container.querySelector<HTMLButtonElement>('.waka-principles-spark');
   expect(spark, 'home has no spark toward Principles').not.toBeNull();
   expect(spark!.getAttribute('aria-label')).toBe('Principles');
   await act(async () => spark!.click()); await settle();
   expect(open(), 'the spark did not open Principles').toBe('principles');
-  expect(world.container.querySelector('.waka-principles-spark'), 'the spark stayed off home').toBeNull();
+  /* With none yet, the walk still lands somewhere that speaks (code review, 2026-11-19). */
+  expect(document.querySelector('.waka-over :is(.waka-ground, .waka-over-status)'), 'the spark led to an empty page').not.toBeNull();
+  expect(world.container.querySelector('.waka-principles-spark:not(.waka-principles-spark--home)'), 'the spark stayed off home').toBeNull();
 });

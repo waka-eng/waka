@@ -2206,9 +2206,21 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   pointer-events: none;
 }
 
-.waka-page--timeless > :not(.waka-timeless, .waka-crossing-being) {
+.waka-page--timeless > :not(.waka-timeless, .waka-crossing-being, .waka-principles-spark--home) {
   position: relative;
   z-index: 1;
+}
+/* THE STAR'S LANE STAYS CLEAR (code review, 2026-11-19). The home star is
+   6px in and 44px wide on the window's left edge; the column starts at the
+   page's 16px phone gutter or, on a wide window, where the 650px measure
+   centres. MEASURED in Chromium: at 390 the column's words began at 16,
+   under the star (6 to 50); this puts them at 56. At 1280 it stays 24.
+   Its padding is whatever keeps the words 6px past the star, never under
+   the usual 24px, on both sides so the column stays centred. */
+/* Two classes on the page, so it outranks the phone's one-gutter rule
+   (`.waka-over:not(.waka-over--note)`, later in this layer). */
+.waka-page.waka-page--timeless .waka-over {
+  padding-inline: max(var(--sp-24), calc(max(var(--sp-6), env(safe-area-inset-left)) + var(--sp-6) + var(--waka-corner) - max(var(--sp-16), (100vw - 650px) / 2)));
 }
 
 /* ═══ THE GROUND, BEFORE THE FIRST PRINCIPLE ═════════════════════════════
@@ -7732,8 +7744,9 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 @layer chrome {
 /* ═══ THE SPARK THAT SAYS PRINCIPLES ARE TO THE RIGHT (founder, 2026-11-12) ═
    At the right edge on the creature's own line (`--jar-char-mid`, the same
-   value the creature's press sits on), a 44px press holding one small
-   four-point spark. It rests dim and glints every few seconds: light is the
+   value the creature's press sits on), a 44px press holding one
+   four-point spark, 32px since the founder asked for it bigger (2026-11-20),
+   sized here for both edges so the two stars cannot drift apart. It rests dim and glints every few seconds: light is the
    only meaning channel, so the hint is a light, not an arrow or a word. */
 .waka-principles-spark {
   position: absolute; z-index: 3;
@@ -7744,9 +7757,16 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   border: 0; border-radius: 50%; background: none; color: var(--jar-live);
   cursor: pointer; pointer-events: auto;
 }
-.waka-principles-spark svg { animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
+/* The same star on Principles' left edge walks home (founder, 2026-11-19).
+   Fixed on the window; its z-index ranks it inside the page's own stacking
+   context (`.waka-page` is fixed at z 56), over the page's other children. */
+.waka-principles-spark--home {
+  position: fixed; z-index: 57; top: 50%;
+  right: auto; left: max(var(--sp-6), env(safe-area-inset-left));
+}
+.waka-principles-spark svg { width: 32px; height: 32px; animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
 @keyframes waka-spark-glint {
-  0%, 70%, 100% { opacity: 0.3; transform: scale(0.7) rotate(0deg); }
+  0%, 70%, 100% { opacity: 0.55; transform: scale(0.85) rotate(0deg); }
   80% { opacity: 1; transform: scale(1.15) rotate(20deg); }
   90% { opacity: 0.6; transform: scale(0.9) rotate(35deg); }
 }

@@ -44,7 +44,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DialogSurface } from "./DialogSurface";
-import { SurfaceHeader } from "./SurfaceHeader";
+import { useNativeBack } from "./SurfaceHeader";
 import { ReadingPausedNotice } from "./ReadingPausedNotice";
 import { useReadingPaused } from "../lib/use-reading-paused";
 import { PrinciplesGround } from "./PrinciplesGround";
@@ -141,7 +141,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
   /** Whose principles these are — the bubble must not call an agent's
       principles yours. Chosen by Home the same way it chooses `title`. */
   whose?: "own" | "agent";
-  /** The "<", Escape and the pull left: one handler, Close to home. */
+  /** The star at the left edge, Escape, the pull left and native back: one handler, Close to home. */
   onClose: () => void;
   /** The page's address, for the native back gestures. */
   gesture?: string | null;
@@ -164,6 +164,9 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
   onCrossed?: () => void;
 }): JSX.Element {
   const say = useCallback((key: Parameters<typeof t>[1]) => t(locale, key), [locale]);
+  /* Android's back and iOS's edge swipe still close the page, now that no
+     header carries them (code review, 2026-11-19). */
+  useNativeBack(onClose, gesture);
   /* EVERY VISIBLE LINE SAYS WHOSE THESE ARE (review, 2026-10-16). With the
      title for screen readers only, the page's own words are the only
      attribution left, so on an agent's wall none of them may say "your". */
@@ -273,6 +276,21 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           keyboard lost the exit the mouse kept. A surface that gave up its
           own close control cannot also trap Tab; that combination is the
           only one where there is no way out at all. */}
+      {/* THE SAME STAR, ON THE OTHER EDGE (founder, 2026-11-19: "there
+          should be the same star on the left to go back. remove the" "<"
+          and "Principles" row). Home's star at the right walks here; this
+          one at the left walks home. Beside the page, not in it: the
+          page's reveal animates a transform that would carry a fixed star
+          with it. Gone while the creature walks either way, when the page
+          is not yet (or no longer) there; Escape and the pull left work
+          throughout. */}
+      {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
+        aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
+        onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
+        </svg>
+      </button>}
       <DialogSurface
         className="waka-over"
         aria-label={title}
@@ -299,12 +317,9 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
         }}
         onPointerCancel={() => { pull.current = null; }}
         >
-        {/* THE SHARED HEADER (nav system): "<" Close and a small centred
-            "Principles". The large title the founder removed ("remove your
-            principles text at the top") stays gone; this is the quiet
-            meta-size name every page carries, and the creature's bubble is
-            still what says it in words. */}
-        <SurfaceHeader locale={locale} gesture={gesture} back={{ kind: "close", onBack: onClose }} title={title} />
+        {/* The page's name, for a screen reader only: no header row (founder,
+            2026-11-19), and the creature's bubble says it in words. */}
+        <h2 className="sr-only">{title}</h2>
         {/* A PAUSED READING SAYS SO HERE TOO. Principles are written from
             the reading, so when the model stops answering this page waited
             forever in the creature's patient voice — "the ground is being

@@ -775,6 +775,8 @@
   "worldReadingKeepEditing": "계속 수정",
   "worldReadingDiscard": "버리기",
   "profileMcpSimpleHint": "프로젝트에서 연 {client} 채팅에 설정 프롬프트를 붙여 넣으세요.",
+  "worldReviewReplyKeep": "좋아요. 가까이 둘게요.",
+  "worldReviewReplyLetGo": "알겠어요. 이제 내려놓을게요.",
   "worldInspirationReviewQuestion": "이건 아직 나에게 중요한가요?",
   "worldInspirationStillRelevant": "맞아요",
   "worldInspirationNotRelevant": "아닌 것 같아요",
