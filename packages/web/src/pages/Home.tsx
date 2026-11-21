@@ -131,7 +131,7 @@ import { canKeep, KEEP_FILE_LIMIT, whyNotKept, type KeepReadiness } from "../lib
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { useImageWords } from "../lib/use-image-words";
 import { bubbleStayMs } from "../lib/kept-bubble";
-import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
+import { PrinciplesOverlay, WakaAsterisk } from "../components/PrinciplesOverlay";
 import { useOpenClaimsLink } from "../lib/open-claims-link";
 import { InspirationReviewCard } from "../components/InspirationReviewCard";
 import { listInspirationReviews } from "../lib/api";
@@ -1129,6 +1129,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   // The glow settles after a tap; the chosen invitation stays until the
   // next tap or navigation. Agent profiles never offer to save on their behalf.
   const [lit, setLit] = useState(false);
+  const [barBeckon, setBarBeckon] = useState(0);
   const litTimer = useRef<number | null>(null);
   /* BOTH OF THE PRESS'S TIMERS, not just the glow's. A press starts two:
      `litTimer` for the glow, and the grace timer in `sayTheWeather` that
@@ -2005,6 +2006,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     if (graceTimer.current !== null) { window.clearTimeout(graceTimer.current); graceTimer.current = null; }
     setCharSay('');
     setLit(true);
+    setBarBeckon(n => n + 1);
     if (litTimer.current !== null) window.clearTimeout(litTimer.current);
     litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
     if (next === 'activity' && sayLineRef.current) sayTheWeatherRef.current(sayLineRef.current);
@@ -9291,15 +9293,18 @@ const RETRY_READ_LIMIT_MS = 20_000;
               right, and nothing on home said so. One four-point spark
               rests dim at the edge and glints every few seconds; a press
               walks there, the same walk the creature's drag takes. Light
-              only, no arrow and no word. Always there on your own home
-              (founder, 2026-11-19: "yes always shown"); with no principle
-              yet, the walk ends on the page that says how they come. */}
+              only, no arrow. Always there on your own home (founder,
+              2026-11-19: "yes always shown"); with no principle yet, the
+              walk ends on the page that says how they come. Founder
+              meeting, 2026-11-20: the four-point spark read as Gemini's
+              logo, so it is WAKA's own asterisk now, and it carries its
+              name dimly under it, because people pressed it asking "what
+              is this?" on desktop as much as on a phone. */}
           {homeChromeShown && atWall.kind === 'self' && !offline ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
-              </svg>
+              <WakaAsterisk />
+              <span className="waka-principles-spark-name" aria-hidden="true">{say('worldPrinciplesShortcut')}</span>
             </button>
           ) : null}
           {/* Taps change the invitation on this profile; dragging right
@@ -11373,6 +11378,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             photoDisabled: !composerDraft.available,
           }}
           onChat={() => openTalk(null)}
+          beckon={barBeckon}
           saved={barSaved}
           /* ON AN AGENT'S WALL THE PULL OPENS ITS ARCHIVE. The sheet reads
              your own field, so it is yours alone; the agent's saves are its

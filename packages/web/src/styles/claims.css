@@ -7031,6 +7031,20 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--sp-2);
   height: var(--sp-64); box-sizing: border-box; padding: var(--sp-6) var(--sp-8) var(--sp-6) var(--sp-6);
   border-radius: var(--r-pill); background: var(--waka-raised);
+  position: relative;
+}
+/* The pill's answer to a tap on the creature: its edge lights twice and
+   settles. Light only, never a fill, so the buttons stay unfilled. */
+.waka-home-bar-beckon {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  animation: waka-home-bar-beckon 1.6s ease-out both;
+}
+@keyframes waka-home-bar-beckon {
+  0% { box-shadow: 0 0 0 1px rgba(242, 236, 225, 0), 0 0 0 0 rgba(242, 236, 225, 0); }
+  18% { box-shadow: 0 0 0 1.5px rgba(242, 236, 225, .85), 0 0 28px 4px rgba(242, 236, 225, .32); }
+  40% { box-shadow: 0 0 0 1px rgba(242, 236, 225, .35), 0 0 14px 2px rgba(242, 236, 225, .12); }
+  58% { box-shadow: 0 0 0 1.5px rgba(242, 236, 225, .75), 0 0 24px 4px rgba(242, 236, 225, .26); }
+  100% { box-shadow: 0 0 0 1px rgba(242, 236, 225, 0), 0 0 0 0 rgba(242, 236, 225, 0); }
 }
 .waka-home-bar-door {
   appearance: none; display: flex; align-items: center; justify-content: center;
@@ -7745,7 +7759,7 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 /* ═══ THE SPARK THAT SAYS PRINCIPLES ARE TO THE RIGHT (founder, 2026-11-12) ═
    At the right edge on the creature's own line (`--jar-char-mid`, the same
    value the creature's press sits on), a 44px press holding one
-   four-point spark, 32px since the founder asked for it bigger (2026-11-20),
+   WAKA asterisk (once a four-point spark), 32px since the founder asked for it bigger (2026-11-20),
    sized here for both edges so the two stars cannot drift apart. It rests dim and glints every few seconds: light is the
    only meaning channel, so the hint is a light, not an arrow or a word. */
 .waka-principles-spark {
@@ -7770,6 +7784,16 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   80% { opacity: 1; transform: scale(1.15) rotate(20deg); }
   90% { opacity: 0.6; transform: scale(0.9) rotate(35deg); }
 }
+/* Its name, dim, under it, held to the edge it stands at so it never runs
+   off the screen. */
+.waka-principles-spark-name {
+  position: absolute; top: calc(100% - var(--sp-4)); right: 0;
+  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-meta);
+  line-height: 1; white-space: nowrap; pointer-events: none;
+}
+.waka-principles-spark--home .waka-principles-spark-name { right: auto; left: 0; }
+.waka-principles-spark:hover .waka-principles-spark-name,
+.waka-principles-spark:focus-visible .waka-principles-spark-name { color: var(--ink); }
 .waka-principles-spark:hover svg, .waka-principles-spark:focus-visible svg { animation-play-state: paused; opacity: 1; transform: scale(1); }
 .waka-principles-spark:focus-visible { outline: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
