@@ -131,7 +131,7 @@ import { canKeep, KEEP_FILE_LIMIT, whyNotKept, type KeepReadiness } from "../lib
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { useImageWords } from "../lib/use-image-words";
 import { bubbleStayMs } from "../lib/kept-bubble";
-import { PrinciplesOverlay, WakaAsterisk } from "../components/PrinciplesOverlay";
+import { PrinciplesOverlay, PrinciplesSpark } from "../components/PrinciplesOverlay";
 import { useOpenClaimsLink } from "../lib/open-claims-link";
 import { InspirationReviewCard } from "../components/InspirationReviewCard";
 import { listInspirationReviews } from "../lib/api";
@@ -9293,18 +9293,16 @@ const RETRY_READ_LIMIT_MS = 20_000;
               right, and nothing on home said so. One four-point spark
               rests dim at the edge and glints every few seconds; a press
               walks there, the same walk the creature's drag takes. Light
-              only, no arrow. Always there on your own home (founder,
-              2026-11-19: "yes always shown"); with no principle yet, the
-              walk ends on the page that says how they come. Founder
-              meeting, 2026-11-20: the four-point spark read as Gemini's
-              logo, so it is WAKA's own asterisk now, and it carries its
-              name dimly under it, because people pressed it asking "what
-              is this?" on desktop as much as on a phone. */}
+              only, no arrow and no word. Always there on your own home
+              (founder, 2026-11-19: "yes always shown"); with no principle
+              yet, the walk ends on the page that says how they come. The
+              founder kept this spark over an asterisk with a name under it
+              (2026-11-20: "I like the old star design, I don't want to say
+              principles there"). */}
           {homeChromeShown && atWall.kind === 'self' && !offline ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
-              <WakaAsterisk />
-              <span className="waka-principles-spark-name" aria-hidden="true">{say('worldPrinciplesShortcut')}</span>
+              <PrinciplesSpark />
             </button>
           ) : null}
           {/* Taps change the invitation on this profile; dragging right

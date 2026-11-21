@@ -2211,16 +2211,16 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   z-index: 1;
 }
 /* THE STAR'S LANE STAYS CLEAR (code review, 2026-11-19). The home star is
-   6px in and 44px wide on the window's left edge; the column starts at the
+   20px in and 44px wide on the window's left edge; the column starts at the
    page's 16px phone gutter or, on a wide window, where the 650px measure
-   centres. MEASURED in Chromium: at 390 the column's words began at 16,
-   under the star (6 to 50); this puts them at 56. At 1280 it stays 24.
+   centres. MEASURED in Chromium: at 390 the star spans 20 to 64 and this
+   puts the words at 70. At 1280 it stays 24.
    Its padding is whatever keeps the words 6px past the star, never under
    the usual 24px, on both sides so the column stays centred. */
 /* Two classes on the page, so it outranks the phone's one-gutter rule
    (`.waka-over:not(.waka-over--note)`, later in this layer). */
 .waka-page.waka-page--timeless .waka-over {
-  padding-inline: max(var(--sp-24), calc(max(var(--sp-6), env(safe-area-inset-left)) + var(--sp-6) + var(--waka-corner) - max(var(--sp-16), (100vw - 650px) / 2)));
+  padding-inline: max(var(--sp-24), calc(max(var(--sp-20), env(safe-area-inset-left)) + var(--sp-6) + var(--waka-corner) - max(var(--sp-16), (100vw - 650px) / 2)));
 }
 
 /* ═══ THE GROUND, BEFORE THE FIRST PRINCIPLE ═════════════════════════════
@@ -7792,12 +7792,12 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 /* ═══ THE SPARK THAT SAYS PRINCIPLES ARE TO THE RIGHT (founder, 2026-11-12) ═
    At the right edge on the creature's own line (`--jar-char-mid`, the same
    value the creature's press sits on), a 44px press holding one
-   WAKA asterisk (once a four-point spark), 32px since the founder asked for it bigger (2026-11-20),
+   four-point spark, 40px since the founder asked for it bigger (2026-11-20),
    sized here for both edges so the two stars cannot drift apart. It rests dim and glints every few seconds: light is the
    only meaning channel, so the hint is a light, not an arrow or a word. */
 .waka-principles-spark {
   position: absolute; z-index: 3;
-  right: max(var(--sp-6), env(safe-area-inset-right));
+  right: max(var(--sp-20), env(safe-area-inset-right));
   top: var(--jar-char-mid, 50%); transform: translateY(-50%);
   display: flex; align-items: center; justify-content: center;
   width: var(--waka-corner); height: var(--waka-corner); padding: 0;
@@ -7809,24 +7809,14 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
    context (`.waka-page` is fixed at z 56), over the page's other children. */
 .waka-principles-spark--home {
   position: fixed; z-index: 57; top: 50%;
-  right: auto; left: max(var(--sp-6), env(safe-area-inset-left));
+  right: auto; left: max(var(--sp-20), env(safe-area-inset-left));
 }
-.waka-principles-spark svg { width: 32px; height: 32px; animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
+.waka-principles-spark svg { width: 40px; height: 40px; animation: waka-spark-glint 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
 @keyframes waka-spark-glint {
   0%, 70%, 100% { opacity: 0.55; transform: scale(0.85) rotate(0deg); }
   80% { opacity: 1; transform: scale(1.15) rotate(20deg); }
   90% { opacity: 0.6; transform: scale(0.9) rotate(35deg); }
 }
-/* Its name, dim, under it, held to the edge it stands at so it never runs
-   off the screen. */
-.waka-principles-spark-name {
-  position: absolute; top: calc(100% - var(--sp-4)); right: 0;
-  color: var(--muted); font-family: var(--waka-face); font-size: var(--t-meta);
-  line-height: 1; white-space: nowrap; pointer-events: none;
-}
-.waka-principles-spark--home .waka-principles-spark-name { right: auto; left: 0; }
-.waka-principles-spark:hover .waka-principles-spark-name,
-.waka-principles-spark:focus-visible .waka-principles-spark-name { color: var(--ink); }
 .waka-principles-spark:hover svg, .waka-principles-spark:focus-visible svg { animation-play-state: paused; opacity: 1; transform: scale(1); }
 .waka-principles-spark:focus-visible { outline: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {

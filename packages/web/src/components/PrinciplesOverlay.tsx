@@ -287,8 +287,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
       {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
         aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
         onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
-        <WakaAsterisk />
-        <span className="waka-principles-spark-name" aria-hidden="true">{say("worldBackHome")}</span>
+        <PrinciplesSpark />
       </button>}
       <DialogSurface
         className="waka-over"
@@ -454,13 +453,12 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
   );
 }
 
-/** WAKA'S ASTERISK, the one mark both Principles doors wear: home's at the
-    right walks to Principles, Principles' at the left walks home. Six round
-    spokes, the "*" the name comes from, so it is ours and no one else's. */
-export function WakaAsterisk(): JSX.Element {
+/** The four-point spark both Principles doors wear: home's at the right
+    walks to Principles, Principles' at the left walks home. */
+export function PrinciplesSpark(): JSX.Element {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M12 3.2v17.6M4.4 7.6l15.2 8.8M4.4 16.4l15.2-8.8" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
     </svg>
   );
 }
