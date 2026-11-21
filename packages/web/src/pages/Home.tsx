@@ -9733,7 +9733,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   <span className="jar-char-bubble-of">{say('worldBubbleKept')}</span>
                   <span className="jar-char-bubble-reading" role="status">{keptWords.status === 'ready' && keptWords.text ? `“${keptWords.text}”`
                     : say('worldReadWordsReading')}</span>
-                </> : <span className="jar-char-bubble-reading" role="status">{companionLine}</span>}
+                </> : <span className="jar-char-bubble-reading" role="status">{
+                  /* A SAVE OPENS A CONVERSATION, IT DOES NOT END ONE. Founder
+                     meeting, 2026-11-20: "after you save something it should
+                     prompt the user to chat more about it, not save it, end."
+                     So a save with words is answered with a question, and
+                     the act under it is the chat about it. */
+                  charSay === say('worldBubbleKept') && !standingAsAgent && visibleInspiration && keptSubject(visibleInspiration).text
+                    ? say('worldBubbleKeptAsk') : companionLine}</span>}
                 {/* ═══ CHAT WHEN THERE IS SOMETHING, SAVE WHEN THERE IS NOT ══
                     Founder, of "Quiet lately — Let's talk about it":
                     "determine when it's appropriate to say 'lets chat about

@@ -4,13 +4,15 @@
  * The creature's other lines are a whisper and go after four seconds. "Kept"
  * carries two acts worth reaching for (Talk about it, See all) and, for a
  * screenshot, the words the server reads AFTER the save — a read that takes
- * a few seconds to land. So it stays eight seconds, and while the words are
+ * a few seconds to land. So it stays twenty seconds, and while the words are
  * still being read it waits for them, up to half a minute; once they land
  * it still gives them four seconds to be read. Past the cap the words are
  * not lost: they are on the saved note.
  */
 export const LINE_STAY_MS = 4_000;
-export const KEPT_STAY_MS = 8_000;
+/* Twenty seconds since the save became a question (founder meeting,
+   2026-11-20): an invitation to talk has to stay long enough to be taken. */
+export const KEPT_STAY_MS = 20_000;
 export const KEPT_WORDS_CAP_MS = 30_000;
 
 /** Milliseconds left for the bubble, from when it began saying what it says. */

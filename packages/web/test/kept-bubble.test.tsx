@@ -63,7 +63,7 @@ describe('how long the bubble stays', () => {
   });
 });
 
-it('keeps "Saved" up past the four seconds a whisper gets, and lets it go after its own stay', async () => {
+it('answers a save with a question that stays long enough to be taken, then lets it go', async () => {
   world = await mountWorld(FACTS); await settle();
   await pressHomeBar(world.container, 'Save an inspiration'); await settle();
   const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
@@ -74,11 +74,14 @@ it('keeps "Saved" up past the four seconds a whisper gets, and lets it go after 
   await settle();
   await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-dock-save')!.click());
   await settle(50, 6);
-  expect(bubble(), 'the save did not answer with Kept').toContain('Saved');
+  expect(bubble(), 'the save did not ask about itself').toContain('Saved. What drew you to it?');
+  expect(world.container.querySelector('.jar-char-bubble-acts')?.textContent, 'the question has no chat under it').toContain('Chat about this');
   await settle(500, 10); // five seconds on
-  expect(bubble(), '"Saved" went with the whispers, at four seconds').toContain('Saved');
-  await settle(500, 8); // nine seconds on
-  expect(bubble(), '"Saved" never left').not.toContain('Saved');
+  expect(bubble(), 'the question went with the whispers, at four seconds').toContain('Saved');
+  await settle(500, 24); // seventeen seconds on
+  expect(bubble(), 'the question went before twenty seconds').toContain('Saved');
+  await settle(500, 8); // twenty one seconds on
+  expect(bubble(), 'the question never left').not.toContain('Saved');
 });
 
 /* Code review, 2026-11-08: a second save while "Saved" stood said the same
