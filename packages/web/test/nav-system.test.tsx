@@ -147,15 +147,15 @@ describe('every page and sheet draws the one header', () => {
     expect(c().querySelector('.waka-home-bar'), 'the home bar left home').not.toBeNull();
   });
 
-  it('keeps one word top right: Past chats on a chat, Past inspirations on the notepad, New inspiration on the list', async () => {
+  it('keeps one word top right on a chat (Past chats) and none on the notepad or the list', async () => {
     await openAt('/chat/new');
     expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent).toBe('Past chats');
     world!.unmount();
     await openAt('/?compose=1');
-    expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent).toBe('Past inspirations');
+    expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent ?? '', 'the save flow does not offer past inspirations').toBe('');
     world!.unmount();
     await openAt('/?open=saves');
-    expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent ?? '', 'the Saved list has no New note, as Past chats has New chat').toBe('New inspiration');
+    expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent ?? '', 'the bar\'s Save is the one way to save').toBe('');
   });
 });
 

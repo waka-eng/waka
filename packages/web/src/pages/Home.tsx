@@ -10154,7 +10154,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
           }}
           asking={leaveAsking} onStay={() => setLeaveAsking(false)}
           onClose={() => saveAsDraft()} onSubmit={() => { void keepIt(); }}
-          onPast={!inspirations || inspirations.length + fieldBeyond === 0 ? undefined : () => saveAsDraft(() => openOverHome('saves'))}
           onBack={backPage} gesture={viewNavigation.href}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
@@ -11514,7 +11513,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
         /* ONE HANDLER FOR "<" AND ESCAPE: Back on an open note (to the list
            or the sheet), on a list opened from a chat (to the chat); Close
            otherwise (home). */
-        onNew={canWriteHere ? startNewInspiration : undefined}
         sheet={savesAsSheet}
         onBack={backPage} backKind="close" gesture={viewNavigation.href}/>:null}
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay

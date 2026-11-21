@@ -364,9 +364,6 @@ export function InspirationComposer(props: {
       or Discard in the creature's bubble. `onClose` keeps the draft and
       leaves; `onStay` puts the question away. */
   asking?: boolean;
-  /** "Past inspirations" at the header's right, as a chat has "Past chats"
-      (founder, 2026-11-10). Keeps the draft, then opens the Saved list. */
-  onPast?: () => void;
   onStay?: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
   /** True when the draft changed in another tab — the one state the "keep as
@@ -526,8 +523,7 @@ export function InspirationComposer(props: {
 
         Nothing trails the moment now: the "⋯" and its one item, Discard,
         became the "<"'s question (see `LeaveAsk`). */}
-    <NotePage locale={props.locale} whenMs={when.current} owner={props.owner} back={{ kind: 'close', onBack: props.onBack }} gesture={props.gesture}
-      trailing={props.onPast ? <button type="button" className="waka-surface-act" onClick={props.onPast}>{say('worldPastInspirations')}</button> : undefined}>
+    <NotePage locale={props.locale} whenMs={when.current} owner={props.owner} back={{ kind: 'close', onBack: props.onBack }} gesture={props.gesture}>
     <div ref={bodyRef} className="jar-composer-body" data-hero={hero ? '1' : undefined}>
     {/* ═══ THE PICTURE IS THE POST (design E3) ═══════════════════════════════
         A screenshot or photo stands large with the creature's question over

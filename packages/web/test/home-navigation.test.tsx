@@ -1117,12 +1117,10 @@ it('keeps background inspiration processing out of the Saves sheet', async () =>
 });
 
 
-it('offers New inspiration at the archive\'s top right, as Past chats offers New chat, and it opens the notepad', async () => {
+it('leaves the archive\'s top right empty: the bar\'s Save is the one way to save', async () => {
   world = await mountWorld(FACTS, { initialEntries: ['/?open=saves'], routerTools: <RouterTools/> }); await settle();
-  const fresh = world.container.querySelector<HTMLButtonElement>('.waka-surface-right .waka-over-new');
-  expect(fresh?.textContent).toBe('New inspiration');
-  await act(async () => fresh!.click()); await settle();
-  expect(world.container.querySelector('.jar-inspiration-composer'), 'New note did not open the notepad').not.toBeNull();
+  expect(world.container.querySelector('.waka-over-new')).toBeNull();
+  expect(world.container.textContent).not.toContain('New inspiration');
 });
 
 it('shows only owned profiles when a signed-in account has no agents', async () => {

@@ -96,13 +96,12 @@ const UNDO_MS = 6000;
 /** How long a sheet takes to drop back down; `claims.css` `waka-sheet-down` matches. */
 const SHEET_DROP_MS = 220;
 
-export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, onNew, sheet = false }: {
+export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, sheet = false }: {
   canReview?:boolean; onRelevanceChanged?:()=>void;
   /** The server has confirmed a change to the live archive. */
   onArchiveChanged?: () => void;
   /** "New note", the header's right word, as Past chats has New chat
       (founder, 2026-11-10). Absent where nothing may be written. */
-  onNew?: () => void;
   /** Pulled up from home's handle: rises over home above the home bar and
       drops back down on close (see `savesAsSheet` in `Home.tsx`). */
   sheet?: boolean;
@@ -1325,13 +1324,11 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
             ) : null}</>}</>}
           /* THE WAY OUT OF THE FILTER, WHICH IS NOT THE WAY OUT OF THE PAGE:
              "See all" is the header's one right-hand word while a claim's
-             filter is on; otherwise "New note", as Past chats has "New chat"
-             (founder, 2026-11-10: "let's have Save new or something like
-             that on top right"). */
+             filter is on. "New inspiration" stood here otherwise and went:
+             the bar's Save is the one way to save (founder meeting,
+             2026-11-20). */
           right={focus && onClearFocus ? (
             <button type="button" className="waka-over-unfocus" onClick={onClearFocus}>{say("worldBubbleSeeAll")}</button>
-          ) : onNew ? (
-            <button type="button" className="waka-over-new" onClick={onNew}>{say("worldNoteNew")}</button>
           ) : undefined} />}
         {/* THE TWO FACTS A GRID NEEDS BEFORE IT CAN BE SEARCHED: how much is
             behind it, and a way to narrow it. Both were in the page's header

@@ -815,8 +815,6 @@
   "worldListening": "듣고 있어요…",
   "worldPastChats": "지난 대화",
   "worldConversationEarlierMemory": "에이전트의 기억으로 답해요.",
-  "worldNoteNew": "새로 남기기",
-  "worldPastInspirations": "남긴 것",
   "signupVerificationRequired": "계정을 만들려면 Cloudflare 인증을 완료하세요. 기존 계정은 로그인할 수 있어요.",
   "signupVerificationChecking": "인증을 확인하고 있어요…",
   "signupVerified": "인증했어요. 계속해서 계정을 만드세요.",
