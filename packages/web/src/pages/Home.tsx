@@ -729,7 +729,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const [fieldBeyond, setFieldBeyond] = useState<number>(0);
   const [fieldLoading,setFieldLoading]=useState(false);
   const [fieldFailed,setFieldFailed]=useState(false);
-  const retryFieldRef=useRef<(()=>void)|null>(null);
+  const retryFieldRef=useRef<((mode?: 'refresh') => void) | null>(null);
   const fieldLoadingRef=useRef(false);fieldLoadingRef.current=fieldLoading;
   /**
    * THE POUR READS THIS; THE POUR DOES NOT DEPEND ON IT.
@@ -2793,7 +2793,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
       for(let attempt=0;attempt<3;attempt++){
         const sourceRead=sourceListMutationRef.current;
         const field=await loadInspirations(undefined,{scope:storageScope??undefined,signal:controller.signal,...(!full?{page:{limit:50}}:{}),onFirstPage:first=>{
-          if(firstShown||dead||controller.signal.aborted)return;firstShown=true;
+          if(firstShown||dead||controller.signal.aborted||sourceRead!==sourceListMutationRef.current)return;firstShown=true;
           // Rank/crowding depend on the complete field. Ready chrome and the
           // companion first, but never paint 200 orbs then reshuffle them.
           if(first.short){setInspirations([]);setFieldBeyond(first.total);setFieldLoading(true);}
@@ -2804,10 +2804,14 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
       }
       throw new Error('The archive changed while opening. Try again.');
     };
-    let fieldPending=false;
-    const readField=(full=true)=>{
+    let fieldPending = false;
+    let fullFieldRequested = false;
+    let refreshQueued = false;
+    const readField = (full: boolean) => {
       if(dead||fieldPending||controller.signal.aborted)return;
-      fieldPending=true;setFieldFailed(false);
+      fieldPending = true;
+      fullFieldRequested ||= full;
+      setFieldFailed(false);
       if(firstShown)setFieldLoading(true);
       void readInitialField(full)
       .then((field) => {
@@ -2874,9 +2878,22 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
           return;
         }
         goOffline(layout);
-      }).finally(()=>{fieldPending=false;});
+      }).finally(() => {
+        fieldPending = false;
+        if (!dead && refreshQueued) {
+          refreshQueued = false;
+          retryFieldRef.current?.('refresh');
+        }
+      });
     };
-    retryFieldRef.current=readField;
+    retryFieldRef.current = (mode) => {
+      if (mode === 'refresh' && fieldPending) {
+        refreshQueued = true;
+        return;
+      }
+      // Refresh the count without walking older pages solely to update it.
+      readField(mode !== 'refresh' || fullFieldRequested || personalFieldDemand.current);
+    };
     readField(false);
     /* LAYER 2 — the sky. Patterns, and then in the background what each of
        them rests on: the citation index the field reads its meaning from and
@@ -4943,6 +4960,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
   );
 
   const sourceListMutationRef = useRef(0);
+  const refreshPersonalArchive = useCallback(() => {
+    if (!readingMountedRef.current || offlineRef.current) return;
+    sourceListMutationRef.current += 1;
+    retryFieldRef.current?.('refresh');
+  }, []);
   const attachmentRequestsRef = useRef(new Set<string>());
   const birthInspiration = (id: string, text: string, atMs: number, serverId?: string) => {
     const seed: BornSeed = { id, ...(serverId ? { sigId: serverId } : {}), capturedMs: atMs, updatedMs: atMs,
@@ -11471,6 +11493,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           following an old reference here. */}
       {conversationScope&&conversationProfile&&viewNavigation.view?.open==='saves'?<SavesOverlay
         canReview={conversationProfile.type==='human'} onRelevanceChanged={()=>verifyReadingRef.current(true)}
+        onArchiveChanged={conversationScope.profileId === storageScope?.profileId ? refreshPersonalArchive : undefined}
         onNoteOpen={savedNoteChanged}
         note={viewNavigation.view.note}
         onNoteAddress={noteAddressChanged}
