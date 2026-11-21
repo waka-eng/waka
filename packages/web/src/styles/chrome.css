@@ -1134,6 +1134,22 @@ body .login-shell .field-input {
   border-radius: 12px;
 }
 
+/* EVERY LANGUAGE PICKER WEARS ONE ARROW. The browser's own arrow sat flush
+   against the right edge and pushed the choice off the left inset the name
+   field above it uses. Founder meeting, 2026-11-20: "the language drop
+   button is misplaced". So the native arrow goes, and a drawn one sits
+   inside the same inset the text keeps on the left. */
+body select.field-input,
+body .waka-account-field select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: calc(var(--sp-14) + 18px);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23f2ece1' stroke-opacity='.7' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--sp-14) center;
+  background-size: 12px 8px;
+}
+
 body .login-shell .field-input:focus {
   border-color: color-mix(in srgb, var(--w-ink) 80%, transparent);
 }body .login-title {
