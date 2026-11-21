@@ -96,8 +96,10 @@ const UNDO_MS = 6000;
 /** How long a sheet takes to drop back down; `claims.css` `waka-sheet-down` matches. */
 const SHEET_DROP_MS = 220;
 
-export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, onNew, sheet = false }: {
+export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, onNew, sheet = false }: {
   canReview?:boolean; onRelevanceChanged?:()=>void;
+  /** The server has confirmed a change to the live archive. */
+  onArchiveChanged?: () => void;
   /** "New note", the header's right word, as Past chats has New chat
       (founder, 2026-11-10). Absent where nothing may be written. */
   onNew?: () => void;
@@ -497,6 +499,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
       .then(() => {
         finishInspirationDelete(scope, pending.row.id);
         markDeleting(pending.row.id, profileId ?? null, false);
+        onArchiveChanged?.();
         refreshSearch();
         return loadShelf();
       })
@@ -512,7 +515,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
         setTotal((count) => count === null ? count : count + 1);
         setEraseFailed(true);
       });
-  }, [beginDelete, loadShelf, markDeleting, profileId, scope?.accountId, scope?.profileId, unforgetNote]);
+  }, [beginDelete, loadShelf, markDeleting, onArchiveChanged, profileId, scope?.accountId, scope?.profileId, unforgetNote]);
 
   const flushErase = useCallback((leaving = false) => {
     const pending = pendingErase.current;
@@ -575,6 +578,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
     setShelfFailed(false);
     try {
       await restoreInspiration(item.id, profileId ? { profile: profileId } : {});
+      onArchiveChanged?.();
       /* back from the shelf under the same id: its clips can land again */
       unforgetNote(item.id, profileId ?? null);
       if (!mounted.current) return;
@@ -585,7 +589,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, locale, profileId,
     } catch {
       if (mounted.current) setShelfFailed(true);
     } finally { shelfAction.current = false; if (mounted.current) setShelfBusy(false); }
-  }, [load, profileId, unforgetNote]);
+  }, [load, onArchiveChanged, profileId, unforgetNote]);
 
   const dropNote = recorder.drop;
   const forget = useCallback(async (item: ApiDeletedInspiration) => {
