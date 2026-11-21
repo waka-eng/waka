@@ -9350,6 +9350,19 @@ const RETRY_READ_LIMIT_MS = 20_000;
               }}
             />
           ) : null}
+          {/* HOW MANY THINGS IT HAS TO SAY, AND WHICH ONE THIS IS. Founder
+              meeting, 2026-11-20: "it's not very intuitive that you have to
+              keep tapping on it and it changes the dialog." One dot per
+              line a tap steps through, the current one lit, so the next
+              tap reads as the next line before it is pressed. Light only. */}
+          {!backgroundHidden && !mouthOpen && !reviewing && atNowView && homeChromeShown ? (() => {
+            const lines: CompanionPrompt[] = ['reading', ...(canOfferReview ? ['review' as const] : []), 'activity', 'principles'];
+            return (
+              <span className="jar-char-lines" aria-hidden="true" data-jar-chrome="1">
+                {lines.map(kind => <span key={kind} className={kind === companionPrompt ? 'jar-char-line jar-char-line--on' : 'jar-char-line'} />)}
+              </span>
+            );
+          })() : null}
           {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
             <>
               {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over

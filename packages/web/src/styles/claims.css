@@ -4718,6 +4718,22 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   transition: opacity 0.14s ease-out;
 }
 
+/* The lines a tap steps through, as dots under the creature. */
+.jar-char-lines {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  top: calc(var(--jar-char-mid, 50%) + var(--jar-char, 120px) / 2 + var(--sp-12));
+  display: flex; gap: var(--sp-6); pointer-events: none;
+}
+.jar-char-line {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: color-mix(in srgb, var(--jar-live) 28%, transparent);
+  transition: background-color 0.3s ease-out, box-shadow 0.3s ease-out;
+}
+.jar-char-line--on {
+  background: var(--jar-live);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--jar-live) 60%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .jar-char-press,
   .jar-char-press--lit {
