@@ -7444,10 +7444,17 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
 /* ONE DONE (review, 2026-11-09): `.chat-page .waka-listening-done` outranks
    the chat's `.chat-page button` reset (0,1,1), so Done reads the same in a
    chat as on the notepad and a saved note. */
-.waka-listening-done, .jar-inspiration-composer .waka-listening-done, .chat-page .waka-listening-done {
+.waka-listening-done, .jar-inspiration-composer .waka-listening-done, .chat-page .waka-listening-done,
+.waka-listening-act, .jar-inspiration-composer .waka-listening-act, .chat-page .waka-listening-act {
   min-height: var(--waka-corner); padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill); background: none; box-shadow: none;
   color: var(--ink); font-family: var(--waka-face); font-size: var(--t-body); font-weight: 400; cursor: pointer;
 }
+/* Discard and Pause beside Done: one row, Done the full-ink word. */
+.waka-listening-foot--row { flex-direction: row; justify-content: center; gap: var(--sp-8); }
+.waka-listening-act, .jar-inspiration-composer .waka-listening-act, .chat-page .waka-listening-act { color: var(--muted); }
+.waka-listening-act:hover, .waka-listening-act:focus-visible { color: var(--ink); }
+/* Paused: the light under the creature rests. */
+.waka-listening--held .waka-listening-light { animation-play-state: paused; opacity: .35; }
 }
 
 @layer chrome {

@@ -40,6 +40,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { t, type SupportedLocale } from '../lib/locales';
 import { Companion } from './Companion';
+import type { Dictation } from '../lib/use-dictation';
 
 /** How long an unchanged tail waits before it reads as settled. */
 const SETTLE_MS = 1400;
@@ -75,7 +76,10 @@ export function ListeningView(props: {
   /** The words heard so far — the draft as dictation writes it. */
   words: string;
   onDone: () => void;
+  /** Pause, Resume and Discard beside Done, where the session offers them. */
+  dictation?: Pick<Dictation, 'held' | 'pause' | 'resume' | 'discard'>;
 }): JSX.Element {
+  const held = props.dictation?.held ?? false;
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const root = useRef<HTMLDivElement>(null), done = useRef<HTMLButtonElement>(null);
   const page = useRef<HTMLDivElement>(null), following = useRef(true);
@@ -145,7 +149,7 @@ export function ListeningView(props: {
   };
 
   return (
-    <div ref={root} className="waka-listening" role="group" aria-label={say('worldListening')}
+    <div ref={root} className={held ? 'waka-listening waka-listening--held' : 'waka-listening'} role="group" aria-label={say('worldListening')}
       /* ESCAPE IS DONE (nav system R3), and it stops here: it must not reach
          the page under the view and close the note mid-dictation. */
       onKeyDown={event => {
@@ -157,7 +161,7 @@ export function ListeningView(props: {
           <span className="waka-listening-light" />
           <Companion size={40} label="" pressable={false} />
         </span>
-        <p className="waka-listening-label" role="status">{say('worldListening')}</p>
+        <p className="waka-listening-label" role="status">{say(held ? 'worldListeningPaused' : 'worldListening')}</p>
       </div>
       <div ref={page} className="waka-listening-page" onScroll={onScroll}>
         <p className="waka-listening-words">
@@ -166,7 +170,11 @@ export function ListeningView(props: {
           {words.length > settled ? <span key={settled} className="waka-listening-arriving">{words.slice(settled)}</span> : null}
         </p>
       </div>
-      <div className="waka-listening-foot">
+      <div className={props.dictation ? 'waka-listening-foot waka-listening-foot--row' : 'waka-listening-foot'}>
+        {props.dictation ? <>
+          <button type="button" className="waka-listening-act" onClick={props.dictation.discard}>{say('worldListeningDiscard')}</button>
+          <button type="button" className="waka-listening-act" onClick={held ? props.dictation.resume : props.dictation.pause}>{say(held ? 'worldListeningResume' : 'worldListeningPause')}</button>
+        </> : null}
         <button ref={done} type="button" className="waka-listening-done" onClick={props.onDone}>{say('worldComposerDictateStop')}</button>
       </div>
     </div>

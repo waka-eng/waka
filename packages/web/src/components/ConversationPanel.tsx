@@ -834,7 +834,7 @@ function ConversationPanelBody({scope,id,initialPrincipleId,initialConversation,
               question so you respond") ═══ Opened from a bubble's "Chat about
               this", the creature stands with that same question over it, in
               home's bubble, instead of the general line. */}
-          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.listening&&!hasOpeningQuote&&!opener?.turn?
+          {!conversation?.messages.length&&!draft?.pending&&!loading&&!error&&!dictation.active&&!hasOpeningQuote&&!opener?.turn?
             opener?.ask?<div className="chat-opening chat-opening--asks">
               <div className="jar-char-bubble-body chat-opening-ask"><span className="jar-char-bubble-reading">{opener.ask}</span></div>
               <span className="chat-opening-beings"><Companion size={64} label="WAKA" /></span>
@@ -1060,8 +1060,8 @@ function ConversationPanelBody({scope,id,initialPrincipleId,initialConversation,
             right — dim until there is something to send, never filled.
             Enter still sends; the send path, the chips and the retry are
             this panel's own, unchanged. */}
-        {dictation.listening?<ListeningView locale={locale} words={draft?.content??''}
-          onDone={()=>dictation.stop()}/>:<NoteBar
+        {dictation.active?<ListeningView locale={locale} words={draft?.content??''}
+          onDone={()=>dictation.stop()} dictation={dictation}/>:<NoteBar
           above={!draft?.pending&&(draft?.attachments?.length||uploads.length)?<ul className="chat-chips" aria-label={say('worldAttachList')}>
             {(draft?.attachments??[]).map(item=><Chip key={item.id} type={item.type} name={attachmentLabel(locale,item.type,item.name)} size={item.size}
               file={localFiles.current.get(item.id)} attachmentId={item.id} state="ready" locale={locale} onRemove={()=>unattach(item.id)}/>)}

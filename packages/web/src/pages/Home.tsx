@@ -5155,8 +5155,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
      result, which lands in the draft they are leaving behind. `abort` is
      for unmount, where there is nothing left to write into. */
   useEffect(() => {
-    if (!mouthOpen && dictation.listening) dictation.stop();
-  }, [mouthOpen, dictation.listening, dictation.stop]);
+    if (!mouthOpen && dictation.active) dictation.stop();
+  }, [mouthOpen, dictation.active, dictation.stop]);
 
   /* ═══ SAY IT: THE NOTEPAD, ALREADY LISTENING (design E1) ═══════════════
      The bar's Say it opens the notepad and starts the microphone as soon as
@@ -10144,7 +10144,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           /* SPEECH HAS ITS OWN VIEW (founder, 2026-11-08): while dictation
              listens, the bar gives way to `ListeningView`; Done stops it and
              the words stand in the note as text. */
-          listening={dictation.listening ? { onDone: () => dictation.stop() } : undefined}
+          listening={dictation.active ? { onDone: () => dictation.stop(), dictation } : undefined}
           onRetryFile={id => { void retryDraftFile(id); }}
           onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}

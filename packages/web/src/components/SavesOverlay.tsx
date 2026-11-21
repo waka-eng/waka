@@ -1614,8 +1614,8 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
                   mic on a saved note writes what you say into its words,
                   in the listening view the notepad and a chat use, and Done
                   drops them into the page as text. */}
-              {dictation.listening ? <ListeningView locale={locale} words={draft}
-                onDone={() => dictation.stop()} /> : <textarea
+              {dictation.active ? <ListeningView locale={locale} words={draft}
+                onDone={() => dictation.stop()} dictation={dictation} /> : <textarea
                 className="jar-panel-text waka-note-page"
                 /* UNTIL THE FULL TEXT ARRIVES the list's preview stands in,
                    read-only, so the page does not open blank — and nothing

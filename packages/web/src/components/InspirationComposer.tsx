@@ -36,6 +36,7 @@ import { DialogSurface } from './DialogSurface';
 import { Companion } from './Companion';
 import { NoteBar, NoteBarAttach } from './NoteBar';
 import { ListeningView } from './ListeningView';
+import type { Dictation } from '../lib/use-dictation';
 import { ReadWordsQuote, type ReadWords } from './ImageWords';
 import type { FixOutcome } from '../lib/use-image-words';
 import { HomeActionIcon } from './HomeActionIcon';
@@ -386,7 +387,7 @@ export function InspirationComposer(props: {
       why, with Add a note / That's all. It still waits for Save. */
   arrival?: boolean;
   /** The microphone is open: the bar gives way to the listening view. */
-  listening?: { onDone: () => void };
+  listening?: { onDone: () => void; dictation?: Pick<Dictation, 'held' | 'pause' | 'resume' | 'discard'> };
 }) {
   const linkInput = useRef<HTMLInputElement>(null);
   const [discarding, setDiscarding] = useState(false), [discardFailed, setDiscardFailed] = useState(false);
@@ -659,7 +660,7 @@ export function InspirationComposer(props: {
       cannotDiscard={discardUnavailable || !props.onDiscard}
       failed={discardFailed} failedLabel={say('worldDiscardInspirationFailed')}
       onKeep={props.onClose} onDiscard={() => { void discardNow(); }} onStay={stay} /> : null}
-    {props.listening ? <ListeningView locale={props.locale} words={props.text} onDone={props.listening.onDone} /> : <NoteBar
+    {props.listening ? <ListeningView locale={props.locale} words={props.text} onDone={props.listening.onDone} dictation={props.listening.dictation} /> : <NoteBar
       tools={props.noteBar ? <>
         {props.noteBar.mic}
         <NoteBarAttach photoLabel={say('worldAddPhoto')} fileLabel={say('worldAddFile')} disabled={blocked} multiple
