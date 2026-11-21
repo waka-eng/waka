@@ -1,3 +1,10 @@
+/**
+ * THE CREATURE'S MOVES (founder, 2026-11-20).
+ *
+ * WHAT THIS MOCKS, AND WHY (gate G6). Nothing. The moves are pure functions
+ * of time and size, and the choice takes its random source as an argument,
+ * so the real code runs whole with no layer replaced.
+ */
 import { describe, expect, it } from "vitest";
 
 import { FLOURISHES, FLOURISH_MS, flourishPose, nextFlourish } from "../src/character/flourish";
