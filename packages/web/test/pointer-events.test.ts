@@ -231,6 +231,12 @@ describe("nothing visible loses its press", () => {
           ![
             ".jar-canvas",
             ".waka-back-swipe", // Decorative progress only; never a hit target.
+            /* Founder meeting, 2026-11-20: the creature's line dots, the bar's
+               answering light and the asterisks' names are aria-hidden paint
+               with nothing to press in them. */
+            ".jar-char-lines",
+            ".waka-home-bar-beckon",
+            ".waka-principles-spark-name",
             ".jar-atmos",
             ".jar-topbar",
             ".jar-offline",
