@@ -55,7 +55,7 @@ function openSheet(): HTMLElement | null {
  * so a native back never skips a layer. Returns how far a swipe has travelled,
  * for the "‹" hint.
  */
-function useNativeBack(onBack: () => void | Promise<unknown>, navigationKey: string | null): number {
+export function useNativeBack(onBack: () => void | Promise<unknown>, navigationKey: string | null): number {
   const action = useRef(onBack); action.current = onBack;
   const [distance, setDistance] = useState(0);
   useEffect(() => {

@@ -775,6 +775,8 @@
   "worldReadingKeepEditing": "Keep editing",
   "worldReadingDiscard": "Discard",
   "profileMcpSimpleHint": "Paste the setup prompt into a {client} chat opened in your project.",
+  "worldReviewReplyKeep": "Good. I’ll keep it close.",
+  "worldReviewReplyLetGo": "Okay. I’ll let it rest.",
   "worldInspirationReviewQuestion": "Does this still matter to you?",
   "worldInspirationStillRelevant": "Yes",
   "worldInspirationNotRelevant": "Not really",

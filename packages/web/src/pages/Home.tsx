@@ -5917,17 +5917,21 @@ const RETRY_READ_LIMIT_MS = 20_000;
      save while "Kept" stood said the same word, so its stay was measured
      from the first save and it left early. */
   const [keptSaves, setKeptSaves] = useState(0);
+  /** Bumped by each review reply, so a second identical reply gets its own stay. */
+  const [replyBeat, setReplyBeat] = useState(0);
+  /** The reply as it was said, so a later locale change cannot unmark it. */
+  const replyLineRef = useRef('');
   const lineSince = useRef<{ said: string; at: number }>({ said: '', at: 0 });
   const keptWaiting = Boolean(keptImageId) && (!keptWords || keptWords.status === 'reading');
   useEffect(() => {
     if (!charSay || companionPrompt === 'activity') return undefined;
-    const saying = `${charSay}#${keptSaves}`;
+    const saying = `${charSay}#${keptSaves}#${replyBeat}`;
     if (lineSince.current.said !== saying) lineSince.current = { said: saying, at: Date.now() };
     const kept = charSay === say('worldBubbleKept');
     const stay = bubbleStayMs({ kept, waitingForWords: kept && keptWaiting, elapsedMs: Date.now() - lineSince.current.at });
-    const id = window.setTimeout(() => { lineSince.current = { said: '', at: 0 }; setCharSay(""); }, stay);
+    const id = window.setTimeout(() => { lineSince.current = { said: '', at: 0 }; replyLineRef.current = ''; setCharSay(""); }, stay);
     return () => window.clearTimeout(id);
-  }, [charSay, companionPrompt, keptWaiting, keptSaves]);
+  }, [charSay, companionPrompt, keptWaiting, keptSaves, replyBeat]);
   /** What a chat about the save opens with: the note, and the words read. */
   const keptSubject = (kept: { id: string; text: string }) => {
     const read = keptWords?.status === 'ready' && kept.id === visibleInspiration?.id ? keptWords.text?.trim() : '';
@@ -6313,9 +6317,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const rows = await fetchPrinciples(profileId ? { profile: profileId } : {});
     if (memoryScopeRef.current?.profileId === profileId) setPrincipleMemory({ profileId, rows, read: true });
   }, []);
-  /* HOME KNOWS WHETHER THERE IS A PRINCIPLE, so the spark at the right edge
-     shows only when there is somewhere to go (founder, 2026-11-12: "the spark
-     should only show when a principle exists"). Read once per profile. */
+  /* HOME READS THE PRINCIPLES ONCE PER PROFILE: the sky marks the orbs a
+     principle stands on from them. */
   const principlesAsked = useRef<string | null>(null);
   useEffect(() => {
     if (!memoryProfileId || offline || principlesRead || principlesAsked.current === memoryProfileId) return;
@@ -9285,14 +9288,16 @@ const RETRY_READ_LIMIT_MS = 20_000;
           ) : null}
           {/* ═══ A SPARK AT THE RIGHT EDGE, LEVEL WITH THE CREATURE (founder,
               2026-11-12, choosing "A spark" of six) ═══ Principles lie to the
-              right, and nothing on home said so. One small four-point spark
+              right, and nothing on home said so. One four-point spark
               rests dim at the edge and glints every few seconds; a press
               walks there, the same walk the creature's drag takes. Light
-              only, no arrow and no word. */}
-          {homeChromeShown && atWall.kind === 'self' && principles.length > 0 ? (
+              only, no arrow and no word. Always there on your own home
+              (founder, 2026-11-19: "yes always shown"); with no principle
+              yet, the walk ends on the page that says how they come. */}
+          {homeChromeShown && atWall.kind === 'self' && !offline ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
-              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
               </svg>
             </button>
@@ -9741,6 +9746,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
                     <button type="button" className="jar-char-bubble-act"
                       onClick={() => { setCharSay(''); openSheet(); }}>{say('worldBubbleSeeAll')}</button>
                   </span>
+                ) : charSay !== '' && charSay === replyLineRef.current ? (
+                  /* A REPLY TO YOUR ANSWER ENDS THERE: a chat opening on "I'll
+                     keep it close" would have nothing to be about (code
+                     review, 2026-11-19). */
+                  null
                 ) : sayIsAboutNothing(charSay) ? (
                   standingAsAgent ? null : (
                     <span className="jar-char-bubble-acts">
@@ -9918,6 +9928,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 item={inspirationReviewQueue[0]} profileId={storageScope.profileId} locale={locale} more={toReview>1}
                 onChanged={async choice=>{
                   verifyReadingRef.current(true);
+                  /* THE CREATURE ANSWERS THE ANSWER (founder, 2026-11-19): it
+                     asked, so it says something back before the next card. */
+                  replyLineRef.current=say(choice==='relevant'?'worldReviewReplyKeep':'worldReviewReplyLetGo');
+                  setCharSay(replyLineRef.current);setReplyBeat(n=>n+1);
                   if(choice!=='not_relevant')return;
                   const queueAtSend=queueLoadRef.current;
                   // Removing support can retire a signal already in this sitting.
