@@ -49,6 +49,9 @@ describe('the "<" is one glyph, named by what it does', () => {
     const glyph = head.querySelector<HTMLButtonElement>(':scope > button.waka-surface-back')!;
     expect(glyph.getAttribute('aria-label')).toBe(name);
     expect(glyph.querySelector('svg'), 'the "<" is not drawn').not.toBeNull();
+    /* X closes, "<" goes back (founder meeting, 2026-11-20). */
+    expect(glyph.querySelector('path')!.getAttribute('d'), 'the glyph does not say what the press does')
+      .toBe(kind === 'close' ? 'M6.5 6.5l11 11M17.5 6.5l-11 11' : 'm14 5-7 7 7 7');
     expect(seen(glyph), 'a word is written beside the "<"').toBe('');
     expect(head.firstElementChild, 'the "<" is not first in the row').toBe(glyph);
     await act(async () => glyph.click());
