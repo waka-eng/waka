@@ -1129,7 +1129,11 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   // The glow settles after a tap; the chosen invitation stays until the
   // next tap or navigation. Agent profiles never offer to save on their behalf.
   const [lit, setLit] = useState(false);
+  /* A tap on the creature asks the bar to answer (`barBeckon` counts the
+     taps); the bar lights only when what the creature then says is asking
+     for a save, and only right then (`beckonLit`, when it was decided). */
   const [barBeckon, setBarBeckon] = useState(0);
+  const [beckonLit, setBeckonLit] = useState({ n: 0, at: 0 });
   const litTimer = useRef<number | null>(null);
   /* BOTH OF THE PRESS'S TIMERS, not just the glow's. A press starts two:
      `litTimer` for the glow, and the grace timer in `sayTheWeather` that
@@ -2007,6 +2011,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     setCharSay('');
     setLit(true);
     setBarBeckon(n => n + 1);
+    simApiRef.current?.flourish();
     if (litTimer.current !== null) window.clearTimeout(litTimer.current);
     litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
     if (next === 'activity' && sayLineRef.current) sayTheWeatherRef.current(sayLineRef.current);
@@ -3214,6 +3219,23 @@ const RETRY_READ_LIMIT_MS = 20_000;
   sayTheWeatherRef.current = sayTheWeather;
   /* The loop is built once and must call the CURRENT rotation, the same
      reason every other seam in this file reaches through a ref. */
+  /* THE BAR ANSWERS ONLY AN ASK TO SAVE (founder, 2026-11-20: "only when
+     nothing is saved yet ... it should highlight the bottom. If the thing is
+     chat about this and see all, then clicking the bottom thing is less
+     relevant"). Read off what the bubble now shows, a frame after the tap and
+     again once a slower line has landed; never on a return from a page,
+     since only a tap moves `barBeckon`. */
+  useEffect(() => {
+    if (!barBeckon) return undefined;
+    let done = false;
+    const look = () => {
+      if (done || !document.querySelector('.jar-char-bubble[data-invites-save], .jar-char-bubble [data-invites-save]')) return;
+      done = true; setBeckonLit({ n: barBeckon, at: Date.now() });
+    };
+    const frame = requestAnimationFrame(look);
+    const later = window.setTimeout(look, 350);
+    return () => { cancelAnimationFrame(frame); window.clearTimeout(later); };
+  }, [barBeckon]);
   const creatureSpeaksRef = useRef(creatureSpeaks);
   creatureSpeaksRef.current = creatureSpeaks;
 
@@ -9457,6 +9479,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                    through `charSay`, which is always the lighter weight. */
                 <div
                   className={`jar-char-bubble${(lead && !standingAsAgent) || agentSays ? ' jar-char-bubble--reading' : ''}`}
+                  data-invites-save={!lead && !agentSays && !standingAsAgent ? '1' : undefined}
                   data-jar-chrome="1"
                   /* Both states of this bubble are pressable — a reading and
                      the empty line — so the flag is unconditional. */
@@ -9777,7 +9800,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 ) : sayIsAboutNothing(charSay) ? (
                   standingAsAgent ? null : (
                     <span className="jar-char-bubble-acts">
-                      <button type="button" className="jar-char-bubble-act"
+                      <button type="button" className="jar-char-bubble-act" data-invites-save="1"
                         onClick={startNewInspiration}>
                         {say('worldBubbleActAdd')}
                       </button>
@@ -11396,7 +11419,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
             photoDisabled: !composerDraft.available,
           }}
           onChat={() => openTalk(null)}
-          beckon={barBeckon}
+          /* Fresh only: a bar mounted again later (back from Principles)
+             does not replay an old answer. */
+          beckon={beckonLit.n && Date.now() - beckonLit.at < 1700 ? beckonLit.n : 0}
           saved={barSaved}
           /* ON AN AGENT'S WALL THE PULL OPENS ITS ARCHIVE. The sheet reads
              your own field, so it is yours alone; the agent's saves are its
