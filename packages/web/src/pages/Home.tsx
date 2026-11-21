@@ -1133,7 +1133,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      taps); the bar lights only when what the creature then says is asking
      for a save, and only right then (`beckonLit`, when it was decided). */
   const [barBeckon, setBarBeckon] = useState(0);
-  const [beckonLit, setBeckonLit] = useState({ n: 0, at: 0 });
+  const [beckonLit, setBeckonLit] = useState<{ n: number; at: number; to: 'save' | 'chat' | 'star' }>({ n: 0, at: 0, to: 'save' });
   const litTimer = useRef<number | null>(null);
   /* BOTH OF THE PRESS'S TIMERS, not just the glow's. A press starts two:
      `litTimer` for the glow, and the grace timer in `sayTheWeather` that
@@ -3219,18 +3219,21 @@ const RETRY_READ_LIMIT_MS = 20_000;
   sayTheWeatherRef.current = sayTheWeather;
   /* The loop is built once and must call the CURRENT rotation, the same
      reason every other seam in this file reaches through a ref. */
-  /* THE BAR ANSWERS ONLY AN ASK TO SAVE (founder, 2026-11-20: "only when
-     nothing is saved yet ... it should highlight the bottom. If the thing is
-     chat about this and see all, then clicking the bottom thing is less
-     relevant"). Read off what the bubble now shows, a frame after the tap and
-     again once a slower line has landed; never on a return from a page,
+  /* THE LIGHT GOES WHERE THE LINE POINTS (founder, 2026-11-20: "nothing
+     saved yet -> save an inspiration should highlight; chat about it -> chat
+     button should highlight; mentioning principle -> star on right could be
+     bigger and spark brighter"). A line marks what it invites with
+     `data-invites`; read off what the bubble now shows, a frame after the tap
+     and again once a slower line has landed. A line inviting nothing (See
+     all) lights nothing, and a return from a page never lights anything,
      since only a tap moves `barBeckon`. */
   useEffect(() => {
     if (!barBeckon) return undefined;
     let done = false;
     const look = () => {
-      if (done || !document.querySelector('.jar-char-bubble[data-invites-save], .jar-char-bubble [data-invites-save]')) return;
-      done = true; setBeckonLit({ n: barBeckon, at: Date.now() });
+      const to = document.querySelector<HTMLElement>('.jar-char-bubble[data-invites], .jar-char-bubble [data-invites]')?.dataset.invites;
+      if (done || (to !== 'save' && to !== 'chat' && to !== 'star')) return;
+      done = true; setBeckonLit({ n: barBeckon, at: Date.now(), to });
     };
     const frame = requestAnimationFrame(look);
     const later = window.setTimeout(look, 350);
@@ -9324,7 +9327,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
           {homeChromeShown && atWall.kind === 'self' && !offline ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
-              <PrinciplesSpark />
+              {/* A line about principles makes the star swell and flare. */}
+              {beckonLit.to === 'star' && beckonLit.n && Date.now() - beckonLit.at < 1700
+                ? <span key={beckonLit.n} className="waka-principles-spark-beckon"><PrinciplesSpark /></span>
+                : <PrinciplesSpark />}
             </button>
           ) : null}
           {/* Taps change the invitation on this profile; dragging right
@@ -9479,7 +9485,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                    through `charSay`, which is always the lighter weight. */
                 <div
                   className={`jar-char-bubble${(lead && !standingAsAgent) || agentSays ? ' jar-char-bubble--reading' : ''}`}
-                  data-invites-save={!lead && !agentSays && !standingAsAgent ? '1' : undefined}
+                  data-invites={standingAsAgent || agentSays ? undefined : lead ? 'chat' : 'save'}
                   data-jar-chrome="1"
                   /* Both states of this bubble are pressable — a reading and
                      the empty line — so the flag is unconditional. */
@@ -9699,7 +9705,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             </>
           ) : null}
           {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'principles' ? (
-            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
+            <div className="jar-char-bubble" data-invites="star" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">{say('worldCompanionPrinciplesPrompt')}</span>
                 <span className="jar-char-bubble-acts">
@@ -9784,7 +9790,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                      (E5); See all pulls up the saves. A keep with no words
                      has nothing to talk about yet, so it offers See all. */
                   <span className="jar-char-bubble-acts">
-                    {visibleInspiration && keptSubject(visibleInspiration).text ? <button type="button" className="jar-char-bubble-act"
+                    {visibleInspiration && keptSubject(visibleInspiration).text ? <button type="button" className="jar-char-bubble-act" data-invites="chat"
                       disabled={talking}
                       onClick={() => { const kept = keptSubject(visibleInspiration); chatOn({ quote: kept.text, inspirationId: kept.id || undefined,selection:{locale,text:kept.text,source:{kind:'inspiration',id:kept.id,...(keptWords?.status==='ready'&&keptWords.text?.trim()&&keptImageId?{imageId:keptImageId}:{})}} }); }}>
                       {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
@@ -9800,7 +9806,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 ) : sayIsAboutNothing(charSay) ? (
                   standingAsAgent ? null : (
                     <span className="jar-char-bubble-acts">
-                      <button type="button" className="jar-char-bubble-act" data-invites-save="1"
+                      <button type="button" className="jar-char-bubble-act" data-invites="save"
                         onClick={startNewInspiration}>
                         {say('worldBubbleActAdd')}
                       </button>
@@ -9808,7 +9814,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   )
                 ) : (
                   <span className="jar-char-bubble-acts">
-                    <button type="button" className="jar-char-bubble-act"
+                    <button type="button" className="jar-char-bubble-act" data-invites="chat"
                       disabled={talking}
                       onClick={() => {
                         if (charSay) { chatOn({ ask: charSay, turn: true }); return; }
@@ -11421,7 +11427,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           onChat={() => openTalk(null)}
           /* Fresh only: a bar mounted again later (back from Principles)
              does not replay an old answer. */
-          beckon={beckonLit.n && Date.now() - beckonLit.at < 1700 ? beckonLit.n : 0}
+          beckon={beckonLit.n && Date.now() - beckonLit.at < 1700 && beckonLit.to !== 'star' ? { n: beckonLit.n, to: beckonLit.to } : undefined}
           saved={barSaved}
           /* ON AN AGENT'S WALL THE PULL OPENS ITS ARCHIVE. The sheet reads
              your own field, so it is yours alone; the agent's saves are its

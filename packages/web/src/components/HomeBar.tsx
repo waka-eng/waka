@@ -59,9 +59,9 @@ export function HomeBar(props: {
   /** "{n} kept ⌃": opens the saves, patterns and principles. `kept` is how
       many you have kept, absent while unknown; at none or unknown it reads "Kept". */
   pull?: { onOpen: () => void; kept?: number };
-  /** Counts the creature's taps. Each new value lights the pill once, so a
-      tap on the creature answers where saving happens. */
-  beckon?: number;
+  /** A tap on the creature lit what its line points to: the Save pill or
+      Chat. Each new `n` plays the light once. */
+  beckon?: { n: number; to: 'save' | 'chat' };
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const photos = useRef<HTMLInputElement>(null);
@@ -85,7 +85,7 @@ export function HomeBar(props: {
                 and the bar stays where the thumb is, so "when you click on
                 the character make the bottom bar also illuminate to
                 respond". Keyed by the tap count so every tap replays it. */}
-            {props.beckon ? <span key={props.beckon} className="waka-home-bar-beckon" aria-hidden="true" /> : null}
+            {props.beckon?.to === 'save' ? <span key={props.beckon.n} className="waka-home-bar-beckon" aria-hidden="true" /> : null}
             <button type="button" className="waka-home-bar-door waka-home-bar-field" aria-label={say('worldBarKeepThought')} onClick={save.onWrite}>
               <span>{say('worldBarThoughtPrompt')}</span>
             </button>
@@ -104,6 +104,7 @@ export function HomeBar(props: {
         ) : null}
         <button type="button" className="waka-home-bar-chat" aria-label={say('worldBarChat')}
           disabled={props.chatDisabled} onClick={props.onChat}>
+          {props.beckon?.to === 'chat' ? <span key={props.beckon.n} className="waka-home-bar-beckon" aria-hidden="true" /> : null}
           <HomeActionIcon kind="bubble" />
         </button>
       </div>
