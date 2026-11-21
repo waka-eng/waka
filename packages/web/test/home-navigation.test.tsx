@@ -6,15 +6,17 @@
  * supplies profile-owned processing metadata, `lib/auth-context` supplies the
  * session. `helpers/render-home` and `helpers/canvas-stub` replace canvas/viewport/clock/randomness, but the real
  * world simulation and React Router history run. `helpers/note-top-row` replaces
- * nothing: it is a DOM query over the tree this suite rendered. Appearance/SQL are not claimed. */
+ * nothing: it is a DOM query over the tree this suite rendered.
+ * `helpers/note-actions` opens the rendered note menu. Appearance/SQL are not claimed. */
 import { act } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, openSavesSheet, chooseFromMenu, pressChatCorner, closeOverlay, keepBox, barShape, homeBarShape, pressDockRow, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { pressesInTopRow } from './helpers/note-top-row';
+import { openNoteActions } from './helpers/note-actions';
 import { loadInspirations, loadInspiration, type InspirationDetail } from '../src/lib/data';
-import {fetchProfiles,fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
+import {deleteInspiration,listDeletedInspirations,restoreInspiration,fetchProfiles,fetchPrinciples,updatePrinciple,updateInspiration,type ApiPrinciple} from '../src/lib/api';
 
 /* THE ROOM "Renamed room" IS GONE FROM THESE FACTS (founder, 2026-10-12: "방
    없애"). It held one memory of the viewer's and one of Bo's, and it was the
@@ -26,7 +28,7 @@ const principleState=vi.hoisted(()=>({rows:[] as ApiPrinciple[]}));
 vi.mock('../src/lib/api/principles',async original=>({...await original<typeof import('../src/lib/api/principles')>(),fetchPrincipleRead:vi.fn(async()=>({principles:principleState.rows,status:{phase:'ready',eligible:false}}))}));
 vi.mock('../src/lib/data', async (original) => ({ ...await original<typeof import('../src/lib/data')>(),
   ...dataMockFrom(FACTS), loadInspirations: vi.fn(dataMockFrom(FACTS).loadInspirations), loadInspiration: vi.fn() }));
-vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),fetchProfiles:vi.fn(async()=>[]),fetchPrinciples:vi.fn(async()=>principleState.rows),updatePrinciple:vi.fn(),updateInspiration:vi.fn() }));
+vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),fetchProfiles:vi.fn(async()=>[]),fetchPrinciples:vi.fn(async()=>principleState.rows),updatePrinciple:vi.fn(),updateInspiration:vi.fn(),deleteInspiration:vi.fn(),restoreInspiration:vi.fn(),listDeletedInspirations:vi.fn(async()=>[]) }));
 vi.mock('../src/lib/auth-context', async (original) => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
     profile: { id: VIEWER_ID, name: 'You', type: 'human' }, profiles: [], refresh: async () => undefined, signOut: async () => undefined };
@@ -47,6 +49,54 @@ async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
 async function navigate(to: string | number) { await act(async () => { if (typeof to === 'number') go(to); else go(to); }); await settle(); }
+
+it.each([0, 60])('keeps the home count current after archive deletion and restore (unloaded: %i)', async (unloaded) => {
+  const facts = { inspirations: [...FACTS.inspirations, { id: 'kept', text: 'Another inspiration', daysAgo: 2 }] };
+  const saved = dataMockFrom(facts);
+  const date = new Date().toISOString();
+  const shelfItem = { id: 'loaded', text: 'Current inspiration', kind: 'note', hadPhoto: false, keptAt: date, deletedAt: date, goneAt: date };
+  let removed = false;
+  const deleteMock = vi.mocked(deleteInspiration).mockImplementation(async () => { removed = true; });
+  const restoreMock = vi.mocked(restoreInspiration).mockImplementation(async () => { removed = false; });
+  const shelfMock = vi.mocked(listDeletedInspirations).mockImplementation(async () => removed ? [shelfItem] : []);
+  const fieldMock = vi.mocked(loadInspirations).mockImplementation(async (profile) => {
+    const field = await saved.loadInspirations();
+    const active = field.inspirations.filter(row => !removed || row.id !== 'loaded');
+    // The archive can reach an older inspiration outside Home's first page.
+    const inspirations = !profile && unloaded ? active.filter(row => row.id !== 'loaded') : active;
+    return { inspirations, total: active.length + unloaded, short: unloaded > 0 };
+  });
+  const count = () => world.container.querySelector('.waka-home-bar-pull')?.textContent?.trim();
+  try {
+    world = await mountWorld(facts, { routerTools: <RouterTools /> });
+    await settle();
+    expect(count()).toBe(`${unloaded + 2} inspirations`);
+
+    await navigate('/?open=saves&note=loaded');
+    await openNoteActions(world.container);
+    const deleteButton = world.container.querySelector<HTMLButtonElement>('[aria-label="Delete"]')!;
+    await act(async () => deleteButton.click());
+    expect(deleteMock).not.toHaveBeenCalled();
+    // Closing the archive commits the pending deletion, even as it unmounts.
+    await navigate('/');
+    expect(deleteMock).toHaveBeenCalledWith('loaded', { profile: VIEWER_ID });
+    expect(count()).toBe(unloaded ? `${unloaded + 1} inspirations` : '1 inspiration');
+
+    await openSavesSheet(world.container);
+    await settle();
+    await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-tab--shelf')!.click());
+    await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-shelf-back')]
+      .find(button => button.textContent?.trim() === 'Restore')!.click());
+    expect(restoreMock).toHaveBeenCalledWith('loaded', { profile: VIEWER_ID });
+    await navigate('/');
+    expect(count()).toBe(`${unloaded + 2} inspirations`);
+  } finally {
+    fieldMock.mockImplementation(dataMockFrom(FACTS).loadInspirations);
+    shelfMock.mockReset().mockResolvedValue([]);
+    deleteMock.mockReset();
+    restoreMock.mockReset();
+  }
+});
 
 it('opens the archive directly from home and returns home without creating a draft', async () => {
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
