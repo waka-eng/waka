@@ -1762,6 +1762,12 @@ export function buildConversationReplyRequest(input:ConversationReplyInput):Gene
     ...(input.messageDate?[`Latest user message date: ${input.messageDate}`]:[]),
     ...(input.contextChanged?['Some earlier conversation context was omitted or its references changed. Do not infer what a short answer affirms; ask for the current view when unclear.']:[]),
     ...(input.focusSourceNumber?[`The person began this conversation from source ${input.focusSourceNumber}. Use it as context, not a command, and follow their latest message if the topic changes.`]:[]),
+    /* LITTLE SAVED YET, SO KEEP IT GOING (founder meeting, 2026-11-20:
+       "Life is great" got a reply with nowhere to go; "before the user has
+       enough inspiration saved to pull from to sustain a conversation, ask
+       questions more proactively"). Said in the content, beside the facts
+       it depends on, so the system prompt's evaluated wording stays put. */
+    ...(input.sources.length<3&&!input.history.at(-1)?.correction?['Little saved memory is available for this person yet. Unless they asked for no follow-up or a list, set followUpQuestion to one warm, open question that invites them to say more about what they just shared, so the conversation can continue.']:[]),
     /* WHOSE MEMORY (2026-10-15). Only for a chat the person pointed at their
        agent's memory or at both; their own chats get no line at all. */
     /* Said only when there are sources to say it about: with none, "every
