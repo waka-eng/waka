@@ -83,6 +83,27 @@ it('combines independently supported originals and review support through the sa
   await expect(t.sql`UPDATE signals SET status='emerging',statement='An unverified new claim' WHERE id=${f.signalId}`).resolves.toBeDefined();
   await expect(t.sql`UPDATE signals SET status='active' WHERE id=${f.signalId}`).rejects.toThrow(/with 0 evidence/);
 });
+it('keeps an active pattern with three independent current witnesses beside a stale link', async () => {
+  const f = await fixture();
+  const distinct = await answer(f, [f.ids[2]!]);
+  const duplicate = await answer(f, [f.ids[0]!]);
+  await support(f, distinct);
+  await support(f, duplicate);
+  await raw(f, f.ids[0]!);
+  await raw(f, f.ids[1]!);
+  const [extra] = await t.sql`INSERT INTO inspirations(profile_id,text)
+    VALUES(${f.profileId},'Additional evidence before editing.') RETURNING id`;
+  await raw(f, extra.id);
+  await t.sql`UPDATE signals SET status='active' WHERE id=${f.signalId}`;
+
+  await t.sql`UPDATE inspirations SET text='Changed original.' WHERE id=${extra.id}`;
+  const current = () => loadPrincipleMaterial(t.db as never, f.profileId);
+  expect((await current()).evidence.get(f.signalId)?.evidenceAt).toHaveLength(3);
+
+  await t.sql`UPDATE review_answers SET answer='Changed review answer.' WHERE id=${distinct}`;
+  expect(await count(f)).toBe(2);
+  expect((await current()).activeSignals).toEqual([]);
+});
 it('fences every source change, including after the old question was already withdrawn',async()=>{
   const f=await fixture(),a=await answer(f,[f.ids[0]!]);await support(f,a);
   const first=await readGenerationRevision(t.db as never,{profileId:f.profileId});
