@@ -82,14 +82,14 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
    "Retrying…" until its request answers. */
 export async function requestPrincipleRefresh(db: Db, profileId: string, retry = false) {
   await db.transaction(async (tx) => {
-    const sources = await recoverPendingSignalSupport(tx, profileId);
-    if (sources.length) await enqueueTopOfMindRefresh(profileId, 'manual', tx);
+    const supportQueued = await recoverPendingSignalSupport(tx, profileId);
+    if (supportQueued) await enqueueTopOfMindRefresh(profileId, 'manual', tx);
     /* A RETRY ALSO RESTARTS A READING THAT FAILED. Before, it re-enqueued
        principles and pending support only, so "Try again" under a paused
        reading asked for the one job that was not the problem. Only on an
        explicit retry, and only when the latest reading job did fail — a
        plain refresh still never buys a synthesis nobody asked for. */
-    if (retry && !sources.length) {
+    if (retry && !supportQueued) {
       if ((await latestReadingJob(tx, profileId))?.status === "failed") await enqueueTopOfMindRefresh(profileId, 'manual', tx);
     }
     await enqueueEligiblePrinciples(tx, profileId, retry, tx);

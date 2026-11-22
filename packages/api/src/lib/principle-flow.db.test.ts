@@ -6,6 +6,8 @@ import { loadPrincipleViews, renderPrinciplesMarkdown, undoPrincipleDispute } fr
 import { createFeedbackForProfile } from "../routes/feedback.js";
 import { loadPrincipleMaterial, promoteIfDemonstrated, refreshPrinciplesForProfile, reconcilePrinciplesAfterSignalLoss } from "./principle-generation.js";
 import { requestPrincipleRefresh, loadPrincipleStatus } from "./principle-status.js";
+import { applySignalSupportReview } from './signal-support-apply.js';
+import { reviewSignalSupport } from './signal-support-review.js';
 import {principleMaterialKey} from './principle-material-key.js';
 import type { ModelProvider } from "./model-provider.js";
 import {createReviewSession} from './review-sessions.js';
@@ -181,6 +183,52 @@ describe("principles across personal profiles", () => {
     await requestPrincipleRefresh(t.db as never,profileId);await requestPrincipleRefresh(t.db as never,profileId);
     const jobs=await t.sql`SELECT status FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_principles'`;
     expect(jobs).toHaveLength(2);expect(jobs.filter(row=>row.status==='pending')).toHaveLength(1);
+  });
+  it.each([3, 2])('recounts %i current witnesses after an inconclusive review without requeuing the reading', async remaining => {
+    const profileId = await person();
+    const [signalId] = await material(profileId, [profileId]);
+    const [source] = await t.sql`SELECT inspiration_id AS id FROM signal_evidence WHERE signal_id=${signalId!} LIMIT 1`;
+    if (remaining === 3) {
+      const [extra] = await t.sql`INSERT INTO inspirations(profile_id,text)
+        VALUES(${profileId},'Another independent example.') RETURNING id`;
+      await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
+        VALUES(${profileId},${profileId},${signalId!},${extra.id})`;
+    }
+    const db = t.db as never;
+    expect((await refreshPrinciplesForProfile({ profileId }, { db, modelProvider: provider })).minted).toBe(1);
+    const [stored] = await loadPrincipleViews(db, profileId);
+    await t.sql`UPDATE inspirations SET text='An edit with no clear verdict.' WHERE id=${source.id}`;
+    const report = await reviewSignalSupport(db, {
+      ownerProfileId: profileId, inspirationId: source.id, maxCalls: 1,
+      provider: { assessSignalSupport: async ({ claims }) => ({
+        assessments: claims.map(claim => ({ signalId: claim.signalId, verdict: 'unresolved', sourceIds: [] })),
+      }) },
+    });
+    expect(await applySignalSupportReview(db, report)).toMatchObject({ withdrawn: [], restored: [], jobId: null });
+    await t.sql`INSERT INTO background_jobs(profile_id,type,payload,status,idempotency_key)
+      VALUES(${profileId},'review_signal_support',${JSON.stringify({ inspirationId: source.id })}::jsonb,
+        'succeeded',${`review_signal_support:${source.id}`})`;
+
+    const views = await loadPrincipleViews(db, profileId);
+    if (remaining === 3) expect(views).toMatchObject([{ id: stored!.id, supportChanged: false }]);
+    else expect(views).toEqual([]);
+    expect(JSON.stringify(views)).not.toContain('An edit with no clear verdict.');
+    expect((await loadPrincipleMaterial(db, profileId)).eligibility.eligible).toBe(remaining === 3);
+
+    await requestPrincipleRefresh(db, profileId);
+    await requestPrincipleRefresh(db, profileId);
+    const jobs = await t.sql`SELECT type,status,request_version::int AS version FROM background_jobs
+      WHERE profile_id=${profileId} ORDER BY type`;
+    expect(jobs.filter(job => job.type === 'review_signal_support')).toEqual([
+      { type: 'review_signal_support', status: 'succeeded', version: 1 },
+    ]);
+    expect(jobs.filter(job => job.type === 'refresh_top_of_mind')).toEqual([]);
+    expect(jobs.filter(job => job.type === 'refresh_principles')).toHaveLength(remaining === 3 ? 1 : 0);
+    expect(await t.sql`SELECT id FROM signal_evidence WHERE inspiration_id=${source.id}`).toHaveLength(1);
+    if (remaining === 3) {
+      await t.sql`UPDATE inspirations SET memory_excluded_at=now() WHERE id=${source.id}`;
+      expect(await loadPrincipleViews(db, profileId)).toEqual([]);
+    }
   });
   it('changes work identity after a source edit is revalidated without changing its capture date',async()=>{
     const profileId=await person();

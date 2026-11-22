@@ -589,6 +589,7 @@ export async function enqueueSignalSupportBatch(profileId: string, payload: Asse
  * alone; succeeded uncertainty asks for more context, not an automatic loop. */
 export async function recoverPendingSignalSupport(db: Pick<ReturnType<typeof getDb>, 'execute'>, profileId: string) {
   const sources = await loadPendingSignalSupportSources(db, profileId);
+  let queued = false;
   for (const source of sources) {
     // Sources are the profile's own (loadPendingSignalSupportSources reads
     // owned evidence only since the room engine retired), so the review is
@@ -596,16 +597,21 @@ export async function recoverPendingSignalSupport(db: Pick<ReturnType<typeof get
     const key = `review_signal_support:${source.inspirationId}`;
     const [job] = await db.execute<{ status: string }>(sql`SELECT status::text FROM background_jobs
       WHERE idempotency_key = ${key} AND profile_id = ${source.ownerProfileId}::uuid`);
-    if (!job || job.status === 'failed') await enqueueSignalSupportReview(source.ownerProfileId, source.inspirationId, db);
-    await db.execute(sql`UPDATE background_jobs SET status = 'pending', attempts = 0, locked_at = NULL,
+    if (!job || job.status === 'failed') {
+      await enqueueSignalSupportReview(source.ownerProfileId, source.inspirationId, db);
+      queued = true;
+    }
+    const retried = await db.execute(sql`UPDATE background_jobs SET status = 'pending', attempts = 0, locked_at = NULL,
       request_version = request_version + 1, run_after = now(), last_error = NULL, result = NULL, rerun_requested = false
       WHERE type::text = 'assess_signal_support' AND status::text = 'failed'
         AND profile_id = ${profileId}::uuid AND payload->>'inspirationId' = ${source.inspirationId}
         AND ${withoutLegacyGroupDestination(sql`payload`)}
         AND payload->>'materialRevision' = (SELECT personal_revision::text FROM inspiration_revisions
-          WHERE inspiration_id = ${source.inspirationId}::uuid AND profile_id = ${profileId}::uuid)`);
+          WHERE inspiration_id = ${source.inspirationId}::uuid AND profile_id = ${profileId}::uuid)
+      RETURNING id`);
+    if (retried.length > 0) queued = true;
   }
-  return sources;
+  return queued;
 }
 
 /**
