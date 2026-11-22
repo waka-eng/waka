@@ -4,6 +4,7 @@ import { getDb } from "./db.js";
 import { citationBodyCurrent, citationStatementCurrent, evidenceSupportCurrent } from './signal-support-state.js';
 import {reviewEvidenceCurrent} from './review-evidence.js';
 import {feedbackWordingCurrent} from './feedback-revisions.js';
+import { SIGNAL_PROMOTION_MIN_EVIDENCE } from './signal-derivation-thresholds.js';
 
 type Db = Pick<ReturnType<typeof getDb>, "select">;
 
@@ -18,12 +19,30 @@ export function personalSignalReadable(profileId: string) {
         AND pe.owner_profile_id = ${profileId}::uuid)
       OR EXISTS (SELECT 1 FROM signal_review_evidence re WHERE re.profile_id=${profileId}::uuid AND re.signal_id=${signals.id}
         AND ${reviewEvidenceCurrent('re')}))
-    AND NOT EXISTS (SELECT 1 FROM signal_review_evidence re WHERE re.signal_id=${signals.id}
-      AND (${reviewEvidenceCurrent('re')}) IS NOT TRUE)
     AND NOT EXISTS (SELECT 1 FROM signal_evidence pe WHERE pe.signal_id = ${signals.id}
-      AND (${evidenceSupportCurrent('pe')}) IS NOT TRUE)
-    AND NOT EXISTS (SELECT 1 FROM signal_evidence pe WHERE pe.signal_id = ${signals.id}
-      AND pe.owner_profile_id <> ${profileId}::uuid))`;
+      AND pe.owner_profile_id <> ${profileId}::uuid)
+    AND CASE
+      WHEN NOT EXISTS (SELECT 1 FROM signal_review_evidence re WHERE re.signal_id = ${signals.id}
+        AND (${reviewEvidenceCurrent('re')}) IS NOT TRUE)
+        AND NOT EXISTS (SELECT 1 FROM signal_evidence pe WHERE pe.signal_id = ${signals.id}
+          AND (${evidenceSupportCurrent('pe')}) IS NOT TRUE) THEN TRUE
+      WHEN ${signals.status} = 'active' THEN
+        -- Keep explicit exclusions in force, including context in a review.
+        NOT EXISTS (SELECT 1 FROM signal_evidence pe JOIN inspirations excluded
+          ON excluded.id = pe.inspiration_id AND excluded.profile_id = pe.owner_profile_id
+          WHERE pe.signal_id = ${signals.id} AND excluded.memory_excluded_at IS NOT NULL)
+        AND NOT EXISTS (SELECT 1 FROM signal_review_evidence_sources re JOIN inspirations excluded
+          ON excluded.id = re.inspiration_id AND excluded.profile_id = re.profile_id
+          WHERE re.signal_id = ${signals.id} AND excluded.memory_excluded_at IS NOT NULL)
+        -- Reuse the promotion counter on current, owned witnesses when some
+        -- links still need checking. The ordinary read avoids this count.
+        AND (SELECT independent_evidence_count(jsonb_agg(jsonb_build_object(
+          'kind', edge.kind, 'unit', edge.unit_id, 'origin', edge.origin_id)), ${SIGNAL_PROMOTION_MIN_EVIDENCE})
+          FROM signal_support_edges(${signals.id}) edge JOIN inspirations origin
+            ON origin.id = edge.origin_id AND origin.profile_id = ${profileId}::uuid
+          WHERE edge.current IS TRUE AND edge.created_at <= now()) >= ${SIGNAL_PROMOTION_MIN_EVIDENCE}
+      ELSE FALSE
+    END)`;
 }
 
 /** Apply before a public limit: hidden rows must not crowd readable entries
