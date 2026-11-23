@@ -4,6 +4,7 @@
  * not a measured cloud claim; handler signaling has separate unit coverage. */
 import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
+import {EmbeddingIndexNeedsRetry} from './embedding-indexer.js';
 import {OpenRouterHttpError} from './openrouter-http.js';
 import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
@@ -109,6 +110,61 @@ it('settles an actual wrapped PostgreSQL failure without storing or logging its 
     expect(JSON.parse(row!.last_error)).toEqual({category:'database',code:'22P02'});
     expect(JSON.stringify([warn.mock.calls,error.mock.calls])).not.toContain(marker);
   } finally { warn.mockRestore();error.mockRestore(); }
+});
+
+it('spaces real lock conflicts and resumes the job without leaking bound values', async () => {
+  const job = await fixture(0, 3);
+  const marker = 'synthetic-lock-query-value';
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const retries: BackgroundJobRetryWake[] = [];
+  const processor = vi.fn(async () => {
+    await getDb().execute(sql`SELECT ${marker}::text FROM profiles
+      WHERE id=${job.profileId}::uuid FOR UPDATE NOWAIT`);
+  });
+  const run = (at: Date) => drainBackgroundJobs({ now: at, limit: 1, processor,
+    onTransientRetry: wake => { retries.push(wake); } });
+  try {
+    await t.sql.begin(async tx => {
+      await tx`SET LOCAL idle_in_transaction_session_timeout = '8s'`;
+      await tx`SELECT id FROM profiles WHERE id=${job.profileId} FOR UPDATE`;
+      expect(await run(now)).toMatchObject({ retried: 1, failed: 0 });
+      const first = retries[0]!.runAfter;
+      expect(first.getTime() - now.getTime()).toBeGreaterThanOrEqual(60_000);
+      expect(first.getTime() - now.getTime()).toBeLessThanOrEqual(75_000);
+      expect(await hasNearTermBackgroundJobRetry(retries, getDb(), now)).toBe(true);
+      expect(await run(new Date(first.getTime() - 1))).toMatchObject({ claimed: 0 });
+      expect(await run(first)).toMatchObject({ retried: 1, failed: 0 });
+      const second = retries[1]!.runAfter;
+      expect(second.getTime() - first.getTime()).toBeGreaterThanOrEqual(180_000);
+      expect(second.getTime() - first.getTime()).toBeLessThanOrEqual(195_000);
+    });
+    const [queued] = await t.sql`SELECT status,attempts,max_attempts,run_after,last_error FROM background_jobs WHERE id=${job.id}`;
+    expect(queued).toMatchObject({ status: 'pending', attempts: 2, max_attempts: 3 });
+    expect(new Date(queued!.run_after)).toEqual(retries[1]!.runAfter);
+    expect(JSON.parse(queued!.last_error)).toEqual({ category: 'database', code: '55P03' });
+    expect(warn).toHaveBeenCalledWith('[background-jobs] attempt settled', expect.objectContaining({
+      jobId: job.id, type: 'derive_signals', attempt: 2, maxAttempts: 3, action: 'retry_queued',
+      runAfter: retries[1]!.runAfter.toISOString(), diagnostic: queued!.last_error,
+    }));
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(marker);
+    expect(await run(retries[1]!.runAfter)).toMatchObject({ succeeded: 1, failed: 0 });
+    expect(processor).toHaveBeenCalledTimes(3);
+  } finally { warn.mockRestore(); }
+});
+
+it('logs when an uncertain embedding outcome requires recovery without scheduling a replay', async () => {
+  const job = await fixture(0, 3);
+  const onTransientRetry = vi.fn();
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    const result = await drainBackgroundJobs({ now, limit: 1, onTransientRetry,
+      processor: async () => { throw new EmbeddingIndexNeedsRetry('outcome_unknown'); } });
+    expect(result).toMatchObject({ failed: 1, retried: 0 });
+    expect(onTransientRetry).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('[background-jobs] attempt settled', expect.objectContaining({
+      jobId: job.id, action: 'failed', attempt: 1, embeddingRecovery: 'outcome_unknown',
+    }));
+  } finally { warn.mockRestore(); }
 });
 
 it('ignores budget deferral even when the row retains its earlier error',async()=>{

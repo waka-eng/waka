@@ -153,7 +153,7 @@ import {
   reviewSessions,
 } from "../db/index.js";
 import { getDb } from "./db.js";
-import { safeErrorDiagnostic } from './error-diagnostics.js';
+import { databaseSqlState, safeErrorDiagnostic } from './error-diagnostics.js';
 import { OpenRouterHttpError } from './openrouter-http.js';
 import { OpenAiHttpError } from './openai-http.js';
 import { ModelConfigurationError } from './model-routing.js';
@@ -983,7 +983,7 @@ export async function drainBackgroundJobs(
       if (exhausted) result.failed += 1;
       else {
         result.retried += 1;
-        options.onTransientRetry?.({id:job.id,profileId:job.profileId,attempts:job.attempts,updatedAt:failedAt,runAfter:calculateBackoffRunAfter(job.attempts,failedAt,err)});
+        options.onTransientRetry?.({id:job.id,profileId:job.profileId,attempts:job.attempts,updatedAt:failedAt,runAfter:calculateBackoffRunAfter(job,failedAt,err)});
       }
     } finally {
       await options.onSettled?.(job);
@@ -1010,6 +1010,21 @@ export async function runBackgroundJobWorker(
 
 /** Settlement fencing alone is too late: a reclaimed worker must not write
  * an artifact first and only discover its lost claim when marking success. */
+class BackgroundJobLockConflict extends Error {
+  constructor(readonly lock: 'profile_revision' | 'job_lease', cause: unknown) {
+    super('Background job lock is busy', { cause });
+  }
+}
+
+async function readJobLock<T>(lock: BackgroundJobLockConflict['lock'], query: PromiseLike<T>): Promise<T> {
+  try {
+    return await query;
+  } catch (error) {
+    if (databaseSqlState(error) === '55P03') throw new BackgroundJobLockConflict(lock, error);
+    throw error;
+  }
+}
+
 async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "select">, job: BackgroundJob, noWait = false) {
   const lockedAt = coerceNullableDate(job.lockedAt);
   if (!lockedAt) throw new Error("Background job ownership changed before commit");
@@ -1034,14 +1049,14 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
         for (const row of destinations) owners.add(row.profileId);
       }
     }
-    await tx.select({ id: generationRevisions.profileId }).from(generationRevisions)
+    await readJobLock('profile_revision', tx.select({ id: generationRevisions.profileId }).from(generationRevisions)
       .where(inArray(generationRevisions.profileId, [...owners])).orderBy(asc(generationRevisions.profileId))
-      .for("update", { noWait: true });
+      .for("update", { noWait: true }));
   }
-  const [owned] = await tx.select({ id: backgroundJobs.id }).from(backgroundJobs)
+  const [owned] = await readJobLock('job_lease', tx.select({ id: backgroundJobs.id }).from(backgroundJobs)
     .where(and(eq(backgroundJobs.id, job.id), eq(backgroundJobs.profileId, job.profileId),
       eq(backgroundJobs.type, job.type), eq(backgroundJobs.status, "running"),
-      eq(backgroundJobs.lockedAt, lockedAt), eq(backgroundJobs.attempts, job.attempts))).for("update", noWait ? { noWait: true } : {});
+      eq(backgroundJobs.lockedAt, lockedAt), eq(backgroundJobs.attempts, job.attempts))).for("update", noWait ? { noWait: true } : {}));
   if (!owned) throw new Error("Background job ownership changed before commit");
 }
 
@@ -1456,6 +1471,21 @@ function backgroundJobDueTime(alias='candidate'){
   return sql`CASE WHEN ${row}.status='pending'::background_job_status THEN ${row}.run_after
     ELSE ${row}.locked_at+(${STALE_LOCK_SECONDS}||' seconds')::interval END`;
 }
+
+/** Hosted claims already serialize their short claim transaction. Derivation
+ * for one profile can wait in the queue while other profiles and job types
+ * remain runnable. An expired lease does not take a slot. */
+export function signalDerivationSlotAvailable(at: ReturnType<typeof sql>, alias: string) {
+  const job = sql.identifier(alias);
+  return sql`(${job}.type <> 'derive_signals'::background_job_type OR NOT EXISTS (
+    SELECT 1 FROM background_jobs active_derivation
+    WHERE active_derivation.profile_id = ${job}.profile_id
+      AND active_derivation.type = 'derive_signals'::background_job_type
+      AND active_derivation.status = 'running'::background_job_status
+      AND active_derivation.locked_at >= ${at} - (${STALE_LOCK_SECONDS} || ' seconds')::interval
+  ))`;
+}
+
 function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string,alias='candidate') {
   const row=sql.identifier(alias);
   return sql`
@@ -1480,6 +1510,7 @@ function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string,
     -- worker must leave it queued, not claim it and spend unsupported retries.
     -- Peek and claim share this predicate, including stale-lease reclamation.
     AND ${row}.type::text IN (${sql.join(backgroundJobTypeValues.map((type) => sql`${type}`), sql`, `)})
+    ${process.env.AWS_LAMBDA_FUNCTION_NAME ? sql`AND ${signalDerivationSlotAvailable(sql`${nowIso}::timestamptz`,alias)}` : sql``}
     ${overdueBeforeIso?sql`AND ${backgroundJobDueTime(alias)}<=${overdueBeforeIso}::timestamptz`:sql``}
   `;
 }
@@ -1896,14 +1927,15 @@ async function markJobFailedOrPending(
   const status: BackgroundJobStatus = exhausted ? "failed" : "pending";
   const lockedAt = exhausted ? (coerceNullableDate(job.lockedAt)?.toISOString() ?? null) : null;
   const runAfter = (
-    exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now, err)
+    exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job, now, err)
   ).toISOString();
-  const settled = await getDb().execute(sql`
+  const diagnostic = jobFailureDiagnostic(err);
+  const [settled] = await getDb().execute<{ status: 'failed' | 'pending'; runAfter: Date | string; currentFailure: boolean }>(sql`
     UPDATE background_jobs
     SET status = CASE WHEN rerun_requested THEN 'pending'::background_job_status ELSE ${status}::background_job_status END,
         locked_at = CASE WHEN rerun_requested THEN NULL ELSE ${lockedAt}::timestamptz END,
         run_after = CASE WHEN rerun_requested THEN ${now.toISOString()}::timestamptz ELSE ${runAfter}::timestamptz END,
-        last_error = CASE WHEN rerun_requested THEN NULL ELSE ${jobFailureDiagnostic(err)} END,
+        last_error = CASE WHEN rerun_requested THEN NULL ELSE ${diagnostic} END,
         attempts = CASE WHEN rerun_requested THEN 0 ELSE attempts END,
         rerun_requested = false,
         -- The version this attempt read has now spent its one malformed retry.
@@ -1916,9 +1948,18 @@ async function markJobFailedOrPending(
     WHERE id = ${job.id}::uuid AND status = 'running'
       AND locked_at = ${coerceNullableDate(job.lockedAt)?.toISOString() ?? null}::timestamptz
       AND attempts = ${job.attempts}
-    RETURNING status
+    RETURNING status, run_after AS "runAfter", last_error IS NOT NULL AS "currentFailure"
   `);
-  if (settled.some(row => row.status === 'failed')) recordOperationalFault('job_terminal');
+  if (!settled) return;
+  if (settled.status === 'failed') recordOperationalFault('job_terminal');
+  console.warn('[background-jobs] attempt settled', {
+    jobId: job.id, type: job.type, requestVersion: job.requestVersion.toString(),
+    attempt: job.attempts, maxAttempts: job.maxAttempts, diagnostic,
+    ...(err instanceof BackgroundJobLockConflict ? { lock: err.lock } : {}),
+    ...(err instanceof EmbeddingIndexNeedsRetry ? { embeddingRecovery: err.code } : {}),
+    action: !settled.currentFailure ? 'newer_request_queued' : settled.status === 'pending' ? 'retry_queued' : 'failed',
+    ...(settled.status === 'pending' ? { runAfter: coerceDate(settled.runAfter).toISOString() } : {}),
+  });
 }
 
 /** Only failures from this drain can request a near-term async wake. A later
@@ -2011,12 +2052,18 @@ function coerceNullableDate(value: Date | string | null): Date | null {
 }
 
 /** 30s, 60s, 120s, … capped at 15 minutes. */
-function calculateBackoffRunAfter(attempts: number, now: Date, error: unknown): Date {
+function calculateBackoffRunAfter(job: Pick<BackgroundJob, 'id' | 'attempts'>, now: Date, error: unknown): Date {
+  if (databaseSqlState(error) === '55P03') {
+    // Stable jitter keeps the persisted due time and the wake hint identical.
+    const seed = Number.parseInt(job.id.slice(0, 4), 16);
+    const delayMs = Math.min(900_000, 60_000 * 3 ** Math.max(0, job.attempts - 1) + (seed % 15_001 || 0));
+    return new Date(now.getTime() + delayMs);
+  }
   // An explicit provider-side outage gets wider spacing within the same
   // attempt budget. Unknown transport outcomes keep their existing policy.
   const unavailable = (error instanceof OpenRouterHttpError || error instanceof OpenAiHttpError)
     && [429, 502, 503, 504].includes(error.status);
-  const delaySeconds = Math.min(15 * 60, (unavailable ? 300 : 30) * 2 ** Math.max(0, attempts - 1));
+  const delaySeconds = Math.min(15 * 60, (unavailable ? 300 : 30) * 2 ** Math.max(0, job.attempts - 1));
   return new Date(now.getTime() + delaySeconds * 1_000);
 }
 
