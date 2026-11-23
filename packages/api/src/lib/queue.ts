@@ -1019,23 +1019,23 @@ export async function runBackgroundJobWorker(
 // The job router
 // ---------------------------------------------------------------------------
 
-/** Settlement fencing alone is too late: a reclaimed worker must not write
- * an artifact first and only discover its lost claim when marking success. */
-class BackgroundJobLockConflict extends Error {
-  constructor(readonly lock: 'profile_revision' | 'job_lease', cause: unknown) {
-    super('Background job lock is busy', { cause });
-  }
-}
+type JobLockLocation = 'profile_revision' | 'job_lease';
+const jobLockLocations = new WeakMap<object, JobLockLocation>();
 
-async function readJobLock<T>(lock: BackgroundJobLockConflict['lock'], query: PromiseLike<T>): Promise<T> {
+async function readJobLock<T>(lock: JobLockLocation, query: PromiseLike<T>): Promise<T> {
   try {
     return await query;
   } catch (error) {
-    if (databaseSqlState(error) === '55P03') throw new BackgroundJobLockConflict(lock, error);
+    // Preserve the driver's exception and cause chain for its callers.
+    if (error && typeof error === 'object' && databaseSqlState(error) === '55P03') {
+      jobLockLocations.set(error, lock);
+    }
     throw error;
   }
 }
 
+/** Settlement fencing alone is too late: a reclaimed worker must not write
+ * an artifact first and only discover its lost claim when marking success. */
 async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "select">, job: BackgroundJob, noWait = false) {
   const lockedAt = coerceNullableDate(job.lockedAt);
   if (!lockedAt) throw new Error("Background job ownership changed before commit");
@@ -1977,10 +1977,11 @@ async function markJobFailedOrPending(
   let action = settled.status === 'pending' ? 'retry_queued' : 'failed';
   if (!settled.currentFailure) action = 'newer_request_queued';
   else if (lockDeferral) action = settled.status === 'pending' ? 'lock_deferred' : 'lock_deferral_limit';
+  const lock = err && typeof err === 'object' ? jobLockLocations.get(err) : undefined;
   console.warn('[background-jobs] attempt settled', {
     jobId: job.id, type: job.type, requestVersion: job.requestVersion.toString(),
     attempt: job.attempts, maxAttempts: job.maxAttempts, diagnostic,
-    ...(err instanceof BackgroundJobLockConflict ? { lock: err.lock } : {}),
+    ...(lock ? { lock } : {}),
     ...(err instanceof EmbeddingIndexNeedsRetry ? { embeddingRecovery: err.code } : {}),
     action,
     ...(lockDeferral && settled.currentFailure ? { lockDeferrals: lockDeferral.checkpoint.count } : {}),
