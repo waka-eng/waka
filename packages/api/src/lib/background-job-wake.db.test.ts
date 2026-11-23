@@ -127,6 +127,34 @@ it('does not bypass an account budget when a pending deadline is delivered', asy
   expect(processor).not.toHaveBeenCalled(); await recoverBackgroundJobWakes('worker'); expect(creates()).toHaveLength(2);
 });
 
+it('runs one hosted derivation per profile and arms waiting work when its slot opens', async () => {
+  vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'synthetic-hosted-worker');
+  const f = await fixture(2);
+  await t.sql`UPDATE background_jobs SET type='derive_signals'`;
+  const [other] = await t.sql`INSERT INTO profiles(account_id,type,name)
+    VALUES(${f.accountId},'agent','Separate profile') RETURNING id`;
+  await t.sql`INSERT INTO background_jobs(profile_id,type,payload,run_after)
+    VALUES(${other.id},'derive_signals','{}',now()-interval '1 second')`;
+  const now = new Date();
+  const claims = (await Promise.all(Array.from({ length: 3 }, () => postgresBackgroundJobStore.claimNext(now))))
+    .filter(job => job !== null);
+  expect(claims.map(job => job.profileId).sort()).toEqual([f.profileId, other.id].sort());
+  const [waiting] = await t.sql`SELECT status,attempts,payload FROM background_jobs WHERE status='pending'`;
+  expect(waiting).toMatchObject({ status: 'pending', attempts: 0, payload: {} });
+  await recoverBackgroundJobWakes('worker', f.profileId);
+  await recoverBackgroundJobWakes('worker', f.profileId);
+  expect(creates()).toHaveLength(1);
+  expect(event()).toMatchObject({ kind: 'lease', profileId: f.profileId });
+
+  const active = claims.find(job => job.profileId === f.profileId)!;
+  await postgresBackgroundJobStore.markSucceeded(active, null);
+  await recoverBackgroundJobWakes('worker', f.profileId);
+  expect(creates()).toHaveLength(2);
+  expect(event(1)).toMatchObject({ kind: 'pending', profileId: f.profileId });
+  expect(await prepareBackgroundJobWake(event(1), now)).toBe(true);
+  expect(await postgresBackgroundJobStore.claimNext(now)).toMatchObject({ profileId: f.profileId, attempts: 1 });
+});
+
 it('limits concurrent hosted claims to four and re-arms a delivered wake while full', async () => {
   await fixture(6);
   vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'synthetic-hosted-worker');
