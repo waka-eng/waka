@@ -153,7 +153,7 @@ import {
   reviewSessions,
 } from "../db/index.js";
 import { getDb } from "./db.js";
-import { safeErrorDiagnostic } from './error-diagnostics.js';
+import { databaseSqlState, safeErrorDiagnostic } from './error-diagnostics.js';
 import { OpenRouterHttpError } from './openrouter-http.js';
 import { OpenAiHttpError } from './openai-http.js';
 import { ModelConfigurationError } from './model-routing.js';
@@ -193,6 +193,7 @@ import {
 } from "./top-of-mind-synthesis.js";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
+const LOCK_DEFERRAL_DELAYS_MS = [15_000, 30_000, 60_000, 120_000, 240_000] as const;
 export const STALE_LOCK_SECONDS = 15 * 60;
 const HOSTED_LIVE_CLAIM_LIMIT = 4;
 
@@ -253,9 +254,8 @@ export interface DrainBackgroundJobsResult {
    */
   deferred: number;
   /**
-   * Jobs put back to sleep by a shift floor — the top of mind moves at most
-   * once a day, and a refresh that arrived early sleeps until the floor
-   * opens. Held, never failed: the attempt is handed back.
+   * Jobs put back to sleep while waiting for cadence, support or a database
+   * lock. The attempt is handed back.
    */
   held: number;
 }
@@ -322,6 +322,7 @@ export interface BackgroundJobStore {
     err: unknown,
     exhausted: boolean,
     now: Date,
+    lockDeferral?: LockDeferral,
   ): Promise<void>;
   /** Put a claimed job back to sleep until `until` — a hold, not a failure:
       the claim's attempt is handed back and no error is recorded. */
@@ -977,13 +978,23 @@ export async function drainBackgroundJobs(
       // retry and an unrelated failure in between changes nothing.
       const malformedRetrySpent = err instanceof MalformedModelOutputError
         && job.malformedRetryVersion !== null && job.malformedRetryVersion === job.requestVersion;
-      const exhausted = job.attempts >= job.maxAttempts || malformedRetrySpent || err instanceof EmbeddingIndexNeedsRetry;
       const failedAt = clock();
-      await store.markFailedOrPending(job, err, exhausted, failedAt);
+      const lockDeferral = planLockDeferral(job, err, failedAt);
+      const exhausted = lockDeferral
+        ? lockDeferral.runAfter === null
+        : job.attempts >= job.maxAttempts || malformedRetrySpent || err instanceof EmbeddingIndexNeedsRetry;
+      await store.markFailedOrPending(job, err, exhausted, failedAt, lockDeferral);
       if (exhausted) result.failed += 1;
       else {
-        result.retried += 1;
-        options.onTransientRetry?.({id:job.id,profileId:job.profileId,attempts:job.attempts,updatedAt:failedAt,runAfter:calculateBackoffRunAfter(job.attempts,failedAt,err)});
+        if (lockDeferral) result.held += 1;
+        else result.retried += 1;
+        options.onTransientRetry?.({
+          id: job.id,
+          profileId: job.profileId,
+          attempts: lockDeferral ? job.attempts - 1 : job.attempts,
+          updatedAt: failedAt,
+          runAfter: lockDeferral?.runAfter ?? calculateBackoffRunAfter(job, failedAt, err),
+        });
       }
     } finally {
       await options.onSettled?.(job);
@@ -1007,6 +1018,21 @@ export async function runBackgroundJobWorker(
 // ---------------------------------------------------------------------------
 // The job router
 // ---------------------------------------------------------------------------
+
+type JobLockLocation = 'profile_revision' | 'job_lease';
+const jobLockLocations = new WeakMap<object, JobLockLocation>();
+
+async function readJobLock<T>(lock: JobLockLocation, query: PromiseLike<T>): Promise<T> {
+  try {
+    return await query;
+  } catch (error) {
+    // Preserve the driver's exception and cause chain for its callers.
+    if (error && typeof error === 'object' && databaseSqlState(error) === '55P03') {
+      jobLockLocations.set(error, lock);
+    }
+    throw error;
+  }
+}
 
 /** Settlement fencing alone is too late: a reclaimed worker must not write
  * an artifact first and only discover its lost claim when marking success. */
@@ -1034,14 +1060,14 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
         for (const row of destinations) owners.add(row.profileId);
       }
     }
-    await tx.select({ id: generationRevisions.profileId }).from(generationRevisions)
+    await readJobLock('profile_revision', tx.select({ id: generationRevisions.profileId }).from(generationRevisions)
       .where(inArray(generationRevisions.profileId, [...owners])).orderBy(asc(generationRevisions.profileId))
-      .for("update", { noWait: true });
+      .for("update", { noWait: true }));
   }
-  const [owned] = await tx.select({ id: backgroundJobs.id }).from(backgroundJobs)
+  const [owned] = await readJobLock('job_lease', tx.select({ id: backgroundJobs.id }).from(backgroundJobs)
     .where(and(eq(backgroundJobs.id, job.id), eq(backgroundJobs.profileId, job.profileId),
       eq(backgroundJobs.type, job.type), eq(backgroundJobs.status, "running"),
-      eq(backgroundJobs.lockedAt, lockedAt), eq(backgroundJobs.attempts, job.attempts))).for("update", noWait ? { noWait: true } : {});
+      eq(backgroundJobs.lockedAt, lockedAt), eq(backgroundJobs.attempts, job.attempts))).for("update", noWait ? { noWait: true } : {}));
   if (!owned) throw new Error("Background job ownership changed before commit");
 }
 
@@ -1050,6 +1076,8 @@ export type ClaimedBackgroundJob = BackgroundJob & {
   /** True when the tenant is a room's mind (retired room work). Absent on rows
    * not produced by the claim, which then rely on the payload checks alone. */
   tenantIsGroup?: boolean;
+  /** Queue metadata, separate from the payload passed to job processors. */
+  lockDeferral?: unknown;
 };
 
 export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<BackgroundJobResult | void> {
@@ -1456,6 +1484,21 @@ function backgroundJobDueTime(alias='candidate'){
   return sql`CASE WHEN ${row}.status='pending'::background_job_status THEN ${row}.run_after
     ELSE ${row}.locked_at+(${STALE_LOCK_SECONDS}||' seconds')::interval END`;
 }
+
+/** Hosted claims already serialize their short claim transaction. Derivation
+ * for one profile can wait in the queue while other profiles and job types
+ * remain runnable. An expired lease does not take a slot. */
+export function signalDerivationSlotAvailable(at: ReturnType<typeof sql>, alias: string) {
+  const job = sql.identifier(alias);
+  return sql`(${job}.type <> 'derive_signals'::background_job_type OR NOT EXISTS (
+    SELECT 1 FROM background_jobs active_derivation
+    WHERE active_derivation.profile_id = ${job}.profile_id
+      AND active_derivation.type = 'derive_signals'::background_job_type
+      AND active_derivation.status = 'running'::background_job_status
+      AND active_derivation.locked_at >= ${at} - (${STALE_LOCK_SECONDS} || ' seconds')::interval
+  ))`;
+}
+
 function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string,alias='candidate') {
   const row=sql.identifier(alias);
   return sql`
@@ -1480,6 +1523,7 @@ function runnableBackgroundJobPredicate(nowIso: string,overdueBeforeIso?:string,
     -- worker must leave it queued, not claim it and spend unsupported retries.
     -- Peek and claim share this predicate, including stale-lease reclamation.
     AND ${row}.type::text IN (${sql.join(backgroundJobTypeValues.map((type) => sql`${type}`), sql`, `)})
+    ${process.env.AWS_LAMBDA_FUNCTION_NAME ? sql`AND ${signalDerivationSlotAvailable(sql`${nowIso}::timestamptz`,alias)}` : sql``}
     ${overdueBeforeIso?sql`AND ${backgroundJobDueTime(alias)}<=${overdueBeforeIso}::timestamptz`:sql``}
   `;
 }
@@ -1784,7 +1828,9 @@ async function claimNextBackgroundJob(now = new Date(), overdueBefore?: Date, ca
       job.id,
       job.profile_id AS "profileId",
       job.type,
-      job.payload,
+      CASE WHEN jsonb_typeof(job.payload) = 'object' THEN job.payload - 'lockDeferral'
+           ELSE job.payload END AS payload,
+      job.payload->'lockDeferral' AS "lockDeferral",
       job.result,
       job.request_version AS "requestVersion",
       job.completed_version AS "completedVersion",
@@ -1892,19 +1938,27 @@ async function markJobFailedOrPending(
   err: unknown,
   exhausted: boolean,
   now: Date,
+  lockDeferral?: LockDeferral,
 ): Promise<void> {
   const status: BackgroundJobStatus = exhausted ? "failed" : "pending";
   const lockedAt = exhausted ? (coerceNullableDate(job.lockedAt)?.toISOString() ?? null) : null;
   const runAfter = (
-    exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now, err)
+    lockDeferral?.runAfter ?? (exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job, now, err))
   ).toISOString();
-  const settled = await getDb().execute(sql`
+  const diagnostic = jobFailureDiagnostic(err);
+  const [settled] = await getDb().execute<{ status: 'failed' | 'pending'; runAfter: Date | string; currentFailure: boolean }>(sql`
     UPDATE background_jobs
     SET status = CASE WHEN rerun_requested THEN 'pending'::background_job_status ELSE ${status}::background_job_status END,
         locked_at = CASE WHEN rerun_requested THEN NULL ELSE ${lockedAt}::timestamptz END,
         run_after = CASE WHEN rerun_requested THEN ${now.toISOString()}::timestamptz ELSE ${runAfter}::timestamptz END,
-        last_error = CASE WHEN rerun_requested THEN NULL ELSE ${jobFailureDiagnostic(err)} END,
-        attempts = CASE WHEN rerun_requested THEN 0 ELSE attempts END,
+        last_error = CASE WHEN rerun_requested THEN NULL ELSE ${diagnostic} END,
+        attempts = CASE WHEN rerun_requested THEN 0 WHEN ${Boolean(lockDeferral)} THEN attempts - 1 ELSE attempts END,
+        -- Return the retry attempt while keeping the job run in the model
+        -- budget ledger. A lock can occur after a provider call.
+        payload = CASE WHEN ${Boolean(lockDeferral?.runAfter)} AND NOT rerun_requested
+          AND request_version = ${job.requestVersion.toString()}::bigint
+          THEN jsonb_set(payload, '{lockDeferral}', ${JSON.stringify(lockDeferral?.checkpoint ?? null)}::jsonb)
+          ELSE payload END,
         rerun_requested = false,
         -- The version this attempt read has now spent its one malformed retry.
         -- A newer request (rerun flag, or any later enqueue) carries a higher
@@ -1916,9 +1970,23 @@ async function markJobFailedOrPending(
     WHERE id = ${job.id}::uuid AND status = 'running'
       AND locked_at = ${coerceNullableDate(job.lockedAt)?.toISOString() ?? null}::timestamptz
       AND attempts = ${job.attempts}
-    RETURNING status
+    RETURNING status, run_after AS "runAfter", last_error IS NOT NULL AS "currentFailure"
   `);
-  if (settled.some(row => row.status === 'failed')) recordOperationalFault('job_terminal');
+  if (!settled) return;
+  if (settled.status === 'failed') recordOperationalFault('job_terminal');
+  let action = settled.status === 'pending' ? 'retry_queued' : 'failed';
+  if (!settled.currentFailure) action = 'newer_request_queued';
+  else if (lockDeferral) action = settled.status === 'pending' ? 'lock_deferred' : 'lock_deferral_limit';
+  const lock = err && typeof err === 'object' ? jobLockLocations.get(err) : undefined;
+  console.warn('[background-jobs] attempt settled', {
+    jobId: job.id, type: job.type, requestVersion: job.requestVersion.toString(),
+    attempt: job.attempts, maxAttempts: job.maxAttempts, diagnostic,
+    ...(lock ? { lock } : {}),
+    ...(err instanceof EmbeddingIndexNeedsRetry ? { embeddingRecovery: err.code } : {}),
+    action,
+    ...(lockDeferral && settled.currentFailure ? { lockDeferrals: lockDeferral.checkpoint.count } : {}),
+    ...(settled.status === 'pending' ? { runAfter: coerceDate(settled.runAfter).toISOString() } : {}),
+  });
 }
 
 /** Only failures from this drain can request a near-term async wake. A later
@@ -1940,7 +2008,8 @@ export async function hasNearTermBackgroundJobRetry(
         AS hint(id uuid, profile_id uuid, attempts integer, updated_at timestamptz, run_after timestamptz)
         ON job.id=hint.id AND job.profile_id=hint.profile_id
       WHERE job.status='pending' AND job.locked_at IS NULL AND job.last_error IS NOT NULL
-        AND job.attempts=hint.attempts AND job.attempts>0 AND job.attempts<job.max_attempts
+        AND job.attempts=hint.attempts AND job.attempts<job.max_attempts
+        AND (job.attempts>0 OR job.payload->'lockDeferral'->>'requestVersion'=job.request_version::text)
         AND job.updated_at=hint.updated_at AND job.run_after=hint.run_after
         AND job.run_after<=${new Date(now.getTime()+120000).toISOString()}::timestamptz
     ) AS pending
@@ -2010,13 +2079,42 @@ function coerceNullableDate(value: Date | string | null): Date | null {
   return value === null ? null : coerceDate(value);
 }
 
+type LockDeferral = {
+  checkpoint: { requestVersion: string; count: number };
+  runAfter: Date | null;
+};
+
+function planLockDeferral(job: ClaimedBackgroundJob, error: unknown, now: Date): LockDeferral | undefined {
+  if (error instanceof EmbeddingIndexNeedsRetry) return;
+  const state = databaseSqlState(error);
+  if (state !== '55P03' && state !== '40P01') return;
+  // The checkpoint is stored in the queue's JSON object, never the work input.
+  if (!job.payload || typeof job.payload !== 'object' || Array.isArray(job.payload)) return;
+
+  const requestVersion = job.requestVersion.toString();
+  let count = 0;
+  const previous = job.lockDeferral as Partial<LockDeferral['checkpoint']> | null | undefined;
+  if (previous?.requestVersion === requestVersion) {
+    const saved = previous.count;
+    count = typeof saved === 'number' && Number.isInteger(saved) && saved >= 0
+      ? saved : LOCK_DEFERRAL_DELAYS_MS.length;
+  }
+  const delay = LOCK_DEFERRAL_DELAYS_MS[count];
+  if (delay === undefined) return { checkpoint: { requestVersion, count }, runAfter: null };
+  const jitter = Number.parseInt(job.id.slice(0, 4), 16) % 5_001;
+  return {
+    checkpoint: { requestVersion, count: count + 1 },
+    runAfter: new Date(now.getTime() + delay + jitter),
+  };
+}
+
 /** 30s, 60s, 120s, … capped at 15 minutes. */
-function calculateBackoffRunAfter(attempts: number, now: Date, error: unknown): Date {
+function calculateBackoffRunAfter(job: Pick<BackgroundJob, 'attempts'>, now: Date, error: unknown): Date {
   // An explicit provider-side outage gets wider spacing within the same
   // attempt budget. Unknown transport outcomes keep their existing policy.
   const unavailable = (error instanceof OpenRouterHttpError || error instanceof OpenAiHttpError)
     && [429, 502, 503, 504].includes(error.status);
-  const delaySeconds = Math.min(15 * 60, (unavailable ? 300 : 30) * 2 ** Math.max(0, attempts - 1));
+  const delaySeconds = Math.min(15 * 60, (unavailable ? 300 : 30) * 2 ** Math.max(0, job.attempts - 1));
   return new Date(now.getTime() + delaySeconds * 1_000);
 }
 

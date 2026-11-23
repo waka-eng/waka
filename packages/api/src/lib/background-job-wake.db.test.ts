@@ -127,6 +127,34 @@ it('does not bypass an account budget when a pending deadline is delivered', asy
   expect(processor).not.toHaveBeenCalled(); await recoverBackgroundJobWakes('worker'); expect(creates()).toHaveLength(2);
 });
 
+it('runs one hosted derivation per profile and arms waiting work when its slot opens', async () => {
+  vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'synthetic-hosted-worker');
+  const f = await fixture(2);
+  await t.sql`UPDATE background_jobs SET type='derive_signals'`;
+  const [other] = await t.sql`INSERT INTO profiles(account_id,type,name)
+    VALUES(${f.accountId},'agent','Separate profile') RETURNING id`;
+  await t.sql`INSERT INTO background_jobs(profile_id,type,payload,run_after)
+    VALUES(${other.id},'derive_signals','{}',now()-interval '1 second')`;
+  const now = new Date();
+  const claims = (await Promise.all(Array.from({ length: 3 }, () => postgresBackgroundJobStore.claimNext(now))))
+    .filter(job => job !== null);
+  expect(claims.map(job => job.profileId).sort()).toEqual([f.profileId, other.id].sort());
+  const [waiting] = await t.sql`SELECT status,attempts,payload FROM background_jobs WHERE status='pending'`;
+  expect(waiting).toMatchObject({ status: 'pending', attempts: 0, payload: {} });
+  await recoverBackgroundJobWakes('worker', f.profileId);
+  await recoverBackgroundJobWakes('worker', f.profileId);
+  expect(creates()).toHaveLength(1);
+  expect(event()).toMatchObject({ kind: 'lease', profileId: f.profileId });
+
+  const active = claims.find(job => job.profileId === f.profileId)!;
+  await postgresBackgroundJobStore.markSucceeded(active, null);
+  await recoverBackgroundJobWakes('worker', f.profileId);
+  expect(creates()).toHaveLength(2);
+  expect(event(1)).toMatchObject({ kind: 'pending', profileId: f.profileId });
+  expect(await prepareBackgroundJobWake(event(1), now)).toBe(true);
+  expect(await postgresBackgroundJobStore.claimNext(now)).toMatchObject({ profileId: f.profileId, attempts: 1 });
+});
+
 it('limits concurrent hosted claims to four and re-arms a delivered wake while full', async () => {
   await fixture(6);
   vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'synthetic-hosted-worker');
@@ -196,6 +224,30 @@ it('cancels the old deadline when a whole group moves, and keeps it when members
   await t.sql`UPDATE background_jobs SET run_after='2026-10-29T14:00:00Z'`;
   await recoverBackgroundJobWakes('worker'); expect(creates()).toHaveLength(3); expect(deletes()).toHaveLength(2);
   expect(await prepareBackgroundJobWake(old, new Date('2026-10-30T12:00:00Z'))).toBe(false);
+});
+it('re-arms a deferred lock conflict with zero spent attempts', async () => {
+  await fixture();
+  await recoverBackgroundJobWakes('worker');
+  const original = event();
+  const now = new Date('2026-10-29T12:00:01Z');
+  expect(await drainBackgroundJobs({ now, limit: 1, processor: async () => {
+    throw new Error('Synthetic lock conflict', { cause: { code: '55P03' } });
+  } })).toMatchObject({ held: 1, retried: 0, failed: 0 });
+  const [job] = await t.sql`SELECT attempts, run_after FROM background_jobs`;
+  expect(job!.attempts).toBe(0);
+  const due = new Date(job!.run_after);
+
+  await retireBackgroundJobWake(original);
+  await recoverBackgroundJobWakes('worker');
+  expect(creates()).toHaveLength(2);
+  const replacement = event(1);
+  if (replacement.kind !== 'pending') throw new Error('Expected a pending wake');
+  expect(new Date(replacement.runAfter)).toEqual(due);
+  expect(await prepareBackgroundJobWake(original, due)).toBe(false);
+  expect(await prepareBackgroundJobWake(replacement, now)).toBe(false);
+  expect(await prepareBackgroundJobWake(replacement, due)).toBe(true);
+  expect(await drainBackgroundJobs({ now: due, limit: 1, processor: async () => {} }))
+    .toMatchObject({ succeeded: 1 });
 });
 it('returns an unspent attempt on scheduler outage without running the provider', async () => {
   await fixture(); const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
