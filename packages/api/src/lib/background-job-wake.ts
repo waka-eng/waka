@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm';
 import type { CreateScheduleCommandInput } from '@aws-sdk/client-scheduler';
 import { backgroundJobTypeValues, type BackgroundJob } from '../db/index.js';
 import { getDb } from './db.js';
-import { STALE_LOCK_SECONDS } from './queue.js';
+import { signalDerivationSlotAvailable, STALE_LOCK_SECONDS } from './queue.js';
 import { recordOperationalFault } from './operational-fault.js';
 import { BackgroundJobHeldError } from './background-job-hold.js';
 
@@ -181,6 +181,7 @@ export async function prepareBackgroundJobWake(value: unknown, now = new Date())
 
 function pendingMissing() {
   return sql`job.status='pending' AND job.locked_at IS NULL AND job.attempts<job.max_attempts AND ${supported('job')}
+    AND ${signalDerivationSlotAvailable(sql`now()`, 'job')}
     AND (job.payload->'pendingWake'->>'runAfter' IS DISTINCT FROM ${stamp('job', 'run_after')}
       OR job.payload->'pendingWake'->>'profileId' IS DISTINCT FROM job.profile_id::text
       OR job.payload->'pendingWake'->>'kind' IS DISTINCT FROM 'pending'
@@ -207,7 +208,8 @@ export async function recoverBackgroundJobWakes(targetArn?: string, profileId?: 
     const ack = await getDb().execute<{ old_wake: unknown }>(sql`
       WITH previous AS (SELECT job.id,job.payload->'pendingWake' AS old_wake FROM background_jobs job
         WHERE profile_id=${wake.profileId}::uuid AND status='pending' AND locked_at IS NULL AND attempts<max_attempts
-          AND run_after=${wake.runAfter}::timestamptz AND ${supported('job')} FOR UPDATE),
+          AND run_after=${wake.runAfter}::timestamptz AND ${supported('job')}
+          AND ${signalDerivationSlotAvailable(sql`now()`, 'job')} FOR UPDATE),
       updated AS (UPDATE background_jobs job SET payload=jsonb_set(job.payload,'{pendingWake}',${JSON.stringify(wake)}::jsonb)
         FROM previous WHERE job.id=previous.id RETURNING previous.old_wake)
       SELECT DISTINCT old_wake FROM updated`);
