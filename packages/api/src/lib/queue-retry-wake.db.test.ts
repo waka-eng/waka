@@ -112,7 +112,7 @@ it('settles an actual wrapped PostgreSQL failure without storing or logging its 
   } finally { warn.mockRestore();error.mockRestore(); }
 });
 
-it('spaces real lock conflicts and resumes the job without leaking bound values', async () => {
+it('defers real lock conflicts without spending processing attempts or leaking bound values', async () => {
   const job = await fixture(0, 3);
   const marker = 'synthetic-lock-query-value';
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -123,32 +123,78 @@ it('spaces real lock conflicts and resumes the job without leaking bound values'
   });
   const run = (at: Date) => drainBackgroundJobs({ now: at, limit: 1, processor,
     onTransientRetry: wake => { retries.push(wake); } });
+  let due = now;
   try {
     await t.sql.begin(async tx => {
       await tx`SET LOCAL idle_in_transaction_session_timeout = '8s'`;
       await tx`SELECT id FROM profiles WHERE id=${job.profileId} FOR UPDATE`;
-      expect(await run(now)).toMatchObject({ retried: 1, failed: 0 });
-      const first = retries[0]!.runAfter;
-      expect(first.getTime() - now.getTime()).toBeGreaterThanOrEqual(60_000);
-      expect(first.getTime() - now.getTime()).toBeLessThanOrEqual(75_000);
-      expect(await hasNearTermBackgroundJobRetry(retries, getDb(), now)).toBe(true);
-      expect(await run(new Date(first.getTime() - 1))).toMatchObject({ claimed: 0 });
-      expect(await run(first)).toMatchObject({ retried: 1, failed: 0 });
-      const second = retries[1]!.runAfter;
-      expect(second.getTime() - first.getTime()).toBeGreaterThanOrEqual(180_000);
-      expect(second.getTime() - first.getTime()).toBeLessThanOrEqual(195_000);
+      for (const delay of [15_000, 30_000, 60_000, 120_000]) {
+        expect(await run(due)).toMatchObject({ held: 1, retried: 0, failed: 0 });
+        const retry = retries.at(-1)!;
+        expect(retry.attempts).toBe(0);
+        expect(retry.runAfter.getTime() - due.getTime()).toBeGreaterThanOrEqual(delay);
+        expect(retry.runAfter.getTime() - due.getTime()).toBeLessThanOrEqual(delay + 5_000);
+        if (delay === 15_000) expect(await hasNearTermBackgroundJobRetry(retries, getDb(), due)).toBe(true);
+        due = retry.runAfter;
+        expect(await run(new Date(due.getTime() - 1))).toMatchObject({ claimed: 0 });
+      }
     });
     const [queued] = await t.sql`SELECT status,attempts,max_attempts,run_after,last_error FROM background_jobs WHERE id=${job.id}`;
-    expect(queued).toMatchObject({ status: 'pending', attempts: 2, max_attempts: 3 });
-    expect(new Date(queued!.run_after)).toEqual(retries[1]!.runAfter);
+    expect(queued).toMatchObject({ status: 'pending', attempts: 0, max_attempts: 3 });
+    expect(new Date(queued!.run_after)).toEqual(due);
     expect(JSON.parse(queued!.last_error)).toEqual({ category: 'database', code: '55P03' });
     expect(warn).toHaveBeenCalledWith('[background-jobs] attempt settled', expect.objectContaining({
-      jobId: job.id, type: 'derive_signals', attempt: 2, maxAttempts: 3, action: 'retry_queued',
-      runAfter: retries[1]!.runAfter.toISOString(), diagnostic: queued!.last_error,
+      jobId: job.id, type: 'derive_signals', attempt: 1, maxAttempts: 3, action: 'lock_deferred',
+      lockDeferrals: 4, runAfter: due.toISOString(), diagnostic: queued!.last_error,
     }));
     expect(JSON.stringify(warn.mock.calls)).not.toContain(marker);
-    expect(await run(retries[1]!.runAfter)).toMatchObject({ succeeded: 1, failed: 0 });
-    expect(processor).toHaveBeenCalledTimes(3);
+    expect(await run(due)).toMatchObject({ succeeded: 1, failed: 0 });
+    expect(processor).toHaveBeenCalledTimes(5);
+    expect(await t.sql`SELECT status, attempts FROM background_jobs WHERE id=${job.id}`)
+      .toEqual([{ status: 'succeeded', attempts: 1 }]);
+    expect(await t.sql`SELECT attempt FROM background_job_runs WHERE job_id=${job.id} ORDER BY started_at`)
+      .toEqual(Array.from({ length: 5 }, () => ({ attempt: 1 })));
+  } finally { warn.mockRestore(); }
+});
+
+it('bounds lock waits per request while keeping earlier processing failures charged', async () => {
+  const job = await fixture(0, 3);
+  const { retries: [firstFailure] } = await fail();
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const wakes: BackgroundJobRetryWake[] = [];
+  const processor = vi.fn(async claimed => {
+    expect(claimed.payload).toEqual({});
+    throw new Error('Synthetic deadlock', { cause: { code: '40P01' } });
+  });
+  const run = (at: Date) => drainBackgroundJobs({ now: at, limit: 1, processor,
+    onTransientRetry: wake => { wakes.push(wake); } });
+  let due = firstFailure!.runAfter;
+  try {
+    for (const delay of [15_000, 30_000, 60_000, 120_000, 240_000]) {
+      expect(await run(due)).toMatchObject({ held: 1, retried: 0, failed: 0 });
+      const wake = wakes.at(-1)!;
+      expect(wake.attempts).toBe(1);
+      expect(wake.runAfter.getTime() - due.getTime()).toBeGreaterThanOrEqual(delay);
+      expect(wake.runAfter.getTime() - due.getTime()).toBeLessThanOrEqual(delay + 5_000);
+      due = wake.runAfter;
+    }
+    expect(await run(due)).toMatchObject({ held: 0, retried: 0, failed: 1 });
+    expect(wakes).toHaveLength(5);
+    expect(await t.sql`SELECT status, attempts, last_error FROM background_jobs WHERE id=${job.id}`)
+      .toEqual([{ status: 'failed', attempts: 1, last_error: '{"category":"database","code":"40P01"}' }]);
+    expect(warn).toHaveBeenCalledWith('[background-jobs] attempt settled', expect.objectContaining({
+      jobId: job.id, action: 'lock_deferral_limit', lockDeferrals: 5,
+    }));
+    expect(await run(new Date(due.getTime() + 60_000))).toMatchObject({ claimed: 0 });
+
+    // A new source version can carry an old checkpoint in the stored payload.
+    await t.sql`UPDATE background_jobs SET status='pending', locked_at=NULL, request_version=request_version+1
+      WHERE id=${job.id}`;
+    due = new Date(due.getTime() + 1_000);
+    expect(await run(due)).toMatchObject({ held: 1, failed: 0 });
+    expect(wakes[5]!.runAfter.getTime() - due.getTime()).toBeLessThanOrEqual(20_000);
+    expect(await t.sql`SELECT (payload->'lockDeferral') AS wait FROM background_jobs WHERE id=${job.id}`)
+      .toEqual([{ wait: { requestVersion: '2', count: 1 } }]);
   } finally { warn.mockRestore(); }
 });
 

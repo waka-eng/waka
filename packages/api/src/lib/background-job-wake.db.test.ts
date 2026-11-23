@@ -225,6 +225,30 @@ it('cancels the old deadline when a whole group moves, and keeps it when members
   await recoverBackgroundJobWakes('worker'); expect(creates()).toHaveLength(3); expect(deletes()).toHaveLength(2);
   expect(await prepareBackgroundJobWake(old, new Date('2026-10-30T12:00:00Z'))).toBe(false);
 });
+it('re-arms a deferred lock conflict with zero spent attempts', async () => {
+  await fixture();
+  await recoverBackgroundJobWakes('worker');
+  const original = event();
+  const now = new Date('2026-10-29T12:00:01Z');
+  expect(await drainBackgroundJobs({ now, limit: 1, processor: async () => {
+    throw new Error('Synthetic lock conflict', { cause: { code: '55P03' } });
+  } })).toMatchObject({ held: 1, retried: 0, failed: 0 });
+  const [job] = await t.sql`SELECT attempts, run_after FROM background_jobs`;
+  expect(job!.attempts).toBe(0);
+  const due = new Date(job!.run_after);
+
+  await retireBackgroundJobWake(original);
+  await recoverBackgroundJobWakes('worker');
+  expect(creates()).toHaveLength(2);
+  const replacement = event(1);
+  if (replacement.kind !== 'pending') throw new Error('Expected a pending wake');
+  expect(new Date(replacement.runAfter)).toEqual(due);
+  expect(await prepareBackgroundJobWake(original, due)).toBe(false);
+  expect(await prepareBackgroundJobWake(replacement, now)).toBe(false);
+  expect(await prepareBackgroundJobWake(replacement, due)).toBe(true);
+  expect(await drainBackgroundJobs({ now: due, limit: 1, processor: async () => {} }))
+    .toMatchObject({ succeeded: 1 });
+});
 it('returns an unspent attempt on scheduler outage without running the provider', async () => {
   await fixture(); const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
   state.send.mockRejectedValue(new Error('Synthetic scheduler outage'));
