@@ -182,7 +182,7 @@ it('keeps ordinary prompt bytes and limits only the first-mode parser',()=>{
 async function ordinaryEvidence(profileId:string) {
   const ids:string[]=[];
   const [reading]=await t.sql`INSERT INTO top_of_minds(profile_id) VALUES(${profileId}) RETURNING id`;
-  const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${reading.id},'statement','Current focus.') RETURNING id`;
+  const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${reading.id},'pattern','Current focus.') RETURNING id`;
   for(let i=0;i<3;i++){
     const first=await seed(profileId,'A distinct active observation '+i,'A distinct firsthand choice '+i+' at the start.');
     ids.push(first.signal);
