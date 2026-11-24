@@ -3,6 +3,13 @@ import type {loadPrincipleMaterial} from './principle-generation.js';
 
 /** Stable evidence identity: opening a page cannot purchase another model pass. */
 export function principleMaterialKey(material: Awaited<ReturnType<typeof loadPrincipleMaterial>>): string {
+  if(material.mode==='first'){
+    return createHash('sha256').update(JSON.stringify({
+      policy:'first-principle-v1',locale:material.preferredLocale,
+      ordinary:material.ordinaryAvailable?principleMaterialKey({...material,mode:'ordinary'}):null,
+      signals:material.firstSignals.map(({id,statement,origins})=>({id,statement,origins})).sort((a,b)=>a.id.localeCompare(b.id)),
+    })).digest('hex');
+  }
   return createHash("sha256").update(JSON.stringify({
     // The new distinct-wording/semantic checks deserve one scheduled pass;
     // an old completed empty result must not permanently suppress them.

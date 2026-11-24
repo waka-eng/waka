@@ -418,6 +418,10 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     }
 
     const created = await db.transaction(async (tx) => {
+      // Serialize a declaration with the first generated Principle before
+      // taking a rank or history row.
+      await tx.execute(sql`SELECT profile_id FROM generation_revisions
+        WHERE profile_id=${scope.profileId}::uuid FOR UPDATE`);
       const ranks = await tx
         .select({ rank: principles.rank })
         .from(principles)

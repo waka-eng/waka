@@ -23,6 +23,10 @@ async function person() {
    and spread its evidence across two members; there is one destination now,
    the person, and one owner, the same person. */
 async function material({ active = false } = {}) {
+  // With emerging signals this suite isolates successive reading claims. The
+  // other branch sets up an unserved profile for the reclaimed Principle job.
+  if (!active) await t.sql`INSERT INTO principles(profile_id,statement,origin,rank)
+    VALUES (${profileId},'Try the small version first.','declared',1)`;
   const ids: string[] = [];
   for (let i = 0; i < 3; i++) {
     const [signal] = await t.sql`INSERT INTO signals (profile_id, statement)

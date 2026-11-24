@@ -109,8 +109,14 @@ describe("principle read", () => {
     expect(host.textContent).toBe("No principle is clear yet.");
   });
 
+  it("shows the completed first reading when two patterns qualify before Top of Mind", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, signalCount: 2, topOfMindCount: 0 } });
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    expect(host.textContent).toBe("No principle is clear yet.");
+  });
+
   it("says nothing while too few patterns exist to read", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, signalCount: 2 } });
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "waiting", eligible: false, signalCount: 2 } });
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     expect(host.textContent).toBe("");
   });
