@@ -147,6 +147,7 @@ class InMemoryBackgroundJobStore implements BackgroundJobStore {
       lockedAt: now,
       startedAt: now,
       lastError: null,
+      terminalNoticeSentFor: null,
       idempotencyKey: null,
       rerunRequested: false,
       malformedRetryVersion: null,

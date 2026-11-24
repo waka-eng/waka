@@ -3,7 +3,12 @@
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
-import {readBackgroundJobRecoveryState,drainBackgroundJobs,postgresBackgroundJobStore,settleAbandonedExhaustedLeases} from './queue.js';
+import {readBackgroundJobRecoveryState,drainBackgroundJobs,enqueueDeriveSignals,postgresBackgroundJobStore,settleAbandonedExhaustedLeases} from './queue.js';
+import {legacyDerivationRecoveryEligible,reconcileLegacyDerivationFailures} from './job-failure-recovery.js';
+import {deliverTerminalJobNotices} from './job-failure-notices.js';
+import {BackgroundJobHeldError} from './background-job-hold.js';
+import {EMBEDDING_2_SPACE} from './embedding-2-space.js';
+import {sql} from 'drizzle-orm';
 import {getDb} from './db.js';
 import {MalformedModelOutputError} from './model-provider.js';
 import {inspectQueueRedrive} from './queue-redrive.js';
@@ -13,6 +18,131 @@ const now=new Date('2026-10-05T12:00:00Z');
 const connection=process.env.DB_CONNECTION_URL!;
 beforeAll(async()=>{t=await createTestDatabase();const url=new URL(connection);url.searchParams.set('options',`-c search_path=${t.schemaName}`);process.env.DB_CONNECTION_URL=url.toString();});beforeEach(async()=>{await t.truncateAll();});afterAll(async()=>{await getDb().$client.end();await t?.cleanup();process.env.DB_CONNECTION_URL=connection;});
 async function owner(){const [a]=await t.sql`INSERT INTO accounts(email) VALUES(${randomUUID()+'@example.test'}) RETURNING id`;const [p]=await t.sql`INSERT INTO profiles(account_id,type,name) VALUES(${a.id},'human','Synthetic recovery') RETURNING id`;return p.id;}
+
+async function legacyDerivationFailure() {
+  const profileId = await owner();
+  const [{account_id: accountId}] = await t.sql`SELECT account_id FROM profiles WHERE id=${profileId}`;
+  const [{id: sourceId}] = await t.sql`INSERT INTO inspirations(profile_id,text)
+    VALUES(${profileId},'Synthetic previously failed inspiration') RETURNING id`;
+  const job = await getDb().transaction(tx => enqueueDeriveSignals(profileId, sourceId, 'created', tx));
+  const diagnostic = '{"category":"database","code":"55P03"}';
+  await t.sql`UPDATE background_jobs SET status='failed', attempts=3, locked_at=${now.toISOString()},
+    started_at=${now.toISOString()}, last_error=${diagnostic}, updated_at=${now.toISOString()} WHERE id=${job.jobId}`;
+  await t.sql`INSERT INTO background_job_runs(account_id, job_id, request_version, attempt, started_at)
+    SELECT ${accountId}, ${job.jobId}, 1, attempt, ${now.toISOString()}::timestamptz - (attempt * interval '1 minute')
+    FROM generate_series(1,3) attempt`;
+  return {profileId, accountId, sourceId, jobId: job.jobId, diagnostic};
+}
+
+async function blockLegacyDispatch(target: Awaited<ReturnType<typeof legacyDerivationFailure>>, status: string) {
+  await t.sql`INSERT INTO embedding_index_attempts(account_id,profile_id,request_key,dispatch_family,purpose,space,
+    source_kind,source_id,input_scope,input_hash,input_bytes,status)
+    VALUES(${target.accountId},${target.profileId},${randomUUID()},'discovery','live',${EMBEDDING_2_SPACE.id},
+      'inspiration',${target.sourceId},'personal',${'0'.repeat(64)},12,${status})`;
+}
+
+it('gives an already exhausted owned lock failure one delayed claim while preserving its historical starts', async () => {
+  const target = await legacyDerivationFailure();
+  const processor = vi.fn(async () => {});
+  const next = new Date(now.getTime() + 30_000);
+  const held = await legacyDerivationFailure();
+  await blockLegacyDispatch(held, 'received');
+  await t.sql`UPDATE background_jobs SET last_error='{"category":"unexpected"}', attempts=2 WHERE id=${held.jobId}`;
+  const relay = 'arn:aws:lambda:us-west-2:111122223333:function:waka-production-JobFailureAlertFunction-fixture';
+  const notify = vi.fn(async (_arn: string, _notice: unknown) => {});
+  vi.stubEnv('WAKA_STAGE', 'production');
+  vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'synthetic-worker');
+  vi.stubEnv('WAKA_JOB_ALERT_RELAY_ARN', relay);
+  try {
+    await deliverTerminalJobNotices(getDb(), undefined, notify);
+    expect(notify).toHaveBeenCalledExactlyOnceWith(relay,
+      expect.objectContaining({ jobType: 'derive_signals', disposition: 'ambiguous' }));
+    const noticed = await t.sql`SELECT id FROM background_jobs WHERE terminal_notice_sent_for=updated_at`;
+    expect(noticed).toEqual([{ id: held.jobId }]);
+  } finally { vi.unstubAllEnvs(); }
+
+  expect(await drainBackgroundJobs({now, processor, limit: 1})).toMatchObject({claimed: 0});
+  const snapshot = await getDb().execute<{eligible: boolean}>(sql`
+    SELECT (${legacyDerivationRecoveryEligible}) AS eligible FROM background_jobs j WHERE j.id=${target.jobId}::uuid`);
+  expect(snapshot).toEqual([{eligible: true}]);
+  await t.sql.begin(async tx => {
+    await tx`SELECT id FROM inspirations WHERE id=${target.sourceId} FOR UPDATE`;
+    expect(await reconcileLegacyDerivationFailures(getDb(), now)).toBe(0);
+  });
+  const recovered = await Promise.all([reconcileLegacyDerivationFailures(getDb(), now), reconcileLegacyDerivationFailures(getDb(), now)]);
+  expect(recovered.reduce((a, b) => a + b)).toBe(1);
+  const [scheduled] = await t.sql`SELECT status, attempts, max_attempts, run_after, last_error,
+    payload->>'terminalRecoveryVersion' AS recovery FROM background_jobs WHERE id=${target.jobId}`;
+  expect(scheduled).toMatchObject({
+    status: 'pending', attempts: 2, max_attempts: 3, last_error: target.diagnostic, recovery: '1',
+  });
+  expect(new Date(scheduled!.run_after).getTime()).toBe(next.getTime());
+  expect(await t.sql`SELECT id FROM background_job_runs WHERE job_id=${target.jobId}`).toHaveLength(3);
+  expect(await drainBackgroundJobs({now, processor, limit: 1})).toMatchObject({claimed: 0});
+  expect(await drainBackgroundJobs({now: next, processor, limit: 1})).toMatchObject({succeeded: 1});
+  expect(processor).toHaveBeenCalledOnce();
+  expect(await t.sql`SELECT id FROM background_job_runs WHERE job_id=${target.jobId}`).toHaveLength(4);
+  expect(await reconcileLegacyDerivationFailures(getDb(), next)).toBe(0);
+});
+
+it('holds old ambiguous and stale source failures and blocks a dispatch that appears after requeue', async () => {
+  const ambiguous = await legacyDerivationFailure();
+  await blockLegacyDispatch(ambiguous, 'received');
+  await t.sql`UPDATE background_jobs SET last_error='{"category":"unexpected"}', attempts=2 WHERE id=${ambiguous.jobId}`;
+  const reserved = await legacyDerivationFailure();
+  await blockLegacyDispatch(reserved, 'reserved');
+  const stale = await legacyDerivationFailure();
+  await t.sql`UPDATE inspirations SET text='Synthetic revised source' WHERE id=${stale.sourceId}`;
+  const late = await legacyDerivationFailure();
+  expect(await reconcileLegacyDerivationFailures(getDb(), now)).toBe(1);
+  await blockLegacyDispatch(late, 'unknown');
+  const next = new Date(now.getTime() + 30_000);
+  expect(await drainBackgroundJobs({now: next, limit: 1})).toMatchObject({failed: 1, retried: 0});
+  expect((await t.sql`SELECT status, payload->>'failureDisposition' AS disposition, last_error
+    FROM background_jobs WHERE id=${late.jobId}`)[0]).toEqual({
+    status: 'failed', disposition: 'ambiguous', last_error: 'embedding_outcome_unknown',
+  });
+  expect(await t.sql`SELECT status FROM background_jobs
+    WHERE id IN (${ambiguous.jobId},${reserved.jobId},${stale.jobId})`).toEqual(Array.from({length: 3}, () => ({status:'failed'})));
+  expect(await reconcileLegacyDerivationFailures(getDb(), next)).toBe(0);
+});
+
+it('leaves a bounded legacy backlog recoverable for the next existing sweep', async () => {
+  for (let i = 0; i < 9; i++) await legacyDerivationFailure();
+  expect(await reconcileLegacyDerivationFailures(getDb(), now)).toBe(8);
+  const remaining = await getDb().execute(sql`SELECT j.id FROM background_jobs j WHERE ${legacyDerivationRecoveryEligible}`);
+  expect(remaining).toHaveLength(1);
+  expect(await reconcileLegacyDerivationFailures(getDb(), now)).toBe(1);
+  expect(await reconcileLegacyDerivationFailures(getDb(), now)).toBe(0);
+});
+
+it('does not re-enter an ordinary derivation retry while its source has an unresolved provider dispatch', async () => {
+  const target = await legacyDerivationFailure();
+  await t.sql`UPDATE background_jobs SET status='pending', locked_at=NULL, attempts=1, last_error='provider_http_503',
+    run_after=${now.toISOString()} WHERE id=${target.jobId}`;
+  await blockLegacyDispatch(target, 'received');
+  expect(await drainBackgroundJobs({now, limit: 1})).toMatchObject({failed: 1, retried: 0});
+  expect((await t.sql`SELECT status,last_error,payload->>'failureDisposition' AS disposition
+    FROM background_jobs WHERE id=${target.jobId}`)[0]).toEqual({
+    status: 'failed', last_error: 'embedding_outcome_unknown', disposition: 'ambiguous',
+  });
+});
+
+it.each([
+  [new Error('Synthetic lock conflict', {cause: {code:'55P03'}}), 'exhausted'],
+  [new BackgroundJobHeldError(new Date(now.getTime() + 60_000), 'Synthetic unresolved work'), 'ambiguous'],
+] as const)('stops a released legacy job after its one metered processor entry', async (error, disposition) => {
+  const target = await legacyDerivationFailure();
+  expect(await reconcileLegacyDerivationFailures(getDb(), now)).toBe(1);
+  const due = new Date(now.getTime() + 30_000);
+  const processor = vi.fn(async () => { throw error; });
+  expect(await drainBackgroundJobs({now: due, processor, limit: 1})).toMatchObject({failed: 1, held: 0, retried: 0});
+  expect(await reconcileLegacyDerivationFailures(getDb(), due)).toBe(0);
+  expect(await t.sql`SELECT status, attempts, payload->>'failureDisposition' AS disposition
+    FROM background_jobs WHERE id=${target.jobId}`).toEqual([{ status: 'failed', attempts: 3, disposition }]);
+  expect(await t.sql`SELECT id FROM background_job_runs WHERE job_id=${target.jobId}`).toHaveLength(4);
+  expect(processor).toHaveBeenCalledOnce();
+});
 
 it('previews and grants at most one extra claim for an exact pre-dispatch reply with a retryable database failure', async () => {
   const profileId = await owner();
@@ -192,7 +322,7 @@ describe('malformed model output: one retry per request version, then a distinct
   });
   it('an unrelated failure in between neither resets nor spends the malformed retry',async()=>{
     const j=await job(5);let call=0;
-    const processor=vi.fn(async()=>{call+=1;throw call===2?new Error('provider timeout'):malformed();});
+    const processor=vi.fn(async()=>{call+=1;throw call===2?new Error('Synthetic serialization rollback', {cause: {code:'40001'}}):malformed();});
     for(let pass=0;pass<3;pass+=1)await drainBackgroundJobs({limit:5,now:new Date(now.getTime()+pass*hour),processor});
     expect(processor).toHaveBeenCalledTimes(3);
     const settled=await j.row();

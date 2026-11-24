@@ -74,6 +74,7 @@ const ENTRY = [
   "monitoring/relay.ts",
   "monitoring/uptime.ts",
   "monitoring/budget-alert.ts",
+  "monitoring/job-alert.ts",
   "principle-refresh.ts",
   "server.ts",
   "nightly-local.ts",

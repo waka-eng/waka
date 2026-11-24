@@ -154,6 +154,8 @@ import {
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { databaseSqlState, safeErrorDiagnostic } from './error-diagnostics.js';
+import { derivationRetryDispatchState } from './job-failure-recovery.js';
+import { deliverTerminalJobNotices } from './job-failure-notices.js';
 import { OpenRouterHttpError } from './openrouter-http.js';
 import { OpenAiHttpError } from './openai-http.js';
 import { ModelConfigurationError } from './model-routing.js';
@@ -956,12 +958,15 @@ export async function drainBackgroundJobs(
     processed += 1;
     result.claimed += 1;
 
+    let processorEntered = false;
     try {
       await options.onClaimed?.(job);
+      processorEntered = true;
       const completion = await (options.processor ?? processBackgroundJob)(job);
       if (await store.markSucceeded(job, completion ?? null)) result.succeeded += 1;
     } catch (err) {
-      if (err instanceof BackgroundJobHeldError) {
+      const recovered = job.terminalRecoveryVersion === job.requestVersion.toString();
+      if (err instanceof BackgroundJobHeldError && !(recovered && processorEntered)) {
         if (err.reason === 'support') await store.holdJob(job, err.heldUntil, 'support');
         else await store.holdJob(job, err.heldUntil);
         result.held += 1;
@@ -980,11 +985,12 @@ export async function drainBackgroundJobs(
         && job.malformedRetryVersion !== null && job.malformedRetryVersion === job.requestVersion;
       const failedAt = clock();
       const lockDeferral = planLockDeferral(job, err, failedAt);
-      const exhausted = lockDeferral
+      const budgetSpent = lockDeferral
         ? lockDeferral.runAfter === null
-        : job.attempts >= job.maxAttempts || malformedRetrySpent || err instanceof EmbeddingIndexNeedsRetry;
-      await store.markFailedOrPending(job, err, exhausted, failedAt, lockDeferral);
-      if (exhausted) result.failed += 1;
+        : job.attempts >= job.maxAttempts || malformedRetrySpent;
+      const terminal = failureDisposition(err, budgetSpent) !== 'retryable';
+      await store.markFailedOrPending(job, err, terminal, failedAt, lockDeferral);
+      if (terminal) result.failed += 1;
       else {
         if (lockDeferral) result.held += 1;
         else result.retried += 1;
@@ -1078,6 +1084,7 @@ export type ClaimedBackgroundJob = BackgroundJob & {
   tenantIsGroup?: boolean;
   /** Queue metadata, separate from the payload passed to job processors. */
   lockDeferral?: unknown;
+  terminalRecoveryVersion?: string | null;
 };
 
 export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<BackgroundJobResult | void> {
@@ -1253,6 +1260,14 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
       const [source] = await getDb().select({ id: inspirations.id }).from(inspirations)
         .where(and(eq(inspirations.id, payload.inspirationId), eq(inspirations.profileId, job.profileId))).limit(1);
       if (!source) return dropPoisonPayload(job);
+      if (job.type === 'derive_signals' && (job.lastError !== null || job.terminalRecoveryVersion === job.requestVersion.toString())) {
+        const dispatch = await derivationRetryDispatchState(getDb(), {
+          jobId: job.id, profileId: job.profileId, requestVersion: job.requestVersion.toString(),
+          attempts: job.attempts, lockedAt: coerceNullableDate(job.lockedAt),
+        });
+        if (dispatch === 'stale') return;
+        if (dispatch === 'blocked') throw new EmbeddingIndexNeedsRetry('outcome_unknown');
+      }
       const supportOnly = job.type === 'review_signal_support';
       const result = await deriveSignalsForInspiration({ ...payload, supportOnly }, {
         beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
@@ -1828,9 +1843,11 @@ async function claimNextBackgroundJob(now = new Date(), overdueBefore?: Date, ca
       job.id,
       job.profile_id AS "profileId",
       job.type,
-      CASE WHEN jsonb_typeof(job.payload) = 'object' THEN job.payload - 'lockDeferral'
+      CASE WHEN jsonb_typeof(job.payload) = 'object'
+        THEN job.payload - ARRAY['lockDeferral','failureDisposition','terminalRecoveryVersion']
            ELSE job.payload END AS payload,
       job.payload->'lockDeferral' AS "lockDeferral",
+      job.payload->>'terminalRecoveryVersion' AS "terminalRecoveryVersion",
       job.result,
       job.request_version AS "requestVersion",
       job.completed_version AS "completedVersion",
@@ -1843,6 +1860,7 @@ async function claimNextBackgroundJob(now = new Date(), overdueBefore?: Date, ca
       job.locked_at AS "lockedAt",
       job.started_at AS "startedAt",
       job.last_error AS "lastError",
+      job.terminal_notice_sent_for AS "terminalNoticeSentFor",
       job.idempotency_key AS "idempotencyKey",
       job.created_at AS "createdAt",
       job.updated_at AS "updatedAt",
@@ -1946,6 +1964,7 @@ async function markJobFailedOrPending(
     lockDeferral?.runAfter ?? (exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job, now, err))
   ).toISOString();
   const diagnostic = jobFailureDiagnostic(err);
+  const disposition = failureDisposition(err, exhausted);
   const [settled] = await getDb().execute<{ status: 'failed' | 'pending'; runAfter: Date | string; currentFailure: boolean }>(sql`
     UPDATE background_jobs
     SET status = CASE WHEN rerun_requested THEN 'pending'::background_job_status ELSE ${status}::background_job_status END,
@@ -1955,10 +1974,14 @@ async function markJobFailedOrPending(
         attempts = CASE WHEN rerun_requested THEN 0 WHEN ${Boolean(lockDeferral)} THEN attempts - 1 ELSE attempts END,
         -- Return the retry attempt while keeping the job run in the model
         -- budget ledger. A lock can occur after a provider call.
-        payload = CASE WHEN ${Boolean(lockDeferral?.runAfter)} AND NOT rerun_requested
-          AND request_version = ${job.requestVersion.toString()}::bigint
-          THEN jsonb_set(payload, '{lockDeferral}', ${JSON.stringify(lockDeferral?.checkpoint ?? null)}::jsonb)
-          ELSE payload END,
+        payload = CASE WHEN jsonb_typeof(payload) <> 'object' THEN payload
+          WHEN rerun_requested THEN payload - 'failureDisposition'
+          ELSE payload || jsonb_build_object('failureDisposition', ${disposition}::text)
+            || CASE WHEN ${Boolean(lockDeferral?.runAfter)}
+              AND request_version = ${job.requestVersion.toString()}::bigint
+              THEN jsonb_build_object('lockDeferral', ${JSON.stringify(lockDeferral?.checkpoint ?? null)}::jsonb)
+              ELSE '{}'::jsonb END
+          END,
         rerun_requested = false,
         -- The version this attempt read has now spent its one malformed retry.
         -- A newer request (rerun flag, or any later enqueue) carries a higher
@@ -1987,6 +2010,11 @@ async function markJobFailedOrPending(
     ...(lockDeferral && settled.currentFailure ? { lockDeferrals: lockDeferral.checkpoint.count } : {}),
     ...(settled.status === 'pending' ? { runAfter: coerceDate(settled.runAfter).toISOString() } : {}),
   });
+  if (settled.status === 'failed') {
+    // The fenced UPDATE has committed. Notice transport cannot alter settlement.
+    try { await deliverTerminalJobNotices(getDb(), job.id); }
+    catch { console.warn('[background-jobs] terminal notice deferred'); }
+  }
 }
 
 /** Only failures from this drain can request a near-term async wake. A later
@@ -2086,6 +2114,7 @@ type LockDeferral = {
 
 function planLockDeferral(job: ClaimedBackgroundJob, error: unknown, now: Date): LockDeferral | undefined {
   if (error instanceof EmbeddingIndexNeedsRetry) return;
+  if (job.terminalRecoveryVersion === job.requestVersion.toString()) return;
   const state = databaseSqlState(error);
   if (state !== '55P03' && state !== '40P01') return;
   // The checkpoint is stored in the queue's JSON object, never the work input.
@@ -2111,16 +2140,22 @@ function planLockDeferral(job: ClaimedBackgroundJob, error: unknown, now: Date):
 /** 30s, 60s, 120s, … capped at 15 minutes. */
 function calculateBackoffRunAfter(job: Pick<BackgroundJob, 'attempts'>, now: Date, error: unknown): Date {
   // An explicit provider-side outage gets wider spacing within the same
-  // attempt budget. Unknown transport outcomes keep their existing policy.
-  const unavailable = (error instanceof OpenRouterHttpError || error instanceof OpenAiHttpError)
-    && [429, 502, 503, 504].includes(error.status);
+  // attempt budget.
+  const unavailable = isRetryableProviderResponse(error);
   const delaySeconds = Math.min(15 * 60, (unavailable ? 300 : 30) * 2 ** Math.max(0, job.attempts - 1));
   return new Date(now.getTime() + delaySeconds * 1_000);
+}
+
+function isRetryableProviderResponse(error: unknown): boolean {
+  return (error instanceof OpenRouterHttpError || error instanceof OpenAiHttpError)
+    && (error.status === 429 || (error.status >= 500 && error.status <= 599));
 }
 
 /** Persist decision-relevant categories and HTTP status, never messages. */
 function jobFailureDiagnostic(error: unknown): string {
   if (error instanceof MalformedModelOutputError) return 'malformed_model_output';
+  if (error instanceof EmbeddingIndexNeedsRetry) return `embedding_${error.code}`;
+  if (error instanceof BackgroundJobHeldError) return 'recovered_work_held';
   if (error instanceof OpenRouterHttpError && error.creditRefused) return 'provider_credit_refused';
   if (error instanceof OpenRouterHttpError || error instanceof OpenAiHttpError) {
     const status = error.status;
@@ -2131,4 +2166,24 @@ function jobFailureDiagnostic(error: unknown): string {
   if (error instanceof ModelDidNotAnswerError) return 'model_unusable_output';
   if (error instanceof ModelConfigurationError) return 'model_configuration';
   return JSON.stringify(safeErrorDiagnostic(error));
+}
+
+function failureDisposition(error: unknown, budgetSpent: boolean): 'retryable' | 'exhausted' | 'permanent' | 'ambiguous' {
+  if (error instanceof EmbeddingIndexNeedsRetry) {
+    return error.code === 'provider_refused' || error.code === 'input_too_large' ? 'permanent' : 'ambiguous';
+  }
+  if (error instanceof ModelConfigurationError || (error instanceof OpenRouterHttpError && error.creditRefused)) return 'permanent';
+  const bounded = budgetSpent ? 'exhausted' : 'retryable';
+  if (error instanceof OpenAiHttpError || error instanceof OpenRouterHttpError) {
+    if (isRetryableProviderResponse(error)) return bounded;
+    if (error.status >= 400 && error.status < 500 && ![408, 409, 429].includes(error.status)) return 'permanent';
+    return 'ambiguous';
+  }
+  const state = databaseSqlState(error);
+  if (state && ['40001', '40P01', '55P03'].includes(state)) return bounded;
+  if (state && /^(22|23|42)/.test(state)) return 'permanent';
+  if (error instanceof MalformedModelOutputError || error instanceof TopOfMindPublicationError
+    || (error instanceof ModelDidNotAnswerError && !error.cause)) return bounded;
+  // An untyped error cannot prove where it occurred relative to paid work.
+  return 'ambiguous';
 }

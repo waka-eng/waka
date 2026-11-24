@@ -6,6 +6,8 @@ import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {EmbeddingIndexNeedsRetry} from './embedding-indexer.js';
 import {OpenRouterHttpError} from './openrouter-http.js';
+import {ModelConfigurationError} from './model-routing.js';
+import * as notices from './job-failure-notices.js';
 import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
 import {getDb} from './db.js';
@@ -57,7 +59,9 @@ it('leaves running, exhausted and next-day reading work to its existing lease/re
 });
 async function fail(){
   const retries:BackgroundJobRetryWake[]=[];
-  const result=await drainBackgroundJobs({now,limit:1,processor:async()=>{throw new Error('Synthetic transport failure');},onTransientRetry:retry=>{retries.push(retry);}});
+  const result=await drainBackgroundJobs({now,limit:1,processor:async()=>{
+    throw new Error('Synthetic serialization rollback', {cause: {code:'40001'}});
+  },onTransientRetry:retry=>{retries.push(retry);}});
   return {retries,result};
 }
 const pending=(retries:BackgroundJobRetryWake[],at=now)=>hasNearTermBackgroundJobRetry(retries,t.db as never,at);
@@ -105,11 +109,40 @@ it('settles an actual wrapped PostgreSQL failure without storing or logging its 
     const result=await drainBackgroundJobs({now,limit:1,processor:async()=>{
       await getDb().execute(sql`SELECT ${marker}::int`);
     }});
-    expect(result).toMatchObject({retried:1});
-    const [row]=await t.sql`SELECT last_error FROM background_jobs WHERE id=${job.id}`;
+    expect(result).toMatchObject({failed:1,retried:0});
+    const [row]=await t.sql`SELECT last_error,payload->>'failureDisposition' AS disposition FROM background_jobs WHERE id=${job.id}`;
     expect(JSON.parse(row!.last_error)).toEqual({category:'database',code:'22P02'});
+    expect(row!.disposition).toBe('permanent');
     expect(JSON.stringify([warn.mock.calls,error.mock.calls])).not.toContain(marker);
   } finally { warn.mockRestore();error.mockRestore(); }
+});
+
+it.each([
+  [new ModelConfigurationError('synthetic config detail'), 'permanent', 'model_configuration', 0],
+  [new OpenRouterHttpError('synthetic credentials detail', 401), 'permanent', 'provider_http_401', 0],
+  [new OpenRouterHttpError('synthetic credit detail', 402, true), 'permanent', 'provider_credit_refused', 0],
+  [new EmbeddingIndexNeedsRetry('commit_unconfirmed'), 'ambiguous', 'embedding_commit_unconfirmed', 0],
+  [Object.assign(new Error('synthetic timeout detail'), { code: 'ETIMEDOUT' }), 'ambiguous', '{"category":"transport","code":"ETIMEDOUT"}', 0],
+  [new Error('Synthetic write acknowledgement lost', {cause: {code:'08006'}}), 'ambiguous', '{"category":"database","code":"08006"}', 0],
+  [new Error('Synthetic opaque cause'), 'ambiguous', '{"category":"unexpected"}', 0],
+  [new OpenRouterHttpError('synthetic last outage', 503), 'exhausted', 'provider_http_503', 2],
+] as const)('records %s only after a closed terminal settlement', async (error, disposition, diagnostic, attempts) => {
+  const job = await fixture(attempts, 3);
+  let committedAtNotice: unknown;
+  const notice = vi.spyOn(notices, 'deliverTerminalJobNotices').mockImplementation(async (_db, id) => {
+    const [row] = await t.sql`SELECT status,last_error,payload->>'failureDisposition' AS disposition
+      FROM background_jobs WHERE id=${id ?? ''}::uuid`;
+    committedAtNotice = row;
+    throw new Error('Synthetic undelivered notice');
+  });
+  try {
+    const result = await drainBackgroundJobs({now,limit:1,processor:async () => { throw error; }});
+    expect(result).toMatchObject({failed:1,retried:0});
+    expect(notice).toHaveBeenCalledExactlyOnceWith(getDb(), job.id);
+    expect(committedAtNotice).toEqual({ status: 'failed', last_error: diagnostic, disposition });
+    expect((await t.sql`SELECT status,last_error,payload->>'failureDisposition' AS disposition
+      FROM background_jobs WHERE id=${job.id}`)[0]).toEqual({ status: 'failed', last_error: diagnostic, disposition });
+  } finally { notice.mockRestore(); }
 });
 
 it('defers real lock conflicts without spending processing attempts or leaking bound values', async () => {
@@ -241,7 +274,7 @@ it('does not signal an exhausted attempt or a stale settlement whose ownership w
   const job=await fixture();const retries:BackgroundJobRetryWake[]=[];
   await drainBackgroundJobs({now,limit:1,onTransientRetry:retry=>{retries.push(retry);},processor:async()=>{
     await t.sql`UPDATE background_jobs SET status='succeeded',locked_at=null WHERE id=${job.id}`;
-    throw new Error('Stale worker failed after losing ownership');
+    throw new Error('Synthetic serialization rollback after ownership loss', {cause: {code:'40001'}});
   }});
   expect(retries).toHaveLength(1);expect(await pending(retries)).toBe(false);
 });
