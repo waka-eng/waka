@@ -79,6 +79,7 @@ export function PrincipleRead({ active, locale, onRead, profileId, name }: {
     /* STRIPPED: "Principles come from patterns in what you save." for too
        few signals; with nothing to report the line is simply absent.
        Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */
+    : status.eligible ? "worldPrinciplesNoCandidate"
     : status.signalCount < 3 ? null
     : status.topOfMindCount < 1 ? "worldPrinciplesNeedRead"
     : "worldPrinciplesNoCandidate";

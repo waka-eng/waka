@@ -58,6 +58,7 @@ beforeEach(async () => {
     entries: [{ type: 'hypothesis', body: wording, citedSignalIds: input.signals.map((signal) => signal.id) }],
   }));
   setDefaultModelProviderForTests({ extractSignalCandidates: extract, assessSignalSupport: assess,judgeSignalMatch:async()=>({relation:"independent"}),
+    distillPrinciples: async () => ({ candidates: [] }),
     reviewTopOfMind: approveReadingReview, synthesizeTopOfMind: synthesize } as unknown as ModelProvider);
 });
 afterAll(async () => {

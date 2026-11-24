@@ -31,6 +31,8 @@ afterAll(async () => { vi.restoreAllMocks(); setDefaultModelProviderForTests(nul
 async function fixture() {
   const [account] = await t.sql`INSERT INTO accounts(email) VALUES (${`complete-${++sequence}@example.test`}) RETURNING id`;
   const [profile] = await t.sql`INSERT INTO profiles(account_id, type, name) VALUES (${account.id}, 'human', 'Owner') RETURNING id`;
+  // These receipts exercise the ordinary reading-to-Principle handoff, after the first Principle.
+  await t.sql`INSERT INTO principles(profile_id,statement,origin,rank) VALUES (${profile.id},'Try the small version first.','declared',1)`;
   await enableFixtureEmbedding2(t,profile.id as string);
   const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${profile.id}, 'A saved source') RETURNING id`;
   // Reading completion needs another original, not more signals from the
