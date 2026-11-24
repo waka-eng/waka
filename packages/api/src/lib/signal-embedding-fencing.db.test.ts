@@ -89,9 +89,14 @@ describe('statement embedding races', () => {
       if (outcome === 'failure') throw new Error('Provider unavailable');
       return [1, ...Array<number>(767).fill(0)];
     });
-    await expect(processBackgroundJob(job!)).rejects.toMatchObject({code:outcome==='success'?'commit_unconfirmed':'outcome_unknown'});
+    await expect(processBackgroundJob(job!)).rejects.toMatchObject({code:outcome==='success'?'publication_pending':'outcome_unknown'});
     expect(OpenRouterEmbedding2Candidate.prototype.embed).toHaveBeenCalledOnce();
     expect(await stored(f.signalId)).toMatchObject([{ input_hash: embeddingInputHash(EMBEDDING_2_SPACE.id,'Stale cached words'), embedding: values }]);
+    expect((await t.sql`SELECT pending_embedding IS NOT NULL AS staged,requested_version>completed_version AS pending
+      FROM embedding_index_work WHERE source_id=${f.signalId}`)[0])
+      .toEqual({staged:outcome==='success',pending:true});
+    expect(await t.sql`SELECT status FROM embedding_index_attempts WHERE source_id=${f.signalId}`)
+      .toEqual([{status:outcome==='success'?'received':'unknown'}]);
   });
 
   it('yields to a concurrent human edit instead of waiting back on its source lock', async () => {

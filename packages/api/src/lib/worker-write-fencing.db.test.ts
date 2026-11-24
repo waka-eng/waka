@@ -97,12 +97,18 @@ describe('every background write owns its claim', () => {
     expect(await t.sql`SELECT id FROM background_jobs WHERE type = 'derive_signals'`).toHaveLength(1);
   });
 
-  it('a reclaimed derivation cannot persist a capture vector', async () => {
+  it('a reclaimed derivation can stage a result but cannot publish its capture vector', async () => {
     const f = await fixture();
     const job = await claimed(f.profileId, 'derive_signals', { inspirationId: f.sourceId, reason: 'created' });
     vi.mocked(OpenRouterEmbedding2Candidate.prototype.embed).mockImplementation(async () => { await reclaim(job.id); return vector(); });
-    await expect(processBackgroundJob(job)).rejects.toMatchObject({code:'commit_unconfirmed'});
+    await expect(processBackgroundJob(job)).rejects.toMatchObject({code:'publication_pending'});
     expect(await t.sql`SELECT id FROM inspiration_embeddings`).toHaveLength(0);
+    expect(await t.sql`SELECT status FROM embedding_index_attempts WHERE source_id=${f.sourceId}`).toEqual([{status:'received'}]);
+    expect((await t.sql`SELECT pending_embedding IS NOT NULL AS staged,requested_version>completed_version AS pending
+      FROM embedding_index_work WHERE source_id=${f.sourceId}`)[0]).toEqual({staged:true,pending:true});
+    expect(await t.sql`SELECT id FROM signal_evidence`).toHaveLength(0);
+    expect(await t.sql`SELECT id FROM background_jobs WHERE type='refresh_top_of_mind'`).toHaveLength(0);
+    expect(OpenRouterEmbedding2Candidate.prototype.embed).toHaveBeenCalledOnce();
   });
 
   it('a reclaimed support assessment cannot withdraw evidence or persist a review', async () => {
