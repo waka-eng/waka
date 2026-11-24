@@ -357,7 +357,7 @@ does not establish a production erasure SLA or complete beta readiness.
 
 ## Terminal background jobs
 
-Production sends an individual Discord notice when a background job stops on a permanent error, an uncertain provider outcome, or an exhausted retry allowance. The message gives the job type, disposition, failure time and a reference. Search that reference in the production background worker logs for the matching job, then inspect its sanitized diagnostic and any provider attempt record before taking action. An uncertain provider outcome requires reconciliation before replay.
+Production sends an individual Discord notice when a background job stops on a permanent error, an uncertain provider outcome, or an exhausted retry allowance. The message gives the job type, an available sanitized diagnostic, disposition, failure time and a reference. Search that reference in the production background worker logs for the matching job, then inspect its sanitized diagnostic and any provider attempt record before taking action. An uncertain provider outcome requires reconciliation before replay.
 
 The worker calls the dedicated job alert function after committing the failure. Only the notification function receives the Discord webhook. A Discord message ID confirms delivery, and the worker marks the exact failed version and timestamp. If that acknowledgement is lost, the existing daily sweep checks outstanding notices again. Duplicate invocations share a DynamoDB delivery record. A crash after Discord accepts a message but before DynamoDB confirms it can produce a duplicate with the same reference.
 

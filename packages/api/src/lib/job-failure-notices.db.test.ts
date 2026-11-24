@@ -37,6 +37,7 @@ it('scopes dispatch to the configured relay and only marks the exact failed row 
     expect(encoded).not.toContain(id);
     const notice = readJobFailureNotice(JSON.parse(encoded))!;
     expect(notice.disposition).toBe('permanent');
+    expect(notice.diagnostic).toBe('other');
     references.push(notice.reference);
     return { StatusCode: 200, Payload: Buffer.from(JSON.stringify({ delivered: references.length === 1 ? 'wrong' : notice.reference })) };
   });
