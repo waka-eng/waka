@@ -478,6 +478,7 @@
   "worldPrinciplesNeedRead": "Not yet.",
   "worldPrinciplesNoCandidate": "No principle is clear yet.",
   "worldPrinciplesQueued": "Waiting for the next automatic review.",
+  "worldPrinciplesAwaitingResult": "Awaiting the review result.",
   "worldPrinciplesReading": "Reviewing saves for a Principle…",
   "worldPrinciplesRetry": "Try again",
   "worldPrinciplesShortcut": "Principles",

@@ -64,9 +64,9 @@ const principle = { id: "principle-1", statement: "Make room for experiments.", 
   conflictsWithId: null, createdAt: "2026-09-22", citedSignals: [{ id: "signal-1", statement: "Experiments recur." }] };
 
 describe("principle read", () => {
-  it('shows queued support without asking for inspirations or generating on mount', async () => {
+  it.each([true, undefined])('shows queued support without generating on mount (supportActive: %s)', async supportActive => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
-      ...ready, phase: 'pending', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true, supportActive: true,
+      ...ready, phase: 'pending', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true, supportActive,
     } });
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     expect(host.textContent).toContain('Waiting to check the supporting saves.');
@@ -80,6 +80,14 @@ describe("principle read", () => {
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     expect(host.querySelector('[role="status"]')?.textContent).toBe('Checking the supporting saves…');
     expect(requestPrincipleRead).not.toHaveBeenCalled();
+  });
+
+  it('uses neutral copy when an older response cannot establish a running job', async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
+      ...ready, phase: 'processing', supportPending: true,
+    } });
+    await act(async () => root.render(<PrincipleRead active locale="ko-KR" />));
+    expect(host.querySelector('[role="status"]')?.textContent).toBe('검토 결과를 기다리고 있어요.');
   });
 
   it('explicitly retries a failed support check even when current eligibility is below the bar', async () => {

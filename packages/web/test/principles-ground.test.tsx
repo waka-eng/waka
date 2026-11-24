@@ -145,6 +145,7 @@ it.each([
   ["processing", false, true, "Reviewing saves for a Principle…"],
   ["pending", true, false, "Waiting to check the supporting saves."],
   ["processing", true, false, "Checking the supporting saves…"],
+  ["processing", undefined, true, "Awaiting the review result."],
 ] as const)("shows %s review status from the overlay (active support: %s)", async (phase, supportActive, eligible, message) => {
   vi.mocked(fetchPrinciples).mockResolvedValue([]);
   vi.mocked(fetchSignals).mockResolvedValue([]);
