@@ -45,7 +45,7 @@ export function createOpenAiModelProvider():ModelProvider {
       if(!input.comparison)return reviewed;
       return ask('judge','top-of-mind comparison','top_of_mind_comparison',buildTopOfMindComparisonRequest(input,reviewed),value=>applyTopOfMindComparison(input,reviewed,value));
     },
-    distillPrinciples:input=>ask('principles','principle distillation','principles',buildPrincipleDistillRequest(input),parseDistilledPrinciples,()=>({candidates:[]})),
+    distillPrinciples:input=>ask('principles','principle distillation','principles',buildPrincipleDistillRequest(input),value=>parseDistilledPrinciples(value,input),()=>({candidates:[]})),
     assessPrincipleGrounding:input=>ask('principles','principle grounding','principle_grounding',buildPrincipleGroundingRequest(input),value=>parsePrincipleGrounding(value,input)),
     judgePrincipleRelation:input=>ask('principleJudge','principle relation judgement','principle_relation',buildPrincipleRelationRequest(input),value=>parsePrincipleRelation(value,input)),
     async routeDeclaration(input){

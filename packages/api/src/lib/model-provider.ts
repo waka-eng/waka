@@ -333,6 +333,8 @@ export interface PrincipleDistillSignal {
 
 export interface DistillPrinciplesInput {
   profileId: string;
+  firstPrinciple?: true;
+  ordinaryAvailable?: true;
   preferredLocale: SupportedLocale;
   signals: PrincipleDistillSignal[];
   /** The standing set — context for no-duplication; matching is the judge's job. */

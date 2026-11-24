@@ -1321,11 +1321,26 @@ restore demonstrated standing without changing the person's words or deciding
 an open dispute. Only unedited machine-owned principles are removed by this
 reconciliation.
 
-Promotion and support-loss maintenance use the same complete-citation check as
-reads: every cited signal must still be active, owned and readable, and both
-the signal wording and the Principle wording must match the cited revisions.
-Three valid citations cannot silently salvage a fourth withdrawn one. A fresh
-grounded match can renew citations before restoring demonstrated standing.
+Reads, promotion and support-loss maintenance check the full citation set.
+Each cited signal must remain owned and readable, and both the signal wording
+and the Principle wording must match the cited revisions. Ordinary Principles
+require active signals. A withdrawn citation invalidates the set until a
+fresh grounded match renews it.
+
+A human profile with no Principle history can mint its first Principle from two
+distinct current signals, including emerging signals. Two direct owned
+inspirations with different normalized original text must be assignable to
+different signals. The grounding review must see distinct original excerpts
+that show the shared decision. This path needs no Top of Mind reading. If both
+evidence bars are available, one distillation and grounding pass prefers
+supported ordinary candidates and can use the two-source candidate as a
+fallback.
+
+A completed save derivation requests this check in its transaction. The
+profile retains a content-free history marker after a Principle is deleted.
+The first minted Principle keeps its own evidence rule on reads and
+reconciliation. Ordinary generation still uses three active supported
+signals and one citing Top of Mind version.
 
 **Generation is mint-or-match, when material changes.** A completed personal
 or agent top-of-mind pass requests an eligibility check. Opening principles
@@ -1457,7 +1472,7 @@ The authoritative values. Machine-checked against code — see
 
 | Constant | Value | One line |
 |---|---|---|
-| `PRINCIPLE_MIN_SIGNALS` | 3 | Distinct citing signals a principle must rest on |
+| `PRINCIPLE_MIN_SIGNALS` | 3 | Distinct citing signals for ordinary generation |
 | `PRINCIPLE_MIN_SPAN_DAYS` | 0 | Initial principles require evidence, without a calendar wait |
 | `PRINCIPLE_MIN_TOM_APPEARANCES` | 1 | Distinct top-of-mind versions citing the signals |
 | `PRINCIPLE_MAX_STATEMENT_LENGTH` | 200 | A principle is a directive, not an essay |

@@ -4,6 +4,7 @@ import { getDb } from "./db.js";
 import { citationBodyCurrent, citationStatementCurrent, evidenceSupportCurrent } from './signal-support-state.js';
 import {reviewEvidenceCurrent} from './review-evidence.js';
 import {feedbackWordingCurrent} from './feedback-revisions.js';
+import { firstPrincipleCitationsIndependent, usesFirstPrincipleBar } from './first-principle-evidence.js';
 import { SIGNAL_PROMOTION_MIN_EVIDENCE } from './signal-derivation-thresholds.js';
 
 type Db = Pick<ReturnType<typeof getDb>, "select">;
@@ -65,12 +66,14 @@ export function personalEntryReadable(profileId: string) {
 
 export function personalPrincipleSupportCurrent(profileId: string, minimumSignals: number) {
   // Separate IDs with the same normalized wording are still one pattern.
-  return sql<boolean>`((SELECT count(DISTINCT lower(btrim(regexp_replace(normalize(signals.statement, NFKC), '[[:space:]]+', ' ', 'g'))))
+  const first = usesFirstPrincipleBar(profileId);
+  return sql<boolean>`((CASE WHEN ${first} THEN ${firstPrincipleCitationsIndependent(profileId)}
+    ELSE (SELECT count(DISTINCT lower(btrim(regexp_replace(normalize(signals.statement, NFKC), '[[:space:]]+', ' ', 'g'))))
       FROM principle_signals ps JOIN signals ON signals.id=ps.signal_id
-      WHERE ps.principle_id = "principles"."id") >= ${minimumSignals}
+      WHERE ps.principle_id = "principles"."id") >= ${minimumSignals} END)
     AND NOT EXISTS (SELECT 1 FROM principle_signals ps LEFT JOIN signals ON signals.id = ps.signal_id
       WHERE ps.principle_id = "principles"."id" AND ((${personalSignalReadable(profileId)}) IS NOT TRUE
-        OR signals.status <> 'active'
+        OR (NOT ${first} AND signals.status <> 'active')
         OR (${citationStatementCurrent('ps')}) IS NOT TRUE
         OR (${citationBodyCurrent('ps', 'principles', 'principle_statement_revision', 'statement_revision')}) IS NOT TRUE)))`;
 }
