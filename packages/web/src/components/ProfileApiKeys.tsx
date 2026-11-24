@@ -1,11 +1,13 @@
 import { publicWebOrigin } from '../lib/public-origins';
 import { mcpKeyConfig, mcpSetupCommands, mcpClientName, type McpClient } from '../lib/mcp-setup';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { HomeActionIcon } from './HomeActionIcon';
 import { McpCopyBlock } from './McpCopyBlock';
 import { McpInstallPrompt } from './McpInstallPrompt';
 
 import { createProfileKey, fetchProfileKeys, revokeProfileKey, type ApiProfileKey, type KeyProfile } from '../lib/api/profile-keys';
 import { formatMessage, t, type SupportedLocale } from '../lib/locales';
+import { dateWords, timeOf } from '../lib/words';
 
 /** Mounted with the profile ID as its key. Secrets live only in this view. */
 export function ProfileApiKeys({ profile, locale }: {
@@ -24,6 +26,9 @@ export function ProfileApiKeys({ profile, locale }: {
   const [fresh, setFresh] = useState<(ApiProfileKey & { secret: string }) | null>(null);
   const [copy, setCopy] = useState<'copied' | 'failed' | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
+  const activeKeysId = useId();
+  const confirmationId = useId();
+  const deleteTrigger = useRef<HTMLButtonElement | null>(null);
   const alive = useRef(true);
   const secretField = useRef<HTMLInputElement>(null);
   const setupDetails = useRef<HTMLDetailsElement>(null);
@@ -70,9 +75,6 @@ export function ProfileApiKeys({ profile, locale }: {
   const config = mcpKeyConfig(client, profile.id, apiUrl, packageOrigin, fresh?.access ?? (personal ? access : "read_capture"));
   const install = mcpSetupCommands({ profile, apiUrl, packageOrigin, installed: false, client, scope: 'user' })[0]!;
   return <div className="waka-api-keys">
-    <div className="waka-session-list-heading">
-      <button type="button" className="waka-settings-erase" disabled={loading || busy !== null} onClick={() => void load()}>{say('profileConnectionsRefresh')}</button>
-    </div>
     <p className="waka-settings-note">{say(personal ? 'profilePersonalMcpHint' : 'profileApiKeysHint')}</p>
     {/* STRIPPED: "Name the app or device using this key."; the field's
         placeholder already says it. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
@@ -101,7 +103,81 @@ export function ProfileApiKeys({ profile, locale }: {
       <button type="button" disabled={loading || busy !== null || !label.trim() || keys.length >= 5} onClick={() => void create()}>{say('profileApiKeysCreate')}</button>
     </div> : null}
     {keys && keys.length >= 5 ? <p className="waka-settings-note">{say('profileApiKeysLimit')}</p> : null}
+    <div className="waka-session-list-heading">
+      <h4 id={activeKeysId} className="waka-mcp-instruction-title">{say('profileApiKeysActive')}</h4>
+      <button type="button" className="waka-settings-erase" disabled={loading || busy !== null} onClick={() => void load()}>{say('profileConnectionsRefresh')}</button>
+    </div>
     {keys?.length === 0 ? <p className="waka-settings-note">{say('profileApiKeysEmpty')}</p> : null}
+    {keys && keys.length > 0 ? <>
+      <table className="waka-api-key-table" role="table" aria-labelledby={activeKeysId} aria-busy={loading}>
+        <thead role="rowgroup">
+          <tr role="row">
+            <th scope="col" role="columnheader">{say('profileApiKeysColumnName')}</th>
+            <th scope="col" role="columnheader">{say('profileApiKeysColumnPermissions')}</th>
+            <th scope="col" role="columnheader">{say('profileApiKeysSecret')}</th>
+            <th scope="col" role="columnheader">{say('profileConnectionLastUsed')}</th>
+            <th scope="col" role="columnheader"><span className="sr-only">{say('profileApiKeysRevoke')}</span></th>
+          </tr>
+        </thead>
+        {keys.map(key => {
+          const name = key.label || say('profileApiKeysSecret');
+          const expanded = confirm === key.id;
+          const lastUsed = key.lastUsedAt ? Date.parse(key.lastUsedAt) : NaN;
+          return <tbody key={key.id} role="rowgroup">
+            <tr role="row">
+              <th scope="row" role="rowheader">
+                <span className="waka-api-key-label" aria-hidden="true">{say('profileApiKeysColumnName')}</span>
+                {name}
+              </th>
+              <td role="cell">
+                <span className="waka-api-key-label" aria-hidden="true">{say('profileApiKeysColumnPermissions')}</span>
+                {say(key.access === 'read_only' ? 'profileMcpReadOnly' : 'profileMcpReadCapture')}
+              </td>
+              <td role="cell">
+                <span className="waka-api-key-label" aria-hidden="true">{say('profileApiKeysSecret')}</span>
+                <code>{key.prefix}…</code>
+              </td>
+              <td role="cell">
+                <span className="waka-api-key-label" aria-hidden="true">{say('profileConnectionLastUsed')}</span>
+                {key.lastUsedAt && Number.isFinite(lastUsed)
+                  ? <time dateTime={key.lastUsedAt}>
+                      <span>{dateWords(lastUsed, Date.now(), locale)}</span>{' '}
+                      <span>{timeOf(lastUsed, locale)}</span>
+                    </time>
+                  : say('profileApiKeysNeverUsed')}
+              </td>
+              <td role="cell">
+                <button type="button" className="waka-api-key-delete" disabled={busy !== null || loading}
+                  title={say('profileApiKeysRevoke')}
+                  aria-label={formatMessage(locale, 'profileApiKeysRevokeNamed', { name: key.label || key.prefix })}
+                  aria-expanded={expanded} aria-controls={expanded ? confirmationId : undefined}
+                  onClick={event => {
+                    deleteTrigger.current = event.currentTarget;
+                    setConfirm(expanded ? null : key.id);
+                  }}>
+                  <HomeActionIcon kind="erase" />
+                </button>
+              </td>
+            </tr>
+            {expanded ? <tr role="row">
+              <td role="cell" colSpan={5}>
+                <div id={confirmationId} className="waka-session-confirm">
+                  <p className="waka-settings-note">{formatMessage(locale, 'profileApiKeysRevokeHint', { name: key.label || key.prefix })}</p>
+                  <div className="waka-session-actions">
+                    <button type="button" className="waka-settings-erase" disabled={busy !== null} onClick={() => {
+                      setConfirm(null);
+                      deleteTrigger.current?.focus();
+                    }}>{say('profileConnectionCancel')}</button>
+                    <button type="button" className="waka-settings-erase" disabled={busy !== null} onClick={() => void revoke(key.id)}>{say('profileApiKeysRevokeConfirm')}</button>
+                  </div>
+                </div>
+              </td>
+            </tr> : null}
+          </tbody>;
+        })}
+      </table>
+      <p className="waka-settings-note">{say('profileApiKeysRotateHint')}</p>
+    </> : null}
     <details ref={setupDetails} className="waka-mcp-key-setup">
       <summary>{say('profileApiKeysConfigTitle')}</summary>
       <label className="waka-mcp-choice"><span>{say('profileMcpClient')}</span><select value={client} onChange={event => setClient(event.target.value as McpClient)}>
@@ -131,24 +207,6 @@ export function ProfileApiKeys({ profile, locale }: {
       </details>
 
     </details>
-    {keys && keys.length > 0 ? <>
-      <h4 className="waka-mcp-instruction-title">{say('profileApiKeysActive')}</h4>
-      <p className="waka-settings-note">{say('profileApiKeysRotateHint')}</p>
-    </> : null}
-    <ul className="waka-session-list" aria-busy={loading}>
-      {keys?.map(key => <li key={key.id} className="waka-session-card">
-        <div className="waka-session-card-heading"><strong>{key.label || say('profileApiKeysSecret')}</strong>{personal ? <span>{say(key.access === "read_only" ? "profileMcpReadOnly" : "profileMcpReadCapture")}</span> : null}<span>{key.prefix}…</span></div>
-        <p className="waka-settings-note">{say('profileConnectionLastUsed')}: {key.lastUsedAt
-          ? new Date(key.lastUsedAt).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' }) : say('profileApiKeysNeverUsed')}</p>
-        {confirm === key.id ? <div className="waka-session-confirm">
-          <p className="waka-settings-note">{formatMessage(locale, 'profileApiKeysRevokeHint', { name: key.label || key.prefix })}</p>
-          <div className="waka-session-actions">
-            <button type="button" className="waka-settings-erase" disabled={busy !== null} onClick={() => setConfirm(null)}>{say('profileConnectionCancel')}</button>
-            <button type="button" className="waka-settings-erase" disabled={busy !== null} onClick={() => void revoke(key.id)}>{say('profileApiKeysRevokeConfirm')}</button>
-          </div>
-        </div> : <button type="button" className="waka-settings-erase" disabled={busy !== null || loading} onClick={() => setConfirm(key.id)}>{say('profileApiKeysRevoke')}</button>}
-      </li>)}
-    </ul>
 
   </div>;
 }
