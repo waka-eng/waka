@@ -114,6 +114,13 @@ export const principles = pgTable(
   }),
 );
 
+/** Survives Principle deletion, but contains no Principle wording or evidence. */
+export const profilePrincipleHistory = pgTable("profile_principle_history", {
+  profileId: uuid("profile_id").primaryKey().references(() => profiles.id, { onDelete: "cascade" }),
+  /** The single mint made under the first-Principle evidence bar, if any. */
+  firstPrincipleId: uuid("first_principle_id"),
+});
+
 export const principleSignals = pgTable(
   "principle_signals",
   {
