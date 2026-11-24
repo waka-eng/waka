@@ -55,8 +55,9 @@ export async function loadPendingSignalSupportSources(db: Pick<ReturnType<typeof
  * never a retired room job the same person's save once fanned out. */
 export async function loadSignalSupportWorkState(db: Pick<ReturnType<typeof getDb>, 'execute'>, profileId: string) {
   const sources = await loadPendingSignalSupportSources(db, profileId);
-  const jobs = await db.execute<{ status: string; inspirationId: string; type: string; runAfter: string | Date }>(sql`
-    SELECT j.status::text, j.type::text, j.run_after AS "runAfter", j.payload->>'inspirationId' AS "inspirationId"
+  type WorkState = { status: string; runAfter: string | Date; lockedAt: string | Date | null };
+  const jobs = await db.execute<WorkState & { inspirationId: string; type: string }>(sql`
+    SELECT j.status::text, j.type::text, j.run_after AS "runAfter", j.locked_at AS "lockedAt", j.payload->>'inspirationId' AS "inspirationId"
     FROM background_jobs j JOIN inspirations i ON i.id::text = j.payload->>'inspirationId' AND i.profile_id = j.profile_id
     JOIN profiles p ON p.id = ${profileId}::uuid
     WHERE j.type::text IN ('review_signal_support', 'assess_signal_support', 'derive_signals')
@@ -67,14 +68,16 @@ export async function loadSignalSupportWorkState(db: Pick<ReturnType<typeof getD
   const pendingIds = new Set(sources.map((source) => source.inspirationId));
   const relevant = jobs.filter((job) => pendingIds.has(job.inspirationId) ||
     ((job.type === 'review_signal_support' || job.type === 'assess_signal_support') && (job.status === 'pending' || job.status === 'running')));
-  const reviewJobs=await db.execute<{status:string;runAfter:Date|string}>(sql`SELECT DISTINCT j.status::text,j.run_after AS "runAfter"
+  const reviewJobs=await db.execute<WorkState>(sql`SELECT DISTINCT j.status::text,j.run_after AS "runAfter",j.locked_at AS "lockedAt"
     FROM background_jobs j JOIN review_answers a ON a.id::text=j.payload->>'answerId' AND a.profile_id=j.profile_id
     WHERE j.profile_id=${profileId}::uuid AND j.type::text='derive_review_answer'
       AND EXISTS(SELECT 1 FROM signal_review_evidence e WHERE e.profile_id=a.profile_id AND e.answer_id=a.id
         AND review_evidence_current(e.profile_id,e.signal_id,e.answer_id) IS NOT TRUE)`);
   const activeJobs = [...relevant,...reviewJobs].filter((job) => job.status === 'pending' || job.status === 'running');
   const nextRun = activeJobs.length ? Math.min(...activeJobs.map((job) => job.status === 'running' ? Date.now() : new Date(job.runAfter).getTime())) : null;
-  return { sources, active: activeJobs.length > 0, running: activeJobs.some((job) => job.status === 'running'), nextRun,
+  const latestClaimAt = activeJobs.reduce((latest, job) => job.status === 'running' && job.lockedAt
+    ? Math.max(latest, new Date(job.lockedAt).getTime()) : latest, -Infinity);
+  return { sources, active: activeJobs.length > 0, latestClaimAt, nextRun,
     failed: [...relevant,...reviewJobs].some((job) => job.status === 'failed'),
     pending: sources.length > 0 || activeJobs.length > 0 };
 }

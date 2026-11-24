@@ -140,12 +140,18 @@ it("says the ground could not be read, and reads it again on Try again", async (
   expect(host.querySelector(".waka-ground-words")?.textContent).toBe("A.");
 });
 
-it("shows a first reading in progress before any pattern becomes active", async () => {
+it.each([
+  ["pending", false, true, "Waiting for the next automatic review."],
+  ["processing", false, true, "Reviewing saves for a Principle…"],
+  ["pending", true, false, "Waiting to check the supporting saves."],
+  ["processing", true, false, "Checking the supporting saves…"],
+] as const)("shows %s review status from the overlay (active support: %s)", async (phase, supportActive, eligible, message) => {
   vi.mocked(fetchPrinciples).mockResolvedValue([]);
   vi.mocked(fetchSignals).mockResolvedValue([]);
-  vi.mocked(fetchPrincipleStatus).mockResolvedValue({ phase: "processing", eligible: true, signalCount: 2, topOfMindCount: 0 });
+  const status = { phase, eligible, supportActive, supportPending: supportActive, signalCount: 2, topOfMindCount: 0 };
+  vi.mocked(fetchPrincipleStatus).mockResolvedValue(status);
   await act(async () => root.render(<PrinciplesOverlay locale="en-US" profileId={PROFILE} title="Principles" onClose={() => {}} onOpen={() => {}} onNewSave={() => {}} />));
-  expect(line()).toBe("Thinking…");
+  expect(line()).toBe(message);
   expect(host.querySelector(".waka-ground-bubble button")).toBeNull();
 });
 

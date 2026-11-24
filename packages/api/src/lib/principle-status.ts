@@ -3,7 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { backgroundJobs, principles, profilePrincipleHistory, profiles } from "../db/index.js";
 import { getDb } from "./db.js";
 import { loadPrincipleMaterial } from "./principle-generation.js";
-import { enqueueRefreshPrinciples, enqueueTopOfMindRefresh, recoverPendingSignalSupport, wakeCommittedBackgroundJobs } from "./queue.js";
+import { enqueueRefreshPrinciples, enqueueTopOfMindRefresh, recoverPendingSignalSupport, STALE_LOCK_SECONDS, wakeCommittedBackgroundJobs } from "./queue.js";
 import { FIRST_PRINCIPLE_SIGNAL_COUNT } from './first-principle-evidence.js';
 import { personalPrincipleSupportCurrent } from './personal-output.js';
 import { PRINCIPLE_MIN_SIGNALS } from './principle-generation.js';
@@ -63,7 +63,7 @@ function readingPausedFrom(latest: { status: string; lastError: string | null; u
 export async function loadPrincipleStatus(db: Db, profileId: string) {
   const material = await loadPrincipleMaterial(db, profileId);
   const key = principleMaterialKey(material);
-  const [job] = await db.select({ status: backgroundJobs.status }).from(backgroundJobs)
+  const [job] = await db.select({ status: backgroundJobs.status, lockedAt: backgroundJobs.lockedAt }).from(backgroundJobs)
     .where(eq(backgroundJobs.idempotencyKey, `refresh_principles:${profileId}:${key}`)).limit(1);
   const support = await loadSignalSupportWorkState(db, profileId);
   const [servedFirst]=!material.mode&&material.firstPrincipleId
@@ -71,14 +71,16 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
       .where(and(eq(principles.profileId,profileId),eq(principles.id,material.firstPrincipleId),
         personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)))
     :[];
-  const phase = support.active ? support.running ? 'processing' : 'pending' : support.failed ? 'failed' : servedFirst ? 'ready' : !material.eligibility.eligible ? "waiting"
+  const liveSince = Date.now() - STALE_LOCK_SECONDS * 1000;
+  const phase = support.active ? support.latestClaimAt >= liveSince ? 'processing' : 'pending' : support.failed ? 'failed' : servedFirst ? 'ready' : !material.eligibility.eligible ? "waiting"
     : job?.status === "failed" ? "failed"
     : job?.status === "succeeded" ? "ready"
-    : job ? "processing" : "pending";
+    : job?.status === "running" && job.lockedAt && job.lockedAt.getTime() >= liveSince ? "processing" : "pending";
   const readingPaused = readingPausedFrom(await latestReadingJob(db, profileId));
   return { phase, eligible: Boolean(servedFirst)||material.eligibility.eligible,
     readingPaused,
     supportPending: support.pending,
+    supportActive: support.active,
     signalCount: servedFirst?FIRST_PRINCIPLE_SIGNAL_COUNT:material.eligibility.distinctSignals,
     topOfMindCount: material.eligibility.tomAppearances };
 }
