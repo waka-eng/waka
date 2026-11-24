@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readTransition, discordDestination, discordPayload, alarmLabels, type AlarmTransition } from './protocol.js';
+import { readJobFailureNotice } from "./job-failure.js";
+import { deliverJobFailure } from "./job-alert.js";
 import { deliver, dynamoStore, handler, SEND_GATE, SEND_LEASE_MS, type DeliveryStore } from './relay.js';
 import { DynamoDBClient, PutItemCommand, UpdateItemCommand, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { probe } from './uptime.js';
@@ -273,5 +275,41 @@ describe('DB/model-free liveness and fixed metrics',()=>{
     const write=vi.spyOn(process.stdout,'write').mockReturnValue(true);vi.stubEnv('WAKA_STAGE','production');recordOperationalFault('api_5xx');
     const metric=JSON.parse(String(write.mock.calls[0][0]));expect(metric._aws.CloudWatchMetrics[0].Dimensions).toEqual([['Stage']]);expect(Object.keys(metric).sort()).toEqual(['Faults','Stage','_aws','code','event']);
     recordOperationalFault('PRIVATE_CANARY' as any);vi.stubEnv('WAKA_STAGE','development');recordOperationalFault('api_5xx');expect(write).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('individual terminal job alerts', () => {
+  const event = { source: 'waka.job-failure.v1', jobType: 'derive_signals', disposition: 'ambiguous', timestamp: now, reference: 'a'.repeat(64) } as const;
+  const clock = () => now;
+  it('sends separate jobs in one alarm period, disables mentions, and acknowledges confirmed duplicates', async () => {
+    const store = new Store();
+    const fetcher = vi.fn(async (_url: Parameters<typeof fetch>[0], _options?: RequestInit) => Response.json({ id: '123456789012345678' }));
+    const notice = readJobFailureNotice(event)!;
+    expect(await deliverJobFailure(notice, store, destination, fetcher, clock)).toEqual({ delivered: notice.reference });
+    await deliverJobFailure(notice, store, destination, fetcher, clock);
+    await deliverJobFailure({ ...notice, reference: 'b'.repeat(64) }, store, destination, fetcher, clock);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const [url, options] = fetcher.mock.calls[0];
+    expect(url).toBe(destination + '?wait=true');
+    const body = JSON.parse(options!.body as string);
+    expect(body.allowed_mentions).toEqual({ parse: [] });
+    expect(body.content).toContain('outcome is uncertain');
+    expect(body.content).toContain(notice.reference);
+    expect(store.heads.size).toBe(0);
+  });
+  it('refuses an unconfirmed Discord response, then retries after the lease expires', async () => {
+    const store = new Store(), notice = readJobFailureNotice(event)!;
+    await expect(deliverJobFailure(notice, store, destination, async () => Response.json({}), clock)).rejects.toThrow('unconfirmed');
+    await expect(deliverJobFailure(notice, store, destination, async () => { throw Error('unexpected POST'); }, clock)).rejects.toThrow('leased');
+    const later = () => now + 60_000;
+    await expect(deliverJobFailure(notice, store, destination, async () => new Response(null, {status: 429}), later)).rejects.toThrow('rejected');
+    expect(store.intents.get('event:job:' + event.reference)?.status).toBe('pending');
+    expect(await deliverJobFailure(notice, store, destination, async () => Response.json({id:'123456789012345678'}), () => now + 180_000))
+      .toEqual({ delivered: event.reference });
+  });
+  it('rejects arbitrary diagnostics, nonterminal dispositions, unrecognized job names and extra fields', () => {
+    for (const invalid of [{ reason: 'private' }, { jobType: '__proto__' }, { reference: '@everyone' }, { disposition: 'retryable' }]) {
+      expect(readJobFailureNotice({ ...event, ...invalid })).toBeNull();
+    }
   });
 });

@@ -5,13 +5,15 @@ import { readTransition, discordDestination, discordPayload, type AlarmTransitio
 export const SEND_GATE = 'alarm-head-v1';
 export const SEND_LEASE_MS = 30000;
 export interface AlarmHead { token: string; until: number; timestamp: number; eventId?: string }
+type DeliveryEvent = AlarmTransition | { id: string; timestamp: number; kind: 'job_failure' };
+type EventKey = Pick<DeliveryEvent, 'id'>;
 export interface DeliveryStore {
-  remember(t: AlarmTransition): Promise<void>;
-  claim(t: AlarmTransition, token: string, now: number): Promise<boolean>;
+  remember(t: DeliveryEvent): Promise<void>;
+  claim(t: EventKey, token: string, now: number): Promise<boolean>;
   claimHead(t: AlarmTransition, token: string, now: number): Promise<AlarmHead>;
-  defer(t: AlarmTransition, token: string, until: number, now: number): Promise<void>;
+  defer(t: EventKey, token: string, until: number, now: number): Promise<void>;
   checkpoint(t: AlarmTransition, token: string, now: number): Promise<void>;
-  settle(t: AlarmTransition, token: string, delivered: boolean, now: number): Promise<void>;
+  settle(t: EventKey, token: string, delivered: boolean, now: number): Promise<void>;
   releaseHead(t: AlarmTransition, token: string, now: number): Promise<void>;
 }
 const conditional = (e: unknown) => (e as {name?:string})?.name === 'ConditionalCheckFailedException';
@@ -69,7 +71,7 @@ export function dynamoStore(table: string): DeliveryStore {
   const eventValues = (token: string, now: number) => ({ ':token': { S: token }, ':now': { N: String(now) }, ':pending': { S: 'pending' } });
   return {
     async remember(t) {
-      try { await db.send(new PutItemCommand({TableName:table,Item:{...key(t.id),alarm:{S:t.alarm},state:{S:t.state},timestamp:{N:String(t.timestamp)},expires:{N:String(Math.floor(t.timestamp/1000)+30*86400)},status:{S:'pending'}},ConditionExpression:'attribute_not_exists(id)'})); }
+      try { await db.send(new PutItemCommand({TableName:table,Item:{...key(t.id),...("kind" in t ? {kind:{S:t.kind}} : {alarm:{S:t.alarm},state:{S:t.state}}),timestamp:{N:String(t.timestamp)},expires:{N:String(Math.floor(("kind" in t ? Date.now() : t.timestamp)/1000)+30*86400)},status:{S:'pending'}},ConditionExpression:'attribute_not_exists(id)'})); }
       catch(e) { if (!conditional(e)) throw Error('monitor_intent_storage'); }
     },
     async claim(t, token, now) {

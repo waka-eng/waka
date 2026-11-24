@@ -45,7 +45,9 @@ export async function embedDiscoveryCandidates(db:Db,input:DiscoveryEmbeddingInp
   if(!attempt.reserved){if('fresh' in attempt&&attempt.fresh&&['reserved','received'].includes(attempt.status))throw new BackgroundJobHeldError(new Date(attempt.inflightUntil),'Embedding request is still in flight');throw new EmbeddingIndexNeedsRetry(attempt.status==='received'?'commit_unconfirmed':attempt.status==='committed'?'commit_unconfirmed':'outcome_unknown');}
   let embedding:number[];
   try{embedding=await client.embed(text);if(!embeddingInSpace(embedding,768,{model:client.model,dimensions:768}))throw new EmbeddingIndexNeedsRetry('provider_refused');}
-  catch(error){const status=error instanceof OpenRouterHttpError?error.status:null;await db.execute(sql`UPDATE embedding_index_attempts SET status=${status===null?'unknown':'http_failed'},http_status=${status},finished_at=clock_timestamp() WHERE id=${attempt.id}::uuid AND account_id=${owner.account_id}::uuid`);if(status===429||status!==null&&status>=500)throw Error('Embedding provider transient HTTP failure');throw new EmbeddingIndexNeedsRetry(status===null?'outcome_unknown':'provider_refused');}
+  catch(error){const status=error instanceof OpenRouterHttpError?error.status:null;await db.execute(sql`UPDATE embedding_index_attempts SET status=${status===null?'unknown':'http_failed'},http_status=${status},finished_at=clock_timestamp() WHERE id=${attempt.id}::uuid AND account_id=${owner.account_id}::uuid`);if(error instanceof OpenRouterHttpError && (error.status===429 || error.status>=500)){
+    throw new OpenRouterHttpError('Embedding provider transient HTTP failure',error.status,error.creditRefused);
+  }throw new EmbeddingIndexNeedsRetry(status===null?'outcome_unknown':'provider_refused');}
   // An uncertain checkpoint retains the provider result in THIS invocation.
   // Publication either commits it with its decision or requires reconciliation.
   try{await db.execute(sql`UPDATE embedding_index_attempts SET status='received',finished_at=clock_timestamp() WHERE id=${attempt.id}::uuid AND account_id=${owner.account_id}::uuid`);}catch{/* no transport replay */}

@@ -185,6 +185,8 @@ export const backgroundJobs = pgTable(
     runAfter: timestamp("run_after", { withTimezone: true }).notNull().defaultNow(),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     lastError: text("last_error"),
+    /** Exact failed updated_at acknowledged by the production Discord relay. */
+    terminalNoticeSentFor: timestamp("terminal_notice_sent_for", { withTimezone: true }),
 
     /**
      * When this job most recently began running — and, unlike `locked_at`,
@@ -235,6 +237,8 @@ export const backgroundJobs = pgTable(
     runnableIdx: index("background_jobs_runnable_idx")
       .on(table.runAfter, table.createdAt)
       .where(sql`${table.status} = 'pending'`),
+    unsentFailureIdx: index("background_jobs_unsent_failure_idx").on(table.updatedAt, table.id)
+      .where(sql`${table.status} = 'failed' AND ${table.terminalNoticeSentFor} IS DISTINCT FROM ${table.updatedAt}`),
     profileStatusIdx: index("background_jobs_profile_status_idx").on(
       table.profileId,
       table.status,
