@@ -1,9 +1,12 @@
 import {principleMaterialKey} from './principle-material-key.js';
-import { and, desc, eq } from "drizzle-orm";
-import { backgroundJobs } from "../db/index.js";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { backgroundJobs, principles, profilePrincipleHistory, profiles } from "../db/index.js";
 import { getDb } from "./db.js";
 import { loadPrincipleMaterial } from "./principle-generation.js";
 import { enqueueRefreshPrinciples, enqueueTopOfMindRefresh, recoverPendingSignalSupport, wakeCommittedBackgroundJobs } from "./queue.js";
+import { FIRST_PRINCIPLE_SIGNAL_COUNT } from './first-principle-evidence.js';
+import { personalPrincipleSupportCurrent } from './personal-output.js';
+import { PRINCIPLE_MIN_SIGNALS } from './principle-generation.js';
 import { loadSignalSupportWorkState } from './signal-support-state.js';
 
 type Database = ReturnType<typeof getDb>;
@@ -63,15 +66,20 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
   const [job] = await db.select({ status: backgroundJobs.status }).from(backgroundJobs)
     .where(eq(backgroundJobs.idempotencyKey, `refresh_principles:${profileId}:${key}`)).limit(1);
   const support = await loadSignalSupportWorkState(db, profileId);
-  const phase = support.active ? support.running ? 'processing' : 'pending' : support.failed ? 'failed' : !material.eligibility.eligible ? "waiting"
+  const [servedFirst]=!material.mode&&material.firstPrincipleId
+    ?await db.select({id:principles.id}).from(principles)
+      .where(and(eq(principles.profileId,profileId),eq(principles.id,material.firstPrincipleId),
+        personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)))
+    :[];
+  const phase = support.active ? support.running ? 'processing' : 'pending' : support.failed ? 'failed' : servedFirst ? 'ready' : !material.eligibility.eligible ? "waiting"
     : job?.status === "failed" ? "failed"
     : job?.status === "succeeded" ? "ready"
     : job ? "processing" : "pending";
   const readingPaused = readingPausedFrom(await latestReadingJob(db, profileId));
-  return { phase, eligible: material.eligibility.eligible,
+  return { phase, eligible: Boolean(servedFirst)||material.eligibility.eligible,
     readingPaused,
     supportPending: support.pending,
-    signalCount: material.eligibility.distinctSignals,
+    signalCount: servedFirst?FIRST_PRINCIPLE_SIGNAL_COUNT:material.eligibility.distinctSignals,
     topOfMindCount: material.eligibility.tomAppearances };
 }
 
@@ -102,6 +110,15 @@ export async function requestPrincipleRefresh(db: Db, profileId: string, retry =
  * may escape this transaction; the existing worker drains the committed tail. */
 export async function enqueuePrinciplesAfterReading(tx: Transaction, profileId: string) {
   await enqueueEligiblePrinciples(tx, profileId, false, tx);
+}
+
+/** Called from the current save's derivation transaction, before any reading. */
+export async function enqueueFirstPrincipleAfterSave(tx: Transaction, profileId: string) {
+  const [unserved]=await tx.select({id:profiles.id}).from(profiles)
+    .where(and(eq(profiles.id,profileId),eq(profiles.type,'human'),sql`NOT EXISTS(
+      SELECT 1 FROM ${profilePrincipleHistory} WHERE ${profilePrincipleHistory.profileId}=${profileId}::uuid)`));
+  if(!unserved)return;
+  await enqueueEligiblePrinciples(tx,profileId,false,tx);
 }
 
 async function enqueueEligiblePrinciples(db: Db, profileId: string, retry: boolean, transaction?: Transaction) {

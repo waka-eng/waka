@@ -10,22 +10,22 @@
 import { useEffect, useState } from "react";
 
 import { Companion } from "./Companion";
-import { fetchSignals, type ApiSignal } from "../lib/api";
+import { fetchSignals, type ApiPrincipleStatus, type ApiSignal } from "../lib/api";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { readProfileText, writeProfileText } from "../lib/profile-storage";
 import { numWords } from "../lib/words";
 
-/** Seats on the card. The same number as `PRINCIPLE_MIN_SIGNALS` on the
-    server; drawn from it rather than from a design choice. */
+/** Maximum number of patterns shown on the card. Eligibility comes from the server. */
 const GROUND_SEATS = 3;
 
 type Phase = "loading" | "ready" | "failed";
 
-export function PrinciplesGround({ locale, profileId, whose = "own", onChat, onNewSave, newSaveLabel }: {
+export function PrinciplesGround({ locale, profileId, whose = "own", eligiblePhase, onChat, onNewSave, newSaveLabel }: {
   locale: SupportedLocale;
   profileId?: string | null;
   /** Whose ground this is — an agent's wall must not say "you keep". */
   whose?: "own" | "agent";
+  eligiblePhase?: ApiPrincipleStatus["phase"];
   /** A chat about what the creature just said. Founder, 2026-10-15: "make
       this also have the chat about it thing." */
   onChat?: (said: string) => void;
@@ -111,11 +111,13 @@ export function PrinciplesGround({ locale, profileId, whose = "own", onChat, onN
      character should be a big part of it ... the character should give that
      feeling of an exciting anticipation." The state line became its speech:
      the same facts, said by the one who is waiting with you. */
-  const line = count === 0
+  const readingLine = eligiblePhase === "pending" || eligiblePhase === "processing" ? say("worldPrinciplesReading")
+    : eligiblePhase === "ready" ? say("worldPrinciplesNoCandidate") : null;
+  const line = readingLine ?? (count === 0
     ? say(agent ? "worldGroundNoneAgent" : "worldGroundNone")
     : count < GROUND_SEATS
       ? formatMessage(locale, agent ? "worldGroundSomeAgent" : "worldGroundSome", { count, countWords: numWords(count, locale) })
-      : say(agent ? "worldGroundReadyAgent" : "worldGroundReady");
+      : say(agent ? "worldGroundReadyAgent" : "worldGroundReady"));
   /* How lit the waiting is, 0 to 1. Light is the only meaning channel: the
      glow around the creature IS the progress, and nothing else measures it. */
   const charge = Math.min(count, GROUND_SEATS) / GROUND_SEATS;
@@ -133,7 +135,7 @@ export function PrinciplesGround({ locale, profileId, whose = "own", onChat, onN
             tail — and ends in the same foot row. */}
         <div className="jar-char-bubble-body waka-ground-bubble">
           <span className="jar-char-bubble-reading" role="status">{line}</span>
-          {!agent && count < GROUND_SEATS && onNewSave ? (
+          {!agent && !readingLine && count < GROUND_SEATS && onNewSave ? (
             <span className="jar-char-bubble-acts">
               <button type="button" className="jar-char-bubble-act" onClick={onNewSave}>
                 {newSaveLabel ?? say("worldBubbleActAdd")}
