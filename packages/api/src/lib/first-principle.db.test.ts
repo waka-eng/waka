@@ -135,18 +135,18 @@ it('publishes a readable Principle from two ordinary saves before the reading ca
   }
 });
 
-async function seed(profileId:string,pattern:string,text:string,source:'app'|'agent'='app',existing?:string){
-  const [capture]=existing?[{id:existing}]:await t.sql`INSERT INTO inspirations(profile_id,text,source) VALUES(${profileId},${text},${source}) RETURNING id`;
-  const [signal]=await t.sql`INSERT INTO signals(profile_id,statement,status) VALUES(${profileId},${pattern},'emerging') RETURNING id`;
-  await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id) VALUES(${profileId},${profileId},${signal.id},${capture.id})`;
-  return {signal:signal.id as string,capture:capture.id as string};
+async function seed(profileId:string,statement:string,text:string,source:'app'|'agent'='app',existing?:string){
+  const [inspiration]=existing?[{id:existing}]:await t.sql`INSERT INTO inspirations(profile_id,text,source) VALUES(${profileId},${text},${source}) RETURNING id`;
+  const [signal]=await t.sql`INSERT INTO signals(profile_id,statement,status) VALUES(${profileId},${statement},'emerging') RETURNING id`;
+  await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id) VALUES(${profileId},${profileId},${signal.id},${inspiration.id})`;
+  return {signal:signal.id as string,inspiration:inspiration.id as string};
 }
 
 it.each(['same source','NFKC duplicate','same wording','agent-authored'] as const)('refuses first generation for %s before any model call',async mode=>{
   const a=await actor();
   const first=await seed(a.id,'작은 실험을 먼저 고른다','ＡＢＣ — 먼저 연습!');
   await seed(a.id,mode==='same wording'?'작은 실험을 먼저 고른다!':'부담을 줄이고 먼저 해 본다',mode==='NFKC duplicate'?'abc 먼저 연습':'다른 선택을 먼저 시험했다.',
-    mode==='agent-authored'?'agent':'app',mode==='same source'?first.capture:undefined);
+    mode==='agent-authored'?'agent':'app',mode==='same source'?first.inspiration:undefined);
   const distill=vi.fn(async()=>({candidates:[]}));
   expect((await refreshPrinciplesForProfile({profileId:a.id},{db:getDb(),modelProvider:model(distill)})).status).toBe('below_bar');
   expect(distill).not.toHaveBeenCalled();
@@ -157,7 +157,7 @@ it('admits distinct Korean origins, and withholds indistinguishable clipped exce
   const korean=await seed(a.id,'소비를 줄이고 먼저 시험한다','연습 때만 작은 붓을 써 보고 큰 세트를 샀다.');
   await seed(a.id,'작은 결과를 본 다음 결정한다','무료 수업을 한 번 듣고 나서 장기 등록을 했다.');
   expect((await loadPrincipleMaterial(getDb(),a.id)).mode).toBe('first');
-  await t.sql`UPDATE inspirations SET text='내용을 고친 뒤에는 새 검증이 필요하다' WHERE id=${korean.capture}`;
+  await t.sql`UPDATE inspirations SET text='내용을 고친 뒤에는 새 검증이 필요하다' WHERE id=${korean.inspiration}`;
   expect((await loadPrincipleMaterial(getDb(),a.id)).mode).toBeNull();
 
   const b=await actor(),prefix='Common synthetic context '.repeat(25);
@@ -182,7 +182,7 @@ it('keeps ordinary prompt bytes and limits only the first-mode parser',()=>{
 async function ordinaryEvidence(profileId:string) {
   const ids:string[]=[];
   const [reading]=await t.sql`INSERT INTO top_of_minds(profile_id) VALUES(${profileId}) RETURNING id`;
-  const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${reading.id},'pattern','Current focus.') RETURNING id`;
+  const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${reading.id},'statement','Current focus.') RETURNING id`;
   for(let i=0;i<3;i++){
     const first=await seed(profileId,'A distinct active observation '+i,'A distinct firsthand choice '+i+' at the start.');
     ids.push(first.signal);
@@ -262,7 +262,7 @@ it('respects declared and human-edited history after deletion or lost support',a
   expect(run.minted).toBe(1);
   const [first]=await loadPrincipleViews(getDb(),b.id);
   await t.sql`UPDATE principles SET statement='My exact saved wording.',locked_at=now() WHERE id=${first!.id}`;
-  await t.sql`DELETE FROM inspirations WHERE id=${evidence.capture}`;
+  await t.sql`DELETE FROM inspirations WHERE id=${evidence.inspiration}`;
   const checked=await reconcilePrinciplesAfterSignalLoss(getDb(),{profileId:b.id,signalIds:[],principleIds:[first!.id]});
   expect(checked.demoted).toEqual([first!.id]);
   const [edited]=await loadPrincipleViews(getDb(),b.id);
