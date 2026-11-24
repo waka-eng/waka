@@ -72,13 +72,22 @@ export function auditMonitoring({outputs,webhook,read}) {
   checks.noDeliveryFeedback=['LambdaErrors','LambdaThrottles'].every(code=>!byCode[code]?.Metrics?.some(m=>m.MetricStat?.Metric?.Dimensions?.some(d=>d.Value===relay.FunctionName)));
   const workerEnv=fn(outputs.backgroundWorkerFunctionName).Environment?.Variables??{};
   checks.preciseWorkerWakes=!!outputs.monitorWakeGroup&&workerEnv.WAKA_BACKGROUND_JOB_WAKE_GROUP===outputs.monitorWakeGroup&&!!outputs.monitorWakeRole&&workerEnv.WAKA_BACKGROUND_JOB_WAKE_ROLE===outputs.monitorWakeRole&&outputs.monitorWakeRole.startsWith(`arn:aws:iam::${account}:role/`);
+  const jobAlert=fn(outputs.monitorJobAlertFunctionName), jobEnv=jobAlert.Environment?.Variables??{};
+  const jobKeys=new Set(['WAKA_STAGE','MONITOR_TABLE','WAKA_DISCORD_WEBHOOK_URL','SST_RESOURCE_App','SST_RESOURCE_DiscordWebhookUrl','NODE_OPTIONS','SST_KEY','SST_KEY_FILE']);
+  checks.workerJobAlertDestination=/^waka-production-JobFailureAlertFunction-[a-zA-Z0-9_-]+$/.test(jobAlert.FunctionName)&&jobAlert.FunctionName===outputs.monitorJobAlertFunctionName&&
+    jobAlert.FunctionArn===`arn:aws:lambda:${region}:${account}:function:${jobAlert.FunctionName}`&&workerEnv.WAKA_JOB_ALERT_RELAY_ARN===jobAlert.FunctionArn;
+  checks.jobAlertIsolation=app(jobEnv).name==='waka'&&app(jobEnv).stage==='production'&&jobEnv.WAKA_STAGE==='production'&&
+    sdkEnvironment(jobEnv)&&Object.keys(jobEnv).every(k=>jobKeys.has(k))&&jobEnv.MONITOR_TABLE===outputs.monitorDeliveryTable&&
+    !!webhook&&jobEnv.WAKA_DISCORD_WEBHOOK_URL===webhook&&jobAlert.Timeout===15&&
+    isolatedMonitorRole(jobAlert.Role,{'dynamodb:PutItem':[table.TableArn],'dynamodb:GetItem':[table.TableArn],'dynamodb:UpdateItem':[table.TableArn]},read,
+      {operator:'ForAllValues:StringLike',values:['event:job:*']});
   const schedules=byCode.ScheduleDelivery?.Metrics??[];
   checks.scheduleFailures=schedules.length===3&&[outputs.monitorDailyRuleName,outputs.monitorPrincipleRuleName].every(name=>schedules.some(m=>m.ReturnData===false&&m.MetricStat?.Metric.Namespace==='AWS/Events'&&m.MetricStat.Metric.MetricName==='FailedInvocations'&&m.MetricStat.Metric.Dimensions?.length===1&&m.MetricStat.Metric.Dimensions[0].Name==='RuleName'&&m.MetricStat.Metric.Dimensions[0].Value===name));
   checks.probeAlarmsBounded=byCode.ProbeMissing?.EvaluationPeriods===3&&byCode.ProbeMissing?.Period===300&&byCode.ProbeMissing?.Threshold===1&&byCode.ProbeMissing?.ComparisonOperator==='LessThanThreshold'&&byCode.ProbeMissing?.TreatMissingData==='breaching'&&byCode.Availability?.EvaluationPeriods===2&&byCode.Availability?.Period===300&&byCode.Availability?.TreatMissingData==='notBreaching';
   const statements=list(doc(read(['lambda','get-policy','--function-name',relay.FunctionName]).Policy)?.Statement??[]).filter(s=>s.Effect==='Allow');
   checks.alarmInvocationPolicy=statements.length===names.length&&names.every(n=>statements.some(s=>list(s.Action).join()==='lambda:InvokeFunction'&&list(s.Resource).join()===relay.FunctionArn&&Object.keys(s.Principal??{}).join()==='Service'&&s.Principal.Service==='lambda.alarms.cloudwatch.amazonaws.com'&&s.Condition?.StringEquals?.['AWS:SourceAccount']===account&&(s.Condition?.ArnLike?.['AWS:SourceArn']??s.Condition?.ArnEquals?.['AWS:SourceArn'])===`arn:aws:cloudwatch:${region}:${account}:alarm:${n}`));
   checks.noRelaySecretInApp=[outputs.apiFunctionName,outputs.backgroundWorkerFunctionName,outputs.monitorPrincipleFunctionName,outputs.monitorCleanupFunctionName].every(name=>!Object.entries(fn(name).Environment?.Variables??{}).some(([key,value])=>key.includes('Discord')||key==='WAKA_DISCORD_WEBHOOK_URL'||(webhook&&value.includes(webhook))));
-  checks.logRetention=[relay,probe].every(f=>{
+  checks.logRetention=[relay,probe,jobAlert].every(f=>{
     // SST assigns an independent physical group; the attested function's
     // actual LoggingConfig binds it. Do not invent a function-derived path.
     const name=f.LoggingConfig?.LogGroup;
