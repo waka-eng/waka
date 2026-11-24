@@ -17,11 +17,12 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { PrinciplesGround } from "../src/components/PrinciplesGround";
 import { PrinciplesOverlay } from "../src/components/PrinciplesOverlay";
-import { fetchPrinciples, fetchSignals, listClaims, type ApiPrinciple, type ApiSignal } from "../src/lib/api";
+import { fetchPrincipleStatus, fetchPrinciples, fetchSignals, listClaims, type ApiPrinciple, type ApiSignal } from "../src/lib/api";
 
 vi.mock("../src/lib/api", async (original) => ({
   ...await original<typeof import("../src/lib/api")>(),
   fetchSignals: vi.fn(),
+  fetchPrincipleStatus: vi.fn(),
   listClaims: vi.fn(),
   fetchPrinciples: vi.fn(),
 }));
@@ -39,6 +40,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   localStorage.clear();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.mocked(fetchPrincipleStatus).mockResolvedValue({ phase: "waiting", eligible: false, signalCount: 0, topOfMindCount: 0 });
   vi.mocked(listClaims).mockResolvedValue({ claims: [], more: false });
   host = document.createElement("div");
   document.body.append(host);
@@ -136,6 +138,15 @@ it("says the ground could not be read, and reads it again on Try again", async (
   await act(async () => retry.click());
   await act(async () => undefined);
   expect(host.querySelector(".waka-ground-words")?.textContent).toBe("A.");
+});
+
+it("shows a first reading in progress before any pattern becomes active", async () => {
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);
+  vi.mocked(fetchSignals).mockResolvedValue([]);
+  vi.mocked(fetchPrincipleStatus).mockResolvedValue({ phase: "processing", eligible: true, signalCount: 2, topOfMindCount: 0 });
+  await act(async () => root.render(<PrinciplesOverlay locale="en-US" profileId={PROFILE} title="Principles" onClose={() => {}} onOpen={() => {}} onNewSave={() => {}} />));
+  expect(line()).toBe("Thinking…");
+  expect(host.querySelector(".waka-ground-bubble button")).toBeNull();
 });
 
 it("meets the first principle once, and only for someone who waited for it", async () => {
