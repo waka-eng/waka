@@ -279,7 +279,7 @@ describe('DB/model-free liveness and fixed metrics',()=>{
 });
 
 describe('individual terminal job alerts', () => {
-  const event = { source: 'waka.job-failure.v1', jobType: 'derive_signals', disposition: 'ambiguous', timestamp: now, reference: 'a'.repeat(64) } as const;
+  const event = { source: 'waka.job-failure.v1', jobType: 'derive_signals', disposition: 'ambiguous', diagnostic: 'embedding_unresolved', timestamp: now, reference: 'a'.repeat(64) } as const;
   const clock = () => now;
   it('sends separate jobs in one alarm period, disables mentions, and acknowledges confirmed duplicates', async () => {
     const store = new Store();
@@ -293,6 +293,7 @@ describe('individual terminal job alerts', () => {
     expect(url).toBe(destination + '?wait=true');
     const body = JSON.parse(options!.body as string);
     expect(body.allowed_mentions).toEqual({ parse: [] });
+    expect(body.content).toContain('embedding request');
     expect(body.content).toContain('outcome is uncertain');
     expect(body.content).toContain(notice.reference);
     expect(store.heads.size).toBe(0);
@@ -308,7 +309,7 @@ describe('individual terminal job alerts', () => {
       .toEqual({ delivered: event.reference });
   });
   it('rejects arbitrary diagnostics, nonterminal dispositions, unrecognized job names and extra fields', () => {
-    for (const invalid of [{ reason: 'private' }, { jobType: '__proto__' }, { reference: '@everyone' }, { disposition: 'retryable' }]) {
+    for (const invalid of [{ reason: 'private' }, { diagnostic: 'PRIVATE INPUT' }, { jobType: '__proto__' }, { reference: '@everyone' }, { disposition: 'retryable' }]) {
       expect(readJobFailureNotice({ ...event, ...invalid })).toBeNull();
     }
   });

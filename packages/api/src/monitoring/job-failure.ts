@@ -24,11 +24,21 @@ const reasons = {
   review: 'This earlier failure needs operator review before replay.',
 };
 
+const diagnosticLabels = {
+  embedding_unresolved: 'An embedding request has an unresolved outcome.',
+  provider_credit_refused: 'The provider refused the request for billing or credit reasons.',
+  model_configuration: 'The configured model or its credentials need attention.',
+  database_lock: 'The database could not acquire a lock or detected a deadlock.',
+  invalid_model_output: 'The model returned unusable output.',
+  other: '',
+};
+
 export interface JobFailureNotice {
   source: 'waka.job-failure.v1';
   reference: string;
   jobType: BackgroundJobType;
   disposition: keyof typeof reasons;
+  diagnostic: keyof typeof diagnosticLabels | `provider_http_${number}`;
   timestamp: number;
 }
 
@@ -37,23 +47,27 @@ export interface JobFailureNotice {
 export function readJobFailureNotice(raw: unknown): JobFailureNotice | null {
   if (!raw || typeof raw !== 'object') return null;
   const n = raw as Record<string, unknown>;
-  if (Object.keys(n).length !== 5 || n.source !== 'waka.job-failure.v1' ||
+  if (Object.keys(n).length !== 6 || n.source !== 'waka.job-failure.v1' ||
       typeof n.reference !== 'string' || !/^[a-f0-9]{64}$/.test(n.reference) ||
       typeof n.jobType !== 'string' || !Object.hasOwn(jobLabels, n.jobType) ||
       typeof n.disposition !== 'string' || !Object.hasOwn(reasons, n.disposition) ||
+      typeof n.diagnostic !== 'string' || !(Object.hasOwn(diagnosticLabels, n.diagnostic) || /^provider_http_[45][0-9]{2}$/.test(n.diagnostic)) ||
       typeof n.timestamp !== 'number' || !Number.isSafeInteger(n.timestamp) ||
       n.timestamp <= 0 || n.timestamp > Date.now() + 300_000) return null;
   return n as unknown as JobFailureNotice;
 }
 
 export function jobFailureDiscordPayload(notice: JobFailureNotice) {
+  const detail = Object.hasOwn(diagnosticLabels, notice.diagnostic)
+    ? diagnosticLabels[notice.diagnostic as keyof typeof diagnosticLabels]
+    : 'The provider returned HTTP ' + notice.diagnostic.slice(-3) + '.';
   return {
     allowed_mentions: { parse: [] },
     content: [
       'WAKA production · Background job needs attention',
-      jobLabels[notice.jobType], reasons[notice.disposition],
+      jobLabels[notice.jobType], detail, reasons[notice.disposition],
       new Date(notice.timestamp).toISOString(),
       'Worker log reference: ' + notice.reference,
-    ].join('\n'),
+    ].filter(Boolean).join('\n'),
   };
 }

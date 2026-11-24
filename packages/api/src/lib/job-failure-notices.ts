@@ -30,9 +30,15 @@ export async function deliverTerminalJobNotices(db: Database, jobId?: string, no
       throw Error('job_notice_destination_invalid');
     }
     const rows = await db.execute<{
-      id: string; version: string; failedAt: string; jobType: JobFailureNotice['jobType']; disposition: JobFailureNotice['disposition'];
+      id: string; version: string; failedAt: string; jobType: JobFailureNotice['jobType']; disposition: JobFailureNotice['disposition']; diagnostic: JobFailureNotice['diagnostic'];
     }>(sql`SELECT j.id, j.request_version::text AS version, j.type::text AS "jobType",
       to_char(j.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "failedAt",
+      CASE WHEN j.last_error IN ('provider_credit_refused','model_configuration') OR j.last_error ~ '^provider_http_[45][0-9]{2}$' THEN j.last_error
+        WHEN j.last_error IN ('malformed_model_output','model_unusable_output') THEN 'invalid_model_output'
+        WHEN j.last_error IN ('{"category":"database","code":"55P03"}','{"category":"database","code":"40P01"}') THEN 'database_lock'
+        WHEN j.last_error IN ('embedding_outcome_unknown','embedding_commit_unconfirmed','embedding_current_vector_unavailable')
+          OR ${legacyDerivationEmbeddingHeld} THEN 'embedding_unresolved'
+        ELSE 'other' END AS diagnostic,
       CASE WHEN j.payload->>'failureDisposition' IN ('permanent','ambiguous','exhausted') THEN j.payload->>'failureDisposition'
         WHEN ${legacyDerivationEmbeddingHeld} THEN 'ambiguous' ELSE 'review' END AS disposition
       FROM background_jobs j
@@ -46,7 +52,7 @@ export async function deliverTerminalJobNotices(db: Database, jobId?: string, no
       const reference = createHash('sha256').update([row.id, row.version, row.failedAt].join('/')).digest('hex');
       try {
         const notice = readJobFailureNotice({ source: 'waka.job-failure.v1', reference, jobType: row.jobType,
-          disposition: row.disposition, timestamp: Date.parse(row.failedAt) });
+          disposition: row.disposition, diagnostic: row.diagnostic, timestamp: Date.parse(row.failedAt) });
         if (!notice) throw Error('job_notice_invalid');
         console.info('[background-jobs] terminal incident', { reference, jobId: row.id, type: row.jobType, disposition: row.disposition });
         await notify(arn, notice);
