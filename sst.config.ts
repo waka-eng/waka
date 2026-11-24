@@ -373,6 +373,7 @@ export default $config({
         Condition: { ArnEquals: { "aws:SourceArn": arn } },
       }] })),
     });
+    const productionAlerts = $app.stage === "production" ? createProductionAlertResources() : undefined;
     const backgroundWorker = new sst.aws.Function("BackgroundWorker", {
       handler: "packages/api/src/background-worker.handler",
       logging: { retention: "1 month" },
@@ -385,6 +386,7 @@ export default $config({
       environment: {
         ...runtimeEnvironment,
         WAKA_BACKGROUND_JOB_CRON_LIMIT: "25",
+        ...(productionAlerts ? { WAKA_JOB_ALERT_RELAY_ARN: productionAlerts.jobAlert.arn } : {}),
         ...(isDevelopmentDomain ? { WAKA_DB_PREPARED_QUERIES: "1" } : {}),
         WAKA_BACKGROUND_JOB_WAKE_GROUP: jobWakeGroup.name,
         WAKA_BACKGROUND_JOB_WAKE_ROLE: jobWakeRole.arn,
@@ -393,6 +395,7 @@ export default $config({
         ...attachmentVersionPurgePermissions,
         { actions: ["scheduler:CreateSchedule", "scheduler:DeleteSchedule"], resources: [jobWakeGroup.arn.apply(arn => arn.replace(":schedule-group/", ":schedule/") + "/waka-job-*")] },
         { actions: ["iam:PassRole"], resources: [jobWakeRole.arn] },
+        ...(productionAlerts ? [{ actions: ["lambda:InvokeFunction"], resources: [productionAlerts.jobAlert.arn] }] : []),
       ],
     });
 
@@ -605,17 +608,38 @@ export default $config({
       }
     }
 
+    // Production-only monitoring. These resources are shared by terminal job and alarm delivery.
+    function createProductionAlertResources() {
+      const discord = new sst.Secret("DiscordWebhookUrl");
+      const deliveryTable = new aws.dynamodb.Table("MonitorDelivery", {
+        billingMode: "PAY_PER_REQUEST", hashKey: "id", attributes: [{ name: "id", type: "S" }],
+        ttl: { attributeName: "expires", enabled: true },
+      });
+      // The worker can invoke only this typed incident handler. The alarm and
+      // budget handlers retain their original service-only ingress policies.
+      const jobAlert = new sst.aws.Function("JobFailureAlert", {
+        handler: "packages/api/src/monitoring/job-alert.handler", timeout: "15 seconds", memory: "128 MB",
+        logging: { retention: "2 weeks" }, retries: 0, link: [discord],
+        environment: { WAKA_STAGE: "production", MONITOR_TABLE: deliveryTable.name, WAKA_DISCORD_WEBHOOK_URL: discord.value },
+        permissions: [{ actions: ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem"], resources: [deliveryTable.arn], conditions: [
+          { test: "ForAllValues:StringLike", variable: "dynamodb:LeadingKeys", values: ["event:job:*"] },
+          { test: "Null", variable: "dynamodb:LeadingKeys", values: ["false"] },
+        ] }],
+        transform: { role: { assumeRolePolicy: JSON.stringify({
+          Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "sts:AssumeRole",
+            Principal: { Service: "lambda.amazonaws.com" } }],
+        }) } },
+      });
+      return { discord, deliveryTable, jobAlert };
+    }
+
     // Production-only monitoring. These functions have no runtimeLinks: no
     // memory database, model, account/auth, or attachment-store credentials.
     let monitoringOutputs = {};
     if ($app.stage === "production") {
       const { alarmLabels } = await import("./packages/api/src/monitoring/protocol");
       const caller = aws.getCallerIdentityOutput();
-      const discord = new sst.Secret("DiscordWebhookUrl");
-      const deliveryTable = new aws.dynamodb.Table("MonitorDelivery", {
-        billingMode: "PAY_PER_REQUEST", hashKey: "id", attributes: [{ name: "id", type: "S" }],
-        ttl: { attributeName: "expires", enabled: true },
-      });
+      const { discord, deliveryTable, jobAlert } = productionAlerts!;
       const deliveryDlq = new aws.sqs.Queue("MonitorDeliveryDlq", { messageRetentionSeconds: 1209600, sqsManagedSseEnabled: true });
       const relay = new sst.aws.Function("MonitorRelay", {
         handler: "packages/api/src/monitoring/relay.handler", timeout: "20 seconds", memory: "128 MB",
@@ -701,7 +725,7 @@ export default $config({
         ...[dailyDrain.nodes.rule.name, principleRefresh.nodes.rule.name].map((name,index) => ({id:`s${index}`,returnData:false,metric:{namespace:"AWS/Events",metricName:"FailedInvocations",dimensions:{RuleName:name},period:300,stat:"Sum"}})),
         {id:"total",expression:"SUM(METRICS())",returnData:true},
       ] });
-      monitoringOutputs = { monitorRelayFunctionName: relay.name, monitorProbeFunctionName: probe.name,
+      monitoringOutputs = { monitorJobAlertFunctionName: jobAlert.name, monitorRelayFunctionName: relay.name, monitorProbeFunctionName: probe.name,
         monitorDeliveryTable: deliveryTable.name, monitorDeliveryDlqUrl: deliveryDlq.url, monitorProbeRuleName: probeCron.nodes.rule.name,
         monitorPrincipleFunctionName: principleRefresh.nodes.function.name, monitorAttachmentDlqName: objectEventDlq.nodes.queue.name,
         monitorDailyRuleName: dailyDrain.nodes.rule.name, monitorPrincipleRuleName: principleRefresh.nodes.rule.name,

@@ -45,7 +45,7 @@ if Discord itself is unavailable; this is not a second notification channel.
 | Public web/API availability | Fixed unauthenticated GETs to `https://waka.im/` and `/api/health` every five minutes, redirect refused, 4-second HTTP deadlines, 64 KiB response limit. Two failed five-minute probe periods alert. | No WAKA/Neon/provider call; a small Dynamo operational state bounds failed API attempts. Successful liveness does not prove authenticated journeys, Neon readiness or model quality. Native probe errors avoid another custom metric. |
 | Missing availability probe | Native Invocations below one for three five-minute periods; missing data breaches. Actions are armed only after a natural healthy/OK baseline. | No forced invocation, state change or setup message. Initialization failure reports the actual action state; an already armed alarm is never disabled by the initializer. |
 | API handled 5xx | Production-only `WAKA/Operations Faults`, any fault in five minutes. | Closed `api_5xx` code; no route/URL/account/body/error text. 4xx and normal quota refusals do not page. |
-| Worker terminal/wake/scheduling failures | Same fault series; terminal metric only after the fenced SQL update actually returns `failed`. Wake/scheduler failures and unexpected worker execution errors have fixed codes. | Expected `BackgroundJobRetryScheduled`, cadence/account-budget holds and successful stale settlements are excluded. Native Lambda Errors cover timeouts and platform failures; throttles have native coverage. |
+| Worker terminal/wake/scheduling failures | Same fault series plus an individual Discord notice for each current terminal job. The worker emits the terminal metric after the fenced SQL update returns `failed`. Wake/scheduler failures and unexpected worker execution errors have fixed codes. | Expected `BackgroundJobRetryScheduled`, cadence/account-budget holds and successful stale settlements are excluded. Native Lambda Errors cover timeouts and platform failures; throttles have native coverage. |
 | Lambda errors/throttles | Sum of fixed function metrics over five minutes. | Current production precise-wake group/role binding is required by the audit. AWS supplies invokedFunctionArn, so the legacy expected retry-signal fallback is unreachable in that configuration; real worker Errors/Throttles remain covered. Relay errors are console-only to avoid a feedback loop. |
 | Attachments | Cleanup errors, storage-scope holds, or ten full existing daily cleanup batches emit a fault; completion DLQ visible count >0 alerts. | Backlog is sampled during existing work, not continuously queried. Safe quarantine can require operator binding; no orphan sweep or owner-data repair is implied. |
 | Overdue jobs/exhausted leases | An explicit recovery inspection with overdue/exhausted work emits the same fixed Faults series; the historical recovery metrics remain available. | No new poll or wake of Neon. Missing samples are not proof of health. Timely silent-stall detection and recovery exercise remain open. |
@@ -62,7 +62,7 @@ relay never forwards the CloudWatch reason, arbitrary event body or stack. It
 constructs a fixed friendly label, state, UTC time and AWS console link, with
 `allowed_mentions.parse=[]`. Initial healthy state is suppressed. OK says “Metric back in range”; it does not claim a failed job was repaired.
 
-The relay alone receives the encrypted Discord secret. It has only its own
+The alarm relay, budget alert function and job failure alert function receive the encrypted Discord secret. The alarm relay has only its own
 leading-key-scoped DynamoDB intent-table permissions, failure-queue send permission, and normal
 Lambda log/trace permissions. Probe/API/worker/cleanup/Principle runtimes never
 receive the webhook. The probe has no memory/model/auth/object-store links. It can GetItem/UpdateItem only the exact `probe:availability` operational key in the existing monitoring table; the relay is limited to `event:*` and `head:waka-production-*` keys and cannot access that probe key.
@@ -354,3 +354,11 @@ configuration (project/free-usage posture is verified), and ongoing operator own
 provider privacy/spend, performance and five-person human gates remain open in
 the [launch checklist](../reviews/production-launch-2026-11-11.md). This foundation
 does not establish a production erasure SLA or complete beta readiness.
+
+## Terminal background jobs
+
+Production sends an individual Discord notice when a background job stops on a permanent error, an uncertain provider outcome, or an exhausted retry allowance. The message gives the job type, an available sanitized diagnostic, disposition, failure time and a reference. Search that reference in the production background worker logs for the matching job, then inspect its sanitized diagnostic and any provider attempt record before taking action. An uncertain provider outcome requires reconciliation before replay.
+
+The worker calls the dedicated job alert function after committing the failure. Only the notification function receives the Discord webhook. A Discord message ID confirms delivery, and the worker marks the exact failed version and timestamp. If that acknowledgement is lost, the existing daily sweep checks outstanding notices again. Duplicate invocations share a DynamoDB delivery record. A crash after Discord accepts a message but before DynamoDB confirms it can produce a duplicate with the same reference.
+
+Daily recovery first considers older signal-derivation failures caused by a database lock. A current, eligible save gets one additional metered claim when its embedding history permits replay. Other unresolved failures are eligible for notice. These checks also run during an explicit recovery invocation. They use the existing worker schedule.

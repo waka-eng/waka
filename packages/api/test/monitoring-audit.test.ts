@@ -7,10 +7,13 @@ import {createSourceFile,ScriptTarget,ScriptKind,isNewExpression,isStringLiteral
 const load=()=>import(/* @vite-ignore */resolve(__dirname,'../../../scripts/monitoring-audit.mjs'));
 function fixture(){
   const account='111122223333',prefix=`arn:aws:lambda:us-west-2:${account}:function:`,webhook='PRIVATE_WEBHOOK_NEVER_PUBLISH';
-  const outputs={apiFunctionName:'api',backgroundWorkerFunctionName:'worker',monitorPrincipleFunctionName:'principle',monitorCleanupFunctionName:'cleanup',monitorRelayFunctionName:'NestedRelay-generated',monitorProbeFunctionName:'probe',monitorDeliveryTable:'delivery',monitorDeliveryDlqUrl:'https://sqs.us-west-2.amazonaws.com/111122223333/delivery-dlq',monitorAttachmentDlqName:'attachment-dlq',monitorProbeRuleName:'probe-rule',monitorDailyRuleName:'daily-rule',monitorPrincipleRuleName:'principle-rule',monitorWakeGroup:'wake-group',monitorWakeRole:`arn:aws:iam::${account}:role/wakes`};
+  const outputs={apiFunctionName:'api',backgroundWorkerFunctionName:'worker',monitorPrincipleFunctionName:'principle',monitorCleanupFunctionName:'cleanup',monitorJobAlertFunctionName:'waka-production-JobFailureAlertFunction-fixture',monitorRelayFunctionName:'NestedRelay-generated',monitorProbeFunctionName:'probe',monitorDeliveryTable:'delivery',monitorDeliveryDlqUrl:'https://sqs.us-west-2.amazonaws.com/111122223333/delivery-dlq',monitorAttachmentDlqName:'attachment-dlq',monitorProbeRuleName:'probe-rule',monitorDailyRuleName:'daily-rule',monitorPrincipleRuleName:'principle-rule',monitorWakeGroup:'wake-group',monitorWakeRole:`arn:aws:iam::${account}:role/wakes`};
   const app=JSON.stringify({name:'waka',stage:'production'}),tableArn=`arn:aws:dynamodb:us-west-2:${account}:table/delivery`,queueArn=`arn:aws:sqs:us-west-2:${account}:delivery-dlq`;
   const sdk={SST_KEY:Buffer.alloc(32,7).toString('base64'),SST_KEY_FILE:'resource.enc'};
   const relay={FunctionName:outputs.monitorRelayFunctionName,FunctionArn:prefix+outputs.monitorRelayFunctionName,Role:`arn:aws:iam::${account}:role/relay`,Timeout:20,MemorySize:128,LoggingConfig:{LogGroup:'/aws/lambda/waka-production-MonitorRelayFunction-custom01'},Environment:{Variables:{...sdk,SST_RESOURCE_App:app,WAKA_STAGE:'production',MONITOR_ACCOUNT:account,MONITOR_TABLE:'delivery',MONITOR_SEND_GATE:'alarm-head-v1',WAKA_DISCORD_WEBHOOK_URL:webhook}}};
+  const jobAlert={FunctionName:outputs.monitorJobAlertFunctionName,FunctionArn:prefix+outputs.monitorJobAlertFunctionName,Role:`arn:aws:iam::${account}:role/incident`,Timeout:15,LoggingConfig:{LogGroup:'/aws/lambda/waka-production-JobFailureAlertFunction-fixture'},
+    Environment:{Variables:{...sdk,SST_RESOURCE_App:app,WAKA_STAGE:'production',MONITOR_TABLE:'delivery',WAKA_DISCORD_WEBHOOK_URL:webhook}}};
+  const jobPolicy={Statement:[{Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:GetItem','dynamodb:UpdateItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['event:job:*']},Null:{'dynamodb:LeadingKeys':'false'}}}]};
   const probe={FunctionName:'probe',FunctionArn:prefix+'probe',Role:`arn:aws:iam::${account}:role/probe`,Timeout:12,MemorySize:128,LoggingConfig:{LogGroup:'/aws/lambda/waka-production-AvailabilityProbeFunction-custom02'},Environment:{Variables:{...sdk,SST_RESOURCE_App:app,MONITOR_TABLE:'delivery'}}};
   const trust={Statement:[{Effect:'Allow',Action:'sts:AssumeRole',Principal:{Service:'lambda.amazonaws.com'}}]};
   const policy={Statement:[{Effect:'Allow',Action:['dynamodb:PutItem','dynamodb:GetItem','dynamodb:UpdateItem'],Resource:tableArn,Condition:{'ForAllValues:StringLike':{'dynamodb:LeadingKeys':['event:*','head:waka-production-*']},Null:{'dynamodb:LeadingKeys':'false'}}},{Effect:'Allow',Action:'sqs:SendMessage',Resource:queueArn}]};
@@ -24,16 +27,16 @@ function fixture(){
   const invocation={Statement:alarms.map(a=>({Effect:'Allow',Action:'lambda:InvokeFunction',Resource:relay.FunctionArn,Principal:{Service:'lambda.alarms.cloudwatch.amazonaws.com'},Condition:{StringEquals:{'AWS:SourceAccount':account},ArnLike:{'AWS:SourceArn':`arn:aws:cloudwatch:us-west-2:${account}:alarm:${a.AlarmName}`}}}))};
   const read=(args:string[])=>{
     if(args[1]==='get-caller-identity')return {Account:account};
-    if(args[1]==='get-function-configuration')return args.at(-1)===relay.FunctionName?relay:args.at(-1)==='probe'?probe:{Timeout:60,MemorySize:1024,Environment:{Variables:{SST_RESOURCE_App:app,...(args.at(-1)==='worker'?{WAKA_BACKGROUND_JOB_WAKE_GROUP:'wake-group',WAKA_BACKGROUND_JOB_WAKE_ROLE:outputs.monitorWakeRole}:{})}}};
+    if(args[1]==='get-function-configuration')return args.at(-1)===relay.FunctionName?relay:args.at(-1)===jobAlert.FunctionName?jobAlert:args.at(-1)==='probe'?probe:{Timeout:60,MemorySize:1024,Environment:{Variables:{SST_RESOURCE_App:app,...(args.at(-1)==='worker'?{WAKA_JOB_ALERT_RELAY_ARN:jobAlert.FunctionArn,WAKA_BACKGROUND_JOB_WAKE_GROUP:'wake-group',WAKA_BACKGROUND_JOB_WAKE_ROLE:outputs.monitorWakeRole}:{})}}};
     if(args[1]==='get-function-concurrency')return {};
     if(args[1]==='describe-table')return {Table:{TableStatus:'ACTIVE',TableArn:tableArn,BillingModeSummary:{BillingMode:'PAY_PER_REQUEST'},KeySchema:[{AttributeName:'id',KeyType:'HASH'}]}};
     if(args[1]==='describe-time-to-live')return {TimeToLiveDescription:{AttributeName:'expires',TimeToLiveStatus:'ENABLED'}};
     if(args[1]==='get-queue-attributes')return {Attributes:{QueueArn:queueArn,MessageRetentionPeriod:'1209600',SqsManagedSseEnabled:'true'}};
     if(args[1]==='get-function-event-invoke-config')return {MaximumRetryAttempts:2,MaximumEventAgeInSeconds:3600,DestinationConfig:{OnFailure:{Destination:queueArn}}};
-    if(args[1]==='get-role')return {Role:{Arn:args.at(-1)==='relay'?relay.Role:probe.Role,AssumeRolePolicyDocument:trust}};
+    if(args[1]==='get-role')return {Role:{Arn:args.at(-1)==='relay'?relay.Role:args.at(-1)==='incident'?jobAlert.Role:probe.Role,AssumeRolePolicyDocument:trust}};
     if(args[1]==='list-attached-role-policies')return {AttachedPolicies:[{PolicyArn:'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'}]};
     if(args[1]==='list-role-policies')return {PolicyNames:args.at(-1)==='relay'?['delivery']:['probe']};
-    if(args[1]==='get-role-policy')return {PolicyDocument:args.includes('relay')?policy:probePolicy};
+    if(args[1]==='get-role-policy')return {PolicyDocument:args.includes('relay')?policy:args.includes('incident')?jobPolicy:probePolicy};
     if(args[1]==='describe-alarms')return {MetricAlarms:alarms};
     if(args[1]==='get-policy')return {Policy:JSON.stringify(args.at(-1)==='probe'?{Statement:[{Effect:'Allow',Action:'lambda:InvokeFunction',Principal:{Service:'events.amazonaws.com'},Condition:{ArnLike:{'AWS:SourceArn':`arn:aws:events:us-west-2:${account}:rule/probe-rule`}}}]}:invocation)};
     if(args[1]==='describe-log-groups')return {logGroups:[{logGroupName:args.at(-1),arn:`arn:aws:logs:us-west-2:${account}:log-group:${args.at(-1)}:*`,logGroupArn:`arn:aws:logs:us-west-2:${account}:log-group:${args.at(-1)}`,retentionInDays:14}]};
@@ -41,7 +44,7 @@ function fixture(){
     if(args[1]==='list-targets-by-rule')return {Targets:[{Arn:probe.FunctionArn}]};
     throw Error('Unexpected metadata read');
   };
-  return {outputs,webhook,read,relay,probe,policy,probePolicy,trust,alarms,invocation};
+  return {outputs,webhook,read,relay,probe,policy,jobAlert,jobPolicy,probePolicy,trust,alarms,invocation};
 }
 it('accepts generated names via exact live identity, scopes and wiring, without secrets in receipt',async()=>{const {auditMonitoring}=await load(),f=fixture(),r=auditMonitoring(f);expect(r.passed).toBe(true);expect(JSON.stringify(r)).not.toContain('PRIVATE_');expect(r.notificationSent).toBe(false);});
 it.each(['foreignAccount','extraDatabase','extraModel','foreignAlarm','broadIam','missingIam','wrongMetric','foreignTrust','probeSecret','unboundedRetry','probeBroadKey','relayProbeKey','feedbackLoop','missingPreciseWakes'])('refuses %s',async kind=>{
@@ -60,6 +63,15 @@ it.each(['foreignAccount','extraDatabase','extraModel','foreignAlarm','broadIam'
   if(kind==='relayProbeKey')f.policy.Statement[0].Condition!['ForAllValues:StringLike']['dynamodb:LeadingKeys']=['*'];
   const read=(args:string[])=>{if(kind==='unboundedRetry'&&args[1]==='get-function-event-invoke-config')return {MaximumRetryAttempts:99};if(kind==='missingPreciseWakes'&&args[1]==='get-function-configuration'&&args.at(-1)==='worker')return {Environment:{Variables:{}}};return f.read(args);};
   expect(auditMonitoring({...f,read}).passed).toBe(false);
+});
+it('refuses a misrouted or overprivileged job notification adapter', async () => {
+  const { auditMonitoring } = await load();
+  const wrong = fixture();
+  wrong.jobAlert.FunctionArn += '-other';
+  expect(auditMonitoring(wrong).checks.workerJobAlertDestination).toBe(false);
+  const broad = fixture();
+  broad.jobPolicy.Statement[0].Condition['ForAllValues:StringLike']['dynamodb:LeadingKeys'] = ['event:*'];
+  expect(auditMonitoring(broad).checks.jobAlertIsolation).toBe(false);
 });
 it.each(['relay','probe'] as const)('validates only exact SDK encryption fields on %s without disclosing them',async role=>{
  const {auditMonitoring}=await load();
