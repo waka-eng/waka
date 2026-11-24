@@ -2005,7 +2005,10 @@ async function markJobFailedOrPending(
     jobId: job.id, type: job.type, requestVersion: job.requestVersion.toString(),
     attempt: job.attempts, maxAttempts: job.maxAttempts, diagnostic,
     ...(lock ? { lock } : {}),
-    ...(err instanceof EmbeddingIndexNeedsRetry ? { embeddingRecovery: err.code } : {}),
+    ...(err instanceof EmbeddingIndexNeedsRetry ? {
+      embeddingRecovery: err.code,
+      ...(err.cause ? { embeddingPublicationDiagnostic: safeErrorDiagnostic(err.cause) } : {}),
+    } : {}),
     action,
     ...(lockDeferral && settled.currentFailure ? { lockDeferrals: lockDeferral.checkpoint.count } : {}),
     ...(settled.status === 'pending' ? { runAfter: coerceDate(settled.runAfter).toISOString() } : {}),
@@ -2113,7 +2116,7 @@ type LockDeferral = {
 };
 
 function planLockDeferral(job: ClaimedBackgroundJob, error: unknown, now: Date): LockDeferral | undefined {
-  if (error instanceof EmbeddingIndexNeedsRetry) return;
+  if (error instanceof EmbeddingIndexNeedsRetry && error.code !== 'publication_pending') return;
   if (job.terminalRecoveryVersion === job.requestVersion.toString()) return;
   const state = databaseSqlState(error);
   if (state !== '55P03' && state !== '40P01') return;
@@ -2170,6 +2173,11 @@ function jobFailureDiagnostic(error: unknown): string {
 
 function failureDisposition(error: unknown, budgetSpent: boolean): 'retryable' | 'exhausted' | 'permanent' | 'ambiguous' {
   if (error instanceof EmbeddingIndexNeedsRetry) {
+    if (error.code === 'publication_pending') {
+      const state = databaseSqlState(error);
+      if (state && /^(22|23|42)/.test(state)) return 'permanent';
+      return budgetSpent ? 'exhausted' : 'retryable';
+    }
     return error.code === 'provider_refused' || error.code === 'input_too_large' ? 'permanent' : 'ambiguous';
   }
   if (error instanceof ModelConfigurationError || (error instanceof OpenRouterHttpError && error.creditRefused)) return 'permanent';

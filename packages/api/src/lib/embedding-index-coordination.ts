@@ -10,8 +10,8 @@ type Db=PostgresJsDatabase<typeof import('../db/index.js')>;
 type Tx=Parameters<Parameters<Db['transaction']>[0]>[0];
 type Reader=Pick<Db,'execute'>;
 export class EmbeddingIndexError extends Error{
- constructor(readonly code:'busy'|'stale'|'missing'|'identity'|'budget'|'calibration_held'|'outcome_unknown'){
-  super(`Embedding index ${code}`);this.name='EmbeddingIndexError';
+ constructor(readonly code:'busy'|'stale'|'missing'|'identity'|'budget'|'calibration_held'|'outcome_unknown',options?:ErrorOptions){
+  super(`Embedding index ${code}`,options);this.name='EmbeddingIndexError';
  }
 }
 function assertSpace(space:string){if(space!==EMBEDDING_2_SPACE.id)throw new EmbeddingIndexError('identity');}
@@ -82,9 +82,9 @@ export async function commitEmbeddingIndexResult(db:Db,input:SettleEmbeddingWork
   try{return await db.transaction(tx=>settleEmbeddingIndexWork(tx,input,commit));}
   catch(error){
    if(error instanceof EmbeddingIndexError)throw error;
-   if(aborted(error)){if(attempt===0){await options.onRetry?.(1);continue;}throw new EmbeddingIndexError('busy');}
+   if(aborted(error)){if(attempt===0){await options.onRetry?.(1);continue;}throw new EmbeddingIndexError('busy',{cause:error});}
    let confirmed=false;try{confirmed=await options.reconcile(db);}catch{/* Unknown is not rollback proof. */}
-   if(confirmed)return {status:'reconciled' as const};throw new EmbeddingIndexError('outcome_unknown');
+   if(confirmed)return {status:'reconciled' as const};throw new EmbeddingIndexError('outcome_unknown',{cause:error});
   }
  }
  throw new EmbeddingIndexError('busy');

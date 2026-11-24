@@ -120,10 +120,10 @@ it('settles deleted-source tombstones without a model or unrelated row deletion'
  const f=await owner(true),s=await signal(f.profileId),c=client();await indexEmbeddingSource(t.db,input(f.profileId,s.id),{client:c});await t.sql`DELETE FROM signals WHERE id=${s.id}`;
  expect((await indexEmbeddingSource(t.db,input(f.profileId,s.id),{client:c})).status).toBe('ineligible');expect(c.embed).toHaveBeenCalledOnce();expect((await t.sql`SELECT requested_version=completed_version AS done,outcome FROM embedding_index_work WHERE profile_id=${f.profileId}`)[0]).toEqual({done:true,outcome:'ineligible'});
 });
-it('reconciles a physical vector/progress commit with lost ACK using actual source/cache, not another HTTP',async()=>{
+it.each([['checkpoint',2],['vector publication',3]] as const)('reconciles a physical %s commit with lost ACK without another HTTP',async(_stage,lostAckAt)=>{
  const f=await owner(true),s=await signal(f.profileId),c=client(),original=t.db.transaction.bind(t.db);let writes=0;
- const uncertain=new Proxy(t.db,{get(target,key,receiver){if(key==='transaction')return async(callback:any,options:any)=>{const result=await original(callback,options);if(options?.accessMode!=='read only'&&++writes===2)throw Object.assign(Error('Synthetic post-commit ACK loss'),{code:'ECONNRESET'});return result;};return Reflect.get(target,key,receiver);}});
- expect((await indexEmbeddingSource(uncertain,input(f.profileId,s.id),{client:c})).status).toBe('updated');expect(c.embed).toHaveBeenCalledOnce();
+ const uncertain=new Proxy(t.db,{get(target,key,receiver){if(key==='transaction')return async(callback:any,options:any)=>{const result=await original(callback,options);if(options?.accessMode!=='read only'&&++writes===lostAckAt)throw Object.assign(Error('Synthetic post-commit ACK loss'),{code:'ECONNRESET'});return result;};return Reflect.get(target,key,receiver);}});
+ expect((await indexEmbeddingSource(uncertain,input(f.profileId,s.id),{client:c})).status).toBe('updated');expect(writes).toBe(3);expect(c.embed).toHaveBeenCalledOnce();
  expect((await indexEmbeddingSource(t.db,input(f.profileId,s.id),{client:c})).status).toBe('unchanged');expect(c.embed).toHaveBeenCalledOnce();expect((await t.sql`SELECT status FROM embedding_index_attempts WHERE profile_id=${f.profileId}`)[0]!.status).toBe('committed');
 });
 it('retains the received provider result across actual work-lock contention and commits with DB-only retry',async()=>{
@@ -168,4 +168,122 @@ it.each(['reflection','attachment'] as const)('uses the exact child timestamp/id
  const second=await indexEmbeddingSource(t.db,request,{client:c});expect(second.inputHash).not.toBe(first.inputHash);expect(c.embed).toHaveBeenCalledTimes(2);
  expect(c.embed.mock.calls[1]![0].indexOf('Second exact')).toBeLessThan(c.embed.mock.calls[1]![0].indexOf('First exact'));
  expect((await t.sql`SELECT outcome,requested_version=completed_version AS done FROM embedding_index_work WHERE source_id=${item.id}`)[0]).toEqual({outcome:'current',done:true});expect((await t.sql`SELECT text FROM inspirations WHERE id=${item.id}`)[0].text).toBe('Stable source words.');
+});
+
+it('resumes a received live inspiration vector after both publication transactions roll back', async () => {
+ const f = await owner(true);
+ const [item] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'Synthetic current memory.') RETURNING id`;
+ const request = {profileId:f.profileId,sourceKind:'inspiration' as const,sourceId:item.id,space:EMBEDDING_2_SPACE.id};
+ const c = client();
+ let failures = 0;
+ await expect(indexEmbeddingSource(t.db,request,{client:c,beforeCommit:async()=>{
+  if(c.embed.mock.calls.length){failures++;throw Object.assign(Error('Synthetic publication lock refusal'),{code:'55P03'});}
+ }})).rejects.toMatchObject({code:'publication_pending'});
+ expect(failures).toBe(2);
+ expect(c.embed).toHaveBeenCalledOnce();
+ expect((await t.sql`SELECT status FROM embedding_index_attempts WHERE profile_id=${f.profileId}`)[0]).toEqual({status:'received'});
+ expect(await t.sql`SELECT id FROM inspiration_embeddings WHERE inspiration_id=${item.id}`).toHaveLength(0);
+ await expect(indexEmbeddingSource(t.db,request,{client:c})).resolves.toMatchObject({status:'updated',generated:false});
+ expect(c.embed).toHaveBeenCalledOnce();
+ expect((await t.sql`SELECT status FROM embedding_index_attempts WHERE profile_id=${f.profileId}`)[0]).toEqual({status:'committed'});
+ expect((await t.sql`SELECT requested_version=completed_version AS done,outcome FROM embedding_index_work WHERE source_id=${item.id}`)[0])
+  .toEqual({done:true,outcome:'current'});
+});
+
+it('waits briefly for a real work-row lock after the embedding response instead of losing the bytes', async () => {
+ const f = await owner(true);
+ const [item] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'Synthetic current memory.') RETURNING id`;
+ const request = {profileId:f.profileId,sourceKind:'inspiration' as const,sourceId:item.id,space:EMBEDDING_2_SPACE.id};
+ const connection = await peer();
+ let release!: () => void;
+ let holding: Promise<unknown> | undefined;
+ let lockDelay: ReturnType<typeof setTimeout> | undefined;
+ const c = client(vi.fn(async (_text: string) => {
+  await new Promise<void>(locked => {
+   holding = connection.client.begin(async tx => {
+    await tx`SELECT id FROM embedding_index_work WHERE source_id=${item.id} FOR UPDATE`;
+    await new Promise<void>(unlock => { release=unlock;locked(); });
+   });
+  });
+  lockDelay=setTimeout(release,150);
+  return values();
+ }));
+ try {
+  await expect(indexEmbeddingSource(t.db,request,{client:c})).resolves.toMatchObject({status:'updated',generated:true});
+  expect(c.embed).toHaveBeenCalledOnce();
+  expect((await t.sql`SELECT requested_version=completed_version AS done,pending_embedding IS NULL AS cleared FROM embedding_index_work WHERE source_id=${item.id}`)[0])
+   .toEqual({done:true,cleared:true});
+ } finally {
+  clearTimeout(lockDelay);release?.();await holding;await connection.client.end();
+ }
+});
+
+it.each(['edit','delete','exclude','policy epoch','profile deletion'] as const)('scrubs staged vectors on %s without replaying old material', async action => {
+ const f=await owner(true);
+ const [item]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'Original synthetic memory.') RETURNING id`;
+ const request={profileId:f.profileId,sourceKind:'inspiration' as const,sourceId:item.id,space:EMBEDDING_2_SPACE.id};
+ const c=client();
+ await expect(indexEmbeddingSource(t.db,request,{client:c,beforeCommit:async()=>{
+  if(c.embed.mock.calls.length)throw Object.assign(Error('Synthetic failure'),{code:'40P01'});
+ }})).rejects.toMatchObject({code:'publication_pending'});
+ expect((await t.sql`SELECT pending_embedding IS NOT NULL AS staged FROM embedding_index_work WHERE source_id=${item.id}`)[0]?.staged).toBe(true);
+ if(action==='edit')await t.sql`UPDATE inspirations SET text='New synthetic words.' WHERE id=${item.id}`;
+ if(action==='delete')await t.sql`DELETE FROM inspirations WHERE id=${item.id}`;
+ if(action==='exclude')await t.sql`UPDATE inspirations SET memory_excluded_at=now() WHERE id=${item.id}`;
+ if(action==='policy epoch')await t.sql`UPDATE profile_embedding_indexes SET active_epoch=active_epoch+1 WHERE profile_id=${f.profileId}`;
+ if(action==='profile deletion')await t.sql`DELETE FROM profiles WHERE id=${f.profileId}`;
+ expect(await t.sql`SELECT id FROM embedding_index_work WHERE source_id=${item.id} AND pending_embedding IS NOT NULL`).toHaveLength(0);
+ expect(await t.sql`SELECT id FROM inspiration_embeddings WHERE inspiration_id=${item.id}`).toHaveLength(0);
+ expect(c.embed).toHaveBeenCalledOnce();
+ if(action==='profile deletion') {
+  expect(await t.sql`SELECT id FROM embedding_index_work WHERE source_id=${item.id}`).toHaveLength(0);
+  expect((await indexEmbeddingSource(t.db,request,{client:c})).status).toBe('missing');
+ }else{
+  expect((await t.sql`SELECT status FROM embedding_index_attempts WHERE profile_id=${f.profileId}`)[0]?.status).toBe('stale');
+  if(action==='delete'||action==='exclude'){
+   expect((await indexEmbeddingSource(t.db,request,{client:c})).status).toBe('ineligible');
+   expect(c.embed).toHaveBeenCalledOnce();
+  }
+  if(action==='edit'){
+   await expect(indexEmbeddingSource(t.db,request,{client:c})).resolves.toMatchObject({status:'updated',generated:true});
+   expect(c.embed).toHaveBeenCalledTimes(2);
+   expect(c.embed.mock.calls[1]?.[0]).toContain('New synthetic words.');
+  }
+ }
+});
+
+it('allows concurrent workers to settle a staged result while retaining one provider reservation', async () => {
+ const ownerFixture=await owner(true),foreign=await owner(true);
+ const [item]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${ownerFixture.profileId},'Only this fixture owns this memory.') RETURNING id`;
+ const request={profileId:ownerFixture.profileId,sourceKind:'inspiration' as const,sourceId:item.id,space:EMBEDDING_2_SPACE.id};
+ const c=client();
+ await expect(indexEmbeddingSource(t.db,request,{client:c,beforeCommit:async()=>{
+  if(c.embed.mock.calls.length)throw Object.assign(Error('Synthetic failure'),{code:'55P03'});
+ }})).rejects.toMatchObject({code:'publication_pending'});
+ const connection=await peer();
+ try {
+  expect((await indexEmbeddingSource(connection.db,{...request,profileId:foreign.profileId},{client:c})).status).toBe('missing');
+  const results=await Promise.allSettled([indexEmbeddingSource(t.db,request,{client:c}),indexEmbeddingSource(connection.db,request,{client:c})]);
+  expect(results.some(result=>result.status==='fulfilled')).toBe(true);
+  for(const result of results)if(result.status==='rejected')expect(result.reason).toMatchObject({code:'publication_pending'});
+  expect((await indexEmbeddingSource(t.db,request,{client:c})).status).toBe('unchanged');
+  expect(c.embed).toHaveBeenCalledOnce();
+  expect(await t.sql`SELECT status FROM embedding_index_attempts WHERE profile_id=${ownerFixture.profileId}`).toEqual([{status:'committed'}]);
+  expect(await t.sql`SELECT id FROM inspiration_embeddings WHERE inspiration_id=${item.id} AND profile_id=${ownerFixture.profileId}`).toHaveLength(1);
+ } finally {await connection.client.end();}
+});
+
+it.each(['wrong hash','invalid geometry'] as const)('holds a received checkpoint with %s without writing or dispatching',async damage=>{
+ const f=await owner(true),s=await signal(f.profileId),c=client();
+ await expect(indexEmbeddingSource(t.db,input(f.profileId,s.id),{client:c,beforeCommit:async()=>{
+  if(c.embed.mock.calls.length)throw Object.assign(Error('Synthetic failure'),{code:'55P03'});
+ }})).rejects.toMatchObject({code:'publication_pending'});
+ if(damage==='wrong hash')await t.sql`UPDATE embedding_index_attempts SET input_hash=repeat('c',64),started_at=now()-interval '1 minute' WHERE source_id=${s.id}`;
+ else {
+  await t.sql`UPDATE embedding_index_work SET pending_embedding=jsonb_set(pending_embedding,'{values}',${JSON.stringify(Array<number>(768).fill(0))}::jsonb) WHERE source_id=${s.id}`;
+  await t.sql`UPDATE embedding_index_attempts SET started_at=now()-interval '1 minute' WHERE source_id=${s.id}`;
+ }
+ await expect(indexEmbeddingSource(t.db,input(f.profileId,s.id),{client:c})).rejects.toMatchObject({code:'commit_unconfirmed'});
+ expect(c.embed).toHaveBeenCalledOnce();
+ expect(await t.sql`SELECT id FROM signal_embeddings WHERE signal_id=${s.id}`).toHaveLength(0);
 });

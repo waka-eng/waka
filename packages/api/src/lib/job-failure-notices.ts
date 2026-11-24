@@ -36,7 +36,7 @@ export async function deliverTerminalJobNotices(db: Database, jobId?: string, no
       CASE WHEN j.last_error IN ('provider_credit_refused','model_configuration') OR j.last_error ~ '^provider_http_[45][0-9]{2}$' THEN j.last_error
         WHEN j.last_error IN ('malformed_model_output','model_unusable_output') THEN 'invalid_model_output'
         WHEN j.last_error IN ('{"category":"database","code":"55P03"}','{"category":"database","code":"40P01"}') THEN 'database_lock'
-        WHEN j.last_error IN ('embedding_outcome_unknown','embedding_commit_unconfirmed','embedding_current_vector_unavailable')
+        WHEN j.last_error IN ('embedding_outcome_unknown','embedding_commit_unconfirmed','embedding_current_vector_unavailable','embedding_publication_pending')
           OR ${legacyDerivationEmbeddingHeld} THEN 'embedding_unresolved'
         ELSE 'other' END AS diagnostic,
       CASE WHEN j.payload->>'failureDisposition' IN ('permanent','ambiguous','exhausted') THEN j.payload->>'failureDisposition'

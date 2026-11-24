@@ -1,14 +1,30 @@
 import { sql, type SQL } from 'drizzle-orm';
 import type { getDb } from './db.js';
+import { EMBEDDING_2_SPACE } from './embedding-2-space.js';
 import { withoutLegacyGroupDestination } from './retired-group-work.js';
 
 type Database = Pick<ReturnType<typeof getDb>, 'execute'>;
 
-const unresolvedEmbedding = (profile: SQL, source: SQL, account: SQL) => sql`
+// The indexer checks current canonical hash and vector geometry before consuming
+// these private bytes. This exception is only for a live derivation claim.
+const stagedCanonicalEmbedding = sql`
+  e.status='received' AND e.dispatch_family='index' AND e.purpose='live' AND e.space=${EMBEDDING_2_SPACE.id}
+  AND EXISTS (SELECT 1 FROM embedding_index_work w
+    JOIN profile_embedding_indexes p ON p.profile_id=w.profile_id AND p.active_space=w.space
+    WHERE w.profile_id=e.profile_id AND w.space=e.space AND w.source_kind=e.source_kind
+      AND w.source_id=e.source_id AND w.input_scope=e.input_scope AND w.requested_version>w.completed_version
+      AND w.pending_embedding->>'attemptId'=e.id::text
+      AND e.request_key IN (
+        'index:live:'||w.id||':'||w.requested_version||':'||p.active_epoch||':1',
+        'index:live:'||w.id||':'||w.requested_version||':'||p.active_epoch||':2',
+        'index:live:'||w.id||':'||w.requested_version||':'||p.active_epoch||':3'))`;
+
+const unresolvedEmbedding = (profile: SQL, source: SQL, account: SQL, allowStaged=false) => sql`
   EXISTS (SELECT 1 FROM embedding_index_attempts e
     WHERE e.account_id = ${account} AND e.profile_id = ${profile} AND e.source_id = ${source}
       AND e.source_kind = 'inspiration' AND e.input_scope = 'personal'
-      AND e.status IN ('reserved','received','unknown'))
+      AND e.status IN ('reserved','received','unknown')
+      ${allowStaged ? sql`AND NOT (${stagedCanonicalEmbedding})` : sql``})
   OR EXISTS (SELECT 1 FROM embedding_index_work w
     WHERE w.profile_id = ${profile} AND w.source_id = ${source}
       AND w.source_kind = 'inspiration' AND w.input_scope = 'personal'
@@ -26,6 +42,7 @@ const ownedCurrentSource = sql`
     AND i.id::text = j.payload->>'inspirationId' AND i.memory_excluded_at IS NULL
     AND owner.type::text IN ('human','agent') AND owner.account_id IS NOT NULL`;
 const sourceHasUnresolvedEmbedding = unresolvedEmbedding(sql`i.profile_id`, sql`i.id`, sql`owner.account_id`);
+const sourceBlocksDerivationRetry = unresolvedEmbedding(sql`i.profile_id`, sql`i.id`, sql`owner.account_id`, true);
 
 /** Distinguishes an old embedding-related ambiguous failure in notice scans. */
 export const legacyDerivationEmbeddingHeld = sql`
@@ -77,7 +94,7 @@ export async function derivationRetryDispatchState(db: Database, input: {
 }): Promise<'stale' | 'blocked' | 'ready'> {
   const [row] = await db.execute<{ blocked: boolean }>(sql`
     SELECT source.blocked FROM background_jobs j
-    JOIN LATERAL (SELECT (${sourceHasUnresolvedEmbedding}) AS blocked ${ownedCurrentSource} LIMIT 1) source ON true
+    JOIN LATERAL (SELECT (${sourceBlocksDerivationRetry}) AS blocked ${ownedCurrentSource} LIMIT 1) source ON true
     WHERE j.id = ${input.jobId}::uuid AND j.profile_id = ${input.profileId}::uuid
       AND j.status = 'running' AND j.request_version = ${input.requestVersion}::bigint
       AND j.locked_at = ${input.lockedAt?.toISOString() ?? null}::timestamptz AND j.attempts = ${input.attempts}`);

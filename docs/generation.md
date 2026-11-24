@@ -550,6 +550,13 @@ replaces a headline. Actual save/load failures remain visible. Saved-word
 idempotency is a separate required contract, not something these processing
 receipts claim to provide.
 
+For live Embedding2 indexing, a validated response is saved with the exact
+current source work and its dispatch receipt before publication. A later
+worker can finish the same fenced SQL publication without another embedding
+request. A source change, deletion, policy change or successful publication
+clears the pending vector. An older received receipt without saved bytes, or
+an uncertain dispatch, remains held.
+
 Refreshes are debounced to one pending pass per profile, with the same
 trailing-edge `rerun_requested` semantics as derivation.
 

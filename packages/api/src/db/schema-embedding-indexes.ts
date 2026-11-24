@@ -1,6 +1,6 @@
-/** Operational index coordination, not another memory layer. No words/vectors. */
+/** Operational index coordination. Pending vectors live only with source work. */
 import {sql} from 'drizzle-orm';
-import {bigint,check,index,integer,numeric,pgSequence,pgTable,text,timestamp,uniqueIndex,uuid} from 'drizzle-orm/pg-core';
+import {bigint,check,index,integer,jsonb,numeric,pgSequence,pgTable,text,timestamp,uniqueIndex,uuid} from 'drizzle-orm/pg-core';
 import {accounts} from './schema-accounts.js';
 import {profiles} from './schema-profiles.js';
 
@@ -34,6 +34,8 @@ export const embeddingIndexWork=pgTable('embedding_index_work',{
  completedInputHash:text('completed_input_hash'),
  outcome:text('outcome').$type<'current'|'ineligible'|'failed'>(),
  failureCode:text('failure_code'),
+ /** Validated live result waiting for its fenced publication. Never read as recall. */
+ pendingEmbedding:jsonb('pending_embedding').$type<{attemptId:string;values:number[]}>(),
  /** Queue cleanup cannot remove a source's durable progress. */
  jobId:uuid('job_id'),
  updatedAt:timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
@@ -46,6 +48,12 @@ export const embeddingIndexWork=pgTable('embedding_index_work',{
  space:check('embedding_index_work_space',sql`${t.space} IN ('gemini-embedding-001','waka.embedding.gemini-2.text-retrieval.v1.768.raw')`),
  hash:check('embedding_index_work_hash',sql`${t.completedInputHash} IS NULL OR ${t.completedInputHash} ~ '^[a-f0-9]{64}$'`),
  outcome:check('embedding_index_work_outcome',sql`${t.outcome} IS NULL OR ${t.outcome} IN ('current','ineligible','failed')`),
+ pendingResult:check('embedding_index_work_pending_embedding',sql`${t.pendingEmbedding} IS NULL OR (
+  ${t.requestedVersion}>${t.completedVersion} AND jsonb_typeof(${t.pendingEmbedding})='object'
+  AND coalesce(${t.pendingEmbedding}->>'attemptId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',false)
+  AND CASE WHEN jsonb_typeof(${t.pendingEmbedding}->'values')='array'
+    THEN jsonb_array_length(${t.pendingEmbedding}->'values')=768 ELSE false END
+  AND octet_length(${t.pendingEmbedding}::text)<=24576)`),
  complete:check('embedding_index_work_complete',sql`(${t.completedVersion}=0 OR ${t.outcome} IS NOT NULL) AND (${t.outcome}<>'current' OR ${t.completedInputHash} IS NOT NULL) AND (${t.outcome}<>'ineligible' OR ${t.completedInputHash} IS NULL)`),
 }));
 
