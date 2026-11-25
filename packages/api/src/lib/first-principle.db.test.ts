@@ -158,118 +158,6 @@ async function seed(profileId:string,statement:string,text:string,source:'app'|'
   return {signal:signal.id as string,inspiration:inspiration.id as string};
 }
 
-it('sends seven distinct short saves across nine linked signals in the native provider request', async () => {
-  const a = await actor();
-  const signalByText = new Map<string, { source: string; signals: string[] }>();
-  for (let i = 0; i < 9; i++) {
-    const text = `I tried choice ${i % 7} on a small scale before committing time.`;
-    const prior = signalByText.get(text);
-    const row = await seed(a.id, `Summary of synthetic situation ${i}.`, text, 'app', prior?.source);
-    if (prior) prior.signals.push(row.signal);
-    else signalByText.set(text, { source: row.inspiration, signals: [row.signal] });
-  }
-  const [first] = signalByText.values();
-  const attach = async (signalId: string, text: string, source = 'app', owner = a.id) => {
-    const [row] = await t.sql`INSERT INTO inspirations(profile_id, text, source)
-      VALUES(${owner}, ${text}, ${source}::inspiration_source) RETURNING id`;
-    await t.sql`INSERT INTO signal_evidence(profile_id, owner_profile_id, signal_id, inspiration_id)
-      VALUES(${a.id}, ${owner}, ${signalId}, ${row!.id})`;
-    return row!.id as string;
-  };
-  await attach(first!.signals[0]!, [...signalByText.keys()][0]!.toUpperCase());
-  await seed(a.id, 'A separate synthetic statement.', 'AGENT_SYNTHETIC_CANARY', 'agent');
-  const foreign = await actor();
-  const foreignLink = await seed(a.id, 'A mixed-owner statement.', 'MIXED_OWNER_SYNTHETIC_CANARY');
-  await attach(foreignLink.signal, 'FOREIGN_SYNTHETIC_CANARY', 'app', foreign.id);
-
-  const calls = vi.fn(async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
-    expect(String(url)).toBe('https://api.openai.com/v1/responses');
-    const body = JSON.parse(String(init?.body));
-    const prompt = body.input.find((row: { role: string }) => row.role === 'user').content[0].text as string;
-    expect(prompt.length).toBeLessThanOrEqual(16_000);
-    expect(prompt).not.toContain('SYNTHETIC_CANARY');
-    const excerpts = [...prompt.matchAll(/<<<source excerpt>>>\n(.+)\n<<<end source excerpt>>>/g)]
-      .map(([, row]) => JSON.parse(row!));
-    expect(excerpts).toHaveLength(7);
-    expect(excerpts).toEqual(expect.arrayContaining([...signalByText].map(([text, { signals }]) => ({
-      text, signalIds: signals.slice().sort(), partial: false,
-    }))));
-    return Response.json({ status: 'completed', model: body.model, output: [{ type: 'message', role: 'assistant',
-      content: [{ type: 'output_text', text: '{"candidates":[]}' }] }] });
-  });
-  vi.stubEnv('OPENAI_API_KEY', 'synthetic-no-network');
-  vi.stubGlobal('fetch', calls);
-  try {
-    expect(await refreshPrinciplesForProfile({ profileId: a.id }, {
-      db: getDb(), modelProvider: createOpenAiModelProvider(),
-    })).toMatchObject({ status: 'no_candidates', minted: 0 });
-    expect(calls).toHaveBeenCalledTimes(1);
-  } finally {
-    vi.unstubAllGlobals();
-    vi.stubEnv('OPENAI_API_KEY', '');
-  }
-});
-
-it('rechecks source ownership, edit revisions, deletion and memory exclusion at excerpt read', async () => {
-  const a = await actor();
-  const own = await seed(a.id, 'A current statement.', 'A current synthetic source.');
-  const edited = await seed(a.id, 'A statement to edit.', 'A synthetic source to edit.');
-  const excluded = await seed(a.id, 'A statement to exclude.', 'A synthetic source to exclude.');
-  const deleted = await seed(a.id, 'A statement to delete.', 'A synthetic source to delete.');
-  const { firstSignals } = await loadPrincipleMaterial(getDb(), a.id);
-  const ids = firstSignals.map(row => row.id);
-  const byId = new Map(firstSignals.map(row => [row.id, row]));
-  expect(await loadFirstPrincipleExcerpts(getDb(), a.id, ids, byId)).toHaveLength(4);
-
-  await t.sql`UPDATE inspirations SET text='Changed after selection.' WHERE id=${edited.inspiration}`;
-  await t.sql`UPDATE inspirations SET memory_excluded_at=now() WHERE id=${excluded.inspiration}`;
-  await t.sql`DELETE FROM inspirations WHERE id=${deleted.inspiration}`;
-  expect(await loadFirstPrincipleExcerpts(getDb(), a.id, ids, byId)).toEqual([
-    { signalIds:[own.signal], text:'A current synthetic source.', partial:false },
-  ]);
-  const foreign = await actor();
-  expect(await loadFirstPrincipleExcerpts(getDb(), foreign.id, ids, byId)).toEqual([]);
-});
-
-it('lets an old empty first review be reconsidered once through ordinary request and worker deduplication', async () => {
-  const a = await actor();
-  await seed(a.id, statements[0]!, choices[0]!);
-  await seed(a.id, statements[1]!, choices[1]!);
-  const material = await loadPrincipleMaterial(getDb(), a.id);
-  const v1 = createHash('sha256').update(JSON.stringify({
-    policy: 'first-principle-v1', locale: material.preferredLocale, ordinary: null,
-    signals: material.firstSignals.map(({id,statement,origins})=>({id,statement,origins})).sort((x,y)=>x.id.localeCompare(y.id)),
-  })).digest('hex');
-  const v2 = principleMaterialKey(material);
-  expect(v2).not.toBe(v1);
-  const [prior] = await t.sql`INSERT INTO background_jobs(profile_id, type, payload, status, idempotency_key)
-    VALUES(${a.id}, 'refresh_principles', ${JSON.stringify({profileId:a.id})}::jsonb, 'succeeded', ${`refresh_principles:${a.id}:${v1}`})
-    RETURNING id`;
-  await t.sql`INSERT INTO principle_generation_steps(profile_id, billing_profile_id, job_id, input_hash, step_key, kind, status, response)
-    VALUES(${a.id}, ${a.id}, ${prior!.id}, ${v1}, 'publication', 'publication', 'ready',
-      '{"status":"no_candidates","minted":0,"attached":0,"conflicts":0,"redeemed":0,"dropped":0}'::jsonb)`;
-  const distill = vi.fn(async () => ({ candidates: [] }));
-  const refresh = async () => expect((await request(a, '/api/principles/refresh', 'POST', {})).status).toBe(202);
-  setDefaultModelProviderForTests(model(distill));
-  try {
-    await refresh();
-    await refresh();
-    const holdUntil = new Date(Date.now() + 60_000);
-    const drain = () => runBackgroundJobWorker({ limit: 80, onClaimed: async job => {
-      if (job.profileId !== a.id || job.type !== 'refresh_principles') throw new BackgroundJobHeldError(holdUntil, 'unrelated isolated fixture work');
-    } });
-    expect((await drain()).failed).toBe(0);
-    await refresh();
-    expect((await drain()).failed).toBe(0);
-    expect(distill).toHaveBeenCalledTimes(1);
-    const jobs = await t.sql`SELECT status, idempotency_key AS key FROM background_jobs WHERE profile_id=${a.id} AND type='refresh_principles'`;
-    expect(jobs).toHaveLength(2);
-    expect(jobs).toEqual(expect.arrayContaining([v1, v2].map(key => ({status:'succeeded',key:`refresh_principles:${a.id}:${key}`}))));
-  } finally {
-    setDefaultModelProviderForTests(null);
-  }
-});
-
 it.each(['same source','NFKC duplicate','same wording','agent-authored'] as const)('refuses first generation for %s before any model call',async mode=>{
   const a=await actor();
   const first=await seed(a.id,'작은 실험을 먼저 고른다','ＡＢＣ — 먼저 연습!');
@@ -400,4 +288,116 @@ it('respects declared and human-edited history after deletion or lost support',a
   expect(checked.demoted).toEqual([first!.id]);
   const [edited]=await loadPrincipleViews(getDb(),b.id);
   expect(edited).toMatchObject({statement:'My exact saved wording.',locked:true,state:'aspirational',unsupported:true,supportChanged:true});
+});
+
+it('sends seven distinct short saves across nine linked signals in the native provider request', async () => {
+  const a = await actor();
+  const signalByText = new Map<string, { source: string; signals: string[] }>();
+  for (let i = 0; i < 9; i++) {
+    const text = `I tried choice ${i % 7} on a small scale before committing time.`;
+    const prior = signalByText.get(text);
+    const row = await seed(a.id, `Summary of synthetic situation ${i}.`, text, 'app', prior?.source);
+    if (prior) prior.signals.push(row.signal);
+    else signalByText.set(text, { source: row.inspiration, signals: [row.signal] });
+  }
+  const [first] = signalByText.values();
+  const attach = async (signalId: string, text: string, source = 'app', owner = a.id) => {
+    const [row] = await t.sql`INSERT INTO inspirations(profile_id, text, source)
+      VALUES(${owner}, ${text}, ${source}::inspiration_source) RETURNING id`;
+    await t.sql`INSERT INTO signal_evidence(profile_id, owner_profile_id, signal_id, inspiration_id)
+      VALUES(${a.id}, ${owner}, ${signalId}, ${row!.id})`;
+    return row!.id as string;
+  };
+  await attach(first!.signals[0]!, [...signalByText.keys()][0]!.toUpperCase());
+  await seed(a.id, 'A separate synthetic statement.', 'AGENT_SYNTHETIC_CANARY', 'agent');
+  const foreign = await actor();
+  const foreignLink = await seed(a.id, 'A mixed-owner statement.', 'MIXED_OWNER_SYNTHETIC_CANARY');
+  await attach(foreignLink.signal, 'FOREIGN_SYNTHETIC_CANARY', 'app', foreign.id);
+
+  const calls = vi.fn(async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    expect(String(url)).toBe('https://api.openai.com/v1/responses');
+    const body = JSON.parse(String(init?.body));
+    const prompt = body.input.find((row: { role: string }) => row.role === 'user').content[0].text as string;
+    expect(prompt.length).toBeLessThanOrEqual(16_000);
+    expect(prompt).not.toContain('SYNTHETIC_CANARY');
+    const excerpts = [...prompt.matchAll(/<<<source excerpt>>>\n(.+)\n<<<end source excerpt>>>/g)]
+      .map(([, row]) => JSON.parse(row!));
+    expect(excerpts).toHaveLength(7);
+    expect(excerpts).toEqual(expect.arrayContaining([...signalByText].map(([text, { signals }]) => ({
+      text, signalIds: signals.slice().sort(), partial: false,
+    }))));
+    return Response.json({ status: 'completed', model: body.model, output: [{ type: 'message', role: 'assistant',
+      content: [{ type: 'output_text', text: '{"candidates":[]}' }] }] });
+  });
+  vi.stubEnv('OPENAI_API_KEY', 'synthetic-no-network');
+  vi.stubGlobal('fetch', calls);
+  try {
+    expect(await refreshPrinciplesForProfile({ profileId: a.id }, {
+      db: getDb(), modelProvider: createOpenAiModelProvider(),
+    })).toMatchObject({ status: 'no_candidates', minted: 0 });
+    expect(calls).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.unstubAllGlobals();
+    vi.stubEnv('OPENAI_API_KEY', '');
+  }
+});
+
+it('rechecks source ownership, edit revisions, deletion and memory exclusion at excerpt read', async () => {
+  const a = await actor();
+  const own = await seed(a.id, 'A current statement.', 'A current synthetic source.');
+  const edited = await seed(a.id, 'A statement to edit.', 'A synthetic source to edit.');
+  const excluded = await seed(a.id, 'A statement to exclude.', 'A synthetic source to exclude.');
+  const deleted = await seed(a.id, 'A statement to delete.', 'A synthetic source to delete.');
+  const { firstSignals } = await loadPrincipleMaterial(getDb(), a.id);
+  const ids = firstSignals.map(row => row.id);
+  const byId = new Map(firstSignals.map(row => [row.id, row]));
+  expect(await loadFirstPrincipleExcerpts(getDb(), a.id, ids, byId)).toHaveLength(4);
+
+  await t.sql`UPDATE inspirations SET text='Changed after selection.' WHERE id=${edited.inspiration}`;
+  await t.sql`UPDATE inspirations SET memory_excluded_at=now() WHERE id=${excluded.inspiration}`;
+  await t.sql`DELETE FROM inspirations WHERE id=${deleted.inspiration}`;
+  expect(await loadFirstPrincipleExcerpts(getDb(), a.id, ids, byId)).toEqual([
+    { signalIds:[own.signal], text:'A current synthetic source.', partial:false },
+  ]);
+  const foreign = await actor();
+  expect(await loadFirstPrincipleExcerpts(getDb(), foreign.id, ids, byId)).toEqual([]);
+});
+
+it('lets an old empty first review be reconsidered once through ordinary request and worker deduplication', async () => {
+  const a = await actor();
+  await seed(a.id, statements[0]!, choices[0]!);
+  await seed(a.id, statements[1]!, choices[1]!);
+  const material = await loadPrincipleMaterial(getDb(), a.id);
+  const v1 = createHash('sha256').update(JSON.stringify({
+    policy: 'first-principle-v1', locale: material.preferredLocale, ordinary: null,
+    signals: material.firstSignals.map(({id,statement,origins})=>({id,statement,origins})).sort((x,y)=>x.id.localeCompare(y.id)),
+  })).digest('hex');
+  const v2 = principleMaterialKey(material);
+  expect(v2).not.toBe(v1);
+  const [prior] = await t.sql`INSERT INTO background_jobs(profile_id, type, payload, status, idempotency_key)
+    VALUES(${a.id}, 'refresh_principles', ${JSON.stringify({profileId:a.id})}::jsonb, 'succeeded', ${`refresh_principles:${a.id}:${v1}`})
+    RETURNING id`;
+  await t.sql`INSERT INTO principle_generation_steps(profile_id, billing_profile_id, job_id, input_hash, step_key, kind, status, response)
+    VALUES(${a.id}, ${a.id}, ${prior!.id}, ${v1}, 'publication', 'publication', 'ready',
+      '{"status":"no_candidates","minted":0,"attached":0,"conflicts":0,"redeemed":0,"dropped":0}'::jsonb)`;
+  const distill = vi.fn(async () => ({ candidates: [] }));
+  const refresh = async () => expect((await request(a, '/api/principles/refresh', 'POST', {})).status).toBe(202);
+  setDefaultModelProviderForTests(model(distill));
+  try {
+    await refresh();
+    await refresh();
+    const holdUntil = new Date(Date.now() + 60_000);
+    const drain = () => runBackgroundJobWorker({ limit: 80, onClaimed: async job => {
+      if (job.profileId !== a.id || job.type !== 'refresh_principles') throw new BackgroundJobHeldError(holdUntil, 'unrelated isolated fixture work');
+    } });
+    expect((await drain()).failed).toBe(0);
+    await refresh();
+    expect((await drain()).failed).toBe(0);
+    expect(distill).toHaveBeenCalledTimes(1);
+    const jobs = await t.sql`SELECT status, idempotency_key AS key FROM background_jobs WHERE profile_id=${a.id} AND type='refresh_principles'`;
+    expect(jobs).toHaveLength(2);
+    expect(jobs).toEqual(expect.arrayContaining([v1, v2].map(key => ({status:'succeeded',key:`refresh_principles:${a.id}:${key}`}))));
+  } finally {
+    setDefaultModelProviderForTests(null);
+  }
 });
