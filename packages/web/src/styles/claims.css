@@ -2491,9 +2491,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   outline: none;
 }
 
-/* THE STATEMENT IS THE CONTROL THAT FILLS THE CARD, so it carries none of a
-   button's own chrome and grows to take the empty space — pressing anywhere
-   in the card that is not the share still opens the principle. */
+/* The statement button fills the available space inside the card. */
 .waka-held-open {
   flex: 1 1 auto;
   display: block;
@@ -2509,9 +2507,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   outline: none;
 }
 
-/* The proof and the act share the card's last line: the proof is why you
-   would share it, so the press belongs beside the reason rather than under
-   it. Wraps to two lines before it ever crowds. */
+/* The retained agent card groups attribution and its share action. */
 .waka-held-foot {
   display: flex;
   flex-wrap: wrap;
