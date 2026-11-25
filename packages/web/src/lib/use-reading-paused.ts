@@ -83,7 +83,7 @@ export function useReadingPaused(enabled: boolean) {
 
   return {
     paused,
-    eligiblePhase: enabled && status?.eligible ? status.phase : undefined,
+    principleStatus: enabled ? status : null,
     /** The principles line (`PrincipleRead`) is already showing a failure
         with its own Try again — which restarts the reading too — so a page
         that shows both says it once. */

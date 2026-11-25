@@ -39,6 +39,8 @@ export interface ApiPrinciple {
 
 export interface ApiPrincipleStatus {
   supportPending?: boolean;
+  /** Queued or claimed support work takes precedence over the Principle review. */
+  supportActive?: boolean;
   phase: "waiting" | "pending" | "processing" | "ready" | "failed";
   /** The latest reading or principles job failed (see `readingPausedFor` in
       the API's `lib/principle-status.ts`). Optional so an older server that
@@ -95,8 +97,8 @@ export async function retryPausedReading(): Promise<ApiPrincipleStatus> {
   return (await postJson<{ status: ApiPrincipleStatus }>(apiPath("/principles/refresh?retry=1"), {}, "The reading could not be restarted")).status;
 }
 
-export async function requestPrincipleRead(retry = false): Promise<void> {
-  await postJson(apiPath(`/principles/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started");
+export async function requestPrincipleRead(retry = false): Promise<ApiPrincipleStatus> {
+  return (await postJson<{ status: ApiPrincipleStatus }>(apiPath(`/principles/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started")).status;
 }
 
 /** GET /principles — the acting profile's ranked set. */

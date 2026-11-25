@@ -158,6 +158,48 @@ async function seed(profileId:string,statement:string,text:string,source:'app'|'
   return {signal:signal.id as string,inspiration:inspiration.id as string};
 }
 
+it('serves waiting until the current Principle review has a live claim', async () => {
+  const a = await actor();
+  await seed(a.id, statements[0]!, choices[0]!);
+  await seed(a.id, statements[1]!, choices[1]!);
+  const status = async () => {
+    const response = await request(a, '/api/principles/status');
+    expect(response.status).toBe(200);
+    return (await json<{ status: Awaited<ReturnType<typeof loadPrincipleStatus>> }>(response)).status;
+  };
+
+  expect(await status()).toMatchObject({ phase: 'pending', eligible: true });
+  const refresh = await request(a, '/api/principles/refresh', 'POST', {});
+  expect(refresh.status).toBe(202);
+  expect(await refresh.json()).toMatchObject({ status: { phase: 'pending', eligible: true } });
+  const [job] = await t.sql`SELECT id, status FROM background_jobs
+    WHERE profile_id=${a.id} AND type='refresh_principles'`;
+  expect(job?.status).toBe('pending');
+  expect(await status()).toMatchObject({ phase: 'pending', eligible: true });
+
+  await t.sql`UPDATE background_jobs SET status='running', locked_at=now(), attempts=1 WHERE id=${job!.id}`;
+  expect(await status()).toMatchObject({ phase: 'processing', eligible: true, supportActive: false });
+  await t.sql`UPDATE background_jobs SET locked_at=now() - interval '1 hour' WHERE id=${job!.id}`;
+  expect(await status()).toMatchObject({ phase: 'pending', eligible: true });
+});
+
+it('distinguishes checking support from reviewing for a Principle', async () => {
+  const a = await actor();
+  const { inspiration } = await seed(a.id, statements[0]!, choices[0]!);
+  const [job] = await t.sql`INSERT INTO background_jobs(profile_id, type, payload)
+    VALUES(${a.id}, 'review_signal_support', ${JSON.stringify({ inspirationId: inspiration })}::jsonb) RETURNING id`;
+  const status = async () => {
+    const response = await request(a, '/api/principles/status');
+    expect(response.status).toBe(200);
+    return (await json<{ status: Awaited<ReturnType<typeof loadPrincipleStatus>> }>(response)).status;
+  };
+  expect(await status()).toMatchObject({ phase: 'pending', eligible: false, supportPending: true, supportActive: true });
+  await t.sql`UPDATE background_jobs SET status='running', locked_at=now(), attempts=1 WHERE id=${job!.id}`;
+  expect(await status()).toMatchObject({ phase: 'processing', eligible: false, supportPending: true, supportActive: true });
+  await t.sql`UPDATE background_jobs SET locked_at=now() - interval '1 hour' WHERE id=${job!.id}`;
+  expect(await status()).toMatchObject({ phase: 'pending', supportActive: true });
+});
+
 it.each(['same source','NFKC duplicate','same wording','agent-authored'] as const)('refuses first generation for %s before any model call',async mode=>{
   const a=await actor();
   const first=await seed(a.id,'작은 실험을 먼저 고른다','ＡＢＣ — 먼저 연습!');
