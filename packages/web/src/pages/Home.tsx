@@ -7882,7 +7882,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
                           ) : null}
                           {pick === pr.id && !pDraft ? (
                             <div className="jar-ask jar-principle-actions">
-                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,wallId:atWall.kind==='agent'?atWall.id:null,section:'sky',principleId:pr.id,sharePrinciple:true})}>{say('worldSharePrinciple')}</button>:null}
+                              {atWall.kind === "agent" && storageScope && !offline ? (
+                                <button type="button" onClick={() => viewNavigation.write({...EMPTY_VIEW, wallId:atWall.id, section:"sky", principleId:pr.id, sharePrinciple:true})}>
+                                  {say("worldSharePrinciple")}
+                                </button>
+                              ) : null}
                               {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,wallId:atWall.kind==='agent'?atWall.id:null,conversationId:'new',principleId:pr.id})}>{say('worldTalkAboutThis')}</button>:null}
                               {pr.citedSignals.length > 0 ? (
                                 <>
@@ -11077,7 +11081,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           covered on EVERY wall by `PrinciplesOverlay` (dock row
           `worldDockPrinciples` -> `openOverHome('principles')`, rendered
           with `profileId={atWall.kind==='agent'?atWall.id:...}`), which also
-          carries the count, the share and the open — and because two
+          opens a Principle — and because two
           controls saying "Principles" in the same place is the exact defect
           the quote above is about. The sky itself is NOT orphaned: opening a
           principle from that overlay writes `section:'sky'`, and dev's
@@ -11520,7 +11524,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
         key={`${storageScope.accountId}:${atWall.kind==='agent'?atWall.id:storageScope.profileId}:principles`}
         locale={locale} profileId={atWall.kind==='agent'?atWall.id:storageScope.profileId}
-        name={atWall.kind==='agent'?atWall.name:auth?.profile?.name??''}
+        name={atWall.kind==='agent'?atWall.name:undefined}
         title={atWall.kind==='agent'?formatMessage(locale,'worldProfilePrinciples',{name:atWall.name}):say('worldPrinciplesShortcut')}
         whose={atWall.kind==='agent'?'agent':'own'}
         onNewSave={atWall.kind==='agent'?undefined:startNewInspiration}
@@ -11531,12 +11535,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
            top of a sheet, and `closeOpen` would otherwise have to know which
            of two things it was closing. */
         onOpen={id=>viewNavigation.write({...EMPTY_VIEW,wallId:atWall.kind==='agent'?atWall.id:null,section:'sky',principleId:id})}
-        /* STRAIGHT TO THE ARTIFACT, skipping the principle's own surface.
-           The card already shows what would be shared; the share surface is
-           the larger version of that same card. Routing through the
-           principle page first made a person confirm a choice they had
-           already made by pressing share. */
-        onShare={id=>viewNavigation.write({...EMPTY_VIEW,wallId:atWall.kind==='agent'?atWall.id:null,section:'sky',principleId:id,sharePrinciple:true})}
+        onShare={atWall.kind === "agent" ? id => viewNavigation.write({...EMPTY_VIEW, wallId:atWall.id, section:"sky", principleId:id, sharePrinciple:true}) : undefined}
         /* What the creature said on the waiting page, talked about. */
         /* NOT ON AN AGENT'S WALL (review, 2026-10-16): talkAbout posts the
            creature's line as YOUR first message, and on an agent's ground that
