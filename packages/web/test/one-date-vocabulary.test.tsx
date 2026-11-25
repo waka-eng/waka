@@ -260,26 +260,20 @@ const MONTH_WITH_DIGIT_YEAR = [
 ];
 
 describe("every surface that prints a date says it in the world's words", () => {
-  it("dates a principle to a month the world speaks aloud, in both languages", async () => {
-    for (const locale of ["en-US", "ko-KR"] as const) {
-      await act(async () => root.render(
-        <PrinciplesOverlay locale={locale} profileId="me" name="You"
-          title="Your principles" onClose={vi.fn()} onOpen={vi.fn()} />,
-      ));
-      await settle();
+  it.each(["en-US", "ko-KR"] as const)("shows only the personal Principle statement in %s", async (locale) => {
+    const open = vi.fn();
+    await act(async () => root.render(
+      <PrinciplesOverlay locale={locale} profileId="me" name="Fixture Owner"
+        title="Your principles" onClose={vi.fn()} onOpen={open} onShare={vi.fn()} />,
+    ));
+    await settle();
 
-      /* THE MEASURED EXPECTATION. `October twenty twenty-six` and
-         `이천이십육년 시월` — not "contains a month name", which `October 2026`
-         would also satisfy. */
-      expect(said()).toContain(monthTag(HELD, locale));
-      for (const shape of MONTH_WITH_DIGIT_YEAR) expect(said()).not.toMatch(shape);
-      /* THE CARD CARRIES NOTHING ELSE DATED, and that is this surface's own
-         ruling rather than an omission here — "one line each, and nothing
-         else on the card … every number beside a sentence is something to
-         read instead of the sentence". The evidence footers under a principle
-         live on the page you press through to, and they have their own case
-         below. */
-    }
+    const card = host.querySelector(".waka-held-card")!;
+    expect(card.textContent).toBe(PRINCIPLE.statement);
+    const buttons = card.querySelectorAll("button");
+    expect(buttons).toHaveLength(1);
+    await act(async () => buttons[0].click());
+    expect(open).toHaveBeenCalledWith(PRINCIPLE.id);
   });
 
   it("stamps a chat row's minute and its day heading from the module", async () => {
