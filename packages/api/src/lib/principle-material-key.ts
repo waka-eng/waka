@@ -5,7 +5,8 @@ import type {loadPrincipleMaterial} from './principle-generation.js';
 export function principleMaterialKey(material: Awaited<ReturnType<typeof loadPrincipleMaterial>>): string {
   if(material.mode==='first'){
     return createHash('sha256').update(JSON.stringify({
-      policy:'first-principle-v1',locale:material.preferredLocale,
+      // Existing idempotent triggers can reconsider one previously empty first pass.
+      policy:'first-principle-v2',locale:material.preferredLocale,
       ordinary:material.ordinaryAvailable?principleMaterialKey({...material,mode:'ordinary'}):null,
       signals:material.firstSignals.map(({id,statement,origins})=>({id,statement,origins})).sort((a,b)=>a.id.localeCompare(b.id)),
     })).digest('hex');

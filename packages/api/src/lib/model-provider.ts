@@ -337,6 +337,8 @@ export interface DistillPrinciplesInput {
   ordinaryAvailable?: true;
   preferredLocale: SupportedLocale;
   signals: PrincipleDistillSignal[];
+  /** A first review may see bounded original app text tied to its selected signals. */
+  firstSaveExcerpts?: Array<{ signalIds: string[]; text: string; partial: boolean }>;
   /** The standing set — context for no-duplication; matching is the judge's job. */
   currentPrinciples: Array<{ id: string; statement: string; state: string }>;
   /** Live top-of-mind entries — what a principle must generalize beyond, never echo. */
