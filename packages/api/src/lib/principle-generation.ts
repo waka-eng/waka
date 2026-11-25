@@ -20,7 +20,7 @@ import { and, asc, eq, getTableColumns, inArray, isNotNull, or, sql } from "driz
 
 import { createHash } from "node:crypto";
 import { readGenerationRevision, assertGenerationRevision, type GenerationRevision } from "./generation-revision.js";
-import { assignFirstPrincipleOrigins, firstPrincipleOrigins, firstPrincipleWording, loadFirstPrincipleExcerpts, usesFirstPrincipleBar, FIRST_PRINCIPLE_SIGNAL_COUNT, type FirstPrincipleSignal } from './first-principle-evidence.js';
+import { assignFirstPrincipleOrigins, directFirstPrinciplePolicy, firstPrincipleOrigins, firstPrincipleWording, isDirectFirstPrinciplePolicy, loadFirstPrincipleExcerpts, usesFirstPrincipleBar, FIRST_PRINCIPLE_SIGNAL_COUNT, type FirstPrincipleSignal } from './first-principle-evidence.js';
 import { personalEntrySupportCurrent, personalPrincipleSupportCurrent, personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
 import { citationStatementCurrent, evidenceSupportCurrent, loadSignalStatementRevisions } from './signal-support-state.js';
 import {
@@ -49,6 +49,7 @@ import { writePrincipleStatementChain } from "./statement-chains.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
+  type FirstPrincipleDirectEvidence,
   type PrincipleCandidate,
   type PrincipleGroundingInput,
 } from "./model-provider.js";
@@ -350,6 +351,9 @@ export async function loadPrincipleMaterial(db: WakaDb | WakaTx, profileId: stri
     eligibility:first&&!ordinary.eligible?{eligible:true,distinctSignals:FIRST_PRINCIPLE_SIGNAL_COUNT,spanDays:0,tomAppearances:0}:ordinary };
 }
 
+type FirstPrincipleExcerpt = Awaited<ReturnType<typeof loadFirstPrincipleExcerpts>>[number];
+type DirectEvidence = FirstPrincipleDirectEvidence & {source:FirstPrincipleExcerpt};
+
 /** At most one owned original-material SELECT, only for valid candidates.
  * The fixed shortlist uses the earliest and latest direct citations per signal.
  * Interleave them so one signal cannot fill the budget ahead of all others. */
@@ -359,6 +363,7 @@ async function addGroundingOriginals(
   evidence: ReadonlyMap<string, Pick<CitationEvidence,'originalIds'>>,
   input: PrincipleGroundingInput,
   required: NonNullable<ReturnType<typeof assignFirstPrincipleOrigins>> = [],
+  direct?: DirectEvidence,
 ) {
   const linked = new Map<string, string[]>(required.map(({signalId,origin})=>[origin.id,[signalId]]));
   for (const offset of [0, 1]) {
@@ -383,8 +388,12 @@ async function addGroundingOriginals(
   for (const [id, signalIds] of linked) {
     const row = byId.get(id);
     if (!row) continue;
-    const inspirationText = row.text.trim() ? row.text.slice(0, 400) : undefined;
-    const answer = row.reflections[0];
+    const designated = direct?.source.origin.id===id ? direct : undefined;
+    if (designated && !row.text.startsWith(designated.source.text)) continue;
+    const clipped = row.text.slice(0,400);
+    const inspirationText = designated && !clipped.includes(designated.quote)
+      ? designated.source.text : row.text.trim() ? clipped : undefined;
+    const answer = designated ? undefined : row.reflections[0];
     const reflection = answer?.slice(0, 400);
     // Omit repeated visible excerpts. Longer, clipped originals may differ
     // beyond this prefix; the review never treats a prefix as a full match.
@@ -392,7 +401,8 @@ async function addGroundingOriginals(
     if (!fingerprint || seen.has(fingerprint)) continue;
     seen.add(fingerprint);
     originals.push({ signalIds, kind: row.kind, inspirationText, reflection,
-      partial: row.text.length > 400 || (answer?.length ?? 0) > 400 || row.reflections.length > 1 });
+      ...(designated?{sourceNumber:designated.sourceNumber}:{}),
+      partial: row.text.length > (inspirationText?.length??400) || (answer?.length ?? 0) > 400 || row.reflections.length > 1 });
     if (renderPrincipleGroundingContext({ ...input, originals }).length > PRINCIPLE_GROUNDING_LIMITS.characters) {
       originals.pop();
       break;
@@ -494,6 +504,7 @@ export async function refreshPrinciplesForProfile(
     currentEntries: currentEntries.map((row) => ({ body: row.body })),
   },new Set(focus.flatMap(row=>row.id?[row.id]:[])));
   if(first&&!ordinary&&!assignFirstPrincipleOrigins(material.firstSignals.filter(row=>distillInput.signals.some(signal=>signal.id===row.id))))return none;
+  const firstSources = new Map<number, FirstPrincipleExcerpt>();
   if(first){
     const sources = await db.transaction(async tx => {
       const current = await readGenerationRevision(tx, { profileId: input.profileId });
@@ -501,18 +512,20 @@ export async function refreshPrinciplesForProfile(
       return loadFirstPrincipleExcerpts(tx, input.profileId, distillInput.signals.map(row => row.id), firstById);
     }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
     const seen = new Set<string>();
-    const firstSaveExcerpts: typeof sources = [];
+    const firstSaveExcerpts: NonNullable<typeof distillInput.firstSaveExcerpts> = [];
     const excerptBudget = Math.min(PRINCIPLE_INPUT_LIMITS.characters,
       renderPrincipleDistillContext(distillInput).length + FIRST_PRINCIPLE_EXCERPT_LIMITS.promptCharacters);
     for (const source of sources) {
       const fingerprint = readingSourceFingerprint([source.text]);
       if (!fingerprint || seen.has(fingerprint)) continue;
-      firstSaveExcerpts.push(source);
+      const sourceNumber = firstSaveExcerpts.length + 1;
+      firstSaveExcerpts.push({sourceNumber,signalIds:source.signalIds,text:source.text,partial:source.partial});
       if (renderPrincipleDistillContext({ ...distillInput, firstSaveExcerpts }).length > excerptBudget) {
         firstSaveExcerpts.pop();
         continue;
       }
       seen.add(fingerprint);
+      firstSources.set(sourceNumber,source);
       if (firstSaveExcerpts.length === FIRST_PRINCIPLE_EXCERPT_LIMITS.excerpts) break;
     }
     if (firstSaveExcerpts.length) distillInput.firstSaveExcerpts = firstSaveExcerpts;
@@ -540,6 +553,7 @@ export async function refreshPrinciplesForProfile(
   let valid: PrincipleCandidate[] = [];
   let firstCandidate: PrincipleCandidate|undefined;
   let firstOriginals: ReturnType<typeof assignFirstPrincipleOrigins> = null;
+  let firstDirect: DirectEvidence | undefined;
   for (const candidate of candidates) {
     const statement = candidate.statement.trim();
     const cited = [...new Set(candidate.citedSignalIds)];
@@ -549,8 +563,19 @@ export async function refreshPrinciplesForProfile(
       now,
     );
     const ordinaryCandidate=ordinary&&verdict.eligible&&cited.every(id=>evidence.has(id));
-    const assigned=first&&!ordinaryCandidate&&!firstCandidate&&cited.length===FIRST_PRINCIPLE_SIGNAL_COUNT
-      ?assignFirstPrincipleOrigins(cited.flatMap(id=>firstById.has(id)?[firstById.get(id)!]:[])):null;
+    let assigned: ReturnType<typeof assignFirstPrincipleOrigins> = null;
+    let direct: DirectEvidence | undefined;
+    if (first && !ordinaryCandidate && !firstCandidate) {
+      if (cited.length===FIRST_PRINCIPLE_SIGNAL_COUNT) {
+        assigned=assignFirstPrincipleOrigins(cited.flatMap(id=>firstById.has(id)?[firstById.get(id)!]:[]));
+      } else if (cited.length===1 && candidate.directEvidence) {
+        const source=firstSources.get(candidate.directEvidence.sourceNumber);
+        if (source?.signalIds.includes(cited[0]!) && source.text.includes(candidate.directEvidence.quote)) {
+          assigned=[{signalId:cited[0]!,origin:source.origin}];
+          direct={...candidate.directEvidence,source};
+        }
+      }
+    }
     if (
       statement.length === 0 ||
       statement.length > PRINCIPLE_MAX_STATEMENT_LENGTH ||
@@ -562,14 +587,15 @@ export async function refreshPrinciplesForProfile(
     }
     const accepted={ ...candidate, statement, citedSignalIds: cited };
     valid.push(accepted);
-    if(assigned){firstCandidate=accepted;firstOriginals=assigned;}
+    if(assigned){firstCandidate=accepted;firstOriginals=assigned;firstDirect=direct;}
   }
   if(valid.length){
     const citedIds=new Set(valid.flatMap(row=>row.citedSignalIds));
     const groundingInput: PrincipleGroundingInput = {preferredLocale,signals:distillInput.signals.filter(row=>citedIds.has(row.id)).map(row=>({id:row.id,statement:row.statement})),
       candidates:valid.map((row,index)=>({id:`candidate-${index}`,statement:row.statement,citedSignalIds:row.citedSignalIds,
-        ...(row===firstCandidate?{firstPrinciple:true as const}:{})}))};
-    const exposed=await addGroundingOriginals(db, revision, evidence, groundingInput,firstOriginals??[]);
+        ...(row===firstCandidate?{firstPrinciple:true as const,
+          ...(firstDirect?{directEvidence:{sourceNumber:firstDirect.sourceNumber,quote:firstDirect.quote}}:{})}:{})}))};
+    const exposed=await addGroundingOriginals(db, revision, evidence, groundingInput,firstOriginals??[],firstDirect);
     if(firstOriginals?.some(({origin})=>!exposed.has(origin.id))){
       const index=valid.indexOf(firstCandidate!);
       valid.splice(index,1);
@@ -675,7 +701,7 @@ export async function refreshPrinciplesForProfile(
           id: mintedId,
           profileId: input.profileId,
           statement: candidate.statement,
-          inputPolicy: null,
+          inputPolicy: useFirst&&firstDirect?directFirstPrinciplePolicy(candidate.citedSignalIds[0]!,firstDirect.source.origin):null,
           type: candidate.type,
           state: "held",
           origin: "minted",
@@ -735,10 +761,12 @@ async function attachCitations(
   signalIds: string[],
 ): Promise<number> {
   if (signalIds.length === 0) return 0;
-  const revisions = await loadSignalStatementRevisions(db, signalIds);
-  const [parent] = await db.select({ revision: principles.statementRevision }).from(principles)
+  const [parent] = await db.select({ revision: principles.statementRevision,inputPolicy:principles.inputPolicy }).from(principles)
     .where(and(eq(principles.profileId, profileId), eq(principles.id, principleId))).limit(1);
   if (!parent) throw new Error('Principle citation parent is unavailable');
+  // An ordinary same-match cannot replace the exact save behind a direct first Principle.
+  if (isDirectFirstPrinciplePolicy(parent.inputPolicy)) return 0;
+  const revisions = await loadSignalStatementRevisions(db, signalIds);
   for (const signalId of signalIds) {
     await db.update(principleSignals).set({ statementRevision: revisions.get(signalId), principleStatementRevision: parent.revision })
       .where(and(eq(principleSignals.profileId, profileId), eq(principleSignals.principleId, principleId), eq(principleSignals.signalId, signalId)));

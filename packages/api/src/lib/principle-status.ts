@@ -4,7 +4,7 @@ import { backgroundJobs, principles, profilePrincipleHistory, profiles } from ".
 import { getDb } from "./db.js";
 import { loadPrincipleMaterial } from "./principle-generation.js";
 import { enqueueRefreshPrinciples, enqueueTopOfMindRefresh, recoverPendingSignalSupport, STALE_LOCK_SECONDS, wakeCommittedBackgroundJobs } from "./queue.js";
-import { FIRST_PRINCIPLE_SIGNAL_COUNT } from './first-principle-evidence.js';
+import { FIRST_PRINCIPLE_SIGNAL_COUNT, isDirectFirstPrinciple } from './first-principle-evidence.js';
 import { personalPrincipleSupportCurrent } from './personal-output.js';
 import { PRINCIPLE_MIN_SIGNALS } from './principle-generation.js';
 import { loadSignalSupportWorkState } from './signal-support-state.js';
@@ -67,7 +67,7 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
     .where(eq(backgroundJobs.idempotencyKey, `refresh_principles:${profileId}:${key}`)).limit(1);
   const support = await loadSignalSupportWorkState(db, profileId);
   const [servedFirst]=!material.mode&&material.firstPrincipleId
-    ?await db.select({id:principles.id}).from(principles)
+    ?await db.select({direct:isDirectFirstPrinciple()}).from(principles)
       .where(and(eq(principles.profileId,profileId),eq(principles.id,material.firstPrincipleId),
         personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)))
     :[];
@@ -81,7 +81,7 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
     readingPaused,
     supportPending: support.pending,
     supportActive: support.active,
-    signalCount: servedFirst?FIRST_PRINCIPLE_SIGNAL_COUNT:material.eligibility.distinctSignals,
+    signalCount: servedFirst?(servedFirst.direct?1:FIRST_PRINCIPLE_SIGNAL_COUNT):material.eligibility.distinctSignals,
     topOfMindCount: material.eligibility.tomAppearances };
 }
 
