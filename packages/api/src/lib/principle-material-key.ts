@@ -6,7 +6,7 @@ export function principleMaterialKey(material: Awaited<ReturnType<typeof loadPri
   if(material.mode==='first'){
     return createHash('sha256').update(JSON.stringify({
       // Existing idempotent triggers can reconsider one previously empty first pass.
-      policy:'first-principle-v2',locale:material.preferredLocale,
+      policy:'first-principle-v3',locale:material.preferredLocale,
       ordinary:material.ordinaryAvailable?principleMaterialKey({...material,mode:'ordinary'}):null,
       signals:material.firstSignals.map(({id,statement,origins})=>({id,statement,origins})).sort((a,b)=>a.id.localeCompare(b.id)),
     })).digest('hex');

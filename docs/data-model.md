@@ -1537,10 +1537,14 @@ artifacts**.
   are an uncapped set selected by longevity, minted per-candidate with
   merge-on-overlap. Cardinality is the structural difference between
   the layers.
-- **Generation follows the evidence.** A human profile’s first generated
-  principle can cite two distinct signals, including emerging ones, when
-  different original inspirations support the same decision across situations.
-  This first principle can appear before top of mind. For subsequent
+- **Generation follows the evidence.** A human profile’s first Principle
+  review starts when two distinct current signals, including emerging ones,
+  have two independent owned inspirations. An inferred default cites both
+  signals. A direct, recurring choice in the person's own words can cite one
+  signal with a verified quote from one linked inspiration. Its `input_policy`
+  binds the cited signal and exact inspiration revision, so losing the
+  original withdraws its support. The first Principle can appear before top
+  of mind. For subsequent
   principles, three active, evidenced signals and a citing top-of-mind version
   are required. A declaration also counts as the profile’s first principle.
 - **First-principle history belongs to the profile.** The
