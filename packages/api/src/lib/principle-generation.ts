@@ -20,7 +20,7 @@ import { and, asc, eq, getTableColumns, inArray, isNotNull, or, sql } from "driz
 
 import { createHash } from "node:crypto";
 import { readGenerationRevision, assertGenerationRevision, type GenerationRevision } from "./generation-revision.js";
-import { assignFirstPrincipleOrigins, firstPrincipleOrigins, firstPrincipleWording, usesFirstPrincipleBar, FIRST_PRINCIPLE_SIGNAL_COUNT, type FirstPrincipleSignal } from './first-principle-evidence.js';
+import { assignFirstPrincipleOrigins, firstPrincipleOrigins, firstPrincipleWording, loadFirstPrincipleExcerpts, usesFirstPrincipleBar, FIRST_PRINCIPLE_SIGNAL_COUNT, type FirstPrincipleSignal } from './first-principle-evidence.js';
 import { personalEntrySupportCurrent, personalPrincipleSupportCurrent, personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
 import { citationStatementCurrent, evidenceSupportCurrent, loadSignalStatementRevisions } from './signal-support-state.js';
 import {
@@ -40,7 +40,7 @@ import { selectIndependentEvidence } from './signal-lifecycle.js';
 import {loadSignalEvidence} from './review-evidence.js';
 import { loadOwnedReadingOriginals, READING_ORIGINAL_LIMIT } from './reading-originals.js';
 import { readingSourceFingerprint } from './top-of-mind-quality.js';
-import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput,renderPrincipleDistillContext,renderPrincipleGroundingContext} from './principle-input.js';
+import {FIRST_PRINCIPLE_EXCERPT_LIMITS,PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput,renderPrincipleDistillContext,renderPrincipleGroundingContext} from './principle-input.js';
 import {parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,principleDistillInstruction,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
 import {principleMaterialKey} from './principle-material-key.js';
 import {principleWork} from './principle-work.js';
@@ -494,6 +494,29 @@ export async function refreshPrinciplesForProfile(
     currentEntries: currentEntries.map((row) => ({ body: row.body })),
   },new Set(focus.flatMap(row=>row.id?[row.id]:[])));
   if(first&&!ordinary&&!assignFirstPrincipleOrigins(material.firstSignals.filter(row=>distillInput.signals.some(signal=>signal.id===row.id))))return none;
+  if(first){
+    const sources = await db.transaction(async tx => {
+      const current = await readGenerationRevision(tx, { profileId: input.profileId });
+      if (current?.revision !== revision.revision) throw new Error('Generation inputs changed; retry current inputs');
+      return loadFirstPrincipleExcerpts(tx, input.profileId, distillInput.signals.map(row => row.id), firstById);
+    }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
+    const seen = new Set<string>();
+    const firstSaveExcerpts: typeof sources = [];
+    const excerptBudget = Math.min(PRINCIPLE_INPUT_LIMITS.characters,
+      renderPrincipleDistillContext(distillInput).length + FIRST_PRINCIPLE_EXCERPT_LIMITS.promptCharacters);
+    for (const source of sources) {
+      const fingerprint = readingSourceFingerprint([source.text]);
+      if (!fingerprint || seen.has(fingerprint)) continue;
+      firstSaveExcerpts.push(source);
+      if (renderPrincipleDistillContext({ ...distillInput, firstSaveExcerpts }).length > excerptBudget) {
+        firstSaveExcerpts.pop();
+        continue;
+      }
+      seen.add(fingerprint);
+      if (firstSaveExcerpts.length === FIRST_PRINCIPLE_EXCERPT_LIMITS.excerpts) break;
+    }
+    if (firstSaveExcerpts.length) distillInput.firstSaveExcerpts = firstSaveExcerpts;
+  }
   const billingProfileId=deps.billingProfileId??input.profileId;
   // The grounding contract changed. Completed job publications still short-circuit
   // above; unfinished work must not reuse a verdict on the old input.

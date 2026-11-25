@@ -1,5 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { principles } from '../db/index.js';
+import type { getDb } from './db.js';
+import { FIRST_PRINCIPLE_EXCERPT_LIMITS } from './principle-input.js';
 import { evidenceSupportCurrent } from './signal-support-state.js';
 
 export const FIRST_PRINCIPLE_SIGNAL_COUNT = 2;
@@ -50,6 +52,46 @@ export function assignFirstPrincipleOrigins(signals: readonly FirstPrincipleSign
     }
   }
   return null;
+}
+
+/** Use the same whole-save identities as eligibility. Give each selected
+ * signal one turn before taking its second origin. Rejoin current links so
+ * a shared save carries every selected signal it actually supports. */
+export async function loadFirstPrincipleExcerpts(
+  db: Pick<ReturnType<typeof getDb>, 'execute'>, profileId: string,
+  signalIds: string[], firstById: ReadonlyMap<string, FirstPrincipleSignal>,
+) {
+  const shortlist = new Map<string, FirstPrincipleOrigin>();
+  for (const offset of [0, 1]) {
+    for (const id of signalIds) {
+      const origin = firstById.get(id)?.origins[offset];
+      if (origin && !shortlist.has(origin.fingerprint) && shortlist.size < FIRST_PRINCIPLE_EXCERPT_LIMITS.sources) {
+        shortlist.set(origin.fingerprint, origin);
+      }
+    }
+  }
+  if (!shortlist.size) return [];
+  const origins = [...shortlist.values()];
+  const entries = origins.map(({id, revision}) => sql`(${id}::uuid, ${revision}::bigint)`);
+  const selectedSignals = sql.join(signalIds.map(id => sql`${id}::uuid`), sql`, `);
+  const limit = FIRST_PRINCIPLE_EXCERPT_LIMITS.sourceCharacters;
+  const rows = await db.execute<{id:string;text:string;partial:boolean;signalIds:string[]}>(sql`
+    WITH requested(id, revision) AS (VALUES ${sql.join(entries, sql`, `)})
+    SELECT i.id, left(i.text, ${limit}) AS text, char_length(i.text) > ${limit} AS partial,
+      ARRAY(SELECT DISTINCT e.signal_id FROM signal_evidence e
+        JOIN signals ON signals.id=e.signal_id AND signals.profile_id=e.profile_id
+        WHERE e.inspiration_id=i.id AND e.owner_profile_id=i.profile_id AND e.profile_id=i.profile_id
+          AND e.signal_id IN (${selectedSignals}) AND ${evidenceSupportCurrent('e','signals')}
+        ORDER BY e.signal_id) AS "signalIds"
+    FROM requested JOIN inspirations i ON i.id=requested.id
+    JOIN inspiration_revisions r ON r.inspiration_id=i.id AND r.profile_id=i.profile_id
+    WHERE i.profile_id=${profileId}::uuid AND i.source='app' AND i.memory_excluded_at IS NULL
+      AND i.created_at<=now() AND r.personal_revision=requested.revision`);
+  const byId = new Map(rows.map(({id, ...excerpt}) => [id, excerpt]));
+  return origins.flatMap(({id}) => {
+    const excerpt = byId.get(id);
+    return excerpt?.signalIds.length ? [excerpt] : [];
+  });
 }
 
 export function usesFirstPrincipleBar(profileId: string) {
