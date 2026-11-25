@@ -47,6 +47,7 @@ describe('all native task paths retain real output contracts',()=>{
     for(const key of ['temperature','top_p','tools','previous_response_id','conversation','metadata'])expect(body).not.toHaveProperty(key);
     const logs=write.mock.calls.map(x=>String(x[0])).filter(x=>x.startsWith('{')).map(x=>JSON.parse(x));
     const usage=logs.find(x=>x.event==='model_usage');expect(usage).toMatchObject({Provider:'openai',UnpricedRequests:1,costStatus:'unknown',inputTokens:25,outputTokens:8,reasoningTokens:3,cachedInputTokens:4});
+    expect(logs.every(x=>!('firstPrincipleOutput' in x))).toBe(true);
     expect(usage).not.toHaveProperty('_aws');expect(usage).not.toHaveProperty('CostUsd');expect(logs.some(x=>x.event==='model_result'&&x.outcome==='accepted')).toBe(true);
     expect(JSON.stringify(logs)).not.toMatch(/PRIVATE_REASONING|SYNTHETIC_OPENAI_KEY|SYNTHETIC_OR_KEY|small tests before/);
   });
@@ -57,6 +58,21 @@ it('uses explicit selection despite a retained OR key; missing/unknown credentia
   vi.stubEnv('WAKA_GENERATION_PROVIDER','foreign');expect(()=>configuredGenerationProvider()).toThrow('Unknown generation provider');
   vi.stubEnv('WAKA_GENERATION_PROVIDER','openai');vi.stubEnv('WAKA_MODEL_CHAT','openai/gpt-6.1-terra');
   expect(()=>openAiRequest('chat',[],'chat',undefined)).toThrow('Unsupported native');expect(fetchMock).not.toHaveBeenCalled();
+});
+it.each([
+  [{candidates:[]}, 'no_proposal', 0],
+  [{unrecognized:'PRIVATE_OUTPUT'}, 'invalid_candidate_list', 0],
+  [{candidates:[{statement:'PRIVATE_PROPOSAL',citedSignalIds:['a']}]}, 'all_candidates_filtered', 0],
+  [{candidates:[{statement:'PRIVATE_PROPOSAL',citedSignalIds:['a','b']}]}, 'candidates_parsed', 1],
+] as const)('classifies first-Principle output %j as %s without logging source material',async(payload,expected,count)=>{
+  fetchMock.mockResolvedValueOnce(response(payload));
+  const result=await createOpenAiModelProvider().distillPrinciples({...profile,firstPrinciple:true,signals:[],currentPrinciples:[],currentEntries:[]});
+  expect(result.candidates).toHaveLength(count);
+  const logs=write.mock.calls.map(([line])=>String(line)).join('');
+  const outcomes=logs.trim().split('\n').map(line=>JSON.parse(line)).filter(row=>row.event==='model_result');
+  expect(outcomes).toHaveLength(1);
+  expect(outcomes[0]).toMatchObject({task:'principles',outcome:'accepted',firstPrincipleOutput:expected});
+  expect(logs).not.toMatch(/PRIVATE_OUTPUT|PRIVATE_PROPOSAL|PRIVATE_REASONING_CANARY|SYNTHETIC_OPENAI_KEY/);
 });
 it('retains the conditional multi-source Review parser with JSON mode instead of unsupported root anyOf',async()=>{
   fetchMock.mockResolvedValueOnce(response({connection:'Small experiments may connect these notes.',question:'What would you like to test together?',sourceNumbers:[1,2]}));

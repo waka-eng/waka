@@ -15,17 +15,33 @@ import type {GeminiShapedRequest} from './generation-schema.js';
 import {emitOperationalMetric} from './operational-metrics.js';
 import {recordOperationalFault} from './operational-fault.js';
 
+// The worker clears model bodies after publication. Keep only a closed outcome
+// on the existing result event so an empty first review can be diagnosed.
+type FirstPrincipleOutput = 'no_proposal' | 'invalid_candidate_list' | 'all_candidates_filtered' | 'candidates_parsed';
+
+function firstPrincipleOutput(raw: unknown, parsed: { candidates: unknown[] }): FirstPrincipleOutput {
+  if (parsed.candidates.length > 0) return 'candidates_parsed';
+  if (!raw || typeof raw !== 'object' || !('candidates' in raw) || !Array.isArray(raw.candidates)) {
+    return 'invalid_candidate_list';
+  }
+  return raw.candidates.length === 0 ? 'no_proposal' : 'all_candidates_filtered';
+}
+
 export function createOpenAiModelProvider():ModelProvider {
   async function ask<T>(task:GptTask,label:string,schema:string,request:GeminiShapedRequest,parse:(value:unknown)=>T,
-    onDeclined?:()=>T):Promise<T>{
+    onDeclined?:()=>T, describeFirstOutput?:(raw:unknown,parsed:T)=>FirstPrincipleOutput):Promise<T>{
     const config=nativeGptTask(task);
     const stage=['development','dev','production','local','test'].includes(process.env.WAKA_STAGE??'')?process.env.WAKA_STAGE:'other';
-    const result=(outcome:'accepted'|'declined'|'rejected')=>emitOperationalMetric({event:'model_result',Stage:stage,Provider:'openai',
-      task,model:config.model,reasoning:config.effort,outcome}); // No EMF, payloads, errors or identifiers.
+    const result=(outcome:'accepted'|'declined'|'rejected',firstOutput?:FirstPrincipleOutput)=>emitOperationalMetric({event:'model_result',Stage:stage,Provider:'openai',
+      task,model:config.model,reasoning:config.effort,outcome,...(firstOutput?{firstPrincipleOutput:firstOutput}:{})}); // No EMF, payloads, errors or identifiers.
     const payload=await callOpenAi(openAiTextRequest(task,request,schema),label);
     if(payload===MODEL_DECLINED){result('declined');if(onDeclined)return onDeclined();throw new ModelDidNotAnswerError(label);}
     if(payload===null){result('rejected');throw new ModelDidNotAnswerError(label);}
-    try{const parsed=parse(payload);result('accepted');return parsed;}catch(error){result('rejected');recordOperationalFault('provider_failure');throw error;}
+    try{
+      const parsed=parse(payload);
+      result('accepted',describeFirstOutput?.(payload,parsed));
+      return parsed;
+    }catch(error){result('rejected');recordOperationalFault('provider_failure');throw error;}
   }
   return {
     name:'openai',
@@ -45,7 +61,8 @@ export function createOpenAiModelProvider():ModelProvider {
       if(!input.comparison)return reviewed;
       return ask('judge','top-of-mind comparison','top_of_mind_comparison',buildTopOfMindComparisonRequest(input,reviewed),value=>applyTopOfMindComparison(input,reviewed,value));
     },
-    distillPrinciples:input=>ask('principles','principle distillation','principles',buildPrincipleDistillRequest(input),value=>parseDistilledPrinciples(value,input),()=>({candidates:[]})),
+    distillPrinciples:input=>ask('principles','principle distillation','principles',buildPrincipleDistillRequest(input),value=>parseDistilledPrinciples(value,input),()=>({candidates:[]}),
+      input.firstPrinciple?firstPrincipleOutput:undefined),
     assessPrincipleGrounding:input=>ask('principles','principle grounding','principle_grounding',buildPrincipleGroundingRequest(input),value=>parsePrincipleGrounding(value,input)),
     judgePrincipleRelation:input=>ask('principleJudge','principle relation judgement','principle_relation',buildPrincipleRelationRequest(input),value=>parsePrincipleRelation(value,input)),
     async routeDeclaration(input){
