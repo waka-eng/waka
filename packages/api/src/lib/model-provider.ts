@@ -338,7 +338,7 @@ export interface DistillPrinciplesInput {
   preferredLocale: SupportedLocale;
   signals: PrincipleDistillSignal[];
   /** A first review may see bounded original app text tied to its selected signals. */
-  firstSaveExcerpts?: Array<{ signalIds: string[]; text: string; partial: boolean }>;
+  firstSaveExcerpts?: Array<{ sourceNumber?: number; signalIds: string[]; text: string; partial: boolean }>;
   /** The standing set — context for no-duplication; matching is the judge's job. */
   currentPrinciples: Array<{ id: string; statement: string; state: string }>;
   /** Live top-of-mind entries — what a principle must generalize beyond, never echo. */
@@ -349,6 +349,12 @@ export interface PrincipleCandidate {
   statement: string;
   type: PrincipleType;
   citedSignalIds: string[];
+  directEvidence?: FirstPrincipleDirectEvidence;
+}
+
+export interface FirstPrincipleDirectEvidence {
+  sourceNumber: number;
+  quote: string;
 }
 
 export interface DistillPrinciplesResult {
@@ -358,9 +364,10 @@ export interface DistillPrinciplesResult {
 export interface PrincipleGroundingInput {
   preferredLocale: SupportedLocale;
   signals: Array<{id:string;statement:string}>;
-  candidates: Array<{id:string;statement:string;citedSignalIds:string[];firstPrinciple?:true}>;
+  candidates: Array<{id:string;statement:string;citedSignalIds:string[];firstPrinciple?:true;directEvidence?:FirstPrincipleDirectEvidence}>;
   originals?: Array<{
     signalIds: string[];
+    sourceNumber?: number;
     kind: string | null;
     inspirationText?: string;
     reflection?: string;

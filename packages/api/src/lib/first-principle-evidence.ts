@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { sql, type SQL } from 'drizzle-orm';
 import { principles } from '../db/index.js';
 import type { getDb } from './db.js';
@@ -88,10 +89,41 @@ export async function loadFirstPrincipleExcerpts(
     WHERE i.profile_id=${profileId}::uuid AND i.source='app' AND i.memory_excluded_at IS NULL
       AND i.created_at<=now() AND r.personal_revision=requested.revision`);
   const byId = new Map(rows.map(({id, ...excerpt}) => [id, excerpt]));
-  return origins.flatMap(({id}) => {
-    const excerpt = byId.get(id);
-    return excerpt?.signalIds.length ? [excerpt] : [];
+  return origins.flatMap(origin => {
+    const excerpt = byId.get(origin.id);
+    return excerpt?.signalIds.length ? [{ ...excerpt, origin }] : [];
   });
+}
+
+const directPolicyPrefix = 'first-principle-direct-v1:';
+
+export function directFirstPrinciplePolicy(signalId: string, origin: FirstPrincipleOrigin) {
+  return directPolicyPrefix + createHash('sha256').update(`${signalId}:${origin.id}:${origin.revision}`).digest('hex');
+}
+
+export function isDirectFirstPrinciplePolicy(policy: string | null) {
+  return policy?.startsWith(directPolicyPrefix) === true;
+}
+
+export function isDirectFirstPrinciple() {
+  return sql<boolean>`coalesce(starts_with(${principles.inputPolicy},${directPolicyPrefix}),false)`;
+}
+
+export function directFirstPrincipleSourceMatches(signal: SQL, inspiration: SQL, owner: SQL) {
+  return sql`${principles.inputPolicy} = ${directPolicyPrefix} || encode(sha256(convert_to(
+    ${signal}::text || ':' || ${inspiration}::text || ':' || (SELECT dr.personal_revision::text
+      FROM inspiration_revisions dr WHERE dr.inspiration_id=${inspiration} AND dr.profile_id=${owner}),
+    'UTF8')), 'hex')`;
+}
+
+export function directFirstPrincipleCitationCurrent(profileId: string) {
+  return sql<boolean>`EXISTS (
+    SELECT 1 FROM signal_evidence direct_e
+    JOIN inspirations direct_i ON direct_i.id=direct_e.inspiration_id AND direct_i.profile_id=direct_e.owner_profile_id
+    WHERE direct_e.signal_id=signals.id AND direct_e.profile_id=${profileId}::uuid
+      AND direct_e.owner_profile_id=direct_e.profile_id AND direct_i.source='app' AND direct_i.created_at<=now()
+      AND ${evidenceSupportCurrent('direct_e','signals')}
+      AND ${directFirstPrincipleSourceMatches(sql`signals.id`,sql`direct_i.id`,sql`direct_i.profile_id`)})`;
 }
 
 export function usesFirstPrincipleBar(profileId: string) {

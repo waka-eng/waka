@@ -7,6 +7,7 @@
 
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { toJsonSchema } from "../lib/generation-schema.js";
 
 import {
   buildDeclarationRouteRequest,
@@ -88,18 +89,22 @@ describe("distillation request", () => {
     });
   });
 
-  it("bounds only the first-only response to one candidate with two citations", () => {
+  it("bounds first-only responses to one paired or directly proved candidate", () => {
     const ordinary = buildPrincipleDistillRequest(DISTILL_INPUT).generationConfig.responseSchema;
     const mixed = buildPrincipleDistillRequest({...DISTILL_INPUT,firstPrinciple:true,ordinaryAvailable:true}).generationConfig.responseSchema;
-    expect(mixed).toEqual(ordinary);
+    expect(mixed?.properties?.candidates?.items?.anyOf?.[0]).toEqual(ordinary?.properties?.candidates?.items);
     expect(ordinary?.properties?.candidates).toMatchObject({
       maxItems:3,items:{properties:{citedSignalIds:{type:"ARRAY",items:{type:"STRING"}}}},
     });
     const first=buildPrincipleDistillRequest({...DISTILL_INPUT,firstPrinciple:true}).generationConfig.responseSchema;
-    expect(first?.properties?.candidates).toMatchObject({
-      maxItems:1,items:{properties:{citedSignalIds:{minItems:2,maxItems:2}}},
-    });
+    expect(first?.properties?.candidates?.maxItems).toBe(1);
+    expect(first?.properties?.candidates?.items?.anyOf).toMatchObject([
+      {properties:{citedSignalIds:{minItems:2,maxItems:2}}},
+      {properties:{citedSignalIds:{minItems:1,maxItems:1},directEvidence:{required:["sourceNumber","quote"]}}},
+    ]);
     expect(first?.properties?.candidates?.minItems).toBeUndefined();
+    const originalRootUnion=toJsonSchema({type:"OBJECT",anyOf:[{type:"OBJECT",properties:{kind:{type:"STRING"}}}]},true);
+    expect(originalRootUnion).toMatchObject({type:"object",anyOf:[{type:"object",additionalProperties:false}]});
   });
 
   it("fences signals, standing principles, and current entries as data", () => {
@@ -145,6 +150,15 @@ describe("distillation request", () => {
 });
 
 describe("reading distillation", () => {
+  it("requires first scope and a structurally valid proof for one-citation output", () => {
+    const direct={statement:"Start with a sketch.",type:"maxim",citedSignalIds:["s1"],directEvidence:{sourceNumber:1,quote:"I prefer a short sketch."}};
+    const first={firstPrinciple:true as const};
+    expect(parseDistilledPrinciples({candidates:[direct]},first).candidates).toEqual([direct]);
+    expect(parseDistilledPrinciples({candidates:[{...direct,directEvidence:undefined}]},first).candidates).toEqual([]);
+    expect(parseDistilledPrinciples({candidates:[{...direct,directEvidence:{...direct.directEvidence,sourceNumber:0}}]},first).candidates).toEqual([]);
+    expect(parseDistilledPrinciples({candidates:[{...direct,citedSignalIds:["s1","s2"]}]},first).candidates).toEqual([]);
+    expect(parseDistilledPrinciples({candidates:[direct]}).candidates[0]?.directEvidence).toBeUndefined();
+  });
   it("accepts a clean candidate and defaults an unknown type to maxim", () => {
     const parsed = parseDistilledPrinciples({
       candidates: [

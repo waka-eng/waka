@@ -2,7 +2,7 @@
    Typed here rather than imported so queue/gemini.ts keeps its types
    private and this module cannot reach past the builders. */
 export interface GeminiShapedSchema {
-  type: string;
+  type?: string;
   description?: string;
   enum?: readonly string[];
   nullable?: boolean;
@@ -40,12 +40,11 @@ const TYPE_MAP: Record<string, string> = {
 
 /** Gemini's UPPERCASE schema dialect → plain JSON Schema. */
 export function toJsonSchema(schema: GeminiShapedSchema, strict = false): Record<string, unknown> {
-  const out: Record<string, unknown> = {
-    type: TYPE_MAP[schema.type] ?? schema.type.toLowerCase(),
-  };
+  const out: Record<string, unknown> = {};
+  if (schema.type) out.type = TYPE_MAP[schema.type] ?? schema.type.toLowerCase();
   if (schema.description) out.description = schema.description;
   if (schema.enum) out.enum = schema.enum;
-  if (schema.nullable) out.type = [out.type as string, "null"];
+  if (schema.nullable && out.type) out.type = [out.type, "null"];
   if (schema.items) out.items = toJsonSchema(schema.items, strict);
   if (schema.properties) {
     out.properties = Object.fromEntries(
