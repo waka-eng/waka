@@ -3,6 +3,7 @@ import {fence} from './prompt-fence.js';
 
 export const PRINCIPLE_INPUT_LIMITS={signals:48,standingContext:24,entries:7,characters:16000} as const;
 export const FIRST_PRINCIPLE_EXCERPT_LIMITS={sources:12, excerpts:8, sourceCharacters:280, promptCharacters:2400} as const;
+export const FIRST_PRINCIPLE_DIRECT_QUOTE_MIN = 8;
 export const PRINCIPLE_COMPARISON_LIMITS={items:20,characters:12000,outputTokens:1600} as const;
 export const PRINCIPLE_GROUNDING_LIMITS={items:3,characters:18000,outputTokens:512} as const;
 
