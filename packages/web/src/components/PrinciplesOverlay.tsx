@@ -345,7 +345,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           /* No chat act on an agent's ground: the chat would open with the
              agent's line posted as the owner's own first message. Home omits
              it too; this holds even when a caller does not. */
-          <PrinciplesGround locale={locale} profileId={profileId} whose={whose} eligiblePhase={readingPaused.eligiblePhase}
+          <PrinciplesGround locale={locale} profileId={profileId} whose={whose} principleStatus={readingPaused.principleStatus}
             onChat={agent ? undefined : onChat} onNewSave={agent ? undefined : onNewSave} newSaveLabel={newSaveLabel} />
         ) : (
           <>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchPrincipleRead, requestPrincipleRead, type ApiPrinciple, type ApiPrincipleStatus } from "../lib/api/principles";
 import { formatMessage, t, type SupportedLocale } from "../lib/i18n";
+import { principleReviewMessage } from "../lib/principle-review-message";
 
 /**
  * The selected profile's principles: a lead line and status. Only the
@@ -45,10 +46,10 @@ export function PrincipleRead({ active, locale, onRead, profileId, name }: {
         if (!profileId && !ensured && (result.status.eligible || result.status.supportPending) && result.status.phase === 'failed' && attempt > retriedAttempt.current) {
           const retry = attempt > retriedAttempt.current;
           retriedAttempt.current = attempt;
-          await requestPrincipleRead(retry);
+          const refreshed = await requestPrincipleRead(retry);
           ensured = true;
           delay = 10_000;
-          if (!disposed) setStatus({ ...result.status, phase: result.status.supportPending ? 'pending' : 'processing' });
+          if (!disposed) setStatus(refreshed);
         }
       } catch {
         consecutiveFailures += 1;
@@ -72,23 +73,23 @@ export function PrincipleRead({ active, locale, onRead, profileId, name }: {
   }, [active, locale, attempt, profileId]);
   const error = failed || status?.phase === "failed";
   const visibleRows = rows;
+  const reviewMessage = principleReviewMessage(status);
   const message = error ? status?.supportPending ? 'worldSupportCheckFailed' : "worldPrinciplesError"
     : !status ? "worldPrinciplesLoading"
-    : status.supportPending ? (status.phase === 'processing' ? 'worldSupportChecking' : status.phase === 'pending' ? 'worldSupportQueued' : 'worldSupportNeedsContext')
-    : status.phase === "processing" || status.phase === "pending" ? "worldPrinciplesReading"
+    : reviewMessage ?? (status.supportPending ? 'worldSupportNeedsContext'
     /* STRIPPED: "Principles come from patterns in what you save." for too
        few signals; with nothing to report the line is simply absent.
        Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */
     : status.eligible ? "worldPrinciplesNoCandidate"
     : status.signalCount < 3 ? null
     : status.topOfMindCount < 1 ? "worldPrinciplesNeedRead"
-    : "worldPrinciplesNoCandidate";
+    : "worldPrinciplesNoCandidate");
   return <>
     {/* STRIPPED: "Your principles will form here." on your own wall; another
         profile's wall still names whose. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
     {visibleRows.length === 0 && profileId && name ? <p className="jar-values-lead">{formatMessage(locale, "worldValuesLeadOther", { name })}</p> : null}
-    {message && (visibleRows.length === 0 || error || status?.phase === "processing") ?
-      <p className="jar-values-sub" role={error ? "alert" : status?.phase === "processing" ? "status" : undefined}>
+    {message && (visibleRows.length === 0 || error || reviewMessage) ?
+      <p className="jar-values-sub" role={error ? "alert" : reviewMessage ? "status" : undefined}>
         {t(locale, message)}
         {error ? <> <button type="button" onClick={() => setAttempt((value) => value + 1)}>
           {t(locale, "worldPrinciplesRetry")}
