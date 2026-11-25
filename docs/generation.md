@@ -1331,7 +1331,12 @@ A human profile with no Principle history can mint its first Principle from two
 distinct current signals, including emerging signals. Two direct owned
 inspirations with different normalized original text must be assignable to
 different signals. The grounding review must see distinct original excerpts
-that show the shared decision. This path needs no Top of Mind reading. If both
+that show the shared decision. Before proposing candidates, first-Principle
+distillation can also see up to eight short excerpts of the current text the
+person saved in the app, within the existing prompt limit. Each excerpt names
+its selected signals. Shared saves count once, partial excerpts are marked,
+and saving a quote does not imply endorsement. Excerpts can supply a decision
+that a signal summary leaves out. This path needs no Top of Mind reading. If both
 evidence bars are available, one distillation and grounding pass prefers
 supported ordinary candidates and can use the two-source candidate as a
 fallback.
