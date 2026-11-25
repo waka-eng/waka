@@ -2,6 +2,7 @@ import type {DistillPrinciplesInput,PrincipleGroundingInput} from './model-provi
 import {fence} from './prompt-fence.js';
 
 export const PRINCIPLE_INPUT_LIMITS={signals:48,standingContext:24,entries:7,characters:16000} as const;
+export const FIRST_PRINCIPLE_EXCERPT_LIMITS={sources:12, excerpts:8, sourceCharacters:280, promptCharacters:2400} as const;
 export const PRINCIPLE_COMPARISON_LIMITS={items:20,characters:12000,outputTokens:1600} as const;
 export const PRINCIPLE_GROUNDING_LIMITS={items:3,characters:18000,outputTokens:512} as const;
 
@@ -21,6 +22,9 @@ export function renderPrincipleDistillContext(input:DistillPrinciplesInput){
      carries a delimiter, and this prompt writes the principles. */
   for(const signal of input.signals)sections.push(fence('signal',[`id: ${signal.id}`,`statement: ${signal.statement}`,
     `evidence: ${signal.evidenceCount} captures, first ${signal.firstEvidenceAt?.toISOString().slice(0,10)??'unknown'}, last ${signal.lastEvidenceAt?.toISOString().slice(0,10)??'unknown'}, selected into ${signal.tomAppearances} top-of-mind versions`].join('\n')));
+  if(input.firstPrinciple && input.firstSaveExcerpts){
+    for(const excerpt of input.firstSaveExcerpts)sections.push(fence('source excerpt',JSON.stringify(excerpt)));
+  }
   if(input.currentPrinciples.length){sections.push('Principles the person already holds (do not restate):');for(const row of input.currentPrinciples)sections.push(fence('principle',row.statement));}
   if(input.currentEntries.length){sections.push('Current top-of-mind entries (shared themes are expected; derive a decision constraint from signals, not another summary):');for(const row of input.currentEntries)sections.push(fence('entry',row.body));}
   return sections.join('\n\n');
@@ -36,11 +40,15 @@ export function selectPrincipleInput(input:DistillPrinciplesInput,focusIds:Reado
   chosen.push(...focused.slice(24));
   const selected:DistillPrinciplesInput={...input,signals:chosen.slice(0,PRINCIPLE_INPUT_LIMITS.signals),
     currentPrinciples:input.currentPrinciples.slice(0,PRINCIPLE_INPUT_LIMITS.standingContext),currentEntries:input.currentEntries.slice(0,PRINCIPLE_INPUT_LIMITS.entries)};
-  while(renderPrincipleDistillContext(selected).length>PRINCIPLE_INPUT_LIMITS.characters){
+  const limit = PRINCIPLE_INPUT_LIMITS.characters - (input.firstPrinciple ? FIRST_PRINCIPLE_EXCERPT_LIMITS.promptCharacters : 0);
+  let size = renderPrincipleDistillContext(selected).length;
+  while(size>limit){
     if(selected.signals.length>3)selected.signals.pop();
     else if(selected.currentPrinciples.length)selected.currentPrinciples.pop();
     else if(selected.currentEntries.length)selected.currentEntries.pop();
-    else throw new Error('Principle evidence cannot fit the input budget without rewriting its words');
+    else if(size>PRINCIPLE_INPUT_LIMITS.characters)throw new Error('Principle evidence cannot fit the input budget without rewriting its words');
+    else break;
+    size=renderPrincipleDistillContext(selected).length;
   }
   return selected;
 }

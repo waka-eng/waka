@@ -1,7 +1,7 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): nothing. Pure selection and the actual
  * provider serializer prove input bounds without a database or model call. */
 import {expect,it} from 'vitest';
-import {PRINCIPLE_INPUT_LIMITS,renderPrincipleDistillContext,selectPrincipleInput} from './principle-input.js';
+import {FIRST_PRINCIPLE_EXCERPT_LIMITS,PRINCIPLE_INPUT_LIMITS,renderPrincipleDistillContext,selectPrincipleInput} from './principle-input.js';
 import {buildPrincipleDistillRequest} from '../queue/gemini.js';
 import type {DistillPrinciplesInput} from './model-provider.js';
 const fixture=(count=400):DistillPrinciplesInput=>({profileId:'fixture',preferredLocale:'en-US',
@@ -24,4 +24,16 @@ it('budgets actual serialized characters and refuses unbounded provider requests
   expect(selected.signals.length).toBeGreaterThanOrEqual(3);
   expect(buildPrincipleDistillRequest(selected).contents[0]!.parts[0]!.text.length).toBeLessThanOrEqual(16000);
   expect(()=>buildPrincipleDistillRequest(input)).toThrow(/principle input bounds/);
+});
+
+it('makes room for first-review excerpts within the existing prompt ceiling',()=>{
+  const input=fixture();
+  input.signals.forEach(row=>{row.statement += 'Longer context. '.repeat(18);});
+  const ordinary = selectPrincipleInput(input);
+  const first = selectPrincipleInput({...input, firstPrinciple:true});
+  expect(first.signals.length).toBeLessThan(ordinary.signals.length);
+  expect(renderPrincipleDistillContext(first).length).toBeLessThanOrEqual(
+    PRINCIPLE_INPUT_LIMITS.characters-FIRST_PRINCIPLE_EXCERPT_LIMITS.promptCharacters,
+  );
+  expect(first.signals.slice(0,3)).toEqual(ordinary.signals.slice(0,3));
 });
