@@ -6957,7 +6957,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-mcp-setup--compact .waka-mcp-choice { margin: var(--sp-8) 0; }
 .waka-mcp-setup--compact .waka-session-command { padding: var(--sp-8) var(--sp-12); }
 
-.waka-api-keys { display: flex; flex-direction: column; gap: var(--sp-8); font-size: var(--t-ui); line-height: 1.5; }
+.waka-api-keys { display: flex; flex-direction: column; gap: var(--sp-8); font-size: var(--t-ui); line-height: 1.5; container: api-keys / inline-size; }
 .waka-api-keys .waka-settings-note,
 .waka-api-keys .waka-mcp-choice,
 .waka-api-keys .waka-account-field > span { font-size: var(--t-meta); }
@@ -6967,6 +6967,85 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-api-keys button,
 .waka-api-keys .waka-mcp-commands,
 .waka-settings-body:has(> .waka-api-keys) > .waka-session-tabs button { font-size: var(--t-ui); }
+.waka-api-keys .waka-session-list-heading h4 { margin: 0; }
+
+.waka-api-key-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--t-meta);
+}
+
+.waka-api-key-table :is(th, td) {
+  padding: var(--sp-8) var(--sp-4) var(--sp-8) 0;
+  text-align: start;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.waka-api-key-table :is(thead, tbody) { border-block-end: 1px solid var(--line); }
+.waka-api-key-table th { font-weight: 500; }
+.waka-api-key-table thead { color: var(--muted); }
+.waka-api-key-table thead th:nth-child(2) { width: 19%; }
+.waka-api-key-table thead th:nth-child(3) { width: 8rem; }
+.waka-api-key-table thead th:nth-child(4) { width: 18%; }
+.waka-api-key-table thead th:last-child { width: var(--sp-44); padding-inline-end: 0; }
+.waka-api-key-table td:last-child { padding-inline-end: 0; }
+.waka-api-key-table code { font-family: var(--font-mono); font-size: var(--t-meta); }
+.waka-api-key-table time { display: inline-flex; flex-wrap: wrap; column-gap: var(--sp-4); }
+.waka-api-key-label { display: none; }
+
+.waka-api-key-table .waka-api-key-delete {
+  display: grid;
+  place-items: center;
+  width: var(--sp-44);
+  height: var(--sp-44);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.waka-api-key-delete svg { width: var(--sp-20); height: var(--sp-20); }
+.waka-api-key-table .waka-api-key-delete:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+.waka-api-key-delete:disabled { opacity: 0.5; cursor: default; }
+
+@container api-keys (max-width: 23rem) {
+  .waka-api-key-table, .waka-api-key-table tbody { display: block; }
+  .waka-api-key-table thead {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    clip-path: inset(50%);
+    overflow: hidden;
+  }
+  .waka-api-key-table tbody > tr:first-child {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: var(--sp-8) var(--sp-12);
+    padding-block: var(--sp-8) var(--sp-12);
+  }
+  .waka-api-key-table tbody > tr:first-child > :is(th, td) { padding: 0; }
+  .waka-api-key-table tbody > tr:first-child > th {
+    grid-area: 1 / 1 / 2 / -1;
+    align-self: center;
+    padding-inline-end: calc(var(--sp-44) + var(--sp-8));
+  }
+  .waka-api-key-table tbody > tr:first-child > td:last-child {
+    grid-area: 1 / 2 / 2 / 3;
+    align-self: center;
+    justify-self: end;
+  }
+  .waka-api-key-table tbody > tr:last-child:has(> td[colspan]),
+  .waka-api-key-table td[colspan] { display: block; }
+  .waka-api-key-label { display: block; color: var(--muted); font-weight: 400; }
+}
 }
 
 @layer chrome {
