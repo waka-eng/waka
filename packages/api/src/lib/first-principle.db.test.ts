@@ -11,7 +11,7 @@ import { loadPrincipleMaterial, reconcilePrinciplesAfterSignalLoss, refreshPrinc
 import { setDefaultModelProviderForTests, type ModelProvider } from './model-provider.js';
 import { runBackgroundJobWorker } from './queue.js';
 import { BackgroundJobHeldError } from './background-job-hold.js';
-import { buildPrincipleDistillRequest, parseDistilledPrinciples, principleDistillInstruction, PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION } from '../queue/gemini.js';
+import { buildPrincipleDistillRequest, buildPrincipleGroundingRequest, parseDistilledPrinciples, principleDistillInstruction, PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION } from '../queue/gemini.js';
 import { loadPrincipleStatus } from './principle-status.js';
 import { loadPrincipleViews } from '../routes/principles.js';
 import { createOpenAiModelProvider } from './openai-model-provider.js';
@@ -67,6 +67,84 @@ type Actor=Awaited<ReturnType<typeof actor>>;
 const request=(a:Actor,path:string,method='GET',body?:unknown)=>app.request(path,{method,
   headers:{Authorization:'Bearer '+a.token,'Content-Type':'application/json',...(method==='POST'?{'Idempotency-Key':randomUUID()}: {})},
   ...(body===undefined?{}:{body:JSON.stringify(body)})});
+
+it.each([
+  { label:'same-domain preference', publish:true, forceProposal:false, saves:[
+    'For future commute changes, I prefer taking a trial bus trip before changing my regular route.',
+    'If I switch to cycling to work, I want to test it on one weekday before committing to it.',
+  ] },
+  { label:'saved outside advice', publish:false, forceProposal:false, saves:[
+    'Bookmark from a bus guide: “Take a trial trip before changing your route.”',
+    'Quote from a cycling guide: “Test the route on a weekday before committing.”',
+  ] },
+  { label:'one-off to-dos', publish:false, forceProposal:false, saves:[
+    'Take the bus next Tuesday while my car is in the shop.',
+    'Pick up my bicycle from the repair shop on Friday.',
+  ] },
+  { label:'an unsupported candidate from saved outside advice', publish:false, forceProposal:true, saves:[
+    'Bookmark from a bus guide: “Take a trial trip before changing your route.”',
+    'Quote from a cycling guide: “Test the route on a weekday before committing.”',
+  ] },
+])('applies the first-review bar to $label through routed saves and the worker', async ({publish,forceProposal,saves}) => {
+  const a=await actor();
+  const summaries=['A bus route came up as a commuting option.','Cycling came up as a commuting option.'];
+  const defaultRule='When changing the commute, try the new option on one regular trip before committing.';
+  let distills=0,groundings=0;
+  const supportsDefault=(texts:string[])=>texts.every(text=>/I (prefer|want to)/.test(text))
+    && texts.every(text=>text.includes('before'));
+  setDefaultModelProviderForTests({
+    ...model(async input=>{
+      distills++;
+      const wire=buildPrincipleDistillRequest(input);
+      const instructions=wire.systemInstruction!.parts[0]!.text;
+      const excerpts=input.firstSaveExcerpts!.map(row=>row.text);
+      expect(excerpts.slice().sort()).toEqual(saves.slice().sort());
+      expect(excerpts.every(text=>wire.contents[0]!.parts[0]!.text.includes(text))).toBe(true);
+      const firstPolicy=instructions.includes('An explicitly endorsed preference') && instructions.includes('same domain');
+      return {candidates:firstPolicy&&(forceProposal||supportsDefault(excerpts))?[candidate(input.signals.map(row=>row.id),defaultRule)]:[]};
+    },async input=>{
+      groundings++;
+      const instructions=buildPrincipleGroundingRequest(input).systemInstruction!.parts[0]!.text;
+      const originals=input.originals?.flatMap(row=>row.inspirationText?[row.inspirationText]:[])??[];
+      return {assessments:input.candidates.map(row=>({candidateId:row.id,
+        supported:row.firstPrinciple===true&&instructions.includes('An explicitly endorsed preference')&&supportsDefault(originals),
+      }))};
+    }),
+    extractSignalCandidates:async input=>{
+      const index=saves.indexOf(input.inspiration.text);
+      expect(index).toBeGreaterThanOrEqual(0);
+      return {category:null,statements:[{statement:summaries[index]!,quote:input.inspiration.text}]};
+    },
+    judgeSignalMatch:async()=>({relation:'independent'}),
+  } as ModelProvider);
+  vi.stubGlobal('fetch',async (input:Parameters<typeof fetch>[0],init?:RequestInit)=>{
+    expect(String(input)).toBe('https://openrouter.ai/api/v1/embeddings');
+    const body=JSON.parse(String(init?.body));
+    const index=body.input.includes(saves[0])||body.input.includes(summaries[0])?0:1;
+    return Response.json({model:EMBEDDING_2_SPACE.wireModel,data:[{index:0,embedding:Array.from({length:768},(_,i)=>Number(i===index))}]});
+  });
+  try {
+    for(const text of saves){
+      expect((await request(a,'/api/inspirations','POST',{kind:'note',text})).status).toBe(201);
+      const run=await runBackgroundJobWorker({limit:50,now:new Date(Date.now()+1000),onClaimed:async job=>{
+        if(job.profileId!==a.id||job.type==='refresh_top_of_mind')
+          throw new BackgroundJobHeldError(new Date(Date.now()+60_000),'isolated fixture unrelated work');
+      }});
+      expect(run.failed).toBe(0);
+    }
+    expect([distills,groundings]).toEqual([1,publish||forceProposal?1:0]);
+    const view=(await json<{principles:Awaited<ReturnType<typeof loadPrincipleViews>>}>(await request(a,'/api/principles'))).principles;
+    if(publish){
+      expect(view).toHaveLength(1);
+      expect(view[0]).toMatchObject({statement:defaultRule,supportChanged:false});
+      expect(view[0]!.citedSignals).toHaveLength(2);
+    }else expect(view).toEqual([]);
+    expect(await t.sql`SELECT id FROM top_of_minds WHERE profile_id=${a.id}`).toHaveLength(0);
+  } finally {
+    setDefaultModelProviderForTests(null);
+    vi.unstubAllGlobals();
+  }
+});
 
 it('publishes a readable Principle from two ordinary saves before the reading can run',async()=>{
   const a=await actor();
@@ -270,6 +348,8 @@ it.each([true,false])('chooses the ordinary candidate when supported=%s from one
   },async input=>{
     checked++;
     expect(input.candidates).toHaveLength(2);
+    expect(input.candidates.find(row=>row.statement===ordinary)?.firstPrinciple).toBeUndefined();
+    expect(input.candidates.find(row=>row.statement===directive)?.firstPrinciple).toBe(true);
     return {assessments:input.candidates.map(row=>({candidateId:row.id,supported:row.statement===directive||ordinarySupported}))};
   });
   const result=await refreshPrinciplesForProfile({profileId:a.id},{db:getDb(),modelProvider:provider});
@@ -301,6 +381,9 @@ it('keeps one waived mint across concurrent work and deletion, then requires ord
     expect(input.firstPrinciple).toBeUndefined();
     expect(input.firstSaveExcerpts).toBeUndefined();
     return {candidates:[candidate(ids,'Make room before choosing additional work.')]};
+  },async input=>{
+    expect(input.candidates.every(row=>row.firstPrinciple===undefined)).toBe(true);
+    return acceptPrincipleGroundingForFixture(input);
   })});
   expect(ordinary.minted).toBe(1);
   const [next]=await loadPrincipleViews(getDb(),a.id);
@@ -359,6 +442,10 @@ it('sends seven distinct short saves across nine linked signals in the native pr
   const calls = vi.fn(async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
     expect(String(url)).toBe('https://api.openai.com/v1/responses');
     const body = JSON.parse(String(init?.body));
+    const schema=body.text.format.schema.properties.candidates;
+    expect(schema.maxItems).toBe(1);
+    expect(schema.minItems ?? 0).toBe(0);
+    expect(schema.items.properties.citedSignalIds).toMatchObject({type:'array',minItems:2,maxItems:2});
     const prompt = body.input.find((row: { role: string }) => row.role === 'user').content[0].text as string;
     expect(prompt.length).toBeLessThanOrEqual(16_000);
     expect(prompt).not.toContain('SYNTHETIC_CANARY');
@@ -410,17 +497,17 @@ it('lets an old empty first review be reconsidered once through ordinary request
   await seed(a.id, statements[0]!, choices[0]!);
   await seed(a.id, statements[1]!, choices[1]!);
   const material = await loadPrincipleMaterial(getDb(), a.id);
-  const v1 = createHash('sha256').update(JSON.stringify({
-    policy: 'first-principle-v1', locale: material.preferredLocale, ordinary: null,
+  const v2 = createHash('sha256').update(JSON.stringify({
+    policy: 'first-principle-v2', locale: material.preferredLocale, ordinary: null,
     signals: material.firstSignals.map(({id,statement,origins})=>({id,statement,origins})).sort((x,y)=>x.id.localeCompare(y.id)),
   })).digest('hex');
-  const v2 = principleMaterialKey(material);
-  expect(v2).not.toBe(v1);
+  const v3 = principleMaterialKey(material);
+  expect(v3).not.toBe(v2);
   const [prior] = await t.sql`INSERT INTO background_jobs(profile_id, type, payload, status, idempotency_key)
-    VALUES(${a.id}, 'refresh_principles', ${JSON.stringify({profileId:a.id})}::jsonb, 'succeeded', ${`refresh_principles:${a.id}:${v1}`})
+    VALUES(${a.id}, 'refresh_principles', ${JSON.stringify({profileId:a.id})}::jsonb, 'succeeded', ${`refresh_principles:${a.id}:${v2}`})
     RETURNING id`;
   await t.sql`INSERT INTO principle_generation_steps(profile_id, billing_profile_id, job_id, input_hash, step_key, kind, status, response)
-    VALUES(${a.id}, ${a.id}, ${prior!.id}, ${v1}, 'publication', 'publication', 'ready',
+    VALUES(${a.id}, ${a.id}, ${prior!.id}, ${v2}, 'publication', 'publication', 'ready',
       '{"status":"no_candidates","minted":0,"attached":0,"conflicts":0,"redeemed":0,"dropped":0}'::jsonb)`;
   const distill = vi.fn(async () => ({ candidates: [] }));
   const refresh = async () => expect((await request(a, '/api/principles/refresh', 'POST', {})).status).toBe(202);
@@ -438,7 +525,7 @@ it('lets an old empty first review be reconsidered once through ordinary request
     expect(distill).toHaveBeenCalledTimes(1);
     const jobs = await t.sql`SELECT status, idempotency_key AS key FROM background_jobs WHERE profile_id=${a.id} AND type='refresh_principles'`;
     expect(jobs).toHaveLength(2);
-    expect(jobs).toEqual(expect.arrayContaining([v1, v2].map(key => ({status:'succeeded',key:`refresh_principles:${a.id}:${key}`}))));
+    expect(jobs).toEqual(expect.arrayContaining([v2, v3].map(key => ({status:'succeeded',key:`refresh_principles:${a.id}:${key}`}))));
   } finally {
     setDefaultModelProviderForTests(null);
   }

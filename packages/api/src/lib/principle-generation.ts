@@ -41,7 +41,7 @@ import {loadSignalEvidence} from './review-evidence.js';
 import { loadOwnedReadingOriginals, READING_ORIGINAL_LIMIT } from './reading-originals.js';
 import { readingSourceFingerprint } from './top-of-mind-quality.js';
 import {FIRST_PRINCIPLE_EXCERPT_LIMITS,PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput,renderPrincipleDistillContext,renderPrincipleGroundingContext} from './principle-input.js';
-import {parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,principleDistillInstruction,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
+import {parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,principleDistillInstruction,principleGroundingInstruction,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
 import {principleMaterialKey} from './principle-material-key.js';
 import {principleWork} from './principle-work.js';
 import {OPENROUTER_GENERATION_MODEL} from './openrouter-http.js';
@@ -567,7 +567,8 @@ export async function refreshPrinciplesForProfile(
   if(valid.length){
     const citedIds=new Set(valid.flatMap(row=>row.citedSignalIds));
     const groundingInput: PrincipleGroundingInput = {preferredLocale,signals:distillInput.signals.filter(row=>citedIds.has(row.id)).map(row=>({id:row.id,statement:row.statement})),
-      candidates:valid.map((row,index)=>({id:`candidate-${index}`,statement:row.statement,citedSignalIds:row.citedSignalIds}))};
+      candidates:valid.map((row,index)=>({id:`candidate-${index}`,statement:row.statement,citedSignalIds:row.citedSignalIds,
+        ...(row===firstCandidate?{firstPrinciple:true as const}:{})}))};
     const exposed=await addGroundingOriginals(db, revision, evidence, groundingInput,firstOriginals??[]);
     if(firstOriginals?.some(({origin})=>!exposed.has(origin.id))){
       const index=valid.indexOf(firstCandidate!);
@@ -576,7 +577,11 @@ export async function refreshPrinciplesForProfile(
       result.dropped++;
     }
     if(valid.length){
-      const groundingKey = createHash('sha256').update(renderPrincipleGroundingContext(groundingInput)).digest('hex');
+      const groundingHash = createHash('sha256').update(renderPrincipleGroundingContext(groundingInput));
+      if (groundingInput.candidates.some(row=>row.firstPrinciple)) {
+        groundingHash.update('\n').update(principleGroundingInstruction(groundingInput));
+      }
+      const groundingKey = groundingHash.digest('hex');
       const grounding=await work.run(`grounding:${groundingKey}`,()=>provider.assessPrincipleGrounding(groundingInput),value=>parsePrincipleGrounding(value,groundingInput));
       valid=valid.filter((_,index)=>{const supported=grounding.assessments[index]!.supported;if(!supported)result.dropped++;return supported;});
     }

@@ -5,6 +5,7 @@
  * a capture rather than wrongly enshrining them.
  */
 
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -57,6 +58,19 @@ describe('bounded semantic grounding',()=>{
     expect(parsePrincipleGrounding({assessments:[{candidateId:'c2',supported:false},{candidateId:'c1',supported:true}]},input).assessments)
       .toEqual([{candidateId:'c1',supported:true},{candidateId:'c2',supported:false}]);
   });
+  it('applies the first rule only to explicitly marked candidates in one batch',()=>{
+    const first={...input.candidates[1]!,firstPrinciple:true as const};
+    const ordinary=buildPrincipleGroundingRequest(input).systemInstruction!.parts[0]!.text;
+    expect(ordinary).toBe(PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION);
+    const firstOnly=buildPrincipleGroundingRequest({...input,candidates:[first]});
+    expect(firstOnly.systemInstruction!.parts[0]!.text).toContain('An explicitly endorsed preference');
+    expect(firstOnly.systemInstruction!.parts[0]!.text).not.toContain('enduring settled rule');
+    const mixed=buildPrincipleGroundingRequest({...input,candidates:[input.candidates[0]!,first]});
+    expect(mixed.systemInstruction!.parts[0]!.text).toContain(ordinary);
+    expect(mixed.systemInstruction!.parts[0]!.text).toContain('firstPrinciple');
+    expect(mixed.contents[0]!.parts[0]!.text).toContain('"firstPrinciple":true');
+    expect(createHash('sha256').update(ordinary).digest('hex')).toBe('3967be5f9aecc66d8bc0db04608ac09608beb6b1e1fe138226c291e326d444f2');
+  });
   it.each([null,{}, {assessments:[]},{assessments:[{candidateId:'c1',supported:true}]},
     {assessments:[{candidateId:'c1',supported:true},{candidateId:'c1',supported:false}]},
     {assessments:[{candidateId:'c1',supported:true},{candidateId:'foreign',supported:true}]},
@@ -72,6 +86,20 @@ describe("distillation request", () => {
       type: "OBJECT",
       required: ["candidates"],
     });
+  });
+
+  it("bounds only the first-only response to one candidate with two citations", () => {
+    const ordinary = buildPrincipleDistillRequest(DISTILL_INPUT).generationConfig.responseSchema;
+    const mixed = buildPrincipleDistillRequest({...DISTILL_INPUT,firstPrinciple:true,ordinaryAvailable:true}).generationConfig.responseSchema;
+    expect(mixed).toEqual(ordinary);
+    expect(ordinary?.properties?.candidates).toMatchObject({
+      maxItems:3,items:{properties:{citedSignalIds:{type:"ARRAY",items:{type:"STRING"}}}},
+    });
+    const first=buildPrincipleDistillRequest({...DISTILL_INPUT,firstPrinciple:true}).generationConfig.responseSchema;
+    expect(first?.properties?.candidates).toMatchObject({
+      maxItems:1,items:{properties:{citedSignalIds:{minItems:2,maxItems:2}}},
+    });
+    expect(first?.properties?.candidates?.minItems).toBeUndefined();
   });
 
   it("fences signals, standing principles, and current entries as data", () => {
@@ -96,7 +124,7 @@ describe("distillation request", () => {
       const instructions = request.systemInstruction!.parts[0]!.text;
       expect(instructions).toContain("Source excerpts can supply a choice the signal summary omits");
       expect(instructions).toContain("Track who made each choice");
-      expect(instructions).toContain("Do not infer\napproval from saving it");
+      expect(instructions).toContain("Do not infer approval from saving it");
       expect(instructions).toContain("Abstain");
     }
   });
