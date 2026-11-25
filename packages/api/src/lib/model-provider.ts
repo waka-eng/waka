@@ -358,7 +358,7 @@ export interface DistillPrinciplesResult {
 export interface PrincipleGroundingInput {
   preferredLocale: SupportedLocale;
   signals: Array<{id:string;statement:string}>;
-  candidates: Array<{id:string;statement:string;citedSignalIds:string[]}>;
+  candidates: Array<{id:string;statement:string;citedSignalIds:string[];firstPrinciple?:true}>;
   originals?: Array<{
     signalIds: string[];
     kind: string | null;
