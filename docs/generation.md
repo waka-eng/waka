@@ -58,7 +58,7 @@ platform-team offer. I keep choosing depth over breadth."*
    existing signals by cosine distance. Said before in other words → the
    capture **attaches as evidence** of that signal. Genuinely new → a signal
    is born `emerging`. In the ambiguous band, one judge call breaks the tie.
-5. **Recurrence decides.** At three pieces of evidence the signal promotes
+5. **Recurrence decides.** At three independent pieces of evidence the signal promotes
    to `active`. One mention is a thought; three are a pattern.
 6. **Confidence follows the evidence** — how much, how spread out over time,
    how recent, whether an agent corroborated it — recomputed at every read,
@@ -334,10 +334,16 @@ evidence_count ≥ SIGNAL_PROMOTION_MIN_EVIDENCE (3)   →   emerging → active
 
 Promotion is enforced twice: in the lifecycle pass
 (`packages/api/src/lib/signal-lifecycle.ts`) and by the Postgres transition
-guard (`drizzle/migrations/0057_review_evidence.sql`). This is not a
+guard (`drizzle/migrations/0094_signal_material_evidence.sql`). This is not a
 residence rule: an already-active signal can lose some evidence, and a locked
 unsupported signal keeps its human wording. Neither a direct insert nor an
 emerging-to-active transition may bypass the promotion bar.
+
+Personal signals count distinct current original material. Repeated saves keep
+their own IDs and citations but contribute once to promotion. The comparison uses
+the full normalized wording, effective attachment material, or an answered
+reflection when the original has no other usable material. Different descriptions
+of separate occasions can therefore support the same signal independently.
 
 ### 6. Confidence
 
@@ -1226,6 +1232,12 @@ evaluated — a decay term only exists if something actually runs it.
 | Confidence spread (weight 30) | span of evidence, saturating at `CONFIDENCE_SATURATION_SPREAD_DAYS` (30) | Same — but monotonic: spread never shrinks as time passes |
 | Selection recency (weight 0.2) | half-life `SELECTION_RECENCY_HALF_LIFE_DAYS` (30) since last evidence | Live, at every refresh |
 | Comeback bonus (weight 0.15) | needs a gap ≥ `COMEBACK_MIN_DORMANT_DAYS` (21); the return must be ≤ `COMEBACK_MAX_RETURN_AGE_DAYS` (14) old | Live, at every refresh |
+
+Two distinct direct saves since the last substantive reading can bring one of
+the twelve recent eligible signals into the lead. Each save must introduce
+material that did not previously support that signal. The same rule applies
+regardless of the size of its history. A disputed signal or a review reply
+cannot earn this boost. The regular refresh schedule still governs publication.
 
 So a signal decays twice, on different clocks: its **confidence** fades with
 a 45-day half-life, and its **selection score** fades again with a 30-day

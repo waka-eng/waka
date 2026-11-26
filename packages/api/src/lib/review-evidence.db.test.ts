@@ -67,6 +67,9 @@ it('gives copies one independent witness while preserving every owned citation',
   expect(await t.db.transaction(tx => refreshSignalLifecycle(tx as never, f.signalId, new Date()))).toBe(true);
   expect(await detail()).toMatchObject({status:'active', evidenceCount:3});
   expect((await detail())?.evidence).toHaveLength(5);
+  const exported = await assembleProfileExport(t.db as never, f.profileId);
+  expect(exported.inspirations).toHaveLength(5);
+  for (const original of exported.inspirations) expect(original).not.toHaveProperty('evidenceTextHash');
 });
 
 it('resolves only owned material, including effective media on otherwise empty saves', async () => {
@@ -88,6 +91,18 @@ it('resolves only owned material, including effective media on otherwise empty s
   const [keys] = await t.sql`SELECT evidence_text_hash('한 글!')=evidence_text_hash('한글') AS korean,
     evidence_text_hash(E' \t') IS NULL AS blank, evidence_text_hash('🐈')<>evidence_text_hash('🐕') AS symbols`;
   expect(keys).toEqual({korean:true,blank:true,symbols:true});
+});
+
+it('counts corrected image wording with the current scene and discards superseded OCR', async () => {
+  const f = await fixture();
+  const scenes = ['Words: outdated. Image: a kitchen', 'Words: old label. Image: a kitchen', 'Words: old label. Image: a workshop'];
+  for (const [i,id] of f.ids.entries()) {
+    await t.sql`UPDATE inspirations SET text='' WHERE id=${id}`;
+    await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,enrichment_status,enrichment_text,transcript_correction)
+      VALUES (${f.profileId},${id},'image','synthetic-key','ready',${scenes[i]!},'Today')`;
+    await raw(f,id);
+  }
+  expect(await count(f)).toBe(2);
 });
 
 it('counts many references and replies once and exposes their current human words only to the owner',async()=>{

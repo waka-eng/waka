@@ -40,7 +40,7 @@ export function personalSignalReadable(profileId: string) {
         AND (SELECT independent_evidence_count(jsonb_agg(jsonb_build_object(
           'kind', edge.kind, 'unit', edge.unit_id, 'origin', edge.material_key)), ${SIGNAL_PROMOTION_MIN_EVIDENCE})
           FROM signal_material_edges(${profileId}::uuid, ARRAY[${signals.id}]) edge
-          WHERE edge.current IS TRUE AND edge.created_at <= now()) >= ${SIGNAL_PROMOTION_MIN_EVIDENCE}
+          WHERE edge.current IS TRUE AND edge.material_key IS NOT NULL AND edge.created_at <= now()) >= ${SIGNAL_PROMOTION_MIN_EVIDENCE}
       ELSE FALSE
     END)`;
 }
