@@ -321,3 +321,98 @@ it('replans a changed later candidate with the same source and already embedded 
     expect((await getLiveTopOfMind(t.db as never, f))?.entries).toHaveLength(1);
   } finally { await other.end(); }
 });
+
+const deadline = 'Send the completed proposal to reviewers by Tuesday.';
+const unrelated = 'Keep a record of the number of proposals reviewed.';
+const direction = (cosine: number) => [cosine, Math.sqrt(1 - cosine ** 2), 0, 0];
+const alternativeVerdict = { relation: 'same', target: 2 } as const;
+
+async function addMatchTarget(f: Awaited<ReturnType<typeof supportedDraft>>, statement: string, embedding = vector, recent = '2026-11-03T00:00:00Z') {
+  const [target] = await t.sql`INSERT INTO signals(profile_id,statement,locked_at,last_evidence_at)
+    VALUES (${f.profileId},${statement},now(),${recent}) RETURNING id`;
+  const id = target.id as string;
+  await t.db.transaction(tx => writeSignalEmbedding(tx as never, { profileId: f.profileId, signalId: id, statement, embedding, model }));
+  return id;
+}
+
+async function twoMatchTargets() {
+  const f = await supportedDraft();
+  await t.db.transaction(tx => writeSignalEmbedding(tx as never, {
+    profileId: f.profileId, signalId: f.signalId, statement: original, embedding: direction(.90), model,
+  }));
+  const distractor = await addMatchTarget(f, deadline);
+  const third = await addMatchTarget(f, unrelated, direction(.80));
+  return { ...f, distractor, third };
+}
+
+it('offers the two closest signals once and attaches to the second when it is the semantic match', async () => {
+  const f = await twoMatchTargets();
+  const judge = vi.fn<ModelProvider['judgeSignalMatch']>(async () => alternativeVerdict);
+  const result = await run(f, quietMornings, judge);
+
+  expect(judge.mock.calls).toEqual([[{ preferredLocale: 'en-US', candidateStatement: quietMornings,
+    existingStatement: deadline, alternativeStatement: original }]]);
+  expect(result).toMatchObject({ matchedSignalIds: [f.signalId], mintedSignalIds: [] });
+  expect(await t.sql`SELECT signal_id FROM signal_evidence WHERE inspiration_id=${f.inspirationId}`)
+    .toEqual([{ signal_id: f.signalId }]);
+});
+
+it.each([
+  [{ relation: 'independent' }, quietMornings],
+  [{ relation: 'opposed', target: 2 }, 'I avoid quiet mornings for work and only concentrate when it is busy.'],
+] as const)('mints once for a paired %j verdict and links only explicit opposition', async (verdict, statement) => {
+  const f = await twoMatchTargets();
+  const judge = vi.fn<ModelProvider['judgeSignalMatch']>(async () => verdict);
+  const result = await run(f, statement, judge);
+  expect(judge).toHaveBeenCalledOnce();
+  expect(result.matchedSignalIds).toEqual([]);
+  expect(result.mintedSignalIds).toHaveLength(1);
+  const disputes = await t.sql`SELECT a_signal_id,b_signal_id FROM signal_contradictions`;
+  if (verdict.relation === 'opposed') {
+    expect(disputes).toHaveLength(1);
+    expect(new Set(Object.values(disputes[0]!))).toEqual(new Set([f.signalId, result.mintedSignalIds[0]]));
+  } else expect(disputes).toEqual([]);
+});
+
+it('keeps stable scan order when similarity ties', async () => {
+  const f = await supportedDraft();
+  await t.sql`UPDATE signals SET last_evidence_at='2026-11-02T00:00:00Z' WHERE id=${f.signalId}`;
+  await addMatchTarget(f, deadline);
+  const judge = vi.fn<ModelProvider['judgeSignalMatch']>(async () => alternativeVerdict);
+  const result = await run(f, quietMornings, judge);
+  expect(judge.mock.calls[0]![0]).toMatchObject({ existingStatement: deadline, alternativeStatement: original });
+  expect(result.matchedSignalIds).toEqual([f.signalId]);
+});
+
+it('refuses a paired same verdict without a target and writes no evidence', async () => {
+  const f = await twoMatchTargets();
+  await expect(run(f, quietMornings, same)).rejects.toThrow('signal match judgement');
+  expect(await t.sql`SELECT id FROM signal_evidence WHERE inspiration_id=${f.inspirationId}`).toEqual([]);
+});
+
+it('reuses an exact paired verdict if the second signal becomes cited during judging', async () => {
+  const f = await twoMatchTargets();
+  const other = postgres(process.env.DB_CONNECTION_URL!, { max: 1, connection: { search_path: t.schemaName } });
+  try {
+    const judge = vi.fn<ModelProvider['judgeSignalMatch']>(async () => {
+      await publishDraftReading(f, drizzle(other) as typeof t.db);
+      return alternativeVerdict;
+    });
+    const result = await run(f, quietMornings, judge);
+    expect(judge).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ matchedSignalIds: [f.signalId], promotedSignalIds: [f.signalId] });
+    expect((await getLiveTopOfMind(t.db as never, f))?.entries).toMatchObject([{ citedSignals:[{ id:f.signalId, statement:original }] }]);
+  } finally { await other.end(); }
+});
+
+it('refuses a prepared pair when the alternative changed during judging', async () => {
+  const f = await twoMatchTargets();
+  const other = postgres(process.env.DB_CONNECTION_URL!, { max: 1, connection: { search_path: t.schemaName } });
+  try {
+    await expect(run(f, quietMornings, async () => {
+      await other`UPDATE signals SET statement='Human correction to the alternative' WHERE id=${f.signalId}`;
+      return { relation: 'same', target: 1 };
+    })).rejects.toThrow('Signal inputs changed');
+    expect(await t.sql`SELECT id FROM signal_evidence WHERE inspiration_id=${f.inspirationId}`).toEqual([]);
+  } finally { await other.end(); }
+});

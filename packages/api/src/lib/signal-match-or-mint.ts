@@ -6,9 +6,9 @@
  * identical wording may attach directly; changed wording still needs a
  * meaning check. Below the judge floor it mints without a relation call.
  *
- * Each candidate spends at most one match judgment on its single nearest
- * target. Changed or negated positions can have almost identical vectors;
- * time scope and certainty are part of their meaning. Review answers always
+ * Each candidate spends at most one match judgment across its two closest
+ * eligible targets, and may attach to one. Changed or negated positions can
+ * have almost identical vectors. Time scope and certainty matter. Review answers always
  * check nearby matches, even when wording is identical.
  * A failure propagates
  * for retry rather than inventing an independent pattern. All judgments are
@@ -45,7 +45,7 @@ import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash,embeddingSpac
 import { getDb } from "./db.js";
 import { projectPersonalEntries } from "./personal-output.js";
 import type { normalizeSupportedLocale } from "./locales.js";
-import type { ModelProvider } from "./model-provider.js";
+import { ModelDidNotAnswerError, type ModelProvider, type SignalMatchJudgement } from "./model-provider.js";
 // The pass owns the shape of its own result; this stage fills three of its
 // fields. Importing the type back from the facade is a type-only edge — it is
 // erased before runtime, so the module graph still points one way. The
@@ -113,10 +113,50 @@ export interface ResolvedCandidate {
   relatedEvidence: Array<{ inspirationId: string; quote: string; material?: InspirationMaterialIdentity; quoteSourceHash?: string }>;
 }
 
-interface MatchJudgement {
-  targetId: string;
+interface Match {
+  target: MatchTarget;
+  similarity: number;
+}
+type ClosestMatches = readonly [Match | undefined, Match | undefined];
+
+interface ComparedTarget {
+  id: string;
   statement: string;
-  relation: Awaited<ReturnType<ModelProvider["judgeSignalMatch"]>>["relation"];
+}
+
+interface MatchJudgement {
+  targets: ComparedTarget[];
+  verdict: SignalMatchJudgement;
+}
+
+function comparedTargets(matches: ClosestMatches, virtualIds?: ReadonlyMap<string, string>): ComparedTarget[] {
+  return matches.flatMap(match => match ? [{
+    id: virtualIds?.get(match.target.id) ?? match.target.id,
+    statement: match.target.statement,
+  }] : []);
+}
+
+function sameComparison(left: ComparedTarget[], right: ComparedTarget[]) {
+  return left.length === right.length && left.every((target, i) =>
+    target.id === right[i]!.id && target.statement === right[i]!.statement);
+}
+
+function judgingNeeded(candidate: ResolvedCandidate, primary: Match, input: ApplyCandidatesInput) {
+  return classifyMatch(primary.similarity) === "judge" || Boolean(input.reviewSource) ||
+    candidate.statement.trim() !== primary.target.statement.trim();
+}
+
+function exactWithdrawal(candidate: ResolvedCandidate, matches: ClosestMatches) {
+  return matches.some(match => match?.target.withdrawn && match.target.statement.trim() === candidate.statement.trim());
+}
+
+function chosenMatch(verdict: SignalMatchJudgement, matches: ClosestMatches): Match | undefined {
+  if (verdict.relation === "independent") return undefined;
+  if (verdict.relation === "same" || verdict.relation === "opposed") {
+    if (!matches[1] && verdict.target === undefined) return matches[0];
+    if (matches[1] && (verdict.target === 1 || verdict.target === 2)) return matches[verdict.target - 1];
+  }
+  throw new ModelDidNotAnswerError("signal match judgement");
 }
 
 interface ApplyCandidatesInput {
@@ -178,25 +218,28 @@ async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarg
       refusals.set(index, anchor);
       continue;
     }
-    const nearest = findBestMatch(candidate.embedding, projected,input.embeddingPolicy);
-    if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
-    let decision = classifyMatch(nearest?.similarity ?? null);
-    if (nearest && (decision === "judge" || input.reviewSource || candidate.statement.trim() !== nearest.target.statement.trim())) {
+    const matches = findClosestMatches(candidate.embedding, projected, input.embeddingPolicy);
+    const [primary, alternate] = matches;
+    if (exactWithdrawal(candidate, matches)) continue;
+    let match = primary && classifyMatch(primary.similarity) === "attach" ? primary : undefined;
+    if (primary && judgingNeeded(candidate, primary, input)) {
+      const targets = comparedTargets(matches);
       const prior = input.priorJudgements?.get(index);
-      const targetId = nearest.target.id;
-      const statement = nearest.target.statement;
-      const relation = prior?.targetId === targetId && prior.statement === statement
-        ? prior.relation
-        : (await input.provider.judgeSignalMatch({ preferredLocale: input.preferredLocale,
-          candidateStatement: candidate.statement, existingStatement: statement })).relation;
-      judgements.set(index, { targetId, statement, relation });
-      decision = relation === "same" ? "attach" : "mint";
+      const verdict = prior && sameComparison(prior.targets, targets)
+        ? prior.verdict
+        : await input.provider.judgeSignalMatch({
+          preferredLocale: input.preferredLocale, candidateStatement: candidate.statement,
+          existingStatement: primary.target.statement,
+          ...(alternate ? { alternativeStatement: alternate.target.statement } : {}),
+        });
+      const chosen = chosenMatch(verdict, matches);
+      judgements.set(index, { targets, verdict });
+      match = verdict.relation === "same" ? chosen : undefined;
     }
-    if (decision === "attach" && nearest) {
-      if (nearest.target.withdrawn) continue;
-      if (canRestate(nearest.target)) {
-        nearest.target.statement = candidate.statement;
-        nearest.target.embedding = candidate.embedding;
+    if (match) {
+      if (canRestate(match.target)) {
+        match.target.statement = candidate.statement;
+        match.target.embedding = candidate.embedding;
       }
     } else projected.push({ id: `candidate:${index}`, statement: candidate.statement,
       status: "emerging", locked: false, withdrawn: false, citedInReading: false, embedding: candidate.embedding });
@@ -257,30 +300,24 @@ export async function applyCandidates(
       continue;
     }
 
-    const nearest = findBestMatch(candidate.embedding, targets,input.embeddingPolicy);
-    if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
-    let decision = classifyMatch(nearest?.similarity ?? null);
-    /** Set when the judge answers `opposed`: the mint below also records
-        the contested pair — the dispute is held, never dissolved by
-        whichever statement arrived second. */
+    const matches = findClosestMatches(candidate.embedding, targets, input.embeddingPolicy);
+    const [primary] = matches;
+    if (exactWithdrawal(candidate, matches)) continue;
+    let match = primary && classifyMatch(primary.similarity) === "attach" ? primary : undefined;
     let opposesSignalId: string | null = null;
 
-    if (nearest && (decision === "judge" || input.reviewSource || candidate.statement.trim() !== nearest.target.statement.trim())) {
-      // Reuse the pre-write verdict only for the exact planned statement.
-      // No provider call runs while source rows are locked. Provider failures
-      // already aborted preparation; they never become invented opposition
-      // or an independent pattern here.
+    if (primary && judgingNeeded(candidate, primary, input)) {
+      // Both options bind the verdict, even when it selected neither. A
+      // changed alternative must not silently repurpose the old decision.
       const judged = judgements.get(candidateIndex);
-      const planId = mintedPlanIds.get(nearest.target.id) ?? nearest.target.id;
-      if (!judged || judged.targetId !== planId || judged.statement !== nearest.target.statement) {
+      if (!judged || !sameComparison(judged.targets, comparedTargets(matches, mintedPlanIds))) {
         if (readingChanged) throw new ReadingCitationPlanChangedError(judgements);
         throw new Error("Signal judgement plan changed");
       }
-      decision = judged.relation === "same" ? "attach" : "mint";
-      if (judged.relation === "opposed") opposesSignalId = nearest.target.id;
+      const chosen = chosenMatch(judged.verdict, matches);
+      match = judged.verdict.relation === "same" ? chosen : undefined;
+      if (judged.verdict.relation === "opposed" && chosen) opposesSignalId = chosen.target.id;
     }
-
-    const match = decision === "attach" ? nearest : null;
 
     if (match) {
       // New discovery cannot reverse an explicit decision about this pair.
@@ -501,20 +538,25 @@ async function loadMatchTargets(
   return targets;
 }
 
-function findBestMatch(
-  embedding: number[],
-  targets: MatchTarget[],
-  policy?:EmbeddingIndexPolicy,
-): { target: MatchTarget; similarity: number } | null {
-  let best: { target: MatchTarget; similarity: number } | null = null;
+function findClosestMatches(embedding: number[], targets: MatchTarget[], policy?: EmbeddingIndexPolicy): ClosestMatches {
+  const minimum = embeddingCandidateRules(policy)?.match.minimum ?? SIGNAL_MERGE_JUDGE_MIN_COSINE;
+  let first: Match | undefined;
+  let second: Match | undefined;
 
   for (const target of targets) {
     const similarity = cosineSimilarity(embedding, target.embedding);
-    if (similarity === null || similarity < (embeddingCandidateRules(policy)?.match.minimum??SIGNAL_MERGE_JUDGE_MIN_COSINE)) continue;
-    if (!best || similarity > best.similarity) best = { target, similarity };
+    if (similarity === null || similarity < minimum) continue;
+    // Equal scores retain the existing stable scan order, including virtual
+    // targets appended while planning this batch.
+    if (!first || similarity > first.similarity) {
+      second = first;
+      first = { target, similarity };
+    } else if (!second || similarity > second.similarity) {
+      second = { target, similarity };
+    }
   }
 
-  return best;
+  return [first, second];
 }
 
 interface SuppressionAnchor {

@@ -100,3 +100,26 @@ it('bounds a non-cooperating native transport with the existing deadline',async(
   const pending=callOpenAi(openAiRequest('chat',[],'chat',undefined),'conversation reply');const rejected=expect(pending).rejects.toThrow('timed out');
   await vi.advanceTimersByTimeAsync(1000);await rejected;expect(fetchMock).toHaveBeenCalledOnce();
 });
+
+it('sends both match targets in one closed native Responses request', async () => {
+  const input = { ...locale, candidateStatement: 'Show a sketch before writing the proposal.',
+    existingStatement: 'Deliver a final proposal by Tuesday.', alternativeStatement: 'Share a rough outline before writing.' };
+  fetchMock.mockResolvedValueOnce(response({ decision: 'same_second' }));
+  await expect(createOpenAiModelProvider().judgeSignalMatch(input)).resolves.toEqual({ relation: 'same', target: 2 });
+  expect(fetchMock).toHaveBeenCalledOnce();
+  const [url, init] = fetchMock.mock.calls[0]!;
+  expect(url).toBe('https://api.openai.com/v1/responses');
+  const wire = JSON.parse(init.body);
+  expect(wire.text.format).toEqual({ type: 'json_schema', name: 'signal_match', strict: true,
+    schema: { type: 'object', required: ['decision'], additionalProperties: false,
+      properties: { decision: { type: 'string', enum: ['same_first', 'same_second', 'independent', 'opposed_first', 'opposed_second'] } } } });
+  expect(wire.input.find((message: { role: string }) => message.role === 'user').content[0].text)
+    .toContain('<<<statement c>>>\n' + input.alternativeStatement + '\n<<<end statement c>>>');
+});
+
+it('rejects a single-target reply to a paired native judgment', async () => {
+  fetchMock.mockResolvedValueOnce(response({ relation: 'same' }));
+  await expect(createOpenAiModelProvider().judgeSignalMatch({ ...locale, candidateStatement: 'A',
+    existingStatement: 'B', alternativeStatement: 'C' })).rejects.toThrow('signal match judgement');
+  expect(fetchMock).toHaveBeenCalledOnce();
+});
