@@ -440,6 +440,7 @@ async function selectSignals(
         statement: row.statement,
         status: row.status,
         confidence,
+        evidenceAt,
         evidenceCount: evidenceAt.length,
         lastEvidenceAt: row.lastEvidenceAt,
         score: computeSelectionScore({
@@ -495,10 +496,7 @@ async function selectSignals(
       evidenceCount: s.evidenceCount,
       lastEvidenceAt: s.lastEvidenceAt,
       score: s.score,
-      timeShape: describeTimeShape(
-        (evidenceBySignal.get(s.id) ?? []).map((item) => item.createdAt),
-        now,
-      ),
+      timeShape: describeTimeShape(s.evidenceAt, now),
       ...(contestedWithIds.length > 0 ? { contestedWithIds } : {}),
     };
   };
