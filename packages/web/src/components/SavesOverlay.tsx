@@ -95,6 +95,8 @@ const UNDO_MS = 6000;
 
 /** How long a sheet takes to drop back down; `claims.css` `waka-sheet-down` matches. */
 const SHEET_DROP_MS = 220;
+/** How far the sheet's grabber is dragged down before it closes. */
+const SHEET_DRAG_CLOSE_PX = 80;
 
 export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, sheet = false }: {
   canReview?:boolean; onRelevanceChanged?:()=>void;
@@ -209,6 +211,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
      (code review, 2026-11-12: a press on the bar under a falling sheet). */
   const onBackNow = useRef(onBack); onBackNow.current = onBack;
   const dropTimer = useRef(0);
+  const dragFrom = useRef<number | null>(null);
   useEffect(() => () => window.clearTimeout(dropTimer.current), []);
   const backOut = useCallback(() => {
     const node = sheetPage.current;
@@ -1268,6 +1271,23 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
        reserve is holding room for nothing, and holding it was the last 60px
        between this page and the one the founder prefers. */
     <div ref={sheetPage} className={`waka-page${open ? " waka-page--note" : sheet ? " waka-page--sheet" : ""}`}>
+      {/* THE GRABBER: dragged down past `SHEET_DRAG_CLOSE_PX` the sheet goes
+          back down from where the finger left it; short of that it settles.
+          The X is the way out for keys and readers, so this is hidden. */}
+      {sheet && !open ? <div className="waka-sheet-grab" aria-hidden="true"
+        onPointerDown={e => { dragFrom.current = e.clientY; e.currentTarget.setPointerCapture?.(e.pointerId); if (sheetPage.current) sheetPage.current.dataset.dragging = "1"; }}
+        onPointerMove={e => {
+          if (dragFrom.current === null || !sheetPage.current) return;
+          sheetPage.current.style.translate = `0 ${Math.max(0, e.clientY - dragFrom.current)}px`;
+        }}
+        onPointerUp={e => {
+          const node = sheetPage.current; const from = dragFrom.current; dragFrom.current = null;
+          if (!node || from === null) return;
+          delete node.dataset.dragging;
+          if (e.clientY - from > SHEET_DRAG_CLOSE_PX) { backOut(); return; }
+          node.style.translate = "";
+        }}
+        onPointerCancel={() => { dragFrom.current = null; if (sheetPage.current) { delete sheetPage.current.dataset.dragging; sheetPage.current.style.translate = ""; } }} /> : null}
       <DialogSurface
         {...listScroll}
         /* ═══ AN OPEN NOTE IS A PAGE, NOT A COLUMN IN THE ARCHIVE ════════

@@ -194,6 +194,11 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
      same object for the whole stay, so finishing a walk never restarts it. */
   const [walk, setWalk] = useState(() => (crossing?.home ? { ...crossing, from: crossing.home } : null));
   const [walking, setWalking] = useState(walk !== null);
+  /* THE WAITING GROUND KEEPS THE CREATURE WHERE HOME HAD IT (founder,
+     2026-11-26). With principles to show, the list needs the room, so the
+     creature still rises to its place above them. */
+  const staysHome = () => !document.querySelector(".waka-page--timeless .waka-held");
+  const [heldAt, setHeldAt] = useState<{ dx: number; dy: number; scale: number } | null>(null);
   useEffect(() => {
     /* Turned round on the way home: walk back in from where the world's
        creature stands, as a new walk (review, 2026-10-15). */
@@ -261,7 +266,14 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           to={walk.going === "in" ? pageCreature : walk.home}
           dir={walk.going === "in" ? 1 : -1}
           going={walk.going}
+          stay={staysHome}
           onDone={() => {
+            /* Where it stayed, the page's own creature takes over at that
+               spot and size, so nothing jumps at the hand over. */
+            if (walk.going === "in" && staysHome()) {
+              const page = pageCreature();
+              if (page) setHeldAt({ dx: walk.from.x - page.x, dy: walk.from.y - page.y, scale: walk.from.size / page.size });
+            }
             setWalking(false);
             onCrossed?.();
           }}
@@ -343,7 +355,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           /* No chat act on an agent's ground: the chat would open with the
              agent's line posted as the owner's own first message. Home omits
              it too; this holds even when a caller does not. */
-          <PrinciplesGround locale={locale} profileId={profileId} whose={whose}
+          <PrinciplesGround locale={locale} profileId={profileId} whose={whose} heldAt={heldAt}
             onChat={agent ? undefined : onChat} onNewSave={agent ? undefined : onNewSave} newSaveLabel={newSaveLabel} />
         ) : (
           <>

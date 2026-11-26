@@ -2850,6 +2850,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   flex-direction: column;
   gap: var(--sp-12);
 }
+/* Room between the search and the first heading (founder, 2026-11-26). */
+.waka-list > .waka-list-chapter:first-child { margin-top: var(--sp-16); }
 
 /* THE CHAPTER HEADING IS NOT AN EYEBROW. The reference sets these at full
    title weight, and it is right: they are the landmarks you scroll to, and
@@ -7094,8 +7096,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-home-bar-pull { gap: var(--sp-8); padding-top: var(--sp-8); border-radius: 999px; touch-action: none; }
 /* The grabber is lit: light is the meaning channel, so it glows. */
 .waka-home-bar-grab {
-  width: var(--sp-44); height: 5px; border-radius: 3px; background: var(--ink);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--ink) 70%, transparent);
+  width: var(--sp-32); height: 4px; border-radius: 2px; background: var(--ink);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--ink) 65%, transparent);
 }
 .waka-home-bar-beckon--pull { inset: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-8)); }
 .waka-home-bar-saved {
@@ -7129,6 +7131,15 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    The mic and the attach glyphs keep `.waka-dock-tool`, re-seated here; "Done"
    needs room the 44px circle does not have. */
 .jar-composer-body { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 0; }
+/* ROOM FOR THE BAR'S ENDS: its tools and Save lean 12px past the words'
+   edges, which overflowed this scroll box, so focusing Save scrolled it 12px
+   sideways and "Saving…" sat off centre (founder, 2026-11-26). The box is
+   24px wider, still centred, and pads those 12px back each side. */
+.jar-seek.jar-inspiration-composer .jar-composer-body {
+  --composer-box: min(calc(100% + 2 * var(--sp-12)), calc(40rem + 2 * var(--sp-12)));
+  box-sizing: border-box; width: var(--composer-box); max-width: none;
+  margin-inline: calc((100% - var(--composer-box)) / 2); padding-inline: var(--sp-12);
+}
 /* ═══ NO BOX, AN OPEN PAGE (founder, 2026-11-09: "notepad feels so 답답해") ═══
    The words were typed into a big dark card inside the page. Now they are
    written straight on the page, in a readable column, and the page itself is
@@ -7206,6 +7217,14 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   min-height: 0; padding: var(--sp-4) 0; border-radius: 0; background: none;
 }
 .waka-note-bar:not([data-field]) .waka-note-bar-tools { margin-inline-start: calc(-1 * var(--sp-12)); }
+/* "SAVING…" IN THE MIDDLE OF THE PAGE, ON THE ICONS' LINE (founder,
+   2026-11-26): three columns, the outer two equal, so the state is centred
+   on the page however wide the tools and the word are. */
+.waka-note-bar:not([data-field]) .waka-note-bar-row { display: grid; grid-template-columns: 1fr minmax(0, auto) 1fr; }
+.waka-note-bar:not([data-field]) .waka-note-bar-row > .waka-note-bar-tools { grid-column: 1; justify-self: start; }
+.waka-note-bar:not([data-field]) .waka-note-bar-row > .waka-note-bar-state { grid-column: 2; }
+.waka-note-bar:not([data-field]) .waka-note-bar-row > :last-child:not(.waka-note-bar-state) { grid-column: 3; justify-self: end; }
+.waka-note-bar-state > .jar-source-status { margin: 0; justify-content: center; font-size: var(--t-meta); color: var(--muted); }
 .waka-note-bar:not([data-field]) .waka-note-bar-row > :last-child { margin-inline-end: calc(-1 * var(--sp-12)); }
 
 /* THE CREATURE, SMALL, BESIDE WHAT IT SAYS — the real `Companion`, never drawn here. */
@@ -7589,6 +7608,17 @@ main.waka-page > .waka-surface-head,
   .waka-review-reader > .waka-surface-head { width: 100%; }
 }
 
+/* THE HEADER STANDS OVER THE BAR (founder, 2026-11-26: "have x be aligned
+   with the mic icon", "make back button align with mic, and ... align with
+   save"). On the notepad and a saved inspiration the row takes the bar's
+   column, and its two ends lean out as the bar's do, so the X or "<" is
+   over the mic and the ⋯ ends where Save ends. MEASURED at 390, 711 and 1280. */
+.jar-seek.jar-inspiration-composer > .waka-surface-head:is(.waka-surface-head, #waka-surface-head),
+.waka-over--note .waka-over-one > .waka-surface-head:is(.waka-surface-head, #waka-surface-head) { width: min(100%, 40rem); }
+.jar-seek.jar-inspiration-composer > .waka-surface-head > .waka-surface-back:is(.waka-surface-back, #waka-surface-head),
+.waka-over--note .waka-over-one > .waka-surface-head > .waka-surface-back:is(.waka-surface-back, #waka-surface-head) { margin-inline-start: calc(-1 * var(--sp-12)); }
+.waka-over--note .waka-over-one > .waka-surface-head > .waka-surface-right { margin-inline-end: calc(-1 * var(--sp-10)); }
+
 /* A SURFACE WITH NO DOM PAGE OF ITS OWN (a principle in the sky, the
    creature's questions) gets the same row in a strip at the top. */
 .waka-surface-strip {
@@ -7759,6 +7789,11 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 
 @layer chrome {
+/* ═══ A SHEET FROM THE BOTTOM (founder, 2026-11-26: "make it feel like
+   bottom up sheets") ═══ It rises from the screen's foot with a grabber on
+   top, its top corners round, and goes back down the same way: X, Escape or
+   a drag down on the grabber. The home bar floats over its foot, so the list
+   stops above the bar. Replaces the centred card below. */
 /* ═══ INSPIRATIONS OPEN AS A MODAL (founder meeting, 2026-11-20) ══════════
    It was a sheet pulled up from the handle with a "<", which read as a new
    page. Now it is one card over home, the same on a phone and a desk ("we
@@ -7766,24 +7801,32 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
    stays, under it, z-60 over the page's 56) and fades out on close
    (`SHEET_DROP_MS` in `SavesOverlay.tsx` waits for that animation). */
 .waka-page.waka-page--sheet {
-  top: calc(var(--sp-12) + env(safe-area-inset-top));
-  bottom: calc(var(--sp-28) + var(--sp-64) + var(--sp-12) + env(safe-area-inset-bottom));
-  left: max(var(--sp-12), env(safe-area-inset-left));
-  right: max(var(--sp-12), env(safe-area-inset-right));
+  top: calc(var(--sp-48) + env(safe-area-inset-top));
+  bottom: 0; left: 0; right: 0;
   width: auto; max-width: 680px; margin-inline: auto;
-  padding-top: var(--sp-8);
-  padding-bottom: var(--sp-12);
-  border-radius: var(--sp-24);
-  background: color-mix(in srgb, var(--waka-raised) 92%, transparent);
-  box-shadow: 0 24px 64px color-mix(in srgb, var(--bg) 80%, transparent);
+  padding-top: 0;
+  padding-bottom: calc(var(--sp-28) + var(--sp-64) + var(--sp-12) + env(safe-area-inset-bottom));
+  border-radius: var(--sp-28) var(--sp-28) 0 0;
+  background: var(--waka-raised);
+  box-shadow: 0 -12px 48px color-mix(in srgb, var(--bg) 70%, transparent);
   min-height: 0;
-  animation: waka-sheet-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: waka-sheet-up 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
-.waka-page.waka-page--sheet[data-leaving] { animation: waka-sheet-down 180ms ease-in both; pointer-events: none; }
+.waka-page.waka-page--sheet[data-leaving] { animation: waka-sheet-down 220ms ease-in both; pointer-events: none; }
+.waka-page.waka-page--sheet[data-dragging] { animation: none; }
+/* The grabber: the handle that pulled it up, now at its top. */
+.waka-sheet-grab {
+  flex: none; display: flex; justify-content: center; align-items: center;
+  height: var(--sp-20); touch-action: none; cursor: grab;
+}
+.waka-sheet-grab::before {
+  content: ""; width: var(--sp-32); height: 4px; border-radius: 2px;
+  background: color-mix(in srgb, var(--ink) 35%, transparent);
+}
 /* The search keeps standing out from the card it now sits on. */
 .waka-page.waka-page--sheet .waka-over-find { background: color-mix(in srgb, var(--ink) 7%, transparent); }
-@keyframes waka-sheet-up { from { opacity: 0; scale: 0.97; } to { opacity: 1; scale: 1; } }
-@keyframes waka-sheet-down { from { opacity: 1; scale: 1; } to { opacity: 0; scale: 0.98; } }
+@keyframes waka-sheet-up { from { translate: 0 100%; } }
+@keyframes waka-sheet-down { to { translate: 0 100%; } }
 @media (prefers-reduced-motion: reduce) {
   .waka-page.waka-page--sheet, .waka-page.waka-page--sheet[data-leaving] { animation: none; }
 }

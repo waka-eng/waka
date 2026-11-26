@@ -13,14 +13,14 @@ import { clamp01 } from "../lib/num";
 import { hopLift } from "./hop";
 
 export const FLOURISHES = [
-  "hop", "twirl", "wiggle", "squish", "double", "backflip", "coin", "jelly",
+  "hop", "twirl", "wiggle", "squish", "double", "backflip", "jelly",
   "pop", "nod", "shiver", "float", "stretch", "curious", "dance", "triple", "dizzy", "bow",
 ] as const;
 export type Flourish = (typeof FLOURISHES)[number];
 
 /** How long each move takes. */
 export const FLOURISH_MS: Record<Flourish, number> = {
-  hop: 560, twirl: 760, wiggle: 620, squish: 560, double: 720, backflip: 820, coin: 700, jelly: 760,
+  hop: 560, twirl: 760, wiggle: 620, squish: 560, double: 720, backflip: 820, jelly: 760,
   pop: 460, nod: 640, shiver: 520, float: 1100, stretch: 900, curious: 1000, dance: 1100, triple: 780, dizzy: 1000, bow: 900,
 };
 
@@ -65,9 +65,6 @@ export function flourishPose(kind: Flourish, t: number, size: number): FlourishP
       const air = u >= 0.15 ? (u - 0.15) / 0.85 : 0;
       return pose({ lift: -arc(air) * size * 0.4, rot: -easeInOut(air) * Math.PI * 2, sq: crouch - arc(air) * 0.04 });
     }
-    case "coin":
-      /* turns edge-on and round again, twice, like a tossed coin */
-      return pose({ lift: -arc(u) * size * 0.18, sx: Math.max(0.06, Math.abs(Math.cos(u * Math.PI * 2))) });
     case "jelly": {
       /* wobbles wide and tall, settling */
       const w = Math.sin(u * Math.PI * 5) * 0.16 * fade;
