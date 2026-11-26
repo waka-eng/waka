@@ -136,6 +136,27 @@ it.each(['independent', 'duplicate', 'disputed', 'late_old_date', 'history_100',
   },
 );
 
+it('keeps a newly saved copy from describing a dormant signal as returning', async () => {
+  const now = new Date(Date.now() + 60_000);
+  const old = new Date(now.getTime() - 70 * 86_400_000).toISOString();
+  await t.sql`DELETE FROM signal_evidence WHERE profile_id=${profileId} AND signal_id=${signalIds[0]!}`;
+  for (const text of [originals[0]!, 'The first trial exposed a hidden save control.', 'The following trial lost a draft.']) {
+    const [source] = await t.sql`INSERT INTO inspirations(profile_id,text,created_at)
+      VALUES (${profileId},${text},${old}) RETURNING id`;
+    await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
+      VALUES (${profileId},${profileId},${signalIds[0]!},${source.id})`;
+  }
+  await t.sql`UPDATE signals SET status='active',last_evidence_at=${old} WHERE id=${signalIds[0]!}`;
+  const [copy] = await t.sql`INSERT INTO inspirations(profile_id,text,created_at)
+    VALUES (${profileId},${originals[0]!},${now.toISOString()}) RETURNING id`;
+  await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
+    VALUES (${profileId},${profileId},${signalIds[0]!},${copy.id})`;
+  await refresh('manual', now);
+  expect(synthesize).toHaveBeenCalledTimes(1);
+  const supplied = synthesize.mock.calls[0]![0].signals.find(signal => signal.id === signalIds[0]);
+  expect(supplied).toMatchObject({ evidenceCount:3, timeShape:'held for 2 months; last fed 2 months ago' });
+});
+
 it('publishes a reviewed meaningful change even when synthesis incorrectly says noChange', async () => {
   await refresh();
   const changed = 'You are exploring how predictable exits and discoverable controls let people save with less hesitation.';
