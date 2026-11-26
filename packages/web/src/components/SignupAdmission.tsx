@@ -29,7 +29,7 @@ export function NativePasswordSignup({locale,children}:{locale:SupportedLocale;c
  },[]);
  async function open(){
   if(opening.current)return;opening.current=true;setFailed(false);
-  try{const url=checkedNativeApiOrigin()+'/login?signup=1';await (await platformServices()).openBrowser(url);}
+  try{const url=checkedNativeApiOrigin() + '/login?' + new URLSearchParams({ signup: '1', preferredLocale: locale });await (await platformServices()).openBrowser(url);}
   catch{setFailed(true);}finally{opening.current=false;}
  }
  if(mode==='off')return <>{children}</>;

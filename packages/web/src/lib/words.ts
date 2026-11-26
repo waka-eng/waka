@@ -15,8 +15,7 @@
  * 2026-08-22). Every function takes the locale LAST, defaulting to English,
  * so a caller that has not learned about Korean yet still speaks — in the
  * default, never in a crash. Korean counts use the native numerals a person
- * says out loud (두 달, 사흘, 스무 날), which is this module's own law —
- * "counts are prose here, never digits" — kept in the other language.
+ * says out loud (두 달, 사흘). Dates use the familiar written form, e.g. 2026년 11월.
  */
 import { DAY_MS } from "./num";
 
@@ -37,7 +36,7 @@ export function agoWords(ms: number, T: number, locale: WordsLocale = "en-US"): 
     const NATIVE_DAYS = ["", "", "이틀", "사흘", "나흘", "닷새", "엿새"];
     if (days < 7) return `${NATIVE_DAYS[days]} 전`;
     if (days < 14) return "지난주";
-    if (days < 100) return `${koNativeCount(days)} 날 전`;
+    if (days < 100) return `${days}일 전`;
     const months = Math.round(days / 30);
     return months < 2 ? "몇 달 전" : `${koNativeCount(months)} 달 전`;
   }
@@ -51,35 +50,11 @@ export function agoWords(ms: number, T: number, locale: WordsLocale = "en-US"): 
   return months < 2 ? "A few months ago" : `${cap(numWords(months))} months ago`;
 }
 
-/**
- * THE MONTH SOMETHING IS DATED TO, SPOKEN — "June twenty twenty-six",
- * "이천이십육년 유월". Korean says the year first, because Korean does.
- *
- * TWO READERS NOW, AND THE SECOND ONE IS WHY THIS COMMENT GREW. The dial's
- * scrub label was the first. The second is the proof line under a principle
- * card — "Held since October twenty twenty-six, drawn from fourteen things
- * you kept" — which carried its OWN
- * `toLocaleDateString(locale, { month: "long", year: "numeric" })` and
- * therefore printed `October 2026` and `2026년 10월`: this module's year rule
- * broken in English and its "counts are prose here, never digits" law broken
- * in Korean, on the one surface in the product whose entire value is that a
- * stranger can read the line and believe it.
- *
- * A reader moving between the dial and the principles page saw one fact in
- * two registers, and no gate could see it because neither string ever enters
- * the catalogue. `test/one-date-vocabulary.test.tsx` can see it now.
- *
- * WHY THE YEAR IS ALWAYS HERE, unlike `dialMonth` one rung down. `dialMonth`
- * labels rows in a list, where a year on one row and not its neighbour is a
- * visible inconsistency, so it drops the year when it is this one. This
- * phrase is spoken alone, inside a sentence about how long something has been
- * true — and "held since October" is a sentence that quietly means a
- * different thing every January.
- */
+/** This label stands alone, so include the year even in January. */
 export function monthTag(ms: number, locale: WordsLocale = "en-US"): string {
   const d = new Date(ms);
   if (locale === "ko-KR") {
-    return `${koSinoNumber(d.getFullYear())}년 ${KO_MONTHS[d.getMonth()]}`;
+    return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
   }
   return `${d.toLocaleDateString("en-US", { month: "long" })} ${yearWords(d.getFullYear())}`;
 }
@@ -112,19 +87,9 @@ const ONES = [
   "seventeen", "eighteen", "nineteen",
 ];
 
-/* ─── Korean numerals ───
-   Two systems, used where a Korean speaker uses each. NATIVE (하나, 스물)
-   counts things — days, months, places; determiner forms (한, 두, 스무)
-   because these words always stand before a counter here. SINO (이천이십육)
-   reads years. Both spelled out: the numerals law does not change language. */
+/* Native Korean determiner forms for counts in prose. */
 const KO_NATIVE_ONES = ["", "한", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉"];
 const KO_NATIVE_TENS = ["", "열", "스물", "서른", "마흔", "쉰", "예순", "일흔", "여든", "아흔"];
-const KO_SINO_DIGITS = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
-const KO_MONTHS = [
-  "일월", "이월", "삼월", "사월", "오월", "유월",
-  "칠월", "팔월", "구월", "시월", "십일월", "십이월",
-];
-
 /** Native Korean count as a determiner — "두", "스무", "스물한". Digits past
     ninety-nine, same surrender as the English side. */
 export function koNativeCount(n: number): string {
@@ -135,21 +100,6 @@ export function koNativeCount(n: number): string {
   /* bare twenty is 스무 before a counter; compounds keep 스물 (스물한) */
   if (ones === 0) return tens === 2 ? "스무" : KO_NATIVE_TENS[tens];
   return `${KO_NATIVE_TENS[tens]}${KO_NATIVE_ONES[ones]}`;
-}
-
-/** Sino-Korean number, spelled — 2026 → "이천이십육". Years wear this. */
-export function koSinoNumber(n: number): string {
-  if (n <= 0 || n > 9999) return String(n);
-  const parts: string[] = [];
-  const units = ["", "십", "백", "천"];
-  const digits = String(n).split("").map(Number);
-  digits.forEach((d, i) => {
-    if (d === 0) return;
-    const unit = units[digits.length - 1 - i];
-    /* 일 is silent before a unit — 천구백, never 일천구백 */
-    parts.push((d === 1 && unit !== "" ? "" : KO_SINO_DIGITS[d]) + unit);
-  });
-  return parts.join("");
 }
 
 /**

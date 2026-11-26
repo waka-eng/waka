@@ -1,5 +1,6 @@
 import { Fragment, useEffect, type ReactNode } from "react";
 import { LegalLinks, legalPaths } from "../components/LegalLinks";
+import { readStoredLocale } from "../lib/locales";
 import terms from "./legal/terms-of-service.md?raw";
 import privacy from "./legal/privacy-policy.md?raw";
 
@@ -39,15 +40,15 @@ export default function LegalDocument({ document: kind }: { document: keyof type
   }, [title]);
 
   return (
-    <main className="waka-legal-page" lang="en">
+    <main className="waka-legal-page">
       <div className="waka-legal-column">
         <a href="/" className="waka-legal-home">WAKA</a>
-        <article aria-labelledby="legal-title">
+        <article lang="en" aria-labelledby="legal-title">
           <p className="waka-legal-status">Last updated <time dateTime="2026-11-18">November 18, 2026</time></p>
           <h1 id="legal-title">{title}</h1>
           {blocks.map((block, index) => <Fragment key={index}>{renderBlock(block)}</Fragment>)}
         </article>
-        <LegalLinks current={kind} />
+        <LegalLinks current={kind} locale={readStoredLocale()} />
       </div>
     </main>
   );

@@ -294,7 +294,7 @@ it("explains an agent’s empty memory in Korean without offering to write into 
     <PrinciplesOverlay locale="ko-KR" profileId={PROFILE} name="Bot" title="에이전트의 원칙" whose="agent"
       onClose={() => {}} onOpen={() => {}} onNewSave={add} onChat={() => {}} />,
   ));
-  expect(line()).toBe("에이전트의 첫 원칙은 에이전트가 남긴 것의 패턴에서 나와요.");
+  expect(line()).toBe("에이전트가 남긴 메모에서 반복되는 선택을 찾으면 첫 원칙이 생겨요.");
   expect(host.querySelector(".waka-ground-how"), "the explaining line came back").toBeNull();
   expect(host.querySelector(".waka-ground-example")).toBeNull();
   expect(host.querySelector(".waka-ground-bubble button")).toBeNull();
