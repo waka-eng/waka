@@ -64,7 +64,7 @@ it('keeps the current wording when a purported change is only a paraphrase', asy
   expect((await stored()).map(row => row.body)).toEqual([fresh]);
 });
 
-it.each(['independent', 'duplicate', 'disputed', 'late_old_date'] as const)(
+it.each(['independent', 'duplicate', 'disputed', 'late_old_date', 'history_100', 'repeated_from_history', 'long_new'] as const)(
   'selects the lead from current new evidence (%s), preserving unchanged pinned wording',
   async mode => {
     const first = await refresh();
@@ -96,12 +96,22 @@ it.each(['independent', 'duplicate', 'disputed', 'late_old_date'] as const)(
       return signal.id as string;
     }
 
+    const history: Array<[string, number]> = [['An earlier walk-through revealed a hidden close button.', -120]];
+    const firstReturn = 'We added an obvious exit in the save flow.';
+    if (mode === 'history_100' || mode === 'repeated_from_history') {
+      for (let i = 0; i < 100; i++) {
+        history.push([mode === 'repeated_from_history' && i === 41 ? firstReturn : `Trial ${i} had a separate observation about getting back.`, -300 - i]);
+      }
+    }
+    const sharedPrefix = mode === 'long_new' ? 'One detailed trial observation. '.repeat(50) : '';
     const growth = await addSignal('Interest in predictable exits', [
+      ...history,
       ['Last week a known exit helped the onboarding trial.', -100],
-      ['We added an obvious exit in the save flow.', mode === 'late_old_date' ? -1 : 5],
-      [mode === 'duplicate' ? 'WE added an obvious exit in the save flow!' : 'On the next trial I restored the Back control.', 10],
+      [sharedPrefix + firstReturn, mode === 'late_old_date' ? -1 : 5],
+      [sharedPrefix + (mode === 'duplicate' ? 'WE added an obvious exit in the save flow!' : 'On the next trial I restored the Back control.'), 10],
     ]);
     const incidental = await addSignal('Interest in shorthand', [
+      ...history.map(([_, time], i): [string, number] => [`Old shorthand example ${i}.`, time]),
       ['I once tried a shorter title in a prototype.', -100],
       ['The copy editor used a short heading in the sandbox.', -60],
       ['I noticed a much newer label in the save flow.', 20],
@@ -114,7 +124,7 @@ it.each(['independent', 'duplicate', 'disputed', 'late_old_date'] as const)(
     synthesize.mockClear();
     const result = await refresh('manual', at(60));
     expect((synthesize.mock.calls[0]![0].signals).slice(0, 2).map(row => row.id)).toEqual(
-      mode === 'independent' ? [growth, incidental] : [incidental, growth],
+      ['independent', 'history_100', 'long_new'].includes(mode) ? [growth, incidental] : [incidental, growth],
     );
     expect(result.reason).toBe('no_change');
     expect(synthesize).toHaveBeenCalledTimes(1);

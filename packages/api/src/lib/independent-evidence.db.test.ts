@@ -19,7 +19,7 @@ async function seed(count:number){
   const createdAt=new Date(Date.now()-86400000).toISOString();
   const ids:string[]=[];
   for(let i=0;i<count;i++){
-    const [source]=await t.sql`INSERT INTO inspirations(profile_id,text,created_at) VALUES (${profile.id},'A synthetic original observation',${createdAt}) RETURNING id`;ids.push(source.id);
+    const [source]=await t.sql`INSERT INTO inspirations(profile_id,text,created_at) VALUES (${profile.id},${`A synthetic original observation from occasion ${i+1}`},${createdAt}) RETURNING id`;ids.push(source.id);
     if(i===0){
       await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,enrichment_status,enrichment_kind,enrichment_text)
         VALUES (${profile.id},${source.id},'audio','https://example.test/synthetic','ready','audio_transcription','The same observation in a transcript')`;

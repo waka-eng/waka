@@ -16,7 +16,7 @@ async function personWith(statuses: Array<"active" | "emerging">) {
     const [s] = await t.sql`INSERT INTO signals(profile_id,statement) VALUES (${p.id},${`Pattern ${n}`}) RETURNING id`;
     if (status !== "active") continue;
     for (let i = 0; i < 3; i++) {
-      const [ins] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${p.id},'raw') RETURNING id`;
+      const [ins] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${p.id},${`Original observation ${n+1} from occasion ${i+1}`}) RETURNING id`;
       await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
         VALUES (${p.id},${p.id},${s.id},${ins.id})`;
     }

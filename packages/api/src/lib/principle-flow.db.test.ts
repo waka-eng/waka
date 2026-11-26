@@ -47,7 +47,7 @@ async function material(profileId: string, owners: string[]) {
     for (let i = 0; i < 3; i++) {
       const author = owners[i % owners.length]!;
       const [inspirationRow] = await t.sql`INSERT INTO inspirations(profile_id,text,visibility)
-        VALUES (${author},'PRIVATE RAW TEXT MUST NEVER LEAVE','public') RETURNING id`;
+        VALUES (${author},${`PRIVATE RAW TEXT MUST NEVER LEAVE: ${n}/${i}`},'public') RETURNING id`;
       await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
         VALUES (${profileId},${author},${s.id},${inspirationRow.id})`;
     }
