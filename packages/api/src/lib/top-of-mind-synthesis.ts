@@ -66,8 +66,7 @@ import {
 } from "./model-provider.js";
 import { acquireTopOfMindArtifactLock } from "./top-of-mind-family-lock.js";
 import { effectiveAttachmentText, effectiveAttachmentStatus } from './attachment-material.js';
-import { distinctReadingOrigins, readingSourceFingerprint, readingQualityIssue, reviewReadingEntries, type TopOfMindQualityContext } from './top-of-mind-quality.js';
-import { loadOwnedReadingOriginals, READING_ORIGINAL_LIMIT } from './reading-originals.js';
+import { distinctReadingOrigins, readingQualityIssue, reviewReadingEntries, type TopOfMindQualityContext } from './top-of-mind-quality.js';
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -441,6 +440,7 @@ async function selectSignals(
         statement: row.statement,
         status: row.status,
         confidence,
+        evidenceAt,
         evidenceCount: evidenceAt.length,
         lastEvidenceAt: row.lastEvidenceAt,
         score: computeSelectionScore({
@@ -496,10 +496,7 @@ async function selectSignals(
       evidenceCount: s.evidenceCount,
       lastEvidenceAt: s.lastEvidenceAt,
       score: s.score,
-      timeShape: describeTimeShape(
-        (evidenceBySignal.get(s.id) ?? []).map((item) => item.createdAt),
-        now,
-      ),
+      timeShape: describeTimeShape(s.evidenceAt, now),
       ...(contestedWithIds.length > 0 ? { contestedWithIds } : {}),
     };
   };
@@ -515,7 +512,7 @@ async function selectSignals(
   if (readingBoundary && focus.length > 0) {
     const candidates = recentFocus.slice(0, TOP_OF_MIND_SIGNAL_LIMIT)
       .filter(row => latestVerdict.get(row.id) !== 'not_true' && !opposing.has(row.id));
-    const growing = await growingRecentSignal(db, profileId, candidates, evidenceBySignal, readingBoundary, now);
+    const growing = candidates.find(candidate => hasNewIndependentSaves(evidenceBySignal.get(candidate.id) ?? [], readingBoundary, now));
     if (growing) focus = [growing, ...focus.filter(row => row.id !== growing.id)].slice(0, focusLimit);
   }
   const chosen = chooseSelection(
@@ -540,51 +537,26 @@ async function selectSignals(
 /** Prefer at most one growing signal within the existing focus budget.
  * Review replies remain useful evidence in the ordinary score. Their linked
  * origins can rule out duplicate saves but cannot make an old capture new. */
-async function growingRecentSignal<T extends { id: string }>(
-  db: WakaTx,
-  profileId: string,
-  recent: T[],
-  evidence: ReadonlyMap<string, ConfidenceEvidence[]>,
-  boundary: Date,
-  now: Date,
-): Promise<T | undefined> {
-  const candidates = [];
-  const ids = new Set<string>();
-  const isNew = (at: Date) => at > boundary && at <= now;
-  for (const signal of recent) {
-    const origins = new Set<string>();
-    const newDirect = new Set<string>();
-    for (const { lineage, createdAt } of evidence.get(signal.id) ?? []) {
-      for (const id of lineage?.originIds ?? []) origins.add(id);
-      if (origins.size > TOP_OF_MIND_SIGNAL_LIMIT) break;
-      if (lineage?.kind === 'inspiration' && isNew(createdAt)) newDirect.add(lineage.unitId);
-    }
-    if (origins.size > TOP_OF_MIND_SIGNAL_LIMIT || newDirect.size < 2
-      || new Set([...ids, ...origins]).size > READING_ORIGINAL_LIMIT) continue;
-    for (const id of origins) ids.add(id);
-    candidates.push({ signal, origins: [...origins], newDirect });
-  }
-  if (!candidates.length) return undefined;
-
-  const originals = new Map((await loadOwnedReadingOriginals(db, profileId, [...ids], true)).map(row => [row.id, row]));
-  for (const { signal, origins, newDirect } of candidates) {
-    if (origins.some(id => !originals.get(id)?.complete)) continue;
-    const seen = new Set<string>();
-    let newIndependent = 0;
-    const ordered = origins.map(id => originals.get(id)!)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
-    for (const row of ordered) {
-      const exact = readingSourceFingerprint([row.text, ...row.reflections, ...row.media]);
-      if (!exact) continue;
-      // Shared capture or ready attachment text can reveal the same article
-      // even when an extra reflection changes the full fingerprint.
-      const fingerprints = [exact, ...[row.text, ...row.media].flatMap(text => readingSourceFingerprint([text]) ?? [])];
-      const repeated = fingerprints.some(value => seen.has(value));
-      for (const value of fingerprints) seen.add(value);
-      if (!repeated && newDirect.has(row.id)) newIndependent++;
-      if (newIndependent === 2) return signal;
+function hasNewIndependentSaves(evidence: readonly ConfidenceEvidence[], boundary: Date, now: Date): boolean {
+  type Origin = { id: string; at: number; keys: string[] };
+  const firstByKey = new Map<string, Origin>();
+  const recentDirect = new Map<string, Origin>();
+  for (const { lineage, material } of evidence) {
+    if (!lineage || !material || !material.growthKeys.length || material.originAt > now) continue;
+    for (const id of lineage.originIds) {
+      const origin = { id, at: material.originAt.getTime(), keys: material.growthKeys };
+      for (const key of origin.keys) {
+        const first = firstByKey.get(key);
+        if (!first || origin.at < first.at || (origin.at === first.at && id < first.id)) firstByKey.set(key, origin);
+      }
+      if (lineage.kind === 'inspiration' && material.originAt > boundary) recentDirect.set(id, origin);
     }
   }
+  let growth = 0;
+  for (const origin of recentDirect.values()) {
+    if (origin.keys.every(key => firstByKey.get(key)?.id === origin.id) && ++growth === 2) return true;
+  }
+  return false;
 }
 
 /** Batch the current original material for selected and carried citations.

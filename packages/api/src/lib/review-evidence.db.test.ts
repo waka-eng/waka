@@ -48,6 +48,63 @@ async function support(f:Fixture,answerId:string){
 async function raw(f:Fixture,id:string){await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id,statement_revision,material_revision)
   SELECT ${f.profileId},${f.profileId},s.id,${id},s.statement_revision,v.personal_revision FROM signals s,inspiration_revisions v WHERE s.id=${f.signalId} AND v.inspiration_id=${id}`;}
 async function count(f:Fixture){return selectIndependentEvidence((await loadSignalEvidence(t.db as never,f.profileId,[f.signalId])).witnesses.get(f.signalId)??[]).length;}
+it('gives copies one independent witness while preserving every owned citation', async () => {
+  const f = await fixture(5);
+  const words = ['Ｒｅｔｕｒｎ to the draft.', 'return to THE draft!', 'Return to the draft',
+    'I returned to the budget draft on Friday.', 'I revisited the demo outline after the interview.'];
+  for (const [i, id] of f.ids.entries()) await t.sql`UPDATE inspirations SET text=${words[i]!} WHERE id=${id}`;
+  for (const id of f.ids.slice(0, 3)) await raw(f, id);
+  const detail = () => getProfileSignal(t.db as never, {profileId:f.profileId, signalId:f.signalId});
+  expect(await count(f)).toBe(1);
+  expect((await detail())?.evidence).toHaveLength(3);
+  await expect(t.sql`UPDATE signals SET status='active' WHERE id=${f.signalId}`).rejects.toThrow(/with 1 evidence/);
+  await support(f, await answer(f, [f.ids[2]!]));
+  expect(await count(f)).toBe(1);
+  await raw(f, f.ids[3]!);
+  expect(await count(f)).toBe(2);
+  await raw(f, f.ids[4]!);
+  expect(await count(f)).toBe(3);
+  expect(await t.db.transaction(tx => refreshSignalLifecycle(tx as never, f.signalId, new Date()))).toBe(true);
+  expect(await detail()).toMatchObject({status:'active', evidenceCount:3});
+  expect((await detail())?.evidence).toHaveLength(5);
+  const exported = await assembleProfileExport(t.db as never, f.profileId);
+  expect(exported.inspirations).toHaveLength(5);
+  for (const original of exported.inspirations) expect(original).not.toHaveProperty('evidenceTextHash');
+});
+
+it('resolves only owned material, including effective media on otherwise empty saves', async () => {
+  const f = await fixture(), other = await fixture();
+  const [a,b,c] = f.ids;
+  await t.sql`UPDATE inspirations SET text='' WHERE profile_id=${f.profileId}`;
+  expect(await t.sql`SELECT * FROM inspiration_evidence_material(${f.profileId},${a!})`).toHaveLength(0);
+  for (const id of [a,b]) {
+    await t.sql`INSERT INTO attachments (profile_id,inspiration_id,type,url,enrichment_status,enrichment_text)
+      VALUES (${f.profileId},${id!},'link','https://example.test/first','ready','A detailed original.')`;
+    await raw(f, id!);
+  }
+  expect(await count(f)).toBe(1);
+  await t.sql`INSERT INTO attachments (profile_id,inspiration_id,type,url,enrichment_status,enrichment_text)
+    VALUES (${f.profileId},${c!},'audio','local-fixture','ready','A different original.')`;
+  await raw(f, c!);
+  expect(await count(f)).toBe(2);
+  expect(await t.sql`SELECT * FROM inspiration_evidence_material(${other.profileId},${a!})`).toHaveLength(0);
+  const [keys] = await t.sql`SELECT evidence_text_hash('한 글!')=evidence_text_hash('한글') AS korean,
+    evidence_text_hash(E' \t') IS NULL AS blank, evidence_text_hash('🐈')<>evidence_text_hash('🐕') AS symbols`;
+  expect(keys).toEqual({korean:true,blank:true,symbols:true});
+});
+
+it('counts corrected image wording with the current scene and discards superseded OCR', async () => {
+  const f = await fixture();
+  const scenes = ['Words: outdated. Image: a kitchen', 'Words: old label. Image: a kitchen', 'Words: old label. Image: a workshop'];
+  for (const [i,id] of f.ids.entries()) {
+    await t.sql`UPDATE inspirations SET text='' WHERE id=${id}`;
+    await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,enrichment_status,enrichment_text,transcript_correction)
+      VALUES (${f.profileId},${id},'image','synthetic-key','ready',${scenes[i]!},'Today')`;
+    await raw(f,id);
+  }
+  expect(await count(f)).toBe(2);
+});
+
 it('counts many references and replies once and exposes their current human words only to the owner',async()=>{
   const f=await fixture(),first=await answer(f),second=await answer(f);await support(f,first);await support(f,second);
   expect(await count(f)).toBe(1);await t.db.transaction(tx=>refreshSignalLifecycle(tx as never,f.signalId,new Date()));

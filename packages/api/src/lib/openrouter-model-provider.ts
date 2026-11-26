@@ -191,7 +191,7 @@ export function createOpenRouterModelProvider(): ModelProvider {
         "WAKA_MODEL_JUDGE",
         "signal_match",
       );
-      return parseSignalMatchJudgement(payload);
+      return parseSignalMatchJudgement(payload, input.alternativeStatement !== undefined);
     },
     async assessSignalSupport(input) {
       const payload = await ask(
