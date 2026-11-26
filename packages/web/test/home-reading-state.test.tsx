@@ -44,7 +44,7 @@ const settled=()=>world!.container.querySelector('.jar-char-bubble-reading');
 const poster=()=>world!.container.querySelector('h1.jar-poster[data-jar-chrome="1"]');
 const retry=()=>[...world!.container.querySelectorAll<HTMLButtonElement>('.jar-hq-inner--activities .jar-forming button')].find(row=>row.textContent==='Try again')!;
 const expectLoading=()=>{
-  expect(forming()?.textContent).toContain('Thinking…');
+  expect(forming()?.textContent).toContain('Loading your reading…');
   expect(forming()?.getAttribute('role')).toBe('status');
   expect(world!.container.textContent).not.toContain('Nothing to say yet. Save a few more things.');
   expect(world!.container.textContent).not.toContain('Capture your first inspiration');
@@ -54,7 +54,7 @@ it('keeps Home usable while a delayed reading loads, without claiming it is empt
   world=await mountWorld(facts);expectLoading();expect(reads.requests).toHaveLength(1);expect(reads.requests[0]!.profile).toBe(VIEWER_ID);
   await act(async()=>reads.requests[0]!.resolve(board()));await world.step(2);
   expect(poster()?.textContent).toContain('Leave room for a small experiment.');
-  expect(world.container.textContent).not.toContain('Thinking…');expect(refreshTopOfMind).not.toHaveBeenCalled();
+  expect(world.container.textContent).not.toContain('Loading your reading…');expect(refreshTopOfMind).not.toHaveBeenCalled();
 });
 it('shows the real empty state only after the owned response confirms no reading',async()=>{
   world=await mountWorld(facts);expectLoading();await act(async()=>reads.requests[0]!.resolve(null));
@@ -70,13 +70,13 @@ it('shows the real empty state only after the owned response confirms no reading
      sixty pixels apart, with the bubble overlapping the words, is exactly
      what the founder reported. */
   expect(forming()).toBeNull();
-  expect(world.container.textContent).not.toContain('Thinking…');expect(refreshTopOfMind).not.toHaveBeenCalled();
+  expect(world.container.textContent).not.toContain('Loading your reading…');expect(refreshTopOfMind).not.toHaveBeenCalled();
 });
 it('does not tell someone to capture their first inspiration until both reads confirm the empty state',async()=>{
   facts.inspirations=[];world=await mountWorld(facts);expectLoading();
   await act(async()=>reads.requests[0]!.resolve(null));
   expect(settled()?.textContent).toContain('Nothing saved yet.');
-  expect(world.container.textContent).not.toContain('Thinking…');
+  expect(world.container.textContent).not.toContain('Loading your reading…');
 });
 it('shows a read failure, preserves a Capture draft, and coalesces explicit read-only retries',async()=>{
   world=await mountWorld(facts);

@@ -39,10 +39,25 @@ export function readStoredLocale(): SupportedLocale {
     // Ignore storage failures in privacy-mode browsers and tests.
   }
 
-  return normalizeSupportedLocale(window.navigator.language);
+  const languages = window.navigator?.languages ?? [];
+  for (const tag of [...languages, window.navigator?.language]) {
+    const primary = tag?.split("-")[0]?.toLowerCase();
+    if (primary === "ko") return "ko-KR";
+    if (primary === "en") return "en-US";
+  }
+  return DEFAULT_LOCALE;
+}
+
+export function applyDocumentLocale(locale: SupportedLocale): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.lang = locale;
+  const manifest = document.head?.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+  const href = locale === "ko-KR" ? "/manifest.ko.webmanifest" : "/manifest.webmanifest";
+  if (manifest && manifest.getAttribute("href") !== href) manifest.setAttribute("href", href);
 }
 
 export function writeStoredLocale(locale: SupportedLocale): void {
+  applyDocumentLocale(locale);
   if (typeof window === "undefined") return;
   try {
     window.localStorage?.setItem?.(LOCALE_STORAGE_KEY, locale);

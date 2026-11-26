@@ -34,7 +34,10 @@ it('browser dismissal invalidates a pending attempt without changing a prior acc
   fixture.dismissal!(); expect(await hasNativeGoogleSignIn()).toBe(false); expect(await nativeSession.read()).toBe(token);
 });
 it('valid URL delivery prevents browser-close from cancelling the in-flight exchange', async () => {
-  await startNativeGoogleSignIn('/inspirations/owned-id');
+  await startNativeGoogleSignIn('/inspirations/owned-id', 'ko-KR');
+  const start = new URL(fixture.browser.mock.calls[0]![0]);
+  expect(start.searchParams.get('preferredLocale')).toBe('ko-KR');
+  expect(start.pathname).toBe('/api/auth/mobile/google');
   const raw = callback(); noteNativeAuthorizationCallback(raw); fixture.dismissal!();
   vi.stubGlobal('fetch', vi.fn(async () => response()));
   expect(await completeNativeGoogleSignIn(raw)).toBe('/inspirations/owned-id');

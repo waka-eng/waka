@@ -83,7 +83,7 @@ import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom"
 
 import { ApiError, fetchPublicProfile, type FetchPublicProfileResponse } from "../lib/api";
 import { useOptionalAuth } from "../lib/auth-context";
-import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
+import { formatMessage, normalizeSupportedLocale, readStoredLocale, t } from "../lib/locales";
 
 export default function PublicProfilePage(): JSX.Element {
   const { handle = "" } = useParams();
@@ -152,7 +152,7 @@ export default function PublicProfilePage(): JSX.Element {
     return <Navigate to="/" replace />;
   }
 
-  const locale = normalizeSupportedLocale(data?.profile.preferredLocale);
+  const locale = auth?.profile?.preferredLocale ?? readStoredLocale();
   /*
     The page shows the artifact's statements and only those. Entry ids and the
     signals behind them are the owner's, not the visitor's, so the public
@@ -259,7 +259,7 @@ export default function PublicProfilePage(): JSX.Element {
                  not merely present — fading never deletes. */
               style={{ "--waka-said-weight": Math.max(0.55, 1 - index * 0.1).toFixed(2) } as React.CSSProperties}
             >
-              <p className="waka-public-body">{entry.body}</p>
+              <p className="waka-public-body" lang={normalizeSupportedLocale(data.profile.preferredLocale)}>{entry.body}</p>
               {entry.supportChanged ? (
                 /* The product's own sentence for this state, not a second one
                    written for this page. It is the same fact — these words

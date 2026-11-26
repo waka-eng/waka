@@ -411,8 +411,8 @@ it('admits distinct Korean origins, and withholds indistinguishable clipped exce
 
 it('keeps ordinary prompt bytes and limits only the first-mode parser',()=>{
   expect(createHash('sha256').update(PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION).digest('hex')).toBe('6d9168fea0ccee010278a0f74842015bea0fac32d7d619b1eabb49633d235309');
-  expect(principleDistillInstruction({firstPrinciple:true})).toContain('A Top of Mind reading is not required');
-  expect(principleDistillInstruction({firstPrinciple:true,ordinaryAvailable:true})).toContain('Prefer an ordinary candidate');
+  expect(principleDistillInstruction({preferredLocale:"en-US",firstPrinciple:true})).toContain('A Top of Mind reading is not required');
+  expect(principleDistillInstruction({preferredLocale:"en-US",firstPrinciple:true,ordinaryAvailable:true})).toContain('Prefer an ordinary candidate');
   const ordinary=candidate(['a','b','c']),pair=candidate(['a','b']);
   expect(parseDistilledPrinciples({candidates:[ordinary,pair,pair]},{firstPrinciple:true}).candidates).toEqual([pair]);
   expect(parseDistilledPrinciples({candidates:[ordinary,pair]},{firstPrinciple:true,ordinaryAvailable:true}).candidates).toEqual([ordinary,pair]);

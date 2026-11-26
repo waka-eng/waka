@@ -36,8 +36,8 @@ export function MobileShell() {
                   await refreshAuth.current();
                   if (!stopped) navigation.current(destination);
                 } catch (error) {
-                  await google.cancelNativeGoogleSignIn();
-                  const reason = error instanceof AuthorizationCancelled && error.reason === 'cancelled' ? 'oauth_denied' : 'token_exchange_failed';
+                  await google.cancelNativeGoogleSignIn().catch(() => {});
+                  const reason = error instanceof AuthorizationCancelled && error.reason === 'cancelled' ? 'oauth_denied' : 'native_sign_in_failed';
                   if (!stopped) navigation.current(`/login?error=${reason}`);
                 }
               } else if (mobileDiagnosticsEnabled && link.searchParams.get('code') === 'synthetic_authorization_code') {
@@ -45,6 +45,8 @@ export function MobileShell() {
               } else if (!stopped) {
                 navigation.current('/login?error=state_expired');
               }
+            }).catch(() => {
+              if (!stopped) navigation.current('/login?error=native_sign_in_failed');
             });
             return;
           }

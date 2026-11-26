@@ -150,7 +150,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
         <PasswordChangeForm locale={props.locale} />
       </Group>
 
-      {open === null ? <LegalLinks /> : null}
+      {open === null ? <LegalLinks locale={props.locale} /> : null}
 
       {open === null ? <button type="button" className="waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
         {say("worldSignOutLower")}

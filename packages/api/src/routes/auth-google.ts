@@ -49,6 +49,7 @@ import {
   wantsSecureCookie,
 } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
+import { isSupportedLocale, type SupportedLocale } from "../lib/locales.js";
 import { databaseSqlState } from "../lib/error-diagnostics.js";
 import { createSessionRow, describeUserAgent } from "../lib/session.js";
 import { MOBILE_BINDING_COOKIE, readMobileBinding, issueMobileCode, mobileCallback } from '../lib/mobile-handoff.js';
@@ -93,6 +94,7 @@ const PKCE_COOKIE_NAME = "waka_oauth_pkce";
 
 /** Safe in-app destination preserved across the cross-origin OAuth round-trip. */
 const RETURN_TO_COOKIE_NAME = "waka_oauth_return_to";
+const LOCALE_COOKIE_NAME = "waka_oauth_locale";
 
 /**
  * Where the post-callback cookie is delivered to before we redirect the
@@ -319,12 +321,20 @@ googleAuthRoutes.get("/login", async (c) => {
     if (!await readMobileBinding(getCookie(c, MOBILE_BINDING_COOKIE))) return c.json({ error: 'Sign-in expired. Please try again.' }, 400);
   } else deleteCookie(c, MOBILE_BINDING_COOKIE, { path: '/' });
   const state = randomToken(32);
+  const locale = c.req.query("preferredLocale");
   const codeVerifier = randomToken(32);
   const codeChallenge = await sha256Base64Url(codeVerifier);
   await bindGoogleSignup(c,()=>getDb(),state,codeVerifier);
 
   setCookie(c, STATE_COOKIE_NAME, state, tempCookieOptions());
   setCookie(c, PKCE_COOKIE_NAME, codeVerifier, tempCookieOptions());
+  // Bind the short-lived preference to this round trip without changing the
+  // state format shared with the signup admission grant.
+  if (isSupportedLocale(locale)) {
+    setCookie(c, LOCALE_COOKIE_NAME, `${state}.${locale}`, tempCookieOptions());
+  } else {
+    deleteCookie(c, LOCALE_COOKIE_NAME, { path: "/" });
+  }
   setCookie(
     c,
     RETURN_TO_COOKIE_NAME,
@@ -384,17 +394,23 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
   const mobileCookie = getCookie(c, MOBILE_BINDING_COOKIE);
   const mobileBinding = await readMobileBinding(mobileCookie);
 
+  let preferredLocale: SupportedLocale | undefined;
+
   function failTo(reason: string): Response {
     const continueMobile=!!mobileBinding&&reason.startsWith("signup_");
     // Best-effort cleanup so a stale state cookie doesn't poison a retry.
     deleteCookie(c, STATE_COOKIE_NAME, { path: "/" });
     deleteCookie(c, PKCE_COOKIE_NAME, { path: "/" });
     deleteCookie(c, RETURN_TO_COOKIE_NAME, { path: "/" });
+    deleteCookie(c, LOCALE_COOKIE_NAME, { path: "/" });
     if(!continueMobile)deleteCookie(c, MOBILE_BINDING_COOKIE, { path: '/' });
     if (mobileBinding&&!continueMobile) return c.redirect(mobileCallback(mobileBinding, { error: reason === 'oauth_denied' ? 'cancelled' : 'failed' }), 302);
     const target = new URL("/login", webOrigin);
     target.searchParams.set("error", reason);
-    if(continueMobile)target.searchParams.set("mobile","1");
+    if (continueMobile) {
+      target.searchParams.set("mobile", "1");
+      if (preferredLocale) target.searchParams.set("preferredLocale", preferredLocale);
+    }
     if (returnTo !== POST_LOGIN_PATH) target.searchParams.set("returnTo", returnTo);
     return c.redirect(target.toString(), 302);
   }
@@ -420,6 +436,8 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
   if (stateCookie !== stateFromUrl) {
     return failTo("state_mismatch");
   }
+  const [localeState, locale] = (getCookie(c, LOCALE_COOKIE_NAME) ?? "").split(".");
+  if (localeState === stateCookie && isSupportedLocale(locale)) preferredLocale = locale;
 
   // -------------------------------------------------------------------------
   // Exchange the authorization code for tokens.
@@ -642,7 +660,7 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
             .returning({ id: accounts.id, email: accounts.email });
 
           const profile = await insertHumanProfile(tx,{
-            accountId:account!.id,name:claims.name??"",avatarUrl:claims.picture??null,
+            accountId:account!.id,name:claims.name??"",avatarUrl:claims.picture??null,preferredLocale,
           });
 
           return {
@@ -690,6 +708,7 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
     deleteCookie(c, STATE_COOKIE_NAME, { path: '/' });
     deleteCookie(c, PKCE_COOKIE_NAME, { path: '/' });
     deleteCookie(c, RETURN_TO_COOKIE_NAME, { path: '/' });
+    deleteCookie(c, LOCALE_COOKIE_NAME, { path: '/' });
     deleteCookie(c, MOBILE_BINDING_COOKIE, { path: '/' });
     return c.redirect(mobileCallback(mobileBinding, { code }), 302);
   }
@@ -714,6 +733,7 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
   deleteCookie(c, STATE_COOKIE_NAME, { path: "/" });
   deleteCookie(c, PKCE_COOKIE_NAME, { path: "/" });
   deleteCookie(c, RETURN_TO_COOKIE_NAME, { path: "/" });
+  deleteCookie(c, LOCALE_COOKIE_NAME, { path: "/" });
 
   // Reference getOAuthRedirectOrigin() so a future audit catches the case
   // where the API and SPA are deliberately co-hosted (single origin) — we

@@ -1,78 +1,5 @@
 // @vitest-environment jsdom
-/**
- * ═══ ONE DATE VOCABULARY, AND NOBODY SPEAKING AROUND IT ═════════════════════
- *
- * `lib/words.ts` exists so that a fact becomes a phrase in exactly one place.
- * Its header states the law it was written to keep: *"This world says 'four
- * days ago' and 'you and your agent', never '4d' or '2 members' … Korean
- * counts use the native numerals a person says out loud (두 달, 사흘, 스무 날),
- * which is this module's own law — 'counts are prose here, never digits' —
- * kept in the other language."*
- *
- * NINE COMPONENTS WENT AROUND IT, each with its own `Intl` option bag, and two
- * of them printed the same fact the module prints, differently, in both
- * languages. Measured on 2026-10-11 against `ms = Date.UTC(2026, 9, 11, 14, 5)`:
- *
- *   | the fact                      | `lib/words.ts`              | the copy        |
- *   | month a thing is dated to, en | `October twenty twenty-six` | `October 2026`  |
- *   | the same, ko                  | `이천이십육년 시월`         | `2026년 10월`   |
- *   | a short date, en              | `Oct 11, 2026` (`dateStamp`)| `Oct 11`        |
- *   | a medium date, ko             | `2026년 10월 11일`          | `2026. 10. 11.` |
- *   | a bare clock, both            | `timeOf`                    | identical TODAY |
- *
- * The English broke the module's year rule. The Korean broke its own stated
- * law, on the proof line under a principle card — the one surface whose entire
- * value is that a stranger can read it and believe it.
- *
- * ── WHY THIS FILE EXISTS, WHICH IS THE WHOLE POINT ─────────────────────────
- *
- * THIS IS THE SECOND TIME. `Home.tsx:4356-4360` records the first:
- *
- *   "THE WORDS ARE `words.ts`'S, NOT THIS FILE'S. It carried a
- *   `toLocaleDateString('en-US')` and its own year rule, which was correct
- *   while the product spoke one language and silently wrong the moment it
- *   spoke two — a Korean wall labelling its rows in English."
- *
- * It was found by reading, fixed by hand, and nothing was left behind that
- * could find the next one — so nine more arrived. Every existing gate is
- * structurally blind here: `i18n.test.ts` asks for catalogue parity and
- * `copy.test.ts` asks whether every catalogue key is rendered, and NONE of
- * these strings ever enters the catalogue. `korean-reaches-the-screen.test.tsx`
- * is the right shape — mount it in Korean and fail on a Latin word — and would
- * still pass `2026년 10월`, because the defect is digits rather than English.
- *
- * ── SO THERE ARE TWO GATES HERE, AND THEY CATCH DIFFERENT MISTAKES ─────────
- *
- * THE SOURCE SCAN is the cheap one and it bites first, at the moment somebody
- * types `toLocaleDateString` in a component. It is the shape
- * `type-scale.test.ts` uses for `text-transform: uppercase` — the closest
- * working precedent in the tree — including its comment-blanking, because
- * three of the files corrected here now QUOTE the call they used to make, and
- * a gate that reads its own documentation as evidence reports work nobody did.
- *
- * It is a BAN WITH ONE NAMED HOLDER rather than a ratchet, which is the
- * opposite choice from `type-scale.test.ts`, and the difference is the size of
- * the honest allowlist. That file had ninety-five legitimate sites and said so:
- * "an allowlist that large is not a gate — it is a list of things the gate has
- * agreed not to look at." Here the legitimate count is ONE, by construction:
- * the module is the vocabulary. Nothing needs forgiving, so nothing is.
- *
- * THE RENDER GATE is the expensive one and catches what the scan cannot: a
- * component that formats a date by hand out of `getMonth()` and a template
- * literal, or one that calls the WRONG words function. It mounts the
- * date-bearing surfaces in BOTH locales and asserts the exact phrase
- * `lib/words.ts` would say — so a surface drifts only by changing this file,
- * and changing this file is a decision somebody has to defend.
- *
- * It also refuses a BARE FOUR-DIGIT YEAR on a month label specifically,
- * because that is the defect that shipped: `October 2026` and `2026년 10월`.
- * Note what this does NOT refuse — digits in a DATE. `dateWords` argues that
- * case at length and the founder's law does not reach it: "A DATE IS READ, NOT
- * COUNTED … that law is about STATES — a count of members, a score, a tally …
- * A calendar date is none of those." `dateStamp` says `2026년 10월 11일` and
- * that is correct. A gate that banned `\d{4}` everywhere would be enforcing a
- * rule this product deliberately does not hold.
- *
+/** Shared formatting keeps month, date and clock labels consistent across surfaces.
  * WHAT THIS MOCKS, AND WHY (gate G6). Two network readers, at the seam where
  * rows enter the surface under test: `lib/api/principles` for the principle
  * cards and `lib/api/conversations` for the chat list. Nothing else — the real
@@ -92,7 +19,7 @@ import { ConversationsOverlay } from "../src/components/ConversationsOverlay";
 import { PrincipleEvidence } from "../src/components/PrincipleEvidence";
 import { PrinciplesOverlay } from "../src/components/PrinciplesOverlay";
 import { ReviewEvidence } from "../src/components/ReviewEvidence";
-import { dateWords, momentTag, monthTag, timeOf } from "../src/lib/words";
+import { agoWords, dateWords, momentTag, monthTag, timeOf } from "../src/lib/words";
 import { fetchPrinciples } from "../src/lib/api/principles";
 import { listConversations } from "../src/lib/api/conversations";
 
@@ -243,23 +170,18 @@ async function settle(): Promise<void> {
   for (let turn = 0; turn < 12; turn += 1) await act(async () => { await Promise.resolve(); });
 }
 
-/**
- * A FOUR-DIGIT YEAR STANDING BESIDE A MONTH, which is the exact shape that
- * shipped twice: `October 2026`, `2026년 10월`.
- *
- * It is deliberately narrow. A bare `\d{4}` would fire on `dateStamp`'s
- * `2026년 10월 11일` and on `Oct 11, 2026`, both of which are right — see this
- * file's header, and `dateWords`'s own argument that a date is read rather than
- * counted. What is forbidden is a year wearing a month and NO DAY, because that
- * is the register `monthTag` exists to speak and the only form it takes is
- * spelled out.
- */
-const MONTH_WITH_DIGIT_YEAR = [
-  /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/,
-  /\b\d{4}년\s*\d{1,2}월(?!\s*\d)/,
-];
+const ENGLISH_MONTH_WITH_DIGIT_YEAR =
+  /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/;
 
 describe("every surface that prints a date says it in the world's words", () => {
+  it("uses written Korean dates and everyday expressions for elapsed days", () => {
+    const now = new Date(2026, 10, 25, 12).getTime();
+    const day = 86_400_000;
+    expect(monthTag(now, "ko-KR")).toBe("2026년 11월");
+    expect(agoWords(now - 3 * day, now, "ko-KR")).toBe("사흘 전");
+    expect(agoWords(now - 21 * day, now, "ko-KR")).toBe("21일 전");
+  });
+
   it.each(["en-US", "ko-KR"] as const)("shows only the personal Principle statement in %s", async (locale) => {
     const open = vi.fn();
     await act(async () => root.render(
@@ -287,7 +209,7 @@ describe("every surface that prints a date says it in the world's words", () => 
          hand-build it a second time out of `Intl` and the two agreed by
          accident. */
       expect(said()).toContain(timeOf(HELD, locale));
-      for (const shape of MONTH_WITH_DIGIT_YEAR) expect(said()).not.toMatch(shape);
+      if (locale === "en-US") expect(said()).not.toMatch(ENGLISH_MONTH_WITH_DIGIT_YEAR);
     }
   });
 

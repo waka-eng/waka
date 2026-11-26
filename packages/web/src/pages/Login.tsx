@@ -58,7 +58,7 @@ import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSi
 import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { hasSignedInHere, useAuth } from "../lib/auth-context";
-import { formatMessage, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
+import { applyDocumentLocale, formatMessage, isSupportedLocale, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 import { resolveRedirect, safeInAppPath } from "../lib/sign-in-destination";
 import { writeOnboardingMarker } from "../lib/onboarding-progress";
@@ -254,12 +254,13 @@ function PasswordForm({
           // errors keep the legacy native form usable; policy/unknown paths
           // above still hold new attempts.
           if(!admissionOff){setAdmissionReady(false);setAdmissionRevision(v=>v+1);}
-          if (err.fieldErrors) {
-            setFieldErrors(err.fieldErrors as SignupFieldErrors);
-          }
-          if (!err.fieldErrors || err.status === 409) {
-            setFormError(err.message);
-          }
+          const fields: SignupFieldErrors = {};
+          if (err.fieldErrors?.email?.length) fields.email = [t(locale, "loginEmailCheck")];
+          if (err.fieldErrors?.password?.length) fields.password = [t(locale, "loginPasswordCheck")];
+          if (err.fieldErrors?.name?.length) fields.name = [t(locale, "loginNameTooLong")];
+          setFieldErrors(fields);
+          if (err.status === 409) setFormError(t(locale, "signupEmailTaken"));
+          else if (!Object.keys(fields).length) setFormError(t(locale, "signupInputInvalid"));
         }
       } else {
         setUncertain(true);setFormError(
@@ -401,11 +402,10 @@ interface LoginValues {
 
 const EMPTY_LOGIN: LoginValues = { email: "", password: "" };
 
-export function LoginForm(): JSX.Element {
+export function LoginForm({ locale = readStoredLocale() }: { locale?: SupportedLocale } = {}): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
-  const locale = readStoredLocale();
 
   const [values, setValues] = useState<LoginValues>(EMPTY_LOGIN);
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
@@ -481,13 +481,14 @@ export function LoginForm(): JSX.Element {
           setFormError(
             t(locale, "loginUnavailable"),
           );
+        } else if (err.status === 429) {
+          setFormError(t(locale, "profilePasswordWait"));
         } else {
-          if (err.fieldErrors) {
-            setFieldErrors(err.fieldErrors as LoginFieldErrors);
-          }
-          if (!err.fieldErrors) {
-            setFormError(err.message);
-          }
+          const fields: LoginFieldErrors = {};
+          if (err.fieldErrors?.email?.length) fields.email = [t(locale, "loginEmailCheck")];
+          if (err.fieldErrors?.password?.length) fields.password = [t(locale, "loginPasswordCheck")];
+          setFieldErrors(fields);
+          if (!Object.keys(fields).length) setFormError(t(locale, "loginFailed"));
         }
       } else {
         setFormError(
@@ -632,7 +633,13 @@ export default function LoginPage(): JSX.Element {
   const [mode, setMode] = useState<Mode>(()=>new URLSearchParams(location.search).get('signup')==='1'?'signup':'login');
   const loginTabRef = useRef<HTMLButtonElement>(null);
   const signupTabRef = useRef<HTMLButtonElement>(null);
-  const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
+  const [locale, setLocale] = useState<SupportedLocale>(() => {
+    const params = new URLSearchParams(location.search);
+    const hint = params.get("preferredLocale");
+    if ((params.get("mobile") === "1" || params.get("signup") === "1") && isSupportedLocale(hint)) return hint;
+    return readStoredLocale();
+  });
+  useEffect(() => applyDocumentLocale(locale), [locale]);
   const navigate = useNavigate();
   /* Why the door is standing here, when the reason is "we could not ask" —
      see `AuthContextValue.serverUnreachable`. It never decides access. */
@@ -648,34 +655,23 @@ export default function LoginPage(): JSX.Element {
    * State, not derived-from-search-params, so the banner persists across the
    * URL cleanup. `useState` initializer reads search params lazily on mount.
    */
-  // Read-only: the banner persists for this page lifetime, then disappears
-  // naturally on the next navigation (form sign-in, retried Google flow,
-  // or anchor click). No setter is needed because there is no in-page
-  // dismiss affordance — re-trying is the dismiss action.
-  const [oauthErrorCode] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    const params = new URLSearchParams(window.location.search);
-    return params.get("error");
-  });
+  const [oauthErrorCode, setOAuthErrorCode] = useState(() => new URLSearchParams(location.search).get("error"));
   const oauthErrorKey = oauthErrorMessageKey(oauthErrorCode);
   const oauthError = oauthErrorKey ? t(locale, oauthErrorKey) : null;
 
   useEffect(() => {
-    // Only clean up if we actually picked up an error param. Avoids a
-    // history.replaceState on every mount for normal /login visits.
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    if (!params.has("error")) return;
+    // Native deep links can deliver an error after the login page mounted.
+    const params = new URLSearchParams(location.search);
+    const error = params.get("error");
+    if (!error) return;
+    setOAuthErrorCode(error);
     params.delete("error");
     const search = params.toString();
     navigate(
       { pathname: location.pathname, search: search ? `?${search}` : "" },
       { replace: true, state: location.state },
     );
-    // We intentionally only run this once on mount — depending on
-    // navigate/location would create a feedback loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [location.pathname, location.search, location.state, navigate]);
 
   /* "Welcome back." only to a browser that has been signed in before; a
      first visit is greeted without the claim that it is a return. */
@@ -824,7 +820,7 @@ export default function LoginPage(): JSX.Element {
           }
         >
           {mode === "login" ? (
-            <LoginForm />
+            <LoginForm locale={locale} />
           ) : (
             <SignupForm
               locale={locale}
@@ -853,7 +849,7 @@ export default function LoginPage(): JSX.Element {
 
         <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} needsVerification={oauthErrorCode === "signup_verification_required" || oauthErrorCode === "signup_admission_used" || oauthErrorCode === "signup_busy" || oauthErrorCode === "signup_closed"} />
         {(!returning || mode === "signup") && <p className="field-hint">{t(locale, "loginGoogleDataUse")}</p>}
-        <LegalLinks />
+        <LegalLinks locale={locale} />
 
         {/* BACK TO WHAT THEY WERE READING — see `wayBackFrom` for why this is
             the only arrival this page can honestly offer a way out of, and

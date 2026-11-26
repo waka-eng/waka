@@ -1465,10 +1465,12 @@ First-Principle fallback:
 ${FIRST_PRINCIPLE_DISTILL_RULE}
 `.trim();
 
-export function principleDistillInstruction(input: Pick<DistillPrinciplesInput,'firstPrinciple'|'ordinaryAvailable'>) {
-  return input.firstPrinciple
+export function principleDistillInstruction(input: Pick<DistillPrinciplesInput, 'firstPrinciple' | 'ordinaryAvailable' | 'preferredLocale'>) {
+  const instruction = input.firstPrinciple
     ? input.ordinaryAvailable ? FIRST_OR_ORDINARY_PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION : FIRST_PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION
     : PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION;
+  if (input.preferredLocale !== 'ko-KR') return instruction;
+  return instruction + '\n원칙 문장은 스스로 메모장에 적어 둘 법한 자연스러운 한국어로 쓰세요. 주어가 분명하면 생략하고, 실제로 어떤 선택을 하는지 일상의 말로 표현하세요. 원문보다 강한 다짐이나 남에게 하는 충고로 바꾸지 마세요. 근거로 인용하는 구절은 번역하거나 다듬지 말고 원문 그대로 두세요.';
 }
 
 const firstPrincipleDirectEvidence = z.object({
