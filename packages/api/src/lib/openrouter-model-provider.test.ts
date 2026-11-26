@@ -352,3 +352,26 @@ describe("the judge over the second road", () => {
     })).rejects.toThrow(ModelDidNotAnswerError);
   });
 });
+
+it("sends both match targets in one closed OpenRouter request and retains the selected opposition", async () => {
+  const input = { preferredLocale: "en-US" as const, candidateStatement: "I skip outlines before writing.",
+    existingStatement: "I deliver a final proposal by Tuesday.", alternativeStatement: "I always write an outline first." };
+  fetchMock.mockResolvedValueOnce(chatReply('{"decision":"opposed_second"}'));
+  await expect(createOpenRouterModelProvider().judgeSignalMatch(input)).resolves.toEqual({ relation: "opposed", target: 2 });
+  expect(fetchMock).toHaveBeenCalledOnce();
+  const [url, init] = fetchMock.mock.calls[0]!;
+  expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
+  const wire = JSON.parse(String(init.body));
+  expect(wire.response_format).toEqual({ type: "json_schema", json_schema: { name: "signal_match",
+    schema: { type: "object", required: ["decision"], additionalProperties: false,
+      properties: { decision: { type: "string", enum: ["same_first", "same_second", "independent", "opposed_first", "opposed_second"] } } } } });
+  expect(wire.messages[1].content)
+    .toContain("<<<statement c>>>\n" + input.alternativeStatement + "\n<<<end statement c>>>");
+});
+
+it("does not accept a paired response with contradictory extra fields", async () => {
+  fetchMock.mockResolvedValueOnce(chatReply('{"decision":"opposed_second","relation":"same"}'));
+  await expect(createOpenRouterModelProvider().judgeSignalMatch({ preferredLocale: "en-US", candidateStatement: "A",
+    existingStatement: "B", alternativeStatement: "C" })).rejects.toThrow(ModelDidNotAnswerError);
+  expect(fetchMock).toHaveBeenCalledOnce();
+});

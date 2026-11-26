@@ -109,7 +109,7 @@ alone does not prove a model's semantic judgment correct.
 | 1 | Which earlier captures are worth showing alongside this one | Arithmetic | cosine over stored capture vectors — floor `RELATED_INSPIRATION_MIN_COSINE` (0.6), strongest `RELATED_INSPIRATION_CONTEXT_LIMIT` (5) of the `RELATED_INSPIRATION_SCAN_LIMIT` (500) most recent |
 | 2 | Is there a supported pattern or current interest here, and in what words | **Model** | 0 to `MAX_SIGNAL_CANDIDATES` (3) statements — zero is a sanctioned answer; its quote is kept only if it is a verbatim span of the capture |
 | 3 | Which earlier captures co-witness a statement | **Model proposes, code verifies** | at most `MAX_RELATED_INSPIRATION_CITATIONS` (2) per statement; only ids that were actually offered; each citation needs a verbatim quote from the cited capture's own text or it is dropped whole |
-| 4 | Same pattern as an existing signal, or a new one | Arithmetic — model tie-break inside one band | ≥ `SIGNAL_MATCH_MIN_COSINE` (0.86) attach as evidence · below `SIGNAL_MERGE_JUDGE_MIN_COSINE` (0.7) mint new · in between, one judge call where **uncertainty mints** |
+| 4 | Same pattern as an existing signal, or a new one | Cosine ranks targets for one meaning judgment | Identical closest wording can attach directly above the attach bar. Otherwise compare up to two eligible targets in one call. Attach to one confirmed match or mint separately. |
 | 5 | Does the pattern count as real | Arithmetic | `SIGNAL_PROMOTION_MIN_EVIDENCE` (3) evidence rows: `emerging` becomes `active` |
 | 6 | How strong is it right now | Arithmetic | the confidence formula below, computed fresh at every read, over evidence dated by capture time |
 | 7 | What happens when its evidence is deleted | Arithmetic | at zero evidence an unlocked signal retires; a human-edited one keeps its words, marked unsupported and excluded from synthesis |
@@ -289,14 +289,20 @@ as evidence for something else. No timer or recurring DB read is added.
 
 **Match-or-mint.** Each candidate is compared against the profile's existing
 signal vectors — the `MATCH_CANDIDATE_SCAN_LIMIT` (500) most recently
-evidenced — and the nearest neighbor's cosine decides. This is
-`classifyMatch` in `packages/api/src/lib/signal-derivation-thresholds.ts`,
-applied by `packages/api/src/lib/signal-match-or-mint.ts` **[checked]**:
+evidenced. Cosine ranks the two closest eligible targets, retaining scan order
+for ties. The nearest identical wording still uses the existing direct-attach
+shortcut. Changed wording gets one meaning judgment with both targets when
+available. The judge can attach to one target, mint independently, or name one
+opposed target when minting. Both targets' IDs and wording bind the verdict.
+Review answers still require a judgment for identical wording.
+
+The original cosine bands remain in
+`packages/api/src/lib/signal-derivation-thresholds.ts`:
 
 | Similarity to nearest existing signal | Decision |
 |---|---|
 | ≥ `SIGNAL_MATCH_MIN_COSINE` (0.86) | **Attach identical wording**; changed wording asks the judge before adding evidence |
-| ≥ `SIGNAL_MERGE_JUDGE_MIN_COSINE` (0.7), < 0.86 | **Ask the judge** — one bounded call for the nearest statement; same meaning attaches, independent or opposed meanings mint separately |
+| ≥ `SIGNAL_MERGE_JUDGE_MIN_COSINE` (0.7), < 0.86 | **Ask the judge** — one bounded call for up to two eligible statements; same meaning attaches, independent or opposed meanings mint separately |
 | < 0.7, or no comparable vector | **Mint** — a new signal is born `emerging` |
 
 The asymmetry is deliberate. A wrong merge fuses two patterns invisibly and
@@ -1858,9 +1864,11 @@ The limited-dev task record `embedding2.dev-candidates.v1` uses0.75 only as a
 candidate floor: chat scans500/validates24/returns6; recall scans500/returns8;
 related-capture context scans500/returns5 using its existing document vector.
 Model2 chat has no additional0.85/0.90 relative floor and no cosine diversity
-penalty. Match/suppression still inspect one nearest
-target each and require existing semantic judgments for nonidentical claims;
-ordinary extraction retains3 candidates, at most6 such judgments. Gardener reads
+penalty. Matching still selects at most one target, with up to two eligible
+statements offered in the same meaning judgment. The compiled match floor and
+other policy values are unchanged. Suppression still checks one nearest refused
+target. Ordinary extraction retains3 candidates and at most6 such judgments
+in its initial plan. Gardener reads
 300 signals and judges at most8 pairs; it does not automatically merge. Reading
 selection retains its12-signal/3-focus caps and bypasses cosine-only model2 pruning.
 Publishing this record alone dispatches no model calls or route activation.

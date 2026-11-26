@@ -652,10 +652,7 @@ export async function assessSignalSupport(input: SignalSupportAssessmentInput): 
  * sentences name the same durable pattern, and context invites it to decide
  * whether the pattern is *true*, which is not its call.
  */
-export const SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION = `
-You compare two statements from one person's memory system and name their
-relation. Exactly one of three answers:
-
+const SIGNAL_MATCH_RELATION_RULES = `
 same — they name the SAME pattern with equivalent certainty, time scope and
 context: a reader who held one would learn nothing new from the other. A
 rewording must preserve whether this is a trial, wish, preference or practice.
@@ -681,6 +678,35 @@ invisible afterwards; a duplicate stays visible and can be merged; a phantom
 opposition manufactures a dispute the person never had.
 `.trim();
 
+export const SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION = `
+You compare two statements from one person's memory system and name their
+relation. Exactly one of three answers:
+
+${SIGNAL_MATCH_RELATION_RULES}
+`.trim();
+
+const PAIRED_SIGNAL_MATCH_SYSTEM_INSTRUCTION = `
+Compare candidate statement A independently against targets B and C from one
+person's memory system. These are the possible relations for each comparison:
+
+${SIGNAL_MATCH_RELATION_RULES}
+
+Return one decision. If either target has the same meaning as A, choose that
+target and return same_first (B) or same_second (C). If both match, choose the
+closer meaning; if equally close choose B. Otherwise name a clearly opposed
+target by returning opposed_first (B) or opposed_second (C), preferring B if
+equally clear. Return independent if neither relation is established. Do not
+use related words or topics as proof of shared or contrary meaning.
+`.trim();
+
+const pairedSignalMatchResponseSchema: ResponseSchema = {
+  type: "OBJECT",
+  properties: {
+    decision: { type: "STRING", enum: ["same_first", "same_second", "independent", "opposed_first", "opposed_second"] },
+  },
+  required: ["decision"],
+};
+
 const signalMatchJudgementResponseSchema: ResponseSchema = {
   type: "OBJECT",
   properties: {
@@ -701,28 +727,42 @@ export function buildSignalMatchJudgementRequest(
     stored statement (`restateSignal`), the fence here guards a write, not
     just a reading. Logged as M9 in docs/known-issues.md.
   */
+  const alternate = input.alternativeStatement;
   const prompt = [
     "statement A:",
     fence("statement a", input.candidateStatement),
     "",
     "statement B:",
     fence("statement b", input.existingStatement),
+    ...(alternate === undefined ? [] : ["", "statement C:", fence("statement c", alternate)]),
   ].join("\n");
 
   return {
-    systemInstruction: { parts: [{ text: SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION }] },
+    systemInstruction: { parts: [{ text: alternate === undefined ? SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION : PAIRED_SIGNAL_MATCH_SYSTEM_INSTRUCTION }] },
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
       // A comparison, not a composition; sampling would make the same pair
       // merge on Tuesday and mint on Wednesday.
       temperature: 0,
       responseMimeType: "application/json",
-      responseSchema: signalMatchJudgementResponseSchema,
+      responseSchema: alternate === undefined ? signalMatchJudgementResponseSchema : pairedSignalMatchResponseSchema,
     },
   };
 }
 
-export function parseSignalMatchJudgement(payload: unknown): SignalMatchJudgement {
+export function parseSignalMatchJudgement(payload: unknown, paired = false): SignalMatchJudgement {
+  if (paired) {
+    if (typeof payload === "object" && payload !== null && !Array.isArray(payload) && Object.keys(payload).join() === "decision") {
+      switch ((payload as { decision?: unknown }).decision) {
+        case "same_first": return { relation: "same", target: 1 };
+        case "same_second": return { relation: "same", target: 2 };
+        case "independent": return { relation: "independent" };
+        case "opposed_first": return { relation: "opposed", target: 1 };
+        case "opposed_second": return { relation: "opposed", target: 2 };
+      }
+    }
+    throw new ModelDidNotAnswerError("signal match judgement");
+  }
   const value =
     typeof payload === "object" && payload !== null
       ? (payload as { relation?: unknown }).relation
@@ -742,7 +782,7 @@ export async function judgeSignalMatch(
   );
   // A refusal or transport failure supplies no relation either. The normal
   // bounded queue handles failure without inventing an independent pattern.
-  return parseSignalMatchJudgement(payload);
+  return parseSignalMatchJudgement(payload, input.alternativeStatement !== undefined);
 }
 
 // ---------------------------------------------------------------------------
