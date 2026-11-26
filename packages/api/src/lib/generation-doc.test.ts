@@ -227,7 +227,7 @@ describe("the doc's [checked] structural claims", () => {
       "utf8",
     );
     const refusal = source.indexOf("findSuppressionAnchor(candidate, anchors,input.embeddingPolicy)");
-    const match = source.indexOf("findBestMatch(candidate.embedding");
+    const match = source.indexOf("findClosestMatches(candidate.embedding");
     expect(refusal).toBeGreaterThan(-1);
     expect(match).toBeGreaterThan(-1);
     expect(refusal).toBeLessThan(match);
