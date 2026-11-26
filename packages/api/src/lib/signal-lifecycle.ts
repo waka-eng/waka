@@ -67,12 +67,9 @@ export function selectIndependentEvidence(evidence:ConfidenceEvidence[]):Confide
     if(lineage.kind==='inspiration'&&(new Set(lineage.originIds).size!==1||lineage.originIds[0]!==lineage.unitId))throw new Error('An inspiration witness needs its own origin');
     const key=`known:${lineage.kind}:${lineage.unitId}`;
     if (row.material === null) return;
-    const previous=units.get(key);
-    if(previous){
-      if(previous.row.source!==row.source)throw new Error('One evidence unit cannot have different authorship kinds');
-      if(row.createdAt<previous.row.createdAt)previous.row={...previous.row,createdAt:row.createdAt};
-    }
-    const unit = previous ?? {row, origins:new Map<string,{id:string; witness:ConfidenceEvidence}>()};
+    const unit = units.get(key) ?? {row, origins:new Map<string,{id:string; witness:ConfidenceEvidence}>()};
+    if (unit.row.source !== row.source) throw new Error('One evidence unit cannot have different authorship kinds');
+    if (row.createdAt < unit.row.createdAt) unit.row = row;
     for (const id of lineage.originIds) {
       const identity = row.material?.key ?? id;
       const found = unit.origins.get(identity);

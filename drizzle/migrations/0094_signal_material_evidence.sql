@@ -19,20 +19,32 @@ LANGUAGE sql STABLE AS $$
     ARRAY(SELECT DISTINCT key FROM unnest(parts.identity || media.locations) AS key ORDER BY key), i.created_at
   FROM inspirations i
   CROSS JOIN LATERAL (
-    SELECT ARRAY(SELECT DISTINCT key FROM unnest(array_agg(coalesce(a.words,a.location))) AS key WHERE key IS NOT NULL ORDER BY key) AS contents,
-      ARRAY(SELECT DISTINCT key FROM unnest(array_agg(a.location)) AS key WHERE key IS NOT NULL ORDER BY key) AS locations
-    FROM (
-      SELECT CASE WHEN CASE WHEN ("attachments"."type"::text IN ('audio','image') AND "attachments"."transcript_correction" IS NOT NULL) THEN 'ready' ELSE "attachments"."enrichment_status"::text END='ready' THEN evidence_text_hash(CASE
-  WHEN ("attachments"."type"::text IN ('audio','image') AND "attachments"."transcript_correction" IS NOT NULL) AND "attachments"."type"::text = 'image' THEN 'Words: ' || "attachments"."transcript_correction" || CASE
-  WHEN "attachments"."enrichment_status"::text <> 'ready' OR nullif(trim(coalesce("attachments"."enrichment_text",'')),'') IS NULL THEN ''
-  WHEN "attachments"."enrichment_text" ~* '(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:'
-    THEN CASE WHEN trim(regexp_replace(coalesce((regexp_match("attachments"."enrichment_text", '^(?:(?!(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:).)*(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:(?:[[:blank:]>#*_]*|(?:(?!(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:).)*(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*)image[[:blank:]*_]*:[[:blank:]*_]*(.*)$', 'i'))[1], (regexp_match("attachments"."enrichment_text", '(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:[[:blank:]*_]*((?:(?!(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:).)*)', 'i'))[1], ''), '^[[:space:]*_]+|[[:space:]*_]+$', '', 'g')) = '' THEN '' ELSE chr(10) || 'Image: ' || trim(regexp_replace(coalesce((regexp_match("attachments"."enrichment_text", '^(?:(?!(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:).)*(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:(?:[[:blank:]>#*_]*|(?:(?!(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:).)*(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*)image[[:blank:]*_]*:[[:blank:]*_]*(.*)$', 'i'))[1], (regexp_match("attachments"."enrichment_text", '(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:[[:blank:]*_]*((?:(?!(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:).)*)', 'i'))[1], ''), '^[[:space:]*_]+|[[:space:]*_]+$', '', 'g')) END
-  ELSE chr(10) || 'Image: ' || trim("attachments"."enrichment_text") END
-  WHEN ("attachments"."type"::text IN ('audio','image') AND "attachments"."transcript_correction" IS NOT NULL) THEN "attachments"."transcript_correction"
-  ELSE "attachments"."enrichment_text" END) END AS words,
-        CASE WHEN attachments.type='link' THEN 'url:' || encode(sha256(convert_to(btrim(attachments.url),'UTF8')),'hex') END AS location
-      FROM attachments WHERE attachments.profile_id=i.profile_id AND attachments.inspiration_id=i.id
-    ) a
+    WITH attached AS (
+      SELECT type::text AS kind, enrichment_status::text AS state, enrichment_text AS body,
+        transcript_correction AS correction, url
+      FROM attachments WHERE profile_id=i.profile_id AND inspiration_id=i.id
+    ), corrected AS (
+      -- Same labelled scene extraction as attachment-material.ts. An image
+      -- correction replaces OCR words while keeping the picture description.
+      SELECT *, CASE WHEN kind::text='image' AND correction IS NOT NULL AND state='ready' THEN
+        CASE WHEN body ~* '(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:'
+          THEN btrim(regexp_replace(coalesce(
+            (regexp_match(body, '^(?:(?!(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:).)*(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:(?:[[:blank:]>#*_]*|(?:(?!(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:).)*(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*)image[[:blank:]*_]*:[[:blank:]*_]*(.*)$', 'i'))[1],
+            (regexp_match(body, '(?:^|\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*image[[:blank:]*_]*:[[:blank:]*_]*((?:(?!(?:\n|(?<=[.!?"”''])[[:blank:]]+)[[:blank:]>#*_]*words[[:blank:]*_]*:).)*)', 'i'))[1], ''), '^[[:space:]*_]+|[[:space:]*_]+$', '', 'g'))
+          ELSE btrim(body) END
+        END AS scene
+      FROM attached
+    ), keys AS (
+      SELECT evidence_text_hash(CASE
+        WHEN kind::text='image' AND correction IS NOT NULL THEN 'Words: ' || correction ||
+          CASE WHEN nullif(scene,'') IS NULL THEN '' ELSE chr(10) || 'Image: ' || scene END
+        WHEN kind::text='audio' AND correction IS NOT NULL THEN correction
+        WHEN state='ready' THEN body END) AS words,
+        CASE WHEN kind='link' THEN 'url:' || encode(sha256(convert_to(nullif(btrim(url),''),'UTF8')),'hex') END AS location
+      FROM corrected
+    )
+    SELECT ARRAY(SELECT DISTINCT coalesce(words,location) FROM keys WHERE coalesce(words,location) IS NOT NULL ORDER BY 1) AS contents,
+      ARRAY(SELECT DISTINCT location FROM keys WHERE location IS NOT NULL ORDER BY 1) AS locations
   ) media
   CROSS JOIN LATERAL (
     SELECT CASE WHEN i.evidence_text_hash IS NULL AND cardinality(media.contents)=0 THEN
@@ -50,7 +62,7 @@ RETURNS TABLE(signal_id uuid, unit_id text, kind text, origin_id uuid, created_a
   current boolean, material_key text, growth_keys text[], origin_at timestamptz)
 LANGUAGE sql STABLE AS $$
   WITH scope AS MATERIALIZED (
-    SELECT type='group' AS is_group FROM profiles WHERE id=owner
+    SELECT type::text='group' AS is_group FROM profiles WHERE id=owner
   ), edges AS MATERIALIZED (
     SELECT e.* FROM signals s CROSS JOIN LATERAL signal_support_edges(s.id,expected_statement) e
     WHERE s.profile_id=owner AND s.id=ANY(claims)
