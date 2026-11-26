@@ -211,11 +211,11 @@ it("speaks Korean", async () => {
     return `https://storage.example.test/${id}`;
   });
   await show([photo("p-1", "바다.jpg"), photo("p-2", null), file("f-1", null, 2048)], "ko-KR");
-  expect(host.querySelector(".chat-attachments")?.getAttribute("aria-label")).toBe("첨부");
+  expect(host.querySelector(".chat-attachments")?.getAttribute("aria-label")).toBe("첨부 파일");
   expect(host.querySelector("a.chat-attachment-photo")?.getAttribute("aria-label")).toBe("사진: 바다.jpg");
   const failed = host.querySelector('[data-state="failed"]')!;
   expect(failed.getAttribute("aria-label")).toBe("사진");
-  expect(failed.textContent).toBe("불러오지 못했어요");
+  expect(failed.textContent).toBe("첨부 파일을 불러오지 못했어요.");
   expect(host.querySelector(".chat-attachment-file-name")?.textContent).toBe("파일");
   expect(host.querySelector(".chat-attachment-file-size")?.textContent).toBe("2 KB");
 });

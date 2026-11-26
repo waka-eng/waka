@@ -201,7 +201,7 @@ describe("principle read", () => {
       ...ready, phase: "processing", supportPending: true, supportActive: false,
     } });
     await act(async () => root.render(<PrincipleRead active locale="ko-KR" profileId="another-profile" name="Bot" />));
-    expect(host.textContent).toContain("원칙을 찾기 위해 저장한 내용을 살펴보고 있어요…");
+    expect(host.textContent).toContain("메모를 살펴보며 원칙을 찾고 있어요…");
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(fetchPrincipleRead).toHaveBeenCalledTimes(2);
     expect(requestPrincipleRead).not.toHaveBeenCalled();

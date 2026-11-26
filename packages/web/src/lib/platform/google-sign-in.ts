@@ -2,6 +2,7 @@ import { createAuthorizationAttempt, validateAuthorizationCallback, type Authori
 import { platformServices } from './index';
 import { nativeSession, revokeRetiredNativeSessions } from '../api/transport';
 import { postJson, apiPath } from '../api/http';
+import { readStoredLocale } from '../locales';
 import type { AuthSessionResponse } from '../api/auth';
 import { Browser } from '@capacitor/browser';
 import type { PluginListenerHandle } from '@capacitor/core';
@@ -19,7 +20,7 @@ async function releaseDismissal() {
   const listener = dismissal; dismissal = undefined;
   await listener?.remove();
 }
-export async function startNativeGoogleSignIn(destination: string): Promise<void> {
+export async function startNativeGoogleSignIn(destination: string, locale = readStoredLocale()): Promise<void> {
   const version = nativeSession.beginChange(); liveAttemptVersion = version;
   const appId = import.meta.env.VITE_APP_ID as string;
   const attempt = await createAuthorizationAttempt(appId);
@@ -35,7 +36,7 @@ export async function startNativeGoogleSignIn(destination: string): Promise<void
   });
   await services.credentials.set(pendingKey, JSON.stringify({ attempt, destination: safeInAppPath(destination) ?? DEFAULT_REDIRECT }));
   if (version !== nativeSession.version) throw new Error('Sign-in was superseded.');
-  const params = new URLSearchParams({ appId, state: attempt.state, challenge: attempt.challenge });
+  const params = new URLSearchParams({ appId, state: attempt.state, challenge: attempt.challenge, preferredLocale: locale });
   try { await services.openBrowser(`${apiPath('/auth/mobile/google')}?${params}`); notify(); }
   catch (error) { await releaseDismissal(); await services.credentials.remove(pendingKey); throw error; }
 }

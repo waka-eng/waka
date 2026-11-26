@@ -37,3 +37,14 @@ it('makes room for first-review excerpts within the existing prompt ceiling',()=
   );
   expect(first.signals.slice(0,3)).toEqual(ordinary.signals.slice(0,3));
 });
+
+it('applies Korean voice to the statement while preserving source quotations in every review mode', () => {
+  for (const mode of [{}, { firstPrinciple: true }, { firstPrinciple: true, ordinaryAvailable: true }] as const) {
+    const input = selectPrincipleInput({ ...fixture(), ...mode });
+    const instruction = (preferredLocale: 'ko-KR' | 'en-US') =>
+      buildPrincipleDistillRequest({ ...input, preferredLocale }).systemInstruction?.parts[0]?.text;
+    expect(instruction('ko-KR')).toContain('일상의 말');
+    expect(instruction('ko-KR')).toContain('원문 그대로');
+    expect(instruction('en-US')).not.toContain('일상의 말');
+  }
+});

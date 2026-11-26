@@ -161,7 +161,7 @@ it('retries a failed personal profile load and translates personal setup in Kore
   fail = null;
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-settings-erase')!.click());
   expect(host.querySelector('[role="alert"]')).toBeNull();
-  await click('설정 프롬프트 복사');
+  await click('연결 요청 문구 복사');
   expect(copied.at(-1)).toContain('브라우저 로그인이나 에이전트 프로필 생성을 사용하지 마세요');
   expect(copied.at(-1)).toContain(personal.id);
 });
@@ -222,5 +222,5 @@ it('keeps personal setup manually copyable if clipboard access fails', async () 
 
 async function openPersonal(locale: SettingsPanelProps['locale'] = 'en-US') {
   await act(async () => root.render(<SettingsPanel {...props} locale={locale} />));
-  await click(locale === 'en-US' ? 'You · MCP' : '나 · MCP');
+  await click(locale === 'en-US' ? 'You · MCP' : '내 메모 연결 (MCP)');
 }

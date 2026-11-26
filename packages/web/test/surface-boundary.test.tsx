@@ -12,6 +12,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { LOCALE_STORAGE_KEY, t } from "../src/lib/locales";
 import { SurfaceBoundary } from "../src/components/SurfaceBoundary";
 
 /**
@@ -61,6 +62,7 @@ beforeEach(() => {
 afterEach(async () => {
   if (root) await act(async () => root.unmount());
   host?.remove();
+  localStorage.removeItem(LOCALE_STORAGE_KEY);
   Object.defineProperty(window, "location", { configurable: true, writable: true, value: trueLocation });
   vi.restoreAllMocks();
 });
@@ -194,4 +196,13 @@ it("offers home on '/' with a query, since the query may be what breaks it, and 
   expect(home, "a home with a query got no way to a clean home").toBeDefined();
   await act(async () => home!.click());
   expect(assign).toHaveBeenCalledWith("/");
+});
+
+
+it("shows Korean recovery copy while keeping crash details in local diagnostics", async () => {
+  localStorage.setItem(LOCALE_STORAGE_KEY, "ko-KR");
+  await mount(<SurfaceBoundary surface="the door"><Boom message="SYNTHETIC_CRASH_DETAIL" /></SurfaceBoundary>);
+  expect(host.textContent).toContain(t("ko-KR", "surfaceUnavailableBody"));
+  expect(host.textContent).not.toContain("SYNTHETIC_CRASH_DETAIL");
+  expect(console.error).toHaveBeenCalledWith("[waka] the door failed to render", expect.any(Error), expect.any(String));
 });

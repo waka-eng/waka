@@ -36,6 +36,6 @@ it('says how many inspirations, and only "Inspirations" when it is not told', as
 });
 
 it('says it in Korean order in Korean', async () => {
-  expect(await pullFor('ko-KR', 12)).toBe('남긴 것 12개');
-  expect(await pullFor('ko-KR', undefined)).toBe('남긴 것');
+  expect(await pullFor('ko-KR', 12)).toBe('저장한 메모 12개');
+  expect(await pullFor('ko-KR', undefined)).toBe('저장한 메모');
 });

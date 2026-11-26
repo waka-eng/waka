@@ -88,7 +88,7 @@ const TOOLS = resolve(dirname(fileURLToPath(import.meta.url)), "../../../tools")
    named by nothing outside its own file. The sweep's other deletions
    (the count formatters, `fetchInspirations`) were named by tests, so they
    were never counted here. */
-const PRIVATE_ENOUGH = 16;
+const PRIVATE_ENOUGH = 12;
 
 function sources(dir: string, found: string[] = []): string[] {
   let entries: string[];

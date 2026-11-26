@@ -1,7 +1,8 @@
 {
   "name": "WAKA",
   "short_name": "WAKA",
-  "description": "Save things mindlessly; WAKA notices what you keep coming back to.",
+  "lang": "en-US",
+  "description": "Save what inspires you and see the ideas you keep coming back to.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

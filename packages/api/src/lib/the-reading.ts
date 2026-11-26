@@ -68,20 +68,20 @@ export const READING_LINES: ReadingLine[] = [
     sentence:
       "When three of your memories say the same thing, WAKA says it back to you in a sentence of its own.",
     sentenceKo:
-      "기억 셋이 같은 것을 말하면, WAKA가 그걸 자기 문장으로 되돌려 말해요.",
+      "서로 다른 메모 세 개에서 같은 생각이 드러나면 WAKA가 그 패턴을 한 문장으로 정리해요.",
     backing: {
       kind: "constant",
       constant: "SIGNAL_PROMOTION_MIN_EVIDENCE",
       value: SIGNAL_PROMOTION_MIN_EVIDENCE,
       words: "three",
-      wordsKo: "셋",
+      wordsKo: "세 개",
     },
   },
   {
     sentence:
       "A new thought joins one of those sentences only when they are all but the same thought; otherwise it stands on its own.",
     sentenceKo:
-      "새로운 생각은 거의 같은 생각일 때만 기존 문장에 합류해요. 아니면 홀로 서요.",
+      "새 메모가 기존 패턴과 거의 같은 뜻일 때만 함께 묶어요. 다른 뜻이면 별개의 패턴으로 남겨요.",
     backing: {
       kind: "constant",
       constant: "SIGNAL_MATCH_MIN_COSINE",
@@ -94,7 +94,7 @@ export const READING_LINES: ReadingLine[] = [
     sentence:
       "A sentence nobody feeds cools. Half of its warmth is gone in about a month and a half.",
     sentenceKo:
-      "아무도 먹이지 않는 문장은 식어요. 한 달 반이면 온기가 절반으로 줄어요.",
+      "관련 메모가 더 쌓이지 않으면 그 패턴의 비중은 약 한 달 반마다 절반으로 줄어요.",
     backing: {
       kind: "constant",
       constant: "CONFIDENCE_RECENCY_HALF_LIFE_DAYS",
@@ -107,33 +107,33 @@ export const READING_LINES: ReadingLine[] = [
     sentence:
       "A sentence that stirs again after three quiet weeks is noticed for coming back.",
     sentenceKo:
-      "조용한 세 주가 지나 다시 일렁이는 문장은, 돌아왔구나 하고 알아봐요.",
+      "세 주 이상 뜸했던 패턴이 다시 나타나면 최근에 다시 눈에 띄기 시작한 것으로 봐요.",
     backing: {
       kind: "constant",
       constant: "COMEBACK_MIN_DORMANT_DAYS",
       value: COMEBACK_MIN_DORMANT_DAYS,
       words: "three quiet weeks",
-      wordsKo: "조용한 세 주",
+      wordsKo: "세 주",
     },
   },
   {
     sentence:
       "Your top of mind is first written once three of those sentences are alive to write it from.",
     sentenceKo:
-      "톱 오브 마인드는 살아 있는 문장이 셋은 되어야 처음 쓰여요.",
+      "‘요즘 드는 생각’을 처음 정리할 때는 참고할 패턴이 적어도 세 개 있어야 해요.",
     backing: {
       kind: "constant",
       constant: "TOP_OF_MIND_MIN_SIGNALS",
       value: TOP_OF_MIND_MIN_SIGNALS,
       words: "three",
-      wordsKo: "셋",
+      wordsKo: "세 개",
     },
   },
   {
     sentence:
       "Your top of mind shifts at most once a day. A rewrite that arrives early waits its turn, and your own hand never waits.",
     sentenceKo:
-      "톱 오브 마인드는 하루에 한 번만 움직여요. 일찍 온 다시 쓰기는 차례를 기다리고, 내 손은 기다리지 않아요.",
+      "‘요즘 드는 생각’은 자동으로는 하루에 한 번까지만 달라져요. 직접 고친 내용은 바로 반영돼요.",
     backing: {
       kind: "constant",
       constant: "TOP_OF_MIND_MIN_SHIFT_HOURS",
@@ -146,7 +146,7 @@ export const READING_LINES: ReadingLine[] = [
     sentence:
       "Each rewrite of your top of mind reads from at most twelve of them: the ones with the most life in them.",
     sentenceKo:
-      "톱 오브 마인드를 다시 쓸 때는 많아야 열두 문장만 읽어요. 가장 생기 있는 것들이에요.",
+      "‘요즘 드는 생각’을 다시 정리할 때는 지금 가장 뚜렷한 패턴을 열두 개까지 살펴봐요.",
     backing: {
       kind: "constant",
       constant: "TOP_OF_MIND_SIGNAL_LIMIT",
@@ -159,13 +159,13 @@ export const READING_LINES: ReadingLine[] = [
     sentence:
       "A sentence you called untrue steps far back in the choosing, and is never erased.",
     sentenceKo:
-      "아니라고 답한 문장은 고르는 자리에서 멀찍이 물러나요. 지워지지는 않아요.",
+      "내 얘기가 아니라고 답한 패턴은 이후에 반영되는 비중이 줄어요. 내용은 그대로 남아요.",
     backing: {
       kind: "constant",
       constant: "SELECTION_DISPUTED_MULTIPLIER",
       value: SELECTION_DISPUTED_MULTIPLIER,
       words: "far back",
-      wordsKo: "멀찍이",
+      wordsKo: "비중이 줄어요",
     },
   },
   /* ── FOUR SENTENCES ABOUT ROOMS CAME OUT HERE (2026-10-15) ─────────────
@@ -193,7 +193,7 @@ export const READING_LINES: ReadingLine[] = [
      disconnected from mechanism reads as less trustworthy than silence. */
   {
     sentence: "A sentence you have written yourself is never rewritten.",
-    sentenceKo: "내 손으로 쓴 문장은 절대 다시 쓰이지 않아요.",
+    sentenceKo: "직접 고친 문장은 WAKA가 다시 쓰지 않아요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/signal-lock-contract.db.test.ts",
@@ -203,7 +203,7 @@ export const READING_LINES: ReadingLine[] = [
     sentence:
       "Hand a sentence back, and WAKA may write it again; released words that nothing supports are let go to retire.",
     sentenceKo:
-      "문장을 다시 맡기면 그때부터 WAKA가 다시 써요. 풀려났는데 아무것도 받치지 않는 말은 물러나게 놓아줘요.",
+      "문장을 WAKA에 다시 맡기면 표현이 달라질 수 있어요. 뒷받침할 메모가 없으면 더 이상 표시하지 않을 수 있어요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/signal-lock-contract.db.test.ts",
@@ -213,7 +213,7 @@ export const READING_LINES: ReadingLine[] = [
     sentence:
       "A sentence's receipts are verified quotes: your words, or your saved page's, and never invented.",
     sentenceKo:
-      "문장의 영수증은 검증된 인용이에요. 내 말이거나 내가 저장한 페이지의 말이고, 지어내는 법은 없어요.",
+      "인용문은 내 글이나 저장한 페이지에서 실제로 확인한 구절이에요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/signal-lock-contract.db.test.ts",
@@ -221,7 +221,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence: "A sentence you set aside does not return to your top of mind.",
-    sentenceKo: "치워 둔 문장은 톱 오브 마인드로 돌아오지 않아요.",
+    sentenceKo: "빼기로 한 문장은 ‘요즘 드는 생각’에 다시 나오지 않아요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
@@ -231,7 +231,7 @@ export const READING_LINES: ReadingLine[] = [
     sentence:
       "A sentence you let go is refused ground: nothing is deleted, nothing that close grows there again, and every refusal is written down, until you put it back.",
     sentenceKo:
-      "놓아준 문장은 땅을 거절당해요. 아무것도 지워지지 않고, 그만큼 가까운 것은 다시 자라지 않고, 모든 거절이 기록에 남아요. 내가 되돌리기 전까지는요.",
+      "패턴을 빼면 되돌릴 때까지 비슷한 패턴도 다시 나타나지 않아요. 메모는 그대로 남고 제외한 기록도 보관해요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/signal-suppression.db.test.ts",
@@ -239,7 +239,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence: "Every reading of your memory is itself on the record.",
-    sentenceKo: "기억을 읽는 일은 그 자체로 기록에 남아요.",
+    sentenceKo: "내 기억을 조회할 때마다 기록이 남아요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/routes/consultations.db.test.ts",
@@ -266,7 +266,7 @@ export const READING_LINES: ReadingLine[] = [
     sentence:
       "A memory shines by how much of your thinking rests on it: the more sentences read from it, the brighter it stands in the ground.",
     sentenceKo:
-      "기억은 생각이 얼마나 그 위에 기대는지만큼 빛나요. 읽어 간 문장이 많을수록 땅에서 더 밝게 서요.",
+      "여러 패턴의 바탕이 된 메모일수록 화면에서 더 밝게 보여요.",
     backing: {
       kind: "contract",
       testPath: "packages/web/test/home-light.test.tsx",
@@ -281,16 +281,16 @@ export const READING_LINES: ReadingLine[] = [
 export function renderTheReading(locale: ProseLocale = "en-US"): string {
   const lines: string[] = [];
   if (locale === "ko-KR") {
-    lines.push("# WAKA가 나를 읽는 방식");
+    lines.push("# WAKA가 메모에서 패턴을 찾는 방법");
     lines.push("");
-    lines.push("> 아래 문장 하나하나가 그것을 지키는 코드에 고정되어 있어요.");
-    lines.push("> 하나라도 사실이 아니게 되는 날, 빌드가 멈춰요.");
+    lines.push("> 아래 설명은 WAKA가 실제로 메모를 정리하는 방식을 담고 있어요.");
+    lines.push("> 설명과 코드가 일치하는지 배포 전에 자동으로 확인해요.");
     lines.push("");
     for (const line of READING_LINES) {
       lines.push(`- ${line.sentenceKo}`);
     }
     lines.push("");
-    lines.push("행동이 가르쳐요. 답은 무게가 되고, 별은 붙들고, 되맡기면 되돌아가요.");
+    lines.push("답변은 다음에 어떤 내용을 보여 줄지에 반영돼요. 문장을 고정하거나 다시 WAKA에 맡길 수도 있어요.");
     return lines.join("\n") + "\n";
   }
   lines.push("# How WAKA reads you");

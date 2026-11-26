@@ -771,6 +771,13 @@ a:focus-visible {
   line-height: 1.6;
   letter-spacing: 0;
 }
+.login-card:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.login-card:lang(ko) .btn-google span {
+  text-transform: none;
+}
 /* `.field-hint`'s OWN BLOCK WAS HERE and went with the class — the full
    argument is in the actions section above, at `.btn-destructive`. It set
    `--t-ui` / 1.55 / `--w-faint`, which is the faint tier the pair below

@@ -40,8 +40,8 @@ import { isMobileBuild } from '../lib/platform';
  * unit-tested and reused if a future page adds a "Re-authenticate with
  * Google" affordance.
  */
-export function googleLoginUrl(returnTo: string, mobile = false): string {
-  const params = new URLSearchParams({ returnTo });
+export function googleLoginUrl(returnTo: string, mobile = false, locale = readStoredLocale()): string {
+  const params = new URLSearchParams({ returnTo, preferredLocale: locale });
   if(mobile)params.set("mobile","1");
   return `${apiPath("/auth/google/login")}?${params.toString()}`;
 }
@@ -123,7 +123,7 @@ export function GoogleSignInButton({
     if (disabled || starting) return;
     if (isMobileBuild) {
       setStarting(true); setError(null);
-      void import('../lib/platform/google-sign-in').then(module => module.startNativeGoogleSignIn(returnTo))
+      void import('../lib/platform/google-sign-in').then(module => module.startNativeGoogleSignIn(returnTo, locale))
         .then(() => setPending(true)).catch(() => setError(t(locale, 'oauthFallback'))).finally(() => setStarting(false));
       return;
     }
@@ -131,7 +131,7 @@ export function GoogleSignInButton({
     // history so the user can hit "Back" from Google's consent page and
     // land where they were. replace() would silently swallow that history
     // entry, which is hostile to users who change their mind.
-    window.location.assign(googleLoginUrl(returnTo,new URLSearchParams(window.location.search).get("mobile")==="1"));
+    window.location.assign(googleLoginUrl(returnTo, new URLSearchParams(window.location.search).get("mobile") === "1", locale));
   }
 
   return <>
