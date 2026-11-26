@@ -3212,9 +3212,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
            `asSentence` — and note that `capitalized.test.ts` cannot see
            these at all, because they are assembled on the server rather
            than drawn from the catalogue it reads. */
-        const lines = spoken.map(
-          (x) => asSentence(`${x.sentence.text} ${day?.label ?? "today"}.`, localeRef.current),
-        );
+        /* KOREAN PUTS THE DAY FIRST (audit, 2026-11-26: "기억 3개를 간직했어요
+           오늘." read as broken): "오늘 3개 저장했어요." */
+        const lines = spoken.map((x) => asSentence(localeRef.current === 'ko-KR'
+          ? `${day?.label ?? "오늘"} ${x.sentence.text}.`
+          : `${x.sentence.text} ${day?.label ?? "today"}.`, localeRef.current));
         settle();
         const dayKey = new Date(Date.now() - (day?.daysAgo ?? 0) * 86_400_000).toISOString().slice(0, 10);
         if (lines.length) speak(lines, dayKey);
@@ -7472,6 +7474,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const savesOpen = viewNavigation.view?.open === 'saves';
   useEffect(() => { if (!savesOpen) setSavesAsSheet(false); }, [savesOpen]);
   const openSheet = useCallback(() => { setSavesAsSheet(true); openOverHome('saves'); }, [openOverHome]);
+  /* One save a reading rests on, opened from under the reading. */
+  const openSaveFromReading = useCallback((id: string) => {
+    const nav = viewNavigationRef.current;
+    nav.write({ ...(nav.view ?? EMPTY_VIEW), open: 'saves', note: id, compose: false, conversationId: null });
+  }, []);
   /* ═══ THE NOTE BAR'S PARTS (design E3, Writing, PhotoNote) ═══════════════
      They stood in the dock's middle group; the notepad draws them now, in a
      slim row UNDER its words so the words get the whole width — mic on the
@@ -9603,6 +9610,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         <>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
                             why={whyFor(lead)}
+                            onOpenSave={openSaveFromReading}
                             onWhy={() => chatOn({ ask: lead.body, turn: true, whyOf: lead,selection:{locale,text:lead.body,source:{kind:'top_of_mind_entry',id:lead.id,why:true,supportIds:whyIds(lead)}} })}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true) } : undefined}
@@ -10174,7 +10182,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 says it now ("I'm inspired!", with the chat as its act). */}
           </div>
         </div>
-        {mouthOpen ? <InspirationComposer noticeInDock key={memoryProfileId} owner={conversationProfile ? formatMessage(locale, "worldSavingToProfile", { name: conversationProfile.name }) : undefined} text={draft} media={inputMedia}
+        {mouthOpen ? <InspirationComposer noticeInDock key={memoryProfileId} owner={conversationProfile && conversationProfile.type !== 'human' ? formatMessage(locale, "worldSavingToProfile", { name: conversationProfile.name }) : undefined} text={draft} media={inputMedia}
           linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
           recordingCandidate={composerDraft.draft.recordingCandidate}
           onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => sayMouthProblem(draftProblem(reason))); }}
@@ -11569,7 +11577,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
         onNoteAddress={noteAddressChanged}
         key={`${conversationScope.accountId}:${conversationScope.profileId}:saves:${savesFocus?.ids.join(',') ?? ''}`}
         viewState={savesFocus ? undefined : listViews.inspirations}
-        scope={conversationScope} ownerName={conversationProfile.name}
+        /* Your own name is not said on your own pages (audit, 2026-11-26:
+           "look · Nov 26" read as a status); an agent's pages say whose. */
+        scope={conversationScope} ownerName={conversationProfile.type === 'human' ? undefined : conversationProfile.name}
         locale={locale} profileId={conversationScope.profileId}
         title={say('worldMenuField')}
         focus={savesFocus} onClearFocus={() => setSavesFocus(null)}
@@ -11593,7 +11603,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
         title={atWall.kind==='agent'?formatMessage(locale,'worldProfilePrinciples',{name:atWall.name}):say('worldPrinciplesShortcut')}
         whose={atWall.kind==='agent'?'agent':'own'}
         onNewSave={atWall.kind==='agent'?undefined:startNewInspiration}
-        newSaveLabel={say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}
+        /* Always the plain act here (audit, 2026-11-26: "Continue draft" on
+           Principles read like a bug); the notepad still opens on the draft. */
+        newSaveLabel={say('worldDockSaves')}
         onClose={closePage} gesture={principlesCrossing ? null : viewNavigation.href}
         /* Opening one REPLACES the overlay rather than stacking on it: the
            principle's own surface is the next thing to read, not a sheet on

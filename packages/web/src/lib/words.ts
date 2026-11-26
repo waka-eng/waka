@@ -350,8 +350,8 @@ export function archiveChapter(
 ): { key: string; words: string } {
   const day = 86_400_000;
   const age = T - ms;
-  if (age < 7 * day) return { key: "d7", words: locale === "ko-KR" ? "지난 7일" : "Previous 7 Days" };
-  if (age < 30 * day) return { key: "d30", words: locale === "ko-KR" ? "지난 30일" : "Previous 30 Days" };
+  if (age < 7 * day) return { key: "d7", words: locale === "ko-KR" ? "지난 7일" : "Previous 7 days" };
+  if (age < 30 * day) return { key: "d30", words: locale === "ko-KR" ? "지난 30일" : "Previous 30 days" };
   const d = new Date(ms);
   const key = `${d.getFullYear()}-${d.getMonth()}`;
   const thisYear = d.getFullYear() === new Date(T).getFullYear();

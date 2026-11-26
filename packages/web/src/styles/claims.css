@@ -1596,7 +1596,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-over--note .jar-saved-attachments,
 .waka-over--note .jar-attachment-preview {
   width: 100%;
-  max-width: 34rem;
+  /* The notepad's column, so the words stay put between saving and reading
+     (audit, 2026-11-26: they moved from 320 to 368 at 1280). */
+  max-width: 40rem;
   margin-inline: auto;
 }
 
@@ -2160,6 +2162,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   white-space: nowrap;
 }
 
+.waka-over-clear {
+  min-height: 44px; padding: 0 var(--sp-4); border: 0; background: none;
+  color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
 .waka-over-retry:hover,
 .waka-over-retry:focus-visible,
 .waka-over-new:hover,
@@ -2910,7 +2916,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-list-lead {
   display: block;
   overflow: hidden;
-  font-size: var(--t-ui);
+  /* The words are what the row is (audit, 2026-11-26: 13px read smaller
+     than the 16px everything else is written in). */
+  font-size: var(--t-body);
   font-weight: 500;
   line-height: 1.4;
   color: var(--ink);
@@ -4835,6 +4843,23 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 /* The bubble's offers, side by side when there are two. Spoken lines, so
    the gap is a word space and a half, not a toolbar's. */
+.waka-reading-from {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 0 var(--sp-6);
+  margin-top: var(--sp-4);
+}
+.waka-reading-from-save {
+  min-height: var(--sp-44); min-width: 0; max-width: 100%; padding: 0; border: 0; background: none;
+  display: inline-flex; align-items: center; color: inherit; font: inherit; cursor: pointer;
+}
+/* A save, by its own words: a hairline chip, never filled. */
+.waka-reading-from-chip {
+  display: block; max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: var(--sp-4) var(--sp-10); border-radius: var(--r-pill);
+  border: 1px solid color-mix(in srgb, var(--waka-on-light) 18%, transparent);
+  color: color-mix(in srgb, var(--waka-on-light) 70%, transparent); font-size: var(--t-meta); line-height: 1.4;
+}
+.waka-reading-from-save:hover .waka-reading-from-chip,
+.waka-reading-from-save:focus-visible .waka-reading-from-chip { border-color: color-mix(in srgb, var(--waka-on-light) 45%, transparent); color: var(--waka-on-light); }
 .jar-char-bubble-acts {
   display: flex;
   align-self: stretch;
@@ -5412,9 +5437,15 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   overflow: hidden;
 }
 
+/* GROWS TO ITS BOUND (craft audit, 2026-11-26): a fixed 36rem stopped the
+   card at y 588 on an 844px phone with 250px of screen unused while its
+   content scrolled inside it. It takes the same bound `.waka-account`
+   computes, capped so a tall desk does not get a column of air. */
 .waka-account--settings {
   width: min(26rem, calc(100vw - var(--sp-32)));
-  height: 36rem;
+  height: min(46rem, calc(
+    100dvh - env(safe-area-inset-top) - var(--sp-12) - var(--waka-corner) - var(--sp-8) - var(--sp-16) - env(safe-area-inset-bottom)
+  ));
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -5597,6 +5628,71 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   line-height: 1.5;
 }
 
+/* ═══ FOUR GROUPS ON ONE EDGE (craft audit, 2026-11-26) ══════════════════
+   Founder: "spacing padding can be better ... categorization design padding
+   Text". MEASURED before, at 390: labels and rows at x 29, Sign out's words
+   at 37, Delete account at 43; gaps of 4, 8, 14 and 44px between things of
+   the same kind; a 12px address, 12px labels, a label that was a heading, a
+   bare 13px line that was a row, and 15px underlined legal links louder
+   than every row. Now one rhythm: 24px between groups, 12px inside one, a
+   single small heading style, every word on the card's one left edge. */
+.waka-settings-content:has(> .waka-settings-section) { gap: var(--sp-24); padding-bottom: var(--sp-8); }
+.waka-settings-section { display: flex; flex-direction: column; gap: var(--sp-12); }
+.waka-settings-heading {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--waka-face);
+  font-size: var(--t-meta);
+  font-weight: 500;
+  letter-spacing: normal;
+}
+.waka-settings-section > .waka-account-field { margin-top: 0; }
+.waka-settings-section > .waka-account-failed { margin-top: 0; }
+/* The address, read-only: a value under its label, as the fields are. */
+.waka-settings-fact .waka-settings-who { color: var(--ink); font-size: var(--t-body); }
+.waka-settings-section > .waka-bookmarklet { justify-self: start; align-self: flex-start; }
+/* The how-to line is quieter than the rows it sits among. */
+.waka-save-anywhere > .waka-settings-note { font-size: var(--t-ui); }
+/* Rows sit on hairlines, one between each, none above the first. Two
+   classes, so `.waka-account button`'s `border: 0` cannot take the line. */
+.waka-settings-list { display: flex; flex-direction: column; }
+.waka-settings-section .waka-settings-list > * + * { border-top: 1px solid var(--line); }
+/* Every row in the card at one size: the same 15px Sign out is set in. */
+.waka-settings-section .waka-settings-row,
+.waka-settings-section > .waka-settings-delete { font-size: var(--t-body); }
+.waka-settings-row .waka-settings-chevron { flex: none; color: var(--muted); }
+.waka-settings-export { display: flex; flex-direction: column; gap: var(--sp-4); }
+.waka-settings-export > a.waka-settings-row { color: var(--ink); text-decoration: none; }
+/* THE FOOT'S TWO ACTS AND THE LEGAL LINKS ON THE SAME EDGE. Their own
+   inline padding put Sign out's words 8px and Delete account's 14px in from
+   every other word on the card; the 44px height stays. */
+.waka-settings-section > .waka-account-out,
+.waka-settings-section > .waka-settings-erase,
+.waka-session-foot > .waka-settings-erase,
+.waka-session-line > .waka-settings-erase {
+  align-self: flex-start;
+  min-height: var(--waka-corner);
+  padding-inline: 0;
+  border-radius: 0;
+  background: none;
+}
+.waka-settings-section > .waka-account-out { color: var(--ink); font-size: var(--t-body); }
+.waka-settings-section > .waka-legal-links { gap: 0 var(--sp-16); font-size: var(--t-meta); }
+.waka-settings-section > .waka-legal-links a { color: var(--muted); }
+
+/* ═══ SIGNED-IN DEVICES, ONE LINE EACH ═════════════════════════════════
+   A 155px card per session, thirty deep on the test account. Now a name,
+   a muted "Last used", and Disconnect on the same row; this device first. */
+.waka-session-current,
+.waka-session-text { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.waka-session-current { padding: var(--sp-12) 0; border-bottom: 1px solid var(--line); }
+.waka-session-name { color: var(--ink); font-size: var(--t-body); overflow-wrap: anywhere; }
+.waka-session-meta { color: var(--muted); font-size: var(--t-meta); }
+.waka-session-line { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
+.waka-session-list .waka-session-card { padding: var(--sp-8) 0; }
+.waka-session-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-8) var(--sp-16); }
+.waka-session-foot > .waka-session-confirm { flex: 1 1 100%; }
+
 /* ═══ THE PUBLIC GROUP'S DRESS GOES WITH THE GROUP ════════════════════
    Founder: "everything regarding public and private should also not be a
    thing in this new experience." The settings panel's public group — the
@@ -5657,18 +5753,23 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   border-bottom: 1px solid var(--line);
 }
 
+/* TEXT TABS, THE CURRENT ONE UNDERLINED (craft audit, 2026-11-26): the
+   filled pills were the one filled control on the card. */
 .waka-session-tabs button {
-  flex: 1;
+  flex: 0 0 auto;
   min-height: var(--waka-corner);
-  padding: 0 var(--sp-12);
-  border-radius: var(--r-pill);
-  text-align: center;
+  padding: 0;
+  border-radius: 0;
+  text-align: left;
   font-size: var(--t-meta);
 }
 
+.waka-session-tabs { gap: var(--sp-20); padding-bottom: 0; }
+.waka-session-tabs button:hover { background: none; }
 .waka-session-tabs button[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  background: none;
   color: var(--ink);
+  box-shadow: inset 0 -1.5px 0 var(--ink);
 }
 
 .waka-session-list-heading,
@@ -5687,8 +5788,14 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   font-weight: 500;
 }
 
+/* THE ANSWERING ACT IS EDGED, NOT FILLED (craft audit, 2026-11-26): the
+   same outline as Save to WAKA, so Copy setup prompt, Change password and
+   the second press of a delete read as one kind of button. */
 .waka-session-actions > button:last-child {
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  padding-inline: var(--sp-16);
+  border: 1px solid var(--field-edge);
+  border-radius: var(--r-pill);
+  background: none;
   color: var(--ink);
 }
 
@@ -6004,15 +6111,21 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   color: var(--ink);
 }
 
+/* ONE LEFT EDGE, ONE RHYTHM (craft audit, 2026-11-26). The numbers pushed
+   the steps' words to x 57 while the header and the foot sat at 29, the
+   steps were 16px apart and the rule 36px below them, and title and body
+   were the same 15px, told apart by weight alone. The numerals go (this
+   block's own rule above was "no numerals"), every gap is 20px, and the
+   body is a step smaller and muted under an ink title. */
 .waka-about-steps {
   display: grid;
-  gap: var(--sp-16);
+  gap: var(--sp-20);
   margin: 0;
-  padding-left: var(--sp-24);
+  padding: 0;
+  list-style: none;
 }
 
-.waka-about-steps li { padding-left: var(--sp-4); }
-.waka-about-steps li::marker { color: var(--muted); }
+.waka-about-steps li { padding: 0; }
 .waka-about-steps h3, .waka-about-details dt {
   margin: 0;
   font-size: var(--t-body);
@@ -6021,15 +6134,15 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .waka-about-steps p, .waka-about-details dd {
   margin: var(--sp-4) 0 0;
-  font-size: var(--t-body);
+  font-size: var(--t-ui);
   line-height: 1.5;
   color: var(--muted);
 }
 .waka-about-details {
   display: grid;
-  gap: var(--sp-12);
+  gap: var(--sp-20);
   margin: 0;
-  padding-top: var(--sp-16);
+  padding-top: var(--sp-20);
   border-top: 1px solid var(--line);
 }
 
@@ -6956,7 +7069,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-session-list-heading h3, .waka-mcp-setup h3 { font-size: var(--t-body); }
 .waka-agent-profile-fields input, .waka-settings-add input, .waka-settings .waka-account-field input { font-size: var(--t-input); }
 .waka-mcp-choice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-8); margin: var(--sp-12) 0; font-size: var(--t-body); }
-.waka-mcp-choice select { min-height: var(--sp-44); max-width: 100%; padding: var(--sp-8); border: 1px solid var(--line); border-radius: var(--sp-8); background: var(--paper); color: var(--ink); font: inherit; font-size: var(--t-input); }
+/* Styled as the card's other fields (craft audit, 2026-11-26: it was the
+   browser's own black select); its arrow is the one chrome.css draws. */
+.waka-mcp-choice select { min-height: var(--waka-corner); max-width: 100%; box-sizing: border-box; padding: 0 calc(var(--sp-14) + 18px) 0 var(--sp-12); border: 1px solid var(--field-edge); border-radius: 12px; background-color: transparent; color: var(--ink); font: inherit; font-size: var(--t-input); }
+.waka-mcp-choice select option { background: var(--waka-raised); color: var(--ink); }
 .waka-mcp-instruction-title { margin: var(--sp-16) 0 var(--sp-8); font-size: var(--t-body); font-weight: 500; }
 .waka-mcp-key-steps { margin: var(--sp-12) 0; padding-inline-start: var(--sp-24); }
 .waka-mcp-key-steps > li { padding-inline-start: var(--sp-4); }
@@ -7262,6 +7378,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   color: var(--ink); font-size: var(--t-input);
 }
 .jar-inspiration-composer .waka-note-ask-act--quiet { color: var(--muted); }
+.jar-inspiration-composer .waka-note-ask-act { white-space: nowrap; }
+.jar-inspiration-composer .waka-note-ask-act--stay { margin-inline-end: auto; margin-inline-start: calc(-1 * var(--sp-12)); }
 .jar-inspiration-composer .waka-note-ask-act:disabled { opacity: 0.4; }
 .waka-note-ask-failed { margin: var(--sp-8) 0 0; color: var(--muted); font-size: var(--t-ui); }
 .waka-note-arrival { display: flex; gap: var(--sp-8); margin: 0 0 var(--sp-12) 50px; }
@@ -7416,14 +7534,17 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   box-sizing: border-box; width: 100%; height: 100%; margin: 0;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  background: color-mix(in srgb, var(--bg) 94%, transparent);
-  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  /* Opaque (audit, 2026-11-26): at 94% the notepad's X and title showed
+     through under "Listening…". */
+  background: var(--bg);
   color: var(--ink); text-align: left;
 }
 .waka-listening-head {
   display: flex; align-items: center; justify-content: center; gap: var(--sp-4);
   padding: var(--sp-12) var(--sp-16) var(--sp-4);
 }
+/* A spacer as wide as the creature, so the label is centred on the page. */
+.waka-listening-head::after { content: ""; flex: none; width: 64px; }
 .waka-listening-being { position: relative; display: grid; place-items: center; flex: none; width: 64px; height: 64px; }
 .waka-listening-being > .waka-companion { position: relative; width: auto; height: auto; background: none; }
 .waka-listening-light {
@@ -7615,8 +7736,11 @@ main.waka-page > .waka-surface-head,
    over the mic and the ⋯ ends where Save ends. MEASURED at 390, 711 and 1280. */
 .jar-seek.jar-inspiration-composer > .waka-surface-head:is(.waka-surface-head, #waka-surface-head),
 .waka-over--note .waka-over-one > .waka-surface-head:is(.waka-surface-head, #waka-surface-head) { width: min(100%, 40rem); }
-.jar-seek.jar-inspiration-composer > .waka-surface-head > .waka-surface-back:is(.waka-surface-back, #waka-surface-head),
-.waka-over--note .waka-over-one > .waka-surface-head > .waka-surface-back:is(.waka-surface-back, #waka-surface-head) { margin-inline-start: calc(-1 * var(--sp-12)); }
+/* ONE X EVERYWHERE (audit, 2026-11-26: the X stood at 4, 16 and 29 on a
+   phone across the notepad, the sheet, chat and the cards). Every header's
+   X or "<" leans 12px out of its 44px box, so the glyph itself stands on the
+   page's text edge, as it does over the notepad's mic. */
+.waka-surface-head > .waka-surface-back:is(.waka-surface-back, #waka-surface-head) { margin-inline-start: calc(-1 * var(--sp-12)); }
 .waka-over--note .waka-over-one > .waka-surface-head > .waka-surface-right { margin-inline-end: calc(-1 * var(--sp-10)); }
 
 /* A SURFACE WITH NO DOM PAGE OF ITS OWN (a principle in the sky, the
@@ -7694,6 +7818,14 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   margin-top: auto; margin-bottom: calc(var(--sp-28) + env(safe-area-inset-bottom));
 }
 .waka-over.waka-over--note { max-height: none; }
+/* ROOM FOR THE ENDS THAT LEAN OUT (audit, 2026-11-26): the header's ⋯ and
+   the bar's Save stand 12px past the words' edges, which overflowed this
+   scroll box, so opening the ⋯ menu scrolled the page sideways and cut the
+   first letters off. The box is 24px wider and pads them back. */
+.waka-page--note > .waka-over.waka-over--note {
+  box-sizing: border-box; width: calc(100% + 2 * var(--sp-12)); max-width: none;
+  margin-inline: calc(-1 * var(--sp-12)); padding-inline: var(--sp-12);
+}
 .waka-page.waka-page--note { padding-bottom: 0; }
 }
 
@@ -7814,6 +7946,20 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 .waka-page.waka-page--sheet[data-leaving] { animation: waka-sheet-down 220ms ease-in both; pointer-events: none; }
 .waka-page.waka-page--sheet[data-dragging] { animation: none; }
+/* THE BAR OVER THE SHEET STAYS A BAR (audit, 2026-11-26): on the sheet's
+   own ground the pill vanished and rows slid under it. A step lighter, with
+   the sheet's list fading out under it. */
+body:has(.waka-page--sheet) .waka-home-bar-pill,
+body:has(.waka-page--sheet) .waka-home-bar-chat {
+  background: color-mix(in srgb, var(--ink) 8%, var(--waka-raised));
+  box-shadow: 0 -8px 24px color-mix(in srgb, var(--waka-raised) 90%, transparent);
+}
+.waka-page.waka-page--sheet::after {
+  content: ""; position: absolute; left: 0; right: 0; pointer-events: none;
+  bottom: calc(var(--sp-28) + var(--sp-64) + var(--sp-12) + env(safe-area-inset-bottom));
+  height: var(--sp-32);
+  background: linear-gradient(to bottom, transparent, var(--waka-raised));
+}
 /* The grabber: the handle that pulled it up, now at its top. */
 .waka-sheet-grab {
   flex: none; display: flex; justify-content: center; align-items: center;

@@ -246,8 +246,10 @@
 }
 /* THE WORD THAT MOVES ON — Next, Start, Continue, Try again. Plain text at
    full white, never a filled pill (founder: "next button too big"; and
-   nothing in a bottom row fills). 44px tall so it is still easy to hit. */
-.onb .onb-go {
+   nothing in a bottom row fills). 44px tall so it is still easy to hit;
+   `button.` so it outranks the reset above (audit, 2026-11-26: it measured
+   71 by 23). */
+.onb button.onb-go {
   min-height: 44px;
   padding: 0 var(--sp-20);
   border: 0;

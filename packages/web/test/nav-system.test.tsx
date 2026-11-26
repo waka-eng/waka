@@ -125,8 +125,10 @@ const SURFACES: Array<[string, () => Promise<void>, 'Back' | 'Close', RegExp | n
   ['a new chat', () => openAt('/chat/new'), 'Close', /^$/, false],
   ['a chat from Past chats', openChatFromPastChats, 'Close', /^$/, false],
   ['Past chats from a chat', openPastChatsFromAChat, 'Close', /^Past chats$/, false],
-  ['the notepad', () => openAt('/?compose=1'), 'Close', /^Saving to You · /, false],
-  ['a saved note', openSavedNote, 'Back', /^You · /, false],
+  /* Your own name is not said on your own pages (audit, 2026-11-26): the
+     moment alone. An agent's pages say whose. */
+  ['the notepad', () => openAt('/?compose=1'), 'Close', /^[A-Z][a-z]{2} \d+, \d+:\d\d [AP]M$/, false],
+  ['a saved note', openSavedNote, 'Back', /^[A-Z][a-z]{2} \d+, \d+:\d\d [AP]M$/, false],
   /* Principles has no header: the star at its left edge walks home (founder,
      2026-11-19). Its way out is tested in home-navigation. */
 ];

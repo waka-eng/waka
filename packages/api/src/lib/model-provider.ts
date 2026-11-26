@@ -273,6 +273,10 @@ export interface TopOfMindReviewResult {
     languageMatches: boolean;
     grounded: boolean;
     synthesized: boolean;
+    /** False when the entry would be true of most people who save anything:
+     * a horoscope, not a reading (insight goal, phase 2). Absent counts as
+     * specific, for verdicts recorded before the check existed. */
+    specific?: boolean;
     supportingInspirationIds: string[];
     /** Smallest opposite-reading set covering this entry's complete meaning.
      * [] means uncovered. Required on both sides during an evaluation. */

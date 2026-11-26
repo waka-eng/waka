@@ -1109,6 +1109,43 @@ body .login-shell .field {
   text-align: left;
 }
 
+/* ═══ THE DOOR SPEAKS IN THE PRODUCT'S REGISTER (craft audit, 2026-11-26) ══
+   MEASURED at 390: a 270px column with 60px each side (the shell's 24 and
+   the card's own 36) where every other screen keeps 16; 10px uppercase
+   tracked labels and tabs ("EMAIL", "SIGN IN") where Settings says "Your
+   name" at 12px; 35px tabs; and the Google note at 16px full ink, louder
+   than the subtitle and every label. Now the gutter is the product's 16,
+   labels and tabs are sentence case like Settings, the tabs take 44px, and
+   the note is a quiet 12px line. */
+body .login-shell {
+  padding-inline: max(var(--sp-16), env(safe-area-inset-left)) max(var(--sp-16), env(safe-area-inset-right));
+}
+body .login-shell .login-card {
+  padding-inline: 0;
+}
+body .login-shell .field-label,
+body .login-shell .login-tabs button,
+body .login-shell .login-divider__label,
+body .login-shell .btn-google {
+  text-transform: none;
+  letter-spacing: normal;
+}
+body .login-shell .field-label {
+  font-size: var(--t-meta);
+  font-weight: 400;
+}
+body .login-shell .login-tabs button {
+  min-height: var(--waka-corner);
+  padding-block: 0;
+  font-size: var(--t-ui);
+}
+body .login-shell .login-google-hint {
+  margin: var(--sp-8) 0 0;
+  color: var(--w-muted);
+  font-size: var(--t-meta);
+  line-height: 1.5;
+}
+
 /* ═══ THE DOOR'S FIELDS ARE BOXES, LIKE THE REST OF THE PRODUCT ══════════
    `chrome.css` has a standing note above the shared field rule — "a rule
    under the words rather than a box around them: the world has no boxes,
@@ -1140,7 +1177,8 @@ body .login-shell .field-input {
    button is misplaced". So the native arrow goes, and a drawn one sits
    inside the same inset the text keeps on the left. */
 body select.field-input,
-body .waka-account-field select {
+body .waka-account-field select,
+body .waka-mcp-choice select {
   appearance: none;
   -webkit-appearance: none;
   padding-right: calc(var(--sp-14) + 18px);

@@ -509,7 +509,6 @@ body {
  * DECLARED ONCE MEANS LAYERS STOP MATTERING. There is no longer any rule in
  * any layer to out-rank; `type-scale.test.ts` holds it at one. */
 .jar-label,
-.jar-saved,
 /* `.jar-mouth-field::placeholder` LEFT THIS REGISTER on 2026-10-11. It was
    right while that field was a one-line box on the home screen: a short
    signpost, in the voice signposts use. The field is now the whole notepad
@@ -532,11 +531,15 @@ body {
    register has nothing to rule about it. Same reason as the six `.profile-*`
    names below: a register entry for a class nothing emits is a declaration
    for nothing. */
-.login-eyebrow,
-.field-label,
-.login-divider,
-.login-divider__label,
-.login-tab,
+/* ═══ THE DOOR LEFT THIS REGISTER (craft audit, 2026-11-26) ═══════════
+   `.login-eyebrow`, `.field-label`, `.login-divider`, `.login-divider__label`,
+   `.login-tab` and `.btn-google` rendered "EMAIL", "SIGN IN", "OR" and
+   "CONTINUE WITH GOOGLE" at 10 to 12px tracked capitals, while the same
+   labels inside the product ("Your name", "Language" in Settings) are
+   sentence case at 12px. The door and the set-up step now speak in the
+   product's register; `chrome.css` sizes them (`THE DOOR SPEAKS IN THE
+   PRODUCT'S REGISTER`). The eyebrow itself is no longer rendered. */
+.jar-saved
 /* ═══ SIX `.profile-*` NAMES AND `.btn-destructive` LEFT THIS REGISTER ══
    Not because the register changed its mind — because `Profile.tsx` was
    deleted on 2026-10-11 with the `/profile` route and nothing renders any
@@ -567,10 +570,9 @@ body {
    you press, listed here, already rendering uppercase — should join the
    sign-out verb in lower case. Both are gone, so the register no longer
    contains a single thing you press, and the question is closed by
-   deletion rather than by answer. `.btn-google` is the last entry below;
-   it is a thing you press, and it is still here, so the question is only
-   mostly closed. */
-.btn-google {
+   deletion rather than by answer. `.btn-google` was the last thing you
+   press in it and left on 2026-11-26 (above), so the question is closed. */
+{
   /* The register's voice stays shared; an interactive label can opt into a
      larger named type step without losing its uppercase/tracking. Metadata
      keeps the original ten-pixel default. */

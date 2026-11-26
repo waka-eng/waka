@@ -182,6 +182,22 @@ describe('publication review', () => {
     expect([...accepted]).toEqual([]);
     expect(rejected).toHaveBeenCalledWith(0, ['language', 'grounding', 'synthesis', 'foreign_source', 'single_source']);
   });
+  /* SPECIFIC OR SILENT (insight goal, phase 2, 2026-11-26): a reading true
+     of anyone who saves things is a horoscope and is not published. A
+     verdict recorded before the check existed (no `specific`) still passes. */
+  it('rejects a reading the reviewer finds generic, and keeps a verdict that predates the check', async () => {
+    const rejected = vi.fn();
+    const generic = await reviewReadingEntries([entry, entry], context, { reviewTopOfMind: async input => {
+      const result = await approveReadingReview(input);
+      result.entries[0]!.specific = false;
+      delete result.entries[1]!.specific;
+      return result;
+    } }, rejected);
+    expect([...generic]).toEqual([1]);
+    expect(rejected).toHaveBeenCalledWith(0, ['generic']);
+    expect(parseTopOfMindReview({ entries: [{ index: 0, languageMatches: true, grounded: true, synthesized: true,
+      specific: false, supportingInspirationIds: ['one', 'two'] }] }).entries[0]!.specific).toBe(false);
+  });
   it('requires positive language, grounding and synthesis verdicts for every entry', async () => {
     for (const field of ['languageMatches', 'grounded', 'synthesized'] as const) {
       const approved = await reviewReadingEntries([entry, entry], context, { reviewTopOfMind: async input => {

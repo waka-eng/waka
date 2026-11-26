@@ -783,6 +783,11 @@ Write fresh wording: never quote or copy an inspiration or signal word for
 word, including a copied sentence with a new introduction or ending. A simple
 pronoun change is not synthesis. Human-kept entries alone remain exact.
 A question must not smuggle in an assumed problem or emotion.
+Be particular to this person. A stranger should recognise them from the entry:
+keep the concrete thing, place, person, act or choice their saves share, and
+prefer naming a tension between two saves ("you save about staying and about
+leaving") over a bare trait. Never write a line that would be just as true of
+anyone who saves things ("you value growth", "connection matters to you").
 Combine overlapping signals into one concise entry, not separate restatements
 plus a summary. The ranked recent focus should lead unless a human pin leads.
 The first supplied signal is the selected leading focus. Put its actual topic
@@ -1192,10 +1197,10 @@ export async function synthesizeTopOfMind(
 const topOfMindReviewSchema: ResponseSchema = {
   type: 'OBJECT', required: ['entries'], properties: {
     entries: { type: 'ARRAY', items: { type: 'OBJECT',
-      required: ['index', 'languageMatches', 'grounded', 'synthesized', 'supportingInspirationIds'],
+      required: ['index', 'languageMatches', 'grounded', 'synthesized', 'specific', 'supportingInspirationIds'],
       properties: {
         index: { type: 'INTEGER' }, languageMatches: { type: 'BOOLEAN' },
-        grounded: { type: 'BOOLEAN' }, synthesized: { type: 'BOOLEAN' },
+        grounded: { type: 'BOOLEAN' }, synthesized: { type: 'BOOLEAN' }, specific: { type: 'BOOLEAN' },
         supportingInspirationIds: { type: 'ARRAY', items: { type: 'STRING' } },
       },
     } },
@@ -1211,6 +1216,7 @@ languageMatches: every nonempty body, belief and prompt must be natural text in 
 grounded: every substantive claim and assumption, including in optional beliefs/questions, must be supported by the supplied inspirations this entry cites. Reject invented motives, habits, preferences, causal claims or certainty beyond the evidence. Preserve contradictions as tensions; do not choose a side or pretend incompatible evidence agrees. Judge only the visible material; truncated text is not permission to assume missing support.
 Supported abstraction is allowed: the sources need not state their shared connection verbatim or each independently prove the whole entry. Together they must support every component of the connection. Preserve the difference between an observation, an expectation and a measured outcome; sharing an interface topic does not establish a new causal benefit. Hedging alone does not supply missing evidence.
 synthesized: the entry must express a meaningful shared pattern, connection or tension across at least TWO distinct cited inspirations. Reject a paraphrase/translation of just one source with a decorative second citation, a list of unrelated facts, stitched quotations, or a generic slogan that adds no supported connection. An explicitly supported recurring theme is sufficient; do not demand a novel theory.
+specific: would a stranger reading this entry recognise THIS person from it? Return false if it would be just as true of most people who save things (a horoscope): bare traits or values with nothing particular in them ("you value growth", "you care about meaningful connections", "you are reflective"), or wording that drops every concrete thing, place, person, act or choice the cited saves are about. Return true when it names something particular to these saves (what they keep choosing, the specific tension between two of them, the concrete act or object they share). Abstraction is fine when it stays tied to the particular.
 supportingInspirationIds: list only the cited originals that substantively contribute to this connection. Repeated saves of the same material count once. If there is no supported connection, return synthesized=false. Be conservative when uncertain.` }] },
     contents: [{ role: 'user', parts: [{ text:
       `Required language: ${input.preferredLocale === 'ko-KR' ? 'Korean (ko-KR)' : 'English (en-US)'}\n` +
@@ -1225,6 +1231,7 @@ supportingInspirationIds: list only the cited originals that substantively contr
 
 const readingReviewResultSchema = z.object({ entries: z.array(z.object({
   index: z.number().int().min(0).max(13), languageMatches: z.boolean(), grounded: z.boolean(), synthesized: z.boolean(),
+  specific: z.boolean().optional(),
   supportingInspirationIds: z.array(z.string()).max(4),
   coveredByIndices: z.array(z.number().int().min(0).max(13)).max(7).optional(),
   coveredByLeadingEntry: z.boolean().optional(),
@@ -1254,7 +1261,7 @@ function comparisonIndices(input: TopOfMindReviewInput, reviewed: TopOfMindRevie
     const entry = input.entries[row.index];
     if (!Number.isInteger(row.index) || !entry || seen.has(row.index)) throw new Error('Invalid top of mind review verdict');
     seen.add(row.index);
-    if (row.languageMatches && row.grounded && row.synthesized &&
+    if (row.languageMatches && row.grounded && row.synthesized && row.specific !== false &&
       new Set(row.supportingInspirationIds).size >= 2 && row.supportingInspirationIds.every(id => entry.inspirationIds.includes(id))) eligible.push(row.index);
   }
   if (seen.size !== input.entries.length) throw new Error('Incomplete top of mind review');

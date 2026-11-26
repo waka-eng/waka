@@ -85,81 +85,139 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   }, []);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  /* The same elements are rows in the overview and pages when one is open. */
+  const groups = <SettingsGroups open={open} setOpen={setOpen} say={say} locale={props.locale}
+    personalProfile={personalProfile} profileLoadFailed={profileLoadFailed}
+    retryProfile={() => setProfileAttempt(attempt => attempt + 1)} />;
+  const danger = <DangerGroup open={open} setOpen={setOpen} say={say}
+    confirmDelete={confirmDelete} setConfirmDelete={setConfirmDelete} deleting={deleting}
+    onDelete={() => {
+      setDeleting(true);
+      void props.onDeleteAccount().finally(() => { if (alive.current) setDeleting(false); });
+    }} />;
 
   return (
     <div ref={panel} className="waka-settings" role="group" aria-label={say("worldSettingsOpen")}>
       <SurfaceHeader locale={props.locale}
         back={{ kind: open === null ? "close" : "back", onBack: stepUp }}
         titleRef={heading}
-        title={say(open === "personal" ? "profilePersonalTitle" : open === "sessions" ? "profileSessionsTitle" : open === "password" ? "profileChangePassword" : open === "danger" ? "profileDelete" : "worldSettingsOpen")} />
+        title={say(open === "personal" ? "profilePersonalMcpTitle" : open === "sessions" ? "profileSessionsTitle" : open === "password" ? "profileChangePassword" : open === "danger" ? "profileDelete" : "worldSettingsOpen")} />
       <div className="waka-settings-content" key={open ?? "overview"}>
+      {/* ═══ FOUR GROUPS, ONE HEADING STYLE (craft audit, 2026-11-26) ══════
+          Founder: "spacing padding can be better ... the workflow
+          categorization design padding Text". The overview was a loose
+          address line, two fields, a label that was really a heading, a bare
+          line of text that was really a row, three rows, underlined links
+          bigger than everything and two bare buttons, each on its own gap.
+          Now: Account, Save from anywhere, Data and connections, About; one
+          small muted heading each, one left edge, 24px between groups. */}
       {open === null ? <>
-      {/* WHO THIS IS. Not editable, and not a field: the address identifies
-          the account and changing it is a different act with its own
-          verification. */}
-      {props.email ? <p className="waka-settings-who">{props.email}</p> : null}
+      <section className="waka-settings-section" aria-labelledby="waka-settings-account">
+        <h3 id="waka-settings-account" className="waka-settings-heading">{say("settingsGroupAccount")}</h3>
+        {/* WHO THIS IS. Not editable: the address identifies the account
+            and changing it is a different act with its own verification.
+            Shown as a read-only value under its own label, like the fields. */}
+        {props.email ? <div className="waka-account-field waka-settings-fact">
+          <span>{say("settingsEmailLabel")}</span>
+          <p className="waka-settings-who">{props.email}</p>
+        </div> : null}
 
-      <label className="waka-account-field">
-        <span>{say("profileNickname")}</span>
-        <input type="text" value={props.name} aria-busy={props.nameBusy} autoComplete="name"
-          onChange={(event) => props.onName(event.currentTarget.value)} />
-      </label>
+        <label className="waka-account-field">
+          <span>{say("profileNickname")}</span>
+          <input type="text" value={props.name} aria-busy={props.nameBusy} autoComplete="name"
+            onChange={(event) => props.onName(event.currentTarget.value)} />
+        </label>
 
-      <label className="waka-account-field">
-        <span>{say("profileLanguageLabel")}</span>
-        {/* STRIPPED: "The language WAKA uses with you." under the label.
-            Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
-        <select aria-label={say("profileLanguageLabel")} value={props.locale} disabled={props.localeBusy}
-          onChange={(event) => props.onLocale(event.currentTarget.value as SupportedLocale)}>
-          {supportedLocales.map((option) => (
-            <option key={option.code} value={option.code}>{option.nativeLabel}</option>
-          ))}
-        </select>
-      </label>
+        <label className="waka-account-field">
+          <span>{say("profileLanguageLabel")}</span>
+          {/* STRIPPED: "The language WAKA uses with you." under the label.
+              Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */}
+          <select aria-label={say("profileLanguageLabel")} value={props.locale} disabled={props.localeBusy}
+            onChange={(event) => props.onLocale(event.currentTarget.value as SupportedLocale)}>
+            {supportedLocales.map((option) => (
+              <option key={option.code} value={option.code}>{option.nativeLabel}</option>
+            ))}
+          </select>
+        </label>
 
-      {props.failed ? (
-        <span className="waka-account-failed" role="alert">{say("profileSaveError")}</span>
-      ) : null}
+        {props.failed ? (
+          <span className="waka-account-failed" role="alert">{say("profileSaveError")}</span>
+        ) : null}
+      </section>
 
       {/* SAVE FROM ANYWHERE: the bookmarklet opens this app's /share with
           the page it was pressed on (see lib/bookmarklet.ts). */}
-      <div className="waka-account-field waka-save-anywhere" role="group" aria-labelledby="waka-save-anywhere-title">
-        <span id="waka-save-anywhere-title">{say("profileSaveAnywhere")}</span>
-        <div className="waka-save-anywhere-row">
-          <small>{say("profileBookmarkletHint")}</small>
-          <a ref={bookmarklet} className="waka-bookmarklet" draggable
-            onClick={(event) => event.preventDefault()}>{say("profileBookmarkletName")}</a>
-        </div>
-      </div>
-      <ProfileExportControl locale={props.locale} />
-      </> : null}
+      <section className="waka-settings-section waka-save-anywhere" aria-labelledby="waka-save-anywhere-title">
+        <h3 id="waka-save-anywhere-title" className="waka-settings-heading">{say("profileSaveAnywhere")}</h3>
+        <p className="waka-settings-note">{say("profileBookmarkletHint")}</p>
+        <a ref={bookmarklet} className="waka-bookmarklet" draggable
+          onClick={(event) => event.preventDefault()}>{say("profileBookmarkletName")}</a>
+      </section>
 
+      <section className="waka-settings-section" aria-labelledby="waka-settings-data">
+        <h3 id="waka-settings-data" className="waka-settings-heading">{say("settingsGroupData")}</h3>
+        <div className="waka-settings-list">
+          <ProfileExportControl locale={props.locale} />
+          {groups}
+        </div>
+      </section>
+
+      <section className="waka-settings-section" aria-labelledby="waka-settings-about">
+        <h3 id="waka-settings-about" className="waka-settings-heading">{say("settingsGroupAbout")}</h3>
+        <LegalLinks />
+        <button type="button" className="waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
+          {say("worldSignOutLower")}
+        </button>
+        {danger}
+      </section>
+      </> : <>{groups}{danger}</>}
+      </div>
+    </div>
+  );
+}
+
+function SettingsGroups({ open, setOpen, say, locale, personalProfile, profileLoadFailed, retryProfile }: {
+  open: Open;
+  setOpen: (next: Open) => void;
+  say: (key: Parameters<typeof t>[1]) => string;
+  locale: SupportedLocale;
+  personalProfile: ApiOwnedProfile | null;
+  profileLoadFailed: boolean;
+  retryProfile: () => void;
+}): JSX.Element {
+  return <>
       <Group id="personal" open={open} setOpen={setOpen} label={say('profilePersonalMcpTitle')}>
-        {personalProfile ? <PersonalConnections key={personalProfile.id} locale={props.locale} profile={personalProfile} />
+        {personalProfile ? <PersonalConnections key={personalProfile.id} locale={locale} profile={personalProfile} />
           : profileLoadFailed ? <>
             <p className="waka-account-failed" role="alert">{say('profilePersonalMcpLoadError')}</p>
-            <button type="button" className="waka-settings-erase" onClick={() => setProfileAttempt(attempt => attempt + 1)}>{say('worldRetry')}</button>
+            <button type="button" className="waka-settings-erase" onClick={retryProfile}>{say('worldRetry')}</button>
           </> : <p className="waka-settings-note" role="status">{say('worldInspirationsLoad')}</p>}
       </Group>
 
       <Group id="sessions" open={open} setOpen={setOpen} label={say("profileSessionsTitle")}>
-        <ProfileConnections locale={props.locale} />
+        <ProfileConnections locale={locale} />
       </Group>
 
       <Group id="password" open={open} setOpen={setOpen} label={say("profileChangePassword")}>
-        <PasswordChangeForm locale={props.locale} />
+        <PasswordChangeForm locale={locale} />
       </Group>
+  </>;
+}
 
-      {open === null ? <LegalLinks /> : null}
-
-      {open === null ? <button type="button" className="waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
-        {say("worldSignOutLower")}
-      </button> : null}
-
-      {/* ═══ THE ONE IRREVERSIBLE ACT, LAST AND TWICE-PRESSED ═════════════
+function DangerGroup({ open, setOpen, say, confirmDelete, setConfirmDelete, deleting, onDelete }: {
+  open: Open;
+  setOpen: (next: Open) => void;
+  say: (key: Parameters<typeof t>[1]) => string;
+  confirmDelete: boolean;
+  setConfirmDelete: (value: boolean) => void;
+  deleting: boolean;
+  onDelete: () => void;
+}): JSX.Element | null {
+  return (
+      /* ═══ THE ONE IRREVERSIBLE ACT, LAST AND TWICE-PRESSED ═════════════
           At the foot, behind a disclosure, behind a second press. The page
           this replaces had it behind a disclosure too and that part was
-          right. */}
+          right. */
       <Group id="danger" open={open} setOpen={setOpen} label={say("profileDelete")}>
         <p className="waka-settings-note">{say("profileDeleteHint")}</p>
         {/* A DESTRUCTIVE CONFIRM ALWAYS OFFERS CANCEL (nav system R8), as
@@ -170,15 +228,12 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           <button type="button" className="waka-settings-erase" disabled={deleting}
             onClick={() => {
               if (!confirmDelete) { setConfirmDelete(true); return; }
-              setDeleting(true);
-              void props.onDeleteAccount().finally(() => { if (alive.current) setDeleting(false); });
+              onDelete();
             }}>
             {say(deleting ? "profileRemoving" : confirmDelete ? "worldDeleteItAnyway" : "profileDelete")}
           </button>
         </div>
       </Group>
-      </div>
-    </div>
   );
 }
 
@@ -272,17 +327,22 @@ function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
     }
   }
 
+  /* A ROW LIKE ITS NEIGHBOURS (craft audit, 2026-11-26: it was a bare line
+     of text with 44px of nothing above and below). It ends in a download
+     glyph rather than a chevron because it does not open a page. */
+  const glyph = <svg className="waka-settings-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" /></svg>;
   return (
-    <div className="waka-account-field">
+    <div className="waka-settings-export">
       {url ? (
-        <a href={url} download="waka-profile.json">{t(locale, "profileExportDownload")}</a>
+        <a className="waka-settings-row" href={url} download="waka-profile.json">{t(locale, "profileExportDownload")}{glyph}</a>
       ) : (
         <button type="button" className="waka-settings-row" disabled={busy} onClick={() => void prepare()}>
-          {t(locale, isMobileBuild ? "profileExportInBrowser" : "profileExportPrepare")}
+          {t(locale, isMobileBuild ? "profileExportInBrowser" : "profileExportPrepare")}{glyph}
         </button>
       )}
-      {isMobileBuild && <small>{t(locale, "profileExportBrowserHint")}</small>}
-      {busy && <small role="status">{t(locale, "profileExportPreparing")}</small>}
+      {isMobileBuild && <p className="waka-settings-note">{t(locale, "profileExportBrowserHint")}</p>}
+      {busy && <p className="waka-settings-note" role="status">{t(locale, "profileExportPreparing")}</p>}
       {error && <p className="waka-account-failed" role="alert">{t(locale, error)}</p>}
     </div>
   );
@@ -355,33 +415,75 @@ function ProfileConnections({ locale }: { locale: SupportedLocale }): JSX.Elemen
   };
 
   // The current browser already has Sign out. Never offer to disconnect it here.
-  const others = sessions?.filter(row => !row.current && new Date(row.expiresAt).getTime() > Date.now());
+  const live = sessions?.filter(row => new Date(row.expiresAt).getTime() > Date.now());
+  const current = live?.find(row => row.current);
+  const others = live?.filter(row => !row.current);
   const date = (value: string) => new Date(value).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+
+  /* ONE PRESS FOR EVERY OTHER DEVICE (craft audit, 2026-11-26: thirty
+     identical cards and no way out of them but thirty presses). The API
+     revokes one session at a time, so this asks once and then revokes each
+     in turn; any that fail stay on screen with the error. */
+  const disconnectOthers = async () => {
+    if (!others?.length) return;
+    setBusy("others");
+    setError("");
+    setNotice("");
+    const ended: string[] = [];
+    for (const session of others) {
+      try { await revokeSession(session.id); ended.push(session.id); } catch { /* reported below */ }
+      if (!alive.current) return;
+    }
+    setSessions(rows => rows?.filter(row => !ended.includes(row.id)) ?? null);
+    setConfirm(null);
+    setBusy(null);
+    if (ended.length === others.length) setNotice(say("profileConnectionSignOutOthersDone"));
+    else setError(say("profileConnectionDisconnectError"));
+  };
 
   return <>
     {error ? <span className="waka-account-failed" role="alert">{error}</span> : null}
-    <div className="waka-session-list-heading">
+    {notice ? <p className="waka-settings-note" role="status">{notice}</p> : null}
+    {loading ? <p className="waka-settings-note" role="status">{say("worldInspirationsLoad")}</p> : null}
+    {/* THIS DEVICE FIRST, so the list starts from the one you are holding. */}
+    {current ? <div className="waka-session-current">
+      <span className="waka-session-name">{current.deviceLabel || say("profileConnectionUnnamed")}</span>
+      <span className="waka-session-meta">{say("profileConnectionThisDevice")}</span>
+    </div> : null}
+    {others?.length === 0 && !loading ? <p className="waka-settings-note">
+      {say('profileAccountConnectionsEmpty')}
+    </p> : null}
+    {/* THE ACTS COME BEFORE THE LIST, so "Sign out everywhere else" is not
+        under eighty rows (the look account had 82). */}
+    <div className="waka-session-foot">
+      {others && others.length > 1 ? (confirm === "others" ? <div className="waka-session-confirm">
+        <p ref={confirmation} tabIndex={-1}>{say("profileConnectionSignOutOthersHint")}</p>
+        <div className="waka-session-actions">
+          <button type="button" className="waka-settings-erase" disabled={busy !== null} onClick={() => setConfirm(null)}>{say("profileConnectionCancel")}</button>
+          <button type="button" className="waka-settings-erase" disabled={busy !== null} onClick={() => void disconnectOthers()}>
+            {say(busy === "others" ? "profileConnectionDisconnecting" : "profileConnectionSignOutOthersConfirm")}</button>
+        </div>
+      </div> : <button type="button" className="waka-settings-erase" data-session-id="others" disabled={loading || busy !== null}
+        onClick={() => { setConfirm("others"); setNotice(""); }}>{say("profileConnectionSignOutOthers")}</button>) : null}
       <button type="button" className="waka-settings-erase" disabled={loading || busy !== null} onClick={() => void load()}>
         {say("profileConnectionsRefresh")}
       </button>
     </div>
-    {notice ? <p className="waka-settings-note" role="status">{notice}</p> : null}
-    {loading ? <p className="waka-settings-note" role="status">{say("worldInspirationsLoad")}</p> : null}
-    {others?.length === 0 && !loading ? <p className="waka-settings-note">
-      {say('profileAccountConnectionsEmpty')}
-    </p> : null}
     <ul ref={list} className="waka-session-list" aria-busy={loading}>
       {others?.map((session) => {
         const name = session.deviceLabel || say("profileConnectionUnnamed");
         return <li key={session.id} className="waka-session-card">
-          <div className="waka-session-card-heading">
-            <strong>{name}</strong>
+          <div className="waka-session-line">
+            <span className="waka-session-text">
+              <span className="waka-session-name">{name}</span>
+              <span className="waka-session-meta">{say("profileConnectionLastUsed")} {date(session.verifiedAt ?? session.lastSeenAt)}</span>
+            </span>
+            {confirm === session.id ? null : <button type="button" className="waka-settings-erase" disabled={loading || busy !== null} onClick={() => { setConfirm(session.id); setNotice(""); }}
+              data-session-id={session.id}
+              aria-label={formatMessage(locale, "profileConnectionDisconnectLabel", { name })}>
+              {say("profileConnectionDisconnect")}
+            </button>}
           </div>
-          <dl className="waka-session-info">
-            {session.verifiedAt ? <><dt>{say('profileMcpLastVerified')}</dt><dd>{date(session.verifiedAt)}</dd></> : null}
-            <dt>{say("profileConnectionLastUsed")}</dt><dd>{date(session.lastSeenAt)}</dd>
-            <dt>{say("profileConnectionExpires")}</dt><dd>{date(session.expiresAt)}</dd>
-          </dl>
           {confirm === session.id ? <div className="waka-session-confirm">
             <p ref={confirmation} tabIndex={-1}>{formatMessage(locale, "profileConnectionDisconnectHint", { name })}</p>
             <div className="waka-session-actions">
@@ -389,11 +491,7 @@ function ProfileConnections({ locale }: { locale: SupportedLocale }): JSX.Elemen
               <button type="button" className="waka-settings-erase" disabled={busy !== null} onClick={() => void disconnect(session)}
                 aria-label={formatMessage(locale, "profileConnectionDisconnectLabel", { name })}>{say(busy === session.id ? "profileConnectionDisconnecting" : "profileConnectionDisconnect")}</button>
             </div>
-          </div> : <button type="button" className="waka-settings-erase" disabled={loading || busy !== null} onClick={() => { setConfirm(session.id); setNotice(""); }}
-            data-session-id={session.id}
-            aria-label={formatMessage(locale, "profileConnectionDisconnectLabel", { name })}>
-            {say("profileConnectionDisconnect")}
-          </button>}
+          </div> : null}
         </li>;
       })}
     </ul>
@@ -412,12 +510,10 @@ function Group({ id, open, setOpen, label, children }: {
   if (id === 'danger') return <button type="button" className="waka-settings-erase waka-settings-delete"
     data-settings-target={id} onClick={() => setOpen(id)}>{label}</button>;
   return (
-    <div className="waka-settings-group">
-      <button type="button" className="waka-settings-row" data-settings-target={id}
-        onClick={() => setOpen(id)}>
-        {label}
-        <span aria-hidden="true">›</span>
-      </button>
-    </div>
+    <button type="button" className="waka-settings-row" data-settings-target={id}
+      onClick={() => setOpen(id)}>
+      {label}
+      <span className="waka-settings-chevron" aria-hidden="true">›</span>
+    </button>
   );
 }

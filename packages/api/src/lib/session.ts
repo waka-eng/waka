@@ -51,11 +51,14 @@ export function describeUserAgent(userAgent: string | null | undefined): string 
   if (!ua) return "Browser";
 
   // Order matters: Edge and Chrome both claim Safari, Chrome claims Safari.
+  // No word boundary before Chrome: "HeadlessChrome/" and iOS's "CriOS/"
+  // are Chrome too, and were read as Safari (audit, 2026-11-26: thirty
+  // "Safari on macOS" rows that were all Chromium).
   const browser =
-    /\bEdg\//.test(ua) ? "Edge"
+    /\bEdg(?:e|A|iOS)?\//.test(ua) ? "Edge"
     : /\bOPR\/|\bOpera\b/.test(ua) ? "Opera"
-    : /\bFirefox\//.test(ua) ? "Firefox"
-    : /\bChrome\//.test(ua) ? "Chrome"
+    : /\bFirefox\/|\bFxiOS\//.test(ua) ? "Firefox"
+    : /Chrome\/|\bCriOS\//.test(ua) ? "Chrome"
     : /\bSafari\//.test(ua) ? "Safari"
     : null;
 

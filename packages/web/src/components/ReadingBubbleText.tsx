@@ -21,7 +21,7 @@ const ReadingDetails = lazy(() => import('./ReadingDetails'));
  * opens the quiet page with the words already in the field; leaving it with
  * unsaved words asks first.
  */
-export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled, details, why, onWhy }: {
+export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled, details, why, onWhy, onOpenSave }: {
   text: string; locale: SupportedLocale;
   onShare?: () => void; onChat?: () => void; chatDisabled?: boolean; details?: ReadingDetailActions;
   /** The saves the read rests on, by their own words. */
@@ -30,6 +30,8 @@ export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled,
       from (founder, 2026-11-12: "when clicking on why, open chat and tell
       user how this was formed"). */
   onWhy?: () => void;
+  /** Opens one of the saves the read rests on. */
+  onOpenSave?: (id: string) => void;
 }) {
   const [editing, setEditing] = useState<{ text: string; details: ReadingDetailActions } | null>(null);
   const [editState, setEditState] = useState({ dirty: false, busy: false });
@@ -44,6 +46,16 @@ export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled,
           reaches its end too (code review, 2026-11-13). */}
       <span className="jar-char-bubble-reading" tabIndex={0} role="region" aria-label={say('worldNowTitle')}>{text}</span>
     </span>
+    {/* ═══ THE SAVES IT CAME FROM, IN VIEW (insight goal, phase 1,
+        2026-11-26) ═══ A read you can trace is a read you believe; one
+        that could be about anyone is a horoscope. The saves stand under the
+        words by their own words, each opening the inspiration itself. Why?
+        still tells the story in a chat (founder, 2026-11-12). */}
+    {why && why.length && onOpenSave ? <span className="waka-reading-from" role="list" aria-label={say('worldReadingFrom')}>
+      {why.map(row => <button key={row.id} type="button" role="listitem" className="waka-reading-from-save" onClick={() => onOpenSave(row.id)}>
+        <span className="waka-reading-from-chip">{row.preview}</span>
+      </button>)}
+    </span> : null}
     {hasWhy || onChat || onShare || edit ? <span className="jar-char-bubble-acts">
       {hasWhy && onWhy ? <button type="button" className="jar-char-bubble-act" onClick={onWhy}>{say('worldReadingWhy')}</button> : null}
       {onChat ? <button type="button" className="jar-char-bubble-act" disabled={chatDisabled} onClick={onChat}>

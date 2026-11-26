@@ -76,7 +76,7 @@ it('does not recover another profile or other-account drafts and warns about cha
 });
 it('names the human memory as the capture destination after a cold load',async()=>{
   world=await mountWorld(FACTS,{initialEntries:['/?compose=1'],routerTools:<RouterProbe/>});await settle();
-  expect(world.container.querySelector('.jar-inspiration-composer .waka-surface-title')?.textContent).toMatch(/^Saving to Me · /);
+  expect(world.container.querySelector('.jar-inspiration-composer .waka-surface-title')?.textContent).toMatch(/^[A-Z][a-z]{2} \d+, \d+:\d\d [AP]M$/); // your own wall: the moment alone, no agent named
   expect(new URLSearchParams(location.search).get('compose')).toBe('1');
 });
 it('refuses another tab’s overwrite and preserves newer words when an older save finishes',()=>{

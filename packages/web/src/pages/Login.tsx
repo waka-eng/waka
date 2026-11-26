@@ -740,11 +740,16 @@ export default function LoginPage(): JSX.Element {
             to its own falloff precisely so it can be dropped into a page
             like this one. */}
         <Companion size={88} />
-        <p className="login-eyebrow">{t(locale, "loginEyebrow")}</p>
+        {/* ONE THING SAID ONCE (craft audit, 2026-11-26). The door said
+            "WAKA" over the title, then the title, then a subtitle restating
+            the title's promise. The eyebrow went (the creature and the tab's
+            name already say where you are), and the subtitle stays only
+            under "Welcome.", where it is the one line saying what this is;
+            "Start saving what moves you." is that line already. */}
         <h1 id="login-title" className="login-title">
           {headline}
         </h1>
-        {!returning && <p className="login-subtitle">{t(locale, "loginProductDescription")}</p>}
+        {!returning && mode === "login" && <p className="login-subtitle">{t(locale, "loginProductDescription")}</p>}
 
         {/* THE DOOR SAYS WHY IT IS THE DOOR.
             A person whose network is down is bounced here by `RequireAuth`
@@ -852,7 +857,7 @@ export default function LoginPage(): JSX.Element {
         <OrDivider locale={locale} />
 
         <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} needsVerification={oauthErrorCode === "signup_verification_required" || oauthErrorCode === "signup_admission_used" || oauthErrorCode === "signup_busy" || oauthErrorCode === "signup_closed"} />
-        {(!returning || mode === "signup") && <p className="field-hint">{t(locale, "loginGoogleDataUse")}</p>}
+        {(!returning || mode === "signup") && <p className="field-hint login-google-hint">{t(locale, "loginGoogleDataUse")}</p>}
         <LegalLinks />
 
         {/* BACK TO WHAT THEY WERE READING — see `wayBackFrom` for why this is

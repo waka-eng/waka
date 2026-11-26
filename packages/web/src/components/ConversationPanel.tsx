@@ -1045,7 +1045,10 @@ function ConversationPanelBody({scope,id,initialPrincipleId,initialConversation,
         {/* `=== false`, NOT falsy: `null` means the server could not be
             asked, and then "your messages are still saved" was a promise
             about messages that had not been sent (audit f2afcbe2). */}
-        {generationEnabled===false?<p className="chat-reply-status" role="status">{say('worldConversationRepliesUnavailable')}</p>:null}
+        {/* Only once something was sent (audit, 2026-11-26): on an empty
+            chat "your message is still here" spoke of a message that did not
+            exist. */}
+        {generationEnabled===false&&(conversation?.messages.length||sending)?<p className="chat-reply-status" role="status">{say('worldConversationRepliesUnavailable')}</p>:null}
         {storageFailed?<p className="chat-reply-status" role="alert">{say('worldConversationDraftFailed')}</p>:null}
         {full?<p className="chat-reply-status">{say('worldConversationFull')}</p>:null}
         {/* WHY A PICK WAS NOT ADDED, in the line the box already speaks in —

@@ -197,11 +197,11 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.kept === 1
-          ? "기억 하나를 간직했어요"
-          : `기억 ${exactCount(c.kept)}개를 간직했어요`
+          ? "하나 저장했어요"
+          : `${exactCount(c.kept)}개 저장했어요`
         : c.kept === 1
-          ? "you kept a memory"
-          : `you kept ${exactCount(c.kept)} memories`,
+          ? "you saved one inspiration"
+          : `you saved ${exactCount(c.kept)} inspirations`,
       backing: "inspirations",
     });
   }
@@ -286,11 +286,11 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.consulted === 1
-          ? "기억이 참고됐어요"
-          : `기억이 ${exactTimes(c.consulted, locale)} 참고됐어요`
+          ? "저장한 메모가 참고됐어요"
+          : `저장한 메모가 ${exactTimes(c.consulted, locale)} 참고됐어요`
         : c.consulted === 1
-          ? "your memory was consulted"
-          : `your memory was consulted ${exactTimes(c.consulted)}`,
+          ? "your inspirations were consulted"
+          : `your inspirations were consulted ${exactTimes(c.consulted)}`,
       backing: "consultations",
     });
   }

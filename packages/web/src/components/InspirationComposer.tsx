@@ -257,8 +257,8 @@ function CreatureLine({ children }: { children: ReactNode }) {
  * nothing more. An empty one just leaves; there is nothing to ask about.
  * Escape, or a tap on the dim, puts the question away and you stay.
  */
-function LeaveAsk({ question, keepLabel, discardLabel, failed, failedLabel, busy, busyLabel, cannotDiscard, onKeep, onDiscard, onStay }: {
-  question: string; keepLabel: string; discardLabel: string; failed: boolean; failedLabel: string;
+function LeaveAsk({ question, keepLabel, discardLabel, stayLabel, failed, failedLabel, busy, busyLabel, cannotDiscard, onKeep, onDiscard, onStay }: {
+  question: string; keepLabel: string; discardLabel: string; stayLabel: string; failed: boolean; failedLabel: string;
   busy: boolean; busyLabel: string; cannotDiscard: boolean; onKeep: () => void; onDiscard: () => void; onStay: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null), first = useRef<HTMLButtonElement>(null);
@@ -290,6 +290,8 @@ function LeaveAsk({ question, keepLabel, discardLabel, failed, failedLabel, busy
       <p id="waka-note-ask-q" className="waka-note-ask-q">{question}</p>
       {failed ? <p className="waka-note-ask-failed" role="alert">{failedLabel}</p> : null}
       <div className="waka-note-ask-acts">
+        {/* STAYING IS SAID, not only a tap on the dim (audit, 2026-11-26). */}
+        <button type="button" className="waka-note-ask-act waka-note-ask-act--quiet waka-note-ask-act--stay" disabled={busy} onClick={onStay}>{stayLabel}</button>
         <button type="button" className="waka-note-ask-act waka-note-ask-act--quiet" disabled={busy || cannotDiscard} onClick={onDiscard}>{busy ? busyLabel : discardLabel}</button>
         <button ref={first} type="button" className="waka-note-ask-act" disabled={busy} onClick={onKeep}>{keepLabel}</button>
       </div>
@@ -655,7 +657,7 @@ export function InspirationComposer(props: {
         between, Keep at its end. Nothing in it fills. */}
     {/* The question is a modal over everything, the listening view too: a
         "<" pressed while listening must be answerable, not hidden under it. */}
-    {asking ? <LeaveAsk question={say('worldLeaveNoteAsk')} keepLabel={say('worldLeaveKeepDraft')}
+    {asking ? <LeaveAsk question={say('worldLeaveNoteAsk')} keepLabel={say('worldLeaveKeepDraft')} stayLabel={say('worldLeaveStay')}
       discardLabel={say('worldLeaveDiscard')} busy={discarding} busyLabel={say('worldDiscardingDraft')}
       cannotDiscard={discardUnavailable || !props.onDiscard}
       failed={discardFailed} failedLabel={say('worldDiscardInspirationFailed')}

@@ -1809,7 +1809,10 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
              the header where it always is. */
           <p className="waka-over-status">
             {say(focus ? "worldClaimFromGone" : "worldInspirationsNoHits")}
-            {(query || category || focus) ? <> <button type="button" className="waka-over-retry" onClick={resetFilters}>{say('worldClearFilters')}</button></> : null}
+            {/* A search alone is cleared as a search, in plain words on the
+                sentence's line (audit, 2026-11-26: "Clear filters" with no
+                filters, as an outlined pill). */}
+            {(query || category || focus) ? <> <button type="button" className="waka-over-clear" onClick={resetFilters}>{say(query && !category && !focus ? 'worldClearSearch' : 'worldClearFilters')}</button></> : null}
           </p>
         ) : (
           /* ═══ THE ARCHIVE READS AS A NOTES LIST ════════════════════════

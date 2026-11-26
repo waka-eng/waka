@@ -364,12 +364,15 @@ it('asks Save as draft or Discard in the bar\'s place, focuses the first act, an
     expect(ask.getAttribute('role')).toBe('alertdialog');
     expect(ask.querySelector('.waka-note-creature'), 'the question is still a creature\'s bubble').toBeNull();
     const acts = [...ask.querySelectorAll<HTMLButtonElement>('.waka-note-ask-act')];
-    expect(acts.map(node => node.textContent)).toEqual(['Discard', 'Save as draft']);
-    expect(document.activeElement, 'focus did not move to the first act').toBe(acts[1]);
-    await act(async () => acts[1]!.click());
+    /* Staying is said too (audit, 2026-11-26), not only a tap on the dim. */
+    expect(acts.map(node => node.textContent)).toEqual(['Stay', 'Discard', 'Save as draft']);
+    expect(document.activeElement, 'focus did not move to Save as draft').toBe(acts[2]);
+    await act(async () => acts[0]!.click());
+    expect(props.onStay, 'Stay did not stay').toHaveBeenCalledTimes(1);
+    await act(async () => acts[2]!.click());
     expect(props.onClose, 'Save as draft did not keep and leave').toHaveBeenCalledTimes(1);
     expect(props.onDiscard).not.toHaveBeenCalled();
-    await act(async () => acts[0]!.click());
+    await act(async () => acts[1]!.click());
     expect(props.onDiscard, 'Discard asked again or did nothing').toHaveBeenCalledTimes(1);
     expect(host.textContent).not.toContain('Its text and attachments will be removed');
 
@@ -385,13 +388,16 @@ it('asks Save as draft or Discard in the bar\'s place, focuses the first act, an
     /* A tap on the dim is staying too, and Tab never leaves the card. */
     props.asking = true; await mount();
     const card = host.querySelector<HTMLElement>('.waka-note-ask-card')!;
-    const [discardAct, keepAct] = [...card.querySelectorAll<HTMLButtonElement>('button')];
+    const [stayAct, discardAct, keepAct] = [...card.querySelectorAll<HTMLButtonElement>('button')];
     await act(async () => keepAct!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })));
+    expect(document.activeElement, 'Tab left the card').toBe(stayAct);
+    await act(async () => stayAct!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })));
     expect(document.activeElement, 'Tab left the card').toBe(discardAct);
     await act(async () => discardAct!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })));
     expect(document.activeElement, 'Tab left the card').toBe(keepAct);
     await act(async () => host.querySelector<HTMLElement>('.waka-note-ask-scrim')!.click());
-    expect(props.onStay).toHaveBeenCalledTimes(1);
+    /* Once from Stay above, once from the dim. */
+    expect(props.onStay).toHaveBeenCalledTimes(2);
   }
 });
 
