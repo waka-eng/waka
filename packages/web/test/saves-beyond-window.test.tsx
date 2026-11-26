@@ -49,18 +49,21 @@ beforeEach(() => { localStorage.clear(); });
 afterEach(() => { world?.unmount(); world = undefined; });
 async function settle() { for (let turn = 0; turn < 6; turn += 1) { await world!.step(20); await act(async () => { await Promise.resolve(); }); } }
 
-/* Why? is answered in a chat now (founder, 2026-11-12): WAKA says the read,
-   then each save it came from, the ones outside the loaded window included. */
-it('answers Why? in a chat, with a cited save the field had not loaded', async () => {
-  let here = '';
-  function Where() { here = useLocation().pathname; return null; }
+/* "From n inspirations" is the Why now (founder, 2026-11-26: too many
+   acts in the bubble): it opens the sheet on exactly the saves the read
+   rests on, the ones outside the loaded window included. */
+it('opens the saves a read rests on, with a cited save the field had not loaded', async () => {
+  let here = '', query = '';
+  function Where() { const at = useLocation(); here = at.pathname; query = at.search; return null; }
   world = await mountWorld(FACTS, { routerTools: <Where /> }); await settle();
-  const why = [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-act')].find(b => b.textContent === 'Why?');
-  expect(why, 'the read offers no Why?').toBeTruthy();
-  await act(async () => why!.click());
+  const from = [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-act')].find(b => /^From \d+ inspirations?$/.test(b.textContent ?? ''));
+  expect(from, 'the read does not say what it came from').toBeTruthy();
+  await act(async () => from!.click());
   for (let turn = 0; turn < 6; turn += 1) { await settle(); await act(async () => { await new Promise(resolve => setTimeout(resolve, 15)); }); }
-  expect(here, 'Why? did not open a new chat').toBe('/chat/new');
-  expect(world.container.querySelector('.waka-says-why'), 'Why? still opened the list in the bubble').toBeNull();
+  expect(here, 'it opened a chat').not.toBe('/chat/new');
+  /* No signed-in owner here, so the sheet itself is not drawn;
+     `reading-from-saves.test.tsx` checks what it shows. */
+  expect(new URLSearchParams(query).get('open'), 'the saves did not open').toBe('saves');
 });
 
 it('reads each cited save outside the window once, however the answers land', async () => {
@@ -78,5 +81,5 @@ it('counts the whole archive on the handle, and opens the archive that pages it 
      archive, its labelled way home up and the home bar gone. */
   expect(world.container.querySelector('.waka-stream'), 'a second Saved sheet came up').toBeNull();
   expect(world.container.querySelector('.waka-surface-back')?.getAttribute('aria-label'), 'it did not open the archive').toBe('Close');
-  expect(world.container.querySelector('.waka-home-bar'), 'the home bar left the sheet pulled up from it').not.toBeNull();
+  expect(world.container.querySelector('.waka-home-bar'), 'the home bar stood on the sheet').toBeNull();
 });

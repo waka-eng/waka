@@ -803,7 +803,7 @@
   "worldBarSaves": "Inspirations",
   "worldBarKeptCount": "{count} {count, plural, one {inspiration} other {inspirations}}",
   "worldReadingWhy": "Why?",
-  "worldReadingFrom": "The saves it came from",
+  "worldReadingFromCount": "From {count} {count, plural, one {inspiration} other {inspirations}}",
   "worldReadingWhyLabel": "Because you saved these",
   "worldBubbleYes": "Yes",
   "worldBubbleNotReally": "Not really",

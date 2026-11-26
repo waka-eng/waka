@@ -1133,7 +1133,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      taps); the bar lights only when what the creature then says is asking
      for a save, and only right then (`beckonLit`, when it was decided). */
   const [barBeckon, setBarBeckon] = useState(0);
-  const [beckonLit, setBeckonLit] = useState<{ n: number; at: number; to: 'save' | 'chat' | 'star' | 'pull' }>({ n: 0, at: 0, to: 'save' });
+  const [beckonLit, setBeckonLit] = useState<{ n: number; at: number; to: 'save' | 'chat' | 'star' }>({ n: 0, at: 0, to: 'save' });
   const litTimer = useRef<number | null>(null);
   /* BOTH OF THE PRESS'S TIMERS, not just the glow's. A press starts two:
      `litTimer` for the glow, and the grace timer in `sayTheWeather` that
@@ -3241,7 +3241,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
     let done = false;
     const look = () => {
       const to = document.querySelector<HTMLElement>('.jar-char-bubble[data-invites], .jar-char-bubble [data-invites]')?.dataset.invites;
-      if (done || (to !== 'save' && to !== 'chat' && to !== 'star' && to !== 'pull')) return;
+      if (done || (to !== 'save' && to !== 'chat' && to !== 'star')) return;
       done = true; setBeckonLit({ n: barBeckon, at: Date.now(), to });
     };
     const frame = requestAnimationFrame(look);
@@ -7379,12 +7379,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
      scrolling, as drawn), each said by the save's own preview. */
   /* WHICH SAVES, before whether they are loaded: the first three cited, in
      the order the signals cite them. */
-  const whyIds = (entry: Entry | null): string[] => {
+  const whyIds = (entry: Entry | null, limit = 3): string[] => {
     const ids: string[] = [];
     for (const cited of entry?.citedSignals ?? []) {
       for (const id of signals?.find(row => row.id === cited.id)?.inspirationIds ?? []) {
         if (!ids.includes(id)) ids.push(id);
-        if (ids.length >= 3) return ids;
+        if (ids.length >= limit) return ids;
       }
     }
     return ids;
@@ -7474,11 +7474,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const savesOpen = viewNavigation.view?.open === 'saves';
   useEffect(() => { if (!savesOpen) setSavesAsSheet(false); }, [savesOpen]);
   const openSheet = useCallback(() => { setSavesAsSheet(true); openOverHome('saves'); }, [openOverHome]);
-  /* One save a reading rests on, opened from under the reading. */
-  const openSaveFromReading = useCallback((id: string) => {
-    const nav = viewNavigationRef.current;
-    nav.write({ ...(nav.view ?? EMPTY_VIEW), open: 'saves', note: id, compose: false, conversationId: null });
-  }, []);
   /* ═══ THE NOTE BAR'S PARTS (design E3, Writing, PhotoNote) ═══════════════
      They stood in the dock's middle group; the notepad draws them now, in a
      slim row UNDER its words so the words get the whole width — mic on the
@@ -9610,8 +9605,19 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         <>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
                             why={whyFor(lead)}
-                            onOpenSave={openSaveFromReading}
-                            onWhy={() => chatOn({ ask: lead.body, turn: true, whyOf: lead,selection:{locale,text:lead.body,source:{kind:'top_of_mind_entry',id:lead.id,why:true,supportIds:whyIds(lead)}} })}
+                            /* ═══ "FROM 3 INSPIRATIONS" IS THE WHY (insight
+                               goal, phase 1; founder, 2026-11-26, of saves
+                               as chips beside Why?: "so many action buttons
+                               in a small space") ═══ One act names how many
+                               saves the read rests on and opens exactly
+                               those, in the sheet; Chat about this is the
+                               conversation. */
+                            whyLabel={formatMessage(locale, 'worldReadingFromCount', { count: whyIds(lead, Infinity).length })}
+                            onWhy={() => {
+                              const ids = whyIds(lead, Infinity);
+                              setSavesFocus({ label: formatMessage(locale, 'worldReadingFromCount', { count: ids.length }), ids });
+                              openSheet();
+                            }}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true) } : undefined}
                             onChat={() => chatOn({ ask: lead.body, turn: true,selection:{locale,text:lead.body,source:{kind:'top_of_mind_entry',id:lead.id}} })} chatDisabled={talking}
@@ -9719,7 +9725,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             </>
           ) : null}
           {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'saves' ? (
-            <div className="jar-char-bubble" data-invites="pull" data-jar-chrome="1" data-jar-interactive="1">
+            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">{formatMessage(locale, 'worldCompanionSavesPrompt', { count: keptCount })}</span>
                 <span className="jar-char-bubble-acts">
@@ -11429,7 +11435,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
           `HomeBar`. It stands on home and nowhere else (nav system R7): every page
           leaves by its header's "<", and the notepad, a saved note and a
           chat write into the one `NoteBar`. */}
-      {phase === 'ready' && (atNowView || (savesOpen && savesAsSheet)) && !reviewing && !savedNoteOpen && !viewNavigation.view?.sharePrinciple ? (
+      {/* NOT OVER THE SHEET (founder, 2026-11-26: "hide buttons"): a sheet
+          is its own surface, and the bar drawn on it cluttered its foot. */}
+      {phase === 'ready' && atNowView && !reviewing && !savedNoteOpen && !viewNavigation.view?.sharePrinciple ? (
         <HomeBar locale={locale}
           /* THE SAME PILL ON AN AGENT'S WALL, saving into the agent (nav
              system: the Kept list's "Keep a thought" was the web's one way

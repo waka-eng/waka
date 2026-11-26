@@ -116,7 +116,7 @@ it('opens the archive directly from home and returns home without creating a dra
       expect(world.container.querySelector(selector)?.getAttribute('aria-hidden')).toBe('true');
     }
     /* The list's way out is the labelled Back, never inert under the list. */
-    const back=world.container.querySelector<HTMLButtonElement>('.waka-surface-back')!;
+    const back=world.container.querySelector<HTMLButtonElement>('.waka-surface-back, .waka-sheet-grab')!;
     expect(back?.getAttribute('aria-label')).toBe('Close');
     expect(back.closest('[inert]')).toBeNull();
     await act(async()=>back.click());await settle();
@@ -762,7 +762,7 @@ it('renders no engineering comment as text on screen', async () => {
  */
 const open = () => new URLSearchParams(location.search).get('open');
 const lit = () => world.container.querySelector<HTMLButtonElement>('.waka-dock .waka-dock-item[aria-current="page"]');
-const row = (name: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-surface-back, .waka-home-bar button, .waka-over-new')]
+const row = (name: string) => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-dock .waka-dock-item, .waka-surface-back, .waka-sheet-grab, .waka-home-bar button, .waka-over-new')]
   .find(node => node.textContent?.trim() === name || node.getAttribute('aria-label') === name)!;
 const key = async (target: EventTarget, name: string) => {
   await act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); });
@@ -940,9 +940,9 @@ it('keeps archive navigation outside the composer, and reaches chat history from
   await pressDockRow(world.container, 'Inspirations'); await settle();
   expect(open(), 'Search did not open the archive').toBe('saves');
   /* ON A LIST THE WAY OUT IS THE LABELLED BACK (design E1), and it goes home. */
-  /* Pulled up from the handle it is a sheet over home, and the home bar
-     stays under it (founder, 2026-11-12). */
-  expect(world.container.querySelector('.waka-home-bar'), 'the home bar left Inspirations pulled up from the handle').not.toBeNull();
+  /* Pulled up from the handle it is a sheet over home, with no home bar on
+     it (founder, 2026-11-26: "hide buttons"). */
+  expect(world.container.querySelector('.waka-home-bar'), 'the home bar stood on the sheet').toBeNull();
   await act(async () => row('Close').click()); await settle();
   expect(open(), 'Close on the archive did not go home').toBeNull();
 
@@ -969,15 +969,18 @@ it('keeps archive navigation outside the composer, and reaches chat history from
  * Inspiration and Chat words are not in the bar on a list, and nothing is
  * lit there any more.
  */
-const returnRow = () => world.container.querySelector<HTMLButtonElement>('.waka-surface-back');
+/* A sheet's way out is its grabber (founder, 2026-11-26: "remove the x"). */
+const returnRow = () => world.container.querySelector<HTMLButtonElement>('.waka-surface-back, .waka-sheet-grab');
 
 it('opens the archive from the Saves sheet with nothing lit, and leaves it by its labelled Back', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   for (const [list, entry] of [['saves', 'Inspirations']] as const) {
     await pressDockRow(world.container, entry); await settle();
     expect(open()).toBe(list);
-    expect(world.container.querySelector('.waka-home-bar'), 'the home bar left the sheet pulled up from it').not.toBeNull();
+    expect(world.container.querySelector('.waka-home-bar'), 'the home bar stood on the sheet').toBeNull();
     expect(world.container.querySelector('.waka-page--sheet'), 'Inspirations from the handle is not a sheet').not.toBeNull();
+    /* The grabber is its close (founder, 2026-11-26: "remove the x"). */
+    expect(world.container.querySelector('.waka-sheet-grab')?.getAttribute('aria-label')).toBe('Close');
     expect(lit()).toBeNull();
     expect(returnRow()?.getAttribute('aria-label')).toBe('Close');
     await act(async () => returnRow()!.click()); await settle();
@@ -992,9 +995,10 @@ it('opens the archive from the Saves sheet with nothing lit, and leaves it by it
 it('opens the inspirations from the creature, as the handle does', async () => {
   world = await mountWorld(FACTS, {routerTools: <RouterTools/>}); await settle();
   await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click()); await settle();
-  const bubble = world.container.querySelector<HTMLElement>('.jar-char-bubble[data-invites="pull"]');
+  const bubble = [...world.container.querySelectorAll<HTMLElement>('.jar-char-bubble')].find(node => /You have \d+ saved/.test(node.textContent ?? '')) ?? null;
   expect(bubble?.textContent, 'the tap did not offer the inspirations').toMatch(/You have \d+ saved/);
-  expect(world.container.querySelector('.waka-home-bar-pull .waka-home-bar-beckon'), 'the handle did not light').not.toBeNull();
+  /* The handle does not light for it (founder, 2026-11-26). */
+  expect(world.container.querySelector('.waka-home-bar-beckon'), 'something lit for the saves line').toBeNull();
   await act(async () => bubble!.querySelector<HTMLButtonElement>('.jar-char-bubble-act')!.click()); await settle();
   expect(open()).toBe('saves');
   expect(world.container.querySelector('.waka-page--sheet'), 'the creature opened a page, not the modal').not.toBeNull();

@@ -803,7 +803,7 @@
   "worldBarSaves": "메모",
   "worldBarKeptCount": "메모 {count}개",
   "worldReadingWhy": "왜요?",
-  "worldReadingFrom": "이 생각이 나온 메모",
+  "worldReadingFromCount": "메모 {count}개에서",
   "worldReadingWhyLabel": "이걸 저장해서 그래요",
   "worldBubbleYes": "맞아요",
   "worldBubbleNotReally": "아닌 것 같아요",

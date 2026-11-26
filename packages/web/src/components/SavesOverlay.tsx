@@ -212,6 +212,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
   const onBackNow = useRef(onBack); onBackNow.current = onBack;
   const dropTimer = useRef(0);
   const dragFrom = useRef<number | null>(null);
+  const dragMoved = useRef(false);
   useEffect(() => () => window.clearTimeout(dropTimer.current), []);
   const backOut = useCallback(() => {
     const node = sheetPage.current;
@@ -1271,13 +1272,16 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
        reserve is holding room for nothing, and holding it was the last 60px
        between this page and the one the founder prefers. */
     <div ref={sheetPage} className={`waka-page${open ? " waka-page--note" : sheet ? " waka-page--sheet" : ""}`}>
-      {/* THE GRABBER: dragged down past `SHEET_DRAG_CLOSE_PX` the sheet goes
-          back down from where the finger left it; short of that it settles.
-          The X is the way out for keys and readers, so this is hidden. */}
-      {sheet && !open ? <div className="waka-sheet-grab" aria-hidden="true"
-        onPointerDown={e => { dragFrom.current = e.clientY; e.currentTarget.setPointerCapture?.(e.pointerId); if (sheetPage.current) sheetPage.current.dataset.dragging = "1"; }}
+      {/* THE GRABBER IS THE WAY DOWN (founder, 2026-11-26: "to pull the
+          sheet down, let user use the - button. remove the x"). A tap closes
+          it; a drag past `SHEET_DRAG_CLOSE_PX` sends it down from where the
+          finger left it, and short of that it settles. Escape still closes. */}
+      {sheet && !open ? <button type="button" className="waka-sheet-grab" aria-label={say("worldClose")}
+        onClick={() => { if (dragMoved.current) { dragMoved.current = false; return; } backOut(); }}
+        onPointerDown={e => { dragFrom.current = e.clientY; dragMoved.current = false; e.currentTarget.setPointerCapture?.(e.pointerId); if (sheetPage.current) sheetPage.current.dataset.dragging = "1"; }}
         onPointerMove={e => {
           if (dragFrom.current === null || !sheetPage.current) return;
+          if (Math.abs(e.clientY - dragFrom.current) > 4) dragMoved.current = true;
           sheetPage.current.style.translate = `0 ${Math.max(0, e.clientY - dragFrom.current)}px`;
         }}
         onPointerUp={e => {
@@ -1330,7 +1334,11 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
         escapeLeavesAsModal={false}
         onClose={open ? onBack : backOut}
         >
-        {open ? null : <SurfaceHeader locale={locale} gesture={gesture}
+        {/* THE SHEET NEEDS NO HEADER (founder, 2026-11-26: "get rid of
+            inspirations (2) here"): the grabber closes it and what it holds
+            is plain. It keeps one while narrowed to a reading's saves or
+            showing Deleted, where the title says what you are looking at. */}
+        {open || (sheet && !focus && !shelfOn) ? null : <SurfaceHeader locale={locale} gesture={gesture}
           back={{ kind: backKind, onBack: backOut }}
           /* THE NAME, THEN HOW MANY (nav system R4): "Kept (36)" centred in the
              one header, the count counting what is on screen (`shown`), and

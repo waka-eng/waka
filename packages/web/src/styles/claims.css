@@ -4843,23 +4843,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 /* The bubble's offers, side by side when there are two. Spoken lines, so
    the gap is a word space and a half, not a toolbar's. */
-.waka-reading-from {
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 0 var(--sp-6);
-  margin-top: var(--sp-4);
-}
-.waka-reading-from-save {
-  min-height: var(--sp-44); min-width: 0; max-width: 100%; padding: 0; border: 0; background: none;
-  display: inline-flex; align-items: center; color: inherit; font: inherit; cursor: pointer;
-}
-/* A save, by its own words: a hairline chip, never filled. */
-.waka-reading-from-chip {
-  display: block; max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  padding: var(--sp-4) var(--sp-10); border-radius: var(--r-pill);
-  border: 1px solid color-mix(in srgb, var(--waka-on-light) 18%, transparent);
-  color: color-mix(in srgb, var(--waka-on-light) 70%, transparent); font-size: var(--t-meta); line-height: 1.4;
-}
-.waka-reading-from-save:hover .waka-reading-from-chip,
-.waka-reading-from-save:focus-visible .waka-reading-from-chip { border-color: color-mix(in srgb, var(--waka-on-light) 45%, transparent); color: var(--waka-on-light); }
 .jar-char-bubble-acts {
   display: flex;
   align-self: stretch;
@@ -7215,7 +7198,6 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   width: var(--sp-32); height: 4px; border-radius: 2px; background: var(--ink);
   box-shadow: 0 0 12px color-mix(in srgb, var(--ink) 65%, transparent);
 }
-.waka-home-bar-beckon--pull { inset: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-8)); }
 .waka-home-bar-saved {
   position: absolute; left: 0; right: 0; bottom: calc(100% + var(--sp-12));
   margin: 0; text-align: center; color: var(--ink); font-family: var(--waka-face); font-size: var(--t-ui);
@@ -7937,7 +7919,7 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   bottom: 0; left: 0; right: 0;
   width: auto; max-width: 680px; margin-inline: auto;
   padding-top: 0;
-  padding-bottom: calc(var(--sp-28) + var(--sp-64) + var(--sp-12) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
   border-radius: var(--sp-28) var(--sp-28) 0 0;
   background: var(--waka-raised);
   box-shadow: 0 -12px 48px color-mix(in srgb, var(--bg) 70%, transparent);
@@ -7946,25 +7928,17 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 .waka-page.waka-page--sheet[data-leaving] { animation: waka-sheet-down 220ms ease-in both; pointer-events: none; }
 .waka-page.waka-page--sheet[data-dragging] { animation: none; }
-/* THE BAR OVER THE SHEET STAYS A BAR (audit, 2026-11-26): on the sheet's
-   own ground the pill vanished and rows slid under it. A step lighter, with
-   the sheet's list fading out under it. */
-body:has(.waka-page--sheet) .waka-home-bar-pill,
-body:has(.waka-page--sheet) .waka-home-bar-chat {
-  background: color-mix(in srgb, var(--ink) 8%, var(--waka-raised));
-  box-shadow: 0 -8px 24px color-mix(in srgb, var(--waka-raised) 90%, transparent);
-}
-.waka-page.waka-page--sheet::after {
-  content: ""; position: absolute; left: 0; right: 0; pointer-events: none;
-  bottom: calc(var(--sp-28) + var(--sp-64) + var(--sp-12) + env(safe-area-inset-bottom));
-  height: var(--sp-32);
-  background: linear-gradient(to bottom, transparent, var(--waka-raised));
-}
 /* The grabber: the handle that pulled it up, now at its top. */
 .waka-sheet-grab {
   flex: none; display: flex; justify-content: center; align-items: center;
-  height: var(--sp-20); touch-action: none; cursor: grab;
+  width: 100%; height: var(--sp-28); margin: 0; padding: 0; border: 0; background: none;
+  touch-action: none; cursor: grab;
 }
+.waka-sheet-grab:focus-visible { outline: none; }
+.waka-sheet-grab:focus-visible::before { box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 50%, transparent); }
+/* The grabber is the sheet's close, so its header keeps the title alone;
+   the X's column stays, so the title stays centred. */
+.waka-page--sheet .waka-surface-head > .waka-surface-back { visibility: hidden; }
 .waka-sheet-grab::before {
   content: ""; width: var(--sp-32); height: 4px; border-radius: 2px;
   background: color-mix(in srgb, var(--ink) 35%, transparent);

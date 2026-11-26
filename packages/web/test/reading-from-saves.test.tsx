@@ -3,7 +3,7 @@
  * A READING SHOWS THE SAVES IT CAME FROM (insight goal, phase 1, 2026-11-26).
  *
  * A read you can trace is a read you believe. Under the home reading stand the
- * saves it rests on, by their own words, and each opens that inspiration.
+ * saves it rests on: "From 2 inspirations" opens exactly those, in the sheet.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): through `helpers/render-home`, `lib/data`
  * (the three layers the world reads: two saves, one signal citing both, one reading citing the signal),
@@ -43,13 +43,14 @@ beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout
 afterEach(() => { world?.unmount(); world = undefined; vi.useRealTimers(); });
 async function settle() { for (let turn = 0; turn < 8; turn += 1) { await world!.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); } }
 
-it('stands the saves a reading rests on under it, and opens one from there', async () => {
+it('says how many saves a reading rests on, and opens exactly those', async () => {
   world = await mountWorld(FACTS, { routerTools: <Where /> }); await settle();
-  const chips = [...world.container.querySelectorAll<HTMLButtonElement>('.waka-reading-from-save')];
-  expect(chips.map(chip => chip.textContent), 'the reading does not show its saves').toEqual([
-    'Walked home the long way to hear the river.', 'I want to quit my job and build something of my own.']);
-  await act(async () => chips[1]!.click()); await settle();
-  const address = new URLSearchParams(location.search);
-  expect(address.get('open')).toBe('saves');
-  expect(address.get('note'), 'the chip did not open its own inspiration').toBe('quit');
+  expect(world.container.querySelector('.waka-reading-from'), 'the saves came back as chips').toBeNull();
+  const from = [...world.container.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-act')].find(b => b.textContent === 'From 2 inspirations');
+  expect(from, 'the reading does not say what it came from').toBeTruthy();
+  await act(async () => from!.click()); await settle();
+  expect(new URLSearchParams(location.search).get('open')).toBe('saves');
+  const rows = [...world.container.querySelectorAll('.waka-page--sheet .waka-list-lead')].map(row => row.textContent);
+  expect(rows, 'the sheet did not show exactly the saves the reading rests on').toEqual([
+    'I want to quit my job and build something of my own.', 'Walked home the long way to hear the river.']);
 });

@@ -64,7 +64,7 @@ export function HomeBar(props: {
   pull?: { onOpen: () => void; kept?: number };
   /** A tap on the creature lit what its line points to: the Save pill or
       Chat. Each new `n` plays the light once. */
-  beckon?: { n: number; to: 'save' | 'chat' | 'pull' };
+  beckon?: { n: number; to: 'save' | 'chat' };
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const photos = useRef<HTMLInputElement>(null);
@@ -88,7 +88,6 @@ export function HomeBar(props: {
             dragFrom.current = null; dragged.current = true; props.pull?.onOpen();
           }}
           onPointerUp={() => { dragFrom.current = null; }} onPointerCancel={() => { dragFrom.current = null; }}>
-          {props.beckon?.to === 'pull' ? <span key={props.beckon.n} className="waka-home-bar-beckon waka-home-bar-beckon--pull" aria-hidden="true" /> : null}
           <span className="waka-home-bar-grab" aria-hidden="true" />
           <span>{props.pull.kept ? formatMessage(props.locale, 'worldBarKeptCount', { count: props.pull.kept }) : say('worldBarSaves')}</span>
         </button>

@@ -54,9 +54,3 @@ it('opens once on a tap, and once on a drag up, never twice for the drag', async
   await act(async () => { at('pointermove', 360); at('pointermove', 300); at('pointerup', 300); pull.click(); });
   expect(opened, 'the drag did not open it exactly once').toBe(2);
 });
-
-it('lights the handle when the creature points at it', async () => {
-  await act(async () => root.render(<HomeBar locale="en-US" onChat={() => undefined} pull={{ onOpen: () => undefined, kept: 3 }} beckon={{ n: 1, to: 'pull' }} />));
-  expect(host.querySelector('.waka-home-bar-pull .waka-home-bar-beckon')).not.toBeNull();
-  expect(host.querySelector('.waka-home-bar-pill .waka-home-bar-beckon'), 'the pill lit for the handle').toBeNull();
-});
