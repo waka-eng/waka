@@ -27,12 +27,15 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import {
+  generationRevisions,
   inspirations,
   signalEmbeddings,
   signalEvidence,
   signalSupportReviews,
   signals,
   suppressions,
+  topOfMindEntries,
+  topOfMinds,
   type SignalStatus,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
@@ -40,6 +43,7 @@ import {embeddingNeedsMeaningReview,embeddingCandidateRules,type EmbeddingIndexP
 import {EmbeddingIndexError} from './embedding-index-coordination.js';
 import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash,embeddingSpaceForClient,type EmbeddingSpace} from './embedding-provider.js';
 import { getDb } from "./db.js";
+import { projectPersonalEntries } from "./personal-output.js";
 import type { normalizeSupportedLocale } from "./locales.js";
 import type { ModelProvider } from "./model-provider.js";
 // The pass owns the shape of its own result; this stage fills three of its
@@ -85,6 +89,7 @@ interface MatchTarget {
   status: SignalStatus;
   locked: boolean;
   withdrawn: boolean;
+  citedInReading: boolean;
   embedding: number[];
 }
 
@@ -106,6 +111,12 @@ export interface ResolvedCandidate {
    * dates via the lifecycle read.
    */
   relatedEvidence: Array<{ inspirationId: string; quote: string; material?: InspirationMaterialIdentity; quoteSourceHash?: string }>;
+}
+
+interface MatchJudgement {
+  targetId: string;
+  statement: string;
+  relation: Awaited<ReturnType<ModelProvider["judgeSignalMatch"]>>["relation"];
 }
 
 interface ApplyCandidatesInput {
@@ -135,13 +146,29 @@ interface ApplyCandidatesInput {
   /** Complete source/permission AND captured policy validation after model
    * calls, before writes (material or generation fence; no proof cache). */
   beforeWrites: () => Promise<void>;
+  /** Completed verdicts for this exact candidate batch, on a local replan. */
+  priorJudgements?: ReadonlyMap<number, MatchJudgement>;
+}
+
+const isDraft = (target: Pick<MatchTarget, "status" | "locked" | "withdrawn">) =>
+  target.status === "emerging" && !target.locked && !target.withdrawn;
+const canRestate = (target: MatchTarget) => isDraft(target) && !target.citedInReading;
+const isPersonalSave = (profileId: string, ownerProfileId: string, inspirationId: string | null) =>
+  inspirationId !== null && profileId === ownerProfileId;
+
+/** The prepared verdict for a later candidate addressed different wording or a
+ * different target after a reading published. The caller may replan in memory. */
+export class ReadingCitationPlanChangedError extends Error {
+  constructor(readonly judgements: ReadonlyMap<number, MatchJudgement>) {
+    super("A reading citation changed the signal judgement plan");
+  }
 }
 
 /** Plan every model decision before touching evidence. Virtual targets mirror
  * same-batch mint/restatement, so the write pass needs no network under source locks. */
 async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarget[], anchors: SuppressionAnchor[]) {
   const projected = targets.map((row) => ({ ...row }));
-  const judgements = new Map<number, { statement: string; relation: "same" | "independent" | "opposed" }>();
+  const judgements = new Map<number, MatchJudgement>();
   const refusals = new Map<number, NonNullable<ReturnType<typeof findSuppressionAnchor>>>();
   for (const [index, candidate] of input.candidates.entries()) {
     const anchor = findSuppressionAnchor(candidate, anchors,input.embeddingPolicy);
@@ -155,19 +182,24 @@ async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarg
     if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
     let decision = classifyMatch(nearest?.similarity ?? null);
     if (nearest && (decision === "judge" || input.reviewSource || candidate.statement.trim() !== nearest.target.statement.trim())) {
-      const judged = await input.provider.judgeSignalMatch({ preferredLocale: input.preferredLocale,
-        candidateStatement: candidate.statement, existingStatement: nearest.target.statement });
-      judgements.set(index, { statement: nearest.target.statement, relation: judged.relation });
-      decision = judged.relation === "same" ? "attach" : "mint";
+      const prior = input.priorJudgements?.get(index);
+      const targetId = nearest.target.id;
+      const statement = nearest.target.statement;
+      const relation = prior?.targetId === targetId && prior.statement === statement
+        ? prior.relation
+        : (await input.provider.judgeSignalMatch({ preferredLocale: input.preferredLocale,
+          candidateStatement: candidate.statement, existingStatement: statement })).relation;
+      judgements.set(index, { targetId, statement, relation });
+      decision = relation === "same" ? "attach" : "mint";
     }
     if (decision === "attach" && nearest) {
       if (nearest.target.withdrawn) continue;
-      if (!nearest.target.locked && nearest.target.status === "emerging") {
+      if (canRestate(nearest.target)) {
         nearest.target.statement = candidate.statement;
         nearest.target.embedding = candidate.embedding;
       }
     } else projected.push({ id: `candidate:${index}`, statement: candidate.statement,
-      status: "emerging", locked: false, withdrawn: false, embedding: candidate.embedding });
+      status: "emerging", locked: false, withdrawn: false, citedInReading: false, embedding: candidate.embedding });
   }
   return { judgements, refusals };
 }
@@ -180,20 +212,29 @@ export async function applyCandidates(
   if(embeddingNeedsMeaningReview(input.embeddingModel)&&readableEmbeddingSpace(input.embeddingPolicy)?.model!==input.embeddingModel)throw new EmbeddingIndexError("identity");
   const space=embeddingSpaceForClient({model:input.embeddingModel,dimensions:input.candidates[0]?.embedding.length});
   if(input.candidates.some(row=>!embeddingInSpace(row.embedding,space.dimensions,space)))throw new Error('Candidate embedding space is invalid');
-  const targets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
+  const initialTargets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
   const anchors = await loadSuppressionAnchors(tx, input.profileId, space, input.inputPolicy);
-  const prior = JSON.stringify({ targets, anchors });
-  const { judgements, refusals } = await prepareJudgements(input, targets, anchors);
+  const { judgements, refusals } = await prepareJudgements(input, initialTargets, anchors);
   await input.beforeWrites();
-  const ids = [...new Set([...targets, ...anchors].map((row) => row.id))].sort();
+  if (isPersonalSave(input.profileId, input.evidenceOwnerProfileId, input.inspirationId) && initialTargets.some(isDraft)) {
+    // Publication takes this same fence. The worker already holds it via
+    // beforeWrites; direct callers take it here, after the model decisions.
+    await tx.select({ id: generationRevisions.profileId }).from(generationRevisions)
+      .where(eq(generationRevisions.profileId, input.profileId)).for("update", { noWait: true });
+  }
+  const ids = [...new Set([...initialTargets, ...anchors].map((row) => row.id))].sort();
   if (ids.length) await tx.select({ id: signals.id }).from(signals)
     .where(and(eq(signals.profileId, input.profileId), inArray(signals.id, ids)))
     .orderBy(asc(signals.id)).for("share");
-  const currentTargets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
+  const targets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
   const currentAnchors = await loadSuppressionAnchors(tx, input.profileId, space, input.inputPolicy);
-  if (JSON.stringify({ targets: currentTargets, anchors: currentAnchors }) !== prior) {
+  const matchInputs = (rows: MatchTarget[], suppressionAnchors: SuppressionAnchor[]) =>
+    JSON.stringify({ targets: rows, anchors: suppressionAnchors }, (key, value: unknown) => key === "citedInReading" ? undefined : value);
+  if (matchInputs(targets, currentAnchors) !== matchInputs(initialTargets, anchors)) {
     throw new Error("Signal inputs changed during judgement; retry current statements");
   }
+  const readingChanged = targets.some((row, index) => row.citedInReading !== initialTargets[index]!.citedInReading);
+  const mintedPlanIds = new Map<string, string>();
 
   const matchedSignalIds: string[] = [];
   const mintedSignalIds: string[] = [];
@@ -230,7 +271,11 @@ export async function applyCandidates(
       // already aborted preparation; they never become invented opposition
       // or an independent pattern here.
       const judged = judgements.get(candidateIndex);
-      if (!judged || judged.statement !== nearest.target.statement) throw new Error("Signal judgement plan changed");
+      const planId = mintedPlanIds.get(nearest.target.id) ?? nearest.target.id;
+      if (!judged || judged.targetId !== planId || judged.statement !== nearest.target.statement) {
+        if (readingChanged) throw new ReadingCitationPlanChangedError(judgements);
+        throw new Error("Signal judgement plan changed");
+      }
       decision = judged.relation === "same" ? "attach" : "mint";
       if (judged.relation === "opposed") opposesSignalId = nearest.target.id;
     }
@@ -242,10 +287,9 @@ export async function applyCandidates(
       // Keep the retired target visible to matching so it cannot mint a twin.
       if (match.target.withdrawn) continue;
 
-      // An emerging signal is a first draft read from a single capture; the
-      // capture that confirms it usually names the pattern better. Once a
-      // signal is active its wording has settled, and only its owner moves it.
-      if (!match.target.locked && match.target.status === "emerging") {
+      // Confirmation may refine an unpublished draft. Published wording
+      // still takes new evidence without making the reading's citation stale.
+      if (canRestate(match.target)) {
         const restated = await restateSignal(tx, match.target, candidate.statement);
         if (restated) {
           await writeSignalEmbedding(tx, {
@@ -365,12 +409,14 @@ export async function applyCandidates(
     // Visible to the rest of this batch: two candidates that both fail to
     // match anything existing must not both mint when the second one is
     // simply the first one again.
+    mintedPlanIds.set(minted.id, `candidate:${candidateIndex}`);
     targets.push({
       id: minted.id,
       statement: candidate.statement,
       status: "emerging",
       locked: false,
       withdrawn: false,
+      citedInReading: false,
       embedding: candidate.embedding,
     });
   }
@@ -430,14 +476,29 @@ async function loadMatchTargets(
     .limit(MATCH_CANDIDATE_SCAN_LIMIT + withdrawn.size);
 
   if(embeddingNeedsMeaningReview(space.model)&&rows.some(row=>row.inputHash!==embeddingInputHash(space,row.statement)||!embeddingInSpace(row.embedding,row.dimensions??0,space)))throw new EmbeddingIndexError("missing");
-  return rows.filter((row):row is typeof row&{embedding:number[]} => row.inputHash === embeddingInputHash(space,row.statement)&&embeddingInSpace(row.embedding,row.dimensions??0,space)).map((row) => ({
+  const targets: MatchTarget[] = rows.filter((row):row is typeof row&{embedding:number[]} => row.inputHash === embeddingInputHash(space,row.statement)&&embeddingInSpace(row.embedding,row.dimensions??0,space)).map((row) => ({
     id: row.id,
     statement: row.statement,
     status: row.status,
     locked: row.lockedAt !== null,
     withdrawn: withdrawn.has(row.id),
+    citedInReading: false,
     embedding: row.embedding,
   }));
+  if (isPersonalSave(profileId, ownerProfileId, inspirationId) && targets.some(isDraft)) {
+    const entries = await tx.select({
+      id: topOfMindEntries.id,
+      lockedAt: topOfMindEntries.lockedAt,
+      pinnedAt: topOfMindEntries.pinnedAt,
+      dismissedAt: topOfMindEntries.dismissedAt,
+    }).from(topOfMindEntries)
+      .innerJoin(topOfMinds, eq(topOfMindEntries.topOfMindId, topOfMinds.id))
+      .where(and(eq(topOfMinds.profileId, profileId), eq(topOfMinds.status, "live"), isNull(topOfMindEntries.dismissedAt)));
+    const { citationsByEntry } = await projectPersonalEntries(tx, profileId, entries);
+    const cited = new Set([...citationsByEntry.values()].flat());
+    for (const target of targets) target.citedInReading = isDraft(target) && cited.has(target.id);
+  }
+  return targets;
 }
 
 function findBestMatch(
@@ -638,8 +699,7 @@ async function restateSignal(
   target: MatchTarget,
   statement: string,
 ): Promise<boolean> {
-  if (target.locked) return false;
-  if (statement === target.statement) return false;
+  if (!canRestate(target) || statement === target.statement) return false;
 
   const updated = await tx
     .update(signals)
