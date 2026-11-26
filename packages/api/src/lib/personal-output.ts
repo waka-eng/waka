@@ -38,9 +38,8 @@ export function personalSignalReadable(profileId: string) {
         -- Reuse the promotion counter on current, owned witnesses when some
         -- links still need checking. The ordinary read avoids this count.
         AND (SELECT independent_evidence_count(jsonb_agg(jsonb_build_object(
-          'kind', edge.kind, 'unit', edge.unit_id, 'origin', edge.origin_id)), ${SIGNAL_PROMOTION_MIN_EVIDENCE})
-          FROM signal_support_edges(${signals.id}) edge JOIN inspirations origin
-            ON origin.id = edge.origin_id AND origin.profile_id = ${profileId}::uuid
+          'kind', edge.kind, 'unit', edge.unit_id, 'origin', edge.material_key)), ${SIGNAL_PROMOTION_MIN_EVIDENCE})
+          FROM signal_material_edges(${profileId}::uuid, ARRAY[${signals.id}]) edge
           WHERE edge.current IS TRUE AND edge.created_at <= now()) >= ${SIGNAL_PROMOTION_MIN_EVIDENCE}
       ELSE FALSE
     END)`;

@@ -81,6 +81,8 @@ export const inspirations = pgTable(
       .references(() => profiles.id, { onDelete: "cascade" }),
 
     text: text("text").notNull(),
+    /** Full normalized original wording for evidence comparisons, computed on save/edit. */
+    evidenceTextHash: text("evidence_text_hash").generatedAlwaysAs(sql`evidence_text_hash("text")`),
     /** Internal raw-text projection. Trigger-maintained; historical rows may
      * be unfilled and search must use current text in that case. No DTO field. */
     textSearchVector:tsvector('text_search_vector'),

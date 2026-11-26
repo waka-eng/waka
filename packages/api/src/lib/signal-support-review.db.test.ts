@@ -410,7 +410,7 @@ describe("applying explicit support decisions", () => {
     for (const signalId of ids) {
       const extraSources: string[] = [];
       for (let n = 0; n < (signalId === f.signalId ? 2 : 3); n++) {
-        const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${f.ownerProfileId}, 'Independent material') RETURNING id`;
+        const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${f.ownerProfileId}, ${`Independent material from occasion ${n+1}`}) RETURNING id`;
         await t.sql`INSERT INTO signal_evidence(profile_id, owner_profile_id, signal_id, inspiration_id)
           VALUES (${f.ownerProfileId}, ${f.ownerProfileId}, ${signalId}, ${source.id})`;
         extraSources.push(source.id as string);
