@@ -89,9 +89,6 @@ export function personalPrincipleReadable(profileId: string, minimumSignals: num
 
 interface EntryForProjection {
   id: string;
-  body: string;
-  belief: string | null;
-  prompt: string | null;
   lockedAt: Date | null;
   pinnedAt: Date | null;
   dismissedAt: Date | null;

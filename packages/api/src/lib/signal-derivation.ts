@@ -83,6 +83,7 @@ import {
 import type { StatementEmbeddingClient } from "./signal-embeddings.js";
 import {
   acquireSignalDerivationLock,
+  ReadingCitationPlanChangedError,
   applyCandidates,
   type ResolvedCandidate,
 } from "./signal-match-or-mint.js";
@@ -412,7 +413,7 @@ export async function deriveSignalsForInspiration(
   const embedded:ResolvedCandidate[]=[];
   for(const [index,candidate] of unique.entries())embedded.push({...candidate,embedding:discovery?.[index]?.embedding??await embeddingClient.embed(candidate.statement)});
 
-  const outcome = await db.transaction(async (tx) => {
+  const publish = (priorJudgements?: ReadingCitationPlanChangedError["judgements"]) => db.transaction(async (tx) => {
       await acquireSignalDerivationLock(tx, profileId);
       /**
        * THE SHELF THE CAPTURE GOES ON.
@@ -441,6 +442,7 @@ export async function deriveSignalsForInspiration(
         now,
         material: material.identity,
         beforeWrites: () => validateSources(tx),
+        priorJudgements,
       });
       let reading: Awaited<ReturnType<typeof requestReading>> | undefined;
       const changed = applied.matchedSignalIds.length > 0 ||
@@ -452,6 +454,13 @@ export async function deriveSignalsForInspiration(
       await commitDiscoveryEmbeddings(tx,profileId,discovery?.map(row=>row.attemptId)??[]);
       return applied;
     });
+
+  const outcome = await publish().catch(error => {
+    if (!(error instanceof ReadingCitationPlanChangedError)) throw error;
+    // A concurrent reading changed a later candidate's match plan. Replan
+    // once with the candidate vectors still in memory and the same job fence.
+    return publish(error.judgements);
+  });
 
   await wakeCommittedBackgroundJobs();
   return {
