@@ -250,12 +250,12 @@ it('offers a separate draft in Korean when the draft changed in another tab', as
   props.error = '다른 탭에서 이 초안이 바뀌었어요. 쓰던 내용은 그대로 남아 있어요.';
   props.draftConflict = true;
   await mount();
-  const offer = [...host.querySelectorAll('button')].find(button => button.textContent === '별도 초안으로 보관');
+  const offer = [...host.querySelectorAll('button')].find(button => button.textContent === '별도 초안으로 저장');
   expect(offer, 'no way to keep a separate draft').toBeDefined();
   await act(async () => offer!.click());
   expect(props.onForkDraft).toHaveBeenCalledOnce();
   props.draftConflict = false; await mount();
-  expect([...host.querySelectorAll('button')].some(button => button.textContent === '별도 초안으로 보관')).toBe(false);
+  expect([...host.querySelectorAll('button')].some(button => button.textContent === '별도 초안으로 저장')).toBe(false);
 });
 it('says a stored file problem and a failed upload in the reader’s language', async () => {
   /* Both are stored on the durable draft as a key or a flag, not a sentence:

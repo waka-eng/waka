@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "../src/lib/api";
+import { t } from "../src/lib/locales";
 import { whyOf } from "../src/lib/why-failed";
 
 /* CODE REVIEW, 2026-11-09: the language pass turned every refusal into
@@ -34,4 +35,15 @@ describe("a refusal says the server's reason, and offers a retry only when one c
   it("uses no dashes", () => {
     for (const status of [409, 500]) expect(whyOf(new ApiError({ status, message: "x" }), "en-US")).not.toMatch(/—|–| - /);
   });
+});
+
+
+it("keeps Korean status explanations actionable without using English API text", () => {
+  const message = "SYNTHETIC_RAW_ENGLISH";
+  const cases = [[413, "worldWhyPayloadTooLarge"], [422, "worldWhyInvalidInput"], [503, "worldWhyServerBusy"]] as const;
+  for (const [status, key] of cases) {
+    expect(whyOf(new ApiError({ status, message }), "ko-KR")).toBe(t("ko-KR", key));
+  }
+  expect(whyOf(new ApiError({ status: 409, message }), "ko-KR")).toBe("");
+  expect(whyOf(new Error(message), "ko-KR")).toBe("");
 });

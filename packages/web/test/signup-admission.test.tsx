@@ -46,7 +46,7 @@ it.each(['en-US','ko-KR'] as const)('does not recreate an ambiguously committed 
  await act(async()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(auth.signup).toHaveBeenCalledOnce();
 });
 it('keeps native continuation as a boolean routing flag, never a grant/token URL',()=>{
- const url=new URL(googleLoginUrl('/memory',true),'https://waka.im');expect([...url.searchParams.keys()].sort()).toEqual(['mobile','returnTo']);expect(url.searchParams.get('mobile')).toBe('1');
+ const url=new URL(googleLoginUrl('/memory',true,'ko-KR'),'https://waka.im');expect([...url.searchParams.keys()].sort()).toEqual(['mobile','preferredLocale','returnTo']);expect(url.searchParams.get('mobile')).toBe('1');expect(url.searchParams.get('preferredLocale')).toBe('ko-KR');
 });
 
 it('holds a blocked widget script with a bounded visible retry, without inserting a real resource',async()=>{

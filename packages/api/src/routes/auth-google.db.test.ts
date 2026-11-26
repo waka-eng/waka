@@ -41,16 +41,67 @@ async function owner() {
   const [profile] = await t.sql`SELECT p.id FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.email=${email} AND p.type='human'`;
   return { email, token, profileId: profile.id as string, keeper: key.key.secret as string, agents };
 }
-async function link(email: string) {
+async function link(email: string, oauth = { state: 'test-state', cookies: 'waka_oauth_state=test-state; waka_oauth_pkce=test-verifier' }) {
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
   const claims = { iss: 'https://accounts.google.com', aud: 'test-google-client', exp: Math.floor(Date.now() / 1000) + 60,
     sub: `google-${email}`, email, email_verified: true, name: 'Verified owner' };
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id_token: `${encode({ alg: 'none' })}.${encode(claims)}.signature` }),
     { status: 200, headers: { 'Content-Type': 'application/json' } })));
-  return app.request('/api/auth/google/callback?code=test-code&state=test-state', {
-    redirect: 'manual', headers: { Cookie: 'waka_oauth_state=test-state; waka_oauth_pkce=test-verifier' },
+  const params = new URLSearchParams({ code: 'test-code', state: oauth.state });
+  return app.request(`/api/auth/google/callback?${params}`, {
+    redirect: 'manual', headers: { Cookie: oauth.cookies },
   });
 }
+
+async function startGoogle(path: string, mobileCookie?: string) {
+  const start = await app.request(path, { headers: mobileCookie ? { Cookie: mobileCookie } : {} });
+  expect(start.status).toBe(302);
+  const redirect = new URL(start.headers.get('Location')!);
+  const state = redirect.searchParams.get('state')!;
+  expect(state).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  expect(redirect.searchParams.has('preferredLocale')).toBe(false);
+  const cookies = start.headers.getSetCookie().map(cookie => cookie.split(';', 1)[0]).join('; ');
+  return { state, cookies: [cookies, mobileCookie].filter(Boolean).join('; ') };
+}
+
+it('applies only a verified web round-trip preference and keeps it on returning Google sign-in', async () => {
+  const email = randomUUID() + '@example.test';
+  const korean = await startGoogle('/api/auth/google/login?preferredLocale=ko-KR');
+  const response = await link(email, korean);
+  expect(response.headers.get('Location')).toBe('http://localhost:5173/');
+  expect(response.headers.getSetCookie()).toContainEqual(expect.stringMatching(/^waka_oauth_locale=;/));
+  const english = await startGoogle('/api/auth/google/login?preferredLocale=en-US');
+  expect((await link(email, english)).headers.get('Location')).toBe('http://localhost:5173/');
+  const [profile] = await t.sql`SELECT p.preferred_locale FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.email=${email}`;
+  expect(profile?.preferred_locale).toBe('ko-KR');
+});
+
+it('ignores a stale locale cookie from a different OAuth state', async () => {
+  const email = randomUUID() + '@example.test';
+  const old = await startGoogle('/api/auth/google/login?preferredLocale=ko-KR');
+  const current = await startGoogle('/api/auth/google/login?preferredLocale=unsupported');
+  const staleLocale = old.cookies.split('; ').find(cookie => cookie.startsWith('waka_oauth_locale='))!;
+  const cookies = current.cookies.split('; ').filter(cookie => !cookie.startsWith('waka_oauth_locale=')).join('; ');
+  expect((await link(email, { state: current.state, cookies: cookies + '; ' + staleLocale })).status).toBe(302);
+  const [profile] = await t.sql`SELECT p.preferred_locale FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.email=${email}`;
+  expect(profile?.preferred_locale).toBe('en-US');
+});
+
+it('carries Korean through the native browser start into a new Google profile', async () => {
+  const email = randomUUID() + '@example.test';
+  const params = new URLSearchParams({
+    appId: 'im.waka.app.dev', state: 'a'.repeat(43), challenge: 'b'.repeat(43), preferredLocale: 'ko-KR',
+  });
+  const native = await app.request(`/api/auth/mobile/google?${params}`);
+  expect(native.status).toBe(302);
+  const startPath = native.headers.get('Location')!;
+  expect(startPath).toBe('/api/auth/google/login?mobile=1&preferredLocale=ko-KR');
+  const binding = native.headers.getSetCookie()[0]!.split(';', 1)[0]!;
+  const response = await link(email, await startGoogle(startPath, binding));
+  expect(response.headers.get('Location')).toMatch(/^im\.waka\.app\.dev:\/\/auth\/callback\?code=/);
+  const [profile] = await t.sql`SELECT p.preferred_locale FROM profiles p JOIN accounts a ON a.id=p.account_id WHERE a.email=${email}`;
+  expect(profile?.preferred_locale).toBe('ko-KR');
+});
 
 it('revokes every old profile credential and sign-in code, while preserving other accounts and subsequent Google sessions', async () => {
   const victim = await owner(), other = await owner();
