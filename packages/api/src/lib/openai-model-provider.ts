@@ -54,7 +54,7 @@ export function createOpenAiModelProvider():ModelProvider {
       return ask('extract','signal extraction','signal_candidates',buildSignalExtractionRequest(input),value=>parseSignalCandidates(value,input),()=>({statements:[],category:null}));
     },
     assessSignalSupport:input=>ask('support','signal support assessment','signal_support',buildSignalSupportRequest(input),parseSignalSupport),
-    judgeSignalMatch:input=>ask('judge','signal match judgement','signal_match',buildSignalMatchJudgementRequest(input),parseSignalMatchJudgement),
+    judgeSignalMatch:input=>ask('judge','signal match judgement','signal_match',buildSignalMatchJudgementRequest(input),value=>parseSignalMatchJudgement(value,input.alternativeStatement!==undefined)),
     synthesizeTopOfMind:input=>ask('synthesize','top-of-mind synthesis','top_of_mind',buildTopOfMindSynthesisRequest(input),parseTopOfMindSynthesis),
     async reviewTopOfMind(input){
       const reviewed=await ask('review','top-of-mind review','top_of_mind_review',buildTopOfMindReviewRequest(input),parseTopOfMindReview);

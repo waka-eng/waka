@@ -292,30 +292,20 @@ export interface TopOfMindReviewResult {
 // Layer 2 — the merge judge
 // ---------------------------------------------------------------------------
 
-/**
- * Asked only inside the ambiguous cosine band, where distance alone cannot
- * say whether two statements name one pattern. Everything above the band
- * attaches and everything below mints without a call, so this costs at most
- * one call per candidate and usually none.
- */
+/** One meaning check for a candidate. The optional second statement is the
+ * next eligible target in scan order after similarity ranking. */
 export interface SignalMatchJudgementInput {
   preferredLocale: SupportedLocale;
   candidateStatement: string;
   existingStatement: string;
+  alternativeStatement?: string;
 }
 
-/**
- * Three-way since no-quiet-corners Phase 5 — the vocabulary principle
- * judging already used, brought down to layer 2: `same` attaches, and
- * `opposed` mints WITH an undirected `contradicts` relation so the dispute
- * is held on the record instead of dissolved by whichever statement came
- * second. `independent` is an explicit verdict for genuine semantic
- * uncertainty. Missing, malformed or declined answers throw instead of
- * inventing a new pattern or silently overriding an owner dismissal.
- */
-export interface SignalMatchJudgement {
-  relation: "same" | "independent" | "opposed";
-}
+/** A paired same/opposed verdict names its target (1 or 2). Single-target
+ * callers retain the existing shape. Unusable replies are never independent. */
+export type SignalMatchJudgement =
+  | { relation: "independent" }
+  | { relation: "same" | "opposed"; target?: 1 | 2 };
 
 // ---------------------------------------------------------------------------
 // Layer 4 — principles

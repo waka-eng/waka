@@ -24,7 +24,7 @@
  * rows record what THEY said out loud, and those are here).
  */
 
-import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, gte, inArray, isNull, sql } from "drizzle-orm";
 import { deletedShelfCutoff } from "./deleted-shelf.js";
 import {conversations,conversationMessages,conversationReplyRequests} from '../db/schema-conversations.js';
 import {principleGenerationSteps} from '../db/schema-principle-work.js';
@@ -128,8 +128,10 @@ async function readProfileExport(db: ExportReader, profileId: string) {
     .where(eq(profiles.id, profileId))
     .limit(1);
 
+  // This derived digest serves the evidence counter. The export already carries the original words.
+  const { evidenceTextHash: _digest, ...exportedInspirationFields } = getTableColumns(inspirations);
   const inspirationRows = await read(db
-    .select()
+    .select(exportedInspirationFields)
     .from(inspirations)
     .where(eq(inspirations.profileId, profileId))
     .orderBy(asc(inspirations.createdAt), asc(inspirations.id)));

@@ -20,7 +20,7 @@ async function principleOnThreeSignals(profileId: string, locked: boolean) {
   for (let n = 0; n < 3; n++) {
     const [s] = await t.sql`INSERT INTO signals(profile_id,statement) VALUES (${profileId},${`Pattern ${n}`}) RETURNING id`;
     for (let i = 0; i < 3; i++) {
-      const [ins] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${profileId},'raw') RETURNING id`;
+      const [ins] = await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${profileId},${`Original observation ${n+1} from occasion ${i+1}`}) RETURNING id`;
       await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
         VALUES (${profileId},${profileId},${s.id},${ins.id})`;
     }
