@@ -294,7 +294,7 @@ it('keeps a one-press way out of the sky and of the ground on your own wall',asy
   expect(caret('.waka-surface-back'),'the sky on your own wall must offer the way down').not.toBeNull();
   await act(async()=>caret('.waka-surface-back')!.click());await settle();
   expect(location.search).toContain('open=principles');
-  await act(async()=>document.querySelector<HTMLButtonElement>('.waka-principles-back .waka-surface-back')!.click());await settle();
+  await act(async()=>document.querySelector<HTMLButtonElement>('.waka-principles-spark--home')!.click());await settle();
   expect(location.pathname+location.search).toBe('/');
   await navigate(-1);expect(location.search).toContain('view=sky');
   world.unmount();
@@ -807,12 +807,12 @@ it('leaves Principles by Escape, and by its labelled Back in one visible press',
   await key(world.container.querySelector('.waka-over[data-jar-surface]')!, 'Escape');
   expect(open(), 'Escape no longer closes Principles').toBeNull();
 
-  /* Its visible way out is the shared "<", top left (founder, 2026-11-26:
-     "to go back use a < icon instead of star"); the left star is gone. */
+  /* Its visible way out is the star at its left edge (founder, 2026-11-26,
+     after trying a "<": "remove < and bring back the star"). */
   await key(document.body, 'ArrowRight'); expect(open()).toBe('principles');
-  expect(document.querySelector('.waka-principles-spark--home'), 'the left star came back').toBeNull();
-  const back = document.querySelector<HTMLButtonElement>('.waka-principles-back .waka-surface-back');
-  expect(back?.getAttribute('aria-label'), 'Principles has no visible way home').toBe('Back');
+  expect(document.querySelector('.waka-principles-back'), 'the "<" came back').toBeNull();
+  const back = document.querySelector<HTMLButtonElement>('.waka-principles-spark--home');
+  expect(back?.getAttribute('aria-label'), 'Principles has no visible way home').toBe('Home');
   await act(async () => back!.click()); await settle();
   expect(open(), 'Back on Principles left Principles in place').toBeNull();
   expect(homeBarShape(world.container)).toEqual(['Save an inspiration', 'Save a screenshot', 'Save your voice', 'Chat']);

@@ -7749,7 +7749,6 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
 .waka-surface-right:empty { display: none; }
 /* Principles' "<" stands where every page's does, across the top, not in
    the page's centred column. */
-.waka-page--timeless > .waka-surface-strip.waka-principles-back { position: fixed; top: 0; left: 0; right: 0; width: auto; z-index: 60; }
 /* ═══ YOUR WEEK, IN ONE LINE (`WeeklyCard`) ═══════════════════════════════
    A sheet from the foot over a dim, holding one cream card in the bubble's
    own colours; Share is a word under it, never filled. */
@@ -7988,7 +7987,6 @@ main.waka-page > .waka-surface-head,
 }
 .waka-surface-strip > * { pointer-events: auto; }
 /* Principles' "<" home stands over the timeless page's own layers. */
-.waka-surface-strip.waka-principles-back { z-index: 70; }
 /* The row itself lets the world take presses beside its controls. */
 .waka-surface-strip > .waka-surface-head { pointer-events: none; }
 .waka-surface-strip > .waka-surface-head > * { pointer-events: auto; }

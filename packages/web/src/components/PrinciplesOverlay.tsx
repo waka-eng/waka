@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { DialogSurface } from "./DialogSurface";
-import { SurfaceHeader, useNativeBack } from "./SurfaceHeader";
+import { useNativeBack } from "./SurfaceHeader";
 import { ReadingPausedNotice } from "./ReadingPausedNotice";
 import { useReadingPaused } from "../lib/use-reading-paused";
 import { PrinciplesGround } from "./PrinciplesGround";
@@ -211,12 +211,14 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           with it. Gone while the creature walks either way, when the page
           is not yet (or no longer) there; Escape and the pull left work
           throughout. */}
-      {/* "<" HOME, WHERE EVERY PAGE KEEPS IT (founder, 2026-11-26: "to go
-          back use a < icon instead of star"): the one header's back, top
-          left, on its own strip because this page draws no header row. */}
-      {walking ? null : <div className="waka-surface-strip waka-principles-back">
-        <SurfaceHeader locale={locale} back={{ kind: "back", onBack: onClose }} />
-      </div>}
+      {/* THE STAR CAME BACK (founder, 2026-11-26, after trying the "<":
+          "remove < and bring back the star"). Home's star at the right walks
+          here; this one at the left walks home. */}
+      {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
+        aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
+        onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
+        <PrinciplesSpark />
+      </button>}
       <DialogSurface
         className="waka-over"
         aria-label={title}
