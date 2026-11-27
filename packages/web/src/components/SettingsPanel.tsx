@@ -14,6 +14,7 @@ import { supportedLocales } from "../lib/i18n";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { SurfaceHeader } from "./SurfaceHeader";
 import { LegalLinks } from "./LegalLinks";
+import { HowItWorksBody } from "./HowItWorksPanel";
 
 export interface SettingsPanelProps {
   locale: SupportedLocale;
@@ -41,12 +42,10 @@ export interface SettingsPanelProps {
   /** Opens Trash, where deleted inspirations wait 30 days (founder,
       2026-11-26: "put trash in profile or sth"). */
   onOpenTrash?: () => void;
-  /** Opens "How WAKA works", which left home's corner for here. */
-  onOpenInfo?: () => void;
 }
 
 /** The current Settings subpage; null is the overview. */
-type Open = null | "personal" | "sessions" | "password" | "danger";
+type Open = null | "personal" | "sessions" | "password" | "danger" | "info";
 
 export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   /* React will not render a `javascript:` href, by design; the bookmarklet's
@@ -107,7 +106,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
       <SurfaceHeader locale={props.locale}
         back={{ kind: open === null ? "close" : "back", onBack: stepUp }}
         titleRef={heading}
-        title={say(open === "personal" ? "profilePersonalMcpTitle" : open === "sessions" ? "profileSessionsTitle" : open === "password" ? "profileChangePassword" : open === "danger" ? "profileDelete" : "worldSettingsOpen")} />
+        title={say(open === "personal" ? "profilePersonalMcpTitle" : open === "sessions" ? "profileSessionsTitle" : open === "password" ? "profileChangePassword" : open === "danger" ? "profileDelete" : open === "info" ? "worldHowItWorksTitle" : "worldSettingsOpen")} />
       <div className="waka-settings-content" key={open ?? "overview"}>
       {/* ═══ FOUR GROUPS, ONE HEADING STYLE (craft audit, 2026-11-26) ══════
           Founder: "spacing padding can be better ... the workflow
@@ -174,17 +173,14 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 
       <section className="waka-settings-section" aria-labelledby="waka-settings-about">
         <h3 id="waka-settings-about" className="waka-settings-heading">{say("settingsGroupAbout")}</h3>
-        {props.onOpenInfo ? <button type="button" className="waka-settings-row" onClick={props.onOpenInfo}>
-          {say("worldHowItWorksTitle")}
-          <span className="waka-settings-chevron" aria-hidden="true">›</span>
-        </button> : null}
+        <Group id="info" open={open} setOpen={setOpen} label={say("worldHowItWorksTitle")}><HowItWorksBody locale={props.locale} /></Group>
         <LegalLinks locale={props.locale} />
         <button type="button" className="waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
           {say("worldSignOutLower")}
         </button>
         {danger}
       </section>
-      </> : <>{groups}{danger}</>}
+      </> : <>{groups}{danger}<Group id="info" open={open} setOpen={setOpen} label={say("worldHowItWorksTitle")}><HowItWorksBody locale={props.locale} /></Group></>}
       </div>
     </div>
   );

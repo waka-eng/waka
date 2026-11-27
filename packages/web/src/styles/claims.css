@@ -8182,6 +8182,8 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 .waka-page.waka-page--sheet[data-leaving] { animation: waka-sheet-down 220ms ease-in both; pointer-events: none; }
 .waka-page.waka-page--sheet[data-dragging] { animation: none; }
+/* Back from an inspiration it is already up: no second rise. */
+.waka-page.waka-page--sheet.waka-page--sheet-risen:not([data-leaving]) { animation: none; }
 /* The dim above the sheet: a tap there puts it down. Behind the sheet. */
 .waka-sheet-scrim {
   position: fixed; inset: 0; z-index: 55; padding: 0; border: 0; cursor: default;

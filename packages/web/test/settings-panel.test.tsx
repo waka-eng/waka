@@ -145,3 +145,21 @@ it("clears both fields when a password change is confirmed", async () => {
     vi.unstubAllGlobals();
   }
 });
+
+/* "How WAKA works" is a Settings page (founder, 2026-11-27: "there's no way
+   to go back. We can only close it and then open it again"): Back returns
+   to Settings, never closes the card. */
+it("opens How WAKA works as a Settings page, and Back returns to Settings", async () => {
+  const onClose = vi.fn();
+  await render({ onClose });
+  const row = [...document.querySelectorAll<HTMLButtonElement>(".waka-settings-row")].find(button => button.textContent?.includes("How WAKA works"));
+  expect(row, "Settings has no How WAKA works row").toBeTruthy();
+  await act(async () => row!.click());
+  expect(document.querySelector(".waka-surface-title")?.textContent).toBe("How WAKA works");
+  expect(document.querySelector(".waka-about-steps"), "the steps did not open in Settings").not.toBeNull();
+  const back = document.querySelector<HTMLButtonElement>(".waka-surface-back")!;
+  expect(back.getAttribute("aria-label")).toBe("Back");
+  await act(async () => back.click());
+  expect(document.querySelector(".waka-surface-title")?.textContent).toBe("Settings");
+  expect(onClose, "Back closed Settings instead of going back").not.toHaveBeenCalled();
+});
