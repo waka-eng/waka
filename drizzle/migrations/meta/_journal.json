@@ -638,6 +638,13 @@
       "when": 1795049985911,
       "tag": "0090_account_attachment_upload_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1795739137167,
+      "tag": "0091_mcp_reads",
+      "breakpoints": true
     }
   ]
 }

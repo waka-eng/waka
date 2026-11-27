@@ -25,6 +25,7 @@ import { armBackgroundJobLease, cancelBackgroundJobLease, cancelBackgroundJobWak
 import { runBackgroundJobWorker,readBackgroundJobRecoveryState,settleAbandonedExhaustedLeases,sweepBackgroundJobRuns,hasNearTermBackgroundJobRetry,readBackgroundJobWakeReferences,hasNearTermRequestedReading,collectReadingWakeReferences,type BackgroundJobRetryWake } from "./lib/queue.js";
 import {QUEUE_RECOVERY_LIMITS,recordQueueRecovery} from './lib/queue-recovery.js';
 import {sweepDeletedShelf} from './lib/deleted-shelf.js';
+import {sweepMcpReads} from './lib/mcp-reads.js';
 import {sweepStaleStagedAttachments} from './lib/conversation-attachments.js';
 import {sweepAttachmentObjects,drainAttachmentObjects} from './lib/attachment-sweep.js';
 import {getDb} from './lib/db.js';
@@ -68,6 +69,8 @@ async function runScheduledSweeps(now=new Date()){
   catch(error){recordOperationalFault('maintenance');console.warn('[abandoned-lease-sweep] failed',safeErrorDiagnostic(error));}
   try{const swept=await sweepDeletedShelf(getDb(),now);if(swept)console.info('[deleted-shelf-sweep]',JSON.stringify({swept}));}
   catch(error){recordOperationalFault('maintenance');console.warn('[deleted-shelf-sweep] failed',safeErrorDiagnostic(error));}
+  try{const swept=await sweepMcpReads(getDb(),now);if(swept)console.info('[mcp-read-sweep]',JSON.stringify({swept}));}
+  catch(error){recordOperationalFault('maintenance');console.warn('[mcp-read-sweep] failed',safeErrorDiagnostic(error));}
   try{const swept=await sweepStaleStagedAttachments(getDb(),now,sweepAttachmentObjects);if(swept)console.info('[staged-attachment-sweep]',JSON.stringify({swept}));}
   catch(error){recordOperationalFault('maintenance');console.warn('[staged-attachment-sweep] failed',safeErrorDiagnostic(error));}
   try {

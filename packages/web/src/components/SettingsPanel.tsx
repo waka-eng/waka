@@ -2,6 +2,7 @@ import { ProfileMcpSetup } from './ProfileMcpSetup';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bookmarkletHref } from "../lib/bookmarklet";
 import { ProfileApiKeys } from './ProfileApiKeys';
+import { McpRecentReads } from './McpRecentReads';
 
 import { changePassword } from "../lib/api/auth";
 import { apiPath, ApiError, getJson } from "../lib/api/http";
@@ -369,7 +370,8 @@ function PersonalConnections({ locale, profile }: { locale: SupportedLocale; pro
       <button type="button" aria-pressed={view === 'setup'} onClick={() => setView('setup')}>{t(locale, 'profileMcpSetupTab')}</button>
       <button type="button" aria-pressed={view === 'keys'} onClick={() => setView('keys')}>{t(locale, 'profileApiKeysTitle')}</button>
     </div>
-    {view === 'keys' ? <ProfileApiKeys locale={locale} profile={profile} /> : <ProfileMcpSetup locale={locale} profile={profile} />}
+    {view === 'keys' ? <><ProfileApiKeys locale={locale} profile={profile} /><McpRecentReads locale={locale} profileId={profile.id} /></>
+      : <ProfileMcpSetup locale={locale} profile={profile} />}
   </>;
 }
 

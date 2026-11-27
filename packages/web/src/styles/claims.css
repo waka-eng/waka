@@ -5684,6 +5684,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-session-meta { color: var(--muted); font-size: var(--t-meta); }
 .waka-session-line { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
 .waka-session-list .waka-session-card { padding: var(--sp-8) 0; }
+/* What each key read, under the keys (2026-11-26). */
+.waka-mcp-reads { display: grid; gap: var(--sp-8); margin-top: var(--sp-24); }
 .waka-session-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-8) var(--sp-16); }
 .waka-session-foot > .waka-session-confirm { flex: 1 1 100%; }
 

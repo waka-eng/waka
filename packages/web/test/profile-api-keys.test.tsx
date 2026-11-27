@@ -86,7 +86,7 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
   expect(host.textContent).toContain('Read and capture also allows new saves');
   expect(host.textContent).toContain('Personal laptop');
   for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent name']) expect(host.textContent).not.toContain(hidden);
-  expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys']);
+  expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys', `/api/mcp-reads?profile=${personal.id}`]);
   expect(calls.every(c => c.method === 'GET')).toBe(true);
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
   expect(document.activeElement).toBe(host.querySelector('[data-settings-target="personal"]'));
