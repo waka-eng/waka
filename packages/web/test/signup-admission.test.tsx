@@ -41,7 +41,7 @@ it('holds a failed verification and requires an explicit retry with a fresh nonc
 it.each(['en-US','ko-KR'] as const)('does not recreate an ambiguously committed password account %s',async locale=>{
  auth.signup.mockRejectedValueOnce(new ApiError({status:0,message:'network unknown'}));vi.mocked(fetchSignupAdmission).mockResolvedValue({mode:'off'});
  await render(createElement(MemoryRouter,null,createElement(SignupForm,{locale})));
- for(const [name,value] of [['email','synthetic@example.test'],['password','synthetic-password-123'],['name','Synthetic']]){await act(async()=>{const field=host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(field,value);field.dispatchEvent(new Event('input',{bubbles:true}));});}
+ for(const [name,value] of [['email','synthetic@example.test'],['password','synthetic-password-123']]){await act(async()=>{const field=host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(field,value);field.dispatchEvent(new Event('input',{bubbles:true}));});}
  const form=host.querySelector('form')!;await act(async()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(auth.signup).toHaveBeenCalledOnce();expect(host.textContent).toContain(t(locale,'signupOutcomeUnknown'));expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
  await act(async()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(auth.signup).toHaveBeenCalledOnce();
 });
@@ -68,7 +68,7 @@ it('starts the expiry budget BEFORE a slow bootstrap and never mounts a late wid
 
 it('invalidates definite duplicate-email409 proof and offers fresh verification before a different signup',async()=>{
  auth.signup.mockRejectedValueOnce(new ApiError({status:409,message:'An account with this email already exists'}));await render(createElement(MemoryRouter,null,createElement(SignupForm,{locale:'en-US'})));
- for(const [name,value] of [['email','synthetic@example.test'],['password','synthetic-password-123'],['name','Synthetic']])await act(async()=>{const field=host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(field,value);field.dispatchEvent(new Event('input',{bubbles:true}));});
+ for(const [name,value] of [['email','synthetic@example.test'],['password','synthetic-password-123']])await act(async()=>{const field=host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(field,value);field.dispatchEvent(new Event('input',{bubbles:true}));});
  await act(async()=>callback('first-token'));expect(host.textContent).toContain(t('en-US','signupVerified'));await act(async()=>host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  expect(auth.signup).toHaveBeenCalledOnce();expect(fetchSignupAdmission).toHaveBeenCalledTimes(2);expect(host.textContent).not.toContain(t('en-US','signupVerified'));expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
  await act(async()=>callback('second-token'));expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(false);

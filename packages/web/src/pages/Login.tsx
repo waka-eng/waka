@@ -58,10 +58,9 @@ import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSi
 import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { hasSignedInHere, useAuth } from "../lib/auth-context";
-import { formatMessage, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
+import { formatMessage, readStoredLocale, t, writeStoredLocale } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 import { resolveRedirect, safeInAppPath } from "../lib/sign-in-destination";
-import { writeOnboardingMarker } from "../lib/onboarding-progress";
 
 /**
  * THE ONE WAY BACK OUT OF THE DOOR, and why there is exactly one.
@@ -115,14 +114,12 @@ const MIN_PASSWORD_LENGTH = 8;
 interface SignupValues {
   email: string;
   password: string;
-  name: string;
   preferredLocale: SupportedLocale;
 }
 
 const EMPTY_SIGNUP: SignupValues = {
   email: "",
   password: "",
-  name: "",
   preferredLocale: readStoredLocale(),
 };
 
@@ -138,7 +135,6 @@ export function SignupForm(props:SignupFormProps = {}):JSX.Element{
 }
 function PasswordForm({
   locale: shellLocale = readStoredLocale(),
-  onLocaleChange,
   admissionOff=false,
 }: SignupFormProps&{admissionOff?:boolean}): JSX.Element {
   const navigate = useNavigate();
@@ -196,9 +192,6 @@ function PasswordForm({
         formatMessage(locale, "loginPasswordMin", { count: MIN_PASSWORD_LENGTH }),
       ];
     }
-    if (!values.name.trim()) {
-      local.name = [t(locale, "profileNicknameRequired")];
-    }
     if (Object.keys(local).length > 0) {
       setFieldErrors(local);
       return;
@@ -211,12 +204,13 @@ function PasswordForm({
       const created = await signup({
         email,
         password: values.password,
-        name: values.name.trim(),
         preferredLocale: values.preferredLocale,
       });
-      /* The name and language were just chosen here, so onboarding opens on
-         the intro rather than asking them again (Law 4). */
-      writeOnboardingMarker(created.account.id, { named: true });
+      /* EMAIL AND PASSWORD ONLY (founder, 2026-11-26, from the iOS and
+         simplicity audit: "do all 6"): the name and language are asked by
+         onboarding's "Let's get you set up", which shows because no `named`
+         marker is written here. The language sent is the page's own, which
+         that step then confirms. */
       // AuthContext has already cached the user; the route guard on `/`
       // (or the user's pre-redirect destination) will see them as
       // authenticated on the very next render.
@@ -273,7 +267,6 @@ function PasswordForm({
 
   const emailError = fieldErrors.email?.[0];
   const passwordError = fieldErrors.password?.[0];
-  const nameError = fieldErrors.name?.[0];
 
   return (
     <form className="login-form" onSubmit={handleSubmit} noValidate>
@@ -330,52 +323,6 @@ function PasswordForm({
             {passwordError}
           </span>
         ) : null}
-      </label>
-
-      <label className="field">
-        <span className="field-label">{t(locale, "profileNickname")}</span>
-        <input
-          className="field-input"
-          type="text"
-          name="name"
-          autoComplete="name"
-          disabled={submitting}
-          value={values.name}
-          onChange={(e) => handleChange("name", e.target.value)}
-          aria-invalid={nameError ? true : undefined}
-          aria-describedby={nameError ? "signup-name-error" : undefined}
-        />
-        {nameError ? (
-          <span id="signup-name-error" className="field-error">
-            {nameError}
-          </span>
-        ) : null}
-      </label>
-
-
-      {/* The language field is BACK (founder, 2026-08-31, reversing
-          2026-08-22): the choice drives what language the memory itself is
-          written in — signals, the top of mind, principles — so it belongs
-          at the door, before the first keep. */}
-      <label className="field">
-        <span className="field-label">{t(locale, "profileLanguageLabel")}</span>
-        <select
-          className="field-input"
-          name="preferredLocale"
-          disabled={submitting}
-          value={values.preferredLocale}
-          onChange={(e) => {
-            const next = e.target.value as SupportedLocale;
-            handleChange("preferredLocale", next);
-            onLocaleChange?.(next);
-          }}
-        >
-          {supportedLocales.map((l) => (
-            <option key={l.code} value={l.code}>
-              {l.nativeLabel}
-            </option>
-          ))}
-        </select>
       </label>
 
       {/* `btn-doorway`: the login page's own submit, and NOT `.profile-card`'s

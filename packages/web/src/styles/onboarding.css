@@ -125,6 +125,14 @@
 
 /* ─── intro frames ─────────────────────────────────────────────────── */
 .onb-intro { touch-action: pan-y; user-select: none; }
+/* Skip: a plain muted word in the top right corner, never filled. */
+.onb button.onb-skip {
+  position: absolute; z-index: 3; top: calc(var(--sp-12) + env(safe-area-inset-top)); right: max(var(--sp-4), env(safe-area-inset-right));
+  min-height: 44px; min-width: 44px; padding: 0 var(--sp-12); border: 0; background: none;
+  color: var(--onb-ink-quiet); font-size: 15px; cursor: pointer;
+}
+.onb button.onb-skip:hover, .onb button.onb-skip:focus-visible { color: var(--onb-white); }
+.onb-intro--leaving .onb-skip { opacity: 0; transition: opacity 250ms ease; }
 .onb-fit {
   position: relative;
   flex: 1 1 auto;

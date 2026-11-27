@@ -216,7 +216,6 @@ export function Menu({ locale, items, current, left, actions, account, settings,
    * the same handler, and the full-screen scrim closes it too.
    */
   const settingsTrigger = useRef<HTMLButtonElement>(null);
-  const infoTrigger = useRef<HTMLButtonElement>(null);
   const settingsLeave = useRef<(() => Promise<boolean>) | null>(null);
   /* The settings panel's own "<" handler (up one level, or close at its
      root), so Escape does exactly what its "<" does (nav system R3). */
@@ -230,7 +229,7 @@ export function Menu({ locale, items, current, left, actions, account, settings,
       leaving.current = false;
       if (!saved) return;
     }
-    if (next === null) (corner === 'info' ? infoTrigger : settingsTrigger).current?.focus();
+    if (next === null) settingsTrigger.current?.focus();
     setCorner(next);
   };
   const close = () => { void changeCorner(null); };
@@ -362,33 +361,9 @@ export function Menu({ locale, items, current, left, actions, account, settings,
             answer was buried on the settings page and then deleted from
             it. See `HowItWorksPanel` for what came back and what did
             not. */}
-        <button
-          type="button"
-          ref={infoTrigger}
-          className="waka-corner waka-corner--info"
-          aria-label={t(locale, "worldHowItWorksTitle")}
-          aria-expanded={corner === "info"}
-          onClick={() => void changeCorner(corner === "info" ? null : "info")}
-        >
-          {/* A RING AND AN "i", drawn rather than typed. The glyph has to
-              sit on the cog's own optical weight — same 20px box, same
-              1.3 stroke, same round joins — or two buttons 44px apart
-              read as two different products. Drawn also means it cannot
-              be restyled by the type scale or picked up by a font swap,
-              which is the whole reason the dock's plus is a path too. */}
-          <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-            <circle cx="10" cy="10" r="7.4" stroke="currentColor" strokeWidth="1.3" fill="none" />
-            <circle cx="10" cy="6.3" r="0.85" fill="currentColor" />
-            <path
-              d="M10 9.1v4.7"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              strokeLinecap="round"
-              fill="none"
-            />
-          </svg>
-        </button>
-
+        {/* THE "i" LEFT THIS CORNER FOR SETTINGS (founder, 2026-11-26, from the
+            simplicity audit): "How WAKA works" repeated onboarding on home,
+            so it is a row in Settings' About now, and home keeps one corner. */}
         <button
           type="button"
           ref={settingsTrigger}
@@ -457,6 +432,7 @@ export function Menu({ locale, items, current, left, actions, account, settings,
               {/* THE PANEL OWNS ITS ONE HEADER: Close at its root, Back on a
                   sub-page (one level up). Escape calls the same handler. */}
               <SettingsPanel {...settings} locale={locale}
+                onOpenInfo={() => { void changeCorner('info'); }}
                 onBeforeLeave={guard => { settingsLeave.current = guard; }}
                 onBackHandler={handler => { settingsBack.current = handler; }}
                 email={account?.email ?? null}

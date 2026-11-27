@@ -40,6 +40,8 @@ export interface SettingsPanelProps {
   /** Opens Trash, where deleted inspirations wait 30 days (founder,
       2026-11-26: "put trash in profile or sth"). */
   onOpenTrash?: () => void;
+  /** Opens "How WAKA works", which left home's corner for here. */
+  onOpenInfo?: () => void;
 }
 
 /** The current Settings subpage; null is the overview. */
@@ -163,7 +165,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           <ProfileExportControl locale={props.locale} />
           {props.onOpenTrash ? <button type="button" className="waka-settings-row" onClick={() => { props.onClose(); props.onOpenTrash?.(); }}>
             {say("worldDeletedShelf")}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="m9 6 6 6-6 6" /></svg>
+            <span className="waka-settings-chevron" aria-hidden="true">›</span>
           </button> : null}
           {groups}
         </div>
@@ -171,6 +173,10 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 
       <section className="waka-settings-section" aria-labelledby="waka-settings-about">
         <h3 id="waka-settings-about" className="waka-settings-heading">{say("settingsGroupAbout")}</h3>
+        {props.onOpenInfo ? <button type="button" className="waka-settings-row" onClick={props.onOpenInfo}>
+          {say("worldHowItWorksTitle")}
+          <span className="waka-settings-chevron" aria-hidden="true">›</span>
+        </button> : null}
         <LegalLinks />
         <button type="button" className="waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
           {say("worldSignOutLower")}

@@ -223,9 +223,6 @@ it('speaks its own line when the weather does not come back', async () => {
 
   await act(async () => { press()!.click(); });
   await world.step(0);
-  expect(speech(), 'the first tap offers the saves').toBe('You have 1 saved. Want to see it?');
-  await act(async () => { press()!.click(); });
-  await world.step(0);
   /* Before the grace period, nothing — the product still prefers the real
      answer and will wait a moment for it. */
   expect(speech(), 'the tap should immediately offer a conversation').toBe('Want to chat about what’s on your mind?');
@@ -239,16 +236,14 @@ it('cycles through other prompts without repeating already-seen activity', async
   vi.mocked(fetchTheWeather).mockResolvedValue(WEATHER);
   world = await mountWorld(FACTS); await settle();
   const tap = async () => { await act(async () => { press()!.click(); }); await settle(); };
-  await tap(); expect(speech()).toBe('You have 1 saved. Want to see it?');
   await tap(); expect(speech()).toBe('You kept one memory today.');
   await tap(); expect(speech()).toBe('Which principles are guiding you lately?');
   await tap(); expect(speech()).toBeNull();
-  await tap(); expect(speech()).toBe('You have 1 saved. Want to see it?');
   await tap(); expect(speech()).toBe('Want to chat about what’s on your mind?');
   vi.mocked(fetchTheWeather).mockResolvedValue({ ...WEATHER, days: [{ ...WEATHER.days[0]!, sentences: [
     ...WEATHER.days[0]!.sentences, { text: 'your memory was consulted', backing: 'consultations' },
   ] }] });
-  await tap(); await tap(); await tap(); await tap();
+  await tap(); await tap(); await tap();
   expect(speech()).toBe('Your memory was consulted today.');
 });
 
@@ -256,13 +251,13 @@ it('does not replace a local answer mid-reading when a slow response arrives', a
   let answer!: (weather: ApiWeather) => void;
   vi.mocked(fetchTheWeather).mockImplementation(() => new Promise(resolve => { answer = resolve; }));
   world = await mountWorld(FACTS); await settle();
-  await act(async () => { press()!.click(); press()!.click(); }); await settle();
+  await act(async () => { press()!.click(); }); await settle();
   const localLine = speech();
   expect(localLine).toBeTruthy();
   await act(async () => { answer(WEATHER); }); await settle();
   expect(speech()).toBe(localLine);
   vi.mocked(fetchTheWeather).mockResolvedValue(WEATHER);
-  await act(async () => { press()!.click(); press()!.click(); press()!.click(); press()!.click(); }); await settle();
+  await act(async () => { press()!.click(); press()!.click(); press()!.click(); }); await settle();
   expect(speech()).toBe('You kept one memory today.');
 });
 
@@ -270,7 +265,6 @@ it('drops a pending activity response after another tap selects principles', asy
   let answer!: (weather: ApiWeather) => void;
   vi.mocked(fetchTheWeather).mockImplementation(() => new Promise(resolve => { answer = resolve; }));
   world = await mountWorld(FACTS); await settle();
-  await act(async () => { press()!.click(); });
   await act(async () => { press()!.click(); });
   await act(async () => { press()!.click(); });
   expect(speech()).toBe('Which principles are guiding you lately?');

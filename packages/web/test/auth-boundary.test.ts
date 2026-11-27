@@ -324,7 +324,7 @@ describe("auth boundary", () => {
     expect(document.activeElement).toBe(container.querySelector("#login-tab-login"));
   });
 
-  it("offers the language choice at the door — English and Korean", async () => {
+  it("asks only email and password at the door", async () => {
     // The pre-submit selector is BACK (founder, 2026-08-31, reversing
     // 2026-08-22): the choice drives what language the memory itself is
     // written in, so it belongs before the first keep.
@@ -340,16 +340,15 @@ describe("auth boundary", () => {
 
     expect(container.textContent).toContain("Start saving what moves you.");
     expect(container.textContent).toContain("Continue with Google");
-    const selector = container.querySelector<HTMLSelectElement>(
-      'select[name="preferredLocale"]',
-    );
-    expect(selector).not.toBeNull();
-    expect(Array.from(selector!.options).map((o) => o.value)).toEqual(["en-US", "ko-KR"]);
-    expect(selector!.value).toBe("en-US");
-    expect(container.textContent).toContain("한국어");
+    /* EMAIL AND PASSWORD ONLY (founder, 2026-11-26): the name and language
+       are asked by onboarding's set-up step, not at the door. */
+    expect(container.querySelector('select[name="preferredLocale"]'), "the language came back to the door").toBeNull();
+    expect(container.querySelector('input[name="name"]'), "the name came back to the door").toBeNull();
+    expect(container.querySelector('input[name="email"]')).not.toBeNull();
+    expect(container.querySelector('input[name="password"]')).not.toBeNull();
   });
 
-  it("renders the standalone SignupForm with the language field", async () => {
+  it("renders the standalone SignupForm with email and password only", async () => {
     vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
 
     const container = await renderAuthRoutes({
@@ -357,7 +356,8 @@ describe("auth boundary", () => {
       loginElement: createElement(SignupForm),
     });
 
-    expect(container.querySelector('select[name="preferredLocale"]')).not.toBeNull();
+    expect(container.querySelector('select[name="preferredLocale"]')).toBeNull();
+    expect(container.querySelector('input[name="name"]')).toBeNull();
     expect(container.textContent).toContain("Create account");
   });
 

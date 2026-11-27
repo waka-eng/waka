@@ -108,6 +108,7 @@ import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
 import { askSaveQuestion, readSaveQuestion } from '../lib/api';
+import { feel } from '../lib/haptics';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
 import { wordsCanStand } from '../lib/note-words';
 import { inspirationPreview } from '../lib/inspiration-preview';
@@ -1084,7 +1085,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const posterSaidRef = useRef(new Map<string, string>());
   /** A requested activity line or a short confirmation/error from an action. */
   const [charSay, setCharSayNow] = useState("");
-  type CompanionPrompt = 'reading' | 'saves' | 'review' | 'activity' | 'principles';
+  type CompanionPrompt = 'reading' | 'review' | 'activity' | 'principles';
   const promptScope = `${storageScope?.accountId ?? ''}:${spaceKey(atWall)}`;
   const [promptChoice, setPromptChoice] = useState<{ scope: string; kind: CompanionPrompt }>(() => ({ scope: promptScope, kind: 'reading' }));
   const promptChoiceRef = useRef(promptChoice);
@@ -1653,14 +1654,11 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      The next tap on the creature asks for it again, quietly (see
      `creatureSpeaks`), so a queue that comes back is asked about then. */
   const reviewRetry = reviewLoadFailed && !offline && atWall.kind === 'self';
-  /* "YOU HAVE 12 SAVED" (founder meeting, 2026-11-20: people tap the
-     creature and never find their inspirations). One of the lines a tap
-     steps through, on your own wall once there is at least one; its act
-     opens the same modal the handle does, and the handle lights. */
-  const keptCount = inspirations ? inspirations.length + fieldBeyond : 0;
-  const canOfferSaves = atWall.kind === 'self' && keptCount > 0;
+  /* NO "YOU HAVE N SAVED" LINE (founder, 2026-11-26, from the simplicity
+     audit): the handle and a reading's "From n inspirations" already open
+     the list, so a third way in was one too many. */
   const promptLines = useMemo<CompanionPrompt[]>(() => ['reading', ...(canOfferReview ? ['review' as const] : []),
-    ...(canOfferSaves ? ['saves' as const] : []), 'activity', 'principles'], [canOfferSaves, canOfferReview]);
+    'activity', 'principles'], [canOfferReview]);
   const companionPrompt = promptChoice.scope !== promptScope || !promptLines.includes(promptChoice.kind)
     ? 'reading' : promptChoice.kind;
   promptChoiceRef.current = { scope: promptScope, kind: companionPrompt };
@@ -2021,6 +2019,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     setLit(true);
     setBarBeckon(n => n + 1);
     simApiRef.current?.flourish();
+    feel('light');
     if (litTimer.current !== null) window.clearTimeout(litTimer.current);
     litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
     if (next === 'activity' && sayLineRef.current) sayTheWeatherRef.current(sayLineRef.current);
@@ -5092,6 +5091,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           /* Each save is its own "Kept", even when the words are the same. */
           setKeptSaves(n => n + 1);
           setCharSay(atWallRef.current.kind === 'self' ? say('worldBubbleKept') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
+          feel('success');
         }
         if (initiated) setShareArrived(false);
         if (initiated && closeAfterSave.current) { closeAfterSave.current = false; window.setTimeout(() => window.close(), 1700); }
@@ -7504,7 +7504,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const [savesAsSheet, setSavesAsSheet] = useState(false);
   const savesOpen = viewNavigation.view?.open === 'saves';
   useEffect(() => { if (!savesOpen) setSavesAsSheet(false); }, [savesOpen]);
-  const openSheet = useCallback(() => { setSavesAsSheet(true); openOverHome('saves'); }, [openOverHome]);
+  const openSheet = useCallback(() => { setSavesAsSheet(true); openOverHome('saves'); feel('light'); }, [openOverHome]);
   /* ═══ THE NOTE BAR'S PARTS (design E3, Writing, PhotoNote) ═══════════════
      They stood in the dock's middle group; the notepad draws them now, in a
      slim row UNDER its words so the words get the whole width — mic on the
@@ -9775,16 +9775,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 </div>
               ) : null}
             </>
-          ) : null}
-          {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'saves' ? (
-            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
-              <span className="jar-char-bubble-body">
-                <span className="jar-char-bubble-reading" role="status">{formatMessage(locale, 'worldCompanionSavesPrompt', { count: keptCount })}</span>
-                <span className="jar-char-bubble-acts">
-                  <button type="button" className="jar-char-bubble-act" onClick={openSheet}>{say('worldBubbleSeeThem')}</button>
-                </span>
-              </span>
-            </div>
           ) : null}
           {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'principles' ? (
             <div className="jar-char-bubble" data-invites="star" data-jar-chrome="1" data-jar-interactive="1">

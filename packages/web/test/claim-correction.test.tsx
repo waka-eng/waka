@@ -545,13 +545,12 @@ it('shows Top of Mind before pending reviews and cycles only on avatar presses',
   expect(bubbleText()).toContain(body);
   expect(invite()).toBeNull();
   await tap(); expect(inviteSays()).toBe('I have a question for you.');
-  await tap(); expect(bubbleText()).toMatch(/You have \d+ saved/);
   await tap(); expect(invite()).toBeNull(); expect(bubbleText()).not.toContain(body);
   await tap(); expect(bubbleText()).toContain('Which principles are guiding you lately?');
   await tap(); expect(bubbleText()).toContain(body);
   expect(world.container.querySelectorAll('.jar-char-bubble')).toHaveLength(1);
   // A complete cycle in one event turn must still end on the reading.
-  await act(async () => { for (let i = 0; i < 5; i++) world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click(); });
+  await act(async () => { for (let i = 0; i < 4; i++) world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click(); });
   expect(bubbleText()).toContain(body);
   await diveIntoReview(world.container, world.step);
   await press(document.body, 'Escape');
@@ -562,7 +561,6 @@ it('skips review when nothing waits and opens the selected principles flow', asy
   await mountQueue();
   await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
   expect(invite()).toBeNull();
-  await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
   await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-press')!.click());
   expect(world.container.querySelector('.jar-char-bubble')?.textContent).toContain('Which principles are guiding you lately?');
   await act(async () => world.container.querySelector<HTMLButtonElement>('.jar-char-bubble-act')!.click());
