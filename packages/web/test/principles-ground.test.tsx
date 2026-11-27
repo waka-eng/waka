@@ -17,13 +17,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { PrinciplesGround } from "../src/components/PrinciplesGround";
 import { PrinciplesOverlay } from "../src/components/PrinciplesOverlay";
-import { fetchPrinciples, fetchSignals, listClaims, type ApiPrinciple, type ApiSignal } from "../src/lib/api";
+import { createFeedback, fetchPrinciples, fetchSignals, listClaims, type ApiPrinciple, type ApiSignal } from "../src/lib/api";
 
 vi.mock("../src/lib/api", async (original) => ({
   ...await original<typeof import("../src/lib/api")>(),
   fetchSignals: vi.fn(),
   listClaims: vi.fn(),
   fetchPrinciples: vi.fn(),
+  createFeedback: vi.fn(),
 }));
 
 const PROFILE = "33333333-3333-4333-8333-333333333333";
@@ -158,6 +159,35 @@ it("meets the first principle once, and only for someone who waited for it", asy
   root = createRoot(host);
   await overlay();
   expect(host.querySelector(".waka-held-first"), "the greeting is once").toBeNull();
+});
+
+/* THE FIRST PRINCIPLE, ONCE, IN LIGHT (insight goal, phase 5): the saves
+   drift in, then the words form, answerable. That's me affirms it. */
+it("reveals the first principle from its saves, and That's me affirms it", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const overlay = () => act(async () => root.render(
+      <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Agi" title="Principles" onClose={() => {}} onOpen={() => {}} />,
+    ));
+    vi.mocked(fetchSignals).mockResolvedValue([]);
+    vi.mocked(fetchPrinciples).mockResolvedValue([]);
+    vi.mocked(createFeedback).mockResolvedValue({} as never);
+    await overlay();
+    vi.mocked(fetchPrinciples).mockResolvedValue([{ ...PRINCIPLE, citedSignals: [{ id: "s", statement: "x",
+      examples: [{ text: "Walked home the long way", createdAt: "" }, { text: "I want to quit my job", createdAt: "" }] }] }]);
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await overlay();
+    expect([...host.querySelectorAll(".waka-reveal-mote")].map(node => node.textContent)).toEqual(["Walked home the long way", "I want to quit my job"]);
+    expect(host.querySelector(".waka-reveal-statement"), "the words formed before the saves gathered").toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2700); });
+    expect(host.querySelector(".waka-reveal-statement")?.textContent).toBe("Choose what you can undo.");
+    expect(host.querySelector(".waka-reveal-from")?.textContent).toBe("From 2 inspirations");
+    const yes = [...host.querySelectorAll<HTMLButtonElement>(".waka-reveal-acts button")].find(b => b.textContent === "That’s me")!;
+    await act(async () => yes.click());
+    expect(vi.mocked(createFeedback)).toHaveBeenCalledWith({ targetType: "principle", targetId: PRINCIPLE.id, value: "true" });
+    expect(host.querySelector(".waka-reveal"), "the reveal stayed after the answer").toBeNull();
+  } finally { vi.useRealTimers(); }
 });
 
 it("does not greet principles that were already there on the first visit", async () => {

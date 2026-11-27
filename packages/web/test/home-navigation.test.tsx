@@ -84,7 +84,7 @@ it.each([0, 60])('keeps the home count current after archive deletion and restor
 
     /* Trash is in Settings now (founder, 2026-11-26: "put trash in profile"). */
     await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]')!.click()); await settle();
-    await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.waka-settings-row')].find(row => row.textContent?.trim() === 'Trash')!.click()); await settle();
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.waka-settings-row')].find(row => row.textContent?.replace('›', '').trim() === 'Trash')!.click()); await settle();
     await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-shelf-back')]
       .find(button => button.textContent?.trim() === 'Restore')!.click());
     expect(restoreMock).toHaveBeenCalledWith('loaded', { profile: VIEWER_ID });

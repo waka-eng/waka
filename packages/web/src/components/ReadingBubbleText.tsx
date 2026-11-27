@@ -20,7 +20,7 @@ const ReadingDetails = lazy(() => import('./ReadingDetails'));
  * opens the quiet page with the words already in the field; leaving it with
  * unsaved words asks first.
  */
-export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled, details, why, whyLabel, onWhy }: {
+export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled, details, why, whyLabel, onWhy, onNotQuite }: {
   text: string; locale: SupportedLocale;
   onShare?: () => void; onChat?: () => void; chatDisabled?: boolean; details?: ReadingDetailActions;
   /** The saves the read rests on, by their own words. */
@@ -31,6 +31,8 @@ export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled,
   onWhy?: () => void;
   /** What the Why? act says: "From 3 inspirations" on home. */
   whyLabel?: string;
+  /** "Not quite": the person says the read is off, and says what is closer. */
+  onNotQuite?: () => void;
 }) {
   const [editing, setEditing] = useState<{ text: string; details: ReadingDetailActions } | null>(null);
   const [editState, setEditState] = useState({ dirty: false, busy: false });
@@ -55,10 +57,10 @@ export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled,
       {/* A LONG READ SCROLLS INSIDE THE BUBBLE, so it takes focus: a keyboard
           reaches its end too (code review, 2026-11-13). */}
       <span ref={words} className="jar-char-bubble-reading" tabIndex={0} role="region" aria-label={say('worldNowTitle')}
-        onContextMenu={onShare || edit ? event => { event.preventDefault(); setMore(true); } : undefined}
-        onPointerDown={onShare || edit ? hold : undefined} onPointerUp={letGo} onPointerLeave={letGo} onPointerCancel={letGo}>{text}</span>
+        onContextMenu={onShare || edit || onNotQuite ? event => { event.preventDefault(); setMore(true); } : undefined}
+        onPointerDown={onShare || edit || onNotQuite ? hold : undefined} onPointerUp={letGo} onPointerLeave={letGo} onPointerCancel={letGo}>{text}</span>
     </span>
-    {hasWhy || onChat || onShare || edit ? <span className="jar-char-bubble-acts">
+    {hasWhy || onChat || onShare || edit || onNotQuite ? <span className="jar-char-bubble-acts">
       {hasWhy && onWhy ? <button type="button" className="jar-char-bubble-act" onClick={onWhy}>{whyLabel ?? say('worldReadingWhy')}</button> : null}
       {onChat ? <button type="button" className="jar-char-bubble-act" disabled={chatDisabled} onClick={onChat}>
         {say('worldTalkAboutThis')}
@@ -69,8 +71,9 @@ export function ReadingBubbleText({ text, locale, onShare, onChat, chatDisabled,
       <button type="button" className="waka-action-sheet-scrim" aria-label={say('worldCancel')} tabIndex={-1} onClick={() => setMore(false)} />
       <div className="waka-action-sheet-card">
         <div className="waka-action-sheet-group">
-          {edit ? <button type="button" autoFocus onClick={() => { setMore(false); words.current?.focus(); edit(); }}>{say('worldEditWording')}</button> : null}
-          {onShare ? <button type="button" autoFocus={!edit} onClick={() => { setMore(false); onShare(); }}>{say('worldShare')}</button> : null}
+          {onNotQuite ? <button type="button" autoFocus onClick={() => { setMore(false); onNotQuite(); }}>{say('worldReadingNotQuite')}</button> : null}
+          {edit ? <button type="button" autoFocus={!onNotQuite} onClick={() => { setMore(false); words.current?.focus(); edit(); }}>{say('worldEditWording')}</button> : null}
+          {onShare ? <button type="button" autoFocus={!edit && !onNotQuite} onClick={() => { setMore(false); onShare(); }}>{say('worldShare')}</button> : null}
         </div>
         <button type="button" className="waka-action-sheet-cancel" onClick={() => setMore(false)}>{say('worldCancel')}</button>
       </div>

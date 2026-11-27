@@ -7710,6 +7710,60 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
   .jar-note-actions > .jar-draft-menu > .waka-add-row + .waka-add-row { border-top: 1px solid var(--line); }
 }
 @media (pointer: coarse) and (prefers-reduced-motion: reduce) { .jar-note-actions > .waka-add-menu.jar-draft-menu { animation: none; } }
+/* ═══ THE FIRST PRINCIPLE'S REVEAL (insight goal, phase 5) ═══════════════
+   Over the page, on its own sky: the saves drift down into the creature as
+   light, then the words form. Light only; the acts are words. */
+.waka-reveal {
+  position: fixed; inset: 0; z-index: 70; display: flex; align-items: flex-start; justify-content: center;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  animation: waka-reveal-in 400ms ease-out both;
+}
+@keyframes waka-reveal-in { from { opacity: 0; } }
+/* Once the words have formed, the sky behind them settles a step darker. */
+.waka-reveal--formed { background: color-mix(in srgb, var(--bg) 82%, transparent); transition: background-color 600ms ease-out; }
+.waka-reveal-mote {
+  position: absolute; left: 50%; top: 58%; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: var(--sp-4) var(--sp-12); border-radius: var(--r-pill); font-size: var(--t-meta);
+  color: color-mix(in srgb, var(--ink) 90%, transparent); background: color-mix(in srgb, var(--moon-warm, var(--ink)) 10%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--moon-warm, var(--ink)) 35%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--moon-warm, var(--ink)) 22%, transparent);
+  animation: waka-reveal-drift 1.9s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes waka-reveal-drift {
+  0% { opacity: 0; transform: translate(calc(-50% + var(--from-x)), var(--from-y)) scale(1); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, 0) scale(0.2); }
+}
+.waka-reveal-words {
+  margin-top: calc(var(--sp-48) * 3 + env(safe-area-inset-top)); width: min(100% - 2 * var(--sp-36), 30rem);
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-16); text-align: center;
+  animation: waka-reveal-form 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes waka-reveal-form { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } }
+.waka-reveal-label, .waka-reveal-from { font-size: var(--t-ui); color: var(--muted); }
+.waka-reveal-statement { font-size: clamp(24px, 6vw, 32px); line-height: 1.3; font-weight: 300; letter-spacing: -0.01em; color: var(--ink); }
+.waka-reveal-acts { display: flex; gap: var(--sp-36); margin-top: var(--sp-16); }
+.waka-reveal-acts > button {
+  min-height: var(--sp-44); padding: 0 var(--sp-4); border: 0; background: none; cursor: pointer;
+  color: var(--ink); font-family: var(--waka-face); font-size: var(--t-input);
+}
+.waka-reveal-acts > .waka-reveal-act--quiet { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .waka-reveal, .waka-reveal-words, .waka-reveal-mote { animation: none; } }
+/* "Not quite": the answered line, struck and fading, while it rethinks. */
+.waka-reading-old {
+  display: block; margin-bottom: var(--sp-6); font-size: var(--t-ui); line-height: 1.4;
+  color: color-mix(in srgb, var(--waka-on-light) 45%, transparent); text-decoration: line-through;
+}
+/* The bar as the answer box: the pill's own ground, one field, one word. */
+.waka-home-bar-answer { flex: 1 1 auto; padding: 0 var(--sp-8) 0 var(--sp-20); gap: var(--sp-8); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent); }
+.waka-home-bar-answer-field {
+  flex: 1 1 auto; min-width: 0; height: var(--sp-44); border: 0; background: none; outline: none;
+  color: var(--ink); font-family: var(--waka-face); font-size: var(--t-input);
+}
+.waka-home-bar-answer-field::placeholder { color: var(--muted); }
+.waka-home-bar-answer-send {
+  flex: none; min-height: var(--sp-44); padding: 0 var(--sp-12); border: 0; background: none;
+  color: var(--ink); font-family: var(--waka-face); font-size: var(--t-input); cursor: pointer;
+}
 /* Save, with Save as draft one arrow away (founder, 2026-11-26). */
 .waka-save-split { position: relative; display: inline-flex; align-items: center; }
 .waka-save-more {

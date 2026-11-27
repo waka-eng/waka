@@ -2004,6 +2004,32 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     !viewNavigation.view?.compose && !viewNavigation.view?.sharePrinciple && !viewNavigation.view?.principleId;
   // One deliberate cycle, with no timer advancing the invitation. Keep the
   // cursor synchronous so rapid taps cannot replay the same choice.
+  /* "NOT QUITE" ON A READING (insight goal, phase 4). The answer goes in as
+     "partly" with the person's words, which the server already turns into an
+     immediate re-read that must honour them; home asks for the reading again
+     until it changes, and says so if it takes long. */
+  const [notQuite, setNotQuite] = useState<null | { entryId: string; old: string; phase: 'asking' | 'thinking' | 'slow' }>(null);
+  const notQuiteTimers = useRef<number[]>([]);
+  useEffect(() => () => notQuiteTimers.current.forEach(id => window.clearTimeout(id)), []);
+  const sendNotQuite = useCallback((text: string) => {
+    setNotQuite(was => was && { ...was, phase: 'thinking' });
+    const entryId = notQuiteRef.current?.entryId;
+    if (!entryId) return;
+    void createFeedback({ targetType: 'top_of_mind_entry', targetId: entryId, value: 'partly', correctionText: text })
+      .catch(() => undefined);
+    /* Ask for the latest reading, not the version on screen. */
+    for (let at = 4_000; at <= 88_000; at += 4_000) notQuiteTimers.current.push(window.setTimeout(() => {
+      readingNeedsLatestRef.current = true; verifyReadingRef.current(true);
+    }, at));
+    notQuiteTimers.current.push(window.setTimeout(() => setNotQuite(was => was && { ...was, phase: 'slow' }), 90_000));
+    notQuiteTimers.current.push(window.setTimeout(() => setNotQuite(null), 96_000));
+  }, []);
+  const notQuiteRef = useRef(notQuite); notQuiteRef.current = notQuite;
+  /* The new reading landed: its words differ from the ones answered. */
+  useEffect(() => {
+    if (!notQuite || notQuite.phase === 'asking' || !lead) return;
+    if (lead.body !== notQuite.old) { notQuiteTimers.current.forEach(id => window.clearTimeout(id)); notQuiteTimers.current = []; setNotQuite(null); }
+  }, [lead, notQuite]);
   /** The next line, or the one a dot names. */
   const creatureSpeaks = useCallback((to?: CompanionPrompt) => {
     if (!atNowView || reviewing) return;
@@ -9653,7 +9679,19 @@ const RETRY_READ_LIMIT_MS = 20_000;
                          re-reads the reading returns early on
                          `atWall.kind !== "self"`. So the data layer and the
                          empty state both knew; only the sentence did not. */
-                      lead && !standingAsAgent ? (
+                      lead && !standingAsAgent && notQuite ? (
+                        /* ═══ NOT QUITE, IN FRONT OF YOU (insight goal,
+                           phase 4; canvas "Not quite") ═══ It asks one
+                           thing, the answer is typed in the bar, then the
+                           old line stands struck through while it rethinks
+                           and the new reading takes its place when it lands. */
+                        notQuite.phase === 'asking'
+                          ? <span className="jar-char-bubble-reading" role="status">{say('worldReadingCloser')}</span>
+                          : <>
+                            <span className="waka-reading-old">{notQuite.old}</span>
+                            <span className="jar-char-bubble-reading" role="status">{say(notQuite.phase === 'slow' ? 'worldReadingRethinkSlow' : 'worldReadingRethinking')}</span>
+                          </>
+                      ) : lead && !standingAsAgent ? (
                         <>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
                             why={whyFor(lead)}
@@ -9673,6 +9711,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true) } : undefined}
                             onChat={() => chatOn({ ask: lead.body, turn: true,selection:{locale,text:lead.body,source:{kind:'top_of_mind_entry',id:lead.id}} })} chatDisabled={talking}
+                            onNotQuite={storageScope && !offline ? () => setNotQuite({ entryId: lead.id, old: lead.body, phase: 'asking' }) : undefined}
                             onShare={storageScope && !offline ? () => setThingShare({
                               kind: "topOfMind", text: lead.body,
                               proof: formatMessage(locale, "worldShareOnMyMind", { date: dateStamp(Date.now(), locale) }),
@@ -11501,6 +11540,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           /* Fresh only: a bar mounted again later (back from Principles)
              does not replay an old answer. */
           beckon={beckonLit.n && Date.now() - beckonLit.at < 1700 && beckonLit.to !== 'star' ? { n: beckonLit.n, to: beckonLit.to } : undefined}
+          answer={notQuite?.phase === 'asking' ? { placeholder: say('worldReadingCloser'), onSend: sendNotQuite, onCancel: () => setNotQuite(null) } : undefined}
           saved={barSaved}
           /* ON AN AGENT'S WALL THE PULL OPENS ITS ARCHIVE. The sheet reads
              your own field, so it is yours alone; the agent's saves are its

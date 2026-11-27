@@ -33,7 +33,7 @@
  * Past chats and Search are not here. Search is the field at the top of
  * Inspirations; past chats are reached from the chat page, through Chat.
  */
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
 import { formatMessage } from '../lib/i18n';
@@ -65,6 +65,10 @@ export function HomeBar(props: {
   /** A tap on the creature lit what its line points to: the Save pill or
       Chat. Each new `n` plays the light once. */
   beckon?: { n: number; to: 'save' | 'chat' };
+  /** The creature asked something (a reading's "What's closer?"): the bar is
+      where the answer is typed, never a new box. Escape or an empty Send
+      puts it back. */
+  answer?: { placeholder: string; onSend: (text: string) => void; onCancel: () => void };
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const photos = useRef<HTMLInputElement>(null);
@@ -93,7 +97,7 @@ export function HomeBar(props: {
         </button>
       ) : null}
       <div className="waka-home-bar-row">
-        {save ? (
+        {props.answer ? <AnswerPill locale={props.locale} {...props.answer} /> : save ? (
           <nav className="waka-home-bar-pill" aria-label={say('worldBarLabel')}>
             {/* THE BAR ANSWERS THE CREATURE. Founder meeting, 2026-11-20:
                 people tapped the creature to save and never found the bar,
@@ -124,5 +128,22 @@ export function HomeBar(props: {
         </button>
       </div>
     </div>
+  );
+}
+
+/* THE BAR TAKES THE ANSWER (insight goal, phase 4; canvas "Not quite"):
+   the same 64px pill, its words and one Send word at its end. Light only:
+   Send is a word, never filled. */
+function AnswerPill({ locale, placeholder, onSend, onCancel }: { locale: SupportedLocale; placeholder: string;
+  onSend: (text: string) => void; onCancel: () => void }): JSX.Element {
+  const [text, setText] = useState('');
+  const send = () => { const said = text.trim(); if (said) onSend(said); else onCancel(); };
+  return (
+    <form className="waka-home-bar-pill waka-home-bar-answer" onSubmit={event => { event.preventDefault(); send(); }}>
+      <input className="waka-home-bar-answer-field" autoFocus value={text} placeholder={placeholder} aria-label={placeholder}
+        enterKeyHint="send" maxLength={500} onChange={event => setText(event.target.value)}
+        onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onCancel(); } }} />
+      <button type="submit" className="waka-home-bar-answer-send">{t(locale, 'worldConversationSend')}</button>
+    </form>
   );
 }

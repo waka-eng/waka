@@ -52,7 +52,7 @@ import { Companion } from "./Companion";
 import { TimelessSky } from "./TimelessSky";
 import { CrossingCompanion, type CreatureSpot } from "./CrossingCompanion";
 import { readProfileText, writeProfileText } from "../lib/profile-storage";
-import { fetchPrinciples, type ApiPrinciple } from "../lib/api";
+import { createFeedback, fetchPrinciples, type ApiPrinciple } from "../lib/api";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { monthTag, numWords } from "../lib/words";
 import { useOptionalAuth } from "../lib/auth-context";
@@ -185,6 +185,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
    * the flag is written as soon as it has been shown.
    */
   const [arriving, setArriving] = useState(false);
+  const [revealDone, setRevealDone] = useState(false);
   const arrivalScope = profileId ? { accountId: "p", profileId } : null;
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
@@ -363,6 +364,9 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           {/* THE CREATURE THAT WAITED WITH YOU PRESENTS IT. Same body, same
               bubble as the waiting page, so the arrival reads as the end of
               that wait rather than as a list that happened to fill. */}
+          {arriving && !agent && rows[0] && !revealDone ? <FirstPrincipleReveal locale={locale} row={rows[0]}
+            onAffirm={() => { setRevealDone(true); void createFeedback({ targetType: "principle", targetId: rows[0]!.id, value: "true" }).catch(() => undefined); }}
+            onNotQuite={() => { setRevealDone(true); onOpen(rows[0]!.id); }} /> : null}
           {arriving ? (
             <div className="waka-ground-hero waka-ground-hero--ready waka-held-first-hero" style={{ ["--charge" as string]: 1 }}>
               <div className="jar-char-bubble-body waka-ground-bubble waka-held-first">
@@ -473,5 +477,44 @@ export function PrinciplesSpark(): JSX.Element {
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
     </svg>
+  );
+}
+
+/**
+ * ═══ THE FIRST PRINCIPLE, ONCE, IN LIGHT (insight goal, phase 5; canvas
+ * "Your first principle"; the meeting's "this should be a wow moment") ═══
+ * The saves it came from drift into the creature as light, then the
+ * principle forms above it in large type, answerable: That's me affirms it,
+ * Not quite opens it to be corrected. Shown only the first time a person
+ * meets their principles (`arriving`); under reduced motion the drift is
+ * skipped and the words are simply there.
+ */
+function FirstPrincipleReveal({ locale, row, onAffirm, onNotQuite }: {
+  locale: SupportedLocale; row: ApiPrinciple; onAffirm: () => void; onNotQuite: () => void;
+}): JSX.Element {
+  const say = (key: Parameters<typeof t>[1]) => t(locale, key);
+  const still = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const [formed, setFormed] = useState(Boolean(still));
+  useEffect(() => { if (formed) return; const id = window.setTimeout(() => setFormed(true), 2600); return () => window.clearTimeout(id); }, [formed]);
+  const motes = row.citedSignals.flatMap(signal => signal.examples ?? []).slice(0, 4);
+  const count = evidenceCount(row);
+  return (
+    <div className={`waka-reveal${formed ? " waka-reveal--formed" : ""}`} role="dialog" aria-modal="true" aria-label={say("worldPrincipleFirstLabel")}>
+      {formed ? null : motes.map((mote, index) => (
+        <span key={index} className="waka-reveal-mote" aria-hidden="true"
+          style={{ ["--from-x" as string]: `${[-110, 90, -70, 120][index]}px`, ["--from-y" as string]: `${[-250, -210, -150, -110][index]}px`, animationDelay: `${index * 220}ms` }}>
+          {mote.text.slice(0, 40)}
+        </span>
+      ))}
+      {formed ? <div className="waka-reveal-words">
+        <span className="waka-reveal-label">{say("worldPrincipleFirstLabel")}</span>
+        <span className="waka-reveal-statement">{row.statement}</span>
+        <span className="waka-reveal-from">{formatMessage(locale, "worldReadingFromCount", { count })}</span>
+        <span className="waka-reveal-acts">
+          <button type="button" autoFocus onClick={onAffirm}>{say("worldPrincipleThatsMe")}</button>
+          <button type="button" className="waka-reveal-act--quiet" onClick={onNotQuite}>{say("worldReadingNotQuite")}</button>
+        </span>
+      </div> : null}
+    </div>
   );
 }
