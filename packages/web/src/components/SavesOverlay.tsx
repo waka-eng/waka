@@ -1639,7 +1639,14 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
                   in the listening view the notepad and a chat use, and Done
                   drops them into the page as text. */}
               {dictation.active ? <ListeningView locale={locale} words={draft}
-                onDone={() => dictation.stop()} dictation={dictation} /> : <textarea
+                onDone={() => dictation.stop()} dictation={dictation} />
+                /* LOADING, NOT A PREVIEW THAT RESHAPES (founder, 2026-11-27:
+                   "it loads only the first four lines with dot dot dot and
+                   then it loads the full thing ... the whole thing changes
+                   ... we should just show loading"). A failed read still
+                   falls back to the preview below. */
+                : !loaded && !stored?.failed ? <p className="waka-note-loading" role="status">{say("worldInspirationsLoad")}</p>
+                : <textarea
                 className="jar-panel-text waka-note-page"
                 /* UNTIL THE FULL TEXT ARRIVES the list's preview stands in,
                    read-only, so the page does not open blank — and nothing
