@@ -32,7 +32,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { HowItWorksPanel } from "./HowItWorksPanel";
-import { SettingsPanel, type SettingsPanelProps } from "./SettingsPanel";
+import { ConnectPanel, SettingsPanel, type SettingsPanelProps } from "./SettingsPanel";
 import { t, type MessageKey, type SupportedLocale } from "../lib/locales";
 import { SurfaceHeader } from "./SurfaceHeader";
 
@@ -134,6 +134,10 @@ export interface MenuProps {
   settings?: Omit<SettingsPanelProps, "locale" | "email" | "onSignOut" | "onClose"> | null;
   /** Leaving. Absent on a surface that cannot sign out. */
   onSignOut?: () => void;
+  /** Bumped to open Settings again: a page reached from Settings (Trash)
+      comes back to it when closed (founder, 2026-11-27: "always have a place
+      to come back to the previous experience"). */
+  reopenSettings?: number;
   /**
    * WHOSE GROUND YOU ARE STANDING ON — the top-left corner's whole job.
    *
@@ -154,7 +158,7 @@ export interface MenuProps {
   hidden?: boolean;
 }
 
-export function Menu({ locale, items, current, left, actions, account, settings, onSignOut, hidden }: MenuProps): JSX.Element | null {
+export function Menu({ locale, items, current, left, actions, account, settings, onSignOut, hidden, reopenSettings = 0 }: MenuProps): JSX.Element | null {
   /* THE SWITCHER'S OWN OPEN STATE IS GONE WITH THE SHEET IT OPENED. The
      three rungs are laid out rather than listed (see `.waka-rungs`), so there
      is nothing to expand, nothing to focus into, nothing to close on Escape
@@ -173,7 +177,8 @@ export function Menu({ locale, items, current, left, actions, account, settings,
    * card away, which is also what a person expects from two buttons 44px
    * apart.
    */
-  const [corner, setCorner] = useState<null | "settings" | "info">(null);
+  const [corner, setCorner] = useState<null | "settings" | "info" | "connect">(null);
+  useEffect(() => { if (reopenSettings) setCorner("settings"); }, [reopenSettings]);
   const account_open = corner === "settings";
   useEffect(() => {
     if (hidden) setCorner(null);
@@ -364,6 +369,24 @@ export function Menu({ locale, items, current, left, actions, account, settings,
         {/* THE "i" LEFT THIS CORNER FOR SETTINGS (founder, 2026-11-26, from the
             simplicity audit): "How WAKA works" repeated onboarding on home,
             so it is a row in Settings' About now, and home keeps one corner. */}
+        {/* ═══ CONNECT, A DOOR OF ITS OWN (founder, 2026-11-27: "use WAKA in
+            Claude Code or Codex ... should be a lot more prominent ... a
+            separate button outside of settings with a connector icon") ═══
+            Two linked rings: WAKA and the tools that read it. */}
+        {settings ? <button
+          type="button"
+          className="waka-corner waka-corner--info waka-corner--connect"
+          aria-label={t(locale, "connectTitle")}
+          title={t(locale, "connectTitle")}
+          aria-expanded={corner === "connect"}
+          onClick={() => void changeCorner(corner === "connect" ? null : "connect")}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+            <path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2" />
+            <path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2" />
+          </svg>
+        </button> : null}
+
         <button
           type="button"
           ref={settingsTrigger}
@@ -423,7 +446,11 @@ export function Menu({ locale, items, current, left, actions, account, settings,
               group named by its heading, so the content supplies the
               semantics and the surface supplies the paint. The bare
               name-and-address check really IS a note, and keeps it. */}
-          {corner === "info" ? (
+          {corner === "connect" ? (
+            <span className="waka-account waka-account--settings waka-account--connect">
+              <ConnectPanel locale={locale} onClose={close} />
+            </span>
+          ) : corner === "info" ? (
             <span className="waka-account waka-account--about">
               <HowItWorksPanel locale={locale} onClose={close} />
             </span>

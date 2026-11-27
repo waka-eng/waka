@@ -13,7 +13,8 @@ beforeEach(()=>{globalThis.IS_REACT_ACT_ENVIRONMENT=true;host=document.createEle
  vi.stubGlobal('fetch',vi.fn(async(input,init)=>{const path=String(input),method=init?.method??'GET';requests.push({path,method});if(method==='GET'&&failRead||method==='DELETE'&&failDelete)return Response.json({error:'Offline'},{status:500});return Response.json(method==='GET'?{sessions:rows}:{id:path.split('/').at(-1),endedCurrent:false});}));
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.unstubAllGlobals();});
-async function open(){await act(async()=>root.render(<SettingsPanel {...props}/>));await act(async()=>button('Signed-in devices').click());}
+/* Signed-in devices sits on the Account page (founder, 2026-11-27: "use more progressive disclosure"). */
+async function open(){await act(async()=>root.render(<SettingsPanel {...props}/>));await act(async()=>host.querySelector<HTMLButtonElement>('button[data-settings-target="account"]')!.click());await act(async()=>button('Signed-in devices').click());}
 it('lists devices from retained credentials without selecting or managing profiles',async()=>{
  await open();expect(host.textContent).toContain('Work laptop');expect(host.textContent).toContain('Other laptop');expect(host.textContent).not.toMatch(/Secret|Agent profiles|Set up MCP/);expect(host.querySelectorAll('.waka-session-card')).toHaveLength(2);
 });

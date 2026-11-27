@@ -39,6 +39,14 @@ const base: SettingsPanelProps = {
 async function render(props: Partial<SettingsPanelProps>): Promise<void> {
   await act(async () => root.render(<SettingsPanel {...base} {...props} />));
 }
+/* Name, language, password, devices and Delete account sit behind the one
+   Account row now (founder, 2026-11-27: "use more progressive disclosure"). */
+async function renderAccount(props: Partial<SettingsPanelProps>): Promise<void> {
+  await render(props);
+  const row = host.querySelector<HTMLButtonElement>('button[data-settings-target="account"]');
+  if (!row) throw new Error("Settings has no Account row");
+  await act(async () => row.click());
+}
 
 const nameField = () => host.querySelector<HTMLInputElement>("input[autocomplete='name']")!;
 const languageField = () => host.querySelector<HTMLSelectElement>("select")!;
@@ -56,14 +64,14 @@ afterEach(async () => {
 });
 
 it("keeps the name field typeable while its own write is in flight", async () => {
-  await render({ nameBusy: true });
+  await renderAccount({ nameBusy: true });
   expect(nameField().disabled).toBe(false);
   expect(nameField().getAttribute("aria-busy")).toBe("true");
   expect(languageField().disabled, "a name write does not lock the language").toBe(false);
 });
 
 it("locks only the language while the language is being written", async () => {
-  await render({ localeBusy: true });
+  await renderAccount({ localeBusy: true });
   expect(languageField().disabled).toBe(true);
   expect(nameField().disabled).toBe(false);
 });
@@ -71,7 +79,7 @@ it("locks only the language while the language is being written", async () => {
 it("explains permanent deletion and requires a separate confirmation in both languages", async () => {
   for (const locale of ["en-US", "ko-KR"] as const) {
     let deletes = 0;
-    await render({ locale, onDeleteAccount: async () => { deletes += 1; } });
+    await renderAccount({ locale, onDeleteAccount: async () => { deletes += 1; } });
     const danger = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
       /Delete account|계정 삭제/.test(b.textContent ?? ""),
     );
@@ -125,7 +133,7 @@ it("clears both fields when a password change is confirmed", async () => {
     new Response(JSON.stringify({ ok: true })));
   vi.stubGlobal("fetch", fetchMock);
   try {
-    await render({});
+    await renderAccount({});
     const open = host.querySelector<HTMLButtonElement>('button[data-settings-target="password"]');
     expect(open?.textContent).toContain("Change password");
     await act(async () => open?.click());

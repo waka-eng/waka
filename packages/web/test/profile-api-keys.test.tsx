@@ -7,7 +7,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { SettingsPanel, type SettingsPanelProps } from '../src/components/SettingsPanel';
+import { ConnectPanel, SettingsPanel, type SettingsPanelProps } from '../src/components/SettingsPanel';
 import type { ApiProfileKey } from '../src/lib/api/profile-keys';
 
 const noah = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'noah', type: 'agent' };
@@ -80,7 +80,10 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
     ? Promise.resolve(Response.json({ profiles: [personal] })) : original(...args));
   keys.push(key('Personal laptop', personal.id), { ...key('Old personal key', personal.id), revokedAt: '2026-10-22T00:00:00Z' });
   await openPersonal();
-  expect(host.querySelector('h2')?.textContent).toBe('Use WAKA in Claude Code or Codex');
+  /* Connect is its own door now (founder, 2026-11-27): the page is Connect,
+     and its first section is Claude Code and Codex. */
+  expect(host.querySelector('h2')?.textContent).toBe('Connect');
+  expect(host.querySelector('#waka-connect-tools')?.textContent).toBe('Use WAKA in Claude Code or Codex');
   expect(calls.some(c => c.path.includes('keys'))).toBe(false);
   await click('API keys');
   expect(host.textContent).toMatch(/Neither can edit or delete inspirations or manage your account/i);
@@ -92,8 +95,8 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
   for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent name']) expect(host.textContent).not.toContain(hidden);
   expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys', `/api/mcp-reads?profile=${personal.id}`]);
   expect(calls.every(c => c.method === 'GET')).toBe(true);
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
-  expect(document.activeElement).toBe(host.querySelector('[data-settings-target="personal"]'));
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Close"]')!.click());
+  expect(closed, 'Close on Connect did not close it').toBe(1);
 });
 
 it('keeps personal keys in their tab and copies a profile-bound setup prompt without a secret', async () => {
@@ -220,7 +223,10 @@ it('keeps personal setup manually copyable if clipboard access fails', async () 
   expect(calls.map(c=>c.path)).toEqual(['/api/profiles']);
 });
 
+/* Use WAKA in Claude Code or Codex lives on Connect, a home door of its own
+   (founder, 2026-11-27), not inside Settings. */
+let closed = 0;
 async function openPersonal(locale: SettingsPanelProps['locale'] = 'en-US') {
-  await act(async () => root.render(<SettingsPanel {...props} locale={locale} />));
-  await click(locale === 'en-US' ? 'Use WAKA in Claude Code or Codex' : 'Claude Code나 Codex에서 WAKA 쓰기');
+  closed = 0;
+  await act(async () => root.render(<ConnectPanel locale={locale} onClose={() => { closed += 1; }} />));
 }

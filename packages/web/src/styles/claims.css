@@ -5651,6 +5651,49 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-settings-section .waka-settings-row,
 .waka-settings-section > .waka-settings-delete { font-size: var(--t-body); }
 .waka-settings-row .waka-settings-chevron { flex: none; color: var(--muted); }
+/* Connect: the card the connector corner opens, Settings' own surface. */
+.waka-account--connect { min-height: min(28rem, calc(100dvh - 7rem)); }
+.waka-connect .waka-settings-section + .waka-settings-section { margin-top: var(--sp-8); }
+/* The connector glyph sits on the corner's optical weight, as the gear does. */
+.waka-corner--connect svg { display: block; }
+/* Terms and Privacy as Settings pages: reading type, one column. */
+.waka-legal-inline { display: flex; flex-direction: column; gap: var(--sp-12); color: var(--ink); font-size: var(--t-ui); line-height: 1.6; }
+.waka-legal-inline h2 { margin: var(--sp-12) 0 0; font-size: var(--t-body); font-weight: 500; }
+.waka-legal-inline h3 { margin: var(--sp-8) 0 0; font-size: var(--t-ui); font-weight: 500; }
+.waka-legal-inline p, .waka-legal-inline ul { margin: 0; color: color-mix(in srgb, var(--ink) 82%, transparent); }
+.waka-legal-inline ul { padding-inline-start: var(--sp-20); }
+.waka-legal-inline a { color: var(--ink); }
+.waka-legal-inline .waka-legal-status { color: var(--muted); font-size: var(--t-meta); }
+/* A CARD'S X IS ON THE RIGHT (founder, 2026-11-27: "shouldn't the close
+   button be on the right?"): Settings and Connect drop from the top-right
+   corner, so their X stands where the hand already is, as iOS cards do. A
+   sub-page's "<" stays left; full pages keep their way out on the left. */
+.waka-account .waka-surface-head > .waka-surface-back[data-back="close"]:is(.waka-surface-back, #waka-surface-head) {
+  grid-column: 3; grid-row: 1; justify-self: end; margin-inline: 0 calc(-1 * var(--sp-12));
+}
+.waka-account .waka-surface-head > .waka-surface-title { grid-row: 1; }
+/* ═══ BLOCKS (founder, 2026-11-27: "dividers between sections of account,
+   data and connections, about, and a section for sign out and delete
+   account") ═══ Each group is its own soft panel, the iOS grouped list:
+   a step lighter than the card, rounded, rows inset inside it. */
+.waka-account .waka-settings-block > .waka-settings-list {
+  padding-inline: 0; border-radius: var(--sp-14); overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+/* THE WHOLE ROW ANSWERS A HOVER (founder, 2026-11-27: "only certain parts
+   change color upon hover"): rows span the panel edge to edge, their words
+   inset, so the tint fills the row, not a box inside it. */
+.waka-account .waka-settings-block .waka-settings-list .waka-settings-row:is(a, button) {
+  box-sizing: border-box; width: 100%; padding-inline: var(--sp-14); border-radius: 0;
+}
+.waka-account .waka-settings-block .waka-settings-list .waka-settings-row:is(a, button):is(:hover, :focus-visible):not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.waka-account .waka-settings-block > .waka-settings-heading { padding-inline: var(--sp-4); }
+/* Account: your name over your address. */
+.waka-settings-me-text { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; text-align: left; }
+.waka-settings-me-email { color: var(--muted); font-size: var(--t-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.waka-account .waka-settings-row.waka-settings-me { padding-block: var(--sp-10); }
 /* EVERY ROW ONE COLOUR, ONE EDGE (founder, 2026-11-27: "this bottom part
    is so ugly"): links, buttons and the way out read as one list. Only
    Delete account steps back. */

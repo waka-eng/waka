@@ -1347,7 +1347,9 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
              when you go to the back button it goes to inspirations and then
              only you can close it ... You need to be able to just close it
              immediately"). It is reached from Settings, not from the list. */
-          back={shelfOn ? { kind: "close", onBack: backOut } : { kind: backKind, onBack: backOut }}
+          /* ...and its "<" goes back to Settings, where it was opened
+             (founder, 2026-11-27: "always have a place to come back to"). */
+          back={shelfOn ? { kind: "back", onBack: backOut } : { kind: backKind, onBack: backOut }}
           /* THE NAME, THEN HOW MANY (nav system R4): "Kept (36)" centred in the
              one header, the count counting what is on screen (`shown`), and
              under a claim's filter the claim's own words. */

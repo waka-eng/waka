@@ -123,7 +123,7 @@ it("closes Trash in one press, and shows an empty Trash as empty", async () => {
   expect(host!.querySelector(".waka-surface-title")?.textContent, "an empty Trash fell back to the list").toBe("Trash");
   expect(leads(), "an empty Trash showed the list").toEqual([]);
   const close = host!.querySelector<HTMLButtonElement>(".waka-surface-back")!;
-  expect(close.getAttribute("aria-label")).toBe("Close");
+  expect(close.getAttribute("aria-label"), "Trash's way out is \"<\" back to Settings").toBe("Back");
   await press(close);
   expect(left, "Close on Trash did not leave").toHaveBeenCalledTimes(1);
   expect(leads(), "Close on Trash went to the list instead").toEqual([]);
