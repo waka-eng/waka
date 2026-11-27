@@ -95,6 +95,8 @@ function verbsOffered(): string[] {
 const REGISTER: Record<string, string> = {
   prepareConversationOpening: "RULED: a read-only POST resolves current owned source proofs without persisting anything; close discards its projection. First Send commits the descriptor with the conversation, whose deleteConversation exit erases it.",
   createProfileKey: "revokeProfileKey",
+  answerHunch: "RULED: answers the creature's guess from the first saves; Yes is the same 'true' a person files on a signal (retracted on the signal's own card), and Not quite writes the person's words, which the next hunch honours and the next reading replaces",
+  askSaveQuestion: "RULED: asks the creature's question about a fresh save; idempotent and read-only for the person, it writes only a generated question onto its own job, which the next answer or edit supersedes",
   revokeProfileKey: "RULED: revocation is permanent; create a new key for the same profile to reconnect",
   revokeSession: "RULED: disconnect ends a credential without deleting memory; reconnect requires fresh consent through the login instructions in Settings",
   // the archive

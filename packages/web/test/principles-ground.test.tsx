@@ -17,7 +17,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { PrinciplesGround } from "../src/components/PrinciplesGround";
 import { PrinciplesOverlay } from "../src/components/PrinciplesOverlay";
-import { fetchPrincipleStatus, fetchPrinciples, fetchSignals, listClaims, type ApiPrinciple, type ApiSignal } from "../src/lib/api";
+import { createFeedback, fetchPrincipleStatus, fetchPrinciples, fetchSignals, listClaims, type ApiPrinciple, type ApiSignal } from "../src/lib/api";
 
 vi.mock("../src/lib/api", async (original) => ({
   ...await original<typeof import("../src/lib/api")>(),
@@ -25,6 +25,7 @@ vi.mock("../src/lib/api", async (original) => ({
   fetchPrincipleStatus: vi.fn(),
   listClaims: vi.fn(),
   fetchPrinciples: vi.fn(),
+  createFeedback: vi.fn(),
 }));
 
 const PROFILE = "33333333-3333-4333-8333-333333333333";
@@ -178,6 +179,35 @@ it("meets the first principle once, and only for someone who waited for it", asy
   expect(host.querySelector(".waka-held-first"), "the greeting is once").toBeNull();
 });
 
+/* THE FIRST PRINCIPLE, ONCE, IN LIGHT (insight goal, phase 5): the saves
+   drift in, then the words form, answerable. That's me affirms it. */
+it("reveals the first principle from its saves, and That's me affirms it", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const overlay = () => act(async () => root.render(
+      <PrinciplesOverlay locale="en-US" profileId={PROFILE} name="Agi" title="Principles" onClose={() => {}} onOpen={() => {}} />,
+    ));
+    vi.mocked(fetchSignals).mockResolvedValue([]);
+    vi.mocked(fetchPrinciples).mockResolvedValue([]);
+    vi.mocked(createFeedback).mockResolvedValue({} as never);
+    await overlay();
+    vi.mocked(fetchPrinciples).mockResolvedValue([{ ...PRINCIPLE, citedSignals: [{ id: "s", statement: "x",
+      examples: [{ text: "Walked home the long way", createdAt: "" }, { text: "I want to quit my job", createdAt: "" }] }] }]);
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await overlay();
+    expect([...host.querySelectorAll(".waka-reveal-mote")].map(node => node.textContent)).toEqual(["Walked home the long way", "I want to quit my job"]);
+    expect(host.querySelector(".waka-reveal-statement"), "the words formed before the saves gathered").toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2700); });
+    expect(host.querySelector(".waka-reveal-statement")?.textContent).toBe("Choose what you can undo.");
+    expect(host.querySelector(".waka-reveal-from")?.textContent).toBe("From 2 inspirations");
+    const yes = [...host.querySelectorAll<HTMLButtonElement>(".waka-reveal-acts button")].find(b => b.textContent === "That’s me")!;
+    await act(async () => yes.click());
+    expect(vi.mocked(createFeedback)).toHaveBeenCalledWith({ targetType: "principle", targetId: PRINCIPLE.id, value: "true" });
+    expect(host.querySelector(".waka-reveal"), "the reveal stayed after the answer").toBeNull();
+  } finally { vi.useRealTimers(); }
+});
+
 it("does not greet principles that were already there on the first visit", async () => {
   vi.mocked(fetchPrinciples).mockResolvedValue([PRINCIPLE]);
   await act(async () => root.render(
@@ -219,12 +249,13 @@ it("holds only the top three, and the creature, not a title, says these are your
      experience"). */
   expect(host.querySelector(".waka-held-hero .waka-held-says"), "the explaining bubble came back").toBeNull();
   expect(host.querySelector(".waka-held-hero [data-crossing-target]")).not.toBeNull();
-  /* NO TITLE AND NO "<" ROW (founder: "remove your principles text at the
-     top", and 2026-11-19, of the header: "remove"). The name stays for a
-     screen reader; the star at the left edge walks home. */
+  /* NO TITLE (founder: "remove your principles text at the top"). The way
+     home is the star at the left edge (2026-11-26: "remove < and bring back
+     the star"). */
   expect(host.querySelector(".waka-over-title"), "the large title came back").toBeNull();
-  expect(host.querySelector(".waka-surface-head"), "the header row came back").toBeNull();
+  expect(host.querySelector(".waka-over .waka-surface-head"), "a header row came back inside the page").toBeNull();
   expect(host.querySelector(".waka-over")?.getAttribute("aria-label")).toBe("Principles");
+  expect(document.querySelector(".waka-principles-back"), "the \"<\" came back").toBeNull();
   expect(document.querySelector(".waka-principles-spark--home")?.getAttribute("aria-label")).toBe("Home");
   expect(host.querySelector(".waka-over-what"), "the one-visit line is gone").toBeNull();
 });

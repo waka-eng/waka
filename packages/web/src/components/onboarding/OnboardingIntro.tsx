@@ -151,6 +151,14 @@ export function OnboardingIntro({ locale, onDone }: { locale: SupportedLocale; o
     window.setTimeout(onDone, INTRO_LEAVE_MS);
   };
   const back = () => { if (!leaving) setBeat((value) => Math.max(0, value - 1)); };
+  /* SKIP, QUIETLY, TOP RIGHT (founder, 2026-11-26, from the iOS audit: "do
+     all 6"): straight to the first question, the way finishing the intro
+     goes. Swiping between beats was already here. */
+  const skip = () => {
+    if (leaving) return;
+    setLeaving(true);
+    window.setTimeout(onDone, INTRO_LEAVE_MS);
+  };
 
   useEffect(() => {
     if (beat === BEATS - 1) { setWalker(true); return undefined; }
@@ -182,6 +190,8 @@ export function OnboardingIntro({ locale, onDone }: { locale: SupportedLocale; o
     <main className={`onb onb-intro${leaving ? " onb-intro--leaving" : ""}`} data-beat={beat}
       onPointerDown={down} onPointerUp={up} onPointerCancel={() => { start.current = null; }}>
       <span className="onb-intro-glow" aria-hidden="true" />
+      {last ? null : <button type="button" className="onb-skip" onClick={skip} disabled={leaving}
+        onPointerDown={event => event.stopPropagation()}>{say("onboardingSkip")}</button>}
       <div className="onb-stage">
         <div className="onb-fit" ref={ref}>
           <div className="onb-plate" style={{ ["--onb-fit" as string]: fit }}>

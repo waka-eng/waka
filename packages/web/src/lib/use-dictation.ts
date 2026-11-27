@@ -118,11 +118,21 @@ export function dictationAvailable(): boolean {
 
 export interface Dictation {
   listening: boolean;
+  /** Paused by the person: the microphone is off, the listening view stays. */
+  held: boolean;
+  /** Listening or paused: the listening view is up. */
+  active: boolean;
   error: string;
   start: () => void;
   stop: () => void;
   /** Ends the session and drops whatever it still sends (a note closing). */
   abort: () => void;
+  /** Turns the microphone off and keeps the view, for `resume`. */
+  pause: () => void;
+  resume: () => void;
+  /** Ends the session and puts the note back as it was before the
+      microphone opened, through every pause since. */
+  discard: () => void;
 }
 
 /**
@@ -135,7 +145,12 @@ export function useDictation(
   locale: string,
 ): Dictation {
   const [listening, setListening] = useState(false);
+  const [held, setHeld] = useState(false);
+  const heldRef = useRef(false);
   const [error, setError] = useState("");
+  /** The note's words before this listening began, kept through pauses:
+      what Discard puts back. */
+  const before = useRef("");
   const session = useRef<Recognition | null>(null);
   /** The words that were in the note when the microphone opened. */
   const base = useRef("");
@@ -158,6 +173,7 @@ export function useDictation(
     session.current?.stop();
     session.current = null;
     setListening(false);
+    heldRef.current = false; setHeld(false);
   }, []);
 
   /* A NOTE THAT CLOSES ABORTS (review, 2026-11-09). `stop` asks for one
@@ -169,6 +185,7 @@ export function useDictation(
     session.current?.abort();
     session.current = null;
     setListening(false);
+    heldRef.current = false; setHeld(false);
   }, []);
 
   const start = useCallback(() => {
@@ -184,6 +201,7 @@ export function useDictation(
     live.continuous = true;
     live.interimResults = true;
     base.current = read.current();
+    if (!heldRef.current) before.current = base.current;
     settled.current = "";
     setError("");
 
@@ -247,5 +265,27 @@ export function useDictation(
     }
   }, [locale]);
 
-  return { listening, error, start, stop, abort };
+  /* PAUSE, RESUME AND DISCARD (founder meeting, 2026-11-20: after a
+     recording "there's no way to delete it. So make the option to delete or
+     cancel or discard. And also pause."). A pause is a stop that keeps the
+     view up; resuming starts a new session anchored on the note as it now
+     stands. Discard is an abort that writes back what was there before the
+     first start, so a pause in between does not split what it removes. */
+  const pause = useCallback(() => {
+    session.current?.stop();
+    session.current = null;
+    setListening(false);
+    heldRef.current = true; setHeld(true);
+  }, []);
+  const resume = useCallback(() => {
+    start();
+    heldRef.current = false; setHeld(false);
+  }, [start]);
+  const discard = useCallback(() => {
+    const was = before.current;
+    abort();
+    write.current(was);
+  }, [abort]);
+
+  return { listening, held, active: listening || held, error, start, stop, abort, pause, resume, discard };
 }

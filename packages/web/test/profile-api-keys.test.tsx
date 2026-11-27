@@ -80,7 +80,7 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
     ? Promise.resolve(Response.json({ profiles: [personal] })) : original(...args));
   keys.push(key('Personal laptop', personal.id), { ...key('Old personal key', personal.id), revokedAt: '2026-10-22T00:00:00Z' });
   await openPersonal();
-  expect(host.querySelector('h2')?.textContent).toBe('You');
+  expect(host.querySelector('h2')?.textContent).toBe('Use WAKA in Claude or ChatGPT');
   expect(calls.some(c => c.path.includes('keys'))).toBe(false);
   await click('API keys');
   expect(host.textContent).toMatch(/Neither can edit or delete inspirations or manage your account/i);
@@ -90,7 +90,7 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
     'Name', 'Permissions', 'API key', 'Last used', 'Delete key',
   ]);
   for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent name']) expect(host.textContent).not.toContain(hidden);
-  expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys']);
+  expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys', `/api/mcp-reads?profile=${personal.id}`]);
   expect(calls.every(c => c.method === 'GET')).toBe(true);
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
   expect(document.activeElement).toBe(host.querySelector('[data-settings-target="personal"]'));
@@ -118,7 +118,7 @@ it('keeps personal keys in their tab and copies a profile-bound setup prompt wit
   const details = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(prompt)![1]!);
   expect(details).toMatchObject({ profileId: personal.id, profileType: 'human', serverName: `waka-${personal.id}`, scope: 'current project only' });
   expect(details.login).toBeUndefined();
-  expect(prompt).toContain('Settings → You · MCP → API keys');
+  expect(prompt).toContain('Settings → Use WAKA in Claude or ChatGPT → API keys');
   expect(prompt).toContain('Do not use browser login');
   expect(prompt).toContain('Never ask me to paste the key into chat');
   expect(prompt).not.toContain(noah.id); expect(prompt).not.toContain(secret);
@@ -222,5 +222,5 @@ it('keeps personal setup manually copyable if clipboard access fails', async () 
 
 async function openPersonal(locale: SettingsPanelProps['locale'] = 'en-US') {
   await act(async () => root.render(<SettingsPanel {...props} locale={locale} />));
-  await click(locale === 'en-US' ? 'You · MCP' : '내 메모 연결 (MCP)');
+  await click(locale === 'en-US' ? 'Use WAKA in Claude or ChatGPT' : 'Claude나 ChatGPT에서 WAKA 쓰기');
 }

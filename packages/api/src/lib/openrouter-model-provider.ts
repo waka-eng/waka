@@ -27,6 +27,8 @@ import {
   parsePrincipleGrounding,
   buildPrincipleRelationRequest,
   buildReflectionQuestionRequest,
+  buildHunchRequest,
+  parseHunch,
   buildReviewQuestionRequest,
   buildConversationReplyRequest,
   parseConversationReply,
@@ -157,6 +159,11 @@ export function createOpenRouterModelProvider(): ModelProvider {
       const payload=await ask(()=>buildReviewQuestionRequest(input),'review question','WAKA_MODEL_REFLECT','review_question');
       if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('review question');
       return parseReviewQuestion(payload,input);
+    },
+    async writeHunch(input) {
+      const payload = await ask(() => buildHunchRequest(input), "hunch", "WAKA_MODEL_REFLECT", "hunch");
+      if (payload === null || payload === MODEL_DECLINED) throw new ModelDidNotAnswerError("hunch");
+      return parseHunch(payload, input);
     },
     async askReflectionQuestion(input) {
       const payload = await ask(

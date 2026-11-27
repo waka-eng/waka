@@ -25,11 +25,17 @@ it('shows the whole read with nothing to open, and its acts in one row', async (
     expect(read.textContent).toBe('A long reading that the bubble holds whole.');
     /* A long read scrolls in the bubble, so a keyboard can reach it. */
     expect(read.tabIndex).toBe(0);
+    /* TWO ACTS ON THE BUBBLE (2026-11-26: "so many action buttons in a
+       small space"); Share and Edit come from a long press or right click on
+       the words, as an action sheet. */
     const acts = [...host.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-acts button')];
-    expect(acts.map(b => b.textContent || b.getAttribute('aria-label'))).toEqual(['Why?', 'Chat about this', 'Share', 'Edit']);
-    await act(async () => acts[2]!.click());
+    expect(acts.map(b => b.textContent || b.getAttribute('aria-label'))).toEqual(['Why?', 'Chat about this']);
+    await act(async () => read.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    const sheet = document.querySelector<HTMLElement>('.waka-action-sheet')!;
+    expect([...sheet.querySelectorAll<HTMLButtonElement>('.waka-action-sheet-group button')].map(b => b.textContent)).toEqual(['Edit', 'Share']);
+    await act(async () => [...sheet.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'Share')!.click());
     expect(share).toHaveBeenCalledOnce();
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.querySelector('.waka-action-sheet'), 'the sheet stayed after its choice').toBeNull();
   } finally { await act(async () => root.unmount()); host.remove(); }
 });
 it('opens Edit on the quiet page already editing, closes by Escape, and returns focus', async () => {
@@ -38,14 +44,16 @@ it('opens Edit on the quiet page already editing, closes by Escape, and returns 
   const root = createRoot(host);
   try {
     await act(async () => root.render(<ReadingBubbleText text="Every word remains available." locale="en-US" details={details} />));
-    const edit = host.querySelector<HTMLButtonElement>('button[aria-label="Edit"]')!;
-    await act(async () => { edit.focus(); edit.click(); });
+    const read = host.querySelector<HTMLElement>('.jar-char-bubble-reading')!;
+    read.focus();
+    await act(async () => read.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.waka-action-sheet button')].find(b => b.textContent === 'Edit')!.click());
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     await vi.waitFor(() => expect(dialog.querySelector('textarea')?.value).toBe('Every word remains available.'));
     expect(dialog.querySelector('button')?.getAttribute('aria-label')).toBe('Close');
     await act(async () => dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.activeElement).toBe(edit);
+    expect(document.activeElement, 'focus fell to the page body').not.toBe(document.body);
   } finally { await act(async () => root.unmount()); host.remove(); }
 });
 it('offers no acts row when there is nothing to do', async () => {

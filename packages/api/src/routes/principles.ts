@@ -120,7 +120,7 @@ export interface PrincipleView {
   supportChanged?: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
-  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }>; reviewExamples?: Array<{answerId:string;sessionId:string;preview:string;createdAt:string}> }>;
+  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string; inspirationId?: string }>; reviewExamples?: Array<{answerId:string;sessionId:string;preview:string;createdAt:string}> }>;
   createdAt: string;
   disputeId?: string | null;
 }
@@ -134,7 +134,7 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
   const support=sql<boolean>`(${profiles.groupId} IS NULL AND ${personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)})`;
   const readable=sql<boolean>`(${profiles.groupId} IS NULL AND ${personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)})`;
   const direct=isDirectFirstPrinciple();
-  type Citation={id:string;statement:string;current:boolean|null;examples:Array<{text:string;createdAt:string}>;
+  type Citation={id:string;statement:string;current:boolean|null;examples:Array<{text:string;createdAt:string;inspirationId:string}>;
     reviewExamples:Array<{answerId:string;sessionId:string;preview:string;createdAt:string}>};
   const rows=await db.select({...getTableColumns(principles),supportCurrent:support,
     disputeId:sql<string|null>`(SELECT CASE WHEN ${feedback.value}='not_true' THEN ${feedback.id} END
@@ -148,7 +148,7 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
           AND (NOT ${direct} OR ${directFirstPrincipleCitationCurrent(profileId)})
           AND ${citationBodyCurrent('principle_signals','principles','principle_statement_revision','statement_revision')}) AS current,
         COALESCE((SELECT jsonb_agg(x) FROM (
-          SELECT left(i.text,240) AS text,i.created_at AS "createdAt"
+          SELECT left(i.text,240) AS text,i.created_at AS "createdAt",i.id AS "inspirationId"
           FROM signal_evidence e JOIN inspirations i ON i.id=e.inspiration_id AND i.profile_id=e.owner_profile_id
           WHERE e.profile_id=${profileId}::uuid AND i.profile_id=${profileId}::uuid
             AND e.signal_id=${signals.id} AND ${evidenceSupportCurrent('e')}
@@ -228,6 +228,8 @@ export function renderPrinciplesMarkdown(
   lines.push("> aspirational = declared in their own words, not yet demonstrated —");
   lines.push("> still binding as their word. contested = under review; rank decides");
   lines.push("> meanwhile.");
+  lines.push("> Under a principle, \"From these saves\" lists what it rests on: the");
+  lines.push("> reason behind the rule, in the person's own saved words.");
   lines.push("");
   if (views.length === 0) {
     lines.push("No principles yet. They are earned from history, or declared.");
@@ -238,6 +240,22 @@ export function renderPrinciplesMarkdown(
         ? `contested, in tension with ${shortId(view.conflictsWithId)}`
         : view.supportChanged && !view.unsupported ? `${view.state}; current support unconfirmed` : view.state;
     lines.push(`${view.rank}. \`${shortId(view.id)}\` (${marker}) — ${view.statement}`);
+    /* THE SAVES BEHIND IT (founder, 2026-11-26, agent to agent): an agent
+       gets the reason with the rule, not a bare label. Up to four distinct
+       saves, newest first, by their full id (for waka_get_inspiration), the
+       day saved and their own words, cut short. Never when support changed. */
+    const saves = new Map<string, { text: string; createdAt: string }>();
+    for (const cited of view.citedSignals) for (const example of cited.examples ?? []) {
+      if (example.inspirationId && !saves.has(example.inspirationId)) saves.set(example.inspirationId, example);
+    }
+    const newest = [...saves].sort((a, b) => b[1].createdAt.localeCompare(a[1].createdAt) || a[0].localeCompare(b[0])).slice(0, 4);
+    if (newest.length) {
+      lines.push("   From these saves:");
+      for (const [id, save] of newest) {
+        const words = save.text.replace(/\s+/g, " ").trim();
+        lines.push(`   - ${save.createdAt.slice(0, 10)} \`${id}\` “${words.length > 200 ? `${words.slice(0, 199)}…` : words}”`);
+      }
+    }
     if (view.unsupported) {
       lines.push("   Supporting evidence has been withdrawn. Preserve the owner's wording; do not describe it as demonstrated by their history or as rejected by them.");
     } else if (view.supportChanged) {

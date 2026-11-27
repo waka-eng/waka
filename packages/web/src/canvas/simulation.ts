@@ -94,6 +94,7 @@ import { onViewportSettle, renderScale } from "./scale";
 import { VIGNETTE, mix, rgbCss } from "./sprites";
 import type { Measured } from "./measured";
 import { ANTICIPATE_MS, ANTICIPATE_SQ, HOP_MS, hopLift } from "../character/hop";
+import { FLOURISH_MS, flourishPose, nextFlourish, type Flourish } from "../character/flourish";
 import { BODY_TIERS, EYE_INK, EYE_LON, EYE_R, EYE_SHUT, FLARE_REACH, FLARE_SECONDS, FLARE_SPREAD, FACE_R, GAZE_LAT, GLASS_MAGNIFY, NUB_DIM, NUB_LIT, NUB_LON, NUB_R_DIM, NUB_R_LIT, NUB_X, NUB_Y, THINK_EYE_X, THINK_EYE_Y, THINK_SQUINT, bodyPath, drawGlasses, glassLenses } from "../character/raster";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
@@ -712,6 +713,8 @@ export interface SimApi {
   hangRail: () => void;
   /** The companion glows for a beat — a tap was heard. */
   acknowledge: (moment?: Moment) => void;
+  /** A move for a new line: a hop, a twirl, a wiggle... never the last one. */
+  flourish: () => void;
   /**
    * Step up out of the way while somebody else is speaking under it — the
    * agent asking why a pick was let go. Founder, 2026-10-15, approved: the
@@ -1941,6 +1944,9 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
          bounce began, 0 at rest. */
       hopNext: false,
       hopAt: 0,
+      /* THE LINE'S MOVE (`character/flourish.ts`): which, and when it began. */
+      flourish: null as Flourish | null,
+      flourishAt: 0,
       /* STEPPING ASIDE: `aside` is where it wants to be (0 or a raise in
          px, negative is up), `asideNow` where it is, eased. */
       aside: 0,
@@ -3829,6 +3835,15 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       companion.flare = 1;
       wake();
     }
+    /* A NEW LINE, A NEW MOVE (founder, 2026-11-20: "the animation should
+       also be different every time"). Movement, so not under reduced
+       motion; the press's flare still answers there. */
+    function flourish() {
+      if (view.reduced) return;
+      companion.flourish = nextFlourish(companion.flourish);
+      companion.flourishAt = performance.now();
+      wake();
+    }
     pressFlareRef.current = pressFlare;
     function sayLine(): string {
       /* PARKED, NOT SCRUBBING. This read `scrubbingRef` — true only while a
@@ -4169,12 +4184,15 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
            that is delighted, not one that is bouncing on a spring. */
         const hopT = companion.hopAt > 0 ? clamp01((performance.now() - companion.hopAt) / HOP_MS) : 0;
         const hop = hopLift(hopT, companion.size);
-        const cyC = companion.y + bob + companion.lift + hop + companion.asideNow;
+        const move = companion.flourish && companion.flourishAt > 0
+          ? flourishPose(companion.flourish, (performance.now() - companion.flourishAt) / FLOURISH_MS[companion.flourish], companion.size)
+          : null;
+        const cyC = companion.y + bob + companion.lift + hop + (move?.lift ?? 0) + companion.asideNow;
         /* THE TRAVELER'S PLACE. The companion is screen-anchored — it is the
            one who travels, so the layout slides under it — and during a
            transition it rides ahead of centre by charOff, near the leading
            third of the screen, still bobbing. */
-        const charSX = cam.x + view.w / 2 + companion.off;
+        const charSX = cam.x + view.w / 2 + companion.off + (move?.dx ?? 0);
 
         /* ──────── THE ROOM'S COMPANY STOOD HERE: 292 LINES ────────
            founder, 2026-08-27: "if room is group, show the character as many
@@ -4237,9 +4255,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
               0.022 *
               Math.max(MOOD_BOB_FLOOR, 1 + companion.mood * MOOD_BOB) -
             companion.pitch * PITCH_STRETCH +
-            companion.ant;
-        const bw = companion.size * (1 + sq);
-        const bh = companion.size * (1 - sq);
+            companion.ant +
+            (move?.sq ?? 0);
+        const bw = companion.size * (1 + sq) * (move?.sx ?? 1);
+        const bh = companion.size * (1 - sq) * (move?.sy ?? 1);
 
         /* the aura: layered pastel blooms at different radii, drifting on
            slow independent orbits. Additive, so it reads as emitted light. */
@@ -4343,7 +4362,8 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
             clamp(companion.pitch, -1, 1) * 0.02 +
             companion.attendHold +
             thinkLean;
-        if (lean !== 0) ctx!.rotate(lean);
+        const turn = lean + (move?.rot ?? 0);
+        if (turn !== 0) ctx!.rotate(turn);
 
         /* The two soft nubs: not limbs — they swell with the glow, and they
            are the companion's only piece of body language. They sit a quarter
@@ -4908,6 +4928,10 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
       }
       if (companion.hopAt > 0) {
         if (now - companion.hopAt >= HOP_MS) companion.hopAt = 0;
+        else easing = true;
+      }
+      if (companion.flourishAt > 0) {
+        if (!companion.flourish || now - companion.flourishAt >= FLOURISH_MS[companion.flourish]) companion.flourishAt = 0;
         else easing = true;
       }
       if (companion.asideNow !== companion.aside) {
@@ -5860,6 +5884,7 @@ export function startSimulation(o: SimulationOptions): (() => void) | undefined 
     }
 
     const api: SimApi = {
+      flourish,
       navigationState: () => ({ wall: curWall(), section: cam.y < view.layout.minCam * 0.5 ? 'sky' : cam.y > view.layout.maxCam * 0.5 ? 'field' : 'top', moving: trip.active || cam.aiming }),
       setCovered: value => {
         if (covered === value) return;

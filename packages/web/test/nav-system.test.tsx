@@ -125,10 +125,14 @@ const SURFACES: Array<[string, () => Promise<void>, 'Back' | 'Close', RegExp | n
   ['a new chat', () => openAt('/chat/new'), 'Close', /^$/, false],
   ['a chat from Past chats', openChatFromPastChats, 'Close', /^$/, false],
   ['Past chats from a chat', openPastChatsFromAChat, 'Close', /^Past chats$/, false],
-  ['the notepad', () => openAt('/?compose=1'), 'Close', /^Saving to You · /, false],
-  ['a saved note', openSavedNote, 'Back', /^You · /, false],
-  /* Principles has no header: the star at its left edge walks home (founder,
-     2026-11-19). Its way out is tested in home-navigation. */
+  /* Your own name is not said on your own pages (audit, 2026-11-26): the
+     moment alone. An agent's pages say whose. */
+  /* The notepad's moment stands in its free top right corner (founder,
+     2026-11-26: "put date on top right corner"), so its middle is empty. */
+  ['the notepad', () => openAt('/?compose=1'), 'Close', /^$/, false],
+  ['a saved note', openSavedNote, 'Back', /^[A-Z][a-z]{2} \d+, \d+:\d\d [AP]M$/, false],
+  /* Principles' way home is the shared "<" on its own strip (founder,
+     2026-11-26); it is tested in home-navigation. */
 ];
 
 describe('every page and sheet draws the one header', () => {
@@ -137,7 +141,7 @@ describe('every page and sheet draws the one header', () => {
     const glyph = expectOneHeader(what, { homeBar });
     expect(glyph.getAttribute('aria-label'), `${what}: the "<" says the wrong thing for what it does`).toBe(name);
     const shown = headers()[0]!.querySelector('h2.waka-surface-title:not(.sr-only)')?.textContent ?? '';
-    if (title) expect(shown, `${what}: the title`).toMatch(title);
+    expect(shown, `${what}: the title`).toMatch(title);
   });
 
   it('home has no header, and is the one place the corners and the home bar stand', async () => {
@@ -147,15 +151,17 @@ describe('every page and sheet draws the one header', () => {
     expect(c().querySelector('.waka-home-bar'), 'the home bar left home').not.toBeNull();
   });
 
-  it('keeps one word top right: Past chats on a chat, Past inspirations on the notepad, New inspiration on the list', async () => {
+  it('keeps one word top right on a chat (Past chats) and none on the notepad or the list', async () => {
     await openAt('/chat/new');
     expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent).toBe('Past chats');
     world!.unmount();
     await openAt('/?compose=1');
-    expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent).toBe('Past inspirations');
+    const right = headers()[0]!.querySelector('.waka-surface-right');
+    expect(right?.querySelector('button'), 'the save flow offers a word top right').toBeNull();
+    expect(right?.querySelector('.waka-surface-when')?.textContent, 'the notepad\'s moment is not in its top right corner').toMatch(/^[A-Z][a-z]{2} \d+, \d+:\d\d [AP]M$/);
     world!.unmount();
     await openAt('/?open=saves');
-    expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent ?? '', 'the Saved list has no New note, as Past chats has New chat').toBe('New inspiration');
+    expect(headers()[0]!.querySelector('.waka-surface-right')?.textContent ?? '', 'the bar\'s Save is the one way to save').toBe('');
   });
 });
 

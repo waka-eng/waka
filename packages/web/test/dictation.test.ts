@@ -224,3 +224,37 @@ describe("speaking into a note", () => {
     expect(live.aborted).toBe(true);
   });
 });
+
+/* PAUSE AND DISCARD (founder meeting, 2026-11-20: after a recording
+   "there's no way to delete it ... And also pause."). */
+describe("pausing and discarding what was said", () => {
+  it("pauses with the view still up, resumes after the words already said, and discard puts back what was there before", () => {
+    const d = dictate("Before.");
+    act(() => d.now.start());
+    act(() => FakeEngine.live!.say([{ text: "one", final: true }]));
+    expect(d.read()).toBe("Before. one");
+    act(() => d.now.pause());
+    expect(d.now.listening).toBe(false);
+    expect(d.now.held).toBe(true);
+    expect(d.now.active).toBe(true);
+    act(() => d.now.resume());
+    expect(d.now.listening).toBe(true);
+    expect(d.now.held).toBe(false);
+    act(() => FakeEngine.live!.say([{ text: "two", final: true }]));
+    expect(d.read()).toBe("Before. one two");
+    act(() => d.now.discard());
+    expect(d.read()).toBe("Before.");
+    expect(d.now.active).toBe(false);
+    expect(FakeEngine.live!.aborted).toBe(true);
+  });
+
+  it("Done after a pause keeps the words and closes the view", () => {
+    const d = dictate();
+    act(() => d.now.start());
+    act(() => FakeEngine.live!.say([{ text: "keep this", final: true }]));
+    act(() => d.now.pause());
+    act(() => d.now.stop());
+    expect(d.read()).toBe("keep this");
+    expect(d.now.active).toBe(false);
+  });
+});

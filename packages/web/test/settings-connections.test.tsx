@@ -28,3 +28,12 @@ it('keeps failed revocation recoverable and its credential on screen',async()=>{
 it('distinguishes failure from empty and refreshes safely',async()=>{
  failRead=true;await open();expect(host.querySelector('[role="alert"]')).not.toBeNull();failRead=false;rows=[];await act(async()=>button('Refresh').click());expect(host.querySelector('[role="alert"]')).toBeNull();expect(host.querySelectorAll('.waka-session-card')).toHaveLength(0);
 });
+/* Craft audit, 2026-11-26: thirty identical cards, no marker for the device in hand and no way out of them but one press each. */
+it('puts this device first and signs every other one out after one confirmation',async()=>{
+ await open();const first=host.querySelector('.waka-session-current');expect(first?.textContent).toContain('Current browser');expect(first?.textContent).toContain('This device');
+ expect(first!.compareDocumentPosition(host.querySelector('.waka-session-card')!)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ await act(async()=>button('Sign out everywhere else').click());expect(requests.filter(r=>r.method==='DELETE')).toEqual([]);
+ await act(async()=>button('Sign them out').click());
+ expect(requests.filter(r=>r.method==='DELETE').map(r=>r.path)).toEqual(['/api/sessions/legacy-one','/api/sessions/legacy-two']);
+ expect(host.querySelectorAll('.waka-session-card')).toHaveLength(0);expect(host.textContent).toContain('Signed out of every other device.');expect(requests.some(r=>r.path.endsWith('/browser')&&r.method==='DELETE')).toBe(false);
+});

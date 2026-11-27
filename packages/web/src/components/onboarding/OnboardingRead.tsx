@@ -7,12 +7,15 @@
  * with the two acts every read on home carries: Why? (the saves behind it)
  * and Talk about this. Continue lands on the normal home.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { t, type SupportedLocale } from "../../lib/locales";
 import type { MessageKey } from "../../lib/i18n";
 import { CreatureSlot } from "./CreatureStage";
 import { SayBubble } from "./SayBubble";
+
+/** When the wait stops being "a few seconds" and the way in is offered. */
+const READING_SLOW_MS = 12_000;
 
 const ORBS: Array<[number, string, string]> = [
   [12, "#f1e9d6", "onb-drift-a 2.4s"],
@@ -28,6 +31,11 @@ export function OnboardingReading({ locale, error = "", busy = false, onContinue
   onContinue?: () => void;
 }): JSX.Element {
   const say = (key: MessageKey) => t(locale, key);
+  /* NO DEAD END (audit, 2026-11-26: "Thinking…" stood for more than 35
+     seconds with nothing to press when the model was slow). Past
+     `READING_SLOW_MS` the person can go in; the read lands on home. */
+  const [slow, setSlow] = useState(false);
+  useEffect(() => { const timer = window.setTimeout(() => setSlow(true), READING_SLOW_MS); return () => window.clearTimeout(timer); }, []);
   return (
     <main className="onb onb--deep onb-arrive">
       <div className="onb-stage onb-reading">
@@ -42,6 +50,11 @@ export function OnboardingReading({ locale, error = "", busy = false, onContinue
         {error && onContinue ? (
           <div className="onb-reading-wait">
             <p className="onb-error" role="alert">{error}</p>
+            <button type="button" className="onb-go" disabled={busy} onClick={onContinue}>{say("onboardingContinue")}</button>
+          </div>
+        ) : slow && onContinue ? (
+          <div className="onb-reading-wait">
+            <p>{say("onboardingReadingSlow")}</p>
             <button type="button" className="onb-go" disabled={busy} onClick={onContinue}>{say("onboardingContinue")}</button>
           </div>
         ) : <p className="onb-reading-wait">{say("onboardingReadingWait")}</p>}

@@ -9,7 +9,7 @@ import type { ReflectionQuestionInput } from './model-provider.js';
 /** Only this source and its answers/attachments, never another profile's memory. */
 export async function loadReflectionQuestionContext(db: Pick<ReturnType<typeof getDb>, 'select'>, profileId: string, inspirationId: string) {
   const [parent, profile, recent, media] = await Promise.all([
-    db.select({text: inspirations.text}).from(inspirations).where(and(eq(inspirations.id,inspirationId),eq(inspirations.profileId,profileId))).limit(1),
+    db.select({text: inspirations.text, prompt: inspirations.prompt}).from(inspirations).where(and(eq(inspirations.id,inspirationId),eq(inspirations.profileId,profileId))).limit(1),
     db.select({preferredLocale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId)).limit(1),
     db.select({id:reflections.id,question:reflections.question,answer:reflections.answer}).from(reflections)
       .where(and(eq(reflections.inspirationId,inspirationId),eq(reflections.profileId,profileId),eq(reflections.skipped,false),isNotNull(reflections.answer)))
@@ -21,6 +21,7 @@ export async function loadReflectionQuestionContext(db: Pick<ReturnType<typeof g
   const input: ReflectionQuestionInput = {
     preferredLocale:isSupportedLocale(profile[0].preferredLocale)?profile[0].preferredLocale:'en-US',
     inspirationText:parent[0].text,
+    ...(parent[0].prompt ? {inspirationPrompt:parent[0].prompt} : {}),
     reflections:[...recent].reverse().map(row=>({question:row.question,answer:row.answer??''})),
     attachments:media.map(row=>({type:row.type,status:row.status??'unavailable',kind:row.kind,
       text:row.status === 'ready' ? row.text : null})),

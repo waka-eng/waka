@@ -59,6 +59,9 @@ import { createClaimsRoutes } from "./routes/claims.js";
 import { createHarvestRoutes } from "./routes/harvest.js";
 import { createInspirationDaysRoutes } from "./routes/inspiration-days.js";
 import { topOfMindRoutes } from "./routes/top-of-mind.js";
+import { createMcpReadRoutes } from "./routes/mcp-reads.js";
+import { recordMcpReads } from "./lib/mcp-reads.js";
+import { hunchRoutes } from "./routes/hunches.js";
 
 export const app = new Hono();
 app.onError((error, c) => {
@@ -89,6 +92,8 @@ app.use("*", async (c, next) => {
   c.header("Vary", "Authorization, Cookie, Origin");
 });
 app.use('/api/*', mobileCors);
+/* What each standing key read, on the owner's record (`lib/mcp-reads.ts`). */
+app.use('/api/*', recordMcpReads());
 
 // Liveness probe + capability handshake for external clients (waka-mcp
 // validates the API URL against it at login; capabilities let clients
@@ -122,6 +127,7 @@ app.route("/api/export", createExportRoute());
 // agent-to-agent read grants. The open default retired with this route.
 app.route("/api/agent-grants", createAgentGrantRoutes());
 app.route("/api/consultations", createConsultationRoutes());
+app.route("/api/mcp-reads", createMcpReadRoutes());
 
 // Deliberately unauthenticated: returns only the owner-approved surface.
 app.route("/api/public/profiles", publicProfileRoutes);
@@ -155,6 +161,7 @@ app.route("/api/inspiration-days", createInspirationDaysRoutes());
 
 // Layer 3 — the one live artifact per profile, and its version chain.
 app.route("/api/top-of-mind", topOfMindRoutes);
+app.route("/api/hunch", hunchRoutes);
 
 // Reader verdicts that teach the next regeneration.
 app.route("/api/feedback", feedbackRoutes);

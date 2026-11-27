@@ -21,7 +21,7 @@ const GROUND_SEATS = 3;
 
 type Phase = "loading" | "ready" | "failed";
 
-export function PrinciplesGround({ locale, profileId, whose = "own", principleStatus, onChat, onNewSave, newSaveLabel }: {
+export function PrinciplesGround({ locale, profileId, whose = "own", heldAt = null, principleStatus, onChat, onNewSave, newSaveLabel }: {
   locale: SupportedLocale;
   profileId?: string | null;
   /** Whose ground this is — an agent's wall must not say "you keep". */
@@ -32,6 +32,9 @@ export function PrinciplesGround({ locale, profileId, whose = "own", principleSt
   onChat?: (said: string) => void;
   onNewSave?: () => void;
   newSaveLabel?: string;
+  /** How far, and at what scale, the creature is held to stay where it
+      walked in (see `PrinciplesOverlay`); its bubble comes with it. */
+  heldAt?: { dx: number; dy: number; scale: number } | null;
 }) {
   const say = (key: Parameters<typeof t>[1]) => t(locale, key);
   const agent = whose === "agent";
@@ -128,7 +131,7 @@ export function PrinciplesGround({ locale, profileId, whose = "own", principleSt
     <section className="waka-ground" aria-label={say(agent ? "worldGroundLabelAgent" : "worldGroundLabel")}>
       <div
         className={`waka-ground-hero${count > 0 ? " waka-ground-hero--stirring" : ""}${count >= GROUND_SEATS ? " waka-ground-hero--ready" : ""}`}
-        style={{ ["--charge" as string]: charge }}
+        style={{ ["--charge" as string]: charge, ...(heldAt ? { translate: `${heldAt.dx}px ${heldAt.dy}px` } : {}) }}
       >
         {/* THE HOME SCREEN'S OWN BUBBLE. Founder, 2026-10-15, of this one
             beside the home screen's: "this also looks different. use exact
@@ -151,7 +154,7 @@ export function PrinciplesGround({ locale, profileId, whose = "own", principleSt
             </span>
           ) : null}
         </div>
-        <span className="waka-ground-being" data-crossing-target="104" style={{ ["--being" as string]: "106px" }}>
+        <span className="waka-ground-being" data-crossing-target="104" style={{ ["--being" as string]: "106px", ...(heldAt ? { scale: String(heldAt.scale) } : {}) }}>
           <Companion size={104} />
         </span>
       </div>

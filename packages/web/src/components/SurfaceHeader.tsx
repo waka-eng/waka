@@ -139,7 +139,12 @@ export function SurfaceHeader({ locale, back, title, srTitle, right, gesture = n
       <button type="button" className="waka-surface-back" aria-label={label} data-back={back.kind}
         disabled={back.disabled} onClick={() => { void back.onBack(); }}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="m14 5-7 7 7 7" /></svg>
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+          {/* X CLOSES, "<" GOES BACK (founder meeting, 2026-11-20: a panel
+              rising over home "has a back button", which says the wrong
+              thing; "put an X there"). One control in one place, its glyph
+              decided by what it does, so the rule holds on every surface. */}
+          <path d={back.kind === 'close' ? 'M6.5 6.5l11 11M17.5 6.5l-11 11' : 'm14 5-7 7 7 7'} /></svg>
         {/* Said to a screen reader only; nothing is ever written beside the "<". */}
         <span className="sr-only">{label}</span>
       </button>

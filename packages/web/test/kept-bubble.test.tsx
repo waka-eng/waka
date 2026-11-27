@@ -8,8 +8,8 @@
  * abandoned before the server could land it.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): `lib/data` (the three layers, the seam
- * `helpers/render-home` names), `lib/api`'s save and the verbs a mounted world
- * asks for on boot, `lib/api/principles` and `lib/api/conversations` (the
+ * `helpers/render-home` names), `lib/api`'s save, the question asked about it
+ * and the verbs a mounted world asks for on boot, `lib/api/principles` and `lib/api/conversations` (the
  * reads a mounted world makes), `lib/auth-context` (a signed-in owner, so the
  * save has a scope), `indexedDB` (fake-indexeddb, the draft store) and the
  * canvas (`helpers/canvas-stub`) — the world outside the page. The page, its
@@ -31,6 +31,9 @@ vi.mock('../src/lib/api', async original => ({
     visibility: 'private', attachments: [], reflections: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })),
   fetchInspirationSaveRequest: vi.fn(async () => { const { ApiError: E } = await import('../src/lib/api/http'); throw new E({ status: 404, code: 'save_not_found', message: 'Not saved yet' }); }),
   fetchPrinciples: vi.fn(async () => []),
+  /* The server's question about this save: running first, then ready. */
+  askSaveQuestion: vi.fn(async () => ({ phase: 'processing' })),
+  readSaveQuestion: vi.fn(async () => ({ phase: 'ready', question: 'What made gluing the chair yourself matter?' })),
   fetchTheWeather: vi.fn(async () => ({ told: null, antechamber: [], days: [] })),
 }));
 vi.mock('../src/lib/auth-context', async original => {
@@ -63,7 +66,10 @@ describe('how long the bubble stays', () => {
   });
 });
 
-it('keeps "Saved" up past the four seconds a whisper gets, and lets it go after its own stay', async () => {
+/* IT ASKS ABOUT WHAT WAS SAVED (founder, 2026-11-26: "this should very
+   clearly react to the content i saved, not generically do this"): "Saved"
+   at once, then the server's question about this save; no See all. */
+it('answers a save with a question about it that stays long enough to be taken, then lets it go', async () => {
   world = await mountWorld(FACTS); await settle();
   await pressHomeBar(world.container, 'Save an inspiration'); await settle();
   const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
@@ -74,11 +80,18 @@ it('keeps "Saved" up past the four seconds a whisper gets, and lets it go after 
   await settle();
   await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-dock-save')!.click());
   await settle(50, 6);
-  expect(bubble(), 'the save did not answer with Kept').toContain('Saved');
-  await settle(500, 10); // five seconds on
-  expect(bubble(), '"Saved" went with the whispers, at four seconds').toContain('Saved');
-  await settle(500, 8); // nine seconds on
-  expect(bubble(), '"Saved" never left').not.toContain('Saved');
+  expect(bubble(), 'the save was not said at once').toContain('Saved');
+  await settle(500, 6); // three seconds on: the question lands
+  expect(bubble(), 'the save did not ask about itself').toBe('Saved. What made gluing the chair yourself matter?');
+  const acts = world.container.querySelector('.jar-char-bubble-acts')?.textContent ?? '';
+  expect(acts, 'the question has no chat under it').toContain('Chat about this');
+  expect(acts, 'See all came back').not.toContain('See all');
+  await settle(500, 4); // five seconds on
+  expect(bubble(), 'the question went with the whispers, at four seconds').toContain('Saved');
+  await settle(500, 24); // seventeen seconds on
+  expect(bubble(), 'the question went before twenty seconds').toContain('Saved');
+  await settle(500, 8); // twenty one seconds on
+  expect(bubble(), 'the question never left').not.toContain('Saved');
 });
 
 /* Code review, 2026-11-08: a second save while "Saved" stood said the same

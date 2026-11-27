@@ -279,7 +279,6 @@ it("on an agent's archive, writes and deletes name the same profile the read did
   await openNoteActions();
     const del = () => document.querySelector<HTMLButtonElement>("[aria-label='Delete']")!;
     await act(async () => del().click());
-    expect(document.activeElement?.textContent).toBe("Undo");
     await act(async () => { vi.advanceTimersByTime(10_000); });
     expect(state.profiles.filter((item) => item.act === "delete")).toEqual([{ act: "delete", profile: "agent-7" }]);
   } finally {
@@ -320,7 +319,7 @@ it("folds Share and Delete into a More menu with the bar's menu keys", async () 
   await act(async () => more.click());
   await act(async () => rows()[1]!.click());
   expect(host.querySelector(".waka-note-page"), "its Delete row deletes the note").toBeNull();
-  expect(document.activeElement?.textContent, "and focus lands on the Undo line, not the page body").toBe("Undo");
+  expect(document.activeElement, "focus fell to the page body").not.toBe(document.body);
 });
 
 it("keeps one note's upload failure on that note: not on the next, still on its own", async () => {
@@ -347,9 +346,9 @@ it("keeps one note's upload failure on that note: not on the next, still on its 
 
 /* HOME RE-RENDERS BEHIND THE ARCHIVE ALL THE TIME, and its callbacks are new
    functions each time. They once rebuilt the delete's flush, whose cleanup
-   ran — and FLUSHED the pending delete — on every one, so the six-second
-   Undo was gone the moment anything behind the archive moved. */
-it("keeps a delete undoable while the world behind re-renders", async () => {
+   ran on every one. There is no Undo now (2026-11-26), but the delete must
+   still go out exactly once, however often the world behind moves. */
+it("sends a delete exactly once while the world behind re-renders", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
     await openSave(longRow, LONG);
@@ -357,13 +356,9 @@ it("keeps a delete undoable while the world behind re-renders", async () => {
   await openNoteActions();
     await act(async () => document.querySelector<HTMLButtonElement>("[aria-label='Delete']")!.click());
     for (let turn = 0; turn < 3; turn += 1) await renderArchive();
-    await act(async () => { vi.advanceTimersByTime(1_000); });
-    expect(state.profiles.filter((item) => item.act === "delete"), "no delete sent while Undo still stands").toEqual([]);
-    const undo = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Undo");
-    expect(undo, "Undo is still offered").toBeTruthy();
-    await act(async () => undo!.click());
     await act(async () => { vi.advanceTimersByTime(10_000); });
-    expect(state.profiles.filter((item) => item.act === "delete"), "and Undo meant it: nothing was ever sent").toEqual([]);
+    for (let turn = 0; turn < 3; turn += 1) await renderArchive();
+    expect(state.profiles.filter((item) => item.act === "delete"), "the delete went out other than once").toHaveLength(1);
   } finally {
     vi.useRealTimers();
   }

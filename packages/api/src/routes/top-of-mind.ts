@@ -38,6 +38,7 @@ import { projectPersonalEntries } from "../lib/personal-output.js";
 import { readGenerationRevision } from "../lib/generation-revision.js";
 import { acquireTopOfMindArtifactLock } from "../lib/top-of-mind-family-lock.js";
 import { validationDetails } from "../lib/validation.js";
+import { loadWeeklyLine } from "../lib/weekly-line.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 
 type WakaDb = ReturnType<typeof getDb>;
@@ -468,6 +469,20 @@ export function createTopOfMindRoutes(
     // is a different state from "the synthesis found nothing to say", and a
     // reader deserves to be able to tell them apart.
     return c.json({ topOfMind }, 200);
+  });
+
+  /* YOUR WEEK, IN ONE LINE (`lib/weekly-line.ts`): the lead reading, when
+     this week wrote or confirmed it and two of this week's saves stand under
+     it; null otherwise. A read of the reading, so it reads as one. */
+  routes.get("/week", async (c) => {
+    const query = scopeQuerySchema.safeParse(c.req.query());
+    if (!query.success) return c.json({ error: "Invalid query", details: validationDetails(query.error) }, 400);
+    const db = getDatabase();
+    const scope = await resolveProfileScope(db, c.get("session"), query.data.profile, "read", loadProfile);
+    if (!scope.ok) return c.json(scope.body, scope.status);
+    const reading = await getTopOfMind(db, { profileId: scope.profileId });
+    c.header("Cache-Control", "private, no-store");
+    return c.json({ week: await loadWeeklyLine(db, scope.profileId, reading, new Date()) }, 200);
   });
 
   routes.get("/versions", async (c) => {

@@ -43,18 +43,18 @@ it('holds a failed public read without loading the widget or dispatching mutatio
  vi.stubGlobal('fetch',vi.fn(async()=>{throw Error('SYNTHETIC_PRIVATE_NETWORK');}));await render(createElement(SignupForm,{locale:'en-US'}));expect(host.textContent).toContain(t('en-US','signupVerificationUnavailable'));expect(host.textContent).not.toContain('SYNTHETIC');expect(f.signup).not.toHaveBeenCalled();expect(f.openBrowser).not.toHaveBeenCalled();
 });
 it('preserves OFF native password signup after exactly one readonly configuration GET',async()=>{
- mode={mode:'off'};f.signup.mockResolvedValue({account:{id:'synthetic-new-account'}});await render(createElement(SignupForm,{locale:'en-US'}));await fill({email:'synthetic@example.test',password:'synthetic-password-123',name:'Synthetic'});
+ mode={mode:'off'};f.signup.mockResolvedValue({account:{id:'synthetic-new-account'}});await render(createElement(SignupForm,{locale:'en-US'}));await fill({email:'synthetic@example.test',password:'synthetic-password-123'});
  await act(async()=>host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(f.signup).toHaveBeenCalledOnce();expect(calls).toHaveLength(1);expect(calls[0]!.method).toBe('GET');expect(f.openBrowser).not.toHaveBeenCalled();
 });
 it('keeps native OFF signup usable after duplicate email, then submits the corrected email',async()=>{
  mode={mode:'off'};f.signup.mockRejectedValueOnce(new ApiError({status:409,message:'Email already exists'})).mockResolvedValueOnce({account:{id:'synthetic-corrected-account'}});
- await render(createElement(SignupForm,{locale:'en-US'}));await fill({email:'duplicate@example.test',password:'synthetic-password-123',name:'Synthetic'});
+ await render(createElement(SignupForm,{locale:'en-US'}));await fill({email:'duplicate@example.test',password:'synthetic-password-123'});
  await act(async()=>host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(f.signup).toHaveBeenCalledOnce();expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(false);
  await fill({email:'corrected@example.test'});await act(async()=>host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  expect(f.signup.mock.calls.map(c=>c[0].email)).toEqual(['duplicate@example.test','corrected@example.test']);expect(calls).toHaveLength(1);expect(f.openBrowser).not.toHaveBeenCalled();
 });
 it.each([new ApiError({status:503,message:'unknown'}),new ApiError({status:403,message:'policy closed',code:'signup_closed'})])('does not reopen native OFF signup after unknown/policy refusal %#',async error=>{
- mode={mode:'off'};f.signup.mockRejectedValueOnce(error);await render(createElement(SignupForm,{locale:'en-US'}));await fill({email:'synthetic@example.test',password:'synthetic-password-123',name:'Synthetic'});
+ mode={mode:'off'};f.signup.mockRejectedValueOnce(error);await render(createElement(SignupForm,{locale:'en-US'}));await fill({email:'synthetic@example.test',password:'synthetic-password-123'});
  const form=host.querySelector('form')!;await act(async()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);await act(async()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));expect(f.signup).toHaveBeenCalledOnce();
 });
 it('refuses an untrusted origin before public fetch or OS browser dispatch',async()=>{

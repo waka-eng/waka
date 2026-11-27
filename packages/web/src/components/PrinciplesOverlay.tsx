@@ -1,5 +1,5 @@
 /* The personal list shows the statement. Opening it reveals the supporting evidence. */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { DialogSurface } from "./DialogSurface";
 import { useNativeBack } from "./SurfaceHeader";
@@ -10,7 +10,7 @@ import { Companion } from "./Companion";
 import { TimelessSky } from "./TimelessSky";
 import { CrossingCompanion, type CreatureSpot } from "./CrossingCompanion";
 import { readProfileText, writeProfileText } from "../lib/profile-storage";
-import { fetchPrinciples, type ApiPrinciple } from "../lib/api";
+import { createFeedback, fetchPrinciples, type ApiPrinciple } from "../lib/api";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { monthTag } from "../lib/words";
 import { useOptionalAuth } from "../lib/auth-context";
@@ -99,6 +99,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
    * the flag is written as soon as it has been shown.
    */
   const [arriving, setArriving] = useState(false);
+  const [revealDone, setRevealDone] = useState(false);
   const arrivalScope = profileId ? { accountId: "p", profileId } : null;
   const [phase, setPhase] = useState<Phase>("loading");
   const mounted = useRef(true);
@@ -108,6 +109,11 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
      same object for the whole stay, so finishing a walk never restarts it. */
   const [walk, setWalk] = useState(() => (crossing?.home ? { ...crossing, from: crossing.home } : null));
   const [walking, setWalking] = useState(walk !== null);
+  /* THE WAITING GROUND KEEPS THE CREATURE WHERE HOME HAD IT (founder,
+     2026-11-26). With principles to show, the list needs the room, so the
+     creature still rises to its place above them. */
+  const staysHome = () => !document.querySelector(".waka-page--timeless .waka-held");
+  const [heldAt, setHeldAt] = useState<{ dx: number; dy: number; scale: number } | null>(null);
   useEffect(() => {
     /* Turned round on the way home: walk back in from where the world's
        creature stands, as a new walk (review, 2026-10-15). */
@@ -175,7 +181,14 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           to={walk.going === "in" ? pageCreature : walk.home}
           dir={walk.going === "in" ? 1 : -1}
           going={walk.going}
+          stay={staysHome}
           onDone={() => {
+            /* Where it stayed, the page's own creature takes over at that
+               spot and size, so nothing jumps at the hand over. */
+            if (walk.going === "in" && staysHome()) {
+              const page = pageCreature();
+              if (page) setHeldAt({ dx: walk.from.x - page.x, dy: walk.from.y - page.y, scale: walk.from.size / page.size });
+            }
             setWalking(false);
             onCrossed?.();
           }}
@@ -198,12 +211,13 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           with it. Gone while the creature walks either way, when the page
           is not yet (or no longer) there; Escape and the pull left work
           throughout. */}
+      {/* THE STAR CAME BACK (founder, 2026-11-26, after trying the "<":
+          "remove < and bring back the star"). Home's star at the right walks
+          here; this one at the left walks home. */}
       {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
         aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
         onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
-        </svg>
+        <PrinciplesSpark />
       </button>}
       <DialogSurface
         className="waka-over"
@@ -259,13 +273,16 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           /* No chat act on an agent's ground: the chat would open with the
              agent's line posted as the owner's own first message. Home omits
              it too; this holds even when a caller does not. */
-          <PrinciplesGround locale={locale} profileId={profileId} whose={whose} principleStatus={readingPaused.principleStatus}
+          <PrinciplesGround locale={locale} profileId={profileId} whose={whose} heldAt={heldAt} principleStatus={readingPaused.principleStatus}
             onChat={agent ? undefined : onChat} onNewSave={agent ? undefined : onNewSave} newSaveLabel={newSaveLabel} />
         ) : (
           <>
           {/* THE CREATURE THAT WAITED WITH YOU PRESENTS IT. Same body, same
               bubble as the waiting page, so the arrival reads as the end of
               that wait rather than as a list that happened to fill. */}
+          {arriving && !agent && rows[0] && !revealDone ? <FirstPrincipleReveal locale={locale} row={rows[0]}
+            onAffirm={() => { setRevealDone(true); void createFeedback({ targetType: "principle", targetId: rows[0]!.id, value: "true" }).catch(() => undefined); }}
+            onNotQuite={() => { setRevealDone(true); onOpen(rows[0]!.id); }} /> : null}
           {arriving ? (
             <div className="waka-ground-hero waka-ground-hero--ready waka-held-first-hero" style={{ ["--charge" as string]: 1 }}>
               <div className="jar-char-bubble-body waka-ground-bubble waka-held-first">
@@ -316,6 +333,72 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           </>
         )}
       </DialogSurface>
+    </div>
+  );
+}
+
+/** The four-point spark both Principles doors wear: home's at the right
+    walks to Principles, Principles' at the left walks home. */
+export function PrinciplesSpark(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+/**
+ * ═══ THE FIRST PRINCIPLE, ONCE, IN LIGHT (insight goal, phase 5; canvas
+ * "Your first principle"; the meeting's "this should be a wow moment") ═══
+ * The saves it came from drift into the creature as light, then the
+ * principle forms above it in large type, answerable: That's me affirms it,
+ * Not quite opens it to be corrected. Shown only the first time a person
+ * meets their principles (`arriving`); under reduced motion the drift is
+ * skipped and the words are simply there.
+ */
+/**
+ * THE REVEAL'S WORDS, shared with the week's card (`WeeklyCard`), so the two
+ * screens are one: a small muted label, the statement in large light type,
+ * "From n of your saves", and under them what that screen offers (the
+ * reveal's That's me / Not quite, the week's "My week · …" and mark).
+ */
+export function RevealWords({ label, statement, from, children }: {
+  label: string; statement: string; from: string; children?: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="waka-reveal-words">
+      <span className="waka-reveal-label">{label}</span>
+      <span className="waka-reveal-statement">{statement}</span>
+      <span className="waka-reveal-from">{from}</span>
+      {children}
+    </div>
+  );
+}
+
+function FirstPrincipleReveal({ locale, row, onAffirm, onNotQuite }: {
+  locale: SupportedLocale; row: ApiPrinciple; onAffirm: () => void; onNotQuite: () => void;
+}): JSX.Element {
+  const say = (key: Parameters<typeof t>[1]) => t(locale, key);
+  const still = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const [formed, setFormed] = useState(Boolean(still));
+  useEffect(() => { if (formed) return; const id = window.setTimeout(() => setFormed(true), 2600); return () => window.clearTimeout(id); }, [formed]);
+  const motes = row.citedSignals.flatMap(signal => signal.examples ?? []).slice(0, 4);
+  const count = new Set(row.citedSignals.flatMap(signal => (signal.examples ?? []).map(example => example.text))).size || row.citedSignals.length;
+  return (
+    <div className={`waka-reveal${formed ? " waka-reveal--formed" : ""}`} role="dialog" aria-modal="true" aria-label={say("worldPrincipleFirstLabel")}>
+      {formed ? null : motes.map((mote, index) => (
+        <span key={index} className="waka-reveal-mote" aria-hidden="true"
+          style={{ ["--from-x" as string]: `${[-110, 90, -70, 120][index]}px`, ["--from-y" as string]: `${[-250, -210, -150, -110][index]}px`, animationDelay: `${index * 220}ms` }}>
+          {mote.text.slice(0, 40)}
+        </span>
+      ))}
+      {formed ? <RevealWords label={say("worldPrincipleFirstLabel")} statement={row.statement}
+        from={formatMessage(locale, "worldReadingFromCount", { count })}>
+        <span className="waka-reveal-acts">
+          <button type="button" autoFocus onClick={onAffirm}>{say("worldPrincipleThatsMe")}</button>
+          <button type="button" className="waka-reveal-act--quiet" onClick={onNotQuite}>{say("worldReadingNotQuite")}</button>
+        </span>
+      </RevealWords> : null}
     </div>
   );
 }

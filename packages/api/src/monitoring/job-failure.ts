@@ -15,6 +15,7 @@ const jobLabels = {
   generate_conversation_reply: 'Generate a chat reply',
   derive_review_answer: 'Process a review answer',
   index_embedding: 'Index an embedding',
+  generate_hunch: 'Write a hunch from the first saves',
 } satisfies Record<BackgroundJobType, string>;
 
 const reasons = {

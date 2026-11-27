@@ -12,7 +12,7 @@ export async function measurePerformanceStage<T>(stage:PerformanceStage,operatio
   try{const result=await work();outcome='ok';return result;}
   finally{recordPerformanceStage(stage,operation,performance.now()-started,outcome);}
 }
-const modelMethods=new Set(['answerConversation','askReflectionQuestion','askReviewQuestion','deriveReviewAnswer','extractSignalCandidates',
+const modelMethods=new Set(['answerConversation','askReflectionQuestion','writeHunch','askReviewQuestion','deriveReviewAnswer','extractSignalCandidates',
   'assessSignalSupport','judgeSignalMatch','distillPrinciples','assessPrincipleGrounding','judgePrincipleRelation','routeDeclaration','synthesizeTopOfMind','reviewTopOfMind']);
 const timingOperations=new Set([...modelMethods,...backgroundJobTypeValues,'conversation','inspiration','gemini']);
 /** Forward precisely one call and its original result/error. Transport, model,

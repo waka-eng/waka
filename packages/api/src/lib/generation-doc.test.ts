@@ -19,6 +19,7 @@
  * That is the point.
  */
 
+import { DELETED_KEEP_DAYS } from '../db/index.js';
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -153,7 +154,11 @@ describe("docs/generation.md stays true to the code", () => {
     for(const locale of ['en-US','ko-KR'] as const){
       const catalog=JSON.parse(readFileSync(resolve(REPO_ROOT,`packages/web/src/lib/i18n/messages/${locale}.json`),'utf8')) as Record<string,string>;
       for(const [key,value] of Object.entries(catalog)){
-        for(const days of stated(value)){expect(days,`${locale} ${key} states an interval the server does not keep`).toBe(signalRoutes.CLAIM_REASK_DAYS);}
+        /* Trash states its own interval, the 30 days a deleted save is kept
+           (founder, 2026-11-26: "truly gone after 30 days"), held to the
+           server's `DELETED_KEEP_DAYS` the same way. */
+        const kept=key==='worldDeletedKeptFor'?DELETED_KEEP_DAYS:signalRoutes.CLAIM_REASK_DAYS;
+        for(const days of stated(value)){expect(days,`${locale} ${key} states an interval the server does not keep`).toBe(kept);}
       }
     }
   });

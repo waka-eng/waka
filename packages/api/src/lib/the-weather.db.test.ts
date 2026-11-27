@@ -93,14 +93,14 @@ describe("the weather is a view of the record", () => {
     const weather = await assembleTheWeather(t.db as never, { profileId, now: NOW });
     const lines = sentencesOf(weather);
 
-    expect(lines).toContain("two days ago: you kept 2 memories");
+    expect(lines).toContain("two days ago: you saved 2 inspirations");
     expect(lines).toContain("two days ago: a new signal was spoken");
     expect(lines).toContain("two days ago: a signal found another memory behind it");
     expect(lines).toContain(
       "yesterday: refused a candidate because it was too close to what you dismissed",
     );
     expect(lines).toContain("yesterday: everything was read again, and your top of mind held");
-    expect(lines).toContain("today: your memory was consulted");
+    expect(lines).toContain("today: your inspirations were consulted");
 
     /* A COUNT IS COUNTED; A DAY IS SAID. Founder ruling, 2026-08-24: the
        telling used to spell counts out and saturate into "many", which made
@@ -168,7 +168,7 @@ describe("the weather is a view of the record", () => {
     /* memories were kept and no pattern moved: the sky held rides along */
     /* the spoken line is counts only — "the sky held" stays in the days
        and the markdown, where the record lives */
-    expect(away.told).toBe("you kept 2 memories.");
+    expect(away.told).toBe("you saved 2 inspirations.");
 
     const quiet = await assembleTheWeather(t.db as never, {
       profileId,
@@ -251,6 +251,6 @@ describe("the weather is a view of the record", () => {
     expect(
       sentencesOf(read),
       "another hand's read is exactly what the sentence means",
-    ).toContain("today: your memory was consulted");
+    ).toContain("today: your inspirations were consulted");
   });
 });

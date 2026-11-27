@@ -31,9 +31,10 @@ import {
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
+import { standingKey } from "../lib/mcp-reads.js";
 import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
-import { enqueueEnrichAttachment, wakeCommittedBackgroundJobs } from "../lib/queue.js";
+import { enqueueEnrichAttachment, enqueueHunchAfterSave, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { assertAttachmentKeysUnused, prepareInspirationAttachments, InspirationAttachmentError, type AttachmentHead } from '../lib/inspiration-attachments.js';
 import { attachmentSelection, serializeAttachment } from './attachments.js';
 import { inspirationSaveFailure, parseInspirationSaveRequestId, runInspirationSave } from '../lib/inspiration-save-requests.js';
@@ -200,6 +201,10 @@ export function registerCaptureRoutes(
           profileId: target.profileId,
           text: parsed.data.text,
           kind: parsed.data.kind ?? null,
+          /* The question WAKA asked is set only by the person's own app
+             session (onboarding), never by a standing key: a model reads it
+             as WAKA's own words (security review, 2026-11-26). */
+          ...(parsed.data.prompt && !standingKey(session) ? { prompt: parsed.data.prompt } : {}),
           source,
           /* absent means private, and that is the column's own default rather
              than a value written here — one place decides what unset means */
@@ -265,6 +270,9 @@ export function registerCaptureRoutes(
 
         const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: inserted.id,
           reason: "created" }, tx);
+        /* Before any reading exists, a save with words asks for a hunch
+           (insight goal, phase 3); an agent's own observation does not. */
+        if (parsed.data.text && source === "app") await enqueueHunchAfterSave(target.profileId, inserted.id, tx);
         const saved={inspirationId:inserted.id,reflectionId:null,processing:processing.receipt};
         return {...saved,response:origin?await readSavedInspiration(tx,target.profileId,saved):{inspiration:{...serializeInspirationDetail(inserted,{attachments:insertedAttachments.map(serializeAttachment),reflections:insertedReflections}),conversationOrigin:null},processing:processing.receipt}};
       }, (tx, saved) => readSavedInspiration(tx, target.profileId, saved));

@@ -375,6 +375,8 @@ describe("the canonical rendering", () => {
 > aspirational = declared in their own words, not yet demonstrated —
 > still binding as their word. contested = under review; rank decides
 > meanwhile.
+> Under a principle, "From these saves" lists what it rests on: the
+> reason behind the rule, in the person's own saved words.
 
 1. \`p-4c952fe3\` (held) — Have something working before you put more money in.
 2. \`p-77a01c2e\` (contested, in tension with p-e83f19aa) — Spend on quality where you will feel it every day.
@@ -383,6 +385,26 @@ describe("the canonical rendering", () => {
 — 3 principles · generated from patterns · this rendering 2026-08-18
 `,
     );
+  });
+
+  /* THE SAVES BEHIND A PRINCIPLE (founder, 2026-11-26, agent to agent): up
+     to four distinct saves, newest first, by full id, day and their own
+     words cut to 200; none when support changed. */
+  it("lists the saves a principle rests on, at most four, newest first", () => {
+    const save = (n: number, day: string, text = `Save number ${n}`) => ({ text, createdAt: `${day}T10:00:00.000Z`, inspirationId: `0000000${n}-0000-4000-8000-000000000000` });
+    const markdown = renderPrinciplesMarkdown({ name: "agikee", type: "human" }, [view({ citedSignals: [
+      { id: "s1", statement: "one", examples: [save(1, "2026-11-01"), save(2, "2026-11-03", "x".repeat(260))] },
+      { id: "s2", statement: "two", examples: [save(2, "2026-11-03"), save(3, "2026-11-05"), save(4, "2026-11-02"), save(5, "2026-10-01")] },
+    ] })], new Date("2026-11-26T07:00:00.000Z"));
+    const lines = markdown.split("\n").filter(line => line.startsWith("   - "));
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toBe("   - 2026-11-05 `00000003-0000-4000-8000-000000000000` “Save number 3”");
+    expect(lines[1]).toContain("00000002-0000-4000-8000-000000000000");
+    expect(lines[1]).toContain(`“${"x".repeat(199)}…”`);
+    expect(markdown).not.toContain("00000005-0000-4000-8000-000000000000");
+    expect(markdown).toContain("   From these saves:");
+    const changed = renderPrinciplesMarkdown({ name: "agikee", type: "human" }, [view({ supportChanged: true, citedSignals: [] })], new Date());
+    expect(changed).not.toContain("From these saves:");
   });
 
   it("is deterministic — same inputs, same bytes", () => {

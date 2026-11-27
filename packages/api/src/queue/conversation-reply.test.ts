@@ -69,3 +69,10 @@ it('says whose memory the sources are only when there are sources to say it abou
   expect(text({perspective:'agent',sources:[]})).not.toContain('Every source below');
   expect(text({perspective:'both',sources:[]})).not.toContain('Each source has owner');
 });
+it('asks for a follow-up question while little is saved, and not once memory can carry the talk', () => {
+  const thin=buildConversationReplyRequest({...input,history:[{role:'user',content:'Life is great.'}]}).contents[0].parts[0].text;
+  expect(thin).toContain('Little saved memory is available');
+  const source=input.sources[0]!;
+  const rich=buildConversationReplyRequest({...input,history:[{role:'user',content:'Life is great.'}],sources:[source,source,source]}).contents[0].parts[0].text;
+  expect(rich).not.toContain('Little saved memory is available');
+});

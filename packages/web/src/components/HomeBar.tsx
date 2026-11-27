@@ -27,18 +27,21 @@
  * whole act ("Keep a thought", "Keep a screenshot", "Keep your voice") for a
  * screen reader and, on the glyphs, a pointer's tooltip.
  *
- * "{n} KEPT ⌃" ABOVE IT (founder: "should be x kept"). The pull says how many
- * you have kept once that is known; before then, and at none, just "Kept".
+ * "{n} INSPIRATIONS" ABOVE IT, under a lit grabber. The pull says how many
+ * you have kept once that is known; before then, just the word.
  *
  * Past chats and Search are not here. Search is the field at the top of
  * Inspirations; past chats are reached from the chat page, through Chat.
  */
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 import { PHOTO_ACCEPT } from '../lib/inspiration-photo';
 import { formatMessage } from '../lib/i18n';
 import { t, type SupportedLocale } from '../lib/locales';
 import { HomeActionIcon } from './HomeActionIcon';
+
+/** How far up the handle is dragged before it opens the inspirations. */
+const PULL_OPEN_PX = 24;
 
 export function HomeBar(props: {
   locale: SupportedLocale;
@@ -59,24 +62,49 @@ export function HomeBar(props: {
   /** "{n} kept ⌃": opens the saves, patterns and principles. `kept` is how
       many you have kept, absent while unknown; at none or unknown it reads "Kept". */
   pull?: { onOpen: () => void; kept?: number };
+  /** A tap on the creature lit what its line points to: the Save pill or
+      Chat. Each new `n` plays the light once. */
+  beckon?: { n: number; to: 'save' | 'chat' };
+  /** The creature asked something (a reading's "What's closer?"): the bar is
+      where the answer is typed, never a new box. Escape or an empty Send
+      puts it back. */
+  answer?: { placeholder: string; onSend: (text: string) => void; onCancel: () => void };
 }): JSX.Element {
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
   const photos = useRef<HTMLInputElement>(null);
+  const dragFrom = useRef<number | null>(null);
+  const dragged = useRef(false);
   const save = props.save;
   return (
     <div className="waka-home-bar" data-jar-chrome="1" data-jar-interactive="1">
       {props.saved ? (
         <p className="waka-home-bar-saved" role="status">{say('worldBubbleKept')}</p>
       ) : props.pull ? (
-        <button type="button" className="waka-home-bar-pull" aria-haspopup="dialog" onClick={props.pull.onOpen}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
-            strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M6 15l6-6 6 6" /></svg>
+        /* A LIT GRABBER, TAPPED OR DRAGGED UP (founder meeting, 2026-11-20:
+           the chevron read as decoration and the inspirations went unfound).
+           A drag of a few px upward opens it as a tap does; the click that
+           follows that drag is then swallowed so it does not open twice. */
+        <button type="button" className="waka-home-bar-pull" aria-haspopup="dialog"
+          onClick={() => { if (dragged.current) { dragged.current = false; return; } props.pull?.onOpen(); }}
+          onPointerDown={e => { dragFrom.current = e.clientY; dragged.current = false; e.currentTarget.setPointerCapture?.(e.pointerId); }}
+          onPointerMove={e => {
+            if (dragFrom.current === null || dragFrom.current - e.clientY < PULL_OPEN_PX) return;
+            dragFrom.current = null; dragged.current = true; props.pull?.onOpen();
+          }}
+          onPointerUp={() => { dragFrom.current = null; }} onPointerCancel={() => { dragFrom.current = null; }}>
+          <span className="waka-home-bar-grab" aria-hidden="true" />
           <span>{props.pull.kept ? formatMessage(props.locale, 'worldBarKeptCount', { count: props.pull.kept }) : say('worldBarSaves')}</span>
         </button>
       ) : null}
       <div className="waka-home-bar-row">
-        {save ? (
+        {props.answer ? <AnswerPill locale={props.locale} {...props.answer} /> : save ? (
           <nav className="waka-home-bar-pill" aria-label={say('worldBarLabel')}>
+            {/* THE BAR ANSWERS THE CREATURE. Founder meeting, 2026-11-20:
+                people tapped the creature to save and never found the bar,
+                and the bar stays where the thumb is, so "when you click on
+                the character make the bottom bar also illuminate to
+                respond". Keyed by the tap count so every tap replays it. */}
+            {props.beckon?.to === 'save' ? <span key={props.beckon.n} className="waka-home-bar-beckon" aria-hidden="true" /> : null}
             <button type="button" className="waka-home-bar-door waka-home-bar-field" aria-label={say('worldBarKeepThought')} onClick={save.onWrite}>
               <span>{say('worldBarThoughtPrompt')}</span>
             </button>
@@ -95,9 +123,27 @@ export function HomeBar(props: {
         ) : null}
         <button type="button" className="waka-home-bar-chat" aria-label={say('worldBarChat')}
           disabled={props.chatDisabled} onClick={props.onChat}>
+          {props.beckon?.to === 'chat' ? <span key={props.beckon.n} className="waka-home-bar-beckon" aria-hidden="true" /> : null}
           <HomeActionIcon kind="bubble" />
         </button>
       </div>
     </div>
+  );
+}
+
+/* THE BAR TAKES THE ANSWER (insight goal, phase 4; canvas "Not quite"):
+   the same 64px pill, its words and one Send word at its end. Light only:
+   Send is a word, never filled. */
+function AnswerPill({ locale, placeholder, onSend, onCancel }: { locale: SupportedLocale; placeholder: string;
+  onSend: (text: string) => void; onCancel: () => void }): JSX.Element {
+  const [text, setText] = useState('');
+  const send = () => { const said = text.trim(); if (said) onSend(said); else onCancel(); };
+  return (
+    <form className="waka-home-bar-pill waka-home-bar-answer" onSubmit={event => { event.preventDefault(); send(); }}>
+      <input className="waka-home-bar-answer-field" autoFocus value={text} placeholder={placeholder} aria-label={placeholder}
+        enterKeyHint="send" maxLength={500} onChange={event => setText(event.target.value)}
+        onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onCancel(); } }} />
+      <button type="submit" className="waka-home-bar-answer-send">{t(locale, 'worldConversationSend')}</button>
+    </form>
   );
 }

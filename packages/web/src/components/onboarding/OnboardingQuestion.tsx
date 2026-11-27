@@ -249,7 +249,9 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
       const words = text.trim();
       const kind = !attachments.length ? "note" : attachments.length === 1 && !words ? attachments[0]!.type as "image" | "audio" : "mixed";
       const saved = await createInspiration(
-        { text: words, kind, source: "app", ...(attachments.length ? { attachments } : {}) },
+        /* THE ANSWER KEEPS ITS QUESTION (insight goal, phase 3): the readings
+           and the first hunch read what was asked, not only what was said. */
+        { text: words, kind, source: "app", prompt: say(question.ask), ...(attachments.length ? { attachments } : {}) },
         { profile: profileId, requestId: requestId.current },
       );
       setSaving(false);
@@ -385,11 +387,10 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
         {mode === "choose" ? (
           <>
             {error ? <p className="onb-error" role="alert">{error}</p> : (
-              <span className={`onb-share-cue${locked ? " onb-share-cue--quiet" : ""}`}>
-                {/* STRIPPED: "Choose one" over the choices. Founder,
-                    2026-11-12: "strip all unnecessary descriptive text across the experience". */}
-                <span className="onb-nudge"><Glyph kind="down" size={16} /></span>
-              </span>
+              /* STRIPPED: "Choose one", and then the bouncing arrow (meeting,
+                 2026-11-20: "I think the arrow is ... annoying"; audit,
+                 2026-11-26): the bar is plain under the question. */
+              null
             )}
             <nav className={`onb-pill onb-choose${calling && !locked ? " onb-choose--call" : ""}`} aria-label={say(question.ask)}>
               {/* THE HOME BAR'S PILL, so the bar you learn here is the bar

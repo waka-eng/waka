@@ -200,8 +200,8 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
           ? "새 메모를 하나 남겼어요"
           : `새 메모를 ${exactCount(c.kept)}개 남겼어요`
         : c.kept === 1
-          ? "you kept a memory"
-          : `you kept ${exactCount(c.kept)} memories`,
+          ? "you saved one inspiration"
+          : `you saved ${exactCount(c.kept)} inspirations`,
       backing: "inspirations",
     });
   }
@@ -289,8 +289,8 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
           ? "내 기억을 한 번 참고했어요"
           : `내 기억을 ${exactTimes(c.consulted, locale)} 참고했어요`
         : c.consulted === 1
-          ? "your memory was consulted"
-          : `your memory was consulted ${exactTimes(c.consulted)}`,
+          ? "your inspirations were consulted"
+          : `your inspirations were consulted ${exactTimes(c.consulted)}`,
       backing: "consultations",
     });
   }

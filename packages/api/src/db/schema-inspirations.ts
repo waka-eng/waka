@@ -110,6 +110,13 @@ export const inspirations = pgTable(
      * downstream may treat null as a category named "null".
      */
     category: text("category"),
+    /**
+     * THE QUESTION THIS WAS AN ANSWER TO, when it was one (insight goal,
+     * phase 3, 2026-11-26): onboarding asks three, and an answer without its
+     * question loses what it means. Context for the readings, never shown as
+     * the save's own words. NULL for an ordinary save.
+     */
+    prompt: text("prompt"),
     source: inspirationSourceEnum("source").notNull().default("app"),
     visibility: inspirationVisibilityEnum("visibility").notNull().default("private"),
     /**

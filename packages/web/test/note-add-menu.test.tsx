@@ -98,7 +98,8 @@ it('puts Add photo and Add file directly on the note bar, with no ＋ menu', asy
   await openNotepad();
   const bar = world.container.querySelector<HTMLElement>('.waka-note-bar-row')!;
   expect(bar, 'the notepad has no note bar').toBeTruthy();
-  expect(bar.querySelector('button[aria-haspopup="menu"]'), 'the ＋ menu is back on the note bar').toBeNull();
+  /* Save's own arrow (Save as draft) is the one menu the bar holds. */
+  expect(bar.querySelector('button[aria-haspopup="menu"]:not(.waka-save-more)'), 'the ＋ menu is back on the note bar').toBeNull();
   const photo = bar.querySelector<HTMLButtonElement>('button[aria-label="Add photo"]');
   const file = bar.querySelector<HTMLButtonElement>('button[aria-label="Add file"]');
   expect(photo?.querySelector('[data-home-action-icon="photo"]'), 'no photo press on the bar').toBeTruthy();

@@ -23,6 +23,7 @@ export * from "./schema-principles";
 export * from "./schema-login-failures";
 export * from "./schema-sessions";
 export * from "./schema-consultations";
+export * from "./schema-mcp-reads";
 export * from "./schema-statement-chains";
 export * from "./schema-agent-keys";
 export * from "./schema-keeper-keys";
@@ -64,3 +65,4 @@ export * from './schema-embedding-indexes.js';
 export * from './schema-signup-admissions.js';
 
 export * from './schema-account-attachment-upload-limits.js';
+export * from './schema-hunches.js';

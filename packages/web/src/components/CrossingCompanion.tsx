@@ -31,6 +31,7 @@ import { REST_BLEED, turnedPose } from "../character/raster";
 import { WALK_HEADROOM, WALK_STEPS_MS, WALK_TURN_MS, placeStep, walkBeat } from "../character/walk";
 import { renderScale } from "../canvas/scale";
 import { clamp01, easeInOut as ease } from "../lib/num";
+import { FLOURISH_MS, flourishPose, nextFlourish } from "../character/flourish";
 import { rampFromCss, rasterGrain } from "../canvas/palette";
 
 export interface CreatureSpot { x: number; y: number; size: number }
@@ -48,7 +49,7 @@ const CROSS_MS = CROSS_TURN_MS * 2 + CROSS_WALK_MS + CROSS_GLIDE_MS;
 const easeOutBack = (t: number) => { const c1 = 1.15, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
 const smooth = (t: number) => { const x = clamp01(t); return x * x * (3 - 2 * x); };
 
-export function CrossingCompanion({ from, to, dir, going, onDone }: {
+export function CrossingCompanion({ from, to, dir, going, stay, onDone }: {
   /** Where the walk happens: the world's spot on the way in, the page's on the way out. */
   from: CreatureSpot;
   /** Where it ends up. Absent means it stays where it walked. A function is
@@ -59,6 +60,11 @@ export function CrossingCompanion({ from, to, dir, going, onDone }: {
   dir: 1 | -1;
   /** "in" walks then glides; "out" glides home first, then walks. */
   going: "in" | "out";
+  /** Asked when the walk in ends: true keeps the creature where it walked
+      and plays one move there instead of the glide (founder, 2026-11-26:
+      "i dont think its necessary for character to jump back to get smaller
+      ... just make it do a motion once it arrives but stay in place"). */
+  stay?: () => boolean;
   onDone: () => void;
 }): JSX.Element {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -84,7 +90,7 @@ export function CrossingCompanion({ from, to, dir, going, onDone }: {
     let ended = false;
     const finish = () => { if (!ended) { ended = true; done.current(); } };
     if (!node || !g) { finish(); return undefined; }
-    const backstop = window.setTimeout(finish, CROSS_MS + 400);
+    const backstop = window.setTimeout(finish, CROSS_MS + 1200);
     const dpr = renderScale(box, box);
     node.width = Math.ceil(box * dpr);
     node.height = Math.ceil(box * dpr);
@@ -99,6 +105,16 @@ export function CrossingCompanion({ from, to, dir, going, onDone }: {
     const start = performance.now();
     let frame = 0;
     let end: CreatureSpot | null | undefined = typeof to === "function" ? undefined : to;
+    /* Decided once, at the glide's first frame, when the page is laid out. */
+    let staying: boolean | undefined;
+    const move = nextFlourish(null, Math.random);
+    /* ONE MOVE ON ARRIVAL, BOTH WAYS (founder, 2026-11-26: "when character
+       goes from principles back to main page, also make it do a motion").
+       Into Principles it plays where it stays; home, once the walk is done.
+       What it says comes after (the page's bubble and home's wait on the
+       walk's end). */
+    const arriveAt = going === "in" ? glideStart : CROSS_MS;
+    const moveEnd = arriveAt + FLOURISH_MS[move];
 
     const place = (spot: CreatureSpot) => {
       node.style.transform = `translate(${spot.x - box / 2}px, ${spot.y - box / 2}px) scale(${spot.size / size})`;
@@ -122,8 +138,9 @@ export function CrossingCompanion({ from, to, dir, going, onDone }: {
       /* Asked every frame of the glide, not once: the page is still sliding
          in while the creature lands, and a target read at the glide's first
          frame is a few pixels from where the page's creature ends up. */
-      if (t >= glideStart && typeof to === "function") end = to() ?? end ?? null;
-      const goal = end ?? from;
+      if (t >= glideStart && staying === undefined) staying = going === "in" && Boolean(stay?.());
+      if (t >= glideStart && !staying && typeof to === "function") end = to() ?? end ?? null;
+      const goal = staying ? from : end ?? from;
       const at = { x: from.x + (goal.x - from.x) * ease(u), y: from.y + (goal.y - from.y) * glideT, size: from.size + (goal.size - from.size) * ease(u) };
       place(at);
       const rising = Math.sign(goal.y - from.y);
@@ -142,10 +159,15 @@ export function CrossingCompanion({ from, to, dir, going, onDone }: {
       g.scale(dpr, dpr);
       /* a little squash at each footfall: the body lands, then lifts — and
          the crouch before a rise and the stretch during it, all from its feet */
-      placeStep(g, size, box, { bob, lean }, land + crouch - stretch);
+      const arriving = going === "out" || Boolean(staying);
+      const pose = arriving && t >= arriveAt ? flourishPose(move, clamp01((t - arriveAt) / FLOURISH_MS[move]), size) : null;
+      if (pose) {
+        node.style.transform = `translate(${at.x - box / 2 + pose.dx}px, ${at.y - box / 2 + pose.lift}px) rotate(${pose.rot}rad) scale(${(at.size / size) * pose.sx}, ${(at.size / size) * pose.sy})`;
+      }
+      placeStep(g, size, box, { bob, lean }, land + crouch - stretch + (pose?.sq ?? 0));
       turnedPose(g, size, ramp, OWNER_BEING, 1, dpr, yaw, stride, look, grain);
 
-      if (t < CROSS_MS) frame = requestAnimationFrame(step);
+      if (t < (going === "out" || staying ? Math.max(CROSS_MS, moveEnd) : CROSS_MS)) frame = requestAnimationFrame(step);
       else finish();
     };
     place(from);

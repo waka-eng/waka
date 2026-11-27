@@ -17,6 +17,7 @@
     "@capacitor/browser": "8.0.5",
     "@capacitor/core": "8.5.2",
     "@capacitor/filesystem": "8.1.4",
+    "@capacitor/haptics": "8.0.2",
     "@capacitor/keyboard": "8.0.6",
     "@fontsource-variable/caveat": "5.3.0",
     "@fontsource-variable/fraunces": "5.3.0",

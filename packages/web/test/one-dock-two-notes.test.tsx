@@ -295,8 +295,11 @@ const KNOWN_DIFFERENCES: Array<{ at: number; notepad: string; savedNote: string 
 const ONLY_ON_THE_SAVED_NOTE = ["Delete", "Share this inspiration", "More"];
 
 /** Both rows, with the one-sided presses taken out so the rest can be compared. */
+/* Save as draft is the notepad's alone (founder, 2026-11-26): a saved
+   inspiration is already saved, so there is no draft to keep. */
+const ONLY_ON_THE_NOTEPAD = ["Save as draft"];
 function comparable(row: ReturnType<typeof dockPresses>) {
-  return row.filter((press) => !ONLY_ON_THE_SAVED_NOTE.includes(press.label ?? ""));
+  return row.filter((press) => !ONLY_ON_THE_SAVED_NOTE.includes(press.label ?? "") && !ONLY_ON_THE_NOTEPAD.includes(press.label ?? ""));
 }
 
 /** The press a page calls Save, wherever it sits in the row. */

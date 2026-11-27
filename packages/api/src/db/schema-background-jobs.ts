@@ -55,6 +55,7 @@ export const backgroundJobTypeValues = [
   "generate_conversation_reply",
   "derive_review_answer",
   "index_embedding",
+  "generate_hunch",
 ] as const;
 export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
 export const backgroundJobTypeEnum = pgEnum("background_job_type", backgroundJobTypeValues);

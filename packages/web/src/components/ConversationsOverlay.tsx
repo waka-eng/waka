@@ -134,7 +134,6 @@ export function ConversationsOverlay({ locale, profileId, title, onBack, backKin
    * that failed, and because the honest message is "it is still here" —
    * which is only true of one row.
    */
-  const [asking, setAsking] = useState<string | null>(null);
   const [going, setGoing] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const live = useRef(true);
@@ -312,52 +311,23 @@ export function ConversationsOverlay({ locale, profileId, title, onBack, backKin
                           {rest(row) ? <span className="waka-list-rest">{rest(row)}</span> : null}
                         </span>
                       </button>
-                      {/* ERASING ONE, ASKED ON THE ROW. This verb had no home
-                          in the product at all for a while: it lived in a
-                          `···` menu inside the conversation you were reading,
-                          where "delete" sits one slip from "send", and the
-                          sweep that cut that menu left the capability
-                          homeless. It belongs beside the row it removes, and
-                          it asks first — inline, because a sheet over a list
-                          makes you lose your place in the list to answer a
-                          question about one line of it. */}
-                      {asking === row.id ? (
-                        <span className="waka-rail-ask">
-                          <span className="waka-rail-question">{say("worldChatDeleteQuestion")}</span>
-                          {failed === row.id ? (
-                            <span className="waka-rail-warn" role="alert">{say("worldDeleteFailed")}</span>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="waka-rail-go"
-                            disabled={going === row.id}
-                            onClick={() => {
-                              setGoing(row.id);
-                              setFailed(null);
-                              void deleteConversation(profileId!, row.id)
-                                .then(() => {
-                                  /* The list holds what was loaded, so it has
-                                     to agree without a refetch — otherwise the
-                                     row you just removed is still sitting
-                                     there. */
-                                  setRows((all) => all.filter((item) => item.id !== row.id));
-                                  setAsking(null);
-                                })
-                                .catch(() => setFailed(row.id))
-                                .finally(() => setGoing(null));
-                            }}
-                          >
-                            {say(going === row.id ? "worldDeleting" : "worldChatDelete")}
-                          </button>
-                          <button type="button" disabled={going === row.id} onClick={() => { setAsking(null); setFailed(null); }}>
-                            {say("worldCancel")}
-                          </button>
-                        </span>
-                      ) : (
-                        <button type="button" className="waka-rail-del" onClick={() => setAsking(row.id)}>
-                          {say("worldDelete")}
-                        </button>
-                      )}
+                      {/* ERASING ONE, ON THE ROW, AT ONCE (founder, 2026-11-26:
+                          "dont confirm and just delete"). The verb sits beside
+                          the row it removes; a failure is said there. */}
+                      {failed === row.id ? <span className="waka-rail-warn" role="alert">{say("worldDeleteFailed")}</span> : null}
+                      <button type="button" className="waka-rail-del" disabled={going === row.id}
+                        onClick={() => {
+                          setGoing(row.id);
+                          setFailed(null);
+                          void deleteConversation(profileId!, row.id)
+                            /* The list holds what was loaded, so it agrees
+                               without a refetch. */
+                            .then(() => setRows((all) => all.filter((item) => item.id !== row.id)))
+                            .catch(() => setFailed(row.id))
+                            .finally(() => setGoing(null));
+                        }}>
+                        {say(going === row.id ? "worldDeleting" : "worldDelete")}
+                      </button>
                     </li>
                   ))}
                 </ul>

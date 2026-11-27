@@ -20,7 +20,7 @@ import { z } from "zod";
 import { backgroundJobs, inspirations, reflections } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
-import { enqueueReflectionQuestion, reflectionQuestionJobKey, wakeCommittedBackgroundJobs } from "../lib/queue.js";
+import { AFTER_SAVE_REFLECTION_ID, enqueueReflectionQuestion, reflectionQuestionJobKey, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { InspirationSaveError, inspirationSaveFailure, parseInspirationSaveRequestId, runInspirationSave } from '../lib/inspiration-save-requests.js';
@@ -95,7 +95,7 @@ export function registerReflectionRoutes(
     if (!target.ok) return c.json(target.body, target.status);
     const material = await loadLatestAnswer(db, target.profileId, idCheck.data);
     if (!material.exists) return c.json({ error: "Inspiration not found" }, 404);
-    if (material.latestId !== body.data.afterReflectionId) {
+    if ((material.latestId ?? AFTER_SAVE_REFLECTION_ID) !== body.data.afterReflectionId) {
       return c.json({ error: "That is not the latest saved reflection" }, 409);
     }
     const current = await readQuestionJob(db, target.profileId, idCheck.data, body.data.afterReflectionId);
@@ -119,7 +119,7 @@ export function registerReflectionRoutes(
     if (!target.ok) return c.json(target.body, target.status);
     const material = await loadLatestAnswer(db, target.profileId, idCheck.data);
     if (!material.exists) return c.json({ error: "Inspiration not found" }, 404);
-    if (material.latestId !== afterCheck.data) return c.json({ error: "That is not the latest saved reflection" }, 409);
+    if ((material.latestId ?? AFTER_SAVE_REFLECTION_ID) !== afterCheck.data) return c.json({ error: "That is not the latest saved reflection" }, 409);
     return c.json(await readQuestionJob(db, target.profileId, idCheck.data, afterCheck.data), 200);
   });
 

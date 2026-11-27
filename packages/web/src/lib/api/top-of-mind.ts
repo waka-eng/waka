@@ -118,6 +118,17 @@ export async function fetchTopOfMind(
   return body.topOfMind ?? null;
 }
 
+/** Your week in one line: the lead reading when this week moved it and two of
+    this week's saves stand under it (`packages/api/src/lib/weekly-line.ts`). */
+export interface ApiWeeklyLine { week: { from: string; to: string }; line: string; saveIds: string[] }
+
+/** GET /top-of-mind/week. Null when the week has nothing true to say. */
+export async function fetchWeeklyLine(options: ProfileScoped = {}, signal?: AbortSignal): Promise<ApiWeeklyLine | null> {
+  const query = options.profile ? `?profile=${encodeURIComponent(options.profile)}` : "";
+  const body = await getJson<{ week: ApiWeeklyLine | null }>(apiPath(`/top-of-mind/week${query}`), "Failed to load your week", signal);
+  return body.week ?? null;
+}
+
 /** GET /top-of-mind/versions — newest first. */
 export async function fetchTopOfMindVersions(options: ProfileScoped = {}, signal?: AbortSignal): Promise<ApiTopOfMindVersion[]> {
   const query=options.profile?`?profile=${encodeURIComponent(options.profile)}`:'';

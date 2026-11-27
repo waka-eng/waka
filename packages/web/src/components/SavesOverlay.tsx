@@ -44,7 +44,7 @@ import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
-import { SurfaceHeader, type BackKind } from "./SurfaceHeader";
+import { SurfaceHeader, useNativeBack, type BackKind } from "./SurfaceHeader";
 import { firstPhoto, onlyAttachments, SavedPhoto } from "./SavedPhoto";
 import { prefersStillness } from "../lib/motion";
 import { AttachmentPreview } from "./AttachmentPreview";
@@ -95,14 +95,15 @@ const UNDO_MS = 6000;
 
 /** How long a sheet takes to drop back down; `claims.css` `waka-sheet-down` matches. */
 const SHEET_DROP_MS = 220;
+/** How far the sheet's grabber is dragged down before it closes. */
+const SHEET_DRAG_CLOSE_PX = 80;
 
-export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, onNew, sheet = false }: {
+export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, locale, profileId, scope = null, ownerName, title, focus, onClearFocus, onNoteOpen, onBack, backKind = "close", gesture = null, note: noteAddress, onNoteAddress, viewState, topRequest, sheet = false }: {
   canReview?:boolean; onRelevanceChanged?:()=>void;
   /** The server has confirmed a change to the live archive. */
   onArchiveChanged?: () => void;
   /** "New note", the header's right word, as Past chats has New chat
       (founder, 2026-11-10). Absent where nothing may be written. */
-  onNew?: () => void;
   /** Pulled up from home's handle: rises over home above the home bar and
       drops back down on close (see `savesAsSheet` in `Home.tsx`). */
   sheet?: boolean;
@@ -210,6 +211,8 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
      (code review, 2026-11-12: a press on the bar under a falling sheet). */
   const onBackNow = useRef(onBack); onBackNow.current = onBack;
   const dropTimer = useRef(0);
+  const dragFrom = useRef<number | null>(null);
+  const dragMoved = useRef(false);
   useEffect(() => () => window.clearTimeout(dropTimer.current), []);
   const backOut = useCallback(() => {
     const node = sheetPage.current;
@@ -285,6 +288,9 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [open, setOpen] = useState<Inspiration | null>(null);
+  /* A sheet with no header still answers the system's back (Android's back,
+     iOS's edge swipe), as its header did (audit, 2026-11-26). */
+  useNativeBack(backOut, sheet && !open && !focus ? gesture : null);
   /* ═══ THE WORDS AS STORED, READ IN FULL BEFORE ANY OF THEM CAN BE WRITTEN ══
      P0, 2026-10-17: editing a long save from this list destroyed the rest of
      it. A row here is a LIST row — `textPreview` is cut at 220 characters on
@@ -361,7 +367,6 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
      note, and focus fell to the page; the Undo line is the next thing a
      keyboard user needs, so a delete made on the note hands it focus — once,
      on that delete, and not on any other way the line appears. */
-  const undoButton = useRef<HTMLButtonElement>(null);
   const focusUndoNext = useRef(false);
   /* An immediate delete (an agent's archive, which has no Undo) hands focus
      to the list it returns to — its first row, or the search field. */
@@ -557,20 +562,6 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
     focusUndoNext.current = true;
     setUndoable(row);
   }, [beginDelete, flushErase, rows]);
-
-  const undoErase = useCallback(() => {
-    const pending = pendingErase.current;
-    if (!pending) return;
-    window.clearTimeout(pending.timer);
-    pendingErase.current = null;
-    markDeleting(pending.row.id, profileId ?? null, false);
-    unforgetNote(pending.row.id, profileId ?? null);
-    showSearchId(pending.row.id); refreshSearch();
-    setRows((all) => all.some((row) => row.id === pending.row.id) ? all
-      : [...all.slice(0, pending.at), pending.row, ...all.slice(pending.at)]);
-    setTotal((count) => count === null ? count : count + 1);
-    setUndoable(null);
-  }, [markDeleting, profileId, unforgetNote]);
 
   const bringBack = useCallback(async (item: ApiDeletedInspiration) => {
     if (shelfAction.current) return;
@@ -1128,7 +1119,9 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
   useEffect(() => {
     if (!undoable || open || !focusUndoNext.current) return;
     focusUndoNext.current = false;
-    undoButton.current?.focus();
+    /* The Undo line is gone (2026-11-26): after a delete, focus goes back
+       to the list, not to the page body. */
+    (document.querySelector<HTMLElement>(".waka-list-row") ?? field.current)?.focus({ preventScroll: true });
   }, [undoable, open]);
 
   const openId = open?.id ?? null;
@@ -1216,7 +1209,9 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
   const active = category && categories.includes(category) ? category : null;
 
   /* A shelf emptied by bringing everything back is not a tab to stand under. */
-  const shelfOn = onShelf && shelf.length > 0 && !focus;
+  /* Trash is reached from Settings now, so it shows even when empty: an
+     empty Trash is a page that says so, not a fall back to the list. */
+  const shelfOn = onShelf && !focus;
   const shelfShown = shelf.filter((item) => !needle || [item.text, item.attachmentName ?? ''].join(' ').toLowerCase().includes(needle));
   const focused = focus ? new Set(focus.ids) : null;
   const shown = searching ? search.rows.filter(row => !hiddenSearchIds.has(row.id)) : rows.filter(
@@ -1268,7 +1263,30 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
        hides them too, and `Home` is told through `onNoteOpen` — so the
        reserve is holding room for nothing, and holding it was the last 60px
        between this page and the one the founder prefers. */
+    <>
+      {/* THE DIM ABOVE A SHEET CLOSES IT (iOS sheets; audit, 2026-11-26). */}
+      {sheet && !open ? <button type="button" className="waka-sheet-scrim" tabIndex={-1} aria-hidden="true" onClick={backOut} /> : null}
     <div ref={sheetPage} className={`waka-page${open ? " waka-page--note" : sheet ? " waka-page--sheet" : ""}`}>
+      {/* THE GRABBER IS THE WAY DOWN (founder, 2026-11-26: "to pull the
+          sheet down, let user use the - button. remove the x"). A tap closes
+          it; a drag past `SHEET_DRAG_CLOSE_PX` sends it down from where the
+          finger left it, and short of that it settles. Escape still closes. */}
+      {sheet && !open ? <button type="button" className="waka-sheet-grab" aria-label={say("worldClose")}
+        onClick={() => { if (dragMoved.current) { dragMoved.current = false; return; } backOut(); }}
+        onPointerDown={e => { dragFrom.current = e.clientY; dragMoved.current = false; e.currentTarget.setPointerCapture?.(e.pointerId); if (sheetPage.current) sheetPage.current.dataset.dragging = "1"; }}
+        onPointerMove={e => {
+          if (dragFrom.current === null || !sheetPage.current) return;
+          if (Math.abs(e.clientY - dragFrom.current) > 4) dragMoved.current = true;
+          sheetPage.current.style.translate = `0 ${Math.max(0, e.clientY - dragFrom.current)}px`;
+        }}
+        onPointerUp={e => {
+          const node = sheetPage.current; const from = dragFrom.current; dragFrom.current = null;
+          if (!node || from === null) return;
+          delete node.dataset.dragging;
+          if (e.clientY - from > SHEET_DRAG_CLOSE_PX) { backOut(); return; }
+          node.style.translate = "";
+        }}
+        onPointerCancel={() => { dragFrom.current = null; if (sheetPage.current) { delete sheetPage.current.dataset.dragging; sheetPage.current.style.translate = ""; } }} /> : null}
       <DialogSurface
         {...listScroll}
         /* ═══ AN OPEN NOTE IS A PAGE, NOT A COLUMN IN THE ARCHIVE ════════
@@ -1311,27 +1329,28 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
         escapeLeavesAsModal={false}
         onClose={open ? onBack : backOut}
         >
-        {open ? null : <SurfaceHeader locale={locale} gesture={gesture}
-          back={{ kind: backKind, onBack: backOut }}
+        {/* THE SHEET NEEDS NO HEADER (founder, 2026-11-26: "get rid of
+            inspirations (2) here"): the grabber closes it and what it holds
+            is plain. It keeps one while narrowed to a reading's saves or
+            showing Deleted, where the title says what you are looking at. */}
+        {open || (sheet && !focus && !shelfOn) ? null : <SurfaceHeader locale={locale} gesture={gesture}
+          /* In Trash, "<" goes back to the list it was reached from. */
+          back={shelfOn ? { kind: "back", onBack: () => setOnShelf(false) } : { kind: backKind, onBack: backOut }}
           /* THE NAME, THEN HOW MANY (nav system R4): "Kept (36)" centred in the
              one header, the count counting what is on screen (`shown`), and
              under a claim's filter the claim's own words. */
-          title={<>{focus ? focus.label : title}{focus ? null : <>{" "}{shelfOn ? (
-              <span className="waka-over-count jar-saved-count">{shelfShown.length < shelf.length ? `(${shelfShown.length}/${shelf.length})` : `(${shelf.length})`}</span>
-            ) : resultTotal != null && (!searching || search.phase === 'ready') ? (
+          title={<>{shelfOn ? say("worldDeletedShelf") : focus ? focus.label : title}{focus || shelfOn ? null : <>{" "}{resultTotal != null && (!searching || search.phase === 'ready') ? (
               <span className="waka-over-count jar-saved-count">
                 {shown.length < resultTotal ? `(${shown.length}/${resultTotal})` : `(${resultTotal})`}
               </span>
             ) : null}</>}</>}
           /* THE WAY OUT OF THE FILTER, WHICH IS NOT THE WAY OUT OF THE PAGE:
              "See all" is the header's one right-hand word while a claim's
-             filter is on; otherwise "New note", as Past chats has "New chat"
-             (founder, 2026-11-10: "let's have Save new or something like
-             that on top right"). */
+             filter is on. "New inspiration" stood here otherwise and went:
+             the bar's Save is the one way to save (founder meeting,
+             2026-11-20). */
           right={focus && onClearFocus ? (
             <button type="button" className="waka-over-unfocus" onClick={onClearFocus}>{say("worldBubbleSeeAll")}</button>
-          ) : onNew ? (
-            <button type="button" className="waka-over-new" onClick={onNew}>{say("worldNoteNew")}</button>
           ) : undefined} />}
         {/* THE TWO FACTS A GRID NEEDS BEFORE IT CAN BE SEARCHED: how much is
             behind it, and a way to narrow it. Both were in the page's header
@@ -1483,7 +1502,11 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
         </div> : null}
         {!open && shelfLoadFailed ? <p className="waka-over-status" role="alert">{say('worldDeletedLoadFailed')} <button type="button" onClick={() => void loadShelf()}>{say('worldRetry')}</button></p> : null}
         {/* The row divides nothing until there are two things to divide into. */}
-        {!open && phase === "ready" && (categories.length > 1 || (shelf.length > 0 && !focus)) ? (
+        {/* NO ALL / DELETED TABS (founder, 2026-11-26: "i dont like all and
+            deleted as categories like this ... taking up so much space").
+            Trash is a row at the list's end; tabs stand only for real
+            categories, and only while there are two. */}
+        {!open && !shelfOn && phase === "ready" && categories.length > 1 ? (
           <div className="waka-tabs" role="tablist" aria-label={say("worldInspirationsCategories")}>
             <button
               type="button"
@@ -1506,22 +1529,6 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
                 {name}
               </button>
             ))}
-            {/* THE SHELF IS THE LAST TAB, and only while something is on it.
-                It is a view of the same list rather than a new place, so it
-                lives where the list's other views do. */}
-            {/* Not while the list is a claim's sources: the shelf cannot be
-                shown inside that filter, so its tab would do nothing. */}
-            {shelf.length > 0 && !focus ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={shelfOn}
-                className={`waka-tab waka-tab--shelf${shelfOn ? " waka-tab--on" : ""}`}
-                onClick={() => { setOnShelf(true); setForgetting(null); setShelfFailed(false); }}
-              >
-                {say("worldDeletedShelf")}
-              </button>
-            ) : null}
           </div>
         ) : null}
 
@@ -1617,8 +1624,8 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
                   mic on a saved note writes what you say into its words,
                   in the listening view the notepad and a chat use, and Done
                   drops them into the page as text. */}
-              {dictation.listening ? <ListeningView locale={locale} words={draft}
-                onDone={() => dictation.stop()} /> : <textarea
+              {dictation.active ? <ListeningView locale={locale} words={draft}
+                onDone={() => dictation.stop()} dictation={dictation} /> : <textarea
                 className="jar-panel-text waka-note-page"
                 /* UNTIL THE FULL TEXT ARRIVES the list's preview stands in,
                    read-only, so the page does not open blank — and nothing
@@ -1714,7 +1721,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
           <div className="waka-list waka-shelf">
             <p className="waka-over-what">{say("worldDeletedKeptFor")}</p>
             {shelfFailed ? <p className="waka-over-status" role="alert">{say("worldDeletedBackFailed")}</p> : null}
-            {shelfShown.length === 0 ? (
+            {shelfShown.length === 0 && !shelf.length ? null : shelfShown.length === 0 ? (
               <p className="waka-over-status">{say("worldInspirationsNoHits")} <button type="button" className="waka-over-retry" onClick={resetFilters}>{say('worldClearFilters')}</button></p>
             ) : (
               <ul className="waka-list-rows">
@@ -1792,7 +1799,10 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
              the header where it always is. */
           <p className="waka-over-status">
             {say(focus ? "worldClaimFromGone" : "worldInspirationsNoHits")}
-            {(query || category || focus) ? <> <button type="button" className="waka-over-retry" onClick={resetFilters}>{say('worldClearFilters')}</button></> : null}
+            {/* A search alone is cleared as a search, in plain words on the
+                sentence's line (audit, 2026-11-26: "Clear filters" with no
+                filters, as an outlined pill). */}
+            {(query || category || focus) ? <> <button type="button" className="waka-over-clear" onClick={resetFilters}>{say(query && !category && !focus ? 'worldClearSearch' : 'worldClearFilters')}</button></> : null}
           </p>
         ) : (
           /* ═══ THE ARCHIVE READS AS A NOTES LIST ════════════════════════
@@ -1924,16 +1934,15 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
             in the same type the bar's states use, with the way back beside
             it — the bar itself only exists while a note is open, and the
             note is what just went. */}
-        {!open && undoable ? (
-          <p className="waka-over-undo" role="status">
-            {say("worldDeletedOne")}
-            <button ref={undoButton} type="button" className="waka-dock-undo" onClick={undoErase}>{say("worldUndo")}</button>
-          </p>
-        ) : !open && eraseFailed ? (
+        {/* NO UNDO TOAST (founder, 2026-11-26: "lets not have deleted undo.
+            instead lets have a trash place and it is truly gone after 30
+            days"): a delete goes to Trash, where Restore is. */}
+        {!open && eraseFailed ? (
           <p className="waka-over-undo" role="alert">{say("worldDeleteFailed")}</p>
         ) : null}
       </DialogSurface>
       {shareOf ? <ShareSheet target={shareOf} locale={locale} onClose={() => setShareOf(null)} /> : null}
     </div>
+    </>
   );
 }

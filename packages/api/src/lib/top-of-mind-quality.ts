@@ -165,6 +165,9 @@ export async function reviewReadingEntries(
       ...(!verdict.languageMatches ? ['language'] : []),
       ...(!verdict.grounded ? ['grounding'] : []),
       ...(!verdict.synthesized ? ['synthesis'] : []),
+      /* SPECIFIC OR SILENT (insight goal, phase 2): a line true of anyone
+         is a horoscope, and publishing it costs the reading its trust. */
+      ...(verdict.specific === false ? ['generic'] : []),
       ...(!ids.every(id => entry.inspirationIds.includes(id)) ? ['foreign_source'] : []),
       ...(distinctReadingOrigins(['review'], { ...context, signalOrigins: supporting }) < 2 ? ['single_source'] : []),
     ];

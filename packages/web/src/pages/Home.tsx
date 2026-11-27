@@ -107,6 +107,10 @@ import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
+import { askSaveQuestion, readSaveQuestion, fetchWeeklyLine, type ApiWeeklyLine } from '../lib/api';
+import { WeeklyCard } from '../components/WeeklyCard';
+import { answerHunch, fetchHunch, type ApiHunch } from '../lib/api';
+import { feel } from '../lib/haptics';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
 import { wordsCanStand } from '../lib/note-words';
 import { inspirationPreview } from '../lib/inspiration-preview';
@@ -131,7 +135,7 @@ import { canKeep, KEEP_FILE_LIMIT, whyNotKept, type KeepReadiness } from "../lib
 import { dictationAvailable, useDictation } from "../lib/use-dictation";
 import { useImageWords } from "../lib/use-image-words";
 import { bubbleStayMs } from "../lib/kept-bubble";
-import { PrinciplesOverlay } from "../components/PrinciplesOverlay";
+import { PrinciplesOverlay, PrinciplesSpark } from "../components/PrinciplesOverlay";
 import { useOpenClaimsLink } from "../lib/open-claims-link";
 import { InspirationReviewCard } from "../components/InspirationReviewCard";
 import { listInspirationReviews } from "../lib/api";
@@ -1087,6 +1091,10 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const promptScope = `${storageScope?.accountId ?? ''}:${spaceKey(atWall)}`;
   const [promptChoice, setPromptChoice] = useState<{ scope: string; kind: CompanionPrompt }>(() => ({ scope: promptScope, kind: 'reading' }));
   const promptChoiceRef = useRef(promptChoice);
+  /* YOUR WEEK, IN ONE LINE (insight goal, phase 5): offered once a week by
+     the creature in the reading's place, and opened as a card. */
+  const [weekOffer, setWeekOffer] = useState<ApiWeeklyLine | null>(null);
+  const [weekCard, setWeekCard] = useState<ApiWeeklyLine | null>(null);
   /**
    * ═══ NOTHING SPEAKS WHILE THE CREATURE IS CHANGING FORM ════════════════
    *
@@ -1129,6 +1137,11 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   // The glow settles after a tap; the chosen invitation stays until the
   // next tap or navigation. Agent profiles never offer to save on their behalf.
   const [lit, setLit] = useState(false);
+  /* A tap on the creature asks the bar to answer (`barBeckon` counts the
+     taps); the bar lights only when what the creature then says is asking
+     for a save, and only right then (`beckonLit`, when it was decided). */
+  const [barBeckon, setBarBeckon] = useState(0);
+  const [beckonLit, setBeckonLit] = useState<{ n: number; at: number; to: 'save' | 'chat' | 'star' }>({ n: 0, at: 0, to: 'save' });
   const litTimer = useRef<number | null>(null);
   /* BOTH OF THE PRESS'S TIMERS, not just the glow's. A press starts two:
      `litTimer` for the glow, and the grace timer in `sayTheWeather` that
@@ -1647,7 +1660,12 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      The next tap on the creature asks for it again, quietly (see
      `creatureSpeaks`), so a queue that comes back is asked about then. */
   const reviewRetry = reviewLoadFailed && !offline && atWall.kind === 'self';
-  const companionPrompt = promptChoice.scope !== promptScope || (promptChoice.kind === 'review' && !canOfferReview)
+  /* NO "YOU HAVE N SAVED" LINE (founder, 2026-11-26, from the simplicity
+     audit): the handle and a reading's "From n inspirations" already open
+     the list, so a third way in was one too many. */
+  const promptLines = useMemo<CompanionPrompt[]>(() => ['reading', ...(canOfferReview ? ['review' as const] : []),
+    'activity', 'principles'], [canOfferReview]);
+  const companionPrompt = promptChoice.scope !== promptScope || !promptLines.includes(promptChoice.kind)
     ? 'reading' : promptChoice.kind;
   promptChoiceRef.current = { scope: promptScope, kind: companionPrompt };
   const viewOpen = viewNavigation.view?.open ?? null;
@@ -1992,12 +2010,102 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     !viewNavigation.view?.compose && !viewNavigation.view?.sharePrinciple && !viewNavigation.view?.principleId;
   // One deliberate cycle, with no timer advancing the invitation. Keep the
   // cursor synchronous so rapid taps cannot replay the same choice.
-  const creatureSpeaks = useCallback(() => {
+  /* "NOT QUITE" ON A READING (insight goal, phase 4). The answer goes in as
+     "partly" with the person's words, which the server already turns into an
+     immediate re-read that must honour them; home asks for the reading again
+     until it changes, and says so if it takes long. */
+  const [notQuite, setNotQuite] = useState<null | { entryId: string; old: string; phase: 'asking' | 'thinking' | 'slow' }>(null);
+  const notQuiteTimers = useRef<number[]>([]);
+  useEffect(() => () => notQuiteTimers.current.forEach(id => window.clearTimeout(id)), []);
+  const sendNotQuite = useCallback((text: string) => {
+    setNotQuite(was => was && { ...was, phase: 'thinking' });
+    const entryId = notQuiteRef.current?.entryId;
+    if (!entryId) return;
+    void createFeedback({ targetType: 'top_of_mind_entry', targetId: entryId, value: 'partly', correctionText: text })
+      .catch(() => undefined);
+    /* Ask for the latest reading, not the version on screen. */
+    for (let at = 4_000; at <= 88_000; at += 4_000) notQuiteTimers.current.push(window.setTimeout(() => {
+      readingNeedsLatestRef.current = true; verifyReadingRef.current(true);
+    }, at));
+    notQuiteTimers.current.push(window.setTimeout(() => setNotQuite(was => was && { ...was, phase: 'slow' }), 90_000));
+    notQuiteTimers.current.push(window.setTimeout(() => setNotQuite(null), 96_000));
+  }, []);
+  const notQuiteRef = useRef(notQuite); notQuiteRef.current = notQuite;
+  /* The new reading landed: its words differ from the ones answered. */
+  useEffect(() => {
+    if (!notQuite || notQuite.phase === 'asking' || !lead) return;
+    if (lead.body !== notQuite.old) { notQuiteTimers.current.forEach(id => window.clearTimeout(id)); notQuiteTimers.current = []; setNotQuite(null); }
+  }, [lead, notQuite]);
+  /* ═══ A HUNCH FROM THE FIRST SAVES (insight goal, phase 3; canvas "A
+     hunch") ═══ Before a reading exists, the creature's main bubble guesses
+     out loud and asks "Am I close?". Yes thanks the person and the reading is
+     asked for at once; Not quite asks "What's closer?", the answer is typed
+     in the bar (the same `answer` the reading's Not quite uses), the old line
+     stands struck through while it rethinks, and the new hunch takes its
+     place. Written by the server after a save, so home asks again for a
+     little while after each save and each answer. */
+  const [hunch, setHunch] = useState<ApiHunch | null>(null);
+  const [hunchStep, setHunchStep] = useState<null | { phase: 'asking' | 'thinking' | 'thanks'; old: string }>(null);
+  const hunchProfile = !standingAsAgent && !offline && storageScope ? storageScope.profileId : null;
+  const hunchPolls = useRef(0);
+  /** Asks for the hunch now and every 2.5s until one other than `notId` is there (or a reading is). */
+  const pollHunch = useCallback((notId: string | null, tries = 12) => {
+    if (!hunchProfile) return;
+    const run = ++hunchPolls.current;
+    const ask = (left: number) => {
+      if (run !== hunchPolls.current) return;
+      void fetchHunch({ profile: hunchProfile }).then(next => {
+        if (run !== hunchPolls.current) return;
+        if (next && next.id !== notId) { setHunch(next); setHunchStep(null); return; }
+        if (!next && notId === null) setHunch(null);
+        if (left > 1) window.setTimeout(() => ask(left - 1), 2_500);
+      }).catch(() => { if (left > 1) window.setTimeout(() => ask(left - 1), 2_500); });
+    };
+    ask(tries);
+  }, [hunchProfile]);
+  useEffect(() => () => { hunchPolls.current += 1; }, []);
+  /* On arrival, and after each save while there is no reading yet. */
+  const savedCount = inspirations ? inspirations.length + fieldBeyond : null;
+  /* One ask on arrival; after a NEW save, keep asking while the job writes
+     (code review, 2026-11-26: a first save asked once, found nothing yet,
+     and the hunch never showed until the next save or a reload). */
+  const countSeen = useRef<number | null>(null);
+  useEffect(() => {
+    if (!hunchProfile || lead || savedCount === null || savedCount === 0) return;
+    const grew = countSeen.current !== null && savedCount > countSeen.current;
+    countSeen.current = savedCount;
+    pollHunch(hunchRef.current?.id ?? null, grew || hunchRef.current ? 12 : 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hunchProfile, savedCount, Boolean(lead)]);
+  const hunchRef = useRef(hunch); hunchRef.current = hunch;
+  /* A reading arriving ends the hunch: the reading is what the creature says. */
+  useEffect(() => { if (lead) { hunchPolls.current += 1; setHunch(null); setHunchStep(null); } }, [lead]);
+  const answerHunchYes = useCallback(() => {
+    const current = hunchRef.current;
+    if (!current || !hunchProfile) return;
+    setHunchStep({ phase: 'thanks', old: current.body });
+    void answerHunch(current.id, { answer: 'yes' }, { profile: hunchProfile }).catch(() => setHunchStep(null));
+    for (let at = 4_000; at <= 60_000; at += 4_000) window.setTimeout(() => {
+      readingNeedsLatestRef.current = true; verifyReadingRef.current(true);
+    }, at);
+    window.setTimeout(() => { if (hunchRef.current?.id === current.id) { setHunch(null); setHunchStep(null); } }, 62_000);
+  }, [hunchProfile]);
+  const sendHunchCorrection = useCallback((text: string) => {
+    const current = hunchRef.current;
+    if (!current || !hunchProfile) return;
+    setHunchStep({ phase: 'thinking', old: current.body });
+    void answerHunch(current.id, { answer: 'not_quite', correction: text }, { profile: hunchProfile })
+      .then(() => pollHunch(current.id, 24))
+      .catch(() => setHunchStep(null));
+  }, [hunchProfile, pollHunch]);
+  /** The next line, or the one a dot names. */
+  const creatureSpeaks = useCallback((to?: CompanionPrompt) => {
     if (!atNowView || reviewing) return;
+    /* A tap moves past the week's offer; it was made once this week. */
+    setWeekOffer(null);
     if (reviewRetry) loadClaims();
-    const choices: CompanionPrompt[] = ['reading', ...(canOfferReview ? ['review' as const] : []), 'activity', 'principles'];
     const current = promptChoiceRef.current.scope === promptScope ? promptChoiceRef.current.kind : 'reading';
-    const next = choices[(choices.indexOf(current) + 1) % choices.length]!;
+    const next = to && promptLines.includes(to) ? to : promptLines[(promptLines.indexOf(current) + 1) % promptLines.length]!;
     promptChoiceRef.current = { scope: promptScope, kind: next };
     setPromptChoice(promptChoiceRef.current);
     speechEpoch += 1;
@@ -2005,10 +2113,13 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     if (graceTimer.current !== null) { window.clearTimeout(graceTimer.current); graceTimer.current = null; }
     setCharSay('');
     setLit(true);
+    setBarBeckon(n => n + 1);
+    simApiRef.current?.flourish();
+    feel('light');
     if (litTimer.current !== null) window.clearTimeout(litTimer.current);
     litTimer.current = window.setTimeout(() => setLit(false), LIT_MS);
     if (next === 'activity' && sayLineRef.current) sayTheWeatherRef.current(sayLineRef.current);
-  }, [atNowView, reviewing, canOfferReview, reviewRetry, loadClaims, promptScope, setCharSay]);
+  }, [atNowView, reviewing, promptLines, reviewRetry, loadClaims, promptScope, setCharSay]);
   useEffect(() => {
     if (atNowView && !reviewing && promptChoice.scope === promptScope) return;
     speechEpoch += 1;
@@ -2415,6 +2526,8 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     settleMs: NAME_SETTLE_MS,
   });
   const settingsCard = auth ? {
+    /* Trash opens the Inspirations page on its deleted view. */
+    onOpenTrash: () => { listViews.inspirations.onShelf = true; openOverHome('saves'); },
     name: settingsWrites.name,
     nameBusy: settingsWrites.nameBusy,
     localeBusy: settingsWrites.localeBusy,
@@ -3179,7 +3292,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
           .filter((sentence) => sentence.text !== "the sky held")
           .filter(
             (sentence) =>
-              sentence.backing !== "signals" && sentence.backing !== "signal_evidence",
+              sentence.backing !== "signals" && sentence.backing !== "signal_evidence" &&
+              /* Nor the reading's own versions (audit, 2026-11-26: "your top
+                 of mind was written for the first time" is plumbing too). */
+              sentence.backing !== "top_of_minds",
           )
           .map((sentence, i) => ({ sentence, i }))
           .sort(
@@ -3198,9 +3314,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
            `asSentence` — and note that `capitalized.test.ts` cannot see
            these at all, because they are assembled on the server rather
            than drawn from the catalogue it reads. */
-        const lines = spoken.map(
-          (x) => asSentence(`${x.sentence.text} ${day?.label ?? "today"}.`, localeRef.current),
-        );
+        /* KOREAN PUTS THE DAY FIRST (audit, 2026-11-26: "기억 3개를 간직했어요
+           오늘." read as broken): "오늘 3개 저장했어요." */
+        const lines = spoken.map((x) => asSentence(localeRef.current === 'ko-KR'
+          ? `${day?.label ?? "오늘"} ${x.sentence.text}.`
+          : `${x.sentence.text} ${day?.label ?? "today"}.`, localeRef.current));
         settle();
         const dayKey = new Date(Date.now() - (day?.daysAgo ?? 0) * 86_400_000).toISOString().slice(0, 10);
         if (lines.length) speak(lines, dayKey);
@@ -3212,6 +3330,26 @@ const RETRY_READ_LIMIT_MS = 20_000;
   sayTheWeatherRef.current = sayTheWeather;
   /* The loop is built once and must call the CURRENT rotation, the same
      reason every other seam in this file reaches through a ref. */
+  /* THE LIGHT GOES WHERE THE LINE POINTS (founder, 2026-11-20: "nothing
+     saved yet -> save an inspiration should highlight; chat about it -> chat
+     button should highlight; mentioning principle -> star on right could be
+     bigger and spark brighter"). A line marks what it invites with
+     `data-invites`; read off what the bubble now shows, a frame after the tap
+     and again once a slower line has landed. A line inviting nothing (See
+     all) lights nothing, and a return from a page never lights anything,
+     since only a tap moves `barBeckon`. */
+  useEffect(() => {
+    if (!barBeckon) return undefined;
+    let done = false;
+    const look = () => {
+      const to = document.querySelector<HTMLElement>('.jar-char-bubble[data-invites], .jar-char-bubble [data-invites]')?.dataset.invites;
+      if (done || (to !== 'save' && to !== 'chat' && to !== 'star')) return;
+      done = true; setBeckonLit({ n: barBeckon, at: Date.now(), to });
+    };
+    const frame = requestAnimationFrame(look);
+    const later = window.setTimeout(look, 350);
+    return () => { cancelAnimationFrame(frame); window.clearTimeout(later); };
+  }, [barBeckon]);
   const creatureSpeaksRef = useRef(creatureSpeaks);
   creatureSpeaksRef.current = creatureSpeaks;
 
@@ -5049,6 +5187,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           /* Each save is its own "Kept", even when the words are the same. */
           setKeptSaves(n => n + 1);
           setCharSay(atWallRef.current.kind === 'self' ? say('worldBubbleKept') : formatMessage(locale, 'worldSavedToProfile', { name: atWallRef.current.name }));
+          feel('success');
         }
         if (initiated) setShareArrived(false);
         if (initiated && closeAfterSave.current) { closeAfterSave.current = false; window.setTimeout(() => window.close(), 1700); }
@@ -5153,8 +5292,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
      result, which lands in the draft they are leaving behind. `abort` is
      for unmount, where there is nothing left to write into. */
   useEffect(() => {
-    if (!mouthOpen && dictation.listening) dictation.stop();
-  }, [mouthOpen, dictation.listening, dictation.stop]);
+    if (!mouthOpen && dictation.active) dictation.stop();
+  }, [mouthOpen, dictation.active, dictation.stop]);
 
   /* ═══ SAY IT: THE NOTEPAD, ALREADY LISTENING (design E1) ═══════════════
      The bar's Say it opens the notepad and starts the microphone as soon as
@@ -5932,6 +6071,30 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const id = window.setTimeout(() => { lineSince.current = { said: '', at: 0 }; replyLineRef.current = ''; setCharSay(""); }, stay);
     return () => window.clearTimeout(id);
   }, [charSay, companionPrompt, keptWaiting, keptSaves, replyBeat]);
+  /* ═══ IT ASKS ABOUT WHAT YOU SAVED (founder, 2026-11-26: "this should
+     very clearly react to the content i saved, not generically do this") ═══
+     "Saved" stands at once; the server writes one question naming something
+     in this save, and it takes the bubble's line when it lands. Asked only
+     while that bubble is up, and only for a save with words. */
+  const [saveQuestion, setSaveQuestion] = useState<{ id: string; question: string } | null>(null);
+  const askAbout = charSay === say('worldBubbleKept') && !standingAsAgent && !offline && visibleInspiration?.text.trim() ? visibleInspiration.id : null;
+  useEffect(() => {
+    if (!askAbout) return undefined;
+    let live = true;
+    const profile = memoryScope?.profileId ? { profile: memoryScope.profileId } : {};
+    void (async () => {
+      try {
+        let answer = await askSaveQuestion(askAbout, profile);
+        for (let tries = 0; live && answer.phase === 'processing' && tries < 12; tries += 1) {
+          await new Promise(resolve => window.setTimeout(resolve, 1500));
+          if (live) answer = await readSaveQuestion(askAbout, profile);
+        }
+        if (live && answer.phase === 'ready') setSaveQuestion({ id: askAbout, question: answer.question });
+      } catch { /* the bubble keeps "Saved"; nothing generic stands in */ }
+    })();
+    return () => { live = false; };
+  }, [askAbout, memoryScope?.profileId]);
+  const keptQuestion = saveQuestion && saveQuestion.id === visibleInspiration?.id ? saveQuestion.question : null;
   /** What a chat about the save opens with: the note, and the words read. */
   const keptSubject = (kept: { id: string; text: string }) => {
     const read = keptWords?.status === 'ready' && kept.id === visibleInspiration?.id ? keptWords.text?.trim() : '';
@@ -7343,12 +7506,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
      scrolling, as drawn), each said by the save's own preview. */
   /* WHICH SAVES, before whether they are loaded: the first three cited, in
      the order the signals cite them. */
-  const whyIds = (entry: Entry | null): string[] => {
+  const whyIds = (entry: Entry | null, limit = 3): string[] => {
     const ids: string[] = [];
     for (const cited of entry?.citedSignals ?? []) {
       for (const id of signals?.find(row => row.id === cited.id)?.inspirationIds ?? []) {
         if (!ids.includes(id)) ids.push(id);
-        if (ids.length >= 3) return ids;
+        if (ids.length >= limit) return ids;
       }
     }
     return ids;
@@ -7437,7 +7600,24 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const [savesAsSheet, setSavesAsSheet] = useState(false);
   const savesOpen = viewNavigation.view?.open === 'saves';
   useEffect(() => { if (!savesOpen) setSavesAsSheet(false); }, [savesOpen]);
-  const openSheet = useCallback(() => { setSavesAsSheet(true); openOverHome('saves'); }, [openOverHome]);
+  const openSheet = useCallback(() => { setSavesAsSheet(true); openOverHome('saves'); feel('light'); }, [openOverHome]);
+  /* ONCE A WEEK, FROM SUNDAY (local time). The week is named by its Sunday;
+     the offer is remembered per profile, so it is made once, and only when
+     the server has something true to say (`fetchWeeklyLine` is null else). */
+  const weekScope = phase === 'ready' && atWall.kind === 'self' && !offline ? storageScope : null;
+  useEffect(() => {
+    if (!weekScope) return undefined;
+    const sunday = new Date(); sunday.setDate(sunday.getDate() - sunday.getDay());
+    const weekKey = `${sunday.getFullYear()}-${sunday.getMonth() + 1}-${sunday.getDate()}`;
+    if (readProfileText(weekScope, 'week:offered') === weekKey) return undefined;
+    const ask = new AbortController();
+    void fetchWeeklyLine({ profile: weekScope.profileId }, ask.signal).then(week => {
+      if (!week || ask.signal.aborted) return;
+      writeProfileText(weekScope, 'week:offered', weekKey);
+      setWeekOffer(week);
+    }).catch(() => undefined);
+    return () => ask.abort();
+  }, [weekScope]);
   /* ═══ THE NOTE BAR'S PARTS (design E3, Writing, PhotoNote) ═══════════════
      They stood in the dock's middle group; the notepad draws them now, in a
      slim row UNDER its words so the words get the whole width — mic on the
@@ -7497,12 +7677,28 @@ const RETRY_READ_LIMIT_MS = 20_000;
      well"): the Save glyph, full ink when there is something to save, dim
      when there is not, named Save for a screen reader. It says why it
      cannot be pressed, as the chat's Send does. */
+  /* ═══ SAVE, AND SAVE AS DRAFT BESIDE IT (founder, 2026-11-26: "add clear
+     save as draft option on this page. perhaps dropdown arrow next to save
+     button and have save as draft as text") ═══ The arrow opens one word
+     above it; the draft keeps the words and goes home. */
+  const [draftMenu, setDraftMenu] = useState(false);
+  useEffect(() => { if (!mouthOpen) setDraftMenu(false); }, [mouthOpen]);
   const noteBarSave = (
-    <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save waka-note-bar-action"
-      aria-label={say('worldKeep')}
-      title={whyNotKeeping ? say(whyNotKeeping) : say('worldKeep')}
-      disabled={!composerCanKeep}
-      onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep" /></button>
+    <span className="waka-save-split">
+      <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save waka-note-bar-action"
+        aria-label={say('worldKeep')}
+        title={whyNotKeeping ? say(whyNotKeeping) : say('worldKeep')}
+        disabled={!composerCanKeep}
+        onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep" /></button>
+      <button type="button" className="waka-save-more" aria-label={say('worldLeaveKeepDraft')} aria-haspopup="menu" aria-expanded={draftMenu}
+        disabled={!composerHasWords} onClick={() => setDraftMenu(open => !open)}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {draftMenu ? <span className="waka-save-menu" role="menu"
+        onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setDraftMenu(false); } }}>
+        <button type="button" role="menuitem" autoFocus onClick={() => { setDraftMenu(false); saveAsDraft(); }}>{say('worldLeaveKeepDraft')}</button>
+      </span> : null}
+    </span>
   );
   const noteBarState = (<>
                 {/* (Dictation has no line here: while it listens the bar is
@@ -9297,13 +9493,17 @@ const RETRY_READ_LIMIT_MS = 20_000;
               walks there, the same walk the creature's drag takes. Light
               only, no arrow and no word. Always there on your own home
               (founder, 2026-11-19: "yes always shown"); with no principle
-              yet, the walk ends on the page that says how they come. */}
+              yet, the walk ends on the page that says how they come. The
+              founder kept this spark over an asterisk with a name under it
+              (2026-11-20: "I like the old star design, I don't want to say
+              principles there"). */}
           {homeChromeShown && atWall.kind === 'self' && !offline ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M12 1.5 13.6 10.4 22.5 12 13.6 13.6 12 22.5 10.4 13.6 1.5 12 10.4 10.4Z" fill="currentColor" />
-              </svg>
+              {/* A line about principles makes the star swell and flare. */}
+              {beckonLit.to === 'star' && beckonLit.n && Date.now() - beckonLit.at < 1700
+                ? <span key={beckonLit.n} className="waka-principles-spark-beckon"><PrinciplesSpark /></span>
+                : <PrinciplesSpark />}
             </button>
           ) : null}
           {/* Taps change the invitation on this profile; dragging right
@@ -9349,7 +9549,35 @@ const RETRY_READ_LIMIT_MS = 20_000;
               }}
             />
           ) : null}
-          {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
+          {/* HOW MANY THINGS IT HAS TO SAY, AND WHICH ONE THIS IS. Founder
+              meeting, 2026-11-20: "it's not very intuitive that you have to
+              keep tapping on it and it changes the dialog." One dot per
+              line a tap steps through, the current one lit, so the next
+              tap reads as the next line before it is pressed. Light only. */}
+          {!backgroundHidden && !mouthOpen && !reviewing && atNowView && homeChromeShown ? (() => {
+            return (
+              <span className="jar-char-lines" data-jar-chrome="1" data-jar-interactive="1">
+                {promptLines.map((kind, index) => <button key={kind} type="button" className="jar-char-line-go"
+                  aria-label={formatMessage(locale, 'worldCreatureLine', { n: index + 1, count: promptLines.length })}
+                  aria-current={kind === companionPrompt ? 'true' : undefined}
+                  onClick={() => creatureSpeaks(kind)}>
+                  <span className={kind === companionPrompt ? 'jar-char-line jar-char-line--on' : 'jar-char-line'} />
+                </button>)}
+              </span>
+            );
+          })() : null}
+          {weekOffer && !(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
+            /* THE WEEK, OFFERED IN THE READING'S PLACE, once. */
+            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
+              <span className="jar-char-bubble-body">
+                <span className="jar-char-bubble-reading" role="status">{say('worldWeekOffer')}</span>
+                <span className="jar-char-bubble-acts">
+                  <button type="button" className="jar-char-bubble-act" onClick={() => { setWeekCard(weekOffer); setWeekOffer(null); }}>{say('worldWeekSeeIt')}</button>
+                </span>
+              </span>
+            </div>
+          ) : null}
+          {!weekOffer && !(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
             <>
               {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over
                   there and being offered "Feeling inspired? Save one.":
@@ -9445,6 +9673,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                    through `charSay`, which is always the lighter weight. */
                 <div
                   className={`jar-char-bubble${(lead && !standingAsAgent) || agentSays ? ' jar-char-bubble--reading' : ''}`}
+                  data-invites={standingAsAgent || agentSays ? undefined : lead ? 'chat' : hunch ? undefined : 'save'}
                   data-jar-chrome="1"
                   /* Both states of this bubble are pressable — a reading and
                      the empty line — so the flag is unconditional. */
@@ -9552,14 +9781,39 @@ const RETRY_READ_LIMIT_MS = 20_000;
                          re-reads the reading returns early on
                          `atWall.kind !== "self"`. So the data layer and the
                          empty state both knew; only the sentence did not. */
-                      lead && !standingAsAgent ? (
+                      lead && !standingAsAgent && notQuite ? (
+                        /* ═══ NOT QUITE, IN FRONT OF YOU (insight goal,
+                           phase 4; canvas "Not quite") ═══ It asks one
+                           thing, the answer is typed in the bar, then the
+                           old line stands struck through while it rethinks
+                           and the new reading takes its place when it lands. */
+                        notQuite.phase === 'asking'
+                          ? <span className="jar-char-bubble-reading" role="status">{say('worldReadingCloser')}</span>
+                          : <>
+                            <span className="waka-reading-old">{notQuite.old}</span>
+                            <span className="jar-char-bubble-reading" role="status">{say(notQuite.phase === 'slow' ? 'worldReadingRethinkSlow' : 'worldReadingRethinking')}</span>
+                          </>
+                      ) : lead && !standingAsAgent ? (
                         <>
                           <ReadingBubbleText key={atWall.kind === 'agent' ? atWall.id : 'human'} text={lead.body} locale={locale}
                             why={whyFor(lead)}
-                            onWhy={() => chatOn({ ask: lead.body, turn: true, whyOf: lead,selection:{locale,text:lead.body,source:{kind:'top_of_mind_entry',id:lead.id,why:true,supportIds:whyIds(lead)}} })}
+                            /* ═══ "FROM 3 INSPIRATIONS" IS THE WHY (insight
+                               goal, phase 1; founder, 2026-11-26, of saves
+                               as chips beside Why?: "so many action buttons
+                               in a small space") ═══ One act names how many
+                               saves the read rests on and opens exactly
+                               those, in the sheet; Chat about this is the
+                               conversation. */
+                            whyLabel={formatMessage(locale, 'worldReadingFromCount', { count: whyIds(lead, Infinity).length })}
+                            onWhy={() => {
+                              const ids = whyIds(lead, Infinity);
+                              setSavesFocus({ label: formatMessage(locale, 'worldReadingFromCount', { count: ids.length }), ids });
+                              openSheet();
+                            }}
                             details={storageScope && !offline ? { profileId: storageScope.profileId, onMutation: beginReadingMutation,
                               onUpdated: () => verifyReadingRef.current(true) } : undefined}
                             onChat={() => chatOn({ ask: lead.body, turn: true,selection:{locale,text:lead.body,source:{kind:'top_of_mind_entry',id:lead.id}} })} chatDisabled={talking}
+                            onNotQuite={storageScope && !offline ? () => setNotQuite({ entryId: lead.id, old: lead.body, phase: 'asking' }) : undefined}
                             onShare={storageScope && !offline ? () => setThingShare({
                               kind: "topOfMind", text: lead.body,
                               proof: formatMessage(locale, "worldShareOnMyMind", { date: dateStamp(Date.now(), locale) }),
@@ -9617,7 +9871,25 @@ const RETRY_READ_LIMIT_MS = 20_000;
                            is the notepad. The offer ("Feeling inspired?
                            Save it.") and this line are the two that name
                            it, and they go to the same place. */
-                        tentativeClaim ? (
+                        hunch && !standingAsAgent ? (
+                          /* ═══ A HUNCH (insight goal, phase 3) ═══ See
+                             `pollHunch`: asked, then answered in place. */
+                          hunchStep?.phase === 'asking'
+                            ? <span className="jar-char-bubble-reading" role="status">{say('worldReadingCloser')}</span>
+                            : hunchStep?.phase === 'thinking' ? <>
+                              <span className="waka-reading-old">{hunchStep.old}</span>
+                              <span className="jar-char-bubble-reading" role="status">{say('worldReadingRethinking')}</span>
+                            </> : hunchStep?.phase === 'thanks'
+                              ? <span className="jar-char-bubble-reading" role="status">{say('worldHunchThanks')}</span>
+                              : <>
+                                <span className="jar-char-bubble-reading">{hunch.body}</span>
+                                <span className="jar-char-bubble-acts">
+                                  <button type="button" className="jar-char-bubble-act" onClick={answerHunchYes}>{say('worldBubbleYes')}</button>
+                                  <button type="button" className="jar-char-bubble-act"
+                                    onClick={() => setHunchStep({ phase: 'asking', old: hunch.body })}>{say('worldReadingNotQuite')}</button>
+                                </span>
+                              </>
+                        ) : tentativeClaim ? (
                           /* ═══ "I MIGHT BE NOTICING" (design F3, from #463) ═══
                              No read yet, but a pattern is forming. The bubble
                              says it tentatively and the only acts are the
@@ -9664,7 +9936,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             </>
           ) : null}
           {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'principles' ? (
-            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
+            <div className="jar-char-bubble" data-invites="star" data-jar-chrome="1" data-jar-interactive="1">
               <span className="jar-char-bubble-body">
                 <span className="jar-char-bubble-reading" role="status">{say('worldCompanionPrinciplesPrompt')}</span>
                 <span className="jar-char-bubble-acts">
@@ -9719,7 +9991,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   <span className="jar-char-bubble-of">{say('worldBubbleKept')}</span>
                   <span className="jar-char-bubble-reading" role="status">{keptWords.status === 'ready' && keptWords.text ? `“${keptWords.text}”`
                     : say('worldReadWordsReading')}</span>
-                </> : <span className="jar-char-bubble-reading" role="status">{companionLine}</span>}
+                </> : <span className="jar-char-bubble-reading" role="status">{
+                  /* A SAVE OPENS A CONVERSATION, IT DOES NOT END ONE. Founder
+                     meeting, 2026-11-20: "after you save something it should
+                     prompt the user to chat more about it, not save it, end."
+                     So a save with words is answered with a question, and
+                     the act under it is the chat about it. */
+                  charSay === say('worldBubbleKept') && keptQuestion ? `${say('worldBubbleKept')}. ${keptQuestion}` : companionLine}</span>}
                 {/* ═══ CHAT WHEN THERE IS SOMETHING, SAVE WHEN THERE IS NOT ══
                     Founder, of "Quiet lately — Let's talk about it":
                     "determine when it's appropriate to say 'lets chat about
@@ -9742,13 +10020,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
                      (E5); See all pulls up the saves. A keep with no words
                      has nothing to talk about yet, so it offers See all. */
                   <span className="jar-char-bubble-acts">
-                    {visibleInspiration && keptSubject(visibleInspiration).text ? <button type="button" className="jar-char-bubble-act"
+                    {visibleInspiration && keptSubject(visibleInspiration).text ? <button type="button" className="jar-char-bubble-act" data-invites="chat"
                       disabled={talking}
                       onClick={() => { const kept = keptSubject(visibleInspiration); chatOn({ quote: kept.text, inspirationId: kept.id || undefined,selection:{locale,text:kept.text,source:{kind:'inspiration',id:kept.id,...(keptWords?.status==='ready'&&keptWords.text?.trim()&&keptImageId?{imageId:keptImageId}:{})}} }); }}>
                       {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
                     </button> : null}
-                    <button type="button" className="jar-char-bubble-act"
-                      onClick={() => { setCharSay(''); openSheet(); }}>{say('worldBubbleSeeAll')}</button>
+                    {/* NO SEE ALL (founder, 2026-11-26: "see all also doesnt
+                        seem necessary to have as CTA"): the handle is there. */}
                   </span>
                 ) : charSay !== '' && charSay === replyLineRef.current ? (
                   /* A REPLY TO YOUR ANSWER ENDS THERE: a chat opening on "I'll
@@ -9758,7 +10036,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 ) : sayIsAboutNothing(charSay) ? (
                   standingAsAgent ? null : (
                     <span className="jar-char-bubble-acts">
-                      <button type="button" className="jar-char-bubble-act"
+                      <button type="button" className="jar-char-bubble-act" data-invites="save"
                         onClick={startNewInspiration}>
                         {say('worldBubbleActAdd')}
                       </button>
@@ -9766,7 +10044,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                   )
                 ) : (
                   <span className="jar-char-bubble-acts">
-                    <button type="button" className="jar-char-bubble-act"
+                    <button type="button" className="jar-char-bubble-act" data-invites="chat"
                       disabled={talking}
                       onClick={() => {
                         if (charSay) { chatOn({ ask: charSay, turn: true }); return; }
@@ -10110,7 +10388,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                 says it now ("I'm inspired!", with the chat as its act). */}
           </div>
         </div>
-        {mouthOpen ? <InspirationComposer noticeInDock key={memoryProfileId} owner={conversationProfile ? formatMessage(locale, "worldSavingToProfile", { name: conversationProfile.name }) : undefined} text={draft} media={inputMedia}
+        {mouthOpen ? <InspirationComposer noticeInDock key={memoryProfileId} owner={conversationProfile && conversationProfile.type !== 'human' ? formatMessage(locale, "worldSavingToProfile", { name: conversationProfile.name }) : undefined} text={draft} media={inputMedia}
           linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
           recordingCandidate={composerDraft.draft.recordingCandidate}
           onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => sayMouthProblem(draftProblem(reason))); }}
@@ -10130,7 +10408,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
           /* SPEECH HAS ITS OWN VIEW (founder, 2026-11-08): while dictation
              listens, the bar gives way to `ListeningView`; Done stops it and
              the words stand in the note as text. */
-          listening={dictation.listening ? { onDone: () => dictation.stop() } : undefined}
+          listening={dictation.active ? { onDone: () => dictation.stop(), dictation } : undefined}
           onRetryFile={id => { void retryDraftFile(id); }}
           onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
@@ -10158,7 +10436,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
           }}
           asking={leaveAsking} onStay={() => setLeaveAsking(false)}
           onClose={() => saveAsDraft()} onSubmit={() => { void keepIt(); }}
-          onPast={!inspirations || inspirations.length + fieldBeyond === 0 ? undefined : () => saveAsDraft(() => openOverHome('saves'))}
           onBack={backPage} gesture={viewNavigation.href}
           onKeyDown={onMouthKey} onForkDraft={() => { void forkDraftAndClear({ fork: composerDraft.fork,
             clearConflict: () => setMouthNoteState(note => (note.conflict ? { text: '', conflict: false } : note)),
@@ -11358,7 +11635,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
           `HomeBar`. It stands on home and nowhere else (nav system R7): every page
           leaves by its header's "<", and the notepad, a saved note and a
           chat write into the one `NoteBar`. */}
-      {phase === 'ready' && (atNowView || (savesOpen && savesAsSheet)) && !reviewing && !savedNoteOpen && !viewNavigation.view?.sharePrinciple ? (
+      {/* NOT OVER THE SHEET (founder, 2026-11-26: "hide buttons"): a sheet
+          is its own surface, and the bar drawn on it cluttered its foot. */}
+      {phase === 'ready' && atNowView && !reviewing && !savedNoteOpen && !viewNavigation.view?.sharePrinciple ? (
         <HomeBar locale={locale}
           /* THE SAME PILL ON AN AGENT'S WALL, saving into the agent (nav
              system: the Kept list's "Keep a thought" was the web's one way
@@ -11378,6 +11657,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
             photoDisabled: !composerDraft.available,
           }}
           onChat={() => openTalk(null)}
+          /* Fresh only: a bar mounted again later (back from Principles)
+             does not replay an old answer. */
+          beckon={beckonLit.n && Date.now() - beckonLit.at < 1700 && beckonLit.to !== 'star' ? { n: beckonLit.n, to: beckonLit.to } : undefined}
+          answer={notQuite?.phase === 'asking' ? { placeholder: say('worldReadingCloser'), onSend: sendNotQuite, onCancel: () => setNotQuite(null) }
+            : hunchStep?.phase === 'asking' ? { placeholder: say('worldReadingCloser'), onSend: sendHunchCorrection, onCancel: () => setHunchStep(null) }
+            : undefined}
           saved={barSaved}
           /* ON AN AGENT'S WALL THE PULL OPENS ITS ARCHIVE. The sheet reads
              your own field, so it is yours alone; the agent's saves are its
@@ -11448,6 +11733,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
         key={`${conversationScope?.accountId}:${conversationScope?.profileId}:${viewNavigation.view.principleId}`} scope={conversationScope ?? storageScope}
         id={viewNavigation.view.principleId} name={conversationProfile?.name??''} locale={locale} onClose={viewNavigation.closeShare}
         onChoose={id=>viewNavigation.write({...EMPTY_VIEW,wallId:viewNavigation.view?.wallId??null,section:'sky',principleId:id,sharePrinciple:true},{replace:true})}/>:null}
+      {weekCard ? (
+        /* It shares its own image, the line alone, never the saves' words. */
+        <WeeklyCard locale={locale} line={weekCard.line} from={weekCard.week.from} to={weekCard.week.to}
+          saves={weekCard.saveIds.length} onClose={() => setWeekCard(null)} />
+      ) : null}
       {thingShare ? (
         <ShareSheet target={thingShare} locale={locale} onClose={() => setThingShare(null)} />
       ) : null}
@@ -11503,7 +11793,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
         onNoteAddress={noteAddressChanged}
         key={`${conversationScope.accountId}:${conversationScope.profileId}:saves:${savesFocus?.ids.join(',') ?? ''}`}
         viewState={savesFocus ? undefined : listViews.inspirations}
-        scope={conversationScope} ownerName={conversationProfile.name}
+        /* Your own name is not said on your own pages (audit, 2026-11-26:
+           "look · Nov 26" read as a status); an agent's pages say whose. */
+        scope={conversationScope} ownerName={conversationProfile.type === 'human' ? undefined : conversationProfile.name}
         locale={locale} profileId={conversationScope.profileId}
         title={say('worldMenuField')}
         focus={savesFocus} onClearFocus={() => setSavesFocus(null)}
@@ -11518,7 +11810,6 @@ const RETRY_READ_LIMIT_MS = 20_000;
         /* ONE HANDLER FOR "<" AND ESCAPE: Back on an open note (to the list
            or the sheet), on a list opened from a chat (to the chat); Close
            otherwise (home). */
-        onNew={canWriteHere ? startNewInspiration : undefined}
         sheet={savesAsSheet}
         onBack={backPage} backKind="close" gesture={viewNavigation.href}/>:null}
       {storageScope&&(principlesOpen||walkingHome)?<PrinciplesOverlay
@@ -11528,7 +11819,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
         title={atWall.kind==='agent'?formatMessage(locale,'worldProfilePrinciples',{name:atWall.name}):say('worldPrinciplesShortcut')}
         whose={atWall.kind==='agent'?'agent':'own'}
         onNewSave={atWall.kind==='agent'?undefined:startNewInspiration}
-        newSaveLabel={say(composerHasWords ? 'worldContinueDraft' : 'worldDockSaves')}
+        /* Always the plain act here (audit, 2026-11-26: "Continue draft" on
+           Principles read like a bug); the notepad still opens on the draft. */
+        newSaveLabel={say('worldDockSaves')}
         onClose={closePage} gesture={principlesCrossing ? null : viewNavigation.href}
         /* Opening one REPLACES the overlay rather than stacking on it: the
            principle's own surface is the next thing to read, not a sheet on

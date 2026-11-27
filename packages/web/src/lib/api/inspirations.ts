@@ -106,6 +106,8 @@ export interface CreateReflectionRequest {
 
 export interface CreateInspirationRequest {
   fromConversation?:{conversationId:string;messageId:string;selectedText:string;adopted:boolean};
+  /** The question this save answers, when WAKA asked one (onboarding). */
+  prompt?: string;
   /* `{ type: 'file' }` (2026-10-15, `FILE_ATTACHMENT_CONTENT_TYPES` in
      `./file-accept`) is in the union now that the note composer has "Add
      file". There is no 'file' KIND, so a note whose attachments are files
@@ -315,6 +317,23 @@ export async function listDeletedInspirations(options: ProfileScoped = {}, signa
 /** Back under the same id and its original date; the reading runs again. */
 export async function restoreInspiration(id: string, options: ProfileScoped = {}): Promise<void> {
   await requestVoid(apiPath(`/inspirations/deleted/${encodeURIComponent(id)}/restore${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`), "POST", undefined, "Failed to bring this back");
+}
+
+/** The question asked right after a save, before any answer exists. */
+const AFTER_SAVE_REFLECTION_ID = "00000000-0000-0000-0000-000000000000";
+export type SaveQuestion = { phase: "idle" | "processing" | "failed" } | { phase: "ready"; question: string };
+
+/** Asks the creature's question about this save (founder, 2026-11-26: it should
+    "very clearly react to the content i saved, not generically"). Idempotent:
+    a second ask returns the job already running or its answer. */
+export async function askSaveQuestion(id: string, options: ProfileScoped = {}): Promise<SaveQuestion> {
+  return postJson<SaveQuestion>(apiPath(`/inspirations/${encodeURIComponent(id)}/reflection-question${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
+    { afterReflectionId: AFTER_SAVE_REFLECTION_ID }, "Failed to ask about this save");
+}
+
+export async function readSaveQuestion(id: string, options: ProfileScoped = {}): Promise<SaveQuestion> {
+  const query = new URLSearchParams({ afterReflectionId: AFTER_SAVE_REFLECTION_ID, ...(options.profile ? { profile: options.profile } : {}) });
+  return getJson<SaveQuestion>(apiPath(`/inspirations/${encodeURIComponent(id)}/reflection-question/status?${query}`), "Failed to read the question");
 }
 
 /** Off the shelf for good, before the thirty days are up. */
