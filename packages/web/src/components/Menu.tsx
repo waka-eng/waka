@@ -432,7 +432,6 @@ export function Menu({ locale, items, current, left, actions, account, settings,
               {/* THE PANEL OWNS ITS ONE HEADER: Close at its root, Back on a
                   sub-page (one level up). Escape calls the same handler. */}
               <SettingsPanel {...settings} locale={locale}
-                onOpenInfo={() => { void changeCorner('info'); }}
                 onBeforeLeave={guard => { settingsLeave.current = guard; }}
                 onBackHandler={handler => { settingsBack.current = handler; }}
                 email={account?.email ?? null}

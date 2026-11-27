@@ -13,6 +13,17 @@ export function HowItWorksPanel({ locale, onClose }: { locale: SupportedLocale; 
   return (
     <div className="waka-about" role="group" aria-label={say("worldHowItWorksTitle")}>
       <SurfaceHeader locale={locale} back={{ kind: "close", onBack: onClose }} title={say("worldHowItWorksTitle")} />
+      <HowItWorksBody locale={locale} />
+    </div>
+  );
+}
+
+/** The steps alone: Settings shows them as its own sub-page, under its own
+    header, so "<" goes back to Settings (founder, 2026-11-27: "there's no way
+    to go back. We can only close it and then open it again"). */
+export function HowItWorksBody({ locale }: { locale: SupportedLocale }): JSX.Element {
+  const say = (key: Parameters<typeof t>[1]) => t(locale, key);
+  return (
       <div className="waka-about-content">
       {/* STRIPPED: the lead line restating the title, and the "One
           companion, your memory" entry below. Founder, 2026-11-12:
@@ -27,6 +38,5 @@ export function HowItWorksPanel({ locale, onClose }: { locale: SupportedLocale; 
         <div><dt>{say("worldHowPrinciplesTitle")}</dt><dd>{say("worldHowPrinciplesBody")}</dd></div>
       </dl>
       </div>
-    </div>
   );
 }

@@ -212,6 +212,15 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
   const onBackNow = useRef(onBack); onBackNow.current = onBack;
   const dropTimer = useRef(0);
   const dragFrom = useRef<number | null>(null);
+  /* IT RISES ONCE (founder, 2026-11-27: coming back from an inspiration, the
+     list "animate[d] again bottom to top ... super motion sickness"). After
+     its first rise the sheet comes back in place. */
+  const sheetRisen = useRef(false);
+  useEffect(() => {
+    if (!sheet || sheetRisen.current) return undefined;
+    const id = window.setTimeout(() => { sheetRisen.current = true; }, 400);
+    return () => window.clearTimeout(id);
+  }, [sheet]);
   const dragMoved = useRef(false);
   useEffect(() => () => window.clearTimeout(dropTimer.current), []);
   const backOut = useCallback(() => {
@@ -1266,7 +1275,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
     <>
       {/* THE DIM ABOVE A SHEET CLOSES IT (iOS sheets; audit, 2026-11-26). */}
       {sheet && !open ? <button type="button" className="waka-sheet-scrim" tabIndex={-1} aria-hidden="true" onClick={backOut} /> : null}
-    <div ref={sheetPage} className={`waka-page${open ? " waka-page--note" : sheet ? " waka-page--sheet" : ""}`}>
+    <div ref={sheetPage} className={`waka-page${open ? " waka-page--note" : sheet ? ` waka-page--sheet${sheetRisen.current ? " waka-page--sheet-risen" : ""}` : ""}`}>
       {/* THE GRABBER IS THE WAY DOWN (founder, 2026-11-26: "to pull the
           sheet down, let user use the - button. remove the x"). A tap closes
           it; a drag past `SHEET_DRAG_CLOSE_PX` sends it down from where the
