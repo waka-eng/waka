@@ -5651,6 +5651,60 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-settings-section .waka-settings-row,
 .waka-settings-section > .waka-settings-delete { font-size: var(--t-body); }
 .waka-settings-row .waka-settings-chevron { flex: none; color: var(--muted); }
+/* ═══ CONNECT, IN PLAIN WORDS (founder, 2026-11-27) ═══ One soft card per
+   tool. Light is the meaning: a lit dot is connected, a dim one is not. */
+.waka-connect-tools { display: flex; flex-direction: column; gap: var(--sp-8); }
+.waka-connect-tool { border-radius: var(--sp-14); background: color-mix(in srgb, var(--ink) 5%, transparent); overflow: hidden; }
+.waka-connect-tool-head {
+  display: flex; align-items: center; gap: var(--sp-12); width: 100%; min-height: 60px;
+  padding: var(--sp-12) var(--sp-14); border: 0; background: none; color: var(--ink);
+  font: inherit; text-align: start; cursor: pointer; transition: background-color 160ms ease-out;
+}
+.waka-connect-tool-head:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.waka-connect-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 22%, transparent); }
+.waka-connect-tool--on .waka-connect-dot { background: var(--moon-warm); box-shadow: 0 0 8px color-mix(in srgb, var(--moon-warm) 70%, transparent), 0 0 18px color-mix(in srgb, var(--moon-warm) 35%, transparent); }
+.waka-connect-tool-name { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: var(--t-body); }
+.waka-connect-tool-status { color: var(--muted); font-size: var(--t-meta); }
+.waka-connect-tool-act { display: flex; align-items: center; gap: var(--sp-8); color: var(--muted); font-size: var(--t-ui); }
+.waka-connect-steps { margin: 0; padding: 0 var(--sp-14) var(--sp-14) calc(var(--sp-14) + var(--sp-20)); display: flex; flex-direction: column; gap: var(--sp-14); }
+.waka-connect-steps > li { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-8); color: var(--muted); }
+.waka-connect-steps > li::marker { color: var(--muted); font-size: var(--t-ui); }
+.waka-connect-step-title { color: var(--ink); font-size: var(--t-ui); line-height: 1.45; }
+.waka-connect-allow { display: flex; align-items: center; gap: var(--sp-8); color: var(--muted); font-size: var(--t-ui); cursor: pointer; }
+.waka-connect-tool .waka-connect-button {
+  min-height: 40px; padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); font: inherit; font-size: var(--t-ui); cursor: pointer;
+}
+.waka-connect-tool .waka-connect-button:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 16%, transparent); }
+.waka-connect-tool .waka-connect-button:disabled { opacity: .5; cursor: default; }
+.waka-connect-tool .waka-connect-button.waka-connect-button--quiet { background: none; padding: 0; min-height: 36px; color: var(--muted); }
+.waka-connect-tool .waka-connect-button.waka-connect-button--quiet:is(:hover, :focus-visible) { background: none; color: var(--ink); }
+.waka-connect-connected { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-8); padding: 0 var(--sp-14) var(--sp-14) calc(var(--sp-14) + 8px + var(--sp-12)); }
+.waka-connect-reads { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: var(--sp-4); font-size: var(--t-ui); color: var(--ink); }
+.waka-connect-reads > li { display: flex; justify-content: space-between; gap: var(--sp-12); }
+.waka-connect-advanced { margin-top: var(--sp-8); color: var(--muted); font-size: var(--t-ui); }
+.waka-connect-advanced > summary { cursor: pointer; padding: var(--sp-8) 0; list-style: none; }
+.waka-connect-advanced > summary::-webkit-details-marker { display: none; }
+.waka-connect-advanced[open] > summary { color: var(--ink); }
+/* Inside a tool card every copy button is the same pill, notes are small,
+   and the key reads as one quiet line of type, not a boxed form. */
+.waka-connect-steps { list-style: none; counter-reset: waka-step; }
+.waka-connect-steps > li { position: relative; counter-increment: waka-step; }
+.waka-connect-steps > li::before {
+  content: counter(waka-step); position: absolute; inset-inline-start: calc(-1 * var(--sp-20)); top: 0;
+  color: var(--muted); font-size: var(--t-ui); line-height: 1.45;
+}
+.waka-connect-tool :is(.waka-connect-steps, .waka-connect-connected) .waka-settings-note { margin: 0; color: var(--muted); font-size: var(--t-meta); line-height: 1.45; }
+.waka-connect-tool .waka-settings-erase {
+  min-height: 40px; margin: 0; padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); font-size: var(--t-ui);
+}
+.waka-connect-tool .waka-settings-erase:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 16%, transparent); }
+.waka-connect-tool .waka-session-command { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-8); width: 100%; padding: 0; border: 0; background: none; }
+.waka-connect-tool .waka-session-command .waka-mcp-commands {
+  margin: 0; padding: var(--sp-10) var(--sp-12); width: 100%; box-sizing: border-box; border: 0; border-radius: var(--sp-10);
+  background: color-mix(in srgb, var(--ink) 6%, transparent); font-size: var(--t-meta); word-break: break-all; white-space: pre-wrap;
+}
 /* An inspiration loading: one quiet line where its words will stand. */
 .waka-note-loading { margin: var(--sp-12) 0 0; color: var(--muted); font-size: var(--t-ui); }
 /* Connect: the card the connector corner opens, Settings' own surface. */

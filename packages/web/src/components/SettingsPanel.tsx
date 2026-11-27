@@ -15,6 +15,7 @@ import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { SurfaceHeader } from "./SurfaceHeader";
 const LegalArticle = lazy(() => import("../pages/LegalDocument").then(module => ({ default: module.LegalArticle })));
 import { HowItWorksBody } from "./HowItWorksPanel";
+import { ConnectTools } from "./ConnectTools";
 
 export interface SettingsPanelProps {
   locale: SupportedLocale;
@@ -558,6 +559,7 @@ export function ConnectPanel({ locale, onClose }: { locale: SupportedLocale; onC
   const bookmarklet = useRef<HTMLAnchorElement>(null);
   useEffect(() => { bookmarklet.current?.setAttribute('href', bookmarkletHref(window.location.origin)); });
   const [dragHint, setDragHint] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(false);
   const [profile, setProfile] = useState<ApiOwnedProfile | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -577,24 +579,39 @@ export function ConnectPanel({ locale, onClose }: { locale: SupportedLocale; onC
       <SurfaceHeader locale={locale} back={{ kind: "close", onBack: onClose }} title={say("connectTitle")} />
       <div className="waka-settings-content">
         <section className="waka-settings-section" aria-labelledby="waka-connect-tools">
-          <h3 id="waka-connect-tools" className="waka-settings-heading">{say("profilePersonalMcpTitle")}</h3>
-          {profile ? <PersonalConnections key={profile.id} locale={locale} profile={profile} />
+          <h3 id="waka-connect-tools" className="waka-settings-heading">{say("connectToolsHeading")}</h3>
+          {profile ? <ConnectTools key={profile.id} locale={locale} profile={profile} />
             : failed ? <>
               <p className="waka-account-failed" role="alert">{say('profilePersonalMcpLoadError')}</p>
               <button type="button" className="waka-settings-erase" onClick={() => setAttempt(n => n + 1)}>{say('worldRetry')}</button>
             </> : <p className="waka-settings-note" role="status">{say('worldInspirationsLoad')}</p>}
         </section>
-        {/* SAVE FROM ANYWHERE: the bookmarklet opens this app's /share with
-            the page it was pressed on (see lib/bookmarklet.ts). */}
-        <section className="waka-settings-section waka-save-anywhere" aria-labelledby="waka-save-anywhere-title">
-          <h3 id="waka-save-anywhere-title" className="waka-settings-heading">{say("profileSaveAnywhere")}</h3>
-          <p className="waka-settings-note">{say("profileBookmarkletHint")}</p>
-          {/* A PRESS HERE SAYS WHAT TO DO (founder, 2026-11-27: "Save from
-              anywhere doesn't work"): it only works from the bookmarks bar. */}
-          <a ref={bookmarklet} className="waka-bookmarklet" draggable
-            onClick={(event) => { event.preventDefault(); setDragHint(true); }}>{say("profileBookmarkletName")}</a>
-          {dragHint ? <p className="waka-settings-note" role="status">{say("profileBookmarkletDragHint")}</p> : null}
+        <section className="waka-settings-section waka-save-anywhere" aria-labelledby="waka-connect-in">
+          <h3 id="waka-connect-in" className="waka-settings-heading">{say("connectBringIn")}</h3>
+          {/* SAVE FROM ANYWHERE, behind its own row: the bookmarklet opens this
+              app's /share with the page it was pressed on (lib/bookmarklet.ts). */}
+          <section className="waka-connect-tool" aria-label={say("connectBrowserButton")}>
+            <button type="button" className="waka-connect-tool-head" aria-expanded={browserOpen} onClick={() => setBrowserOpen(was => !was)}>
+              <span className="waka-connect-tool-name"><span>{say("connectBrowserButton")}</span>
+                <span className="waka-connect-tool-status">{say("connectBrowserStatus")}</span></span>
+              <span className="waka-connect-tool-act"><span className="waka-settings-chevron" aria-hidden="true">{browserOpen ? '⌄' : '›'}</span></span>
+            </button>
+            {browserOpen ? <div className="waka-connect-connected">
+              <p className="waka-settings-note">{say("profileBookmarkletHint")}</p>
+              {/* A PRESS HERE SAYS WHAT TO DO (founder, 2026-11-27: "Save from
+                  anywhere doesn't work"): it only works from the bookmarks bar. */}
+              <a ref={bookmarklet} className="waka-bookmarklet" draggable
+                onClick={(event) => { event.preventDefault(); setDragHint(true); }}>{say("profileBookmarkletName")}</a>
+              {dragHint ? <p className="waka-settings-note" role="status">{say("profileBookmarkletDragHint")}</p> : null}
+            </div> : null}
+          </section>
         </section>
+        {/* THE TECHNICAL WORDS, ONLY FOR WHOEVER OPENS THEM: every key,
+            its access, the raw setup for each client, everything read. */}
+        {profile ? <details className="waka-connect-advanced">
+          <summary>{say("connectAdvanced")}</summary>
+          <PersonalConnections locale={locale} profile={profile} />
+        </details> : null}
       </div>
     </div>
   );
