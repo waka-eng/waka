@@ -131,6 +131,11 @@
   /* --- the reading cluster. Everything else lives here. --- */
   --t-reading: clamp(21px, 2.2vw, 30px);
   --t-bubble-reading: 22px;
+  /* The week's picture (`WeeklyCard`) is drawn at a fixed 390 wide and
+     scaled as an image, so its line cannot follow the viewport the way
+     `--t-reading` does: 28px, inside the reveal's 24 to 32, and the same
+     28 the shared file is drawn at (`lib/week-artifact.ts`). */
+  --t-reveal: 28px;
   --t-lead: clamp(16px, 1.2vw, 19px);
   /* Home leaves more room around the statement without crowding short
      windows. Both limits come from the existing reading/lead scale. */

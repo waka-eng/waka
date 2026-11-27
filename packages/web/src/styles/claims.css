@@ -7750,6 +7750,46 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
 /* Principles' "<" stands where every page's does, across the top, not in
    the page's centred column. */
 .waka-page--timeless > .waka-surface-strip.waka-principles-back { position: fixed; top: 0; left: 0; right: 0; width: auto; z-index: 60; }
+/* ═══ YOUR WEEK, IN ONE LINE (`WeeklyCard`) ═══════════════════════════════
+   A sheet from the foot over a dim, holding one cream card in the bubble's
+   own colours; Share is a word under it, never filled. */
+.waka-week { position: fixed; inset: 0; z-index: 190; display: flex; align-items: flex-end; justify-content: center; }
+.waka-week-scrim { position: absolute; inset: 0; padding: 0; border: 0; cursor: default; background: color-mix(in srgb, var(--bg) 60%, transparent); }
+.waka-week-sheet {
+  position: relative; box-sizing: border-box; width: min(100%, 520px);
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-16);
+  padding: 0 var(--sp-24) calc(var(--sp-24) + env(safe-area-inset-bottom));
+  border-radius: var(--sp-28) var(--sp-28) 0 0; background: var(--waka-raised);
+  animation: waka-sheet-up 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.waka-week-grab { display: flex; justify-content: center; align-items: center; width: 100%; height: var(--sp-28); padding: 0; border: 0; background: none; cursor: pointer; }
+.waka-week-grab::before { content: ""; width: var(--sp-32); height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 35%, transparent); }
+/* The image, story-shaped (9:16), as large as the screen allows; while it
+   is drawn the frame holds its shape on the night it will be drawn on. */
+.waka-week-frame {
+  display: grid; place-items: center; overflow: hidden;
+  height: min(72dvh, calc((100vw - 2 * var(--sp-24)) * 16 / 9)); aspect-ratio: 9 / 16;
+  border-radius: var(--sp-20); background: var(--moon-ground);
+  box-shadow: 0 0 0 1px var(--line), 0 24px 64px color-mix(in srgb, var(--bg) 70%, transparent);
+}
+/* THE PICTURE: the first principle's reveal at the phone's own 390 by 693,
+   scaled to the frame (`WEEK_PICTURE` in lib/week-artifact.ts draws the
+   same layout into the shared file). Its words are `.waka-reveal-words`
+   themselves, at the reveal's top on a 390 wide screen. */
+.waka-week-frame { align-self: center; }
+.waka-week-picture {
+  position: relative; transform-origin: 0 0; overflow: hidden; display: flex; justify-content: center;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--moon-warm) 2%, var(--moon-ground)), var(--moon-ground));
+}
+.waka-week-picture > .waka-reveal-words { margin-top: calc(var(--sp-48) * 3); width: calc(100% - 2 * var(--sp-36)); }
+.waka-week-picture .waka-reveal-statement { font-size: var(--t-reveal); color: var(--moon-warm); }
+.waka-week-being { position: absolute; left: 50%; top: 520px; transform: translate(-50%, -50%); }
+.waka-week-foot { margin-top: var(--sp-16); font-size: var(--t-ui); color: var(--muted); }
+.waka-week-mark { margin-top: calc(-1 * var(--sp-10)); font-size: var(--t-label); font-weight: 500; letter-spacing: 0.08em; color: color-mix(in srgb, var(--muted) 70%, transparent); }
+.waka-week-notice { margin: 0; color: var(--muted); font-family: var(--waka-face); font-size: var(--t-meta); }
+.waka-week-share { min-height: var(--sp-44); padding: 0 var(--sp-16); border: 0; background: none; color: var(--ink); font-family: var(--waka-face); font-size: var(--t-input); cursor: pointer; }
+.waka-week-share:disabled { opacity: 0.4; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .waka-week-sheet { animation: none; } }
 /* ═══ AN ACTION SHEET (iOS's way to offer an item's other actions) ═══════
    From the foot of the screen over a dim; grouped acts, Cancel apart below.
    Never filled: the acts are words on the raised ground. */

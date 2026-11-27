@@ -107,7 +107,8 @@ import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
-import { askSaveQuestion, readSaveQuestion } from '../lib/api';
+import { askSaveQuestion, readSaveQuestion, fetchWeeklyLine, type ApiWeeklyLine } from '../lib/api';
+import { WeeklyCard } from '../components/WeeklyCard';
 import { feel } from '../lib/haptics';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
 import { wordsCanStand } from '../lib/note-words';
@@ -1089,6 +1090,10 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const promptScope = `${storageScope?.accountId ?? ''}:${spaceKey(atWall)}`;
   const [promptChoice, setPromptChoice] = useState<{ scope: string; kind: CompanionPrompt }>(() => ({ scope: promptScope, kind: 'reading' }));
   const promptChoiceRef = useRef(promptChoice);
+  /* YOUR WEEK, IN ONE LINE (insight goal, phase 5): offered once a week by
+     the creature in the reading's place, and opened as a card. */
+  const [weekOffer, setWeekOffer] = useState<ApiWeeklyLine | null>(null);
+  const [weekCard, setWeekCard] = useState<ApiWeeklyLine | null>(null);
   /**
    * ═══ NOTHING SPEAKS WHILE THE CREATURE IS CHANGING FORM ════════════════
    *
@@ -2033,6 +2038,8 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   /** The next line, or the one a dot names. */
   const creatureSpeaks = useCallback((to?: CompanionPrompt) => {
     if (!atNowView || reviewing) return;
+    /* A tap moves past the week's offer; it was made once this week. */
+    setWeekOffer(null);
     if (reviewRetry) loadClaims();
     const current = promptChoiceRef.current.scope === promptScope ? promptChoiceRef.current.kind : 'reading';
     const next = to && promptLines.includes(to) ? to : promptLines[(promptLines.indexOf(current) + 1) % promptLines.length]!;
@@ -7531,6 +7538,23 @@ const RETRY_READ_LIMIT_MS = 20_000;
   const savesOpen = viewNavigation.view?.open === 'saves';
   useEffect(() => { if (!savesOpen) setSavesAsSheet(false); }, [savesOpen]);
   const openSheet = useCallback(() => { setSavesAsSheet(true); openOverHome('saves'); feel('light'); }, [openOverHome]);
+  /* ONCE A WEEK, FROM SUNDAY (local time). The week is named by its Sunday;
+     the offer is remembered per profile, so it is made once, and only when
+     the server has something true to say (`fetchWeeklyLine` is null else). */
+  const weekScope = phase === 'ready' && atWall.kind === 'self' && !offline ? storageScope : null;
+  useEffect(() => {
+    if (!weekScope) return undefined;
+    const sunday = new Date(); sunday.setDate(sunday.getDate() - sunday.getDay());
+    const weekKey = `${sunday.getFullYear()}-${sunday.getMonth() + 1}-${sunday.getDate()}`;
+    if (readProfileText(weekScope, 'week:offered') === weekKey) return undefined;
+    const ask = new AbortController();
+    void fetchWeeklyLine({ profile: weekScope.profileId }, ask.signal).then(week => {
+      if (!week || ask.signal.aborted) return;
+      writeProfileText(weekScope, 'week:offered', weekKey);
+      setWeekOffer(week);
+    }).catch(() => undefined);
+    return () => ask.abort();
+  }, [weekScope]);
   /* ═══ THE NOTE BAR'S PARTS (design E3, Writing, PhotoNote) ═══════════════
      They stood in the dock's middle group; the notepad draws them now, in a
      slim row UNDER its words so the words get the whole width — mic on the
@@ -9479,7 +9503,18 @@ const RETRY_READ_LIMIT_MS = 20_000;
               </span>
             );
           })() : null}
-          {!(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
+          {weekOffer && !(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
+            /* THE WEEK, OFFERED IN THE READING'S PLACE, once. */
+            <div className="jar-char-bubble" data-jar-chrome="1" data-jar-interactive="1">
+              <span className="jar-char-bubble-body">
+                <span className="jar-char-bubble-reading" role="status">{say('worldWeekOffer')}</span>
+                <span className="jar-char-bubble-acts">
+                  <button type="button" className="jar-char-bubble-act" onClick={() => { setWeekCard(weekOffer); setWeekOffer(null); }}>{say('worldWeekSeeIt')}</button>
+                </span>
+              </span>
+            </div>
+          ) : null}
+          {!weekOffer && !(offeredShare && !standingAsAgent) && !mouthOpen && !charSay && !turning && !reviewing && companionPrompt === 'reading' ? (
             <>
               {/* NOT ON AN AGENT'S WALL. Founder, pressing the creature over
                   there and being offered "Feeling inspired? Save one.":
@@ -11615,6 +11650,11 @@ const RETRY_READ_LIMIT_MS = 20_000;
         key={`${conversationScope?.accountId}:${conversationScope?.profileId}:${viewNavigation.view.principleId}`} scope={conversationScope ?? storageScope}
         id={viewNavigation.view.principleId} name={conversationProfile?.name??''} locale={locale} onClose={viewNavigation.closeShare}
         onChoose={id=>viewNavigation.write({...EMPTY_VIEW,wallId:viewNavigation.view?.wallId??null,section:'sky',principleId:id,sharePrinciple:true},{replace:true})}/>:null}
+      {weekCard ? (
+        /* It shares its own image, the line alone, never the saves' words. */
+        <WeeklyCard locale={locale} line={weekCard.line} from={weekCard.week.from} to={weekCard.week.to}
+          saves={weekCard.saveIds.length} onClose={() => setWeekCard(null)} />
+      ) : null}
       {thingShare ? (
         <ShareSheet target={thingShare} locale={locale} onClose={() => setThingShare(null)} />
       ) : null}

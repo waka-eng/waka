@@ -1,5 +1,5 @@
 /* The personal list shows the statement. Opening it reveals the supporting evidence. */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { DialogSurface } from "./DialogSurface";
 import { SurfaceHeader, useNativeBack } from "./SurfaceHeader";
@@ -354,6 +354,25 @@ export function PrinciplesSpark(): JSX.Element {
  * meets their principles (`arriving`); under reduced motion the drift is
  * skipped and the words are simply there.
  */
+/**
+ * THE REVEAL'S WORDS, shared with the week's card (`WeeklyCard`), so the two
+ * screens are one: a small muted label, the statement in large light type,
+ * "From n of your saves", and under them what that screen offers (the
+ * reveal's That's me / Not quite, the week's "My week · …" and mark).
+ */
+export function RevealWords({ label, statement, from, children }: {
+  label: string; statement: string; from: string; children?: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="waka-reveal-words">
+      <span className="waka-reveal-label">{label}</span>
+      <span className="waka-reveal-statement">{statement}</span>
+      <span className="waka-reveal-from">{from}</span>
+      {children}
+    </div>
+  );
+}
+
 function FirstPrincipleReveal({ locale, row, onAffirm, onNotQuite }: {
   locale: SupportedLocale; row: ApiPrinciple; onAffirm: () => void; onNotQuite: () => void;
 }): JSX.Element {
@@ -371,15 +390,13 @@ function FirstPrincipleReveal({ locale, row, onAffirm, onNotQuite }: {
           {mote.text.slice(0, 40)}
         </span>
       ))}
-      {formed ? <div className="waka-reveal-words">
-        <span className="waka-reveal-label">{say("worldPrincipleFirstLabel")}</span>
-        <span className="waka-reveal-statement">{row.statement}</span>
-        <span className="waka-reveal-from">{formatMessage(locale, "worldReadingFromCount", { count })}</span>
+      {formed ? <RevealWords label={say("worldPrincipleFirstLabel")} statement={row.statement}
+        from={formatMessage(locale, "worldReadingFromCount", { count })}>
         <span className="waka-reveal-acts">
           <button type="button" autoFocus onClick={onAffirm}>{say("worldPrincipleThatsMe")}</button>
           <button type="button" className="waka-reveal-act--quiet" onClick={onNotQuite}>{say("worldReadingNotQuite")}</button>
         </span>
-      </div> : null}
+      </RevealWords> : null}
     </div>
   );
 }

@@ -137,6 +137,20 @@ export function dateStamp(ms: number, locale: WordsLocale = "en-US"): string {
   return `${month} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
+/**
+ * The week a weekly card covers: `Nov 20 to 26`, or `Nov 28 to Dec 4` across
+ * a month; `11월 20일부터 26일까지`, or `11월 28일부터 12월 4일까지`.
+ */
+export function weekWords(fromMs: number, toMs: number, locale: WordsLocale = "en-US", monthStyle: "short" | "long" = "short"): string {
+  const from = new Date(fromMs), to = new Date(toMs);
+  const sameMonth = from.getMonth() === to.getMonth();
+  if (locale === "ko-KR") {
+    return `${from.getMonth() + 1}월 ${from.getDate()}일부터 ${sameMonth ? "" : `${to.getMonth() + 1}월 `}${to.getDate()}일까지`;
+  }
+  const month = (d: Date) => d.toLocaleDateString("en-US", { month: monthStyle });
+  return `${month(from)} ${from.getDate()} to ${sameMonth ? "" : `${month(to)} `}${to.getDate()}`;
+}
+
 export function dateWords(ms: number, T: number, locale: WordsLocale = "en-US"): string {
   const d = new Date(ms);
   /*
