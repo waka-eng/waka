@@ -58,14 +58,14 @@ afterEach(() => {
   root = null; host = null; dock = null;
 });
 
-async function mount(profileId?: string, trash = false) {
+async function mount(profileId?: string, trash = false, onBack: () => void = () => undefined) {
   const { Archive } = await import("./helpers/archive");
   dock = document.createElement("span");
   document.body.appendChild(dock);
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
-  await act(async () => { root!.render(createElement(Archive, { profileId, locale: "en-US", title: "Your inspirations", onBack: () => undefined,
+  await act(async () => { root!.render(createElement(Archive, { profileId, locale: "en-US", title: "Your inspirations", onBack,
     viewState: { query: '', category: null, onShelf: trash, scrollTop: 0 } })); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 }
@@ -115,14 +115,18 @@ it("opens on Trash, says how long it keeps things, and brings a thing back from 
   expect(calls.restored).toEqual(["z"]);
 });
 
-it("returns from Trash to the list by its \"<\", and shows an empty Trash as empty", async () => {
-  await mount(undefined, true);
+/* Trash closes in one press (founder, 2026-11-27: "You need to be able to
+   just close it immediately"), never by way of the list. */
+it("closes Trash in one press, and shows an empty Trash as empty", async () => {
+  const left = vi.fn();
+  await mount(undefined, true, left);
   expect(host!.querySelector(".waka-surface-title")?.textContent, "an empty Trash fell back to the list").toBe("Trash");
   expect(leads(), "an empty Trash showed the list").toEqual([]);
-  const back = host!.querySelector<HTMLButtonElement>(".waka-surface-back")!;
-  expect(back.getAttribute("aria-label")).toBe("Back");
-  await press(back);
-  expect(leads()).toEqual(["Second thing", "First thing"]);
+  const close = host!.querySelector<HTMLButtonElement>(".waka-surface-back")!;
+  expect(close.getAttribute("aria-label")).toBe("Close");
+  await press(close);
+  expect(left, "Close on Trash did not leave").toHaveBeenCalledTimes(1);
+  expect(leads(), "Close on Trash went to the list instead").toEqual([]);
 });
 
 it("offers to share the open note", async () => {
