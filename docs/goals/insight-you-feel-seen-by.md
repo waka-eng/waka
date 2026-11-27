@@ -1,6 +1,15 @@
 # Goal: insight you feel seen by
 
-Status: Phase 1 in progress (2026-11-26). Owner: the founder decides design; Claude builds.
+Status: Phases 1 to 5 built on design/meeting-1120 (2026-11-26), not yet deployed. Owner: the founder decides design; Claude builds.
+
+| Phase | State |
+| --- | --- |
+| 1. Every reading shows its saves | Built: "From n inspirations" opens exactly those saves. |
+| 2. Specific or silent | Built: the reviewer's `specific` verdict rejects horoscopes; fixture set of real readings still to write. |
+| 3. A hunch from the first saves | Built: `hunches` table and `generate_hunch` job (migration 0096), onboarding answers keep their question. Not yet tried against a live model. |
+| 4. Not quite rewrites it | Built for readings and hunches: the bar takes the answer, "Rethinking", the new line lands. |
+| 5. The moment | Built: the first principle's reveal, and the weekly card (`GET /api/top-of-mind/week`) shared as a story image. |
+| Later: values other agents can ask | Started as sharper MCP: principles carry their saves, and every key's read is logged (migration 0095). |
 
 ## Why
 

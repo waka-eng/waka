@@ -30,7 +30,7 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
-| [`insight-you-feel-seen-by.md`](insight-you-feel-seen-by.md) | Phase 1 in progress (2026-11-26): readings show their saves; the reviewer rejects generic readings. Phases 3 to 5 on the design canvas for approval. |
+| [`insight-you-feel-seen-by.md`](insight-you-feel-seen-by.md) | Phases 1 to 5 built on design/meeting-1120 (2026-11-26), not yet deployed; live-model check of the hunch and the save question still open. |
 | [`web-quality.md`](web-quality.md) | In progress — web changes and PR 366 generation repairs deployed/verified; raw inspirations form a reading and a minted Principle, with human wording preserved. PR 368 member/navigation fixes delivered; six self-audit findings recorded as open follow-ups. First-time human and remaining operational acceptance stay open. |
 | [`native-capture.md`](native-capture.md) | Paused by owner 2026-10-07 — retain M3 native capture on the roadmap while prioritizing web quality; recorder and upload/lifecycle acceptance remain open. |
 | [`beta-readiness.md`](beta-readiness.md) | Incomplete — milestones 1 and 3 delivered in PR 350; operational audit and recovery fixes deployed through PR 351. Dev configuration/heartbeat and public URL policy observed. Milestone 2 first-time comprehension and milestone 4 controlled live measurements, spending/privacy/source safeguards and exercised alerts remain open. |
