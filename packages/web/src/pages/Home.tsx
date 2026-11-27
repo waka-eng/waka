@@ -109,6 +109,7 @@ import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
 import { askSaveQuestion, readSaveQuestion, fetchWeeklyLine, type ApiWeeklyLine } from '../lib/api';
 import { WeeklyCard } from '../components/WeeklyCard';
+import { answerHunch, fetchHunch, type ApiHunch } from '../lib/api';
 import { feel } from '../lib/haptics';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
 import { wordsCanStand } from '../lib/note-words';
@@ -2035,6 +2036,62 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     if (!notQuite || notQuite.phase === 'asking' || !lead) return;
     if (lead.body !== notQuite.old) { notQuiteTimers.current.forEach(id => window.clearTimeout(id)); notQuiteTimers.current = []; setNotQuite(null); }
   }, [lead, notQuite]);
+  /* ═══ A HUNCH FROM THE FIRST SAVES (insight goal, phase 3; canvas "A
+     hunch") ═══ Before a reading exists, the creature's main bubble guesses
+     out loud and asks "Am I close?". Yes thanks the person and the reading is
+     asked for at once; Not quite asks "What's closer?", the answer is typed
+     in the bar (the same `answer` the reading's Not quite uses), the old line
+     stands struck through while it rethinks, and the new hunch takes its
+     place. Written by the server after a save, so home asks again for a
+     little while after each save and each answer. */
+  const [hunch, setHunch] = useState<ApiHunch | null>(null);
+  const [hunchStep, setHunchStep] = useState<null | { phase: 'asking' | 'thinking' | 'thanks'; old: string }>(null);
+  const hunchProfile = !standingAsAgent && !offline && storageScope ? storageScope.profileId : null;
+  const hunchPolls = useRef(0);
+  /** Asks for the hunch now and every 2.5s until one other than `notId` is there (or a reading is). */
+  const pollHunch = useCallback((notId: string | null, tries = 12) => {
+    if (!hunchProfile) return;
+    const run = ++hunchPolls.current;
+    const ask = (left: number) => {
+      if (run !== hunchPolls.current) return;
+      void fetchHunch({ profile: hunchProfile }).then(next => {
+        if (run !== hunchPolls.current) return;
+        if (next && next.id !== notId) { setHunch(next); setHunchStep(null); return; }
+        if (!next && notId === null) setHunch(null);
+        if (left > 1) window.setTimeout(() => ask(left - 1), 2_500);
+      }).catch(() => { if (left > 1) window.setTimeout(() => ask(left - 1), 2_500); });
+    };
+    ask(tries);
+  }, [hunchProfile]);
+  useEffect(() => () => { hunchPolls.current += 1; }, []);
+  /* On arrival, and after each save while there is no reading yet. */
+  const savedCount = inspirations ? inspirations.length + fieldBeyond : null;
+  useEffect(() => {
+    if (!hunchProfile || lead || savedCount === null || savedCount === 0) return;
+    pollHunch(hunchRef.current?.id ?? null, hunchRef.current ? 12 : 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hunchProfile, savedCount, Boolean(lead)]);
+  const hunchRef = useRef(hunch); hunchRef.current = hunch;
+  /* A reading arriving ends the hunch: the reading is what the creature says. */
+  useEffect(() => { if (lead) { hunchPolls.current += 1; setHunch(null); setHunchStep(null); } }, [lead]);
+  const answerHunchYes = useCallback(() => {
+    const current = hunchRef.current;
+    if (!current || !hunchProfile) return;
+    setHunchStep({ phase: 'thanks', old: current.body });
+    void answerHunch(current.id, { answer: 'yes' }, { profile: hunchProfile }).catch(() => setHunchStep(null));
+    for (let at = 4_000; at <= 60_000; at += 4_000) window.setTimeout(() => {
+      readingNeedsLatestRef.current = true; verifyReadingRef.current(true);
+    }, at);
+    window.setTimeout(() => { if (hunchRef.current?.id === current.id) { setHunch(null); setHunchStep(null); } }, 62_000);
+  }, [hunchProfile]);
+  const sendHunchCorrection = useCallback((text: string) => {
+    const current = hunchRef.current;
+    if (!current || !hunchProfile) return;
+    setHunchStep({ phase: 'thinking', old: current.body });
+    void answerHunch(current.id, { answer: 'not_quite', correction: text }, { profile: hunchProfile })
+      .then(() => pollHunch(current.id, 24))
+      .catch(() => setHunchStep(null));
+  }, [hunchProfile, pollHunch]);
   /** The next line, or the one a dot names. */
   const creatureSpeaks = useCallback((to?: CompanionPrompt) => {
     if (!atNowView || reviewing) return;
@@ -9610,7 +9667,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                    through `charSay`, which is always the lighter weight. */
                 <div
                   className={`jar-char-bubble${(lead && !standingAsAgent) || agentSays ? ' jar-char-bubble--reading' : ''}`}
-                  data-invites={standingAsAgent || agentSays ? undefined : lead ? 'chat' : 'save'}
+                  data-invites={standingAsAgent || agentSays ? undefined : lead ? 'chat' : hunch ? undefined : 'save'}
                   data-jar-chrome="1"
                   /* Both states of this bubble are pressable — a reading and
                      the empty line — so the flag is unconditional. */
@@ -9808,7 +9865,25 @@ const RETRY_READ_LIMIT_MS = 20_000;
                            is the notepad. The offer ("Feeling inspired?
                            Save it.") and this line are the two that name
                            it, and they go to the same place. */
-                        tentativeClaim ? (
+                        hunch && !standingAsAgent ? (
+                          /* ═══ A HUNCH (insight goal, phase 3) ═══ See
+                             `pollHunch`: asked, then answered in place. */
+                          hunchStep?.phase === 'asking'
+                            ? <span className="jar-char-bubble-reading" role="status">{say('worldReadingCloser')}</span>
+                            : hunchStep?.phase === 'thinking' ? <>
+                              <span className="waka-reading-old">{hunchStep.old}</span>
+                              <span className="jar-char-bubble-reading" role="status">{say('worldReadingRethinking')}</span>
+                            </> : hunchStep?.phase === 'thanks'
+                              ? <span className="jar-char-bubble-reading" role="status">{say('worldHunchThanks')}</span>
+                              : <>
+                                <span className="jar-char-bubble-reading">{hunch.body}</span>
+                                <span className="jar-char-bubble-acts">
+                                  <button type="button" className="jar-char-bubble-act" onClick={answerHunchYes}>{say('worldBubbleYes')}</button>
+                                  <button type="button" className="jar-char-bubble-act"
+                                    onClick={() => setHunchStep({ phase: 'asking', old: hunch.body })}>{say('worldReadingNotQuite')}</button>
+                                </span>
+                              </>
+                        ) : tentativeClaim ? (
                           /* ═══ "I MIGHT BE NOTICING" (design F3, from #463) ═══
                              No read yet, but a pattern is forming. The bubble
                              says it tentatively and the only acts are the
@@ -11579,7 +11654,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
           /* Fresh only: a bar mounted again later (back from Principles)
              does not replay an old answer. */
           beckon={beckonLit.n && Date.now() - beckonLit.at < 1700 && beckonLit.to !== 'star' ? { n: beckonLit.n, to: beckonLit.to } : undefined}
-          answer={notQuite?.phase === 'asking' ? { placeholder: say('worldReadingCloser'), onSend: sendNotQuite, onCancel: () => setNotQuite(null) } : undefined}
+          answer={notQuite?.phase === 'asking' ? { placeholder: say('worldReadingCloser'), onSend: sendNotQuite, onCancel: () => setNotQuite(null) }
+            : hunchStep?.phase === 'asking' ? { placeholder: say('worldReadingCloser'), onSend: sendHunchCorrection, onCancel: () => setHunchStep(null) }
+            : undefined}
           saved={barSaved}
           /* ON AN AGENT'S WALL THE PULL OPENS ITS ARCHIVE. The sheet reads
              your own field, so it is yours alone; the agent's saves are its

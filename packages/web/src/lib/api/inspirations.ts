@@ -106,6 +106,8 @@ export interface CreateReflectionRequest {
 
 export interface CreateInspirationRequest {
   fromConversation?:{conversationId:string;messageId:string;selectedText:string;adopted:boolean};
+  /** The question this save answers, when WAKA asked one (onboarding). */
+  prompt?: string;
   /* `{ type: 'file' }` (2026-10-15, `FILE_ATTACHMENT_CONTENT_TYPES` in
      `./file-accept`) is in the union now that the note composer has "Add
      file". There is no 'file' KIND, so a note whose attachments are files

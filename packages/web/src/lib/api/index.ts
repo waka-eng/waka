@@ -98,6 +98,7 @@ export * from "./inspiration-days";
 export * from "./principles";
 export * from "./top-of-mind";
 export * from "./feedback";
+export * from "./hunch";
 export * from "./public-profiles";
 export * from "./weather";
 

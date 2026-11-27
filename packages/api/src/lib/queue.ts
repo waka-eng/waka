@@ -185,6 +185,7 @@ import {
 } from "./signal-derivation.js";
 import { isSupportedLocale } from "./locales.js";
 import { loadReflectionQuestionContext } from './reflection-question-context.js';
+import { hasLiveReading, writeHunchForProfile } from './hunches.js';
 import { loadReviewQuestionContext } from './review-dialogue-context.js';
 import { reconcilePrinciplesAfterSignalLoss, refreshPrinciplesForProfile } from "./principle-generation.js";
 import { tendSignalGarden } from "./signal-gardener.js";
@@ -374,7 +375,8 @@ async function enqueueKeyedJob(input: {
     | "generate_reflection_question"
     | "generate_review_question"
     | "generate_conversation_reply"
-    | "derive_review_answer";
+    | "derive_review_answer"
+    | "generate_hunch";
   payload:
     | EnrichAttachmentPayload
     | DeriveSignalsPayload
@@ -386,7 +388,8 @@ async function enqueueKeyedJob(input: {
     | GenerateReflectionQuestionPayload
     | GenerateReviewQuestionPayload
     | {conversationId:string;replyRequestId:string}
-    | {answerId:string;sessionId:string;signalIds?:string[]};
+    | {answerId:string;sessionId:string;signalIds?:string[]}
+    | GenerateHunchPayload;
   idempotencyKey: string;
 }, transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult> {
   const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
@@ -673,6 +676,25 @@ export async function enqueueTopOfMindRefresh(
     else await wakeBackgroundWorker([{id:job.id,profileId,requestVersion:job.requestVersion}]);
   }
   return { jobId: job.id, requestVersion: job.requestVersion, created: job.created };
+}
+
+/** What a hunch job was asked after: a save, or a Not quite on a hunch. */
+export type GenerateHunchPayload = { inspirationId: string } | { afterHunchId: string };
+
+/** A hunch after a save, while the profile has no reading yet (insight goal,
+ * phase 3). Keyed by the save, so a retried capture asks once. */
+export async function enqueueHunchAfterSave(profileId: string, inspirationId: string,
+  transaction: Pick<ReturnType<typeof getDb>, "execute" | "select">): Promise<EnqueueResult | null> {
+  if (await hasLiveReading(transaction, profileId)) return null;
+  return enqueueKeyedJob({ profileId, type: "generate_hunch", payload: { inspirationId },
+    idempotencyKey: `generate_hunch:${profileId}:save:${inspirationId}` }, transaction);
+}
+
+/** A new hunch that must honour the Not quite on `hunchId`. */
+export async function enqueueHunchAfterCorrection(profileId: string, hunchId: string,
+  transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult> {
+  return enqueueKeyedJob({ profileId, type: "generate_hunch", payload: { afterHunchId: hunchId },
+    idempotencyKey: `generate_hunch:${profileId}:after:${hunchId}` }, transaction);
 }
 
 /** The question asked right after a save, before any answer exists: its
@@ -1172,6 +1194,14 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
           contextHash:context.hash,question:result.question,connection:result.connection,sourceIds:result.sourceNumbers.map(number=>context.sourceIdentities[number-1]!.id)};
         await tx.update(backgroundJobs).set({payload}).where(and(eq(backgroundJobs.id,job.id),eq(backgroundJobs.profileId,job.profileId)));
       });return;
+    }
+    case "generate_hunch": {
+      const save = readString(job.payload, "inspirationId"), after = readString(job.payload, "afterHunchId");
+      if (!save && !after) return dropPoisonPayload(job);
+      const provider = await getDefaultModelProvider();
+      await writeHunchForProfile(getDb(), provider, { profileId: job.profileId, ...(save ? { newestId: save } : {}),
+        beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true) });
+      return;
     }
     case "generate_reflection_question": {
       const payload = parseGenerateReflectionQuestionPayload(job.payload);

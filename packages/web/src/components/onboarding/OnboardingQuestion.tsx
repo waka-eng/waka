@@ -249,7 +249,9 @@ export function OnboardingQuestion({ locale, index, profileId, calling, onTouche
       const words = text.trim();
       const kind = !attachments.length ? "note" : attachments.length === 1 && !words ? attachments[0]!.type as "image" | "audio" : "mixed";
       const saved = await createInspiration(
-        { text: words, kind, source: "app", ...(attachments.length ? { attachments } : {}) },
+        /* THE ANSWER KEEPS ITS QUESTION (insight goal, phase 3): the readings
+           and the first hunch read what was asked, not only what was said. */
+        { text: words, kind, source: "app", prompt: say(question.ask), ...(attachments.length ? { attachments } : {}) },
         { profile: profileId, requestId: requestId.current },
       );
       setSaving(false);

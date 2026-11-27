@@ -673,6 +673,13 @@
       "when": 1795755057074,
       "tag": "0095_mcp_reads",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1795755388407,
+      "tag": "0096_insight_hunches",
+      "breakpoints": true
     }
   ]
 }

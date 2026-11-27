@@ -42,6 +42,7 @@ vi.mock("../lib/queue.js", () => ({
   enqueueDeriveSignals: vi.fn(async () => ({ id: "job", created: true })),
   enqueueTopOfMindRefresh: vi.fn(async () => ({ id: "job", created: true })),
   enqueueEnrichAttachment: vi.fn(async () => ({ id: "job", created: true })),
+  enqueueHunchAfterSave: vi.fn(async () => null),
   enqueueReflectionQuestion: vi.fn(async () => ({ jobId: "job", created: true })),
   reflectionQuestionJobKey: vi.fn((profileId: string, inspirationId: string, afterId: string) =>
     `generate_reflection_question:${profileId}:${inspirationId}:${afterId}`),

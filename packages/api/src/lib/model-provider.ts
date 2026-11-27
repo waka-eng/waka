@@ -62,6 +62,8 @@ export interface SignalCandidateExtractionInput {
     /** "app" when the words are the human's, "agent" when an agent observed. */
     source: "app" | "agent";
     createdAt: Date;
+    /** The question this capture answered (onboarding asks three), if any. */
+    prompt?: string | null;
   };
   /** The human's own answers — the strongest context a capture carries. */
   reflections: Array<{ question: string; answer: string }>;
@@ -488,12 +490,27 @@ export class MalformedModelOutputError extends ModelDidNotAnswerError {
 export interface ReflectionQuestionInput {
   preferredLocale: SupportedLocale;
   inspirationText: string;
+  /** The question the inspiration answered, if it was an answer. */
+  inspirationPrompt?: string | null;
   reflections: Array<{ question: string; answer: string }>;
   attachments?: Array<{ type: 'link' | 'image' | 'audio' | 'file'; status: string; kind: string | null; text: string | null }>;
 }
 
 export interface ReflectionQuestionResult {
   question: string;
+}
+
+/** A hunch: one tentative line from the first saves (insight goal, phase 3). */
+export interface HunchInput {
+  preferredLocale: SupportedLocale;
+  /** Newest first, at most six, each with words. */
+  saves: Array<{ id: string; text: string; prompt: string | null }>;
+  /** Earlier hunches the person said Not quite to, with what they said instead. */
+  declined: Array<{ body: string; correction: string }>;
+}
+export interface HunchResult {
+  hunch: string;
+  inspirationIds: string[];
 }
 
 export interface ReviewQuestionInput {
@@ -538,6 +555,8 @@ export interface ModelProvider {
   readonly pinnedModel?: string;
   answerConversation(input:ConversationReplyInput):Promise<ConversationReplyResult>;
   askReflectionQuestion(input: ReflectionQuestionInput): Promise<ReflectionQuestionResult>;
+  /** Optional so a provider without it simply writes no hunch. */
+  writeHunch?(input: HunchInput): Promise<HunchResult>;
   askReviewQuestion(input:ReviewQuestionInput):Promise<ReviewQuestionResult>;
   deriveReviewAnswer(input:ReviewAnswerDerivationInput):Promise<ReviewAnswerDerivationResult>;
   extractSignalCandidates(

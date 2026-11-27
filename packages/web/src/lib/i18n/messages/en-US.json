@@ -836,6 +836,7 @@
   "worldReadingNotQuite": "Not quite",
   "worldReadingCloser": "What’s closer?",
   "worldReadingRethinking": "Rethinking…",
+  "worldHunchThanks": "Thanks. That helps.",
   "worldReadingRethinkSlow": "Still thinking. It will be here when it lands.",
   "worldReadingFromCount": "From {count} {count, plural, one {inspiration} other {inspirations}}",
   "worldReadingWhyLabel": "Because you saved these",

@@ -5,7 +5,7 @@ import {
   buildTopOfMindReviewRequest,parseTopOfMindReview,buildTopOfMindComparisonRequest,applyTopOfMindComparison,
   buildPrincipleDistillRequest,parseDistilledPrinciples,buildPrincipleGroundingRequest,parsePrincipleGrounding,
   buildPrincipleRelationRequest,parsePrincipleRelation,buildDeclarationRouteRequest,parseDeclarationRoute,
-  buildReflectionQuestionRequest,parseReflectionQuestion,buildReviewQuestionRequest,parseReviewQuestion,
+  buildReflectionQuestionRequest,parseReflectionQuestion,buildHunchRequest,parseHunch,buildReviewQuestionRequest,parseReviewQuestion,
   buildConversationReplyRequest,parseConversationReply,buildReviewAnswerDerivationRequest,parseReviewAnswerDerivation,
 } from '../queue/gemini.js';
 import {MODEL_DECLINED,ModelDidNotAnswerError,DeclarationNotConsideredError,type ModelProvider} from './model-provider.js';
@@ -47,6 +47,7 @@ export function createOpenAiModelProvider():ModelProvider {
     name:'openai',
     answerConversation:input=>ask('chat','conversation reply','conversation_reply',buildConversationReplyRequest(input),value=>parseConversationReply(value,input)),
     askReflectionQuestion:input=>ask('reflect','reflection follow-up','reflection_question',buildReflectionQuestionRequest(input),value=>parseReflectionQuestion(value,input)),
+    writeHunch:input=>ask('reflect','hunch','hunch',buildHunchRequest(input),value=>parseHunch(value,input)),
     askReviewQuestion:input=>ask('reflect','review question','review_question',buildReviewQuestionRequest(input),value=>parseReviewQuestion(value,input)),
     deriveReviewAnswer:input=>ask('extract','review derivation','review_derivation',buildReviewAnswerDerivationRequest(input),value=>parseReviewAnswerDerivation(value,input)),
     async extractSignalCandidates(input){

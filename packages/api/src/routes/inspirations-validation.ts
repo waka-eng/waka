@@ -61,6 +61,9 @@ export const createInspirationSchema = z.object({
     .max(MAX_TEXT_CHARS, "Inspiration text is too long")
     .default(''),
   attachments: z.array(inspirationAttachmentInputSchema).min(1).max(MAX_INSPIRATION_ATTACHMENTS).optional(),
+  /** The question this save answers, when WAKA asked one (onboarding). Context
+      for the readings, never the save's own words. */
+  prompt: z.string().trim().min(1).max(300, "prompt must be <= 300 characters").optional(),
   kind: z.preprocess(
     (v) => (typeof v === "string" ? v.trim() || undefined : v),
     z

@@ -340,6 +340,7 @@ export async function deriveSignalsForInspiration(
       text: inspiration.text,
       source: inspiration.source,
       createdAt: inspiration.createdAt,
+      prompt: inspiration.prompt,
     },
     reflections: reflectionRows.map((row) => ({
       question: row.question,

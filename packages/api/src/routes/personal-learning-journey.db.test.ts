@@ -176,6 +176,9 @@ describe('personal learning journey', () => {
       // Exhaust one attempt to exercise the real explicit recovery endpoint.
       await t.sql`UPDATE background_jobs SET max_attempts = 1 WHERE type = 'derive_signals'`;
       await deferFixtureIndexJobs(t);
+      /* The hunch the saves asked for (insight goal, phase 3) waits, so the
+         one job drained here is the derivation this case is about. */
+      await t.sql`UPDATE background_jobs SET run_after = now() + interval '1 day' WHERE type = 'generate_hunch'`;
       const failed = await drainBackgroundJobs({ limit: 1, now: new Date(Date.now() + 1000) });
       expect(failed.failed).toBe(1);
       expect(await f.status()).toMatchObject({ phase: 'failed', canRetry: true, result: null });
