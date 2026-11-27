@@ -80,7 +80,7 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
     ? Promise.resolve(Response.json({ profiles: [personal] })) : original(...args));
   keys.push(key('Personal laptop', personal.id), { ...key('Old personal key', personal.id), revokedAt: '2026-10-22T00:00:00Z' });
   await openPersonal();
-  expect(host.querySelector('h2')?.textContent).toBe('Use WAKA in Claude or ChatGPT');
+  expect(host.querySelector('h2')?.textContent).toBe('Use WAKA in Claude Code or Codex');
   expect(calls.some(c => c.path.includes('keys'))).toBe(false);
   await click('API keys');
   expect(host.textContent).toMatch(/Neither can edit or delete inspirations or manage your account/i);
@@ -118,7 +118,7 @@ it('keeps personal keys in their tab and copies a profile-bound setup prompt wit
   const details = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(prompt)![1]!);
   expect(details).toMatchObject({ profileId: personal.id, profileType: 'human', serverName: `waka-${personal.id}`, scope: 'current project only' });
   expect(details.login).toBeUndefined();
-  expect(prompt).toContain('Settings → Use WAKA in Claude or ChatGPT → API keys');
+  expect(prompt).toContain('Settings → Use WAKA in Claude Code or Codex → API keys');
   expect(prompt).toContain('Do not use browser login');
   expect(prompt).toContain('Never ask me to paste the key into chat');
   expect(prompt).not.toContain(noah.id); expect(prompt).not.toContain(secret);
@@ -222,5 +222,5 @@ it('keeps personal setup manually copyable if clipboard access fails', async () 
 
 async function openPersonal(locale: SettingsPanelProps['locale'] = 'en-US') {
   await act(async () => root.render(<SettingsPanel {...props} locale={locale} />));
-  await click(locale === 'en-US' ? 'Use WAKA in Claude or ChatGPT' : 'Claude나 ChatGPT에서 WAKA 쓰기');
+  await click(locale === 'en-US' ? 'Use WAKA in Claude Code or Codex' : 'Claude Code나 Codex에서 WAKA 쓰기');
 }

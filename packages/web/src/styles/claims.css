@@ -5651,6 +5651,13 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-settings-section .waka-settings-row,
 .waka-settings-section > .waka-settings-delete { font-size: var(--t-body); }
 .waka-settings-row .waka-settings-chevron { flex: none; color: var(--muted); }
+/* EVERY ROW ONE COLOUR, ONE EDGE (founder, 2026-11-27: "this bottom part
+   is so ugly"): links, buttons and the way out read as one list. Only
+   Delete account steps back. */
+.waka-account .waka-settings-section .waka-settings-row:is(a, button) {
+  color: var(--ink); text-decoration: none; padding-inline: 0; margin: 0;
+}
+.waka-account .waka-settings-leave .waka-settings-row.waka-settings-delete { color: var(--muted); }
 .waka-settings-export { display: flex; flex-direction: column; gap: var(--sp-4); }
 .waka-settings-export > a.waka-settings-row { color: var(--ink); text-decoration: none; }
 /* THE FOOT'S TWO ACTS AND THE LEGAL LINKS ON THE SAME EDGE. Their own

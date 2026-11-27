@@ -1,6 +1,6 @@
 /**
  * WHAT EACH KEY READ (founder, 2026-11-26, agent to agent): under the keys
- * that let Claude or ChatGPT into this memory, the reads they made, newest
+ * that let Claude Code or Codex into this memory, the reads they made, newest
  * first, in plain words: "Read your 3 principles", "Searched for “job”". The
  * key's own name says which; revoking that key, just above, is how to stop
  * it. Reads by the app itself are never listed.

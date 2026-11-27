@@ -100,11 +100,16 @@ it("offers an owned JSON export and releases the temporary file URL on close", a
   vi.stubGlobal("fetch", fetchMock);
   try {
     await render({});
-    const prepare = [...host.querySelectorAll("button")].find(button => button.textContent === "Prepare my data export");
+    /* One press downloads (founder, 2026-11-27: "it's just like stuck here
+       ... I don't get the purpose of this"). */
+    const started = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const prepare = [...host.querySelectorAll("button")].find(button => button.textContent === "Download my data");
     expect(prepare).toBeDefined();
     await act(async () => prepare?.click());
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/export");
     expect(download).toHaveBeenCalledOnce();
+    expect(started, "the download did not start on the one press").toHaveBeenCalledOnce();
+    started.mockRestore();
     expect(host.querySelector('a[download="waka-profile.json"]')?.getAttribute("href")).toBe("blob:test-profile-export");
     await act(async () => root.render(null));
     expect(release).toHaveBeenCalledWith("blob:test-profile-export");

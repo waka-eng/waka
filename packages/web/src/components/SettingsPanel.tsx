@@ -13,7 +13,7 @@ import { fetchSessions, revokeSession, type ApiSession } from "../lib/api/sessio
 import { supportedLocales } from "../lib/i18n";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { SurfaceHeader } from "./SurfaceHeader";
-import { LegalLinks } from "./LegalLinks";
+import { legalPaths } from "./LegalLinks";
 import { HowItWorksBody } from "./HowItWorksPanel";
 
 export interface SettingsPanelProps {
@@ -173,12 +173,22 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
 
       <section className="waka-settings-section" aria-labelledby="waka-settings-about">
         <h3 id="waka-settings-about" className="waka-settings-heading">{say("settingsGroupAbout")}</h3>
-        <Group id="info" open={open} setOpen={setOpen} label={say("worldHowItWorksTitle")}><HowItWorksBody locale={props.locale} /></Group>
-        <LegalLinks locale={props.locale} />
-        <button type="button" className="waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
-          {say("worldSignOutLower")}
-        </button>
-        {danger}
+        {/* ONE LIST OF MATCHING ROWS (founder, 2026-11-27: "this bottom
+            part is so ugly"): How WAKA works and the two legal pages as rows
+            like every other, then the way out on its own list below. */}
+        <div className="waka-settings-list">
+          <Group id="info" open={open} setOpen={setOpen} label={say("worldHowItWorksTitle")}><HowItWorksBody locale={props.locale} /></Group>
+          <a className="waka-settings-row" href={legalPaths.terms}>{say("legalTermsLink")}<span className="waka-settings-chevron" aria-hidden="true">›</span></a>
+          <a className="waka-settings-row" href={legalPaths.privacy}>{say("legalPrivacyLink")}<span className="waka-settings-chevron" aria-hidden="true">›</span></a>
+        </div>
+      </section>
+      <section className="waka-settings-section waka-settings-leave" aria-label={say("worldSignOutLower")}>
+        <div className="waka-settings-list">
+          <button type="button" className="waka-settings-row waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
+            {say("worldSignOutLower")}
+          </button>
+          {danger}
+        </div>
       </section>
       </> : <>{groups}{danger}<Group id="info" open={open} setOpen={setOpen} label={say("worldHowItWorksTitle")}><HowItWorksBody locale={props.locale} /></Group></>}
       </div>
@@ -298,6 +308,9 @@ function PasswordChangeForm({ locale }: { locale: SupportedLocale }): JSX.Elemen
   </form>;
 }
 
+/** How long Download my data waits before it says it failed. */
+const EXPORT_DEADLINE_MS = 60_000;
+
 function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
   const pending = useRef<AbortController | null>(null);
   const objectUrl = useRef<string | null>(null);
@@ -315,6 +328,10 @@ function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
     pending.current = request;
     setError(undefined);
     setBusy(true);
+    /* NEVER STUCK (founder, 2026-11-27: "it's just like stuck here"): a read
+       that has not answered in a minute is called failed, with its retry. */
+    let timedOut = false;
+    const deadline = window.setTimeout(() => { timedOut = true; request.abort(); }, EXPORT_DEADLINE_MS);
     try {
       if (isMobileBuild) {
         await (await platformServices()).openBrowser(checkedNativeApiOrigin());
@@ -325,15 +342,22 @@ function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
         const blob = new Blob([JSON.stringify(bundle)], { type: "application/json" });
         objectUrl.current = URL.createObjectURL(blob);
         setUrl(objectUrl.current);
+        /* ONE PRESS: the file starts downloading as soon as it is ready; the
+           row then offers it again by its own link. */
+        const link = document.createElement("a");
+        link.href = objectUrl.current; link.download = "waka-profile.json";
+        document.body.append(link); link.click(); link.remove();
       }
     } catch (failure) {
-      if (!request.signal.aborted) {
+      if (timedOut) setError("profileExportFailed");
+      else if (!request.signal.aborted) {
         setError(failure instanceof ApiError && failure.code === "export_too_large"
           ? "profileExportTooLarge" : "profileExportFailed");
       }
     } finally {
+      window.clearTimeout(deadline);
       pending.current = null;
-      if (!request.signal.aborted) setBusy(false);
+      if (!request.signal.aborted || timedOut) setBusy(false);
     }
   }
 
@@ -518,7 +542,7 @@ function Group({ id, open, setOpen, label, children }: {
   children: React.ReactNode;
 }): JSX.Element | null {
   if (open !== null) return open === id ? <div className="waka-settings-body">{children}</div> : null;
-  if (id === 'danger') return <button type="button" className="waka-settings-erase waka-settings-delete"
+  if (id === 'danger') return <button type="button" className="waka-settings-row waka-settings-delete"
     data-settings-target={id} onClick={() => setOpen(id)}>{label}</button>;
   return (
     <button type="button" className="waka-settings-row" data-settings-target={id}
