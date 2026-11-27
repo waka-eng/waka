@@ -29,6 +29,8 @@ import {sweepMcpReads} from './lib/mcp-reads.js';
 import {sweepStaleStagedAttachments} from './lib/conversation-attachments.js';
 import {sweepAttachmentObjects,drainAttachmentObjects} from './lib/attachment-sweep.js';
 import {getDb} from './lib/db.js';
+import {reconcileLegacyDerivationFailures} from './lib/job-failure-recovery.js';
+import {deliverTerminalJobNotices} from './lib/job-failure-notices.js';
 import {recordOperationalFault,recordDailySweep} from './lib/operational-fault.js';
 
 const DEFAULT_CRON_LIMIT = 5;
@@ -53,6 +55,18 @@ export function isScheduledEvent(event:unknown):boolean{
   return Boolean(event&&typeof event==='object'&&(event as {source?:unknown}).source==='aws.events'&&(event as {'detail-type'?:unknown})['detail-type']==='Scheduled Event');
 }
 
+async function reconcileJobFailures(now = new Date()) {
+  try {
+    const requeued = await reconcileLegacyDerivationFailures(getDb(), now);
+    if (requeued) console.info('[job-failure-recovery]', { requeued });
+  } catch (error) {
+    recordOperationalFault('maintenance');
+    console.warn('[job-failure-recovery] deferred', safeErrorDiagnostic(error));
+  }
+  try { await deliverTerminalJobNotices(getDb()); }
+  catch { console.warn('[background-jobs] terminal notices deferred'); }
+}
+
 /**
  * The daily run's housekeeping: final-attempt leases whose worker died
  * (`settleAbandonedExhaustedLeases` — here, once a day, never on the drain
@@ -67,6 +81,7 @@ async function runScheduledSweeps(now=new Date()){
   catch(error){recordOperationalFault('maintenance');console.warn('[background-job-runs-sweep] failed',safeErrorDiagnostic(error));}
   try{const settled=await settleAbandonedExhaustedLeases(getDb(),now);if(settled)console.info('[abandoned-lease-sweep]',JSON.stringify({settled}));}
   catch(error){recordOperationalFault('maintenance');console.warn('[abandoned-lease-sweep] failed',safeErrorDiagnostic(error));}
+  await reconcileJobFailures(now);
   try{const swept=await sweepDeletedShelf(getDb(),now);if(swept)console.info('[deleted-shelf-sweep]',JSON.stringify({swept}));}
   catch(error){recordOperationalFault('maintenance');console.warn('[deleted-shelf-sweep] failed',safeErrorDiagnostic(error));}
   try{const swept=await sweepMcpReads(getDb(),now);if(swept)console.info('[mcp-read-sweep]',JSON.stringify({swept}));}
@@ -128,6 +143,7 @@ async function runHandler(event?:unknown, context?: WorkerContext) {
 
 
   if(event&&typeof event==='object'&&(event as {mode?:unknown}).mode==='recovery'){
+    await reconcileJobFailures();
     const state=await readBackgroundJobRecoveryState();recordQueueRecovery(state);
     if(!state.overdue){await recoverBackgroundJobWakes(context?.invokedFunctionArn);return {...empty,recovery:state};}
     const result=await runBackgroundJobWorker({limit:QUEUE_RECOVERY_LIMITS.claims,overdueOnly:true,...lifecycle,...deadline});

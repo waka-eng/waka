@@ -47,6 +47,8 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export interface ConfidenceEvidence {
   createdAt: Date;
   source: "app" | "agent";
+  /** The durable save ID remains the citation even when two saves have identical material. */
+  material?: {key:string; growthKeys:string[]; originAt:Date} | null;
   /** Validated provenance, not extra evidence. Review replies share a session
    * unit; only focused source origins may be used, never all model context. */
   lineage?: {kind:'inspiration'|'review';unitId:string;originIds:string[]};
@@ -58,19 +60,24 @@ export interface ConfidenceEvidence {
 export function selectIndependentEvidence(evidence:ConfidenceEvidence[]):ConfidenceEvidence[]{
   if(evidence.every(row=>!row.lineage))return [...evidence];
   if(evidence.some(row=>!row.lineage))throw new Error('Cannot combine identified evidence with anonymous rows');
-  const units=new Map<string,{row:ConfidenceEvidence;origins:Set<string>;originDates:Map<string,Date>}>();
+  const units=new Map<string,{row:ConfidenceEvidence; origins:Map<string,{id:string; witness:ConfidenceEvidence}>}>();
   evidence.forEach(row=>{
     const lineage=row.lineage!;
     if(!lineage.unitId||!lineage.originIds.length)return;
     if(lineage.kind==='inspiration'&&(new Set(lineage.originIds).size!==1||lineage.originIds[0]!==lineage.unitId))throw new Error('An inspiration witness needs its own origin');
     const key=`known:${lineage.kind}:${lineage.unitId}`;
-    const origins=lineage.originIds;
-    const previous=units.get(key);
-    if(previous){
-      if(previous.row.source!==row.source)throw new Error('One evidence unit cannot have different authorship kinds');
-      if(row.createdAt<previous.row.createdAt)previous.row={...previous.row,createdAt:row.createdAt};
-      for(const origin of origins){previous.origins.add(origin);const date=previous.originDates.get(origin);if(!date||row.createdAt<date)previous.originDates.set(origin,row.createdAt);}
-    }else units.set(key,{row:{...row},origins:new Set(origins),originDates:new Map(origins.map(origin=>[origin,row.createdAt]))});
+    if (row.material === null) return;
+    const unit = units.get(key) ?? {row, origins:new Map<string,{id:string; witness:ConfidenceEvidence}>()};
+    if (unit.row.source !== row.source) throw new Error('One evidence unit cannot have different authorship kinds');
+    if (row.createdAt < unit.row.createdAt) unit.row = row;
+    for (const id of lineage.originIds) {
+      const identity = row.material?.key ?? id;
+      const found = unit.origins.get(identity);
+      if (!found || row.createdAt < found.witness.createdAt || (+row.createdAt === +found.witness.createdAt && id < found.id)) {
+        unit.origins.set(identity, {id, witness:row});
+      }
+    }
+    units.set(key,unit);
   });
   const ordered=[...units].sort(([a,x],[b,y])=>Number(x.row.lineage?.kind==='review')-Number(y.row.lineage?.kind==='review')||x.row.createdAt.getTime()-y.row.createdAt.getTime()||(a<b?-1:a>b?1:0));
   const matched=new Map<string,string>();
@@ -79,7 +86,7 @@ export function selectIndependentEvidence(evidence:ConfidenceEvidence[]):Confide
     const queue=[start],visited=new Set<string>(),parent=new Map<string,string>();
     for(let index=0;index<queue.length;index++){
       const key=queue[index]!;
-      for(const origin of [...units.get(key)!.origins].sort()){
+      for(const origin of [...units.get(key)!.origins.keys()].sort()){
         if(visited.has(origin))continue;visited.add(origin);parent.set(origin,key);
         const previous=matched.get(origin);
         if(previous!==undefined){queue.push(previous);continue;}
@@ -97,8 +104,10 @@ export function selectIndependentEvidence(evidence:ConfidenceEvidence[]):Confide
   // A selected unit is a calculation result, not a replacement for its full
   // provenance ledger. Pin its matched origin and the date that origin was
   // first supported, so another count of this result cannot re-date it.
-  return ordered.filter(([key])=>chosen.has(key)).map(([key,unit])=>({...unit.row,
-    createdAt:unit.originDates.get(unitOrigin.get(key)!)!,lineage:{...unit.row.lineage!,originIds:[unitOrigin.get(key)!]}}));
+  return ordered.filter(([key])=>chosen.has(key)).map(([key,unit])=>{
+    const {id, witness} = unit.origins.get(unitOrigin.get(key)!)!;
+    return {...witness, lineage:{...witness.lineage!,originIds:[id]}};
+  });
 }
 
 /**

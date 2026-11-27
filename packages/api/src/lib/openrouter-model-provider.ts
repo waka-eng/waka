@@ -191,7 +191,7 @@ export function createOpenRouterModelProvider(): ModelProvider {
         "WAKA_MODEL_JUDGE",
         "signal_match",
       );
-      return parseSignalMatchJudgement(payload);
+      return parseSignalMatchJudgement(payload, input.alternativeStatement !== undefined);
     },
     async assessSignalSupport(input) {
       const payload = await ask(
@@ -222,7 +222,7 @@ export function createOpenRouterModelProvider(): ModelProvider {
       );
       if (payload === MODEL_DECLINED) return { candidates: [] };
       if (payload === null) throw new ModelDidNotAnswerError("principle distillation");
-      return parseDistilledPrinciples(payload);
+      return parseDistilledPrinciples(payload,input);
     },
     async judgePrincipleRelation(input) {
       const payload = await ask(

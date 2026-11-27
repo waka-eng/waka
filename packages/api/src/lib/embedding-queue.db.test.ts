@@ -3,6 +3,7 @@
  * `ModelProvider` supplies grounded fixtures. Actual factory, dispatcher,
  * claim/60-start budget, progress, source fences and publications execute. */
 import {randomUUID} from 'node:crypto';
+import postgres from 'postgres';
 import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js';
 import {getDb} from './db.js';
@@ -90,4 +91,45 @@ it('keeps queue kind fairness and existing 60-start accounting with a model2 bac
  expect((await postgresBackgroundJobStore.usageForAccount(f.accountId,new Date(Date.now()-3600000))).startedInWindow).toBe(1);
  await t.sql`INSERT INTO background_job_runs(account_id,job_id,attempt,started_at) SELECT ${f.accountId},gen_random_uuid(),1,now()-interval '1 second' FROM generate_series(1,59)`;
  const blocked=await drainBackgroundJobs({limit:1,processor:async()=>{throw Error('Budget must prevent work');}});expect(blocked.claimed).toBe(0);expect(blocked.deferred).toBeGreaterThan(0);expect(await t.sql`SELECT id FROM background_job_runs WHERE account_id=${f.accountId}`).toHaveLength(60);expect(wire).not.toHaveBeenCalled();
+});
+
+it('defers a real publication lock and resumes capture derivation from the staged vector without new HTTP',async()=>{
+ const f=await owner();
+ const [source]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES(${f.profileId},'Synthetic capture held after validation.') RETURNING id`;
+ const request=await enqueueDeriveSignals(f.profileId,source.id,'created');
+ await t.sql`UPDATE background_jobs SET run_after=now()+interval '1 hour' WHERE type='index_embedding'`;
+ const peer=postgres(process.env.DB_CONNECTION_URL!,{max:1,prepare:false});
+ let unlock!:()=>void;
+ let holder:Promise<unknown>|undefined;
+ wire.mockImplementationOnce(async(url,init)=>{
+  expect(String(url)).toBe('https://openrouter.ai/api/v1/embeddings');
+  expect(JSON.parse(String(init?.body)).model).toBe(EMBEDDING_2_SPACE.wireModel);
+  await new Promise<void>(locked=>{
+   holder=peer.begin(async tx=>{
+    await tx`SELECT profile_id FROM generation_revisions WHERE profile_id=${f.profileId} FOR UPDATE`;
+    await new Promise<void>(release=>{unlock=release;locked();});
+   });
+  });
+  return Response.json({model:EMBEDDING_2_SPACE.wireModel,data:[{embedding:[1,...Array<number>(767).fill(0)]}]});
+ });
+ try {
+  const blocked=await drainBackgroundJobs({limit:1,now:new Date(Date.now()+1000)});
+  expect(blocked).toMatchObject({claimed:1,held:1,failed:0,retried:0});
+  const [pending]=await t.sql`SELECT status,attempts,max_attempts,last_error,payload->'lockDeferral' AS lock_deferral,run_after
+   FROM background_jobs WHERE id=${request.jobId}`;
+  expect(pending).toMatchObject({status:'pending',attempts:0,max_attempts:3,last_error:'embedding_publication_pending',lock_deferral:{count:1}});
+  expect((await t.sql`SELECT status FROM embedding_index_attempts WHERE profile_id=${f.profileId}`)).toEqual([{status:'received'}]);
+  expect(await t.sql`SELECT id FROM inspiration_embeddings WHERE inspiration_id=${source.id}`).toHaveLength(0);
+  expect(extract).not.toHaveBeenCalled();
+  unlock();await holder;
+  const next=new Date(new Date(pending.run_after).getTime()+1000);
+  expect(await drainBackgroundJobs({limit:1,now:next})).toMatchObject({claimed:1,succeeded:1,failed:0});
+  expect(extract).toHaveBeenCalledOnce();
+  expect(wire).toHaveBeenCalledOnce();
+  expect((await t.sql`SELECT status FROM embedding_index_attempts WHERE profile_id=${f.profileId}`)).toEqual([{status:'committed'}]);
+  expect((await t.sql`SELECT count(*)::int AS n FROM background_job_runs WHERE job_id=${request.jobId}`)[0]?.n).toBe(2);
+  expect((await t.sql`SELECT derived_at IS NOT NULL AS derived FROM inspiration_processing WHERE id=${request.receipt.id}`)[0]?.derived).toBe(true);
+  expect((await t.sql`SELECT pending_embedding IS NULL AS cleared,requested_version=completed_version AS done FROM embedding_index_work WHERE source_id=${source.id}`)[0])
+   .toEqual({cleared:true,done:true});
+ } finally {unlock?.();await holder;await peer.end();}
 });

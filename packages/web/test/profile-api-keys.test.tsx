@@ -24,7 +24,8 @@ const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
 const key = (id: string, profileId = noah.id): ApiProfileKey => ({
   id, profileId, label: id, prefix: 'waka_agent_12345', createdAt: '2026-10-23T00:00:00Z', lastUsedAt: null, revokedAt: null,
 });
-const button = (name: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.replace('›', '').trim() === name)!;
+const button = (name: string) => [...host.querySelectorAll<HTMLButtonElement>('button')]
+  .find(b => (b.getAttribute('aria-label') ?? b.textContent?.replace('›', '').trim()) === name)!;
 const click = async (name: string) => { await act(async () => button(name).click()); };
 const input = async (name: string, value: string) => {
   const node = host.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)!;
@@ -85,6 +86,9 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
   expect(host.textContent).toMatch(/Neither can edit or delete inspirations or manage your account/i);
   expect(host.textContent).toContain('Read and capture also allows new saves');
   expect(host.textContent).toContain('Personal laptop');
+  expect([...host.querySelectorAll('thead th')].map(header => header.textContent)).toEqual([
+    'Name', 'Permissions', 'API key', 'Last used', 'Delete key',
+  ]);
   for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent name']) expect(host.textContent).not.toContain(hidden);
   expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys', `/api/mcp-reads?profile=${personal.id}`]);
   expect(calls.every(c => c.method === 'GET')).toBe(true);
@@ -133,9 +137,16 @@ it('keeps personal keys in their tab and copies a profile-bound setup prompt wit
 it('revokes a personal key without touching an agent key, session or memory', async () => {
   keys.push(key('Personal laptop', personal.id));
   await openPersonal(); await click('API keys');
-  await click('Delete key');
+  const trigger = button('Delete key Personal laptop');
+  expect(trigger.closest('tr')?.querySelector('th[scope="row"]')?.textContent).toContain('Personal laptop');
+  await click('Delete key Personal laptop');
   expect(calls.some(c => c.method === 'DELETE')).toBe(false);
+  expect(trigger.getAttribute('aria-expanded')).toBe('true');
   expect(host.textContent).toContain('Everything saved stays');
+  await click('Cancel');
+  expect(document.activeElement).toBe(trigger);
+  expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  await click('Delete key Personal laptop');
   await click('Delete');
   expect(calls.filter(c => c.method === 'DELETE').map(c => c.path)).toEqual(['/api/keeper-keys/Personal%20laptop']);
   expect(host.textContent).not.toContain('Personal laptop');
@@ -150,7 +161,7 @@ it('retries a failed personal profile load and translates personal setup in Kore
   fail = null;
   await act(async () => host.querySelector<HTMLButtonElement>('.waka-settings-erase')!.click());
   expect(host.querySelector('[role="alert"]')).toBeNull();
-  await click('설정 프롬프트 복사');
+  await click('연결 요청 문구 복사');
   expect(copied.at(-1)).toContain('브라우저 로그인이나 에이전트 프로필 생성을 사용하지 마세요');
   expect(copied.at(-1)).toContain(personal.id);
 });

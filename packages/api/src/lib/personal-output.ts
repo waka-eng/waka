@@ -4,6 +4,8 @@ import { getDb } from "./db.js";
 import { citationBodyCurrent, citationStatementCurrent, evidenceSupportCurrent } from './signal-support-state.js';
 import {reviewEvidenceCurrent} from './review-evidence.js';
 import {feedbackWordingCurrent} from './feedback-revisions.js';
+import { directFirstPrincipleCitationCurrent, firstPrincipleCitationsIndependent, isDirectFirstPrinciple, usesFirstPrincipleBar } from './first-principle-evidence.js';
+import { SIGNAL_PROMOTION_MIN_EVIDENCE } from './signal-derivation-thresholds.js';
 
 type Db = Pick<ReturnType<typeof getDb>, "select">;
 
@@ -18,12 +20,29 @@ export function personalSignalReadable(profileId: string) {
         AND pe.owner_profile_id = ${profileId}::uuid)
       OR EXISTS (SELECT 1 FROM signal_review_evidence re WHERE re.profile_id=${profileId}::uuid AND re.signal_id=${signals.id}
         AND ${reviewEvidenceCurrent('re')}))
-    AND NOT EXISTS (SELECT 1 FROM signal_review_evidence re WHERE re.signal_id=${signals.id}
-      AND (${reviewEvidenceCurrent('re')}) IS NOT TRUE)
     AND NOT EXISTS (SELECT 1 FROM signal_evidence pe WHERE pe.signal_id = ${signals.id}
-      AND (${evidenceSupportCurrent('pe')}) IS NOT TRUE)
-    AND NOT EXISTS (SELECT 1 FROM signal_evidence pe WHERE pe.signal_id = ${signals.id}
-      AND pe.owner_profile_id <> ${profileId}::uuid))`;
+      AND pe.owner_profile_id <> ${profileId}::uuid)
+    AND CASE
+      WHEN NOT EXISTS (SELECT 1 FROM signal_review_evidence re WHERE re.signal_id = ${signals.id}
+        AND (${reviewEvidenceCurrent('re')}) IS NOT TRUE)
+        AND NOT EXISTS (SELECT 1 FROM signal_evidence pe WHERE pe.signal_id = ${signals.id}
+          AND (${evidenceSupportCurrent('pe')}) IS NOT TRUE) THEN TRUE
+      WHEN ${signals.status} = 'active' THEN
+        -- Keep explicit exclusions in force, including context in a review.
+        NOT EXISTS (SELECT 1 FROM signal_evidence pe JOIN inspirations excluded
+          ON excluded.id = pe.inspiration_id AND excluded.profile_id = pe.owner_profile_id
+          WHERE pe.signal_id = ${signals.id} AND excluded.memory_excluded_at IS NOT NULL)
+        AND NOT EXISTS (SELECT 1 FROM signal_review_evidence_sources re JOIN inspirations excluded
+          ON excluded.id = re.inspiration_id AND excluded.profile_id = re.profile_id
+          WHERE re.signal_id = ${signals.id} AND excluded.memory_excluded_at IS NOT NULL)
+        -- Reuse the promotion counter on current, owned witnesses when some
+        -- links still need checking. The ordinary read avoids this count.
+        AND (SELECT independent_evidence_count(jsonb_agg(jsonb_build_object(
+          'kind', edge.kind, 'unit', edge.unit_id, 'origin', edge.material_key)), ${SIGNAL_PROMOTION_MIN_EVIDENCE})
+          FROM signal_material_edges(${profileId}::uuid, ARRAY[${signals.id}]) edge
+          WHERE edge.current IS TRUE AND edge.material_key IS NOT NULL AND edge.created_at <= now()) >= ${SIGNAL_PROMOTION_MIN_EVIDENCE}
+      ELSE FALSE
+    END)`;
 }
 
 /** Apply before a public limit: hidden rows must not crowd readable entries
@@ -46,12 +65,18 @@ export function personalEntryReadable(profileId: string) {
 
 export function personalPrincipleSupportCurrent(profileId: string, minimumSignals: number) {
   // Separate IDs with the same normalized wording are still one pattern.
-  return sql<boolean>`((SELECT count(DISTINCT lower(btrim(regexp_replace(normalize(signals.statement, NFKC), '[[:space:]]+', ' ', 'g'))))
+  const first = usesFirstPrincipleBar(profileId);
+  const direct = isDirectFirstPrinciple();
+  return sql<boolean>`((CASE WHEN ${direct} THEN ${first} AND (SELECT count(*) FROM principle_signals pc
+      WHERE pc.principle_id=${principles.id} AND pc.profile_id=${profileId}::uuid) = 1
+    WHEN ${first} THEN ${firstPrincipleCitationsIndependent(profileId)}
+    ELSE (SELECT count(DISTINCT lower(btrim(regexp_replace(normalize(signals.statement, NFKC), '[[:space:]]+', ' ', 'g'))))
       FROM principle_signals ps JOIN signals ON signals.id=ps.signal_id
-      WHERE ps.principle_id = "principles"."id") >= ${minimumSignals}
+      WHERE ps.principle_id = "principles"."id") >= ${minimumSignals} END)
     AND NOT EXISTS (SELECT 1 FROM principle_signals ps LEFT JOIN signals ON signals.id = ps.signal_id
       WHERE ps.principle_id = "principles"."id" AND ((${personalSignalReadable(profileId)}) IS NOT TRUE
-        OR signals.status <> 'active'
+        OR (NOT ${first} AND signals.status <> 'active')
+        OR (${direct} AND (${directFirstPrincipleCitationCurrent(profileId)}) IS NOT TRUE)
         OR (${citationStatementCurrent('ps')}) IS NOT TRUE
         OR (${citationBodyCurrent('ps', 'principles', 'principle_statement_revision', 'statement_revision')}) IS NOT TRUE)))`;
 }
@@ -63,9 +88,6 @@ export function personalPrincipleReadable(profileId: string, minimumSignals: num
 
 interface EntryForProjection {
   id: string;
-  body: string;
-  belief: string | null;
-  prompt: string | null;
   lockedAt: Date | null;
   pinnedAt: Date | null;
   dismissedAt: Date | null;

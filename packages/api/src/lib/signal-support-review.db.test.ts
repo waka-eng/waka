@@ -259,6 +259,34 @@ describe("applying explicit support decisions", () => {
     expect(await t.sql`SELECT id FROM signals WHERE profile_id = ${f.ownerProfileId}`).toHaveLength(1);
   });
 
+  it("does not reattach or mint when the judge selects the withdrawn second target", async () => {
+    const f = await fixture();
+    const candidateVector = [1, 0, 0, 0];
+    const withdrawnStatement = "I choose quiet before making decisions";
+    const otherStatement = "I make decisions with a written agenda";
+    const [other] = await t.sql`INSERT INTO signals(profile_id,statement,locked_at)
+      VALUES (${f.ownerProfileId},${otherStatement},now()) RETURNING id`;
+    await t.db.transaction(async tx => {
+      await writeSignalEmbedding(tx as never, { profileId:f.ownerProfileId, signalId:f.signalId,
+        statement:withdrawnStatement, embedding:[.90, Math.sqrt(1-.90**2), 0, 0], model:"support-test" });
+      await writeSignalEmbedding(tx as never, { profileId:f.ownerProfileId, signalId:other.id as string,
+        statement:otherStatement, embedding:candidateVector, model:"support-test" });
+    });
+    await applySignalSupportReview(t.db as never, await review(f, "unsupported"));
+    const judge = vi.fn<ModelProvider["judgeSignalMatch"]>(async () => ({relation:"same",target:2}));
+    const result = await t.db.transaction(async tx => {
+      await acquireSignalDerivationLock(tx as never, f.ownerProfileId);
+      return applyCandidates(tx as never, { profileId:f.ownerProfileId,evidenceOwnerProfileId:f.ownerProfileId,
+        inspirationId:f.inspirationId,embeddingModel:"support-test",preferredLocale:"en-US",now:new Date(),
+        provider:{judgeSignalMatch:judge} as unknown as ModelProvider,beforeWrites:async()=>{},
+        candidates:[{statement:"I like to settle decisions in quiet",embedding:candidateVector,quote:null,quoteSource:null,reason:null,relatedEvidence:[]}] });
+    });
+    expect(judge).toHaveBeenCalledOnce();
+    expect(judge.mock.calls[0]![0]).toMatchObject({existingStatement:otherStatement,alternativeStatement:withdrawnStatement});
+    expect(result).toMatchObject({matchedSignalIds:[],mintedSignalIds:[]});
+    expect(await t.sql`SELECT id FROM signal_evidence WHERE inspiration_id=${f.inspirationId}`).toHaveLength(0);
+  });
+
   it("the database refuses an old writer reattaching an explicitly withdrawn link", async () => {
     const f = await fixture();
     await applySignalSupportReview(t.db as never, await review(f, "unsupported"));
@@ -410,7 +438,7 @@ describe("applying explicit support decisions", () => {
     for (const signalId of ids) {
       const extraSources: string[] = [];
       for (let n = 0; n < (signalId === f.signalId ? 2 : 3); n++) {
-        const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${f.ownerProfileId}, 'Independent material') RETURNING id`;
+        const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${f.ownerProfileId}, ${`Independent material from occasion ${n+1}`}) RETURNING id`;
         await t.sql`INSERT INTO signal_evidence(profile_id, owner_profile_id, signal_id, inspiration_id)
           VALUES (${f.ownerProfileId}, ${f.ownerProfileId}, ${signalId}, ${source.id})`;
         extraSources.push(source.id as string);

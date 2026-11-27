@@ -40,6 +40,7 @@ import { legalPaths } from "./components/LegalLinks";
 import { MobileShell } from './components/MobileShell';
 import { AnalyticsNavigation } from './components/AnalyticsNavigation';
 import { startAnalytics } from './lib/analytics';
+import { applyDocumentLocale, readStoredLocale } from './lib/locales';
 if (import.meta.env.VITE_BUILD_TARGET === 'mobile') void import('./styles/mobile-fonts.css');
 // FIRST, ALWAYS: declares the layer order every other stylesheet relies on.
 // A @layer statement must precede the rules it orders, so this import cannot
@@ -138,6 +139,7 @@ function ProtectedHome() {
 /* Before React mounts, so a stylesheet that never arrives cannot cost the
    screen that needed it. See lib/preload-recovery.ts for why this is narrow
    rather than a blanket ignore. */
+applyDocumentLocale(readStoredLocale());
 installPreloadRecovery();
 startAnalytics();
 

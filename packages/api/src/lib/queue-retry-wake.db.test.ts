@@ -4,7 +4,10 @@
  * not a measured cloud claim; handler signaling has separate unit coverage. */
 import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
+import {EmbeddingIndexNeedsRetry} from './embedding-indexer.js';
 import {OpenRouterHttpError} from './openrouter-http.js';
+import {ModelConfigurationError} from './model-routing.js';
+import * as notices from './job-failure-notices.js';
 import {afterAll,beforeAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/db.js';
 import {getDb} from './db.js';
@@ -56,7 +59,9 @@ it('leaves running, exhausted and next-day reading work to its existing lease/re
 });
 async function fail(){
   const retries:BackgroundJobRetryWake[]=[];
-  const result=await drainBackgroundJobs({now,limit:1,processor:async()=>{throw new Error('Synthetic transport failure');},onTransientRetry:retry=>{retries.push(retry);}});
+  const result=await drainBackgroundJobs({now,limit:1,processor:async()=>{
+    throw new Error('Synthetic serialization rollback', {cause: {code:'40001'}});
+  },onTransientRetry:retry=>{retries.push(retry);}});
   return {retries,result};
 }
 const pending=(retries:BackgroundJobRetryWake[],at=now)=>hasNearTermBackgroundJobRetry(retries,t.db as never,at);
@@ -104,11 +109,141 @@ it('settles an actual wrapped PostgreSQL failure without storing or logging its 
     const result=await drainBackgroundJobs({now,limit:1,processor:async()=>{
       await getDb().execute(sql`SELECT ${marker}::int`);
     }});
-    expect(result).toMatchObject({retried:1});
-    const [row]=await t.sql`SELECT last_error FROM background_jobs WHERE id=${job.id}`;
+    expect(result).toMatchObject({failed:1,retried:0});
+    const [row]=await t.sql`SELECT last_error,payload->>'failureDisposition' AS disposition FROM background_jobs WHERE id=${job.id}`;
     expect(JSON.parse(row!.last_error)).toEqual({category:'database',code:'22P02'});
+    expect(row!.disposition).toBe('permanent');
     expect(JSON.stringify([warn.mock.calls,error.mock.calls])).not.toContain(marker);
   } finally { warn.mockRestore();error.mockRestore(); }
+});
+
+it.each([
+  [new ModelConfigurationError('synthetic config detail'), 'permanent', 'model_configuration', 0],
+  [new OpenRouterHttpError('synthetic credentials detail', 401), 'permanent', 'provider_http_401', 0],
+  [new OpenRouterHttpError('synthetic credit detail', 402, true), 'permanent', 'provider_credit_refused', 0],
+  [new EmbeddingIndexNeedsRetry('commit_unconfirmed'), 'ambiguous', 'embedding_commit_unconfirmed', 0],
+  [Object.assign(new Error('synthetic timeout detail'), { code: 'ETIMEDOUT' }), 'ambiguous', '{"category":"transport","code":"ETIMEDOUT"}', 0],
+  [new Error('Synthetic write acknowledgement lost', {cause: {code:'08006'}}), 'ambiguous', '{"category":"database","code":"08006"}', 0],
+  [new Error('Synthetic opaque cause'), 'ambiguous', '{"category":"unexpected"}', 0],
+  [new OpenRouterHttpError('synthetic last outage', 503), 'exhausted', 'provider_http_503', 2],
+] as const)('records %s only after a closed terminal settlement', async (error, disposition, diagnostic, attempts) => {
+  const job = await fixture(attempts, 3);
+  let committedAtNotice: unknown;
+  const notice = vi.spyOn(notices, 'deliverTerminalJobNotices').mockImplementation(async (_db, id) => {
+    const [row] = await t.sql`SELECT status,last_error,payload->>'failureDisposition' AS disposition
+      FROM background_jobs WHERE id=${id ?? ''}::uuid`;
+    committedAtNotice = row;
+    throw new Error('Synthetic undelivered notice');
+  });
+  try {
+    const result = await drainBackgroundJobs({now,limit:1,processor:async () => { throw error; }});
+    expect(result).toMatchObject({failed:1,retried:0});
+    expect(notice).toHaveBeenCalledExactlyOnceWith(getDb(), job.id);
+    expect(committedAtNotice).toEqual({ status: 'failed', last_error: diagnostic, disposition });
+    expect((await t.sql`SELECT status,last_error,payload->>'failureDisposition' AS disposition
+      FROM background_jobs WHERE id=${job.id}`)[0]).toEqual({ status: 'failed', last_error: diagnostic, disposition });
+  } finally { notice.mockRestore(); }
+});
+
+it('defers real lock conflicts without spending processing attempts or leaking bound values', async () => {
+  const job = await fixture(0, 3);
+  const marker = 'synthetic-lock-query-value';
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const retries: BackgroundJobRetryWake[] = [];
+  const processor = vi.fn(async () => {
+    await getDb().execute(sql`SELECT ${marker}::text FROM profiles
+      WHERE id=${job.profileId}::uuid FOR UPDATE NOWAIT`);
+  });
+  const run = (at: Date) => drainBackgroundJobs({ now: at, limit: 1, processor,
+    onTransientRetry: wake => { retries.push(wake); } });
+  let due = now;
+  try {
+    await t.sql.begin(async tx => {
+      await tx`SET LOCAL idle_in_transaction_session_timeout = '8s'`;
+      await tx`SELECT id FROM profiles WHERE id=${job.profileId} FOR UPDATE`;
+      for (const delay of [15_000, 30_000, 60_000, 120_000]) {
+        expect(await run(due)).toMatchObject({ held: 1, retried: 0, failed: 0 });
+        const retry = retries.at(-1)!;
+        expect(retry.attempts).toBe(0);
+        expect(retry.runAfter.getTime() - due.getTime()).toBeGreaterThanOrEqual(delay);
+        expect(retry.runAfter.getTime() - due.getTime()).toBeLessThanOrEqual(delay + 5_000);
+        if (delay === 15_000) expect(await hasNearTermBackgroundJobRetry(retries, getDb(), due)).toBe(true);
+        due = retry.runAfter;
+        expect(await run(new Date(due.getTime() - 1))).toMatchObject({ claimed: 0 });
+      }
+    });
+    const [queued] = await t.sql`SELECT status,attempts,max_attempts,run_after,last_error FROM background_jobs WHERE id=${job.id}`;
+    expect(queued).toMatchObject({ status: 'pending', attempts: 0, max_attempts: 3 });
+    expect(new Date(queued!.run_after)).toEqual(due);
+    expect(JSON.parse(queued!.last_error)).toEqual({ category: 'database', code: '55P03' });
+    expect(warn).toHaveBeenCalledWith('[background-jobs] attempt settled', expect.objectContaining({
+      jobId: job.id, type: 'derive_signals', attempt: 1, maxAttempts: 3, action: 'lock_deferred',
+      lockDeferrals: 4, runAfter: due.toISOString(), diagnostic: queued!.last_error,
+    }));
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(marker);
+    expect(await run(due)).toMatchObject({ succeeded: 1, failed: 0 });
+    expect(processor).toHaveBeenCalledTimes(5);
+    expect(await t.sql`SELECT status, attempts FROM background_jobs WHERE id=${job.id}`)
+      .toEqual([{ status: 'succeeded', attempts: 1 }]);
+    expect(await t.sql`SELECT attempt FROM background_job_runs WHERE job_id=${job.id} ORDER BY started_at`)
+      .toEqual(Array.from({ length: 5 }, () => ({ attempt: 1 })));
+  } finally { warn.mockRestore(); }
+});
+
+it('bounds lock waits per request while keeping earlier processing failures charged', async () => {
+  const job = await fixture(0, 3);
+  const { retries: [firstFailure] } = await fail();
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const wakes: BackgroundJobRetryWake[] = [];
+  const processor = vi.fn(async claimed => {
+    expect(claimed.payload).toEqual({});
+    throw new Error('Synthetic deadlock', { cause: { code: '40P01' } });
+  });
+  const run = (at: Date) => drainBackgroundJobs({ now: at, limit: 1, processor,
+    onTransientRetry: wake => { wakes.push(wake); } });
+  let due = firstFailure!.runAfter;
+  try {
+    for (const delay of [15_000, 30_000, 60_000, 120_000, 240_000]) {
+      expect(await run(due)).toMatchObject({ held: 1, retried: 0, failed: 0 });
+      const wake = wakes.at(-1)!;
+      expect(wake.attempts).toBe(1);
+      expect(wake.runAfter.getTime() - due.getTime()).toBeGreaterThanOrEqual(delay);
+      expect(wake.runAfter.getTime() - due.getTime()).toBeLessThanOrEqual(delay + 5_000);
+      due = wake.runAfter;
+    }
+    expect(await run(due)).toMatchObject({ held: 0, retried: 0, failed: 1 });
+    expect(wakes).toHaveLength(5);
+    expect(await t.sql`SELECT status, attempts, last_error FROM background_jobs WHERE id=${job.id}`)
+      .toEqual([{ status: 'failed', attempts: 1, last_error: '{"category":"database","code":"40P01"}' }]);
+    expect(warn).toHaveBeenCalledWith('[background-jobs] attempt settled', expect.objectContaining({
+      jobId: job.id, action: 'lock_deferral_limit', lockDeferrals: 5,
+    }));
+    expect(await run(new Date(due.getTime() + 60_000))).toMatchObject({ claimed: 0 });
+
+    // A new source version can carry an old checkpoint in the stored payload.
+    await t.sql`UPDATE background_jobs SET status='pending', locked_at=NULL, request_version=request_version+1
+      WHERE id=${job.id}`;
+    due = new Date(due.getTime() + 1_000);
+    expect(await run(due)).toMatchObject({ held: 1, failed: 0 });
+    expect(wakes[5]!.runAfter.getTime() - due.getTime()).toBeLessThanOrEqual(20_000);
+    expect(await t.sql`SELECT (payload->'lockDeferral') AS wait FROM background_jobs WHERE id=${job.id}`)
+      .toEqual([{ wait: { requestVersion: '2', count: 1 } }]);
+  } finally { warn.mockRestore(); }
+});
+
+it('logs when an uncertain embedding outcome requires recovery without scheduling a replay', async () => {
+  const job = await fixture(0, 3);
+  const onTransientRetry = vi.fn();
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    const result = await drainBackgroundJobs({ now, limit: 1, onTransientRetry,
+      processor: async () => { throw new EmbeddingIndexNeedsRetry('outcome_unknown'); } });
+    expect(result).toMatchObject({ failed: 1, retried: 0 });
+    expect(onTransientRetry).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('[background-jobs] attempt settled', expect.objectContaining({
+      jobId: job.id, action: 'failed', attempt: 1, embeddingRecovery: 'outcome_unknown',
+    }));
+  } finally { warn.mockRestore(); }
 });
 
 it('ignores budget deferral even when the row retains its earlier error',async()=>{
@@ -139,7 +274,7 @@ it('does not signal an exhausted attempt or a stale settlement whose ownership w
   const job=await fixture();const retries:BackgroundJobRetryWake[]=[];
   await drainBackgroundJobs({now,limit:1,onTransientRetry:retry=>{retries.push(retry);},processor:async()=>{
     await t.sql`UPDATE background_jobs SET status='succeeded',locked_at=null WHERE id=${job.id}`;
-    throw new Error('Stale worker failed after losing ownership');
+    throw new Error('Synthetic serialization rollback after ownership loss', {cause: {code:'40001'}});
   }});
   expect(retries).toHaveLength(1);expect(await pending(retries)).toBe(false);
 });

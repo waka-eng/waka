@@ -32,6 +32,7 @@ import { safeErrorDiagnostic } from '../lib/error-diagnostics.js';
 import { recordConsultation } from "../lib/consultations.js";
 import { and, asc, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { personalPrincipleReadable, personalPrincipleSupportCurrent, personalSignalReadable } from '../lib/personal-output.js';
+import { directFirstPrincipleCitationCurrent, directFirstPrincipleSourceMatches, isDirectFirstPrinciple } from '../lib/first-principle-evidence.js';
 import { citationBodyCurrent, citationStatementCurrent, evidenceSupportCurrent } from '../lib/signal-support-state.js';
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
@@ -132,6 +133,7 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
   // a mind never resolves through this scope, and is refused here regardless.
   const support=sql<boolean>`(${profiles.groupId} IS NULL AND ${personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)})`;
   const readable=sql<boolean>`(${profiles.groupId} IS NULL AND ${personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)})`;
+  const direct=isDirectFirstPrinciple();
   type Citation={id:string;statement:string;current:boolean|null;examples:Array<{text:string;createdAt:string;inspirationId:string}>;
     reviewExamples:Array<{answerId:string;sessionId:string;preview:string;createdAt:string}>};
   const rows=await db.select({...getTableColumns(principles),supportCurrent:support,
@@ -143,19 +145,21 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
       SELECT ${signals.id} AS id,${signals.statement} AS statement,
         (${citationStatementCurrent('principle_signals')} AND
           ${personalSignalReadable(profileId)}
+          AND (NOT ${direct} OR ${directFirstPrincipleCitationCurrent(profileId)})
           AND ${citationBodyCurrent('principle_signals','principles','principle_statement_revision','statement_revision')}) AS current,
         COALESCE((SELECT jsonb_agg(x) FROM (
           SELECT left(i.text,240) AS text,i.created_at AS "createdAt",i.id AS "inspirationId"
           FROM signal_evidence e JOIN inspirations i ON i.id=e.inspiration_id AND i.profile_id=e.owner_profile_id
           WHERE e.profile_id=${profileId}::uuid AND i.profile_id=${profileId}::uuid
             AND e.signal_id=${signals.id} AND ${evidenceSupportCurrent('e')}
+            AND (NOT ${direct} OR ${directFirstPrincipleSourceMatches(sql`e.signal_id`,sql`i.id`,sql`i.profile_id`)})
           ORDER BY i.created_at DESC,i.id LIMIT 2
         ) x),'[]'::jsonb) AS examples,
         COALESCE((SELECT jsonb_agg(x) FROM (
           SELECT a.id AS "answerId",a.session_id AS "sessionId",
             CASE WHEN length(a.answer)>240 THEN left(a.answer,237)||'…' ELSE a.answer END AS preview,a.created_at AS "createdAt"
           FROM signal_review_evidence e JOIN review_answers a ON a.profile_id=e.profile_id AND a.id=e.answer_id
-          WHERE e.profile_id=${profileId}::uuid AND e.signal_id=${signals.id}
+          WHERE e.profile_id=${profileId}::uuid AND e.signal_id=${signals.id} AND NOT ${direct}
             AND review_evidence_current(e.profile_id,e.signal_id,e.answer_id)
           ORDER BY a.created_at DESC,a.id LIMIT 2
         ) x),'[]'::jsonb) AS "reviewExamples"
@@ -436,6 +440,10 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     }
 
     const created = await db.transaction(async (tx) => {
+      // Serialize a declaration with the first generated Principle before
+      // taking a rank or history row.
+      await tx.execute(sql`SELECT profile_id FROM generation_revisions
+        WHERE profile_id=${scope.profileId}::uuid FOR UPDATE`);
       const ranks = await tx
         .select({ rank: principles.rank })
         .from(principles)

@@ -97,7 +97,7 @@ export async function currentArtifactResult(tx: Transaction, profileId: string):
 /** Final source transaction, after all model/grounding work. An unchanged pass
  * must not forget an earlier read dependency, including one whose result
  * arrived during extraction. The caller owns source and worker commit fences. */
-export async function finishInspirationDerivation(tx: Transaction, input: DerivationProcessingInput, options: {
+export async function finishInspirationDerivation(tx: Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0], input: DerivationProcessingInput, options: {
   reading?: EnqueueResult;
   complete: boolean;
   requestReading: () => Promise<EnqueueResult>;
@@ -144,6 +144,10 @@ export async function finishInspirationDerivation(tx: Transaction, input: Deriva
     FROM inspirations i, inspiration_revisions r
     WHERE i.id = p.inspiration_id AND i.profile_id = p.owner_profile_id AND r.inspiration_id = i.id AND r.profile_id = i.profile_id
       AND ${derivationScope(input)} AND p.completed_at IS NULL AND ${currentMaterial} AND ${authorizedDestination} AND ${allowedSource}`);
+  if(input.profileId===input.ownerProfileId){
+    const {enqueueFirstPrincipleAfterSave}=await import('./principle-status.js');
+    await enqueueFirstPrincipleAfterSave(tx,input.profileId);
+  }
 }
 
 /** Inside artifact publication, never the later job-settlement callback. Keep

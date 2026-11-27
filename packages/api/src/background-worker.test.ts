@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {drainAttachmentObjects} from './lib/attachment-sweep.js';
+import {reconcileLegacyDerivationFailures} from './lib/job-failure-recovery.js';
+import {deliverTerminalJobNotices} from './lib/job-failure-notices.js';
 
 import * as jobWakes from './lib/background-job-wake.js';
 import { handler, isScheduledEvent } from "./background-worker.js";
@@ -13,10 +15,14 @@ import { runBackgroundJobWorker,readBackgroundJobRecoveryState,settleAbandonedEx
  * counts; `readBackgroundJobRecoveryState` supplies eligibility counts. SQL
  * eligibility and real claims are tested separately on disposable Postgres.
  * The job-wake helpers isolate Scheduler transport; their actual state queries
- * and cancellation races are covered in background-job-wake.db.test.ts. */
+ * and cancellation races are covered in background-job-wake.db.test.ts.
+ * Failure recovery and notice transport are mocked here to check cadence and
+ * ordering. Their SQL and notice boundaries have separate coverage. */
 
 /** A pass over an empty queue: nothing taken, nothing pushed out of the way. */
 const IDLE_PASS = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
+vi.mock('./lib/job-failure-recovery.js', () => ({ reconcileLegacyDerivationFailures: vi.fn() }));
+vi.mock('./lib/job-failure-notices.js', () => ({ deliverTerminalJobNotices: vi.fn() }));
 
 vi.mock('./lib/background-job-wake.js', async original => ({
   ...await original<typeof import('./lib/background-job-wake.js')>(),
@@ -52,6 +58,8 @@ vi.mock('./lib/attachment-sweep.js',async original=>({
 }));
 
 beforeEach(() => {
+  vi.mocked(reconcileLegacyDerivationFailures).mockReset().mockResolvedValue(0);
+  vi.mocked(deliverTerminalJobNotices).mockReset().mockResolvedValue(undefined);
   vi.mocked(drainAttachmentObjects).mockReset().mockResolvedValue({selected:0,deleted:0,retained:0,failed:0});
   vi.mocked(jobWakes.armBackgroundJobLease).mockReset().mockResolvedValue(true);
   vi.mocked(jobWakes.cancelBackgroundJobLease).mockReset().mockResolvedValue(undefined);
@@ -231,6 +239,26 @@ describe("background worker cron handler", () => {
    copies and chat uploads staged for a message never sent. */
 describe("the daily sweeps: the deleted shelf and abandoned staged chat uploads", () => {
   const scheduled = { source: "aws.events", "detail-type": "Scheduled Event" };
+
+  it('reconciles old failures before notices only on scheduled and explicit recovery', async () => {
+    await handler({ mode: 'enqueue' });
+    await handler({ mode: 'wake_recovery' });
+    expect(reconcileLegacyDerivationFailures).not.toHaveBeenCalled();
+    expect(deliverTerminalJobNotices).not.toHaveBeenCalled();
+    await handler(scheduled);
+    expect(vi.mocked(settleAbandonedExhaustedLeases).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(reconcileLegacyDerivationFailures).mock.invocationCallOrder[0]!);
+    expect(vi.mocked(reconcileLegacyDerivationFailures).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(deliverTerminalJobNotices).mock.invocationCallOrder[0]!);
+    expect(deliverTerminalJobNotices).toHaveBeenCalledTimes(1);
+
+    vi.mocked(deliverTerminalJobNotices).mockRejectedValueOnce(new Error('Synthetic route failure'));
+    await expect(handler({ mode: 'recovery' })).resolves.toMatchObject({ claimed: 0 });
+    expect(reconcileLegacyDerivationFailures).toHaveBeenCalledTimes(2);
+    expect(deliverTerminalJobNotices).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(reconcileLegacyDerivationFailures).mock.invocationCallOrder[1])
+      .toBeLessThan(vi.mocked(deliverTerminalJobNotices).mock.invocationCallOrder[1]!);
+  });
   it('connects the configured serialized Cron input to the real maintenance branch; old empty input misses it',async()=>{
     const root=resolve(__dirname,'../../..');
     const config=readFileSync(resolve(root,'sst.config.ts'),'utf8');

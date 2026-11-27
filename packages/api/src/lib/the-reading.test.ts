@@ -35,14 +35,14 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../.."
  * words — here and in the sentence — are re-worded for the new value.
  */
 const WORDED_FOR: Record<string, { value: number; words: string; wordsKo: string }> = {
-  SIGNAL_PROMOTION_MIN_EVIDENCE: { value: 3, words: "three", wordsKo: "셋" },
+  SIGNAL_PROMOTION_MIN_EVIDENCE: { value: 3, words: "three", wordsKo: "세 개" },
   SIGNAL_MATCH_MIN_COSINE: { value: 0.86, words: "all but the same", wordsKo: "거의 같은" },
   CONFIDENCE_RECENCY_HALF_LIFE_DAYS: { value: 45, words: "a month and a half", wordsKo: "한 달 반" },
-  COMEBACK_MIN_DORMANT_DAYS: { value: 21, words: "three quiet weeks", wordsKo: "조용한 세 주" },
-  TOP_OF_MIND_MIN_SIGNALS: { value: 3, words: "three", wordsKo: "셋" },
+  COMEBACK_MIN_DORMANT_DAYS: { value: 21, words: "three quiet weeks", wordsKo: "세 주" },
+  TOP_OF_MIND_MIN_SIGNALS: { value: 3, words: "three", wordsKo: "세 개" },
   TOP_OF_MIND_MIN_SHIFT_HOURS: { value: 24, words: "once a day", wordsKo: "하루에 한 번" },
   TOP_OF_MIND_SIGNAL_LIMIT: { value: 12, words: "twelve", wordsKo: "열두" },
-  SELECTION_DISPUTED_MULTIPLIER: { value: 0.4, words: "far back", wordsKo: "멀찍이" },
+  SELECTION_DISPUTED_MULTIPLIER: { value: 0.4, words: "far back", wordsKo: "비중이 줄어요" },
   /* The three `GROUP_DRAFT_*` rows came out with the room sentences they
      worded (founder: "방 없애", 2026-10-15). The table is checked for exact
      parity against the registry in both directions — every worded constant

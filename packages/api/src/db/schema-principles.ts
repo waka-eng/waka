@@ -61,7 +61,7 @@ export const principles = pgTable(
     /** The directive, in the owner's language. Phrased as a constraint. */
     statement: text("statement").notNull(),
     statementRevision: bigint('statement_revision', { mode: 'bigint' }).notNull().default(sql`1`),
-    /** Room derivation policy; never inferred from today's citations. */
+    /** Stored derivation policy, including historic room tags or an exact direct first-Principle source binding. */
     inputPolicy: text("input_policy"),
 
     type: principleTypeEnum("type").notNull().default("maxim"),
@@ -113,6 +113,13 @@ export const principles = pgTable(
     profileIdIdUnique: unique("principles_profile_id_id_unique").on(table.profileId, table.id),
   }),
 );
+
+/** Survives Principle deletion, but contains no Principle wording or evidence. */
+export const profilePrincipleHistory = pgTable("profile_principle_history", {
+  profileId: uuid("profile_id").primaryKey().references(() => profiles.id, { onDelete: "cascade" }),
+  /** The single mint made under the first-Principle evidence bar, if any. */
+  firstPrincipleId: uuid("first_principle_id"),
+});
 
 export const principleSignals = pgTable(
   "principle_signals",

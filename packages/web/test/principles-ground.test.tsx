@@ -17,11 +17,12 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { PrinciplesGround } from "../src/components/PrinciplesGround";
 import { PrinciplesOverlay } from "../src/components/PrinciplesOverlay";
-import { createFeedback, fetchPrinciples, fetchSignals, listClaims, type ApiPrinciple, type ApiSignal } from "../src/lib/api";
+import { createFeedback, fetchPrincipleStatus, fetchPrinciples, fetchSignals, listClaims, type ApiPrinciple, type ApiSignal } from "../src/lib/api";
 
 vi.mock("../src/lib/api", async (original) => ({
   ...await original<typeof import("../src/lib/api")>(),
   fetchSignals: vi.fn(),
+  fetchPrincipleStatus: vi.fn(),
   listClaims: vi.fn(),
   fetchPrinciples: vi.fn(),
   createFeedback: vi.fn(),
@@ -40,6 +41,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   localStorage.clear();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.mocked(fetchPrincipleStatus).mockResolvedValue({ phase: "waiting", eligible: false, signalCount: 0, topOfMindCount: 0 });
   vi.mocked(listClaims).mockResolvedValue({ claims: [], more: false });
   host = document.createElement("div");
   document.body.append(host);
@@ -137,6 +139,22 @@ it("says the ground could not be read, and reads it again on Try again", async (
   await act(async () => retry.click());
   await act(async () => undefined);
   expect(host.querySelector(".waka-ground-words")?.textContent).toBe("A.");
+});
+
+it.each([
+  ["pending", false, true, "Waiting for the next automatic review."],
+  ["processing", false, true, "Reviewing saves for a Principle…"],
+  ["pending", true, false, "Waiting to check the supporting saves."],
+  ["processing", true, false, "Checking the supporting saves…"],
+  ["processing", undefined, true, "Awaiting the review result."],
+] as const)("shows %s review status from the overlay (active support: %s)", async (phase, supportActive, eligible, message) => {
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);
+  vi.mocked(fetchSignals).mockResolvedValue([]);
+  const status = { phase, eligible, supportActive, supportPending: supportActive, signalCount: 2, topOfMindCount: 0 };
+  vi.mocked(fetchPrincipleStatus).mockResolvedValue(status);
+  await act(async () => root.render(<PrinciplesOverlay locale="en-US" profileId={PROFILE} title="Principles" onClose={() => {}} onOpen={() => {}} onNewSave={() => {}} />));
+  expect(line()).toBe(message);
+  expect(host.querySelector(".waka-ground-bubble button")).toBeNull();
 });
 
 it("meets the first principle once, and only for someone who waited for it", async () => {
@@ -308,7 +326,7 @@ it("explains an agent’s empty memory in Korean without offering to write into 
     <PrinciplesOverlay locale="ko-KR" profileId={PROFILE} name="Bot" title="에이전트의 원칙" whose="agent"
       onClose={() => {}} onOpen={() => {}} onNewSave={add} onChat={() => {}} />,
   ));
-  expect(line()).toBe("에이전트의 첫 원칙은 에이전트가 저장한 메모의 패턴에서 나와요.");
+  expect(line()).toBe("에이전트가 남긴 메모에서 반복되는 선택을 찾으면 첫 원칙이 생겨요.");
   expect(host.querySelector(".waka-ground-how"), "the explaining line came back").toBeNull();
   expect(host.querySelector(".waka-ground-example")).toBeNull();
   expect(host.querySelector(".waka-ground-bubble button")).toBeNull();

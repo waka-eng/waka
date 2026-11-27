@@ -52,7 +52,7 @@ import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { createConversation } from "../lib/api/conversations";
-import { ApiError, fetchInspirationPage, fetchInspirationSnapshot, type ApiInspiration } from "../lib/api";
+import { fetchInspirationPage, fetchInspirationSnapshot, type ApiInspiration } from "../lib/api";
 import { Companion } from "../components/Companion";
 import { CreatureStage } from "../components/onboarding/CreatureStage";
 import { pendingShare, renewShare } from "../components/ShareArrival";
@@ -179,10 +179,10 @@ export default function OnboardingPage(): JSX.Element {
       clearOnboardingMarker(accountId);
       if (share.current) renewShare(share.current);
       navigate(destination, { replace: true });
-    } catch (reason) {
+    } catch {
       clearOnboardingExit();
       setFading(false);
-      setLeaveError(reason instanceof ApiError ? reason.message : say("profileSaveError"));
+      setLeaveError(say("profileSaveError"));
       setLeaving(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -327,8 +327,8 @@ function NameStep({ onNamed }: { onNamed: () => void }): JSX.Element {
       writeStoredLocale(preferredLocale);
       writeOnboardingMarker(account?.id, { named: true });
       onNamed();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : t(locale, "profileSaveError"));
+    } catch {
+      setError(t(locale, "profileSaveError"));
     } finally {
       setSubmitting(false);
     }

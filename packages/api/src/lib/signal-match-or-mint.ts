@@ -6,9 +6,9 @@
  * identical wording may attach directly; changed wording still needs a
  * meaning check. Below the judge floor it mints without a relation call.
  *
- * Each candidate spends at most one match judgment on its single nearest
- * target. Changed or negated positions can have almost identical vectors;
- * time scope and certainty are part of their meaning. Review answers always
+ * Each candidate spends at most one match judgment across its two closest
+ * eligible targets, and may attach to one. Changed or negated positions can
+ * have almost identical vectors. Time scope and certainty matter. Review answers always
  * check nearby matches, even when wording is identical.
  * A failure propagates
  * for retry rather than inventing an independent pattern. All judgments are
@@ -27,12 +27,15 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import {
+  generationRevisions,
   inspirations,
   signalEmbeddings,
   signalEvidence,
   signalSupportReviews,
   signals,
   suppressions,
+  topOfMindEntries,
+  topOfMinds,
   type SignalStatus,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
@@ -40,8 +43,9 @@ import {embeddingNeedsMeaningReview,embeddingCandidateRules,type EmbeddingIndexP
 import {EmbeddingIndexError} from './embedding-index-coordination.js';
 import {readableEmbeddingSpace,embeddingInSpace,embeddingInputHash,embeddingSpaceForClient,type EmbeddingSpace} from './embedding-provider.js';
 import { getDb } from "./db.js";
+import { projectPersonalEntries } from "./personal-output.js";
 import type { normalizeSupportedLocale } from "./locales.js";
-import type { ModelProvider } from "./model-provider.js";
+import { ModelDidNotAnswerError, type ModelProvider, type SignalMatchJudgement } from "./model-provider.js";
 // The pass owns the shape of its own result; this stage fills three of its
 // fields. Importing the type back from the facade is a type-only edge — it is
 // erased before runtime, so the module graph still points one way. The
@@ -85,6 +89,7 @@ interface MatchTarget {
   status: SignalStatus;
   locked: boolean;
   withdrawn: boolean;
+  citedInReading: boolean;
   embedding: number[];
 }
 
@@ -106,6 +111,52 @@ export interface ResolvedCandidate {
    * dates via the lifecycle read.
    */
   relatedEvidence: Array<{ inspirationId: string; quote: string; material?: InspirationMaterialIdentity; quoteSourceHash?: string }>;
+}
+
+interface Match {
+  target: MatchTarget;
+  similarity: number;
+}
+type ClosestMatches = readonly [Match | undefined, Match | undefined];
+
+interface ComparedTarget {
+  id: string;
+  statement: string;
+}
+
+interface MatchJudgement {
+  targets: ComparedTarget[];
+  verdict: SignalMatchJudgement;
+}
+
+function comparedTargets(matches: ClosestMatches, virtualIds?: ReadonlyMap<string, string>): ComparedTarget[] {
+  return matches.flatMap(match => match ? [{
+    id: virtualIds?.get(match.target.id) ?? match.target.id,
+    statement: match.target.statement,
+  }] : []);
+}
+
+function sameComparison(left: ComparedTarget[], right: ComparedTarget[]) {
+  return left.length === right.length && left.every((target, i) =>
+    target.id === right[i]!.id && target.statement === right[i]!.statement);
+}
+
+function judgingNeeded(candidate: ResolvedCandidate, primary: Match, input: ApplyCandidatesInput) {
+  return classifyMatch(primary.similarity) === "judge" || Boolean(input.reviewSource) ||
+    candidate.statement.trim() !== primary.target.statement.trim();
+}
+
+function exactWithdrawal(candidate: ResolvedCandidate, matches: ClosestMatches) {
+  return matches.some(match => match?.target.withdrawn && match.target.statement.trim() === candidate.statement.trim());
+}
+
+function chosenMatch(verdict: SignalMatchJudgement, matches: ClosestMatches): Match | undefined {
+  if (verdict.relation === "independent") return undefined;
+  if (verdict.relation === "same" || verdict.relation === "opposed") {
+    if (!matches[1] && verdict.target === undefined) return matches[0];
+    if (matches[1] && (verdict.target === 1 || verdict.target === 2)) return matches[verdict.target - 1];
+  }
+  throw new ModelDidNotAnswerError("signal match judgement");
 }
 
 interface ApplyCandidatesInput {
@@ -135,13 +186,29 @@ interface ApplyCandidatesInput {
   /** Complete source/permission AND captured policy validation after model
    * calls, before writes (material or generation fence; no proof cache). */
   beforeWrites: () => Promise<void>;
+  /** Completed verdicts for this exact candidate batch, on a local replan. */
+  priorJudgements?: ReadonlyMap<number, MatchJudgement>;
+}
+
+const isDraft = (target: Pick<MatchTarget, "status" | "locked" | "withdrawn">) =>
+  target.status === "emerging" && !target.locked && !target.withdrawn;
+const canRestate = (target: MatchTarget) => isDraft(target) && !target.citedInReading;
+const isPersonalSave = (profileId: string, ownerProfileId: string, inspirationId: string | null) =>
+  inspirationId !== null && profileId === ownerProfileId;
+
+/** The prepared verdict for a later candidate addressed different wording or a
+ * different target after a reading published. The caller may replan in memory. */
+export class ReadingCitationPlanChangedError extends Error {
+  constructor(readonly judgements: ReadonlyMap<number, MatchJudgement>) {
+    super("A reading citation changed the signal judgement plan");
+  }
 }
 
 /** Plan every model decision before touching evidence. Virtual targets mirror
  * same-batch mint/restatement, so the write pass needs no network under source locks. */
 async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarget[], anchors: SuppressionAnchor[]) {
   const projected = targets.map((row) => ({ ...row }));
-  const judgements = new Map<number, { statement: string; relation: "same" | "independent" | "opposed" }>();
+  const judgements = new Map<number, MatchJudgement>();
   const refusals = new Map<number, NonNullable<ReturnType<typeof findSuppressionAnchor>>>();
   for (const [index, candidate] of input.candidates.entries()) {
     const anchor = findSuppressionAnchor(candidate, anchors,input.embeddingPolicy);
@@ -151,23 +218,31 @@ async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarg
       refusals.set(index, anchor);
       continue;
     }
-    const nearest = findBestMatch(candidate.embedding, projected,input.embeddingPolicy);
-    if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
-    let decision = classifyMatch(nearest?.similarity ?? null);
-    if (nearest && (decision === "judge" || input.reviewSource || candidate.statement.trim() !== nearest.target.statement.trim())) {
-      const judged = await input.provider.judgeSignalMatch({ preferredLocale: input.preferredLocale,
-        candidateStatement: candidate.statement, existingStatement: nearest.target.statement });
-      judgements.set(index, { statement: nearest.target.statement, relation: judged.relation });
-      decision = judged.relation === "same" ? "attach" : "mint";
+    const matches = findClosestMatches(candidate.embedding, projected, input.embeddingPolicy);
+    const [primary, alternate] = matches;
+    if (exactWithdrawal(candidate, matches)) continue;
+    let match = primary && classifyMatch(primary.similarity) === "attach" ? primary : undefined;
+    if (primary && judgingNeeded(candidate, primary, input)) {
+      const targets = comparedTargets(matches);
+      const prior = input.priorJudgements?.get(index);
+      const verdict = prior && sameComparison(prior.targets, targets)
+        ? prior.verdict
+        : await input.provider.judgeSignalMatch({
+          preferredLocale: input.preferredLocale, candidateStatement: candidate.statement,
+          existingStatement: primary.target.statement,
+          ...(alternate ? { alternativeStatement: alternate.target.statement } : {}),
+        });
+      const chosen = chosenMatch(verdict, matches);
+      judgements.set(index, { targets, verdict });
+      match = verdict.relation === "same" ? chosen : undefined;
     }
-    if (decision === "attach" && nearest) {
-      if (nearest.target.withdrawn) continue;
-      if (!nearest.target.locked && nearest.target.status === "emerging") {
-        nearest.target.statement = candidate.statement;
-        nearest.target.embedding = candidate.embedding;
+    if (match) {
+      if (canRestate(match.target)) {
+        match.target.statement = candidate.statement;
+        match.target.embedding = candidate.embedding;
       }
     } else projected.push({ id: `candidate:${index}`, statement: candidate.statement,
-      status: "emerging", locked: false, withdrawn: false, embedding: candidate.embedding });
+      status: "emerging", locked: false, withdrawn: false, citedInReading: false, embedding: candidate.embedding });
   }
   return { judgements, refusals };
 }
@@ -180,20 +255,29 @@ export async function applyCandidates(
   if(embeddingNeedsMeaningReview(input.embeddingModel)&&readableEmbeddingSpace(input.embeddingPolicy)?.model!==input.embeddingModel)throw new EmbeddingIndexError("identity");
   const space=embeddingSpaceForClient({model:input.embeddingModel,dimensions:input.candidates[0]?.embedding.length});
   if(input.candidates.some(row=>!embeddingInSpace(row.embedding,space.dimensions,space)))throw new Error('Candidate embedding space is invalid');
-  const targets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
+  const initialTargets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
   const anchors = await loadSuppressionAnchors(tx, input.profileId, space, input.inputPolicy);
-  const prior = JSON.stringify({ targets, anchors });
-  const { judgements, refusals } = await prepareJudgements(input, targets, anchors);
+  const { judgements, refusals } = await prepareJudgements(input, initialTargets, anchors);
   await input.beforeWrites();
-  const ids = [...new Set([...targets, ...anchors].map((row) => row.id))].sort();
+  if (isPersonalSave(input.profileId, input.evidenceOwnerProfileId, input.inspirationId) && initialTargets.some(isDraft)) {
+    // Publication takes this same fence. The worker already holds it via
+    // beforeWrites; direct callers take it here, after the model decisions.
+    await tx.select({ id: generationRevisions.profileId }).from(generationRevisions)
+      .where(eq(generationRevisions.profileId, input.profileId)).for("update", { noWait: true });
+  }
+  const ids = [...new Set([...initialTargets, ...anchors].map((row) => row.id))].sort();
   if (ids.length) await tx.select({ id: signals.id }).from(signals)
     .where(and(eq(signals.profileId, input.profileId), inArray(signals.id, ids)))
     .orderBy(asc(signals.id)).for("share");
-  const currentTargets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
+  const targets = await loadMatchTargets(tx, input.profileId, space, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
   const currentAnchors = await loadSuppressionAnchors(tx, input.profileId, space, input.inputPolicy);
-  if (JSON.stringify({ targets: currentTargets, anchors: currentAnchors }) !== prior) {
+  const matchInputs = (rows: MatchTarget[], suppressionAnchors: SuppressionAnchor[]) =>
+    JSON.stringify({ targets: rows, anchors: suppressionAnchors }, (key, value: unknown) => key === "citedInReading" ? undefined : value);
+  if (matchInputs(targets, currentAnchors) !== matchInputs(initialTargets, anchors)) {
     throw new Error("Signal inputs changed during judgement; retry current statements");
   }
+  const readingChanged = targets.some((row, index) => row.citedInReading !== initialTargets[index]!.citedInReading);
+  const mintedPlanIds = new Map<string, string>();
 
   const matchedSignalIds: string[] = [];
   const mintedSignalIds: string[] = [];
@@ -216,36 +300,33 @@ export async function applyCandidates(
       continue;
     }
 
-    const nearest = findBestMatch(candidate.embedding, targets,input.embeddingPolicy);
-    if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
-    let decision = classifyMatch(nearest?.similarity ?? null);
-    /** Set when the judge answers `opposed`: the mint below also records
-        the contested pair — the dispute is held, never dissolved by
-        whichever statement arrived second. */
+    const matches = findClosestMatches(candidate.embedding, targets, input.embeddingPolicy);
+    const [primary] = matches;
+    if (exactWithdrawal(candidate, matches)) continue;
+    let match = primary && classifyMatch(primary.similarity) === "attach" ? primary : undefined;
     let opposesSignalId: string | null = null;
 
-    if (nearest && (decision === "judge" || input.reviewSource || candidate.statement.trim() !== nearest.target.statement.trim())) {
-      // Reuse the pre-write verdict only for the exact planned statement.
-      // No provider call runs while source rows are locked. Provider failures
-      // already aborted preparation; they never become invented opposition
-      // or an independent pattern here.
+    if (primary && judgingNeeded(candidate, primary, input)) {
+      // Both options bind the verdict, even when it selected neither. A
+      // changed alternative must not silently repurpose the old decision.
       const judged = judgements.get(candidateIndex);
-      if (!judged || judged.statement !== nearest.target.statement) throw new Error("Signal judgement plan changed");
-      decision = judged.relation === "same" ? "attach" : "mint";
-      if (judged.relation === "opposed") opposesSignalId = nearest.target.id;
+      if (!judged || !sameComparison(judged.targets, comparedTargets(matches, mintedPlanIds))) {
+        if (readingChanged) throw new ReadingCitationPlanChangedError(judgements);
+        throw new Error("Signal judgement plan changed");
+      }
+      const chosen = chosenMatch(judged.verdict, matches);
+      match = judged.verdict.relation === "same" ? chosen : undefined;
+      if (judged.verdict.relation === "opposed" && chosen) opposesSignalId = chosen.target.id;
     }
-
-    const match = decision === "attach" ? nearest : null;
 
     if (match) {
       // New discovery cannot reverse an explicit decision about this pair.
       // Keep the retired target visible to matching so it cannot mint a twin.
       if (match.target.withdrawn) continue;
 
-      // An emerging signal is a first draft read from a single capture; the
-      // capture that confirms it usually names the pattern better. Once a
-      // signal is active its wording has settled, and only its owner moves it.
-      if (!match.target.locked && match.target.status === "emerging") {
+      // Confirmation may refine an unpublished draft. Published wording
+      // still takes new evidence without making the reading's citation stale.
+      if (canRestate(match.target)) {
         const restated = await restateSignal(tx, match.target, candidate.statement);
         if (restated) {
           await writeSignalEmbedding(tx, {
@@ -365,12 +446,14 @@ export async function applyCandidates(
     // Visible to the rest of this batch: two candidates that both fail to
     // match anything existing must not both mint when the second one is
     // simply the first one again.
+    mintedPlanIds.set(minted.id, `candidate:${candidateIndex}`);
     targets.push({
       id: minted.id,
       statement: candidate.statement,
       status: "emerging",
       locked: false,
       withdrawn: false,
+      citedInReading: false,
       embedding: candidate.embedding,
     });
   }
@@ -430,30 +513,50 @@ async function loadMatchTargets(
     .limit(MATCH_CANDIDATE_SCAN_LIMIT + withdrawn.size);
 
   if(embeddingNeedsMeaningReview(space.model)&&rows.some(row=>row.inputHash!==embeddingInputHash(space,row.statement)||!embeddingInSpace(row.embedding,row.dimensions??0,space)))throw new EmbeddingIndexError("missing");
-  return rows.filter((row):row is typeof row&{embedding:number[]} => row.inputHash === embeddingInputHash(space,row.statement)&&embeddingInSpace(row.embedding,row.dimensions??0,space)).map((row) => ({
+  const targets: MatchTarget[] = rows.filter((row):row is typeof row&{embedding:number[]} => row.inputHash === embeddingInputHash(space,row.statement)&&embeddingInSpace(row.embedding,row.dimensions??0,space)).map((row) => ({
     id: row.id,
     statement: row.statement,
     status: row.status,
     locked: row.lockedAt !== null,
     withdrawn: withdrawn.has(row.id),
+    citedInReading: false,
     embedding: row.embedding,
   }));
+  if (isPersonalSave(profileId, ownerProfileId, inspirationId) && targets.some(isDraft)) {
+    const entries = await tx.select({
+      id: topOfMindEntries.id,
+      lockedAt: topOfMindEntries.lockedAt,
+      pinnedAt: topOfMindEntries.pinnedAt,
+      dismissedAt: topOfMindEntries.dismissedAt,
+    }).from(topOfMindEntries)
+      .innerJoin(topOfMinds, eq(topOfMindEntries.topOfMindId, topOfMinds.id))
+      .where(and(eq(topOfMinds.profileId, profileId), eq(topOfMinds.status, "live"), isNull(topOfMindEntries.dismissedAt)));
+    const { citationsByEntry } = await projectPersonalEntries(tx, profileId, entries);
+    const cited = new Set([...citationsByEntry.values()].flat());
+    for (const target of targets) target.citedInReading = isDraft(target) && cited.has(target.id);
+  }
+  return targets;
 }
 
-function findBestMatch(
-  embedding: number[],
-  targets: MatchTarget[],
-  policy?:EmbeddingIndexPolicy,
-): { target: MatchTarget; similarity: number } | null {
-  let best: { target: MatchTarget; similarity: number } | null = null;
+function findClosestMatches(embedding: number[], targets: MatchTarget[], policy?: EmbeddingIndexPolicy): ClosestMatches {
+  const minimum = embeddingCandidateRules(policy)?.match.minimum ?? SIGNAL_MERGE_JUDGE_MIN_COSINE;
+  let first: Match | undefined;
+  let second: Match | undefined;
 
   for (const target of targets) {
     const similarity = cosineSimilarity(embedding, target.embedding);
-    if (similarity === null || similarity < (embeddingCandidateRules(policy)?.match.minimum??SIGNAL_MERGE_JUDGE_MIN_COSINE)) continue;
-    if (!best || similarity > best.similarity) best = { target, similarity };
+    if (similarity === null || similarity < minimum) continue;
+    // Equal scores retain the existing stable scan order, including virtual
+    // targets appended while planning this batch.
+    if (!first || similarity > first.similarity) {
+      second = first;
+      first = { target, similarity };
+    } else if (!second || similarity > second.similarity) {
+      second = { target, similarity };
+    }
   }
 
-  return best;
+  return [first, second];
 }
 
 interface SuppressionAnchor {
@@ -638,8 +741,7 @@ async function restateSignal(
   target: MatchTarget,
   statement: string,
 ): Promise<boolean> {
-  if (target.locked) return false;
-  if (statement === target.statement) return false;
+  if (!canRestate(target) || statement === target.statement) return false;
 
   const updated = await tx
     .update(signals)

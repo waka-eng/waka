@@ -9,8 +9,8 @@
  * set, merged on overlap, marked contested on genuine collision.
  *
  * Material changes request a deduplicated background pass. The nightly cron
- * recovers missed work. Three evidenced patterns and a citing top-of-mind
- * version can support an initial principle, without a fixed calendar wait.
+ * recovers missed work. The first human Principle may use two independently
+ * grounded signals. Ordinary generation uses three active signals and a reading.
  *
  * Canon: docs/data-model.md ("Principle (layer 4)"); mechanics and the
  * qualification tests: docs/generation.md; phases: docs/goals/principles.md.
@@ -20,10 +20,12 @@ import { and, asc, eq, getTableColumns, inArray, isNotNull, or, sql } from "driz
 
 import { createHash } from "node:crypto";
 import { readGenerationRevision, assertGenerationRevision, type GenerationRevision } from "./generation-revision.js";
+import { assignFirstPrincipleOrigins, directFirstPrinciplePolicy, firstPrincipleOrigins, firstPrincipleWording, isDirectFirstPrinciplePolicy, loadFirstPrincipleExcerpts, usesFirstPrincipleBar, FIRST_PRINCIPLE_SIGNAL_COUNT, type FirstPrincipleSignal } from './first-principle-evidence.js';
 import { personalEntrySupportCurrent, personalPrincipleSupportCurrent, personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
 import { citationStatementCurrent, evidenceSupportCurrent, loadSignalStatementRevisions } from './signal-support-state.js';
 import {
   principles,
+  profilePrincipleHistory,
   principleSignals,
   signals,
   topOfMindEntrySignals,
@@ -38,8 +40,8 @@ import { selectIndependentEvidence } from './signal-lifecycle.js';
 import {loadSignalEvidence} from './review-evidence.js';
 import { loadOwnedReadingOriginals, READING_ORIGINAL_LIMIT } from './reading-originals.js';
 import { readingSourceFingerprint } from './top-of-mind-quality.js';
-import {PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput,renderPrincipleDistillContext,renderPrincipleGroundingContext} from './principle-input.js';
-import {parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
+import {FIRST_PRINCIPLE_EXCERPT_LIMITS,PRINCIPLE_COMPARISON_LIMITS,PRINCIPLE_GROUNDING_LIMITS,PRINCIPLE_INPUT_LIMITS,selectPrincipleInput,renderPrincipleDistillContext,renderPrincipleGroundingContext} from './principle-input.js';
+import {parseDistilledPrinciples,parsePrincipleRelation,parsePrincipleGrounding,principleDistillInstruction,principleGroundingInstruction,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION} from '../queue/gemini.js';
 import {principleMaterialKey} from './principle-material-key.js';
 import {principleWork} from './principle-work.js';
 import {OPENROUTER_GENERATION_MODEL} from './openrouter-http.js';
@@ -47,6 +49,7 @@ import { writePrincipleStatementChain } from "./statement-chains.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
+  type FirstPrincipleDirectEvidence,
   type PrincipleCandidate,
   type PrincipleGroundingInput,
 } from "./model-provider.js";
@@ -314,29 +317,42 @@ export interface PrincipleGenerationDependencies {
   expectedMaterialKey?:string;
 }
 
-/** The profile's own readable active signals and their citation evidence. */
-export async function loadPrincipleMaterial(db: WakaDb | WakaTx, profileId: string) {
-  const [profile] = await db.select({ preferredLocale: profiles.preferredLocale, type: profiles.type }).from(profiles)
-    .where(eq(profiles.id, profileId)).limit(1);
-  /* A room's mind: its principles retired with the room engine. Decided on
-     this same profile read, before any signal or evidence is loaded. */
-  const groupProfile = profile?.type === "group";
-  if (groupProfile) {
-    const evidence = new Map<string, CitationEvidence>();
-    return { activeSignals: [] as Array<{ id: string; statement: string; lastEvidenceAt: Date | null; updatedAt: Date }>,
-      evidence, groupProfile, preferredLocale: profile?.preferredLocale ?? "en-US",
-      eligibility: computeCitationEligibility([], new Date()) };
+/** Prefer the established active-signal/reading bar. Only an unserved human
+ * profile may use the first-Principle evidence, with direct owned origins. */
+export async function loadPrincipleMaterial(db: WakaDb | WakaTx, profileId: string, now = new Date()) {
+  const [profile] = await db.select({ preferredLocale:profiles.preferredLocale,type:profiles.type,accountId:profiles.accountId,
+    history:profilePrincipleHistory.profileId,firstPrincipleId:profilePrincipleHistory.firstPrincipleId })
+    .from(profiles).leftJoin(profilePrincipleHistory,eq(profilePrincipleHistory.profileId,profiles.id))
+    .where(eq(profiles.id,profileId)).limit(1);
+  const groupProfile=profile?.type==='group';
+  const activeSignals=groupProfile?[]:await db.select({ id:signals.id,statement:signals.statement,
+    lastEvidenceAt:signals.lastEvidenceAt, updatedAt:signals.updatedAt })
+    .from(signals).where(and(eq(signals.profileId,profileId),eq(signals.status,'active'),personalSignalReadable(profileId)));
+  const evidence=await loadCitationEvidence(db,profileId,activeSignals);
+  const ordinary=computeCitationEligibility([...evidence.values()],now);
+  const firstSignals: Array<FirstPrincipleSignal & { statement:string;lastEvidenceAt:Date|null }> = [];
+  if (profile?.type==='human' && profile.accountId && !profile.history) {
+    const rows=await db.execute<{ id:string;statement:string;wording:string;last_evidence_at:string|null;
+      origins:FirstPrincipleSignal['origins'] }>(sql`
+      SELECT signals.id,signals.statement,${firstPrincipleWording(sql`signals.statement`)} AS wording,
+        signals.last_evidence_at::text, origin.origins
+      FROM signals CROSS JOIN LATERAL (
+        SELECT jsonb_agg(jsonb_build_object('id',o.id,'fingerprint',o.fingerprint,'revision',o.revision) ORDER BY o.fingerprint) AS origins
+        FROM (${firstPrincipleOrigins(profileId,sql`signals.id`)}) o
+      ) origin
+      WHERE ${personalSignalReadable(profileId)} AND signals.status IN ('active','emerging') AND origin.origins IS NOT NULL
+      ORDER BY signals.last_evidence_at DESC NULLS LAST,signals.id LIMIT ${PRINCIPLE_INPUT_LIMITS.signals}`);
+    firstSignals.push(...rows.map(row=>({...row,lastEvidenceAt:row.last_evidence_at?new Date(row.last_evidence_at):null})));
   }
-  const rows = await db.select({ id: signals.id, statement: signals.statement,
-    lastEvidenceAt: signals.lastEvidenceAt, updatedAt: signals.updatedAt })
-    .from(signals).where(and(eq(signals.profileId, profileId), eq(signals.status, "active"),
-      personalSignalReadable(profileId)));
-  const activeSignals = rows;
-  const evidence = await loadCitationEvidence(db, profileId, activeSignals);
-  return { activeSignals, evidence, groupProfile,
-    preferredLocale: profile?.preferredLocale ?? "en-US",
-    eligibility: computeCitationEligibility([...evidence.values()], new Date()) };
+  const first=assignFirstPrincipleOrigins(firstSignals);
+  return { activeSignals,evidence,groupProfile,firstSignals,firstPrincipleId:profile?.firstPrincipleId??null,
+    mode:first?'first' as const:ordinary.eligible?'ordinary' as const:null,ordinaryAvailable:ordinary.eligible,
+    preferredLocale:profile?.preferredLocale??'en-US',
+    eligibility:first&&!ordinary.eligible?{eligible:true,distinctSignals:FIRST_PRINCIPLE_SIGNAL_COUNT,spanDays:0,tomAppearances:0}:ordinary };
 }
+
+type FirstPrincipleExcerpt = Awaited<ReturnType<typeof loadFirstPrincipleExcerpts>>[number];
+type DirectEvidence = FirstPrincipleDirectEvidence & {source:FirstPrincipleExcerpt};
 
 /** At most one owned original-material SELECT, only for valid candidates.
  * The fixed shortlist uses the earliest and latest direct citations per signal.
@@ -344,18 +360,21 @@ export async function loadPrincipleMaterial(db: WakaDb | WakaTx, profileId: stri
 async function addGroundingOriginals(
   db: WakaDb,
   revision: GenerationRevision,
-  evidence: ReadonlyMap<string, CitationEvidence>,
+  evidence: ReadonlyMap<string, Pick<CitationEvidence,'originalIds'>>,
   input: PrincipleGroundingInput,
-): Promise<void> {
-  const linked = new Map<string, string[]>();
+  required: NonNullable<ReturnType<typeof assignFirstPrincipleOrigins>> = [],
+  direct?: DirectEvidence,
+) {
+  const linked = new Map<string, string[]>(required.map(({signalId,origin})=>[origin.id,[signalId]]));
   for (const offset of [0, 1]) {
     for (const signal of input.signals) {
       const id = evidence.get(signal.id)?.originalIds?.[offset];
       if (!id || (!linked.has(id) && linked.size === READING_ORIGINAL_LIMIT)) continue;
-      linked.set(id, [...(linked.get(id) ?? []), signal.id]);
+      linked.set(id, [...new Set([...(linked.get(id) ?? []), signal.id])]);
     }
   }
-  if (!linked.size) return;
+  const exposed=new Set<string>();
+  if (!linked.size) return exposed;
 
   const rows = await db.transaction(async tx => {
     const current = await readGenerationRevision(tx, { profileId: revision.profileId });
@@ -369,8 +388,12 @@ async function addGroundingOriginals(
   for (const [id, signalIds] of linked) {
     const row = byId.get(id);
     if (!row) continue;
-    const inspirationText = row.text.trim() ? row.text.slice(0, 400) : undefined;
-    const answer = row.reflections[0];
+    const designated = direct?.source.origin.id===id ? direct : undefined;
+    if (designated && !row.text.startsWith(designated.source.text)) continue;
+    const clipped = row.text.slice(0,400);
+    const inspirationText = designated && !clipped.includes(designated.quote)
+      ? designated.source.text : row.text.trim() ? clipped : undefined;
+    const answer = designated ? undefined : row.reflections[0];
     const reflection = answer?.slice(0, 400);
     // Omit repeated visible excerpts. Longer, clipped originals may differ
     // beyond this prefix; the review never treats a prefix as a full match.
@@ -378,14 +401,17 @@ async function addGroundingOriginals(
     if (!fingerprint || seen.has(fingerprint)) continue;
     seen.add(fingerprint);
     originals.push({ signalIds, kind: row.kind, inspirationText, reflection,
-      partial: row.text.length > 400 || (answer?.length ?? 0) > 400 || row.reflections.length > 1 });
+      ...(designated?{sourceNumber:designated.sourceNumber}:{}),
+      partial: row.text.length > (inspirationText?.length??400) || (answer?.length ?? 0) > 400 || row.reflections.length > 1 });
     if (renderPrincipleGroundingContext({ ...input, originals }).length > PRINCIPLE_GROUNDING_LIMITS.characters) {
       originals.pop();
       break;
     }
+    exposed.add(id);
     if (originals.length === 12) break;
   }
   if (originals.length) input.originals = originals;
+  return exposed;
 }
 
 export async function refreshPrinciplesForProfile(
@@ -412,16 +438,19 @@ export async function refreshPrinciplesForProfile(
   const snapshot = await db.transaction(async tx => {
     const revision = await readGenerationRevision(tx, { profileId: input.profileId });
     if (!revision) return null;
-    return { revision, material: await loadPrincipleMaterial(tx, input.profileId) };
+    return { revision, material: await loadPrincipleMaterial(tx, input.profileId, now) };
   }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
   if (!snapshot) return none;
   const { revision, material } = snapshot;
   const { activeSignals, evidence } = material;
   if(deps.expectedMaterialKey&&deps.expectedMaterialKey!==principleMaterialKey(material))return {...none,status:'superseded'};
-  if (activeSignals.length < bar("SIGNALS")) return none;
-
-  const overall = computeCitationEligibility([...evidence.values()], now);
-  if (!overall.eligible) return none;
+  if (!material.mode) return none;
+  const first=material.mode==='first';
+  const ordinary=material.ordinaryAvailable;
+  const inputSignals=first
+    ?[...new Map([...(ordinary?activeSignals:[]),...material.firstSignals].map(row=>[row.id,row])).values()]
+    :activeSignals;
+  const firstById=new Map(material.firstSignals.map(row=>[row.id,row]));
 
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
   const [profileRow] = await db
@@ -436,11 +465,11 @@ export async function refreshPrinciplesForProfile(
     .from(principles)
     .where(eq(principles.profileId, input.profileId)).orderBy(asc(principles.rank),asc(principles.id));
 
-  const [liveTom] = await db
+  const [liveTom] = ordinary ? await db
     .select({ id: topOfMinds.id })
     .from(topOfMinds)
     .where(and(eq(topOfMinds.profileId, input.profileId), eq(topOfMinds.status, "live")))
-    .limit(1);
+    .limit(1) : [];
   const storedEntries = liveTom
     ? await db
         .select()
@@ -454,13 +483,14 @@ export async function refreshPrinciplesForProfile(
   const distillInput=selectPrincipleInput({
     profileId: input.profileId,
     preferredLocale,
-    signals: activeSignals.map((row) => {
+    ...(first?{firstPrinciple:true as const,...(ordinary?{ordinaryAvailable:true as const}:{})}:{}),
+    signals: inputSignals.map((row) => {
       const stats = evidence.get(row.id);
       const times = (stats?.evidenceAt ?? []).map((d) => d.getTime());
       return {
         id: row.id,
         statement: row.statement,
-        evidenceCount: stats?.evidenceAt.length ?? 0,
+        evidenceCount: stats?.evidenceAt.length??firstById.get(row.id)?.origins.length??0,
         firstEvidenceAt: times.length ? new Date(Math.min(...times)) : null,
         lastEvidenceAt: row.lastEvidenceAt,
         tomAppearances: stats?.tomVersionIds.length ?? 0,
@@ -473,6 +503,33 @@ export async function refreshPrinciplesForProfile(
     })),
     currentEntries: currentEntries.map((row) => ({ body: row.body })),
   },new Set(focus.flatMap(row=>row.id?[row.id]:[])));
+  if(first&&!ordinary&&!assignFirstPrincipleOrigins(material.firstSignals.filter(row=>distillInput.signals.some(signal=>signal.id===row.id))))return none;
+  const firstSources = new Map<number, FirstPrincipleExcerpt>();
+  if(first){
+    const sources = await db.transaction(async tx => {
+      const current = await readGenerationRevision(tx, { profileId: input.profileId });
+      if (current?.revision !== revision.revision) throw new Error('Generation inputs changed; retry current inputs');
+      return loadFirstPrincipleExcerpts(tx, input.profileId, distillInput.signals.map(row => row.id), firstById);
+    }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
+    const seen = new Set<string>();
+    const firstSaveExcerpts: NonNullable<typeof distillInput.firstSaveExcerpts> = [];
+    const excerptBudget = Math.min(PRINCIPLE_INPUT_LIMITS.characters,
+      renderPrincipleDistillContext(distillInput).length + FIRST_PRINCIPLE_EXCERPT_LIMITS.promptCharacters);
+    for (const source of sources) {
+      const fingerprint = readingSourceFingerprint([source.text]);
+      if (!fingerprint || seen.has(fingerprint)) continue;
+      const sourceNumber = firstSaveExcerpts.length + 1;
+      firstSaveExcerpts.push({sourceNumber,signalIds:source.signalIds,text:source.text,partial:source.partial});
+      if (renderPrincipleDistillContext({ ...distillInput, firstSaveExcerpts }).length > excerptBudget) {
+        firstSaveExcerpts.pop();
+        continue;
+      }
+      seen.add(fingerprint);
+      firstSources.set(sourceNumber,source);
+      if (firstSaveExcerpts.length === FIRST_PRINCIPLE_EXCERPT_LIMITS.excerpts) break;
+    }
+    if (firstSaveExcerpts.length) distillInput.firstSaveExcerpts = firstSaveExcerpts;
+  }
   const billingProfileId=deps.billingProfileId??input.profileId;
   // The grounding contract changed. Completed job publications still short-circuit
   // above; unfinished work must not reuse a verdict on the old input.
@@ -480,10 +537,10 @@ export async function refreshPrinciplesForProfile(
     provider:provider.name??'injected',models:provider.pinnedModel?[provider.pinnedModel]:provider.name==='openrouter'
       ?[process.env.WAKA_MODEL_PRINCIPLES?.trim()||OPENROUTER_GENERATION_MODEL,process.env.WAKA_MODEL_PRINCIPLE_JUDGE?.trim()||OPENROUTER_GENERATION_MODEL]
       :['gemini-3.1-flash-lite'],limits:{input:PRINCIPLE_INPUT_LIMITS,comparison:PRINCIPLE_COMPARISON_LIMITS,grounding:PRINCIPLE_GROUNDING_LIMITS},
-    prompts:[PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION,PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION],context:renderPrincipleDistillContext(distillInput),material:principleMaterialKey(material),distillInput,
+    prompts:[principleDistillInstruction(distillInput),PRINCIPLE_RELATION_JUDGE_SYSTEM_INSTRUCTION,PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION],context:renderPrincipleDistillContext(distillInput),material:principleMaterialKey(material),distillInput,
     standing:existing.map(row=>({id:row.id,statement:row.statement,revision:String(row.statementRevision),rank:row.rank,state:row.state,origin:row.origin,locked:row.lockedAt!==null,supported:row.supportCurrent,conflictsWithId:row.conflictsWithId}))})).digest('hex');
   const work=principleWork({db,profileId:input.profileId,billingProfileId,inputHash,revision,jobId:deps.jobId,beforeProgress:deps.beforeProgress});
-  const distilled=await work.run('distill',()=>provider.distillPrinciples(distillInput),value=>({candidates:parseDistilledPrinciples(value).candidates.slice(0,PRINCIPLE_MAX_CANDIDATES_PER_RUN)}));
+  const distilled=await work.run('distill',()=>provider.distillPrinciples(distillInput),value=>({candidates:parseDistilledPrinciples(value,distillInput).candidates.slice(0,PRINCIPLE_MAX_CANDIDATES_PER_RUN)}));
   const recordPublication=async(tx:WakaTx,result:RefreshPrinciplesResult)=>{
     if(deps.jobId)await tx.insert(principleGenerationSteps).values({profileId:input.profileId,billingProfileId,jobId:deps.jobId,inputHash,stepKey:'publication',kind:'publication',status:'ready',response:result,finishedAt:new Date()});
     await tx.update(principleGenerationSteps).set({response:null}).where(and(eq(principleGenerationSteps.profileId,input.profileId),eq(principleGenerationSteps.kind,'model')));
@@ -494,33 +551,69 @@ export async function refreshPrinciplesForProfile(
 
   const candidates = distilled.candidates.slice(0, PRINCIPLE_MAX_CANDIDATES_PER_RUN);
   let valid: PrincipleCandidate[] = [];
+  let firstCandidate: PrincipleCandidate|undefined;
+  let firstOriginals: ReturnType<typeof assignFirstPrincipleOrigins> = null;
+  let firstDirect: DirectEvidence | undefined;
   for (const candidate of candidates) {
     const statement = candidate.statement.trim();
     const cited = [...new Set(candidate.citedSignalIds)];
+
     const verdict = computeCitationEligibility(
       cited.map((id) => evidence.get(id)!).filter(Boolean),
       now,
     );
+    const ordinaryCandidate=ordinary&&verdict.eligible&&cited.every(id=>evidence.has(id));
+    let assigned: ReturnType<typeof assignFirstPrincipleOrigins> = null;
+    let direct: DirectEvidence | undefined;
+    if (first && !ordinaryCandidate && !firstCandidate) {
+      if (cited.length===FIRST_PRINCIPLE_SIGNAL_COUNT) {
+        assigned=assignFirstPrincipleOrigins(cited.flatMap(id=>firstById.has(id)?[firstById.get(id)!]:[]));
+      } else if (cited.length===1 && candidate.directEvidence) {
+        const source=firstSources.get(candidate.directEvidence.sourceNumber);
+        if (source?.signalIds.includes(cited[0]!) && source.text.includes(candidate.directEvidence.quote)) {
+          assigned=[{signalId:cited[0]!,origin:source.origin}];
+          direct={...candidate.directEvidence,source};
+        }
+      }
+    }
     if (
       statement.length === 0 ||
       statement.length > PRINCIPLE_MAX_STATEMENT_LENGTH ||
       cited.some(id=>!activeIds.has(id)) ||
-      !verdict.eligible
+      (!ordinaryCandidate && !assigned)
     ) {
       result.dropped += 1;
       continue;
     }
-    valid.push({ ...candidate, statement, citedSignalIds: cited });
+    const accepted={ ...candidate, statement, citedSignalIds: cited };
+    valid.push(accepted);
+    if(assigned){firstCandidate=accepted;firstOriginals=assigned;firstDirect=direct;}
   }
   if(valid.length){
     const citedIds=new Set(valid.flatMap(row=>row.citedSignalIds));
     const groundingInput: PrincipleGroundingInput = {preferredLocale,signals:distillInput.signals.filter(row=>citedIds.has(row.id)).map(row=>({id:row.id,statement:row.statement})),
-      candidates:valid.map((row,index)=>({id:`candidate-${index}`,statement:row.statement,citedSignalIds:row.citedSignalIds}))};
-    await addGroundingOriginals(db, revision, evidence, groundingInput);
-    const groundingKey = createHash('sha256').update(renderPrincipleGroundingContext(groundingInput)).digest('hex');
-    const grounding=await work.run(`grounding:${groundingKey}`,()=>provider.assessPrincipleGrounding(groundingInput),value=>parsePrincipleGrounding(value,groundingInput));
-    valid=valid.filter((_,index)=>{const supported=grounding.assessments[index]!.supported;if(!supported)result.dropped++;return supported;});
+      candidates:valid.map((row,index)=>({id:`candidate-${index}`,statement:row.statement,citedSignalIds:row.citedSignalIds,
+        ...(row===firstCandidate?{firstPrinciple:true as const,
+          ...(firstDirect?{directEvidence:{sourceNumber:firstDirect.sourceNumber,quote:firstDirect.quote}}:{})}:{})}))};
+    const exposed=await addGroundingOriginals(db, revision, evidence, groundingInput,firstOriginals??[],firstDirect);
+    if(firstOriginals?.some(({origin})=>!exposed.has(origin.id))){
+      const index=valid.indexOf(firstCandidate!);
+      valid.splice(index,1);
+      groundingInput.candidates.splice(index,1);
+      result.dropped++;
+    }
+    if(valid.length){
+      const groundingHash = createHash('sha256').update(renderPrincipleGroundingContext(groundingInput));
+      if (groundingInput.candidates.some(row=>row.firstPrinciple)) {
+        groundingHash.update('\n').update(principleGroundingInstruction(groundingInput));
+      }
+      const groundingKey = groundingHash.digest('hex');
+      const grounding=await work.run(`grounding:${groundingKey}`,()=>provider.assessPrincipleGrounding(groundingInput),value=>parsePrincipleGrounding(value,groundingInput));
+      valid=valid.filter((_,index)=>{const supported=grounding.assessments[index]!.supported;if(!supported)result.dropped++;return supported;});
+    }
   }
+  if(valid.some(candidate=>candidate!==firstCandidate))valid=valid.filter(candidate=>candidate!==firstCandidate);
+  const useFirst=valid[0]!==undefined&&valid[0]===firstCandidate;
   if (valid.length === 0) {
     await db.transaction(async (tx) => {
       await assertGenerationRevision(tx, revision);
@@ -580,6 +673,12 @@ export async function refreshPrinciplesForProfile(
       if (code === "55P03") throw new Error("Generation inputs changed; retry current inputs");
       throw error;
     }
+    if(useFirst){
+      const [claimed]=await tx.insert(profilePrincipleHistory)
+        .values({profileId:input.profileId,firstPrincipleId:planned[0]!.mintedId})
+        .onConflictDoNothing().returning({profileId:profilePrincipleHistory.profileId});
+      if(!claimed)return {...none,status:'superseded'};
+    }
     for (const { candidate, matchedId, conflictingId, mintedId } of planned) {
       if (matchedId) {
         const attached = await attachCitations(tx, input.profileId, matchedId, candidate.citedSignalIds);
@@ -602,7 +701,7 @@ export async function refreshPrinciplesForProfile(
           id: mintedId,
           profileId: input.profileId,
           statement: candidate.statement,
-          inputPolicy: null,
+          inputPolicy: useFirst&&firstDirect?directFirstPrinciplePolicy(candidate.citedSignalIds[0]!,firstDirect.source.origin):null,
           type: candidate.type,
           state: "held",
           origin: "minted",
@@ -620,6 +719,12 @@ export async function refreshPrinciplesForProfile(
           principleStatementRevision: row!.statementRevision,
         })),
       );
+      if(useFirst){
+        const [confirmed]=await tx.select({id:principles.id}).from(principles).where(and(
+          eq(principles.id,row!.id),eq(principles.profileId,input.profileId),
+          personalPrincipleSupportCurrent(input.profileId,PRINCIPLE_MIN_SIGNALS)));
+        if(!confirmed)throw new Error('First Principle support changed before publication');
+      }
       // The chain begins at birth — the machine's sentence every later
       // revert returns to (no-quiet-corners Phase 2).
       await writePrincipleStatementChain(tx, {
@@ -656,10 +761,12 @@ async function attachCitations(
   signalIds: string[],
 ): Promise<number> {
   if (signalIds.length === 0) return 0;
-  const revisions = await loadSignalStatementRevisions(db, signalIds);
-  const [parent] = await db.select({ revision: principles.statementRevision }).from(principles)
+  const [parent] = await db.select({ revision: principles.statementRevision,inputPolicy:principles.inputPolicy }).from(principles)
     .where(and(eq(principles.profileId, profileId), eq(principles.id, principleId))).limit(1);
   if (!parent) throw new Error('Principle citation parent is unavailable');
+  // An ordinary same-match cannot replace the exact save behind a direct first Principle.
+  if (isDirectFirstPrinciplePolicy(parent.inputPolicy)) return 0;
+  const revisions = await loadSignalStatementRevisions(db, signalIds);
   for (const signalId of signalIds) {
     await db.update(principleSignals).set({ statementRevision: revisions.get(signalId), principleStatementRevision: parent.revision })
       .where(and(eq(principleSignals.profileId, profileId), eq(principleSignals.principleId, principleId), eq(principleSignals.signalId, signalId)));
@@ -693,7 +800,7 @@ export async function promoteIfDemonstrated(
   // Evidence belongs to this exact instruction and its entire citation set.
   // Three surviving links cannot silently repair a fourth withdrawn link.
   const [current] = await db
-    .select({ state: principles.state, unsupportedAt: principles.unsupportedAt,
+    .select({ state: principles.state, unsupportedAt: principles.unsupportedAt, first:usesFirstPrincipleBar(profileId),
       supportCurrent:personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS) })
     .from(principles)
     .where(and(eq(principles.id, principleId),eq(principles.profileId,profileId)))
@@ -711,7 +818,7 @@ export async function promoteIfDemonstrated(
     cited,
   );
   const verdict = computeCitationEligibility([...evidence.values()], now);
-  if (!verdict.eligible ||
+  if ((!current.first && !verdict.eligible) ||
     (!promoteDecision(current.state, true) && current.unsupportedAt === null)) return false;
 
   const updated = await db
@@ -764,7 +871,7 @@ export async function reconcilePrinciplesAfterSignalLoss(
       // Read standing under the row lock: a committed human edit must be
       // observed before deciding whether automatic deletion is allowed.
       const [row] = await tx
-        .select({...getTableColumns(principles),supportCurrent:personalPrincipleSupportCurrent(input.profileId,PRINCIPLE_MIN_SIGNALS)})
+        .select({...getTableColumns(principles),first:usesFirstPrincipleBar(input.profileId),supportCurrent:personalPrincipleSupportCurrent(input.profileId,PRINCIPLE_MIN_SIGNALS)})
         .from(principles)
         .where(and(eq(principles.id, principleId), eq(principles.profileId, input.profileId)))
         .for("update")
@@ -777,7 +884,7 @@ export async function reconcilePrinciplesAfterSignalLoss(
         .innerJoin(signals, eq(signals.id, principleSignals.signalId))
         .where(and(eq(principleSignals.principleId, principleId), eq(signals.status, "active")));
       const evidence = await loadCitationEvidence(tx, input.profileId, cited);
-      const action = reconcileAction(row, row.supportCurrent && computeCitationEligibility([...evidence.values()], now).eligible);
+      const action = reconcileAction(row, row.supportCurrent && (row.first || computeCitationEligibility([...evidence.values()], now).eligible));
       if (action === "keep") return;
 
       if (action === "demote") {

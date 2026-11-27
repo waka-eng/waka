@@ -1,0 +1,2 @@
+ALTER TABLE "background_jobs" ADD COLUMN "terminal_notice_sent_for" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "background_jobs_unsent_failure_idx" ON "background_jobs" USING btree ("updated_at","id") WHERE "background_jobs"."status" = 'failed' AND "background_jobs"."terminal_notice_sent_for" IS DISTINCT FROM "background_jobs"."updated_at";

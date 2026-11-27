@@ -1537,12 +1537,23 @@ artifacts**.
   are an uncapped set selected by longevity, minted per-candidate with
   merge-on-overlap. Cardinality is the structural difference between
   the layers.
-- **Generated from changed material**: three active, evidenced signals and
-  at least one citing top-of-mind version can support an initial principle.
-  Personal and agent top-of-mind jobs request generation; opening the view
-  can queue missed work. Requests are deduplicated by material fingerprint.
-  A nightly cron and hourly local recovery pass cover missed triggers.
-  State maintenance is immediate SQL. No calendar wait is required.
+- **Generation follows the evidence.** A human profile’s first Principle
+  review starts when two distinct current signals, including emerging ones,
+  have two independent owned inspirations. An inferred default cites both
+  signals. A direct, recurring choice in the person's own words can cite one
+  signal with a verified quote from one linked inspiration. Its `input_policy`
+  binds the cited signal and exact inspiration revision, so losing the
+  original withdraws its support. The first Principle can appear before top
+  of mind. For subsequent
+  principles, three active, evidenced signals and a citing top-of-mind version
+  are required. A declaration also counts as the profile’s first principle.
+- **First-principle history belongs to the profile.** The
+  `profile_principle_history` row survives removing an individual principle
+  and is erased with the profile. It identifies the principle admitted under
+  the lower threshold so WAKA can keep checking its support.
+- Processing a save can queue the first principle. Top-of-mind publication
+  and scheduled recovery also request generation. Requests for the same
+  eligible material share a job.
 - **The canonical rendering is machine-facing**: one deterministic
   markdown document (rank-ordered, stable ids, a self-describing
   preamble carrying the consumption contract), served byte-identically

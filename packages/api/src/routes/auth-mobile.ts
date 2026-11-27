@@ -6,27 +6,32 @@ import { accounts, mobileLoginCodes, profiles, sessions } from '../db/index.js';
 import { getDb } from '../lib/db.js';
 import { signSessionToken, SESSION_TTL_SECONDS, wantsSecureCookie } from '../lib/auth.js';
 import { hashSessionToken } from '../lib/session.js';
+import { supportedLocaleSchema } from '../lib/locales.js';
 import { getOAuthRedirectOrigin } from '../lib/google-oauth.js';
 import { MOBILE_BINDING_COOKIE, mobileBindingSchema, mobileChallenge, mobileDigest, signMobileBinding } from '../lib/mobile-handoff.js';
 import { loadIdentity, serializeAccount, serializeProfile } from './auth-identity.js';
 
 export const mobileAuthRoutes = new Hono();
+const mobileGoogleStartSchema = mobileBindingSchema.extend({ preferredLocale: supportedLocaleSchema.optional() });
 mobileAuthRoutes.get('/google', async c => {
-  const parsed = mobileBindingSchema.safeParse(c.req.query());
+  const parsed = mobileGoogleStartSchema.safeParse(c.req.query());
   if (!parsed.success) return c.json({ error: 'Invalid sign-in request' }, 400);
+  const { preferredLocale, ...binding } = parsed.data;
   const origin = new URL(process.env.PUBLIC_WEB_URL ?? getOAuthRedirectOrigin());
   const fixture = process.env.WAKA_MOBILE_FIXTURE_RUN === '1' && ['localhost', '127.0.0.1'].includes(origin.hostname) &&
     ['localhost', '127.0.0.1'].includes(new URL(process.env.DB_CONNECTION_URL ?? 'https://invalid').hostname);
   const expectedApp = fixture ? 'im.waka.app.test' : origin.hostname === 'waka.im' ? 'im.waka.app' : 'im.waka.app.dev';
-  if (!['waka.im', 'dev.waka.im', 'localhost', '127.0.0.1'].includes(origin.hostname) || parsed.data.appId !== expectedApp) {
+  if (!['waka.im', 'dev.waka.im', 'localhost', '127.0.0.1'].includes(origin.hostname) || binding.appId !== expectedApp) {
     return c.json({ error: 'Unexpected app identity' }, 400);
   }
-  setCookie(c, MOBILE_BINDING_COOKIE, await signMobileBinding(parsed.data), {
+  setCookie(c, MOBILE_BINDING_COOKIE, await signMobileBinding(binding), {
     httpOnly: true, sameSite: 'Lax', secure: wantsSecureCookie(), path: '/', maxAge: 600,
   });
   // Google still redirects to the existing registered HTTPS server callback,
   // not to a custom Android scheme or the embedded app WebView.
-  return c.redirect('/api/auth/google/login?mobile=1', 302);
+  const params = new URLSearchParams({ mobile: '1' });
+  if (preferredLocale) params.set('preferredLocale', preferredLocale);
+  return c.redirect(`/api/auth/google/login?${params}`, 302);
 });
 
 const exchangeSchema = mobileBindingSchema.omit({ challenge: true }).extend({

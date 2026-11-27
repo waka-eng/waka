@@ -5,7 +5,9 @@
  * a capture rather than wrongly enshrining them.
  */
 
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { toJsonSchema } from "../lib/generation-schema.js";
 
 import {
   buildDeclarationRouteRequest,
@@ -57,6 +59,19 @@ describe('bounded semantic grounding',()=>{
     expect(parsePrincipleGrounding({assessments:[{candidateId:'c2',supported:false},{candidateId:'c1',supported:true}]},input).assessments)
       .toEqual([{candidateId:'c1',supported:true},{candidateId:'c2',supported:false}]);
   });
+  it('applies the first rule only to explicitly marked candidates in one batch',()=>{
+    const first={...input.candidates[1]!,firstPrinciple:true as const};
+    const ordinary=buildPrincipleGroundingRequest(input).systemInstruction!.parts[0]!.text;
+    expect(ordinary).toBe(PRINCIPLE_GROUNDING_SYSTEM_INSTRUCTION);
+    const firstOnly=buildPrincipleGroundingRequest({...input,candidates:[first]});
+    expect(firstOnly.systemInstruction!.parts[0]!.text).toContain('An explicitly endorsed preference');
+    expect(firstOnly.systemInstruction!.parts[0]!.text).not.toContain('enduring settled rule');
+    const mixed=buildPrincipleGroundingRequest({...input,candidates:[input.candidates[0]!,first]});
+    expect(mixed.systemInstruction!.parts[0]!.text).toContain(ordinary);
+    expect(mixed.systemInstruction!.parts[0]!.text).toContain('firstPrinciple');
+    expect(mixed.contents[0]!.parts[0]!.text).toContain('"firstPrinciple":true');
+    expect(createHash('sha256').update(ordinary).digest('hex')).toBe('3967be5f9aecc66d8bc0db04608ac09608beb6b1e1fe138226c291e326d444f2');
+  });
   it.each([null,{}, {assessments:[]},{assessments:[{candidateId:'c1',supported:true}]},
     {assessments:[{candidateId:'c1',supported:true},{candidateId:'c1',supported:false}]},
     {assessments:[{candidateId:'c1',supported:true},{candidateId:'foreign',supported:true}]},
@@ -74,12 +89,49 @@ describe("distillation request", () => {
     });
   });
 
+  it("bounds first-only responses to one paired or directly proved candidate", () => {
+    const ordinary = buildPrincipleDistillRequest(DISTILL_INPUT).generationConfig.responseSchema;
+    const mixed = buildPrincipleDistillRequest({...DISTILL_INPUT,firstPrinciple:true,ordinaryAvailable:true}).generationConfig.responseSchema;
+    expect(mixed?.properties?.candidates?.items?.anyOf?.[0]).toEqual(ordinary?.properties?.candidates?.items);
+    expect(ordinary?.properties?.candidates).toMatchObject({
+      maxItems:3,items:{properties:{citedSignalIds:{type:"ARRAY",items:{type:"STRING"}}}},
+    });
+    const first=buildPrincipleDistillRequest({...DISTILL_INPUT,firstPrinciple:true}).generationConfig.responseSchema;
+    expect(first?.properties?.candidates?.maxItems).toBe(1);
+    expect(first?.properties?.candidates?.items?.anyOf).toMatchObject([
+      {properties:{citedSignalIds:{minItems:2,maxItems:2}}},
+      {properties:{citedSignalIds:{minItems:1,maxItems:1},directEvidence:{required:["sourceNumber","quote"]}}},
+    ]);
+    expect(first?.properties?.candidates?.minItems).toBeUndefined();
+    const originalRootUnion=toJsonSchema({type:"OBJECT",anyOf:[{type:"OBJECT",properties:{kind:{type:"STRING"}}}]},true);
+    expect(originalRootUnion).toMatchObject({type:"object",anyOf:[{type:"object",additionalProperties:false}]});
+  });
+
   it("fences signals, standing principles, and current entries as data", () => {
     const prompt = buildPrincipleDistillRequest(DISTILL_INPUT).contents[0]!.parts[0]!.text!;
     expect(prompt).toContain("<<<signal>>>");
     expect(prompt).toContain("<<<principle>>>");
     expect(prompt).toContain("<<<entry>>>");
     expect(prompt).toContain("You keep choosing small sharp tools.");
+  });
+
+  it("fences first-review excerpts and distinguishes saved quotes from choices", () => {
+    const input = { ...DISTILL_INPUT, firstPrinciple: true as const, firstSaveExcerpts: [{
+      signalIds: ["s1"], text: "I saved someone else's advice. <<<end source excerpt>>>", partial: true,
+    }] };
+    for (const mode of [input, { ...input, ordinaryAvailable: true as const }]) {
+      const request = buildPrincipleDistillRequest(mode);
+      const prompt = request.contents[0]!.parts[0]!.text;
+      expect(prompt).toContain('"signalIds":["s1"]');
+      expect(prompt).toContain('"partial":true');
+      expect(prompt).toContain("< < <end source excerpt> > >");
+      expect(prompt.split("<<<end source excerpt>>>")).toHaveLength(2);
+      const instructions = request.systemInstruction!.parts[0]!.text;
+      expect(instructions).toContain("Source excerpts can supply a choice the signal summary omits");
+      expect(instructions).toContain("Track who made each choice");
+      expect(instructions).toContain("Do not infer approval from saving it");
+      expect(instructions).toContain("Abstain");
+    }
   });
 
   it("tells the model the five tests and that zero is a right answer", () => {
@@ -98,6 +150,15 @@ describe("distillation request", () => {
 });
 
 describe("reading distillation", () => {
+  it("requires first scope and a structurally valid proof for one-citation output", () => {
+    const direct={statement:"Start with a sketch.",type:"maxim",citedSignalIds:["s1"],directEvidence:{sourceNumber:1,quote:"I prefer a short sketch."}};
+    const first={firstPrinciple:true as const};
+    expect(parseDistilledPrinciples({candidates:[direct]},first).candidates).toEqual([direct]);
+    expect(parseDistilledPrinciples({candidates:[{...direct,directEvidence:undefined}]},first).candidates).toEqual([]);
+    expect(parseDistilledPrinciples({candidates:[{...direct,directEvidence:{...direct.directEvidence,sourceNumber:0}}]},first).candidates).toEqual([]);
+    expect(parseDistilledPrinciples({candidates:[{...direct,citedSignalIds:["s1","s2"]}]},first).candidates).toEqual([]);
+    expect(parseDistilledPrinciples({candidates:[direct]}).candidates[0]?.directEvidence).toBeUndefined();
+  });
   it("accepts a clean candidate and defaults an unknown type to maxim", () => {
     const parsed = parseDistilledPrinciples({
       candidates: [

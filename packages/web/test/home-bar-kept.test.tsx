@@ -36,8 +36,8 @@ it('says how many inspirations, and only "Inspirations" when it is not told', as
 });
 
 it('says it in Korean order in Korean', async () => {
-  expect(await pullFor('ko-KR', 12)).toBe('메모 12개');
-  expect(await pullFor('ko-KR', undefined)).toBe('메모');
+  expect(await pullFor('ko-KR', 12)).toBe('저장한 메모 12개');
+  expect(await pullFor('ko-KR', undefined)).toBe('저장한 메모');
 });
 
 /* A LIT GRABBER, TAPPED OR DRAGGED UP (founder meeting, 2026-11-20). */

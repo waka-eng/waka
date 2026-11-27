@@ -318,7 +318,7 @@ export async function restoreInspiration(id: string, options: ProfileScoped = {}
 }
 
 /** The question asked right after a save, before any answer exists. */
-export const AFTER_SAVE_REFLECTION_ID = "00000000-0000-0000-0000-000000000000";
+const AFTER_SAVE_REFLECTION_ID = "00000000-0000-0000-0000-000000000000";
 export type SaveQuestion = { phase: "idle" | "processing" | "failed" } | { phase: "ready"; question: string };
 
 /** Asks the creature's question about this save (founder, 2026-11-26: it should

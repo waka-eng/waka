@@ -187,7 +187,7 @@ interface WindowCounts {
 /** "the sky held" is filtered out of the spoken line by identity, so the
     phrase lives in exactly one place per language. */
 function skyHeldText(locale: ProseLocale): string {
-  return locale === "ko-KR" ? "하늘은 그대로였어요" : "the sky held";
+  return locale === "ko-KR" ? "패턴에는 변화가 없었어요" : "the sky held";
 }
 
 function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSentence[] {
@@ -197,8 +197,8 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.kept === 1
-          ? "하나 저장했어요"
-          : `${exactCount(c.kept)}개 저장했어요`
+          ? "새 메모를 하나 남겼어요"
+          : `새 메모를 ${exactCount(c.kept)}개 남겼어요`
         : c.kept === 1
           ? "you saved one inspiration"
           : `you saved ${exactCount(c.kept)} inspirations`,
@@ -209,8 +209,8 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.minted === 1
-          ? "새 신호가 하나 생겼어요"
-          : `새로운 신호가 ${exactCount(c.minted)}개 생겼어요`
+          ? "새로운 패턴을 하나 발견했어요"
+          : `새로운 패턴을 ${exactCount(c.minted)}개 발견했어요`
         : c.minted === 1
           ? "a new signal was spoken"
           : `${exactCount(c.minted)} new signals were spoken`,
@@ -221,8 +221,8 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.roots === 1
-          ? "신호 하나가 뒤에 선 기억을 하나 더 찾았어요"
-          : `신호들이 뒤에 선 기억을 ${exactCount(c.roots)}개 더 찾았어요`
+          ? "기존 패턴을 뒷받침하는 메모를 하나 더 찾았어요"
+          : `기존 패턴과 메모 사이에서 새로운 연결을 ${exactCount(c.roots)}개 찾았어요`
         : c.roots === 1
           ? "a signal found another memory behind it"
           : `your signals found ${exactCount(c.roots)} more memories behind them`,
@@ -233,8 +233,8 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.refusals === 1
-          ? "치워 둔 것과 너무 가까워서 후보 하나를 거절했어요"
-          : `치워 둔 것과 너무 가까워서 후보 ${exactCount(c.refusals)}개를 거절했어요`
+          ? "전에 빼기로 한 패턴과 비슷한 내용 하나를 제외했어요"
+          : `전에 빼기로 한 패턴과 비슷한 내용 ${exactCount(c.refusals)}개를 제외했어요`
         : c.refusals === 1
           ? "refused a candidate because it was too close to what you dismissed"
           : `refused ${exactCount(c.refusals)} candidates because they were too close to what you dismissed`,
@@ -249,7 +249,7 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
   if (c.posterFirst > 0) {
     out.push({
       text: ko
-        ? "톱 오브 마인드가 처음으로 쓰였어요"
+        ? "‘요즘 드는 생각’을 처음으로 정리했어요"
         : "your top of mind was written for the first time",
       backing: "top_of_minds",
     });
@@ -258,8 +258,8 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.posterRewrites === 1
-          ? "톱 오브 마인드가 다시 쓰였어요"
-          : `톱 오브 마인드가 ${exactTimes(c.posterRewrites, locale)} 다시 쓰였어요`
+          ? "‘요즘 드는 생각’을 다시 정리했어요"
+          : `‘요즘 드는 생각’을 ${exactTimes(c.posterRewrites, locale)} 다시 정리했어요`
         : c.posterRewrites === 1
           ? "your top of mind was rewritten"
           : `your top of mind was rewritten ${exactTimes(c.posterRewrites)}`,
@@ -269,7 +269,7 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
   if (c.posterHeld > 0) {
     out.push({
       text: ko
-        ? "전부 다시 읽었는데, 톱 오브 마인드는 그대로였어요"
+        ? "메모를 다시 살펴봤어요. ‘요즘 드는 생각’은 그대로예요"
         : "everything was read again, and your top of mind held",
       backing: "top_of_minds",
     });
@@ -277,7 +277,7 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
   if (c.posterYourHand > 0) {
     out.push({
       text: ko
-        ? "톱 오브 마인드가 내 말을 받아들였어요"
+        ? "‘요즘 드는 생각’에 직접 고친 문장이 반영됐어요"
         : "your top of mind took your own words",
       backing: "top_of_minds",
     });
@@ -286,8 +286,8 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.consulted === 1
-          ? "저장한 메모가 참고됐어요"
-          : `저장한 메모가 ${exactTimes(c.consulted, locale)} 참고됐어요`
+          ? "내 기억을 한 번 참고했어요"
+          : `내 기억을 ${exactTimes(c.consulted, locale)} 참고했어요`
         : c.consulted === 1
           ? "your inspirations were consulted"
           : `your inspirations were consulted ${exactTimes(c.consulted)}`,
@@ -543,13 +543,12 @@ export async function assembleTheWeather(
 export function renderTheWeather(weather: TheWeather, locale: ProseLocale = "en-US"): string {
   const lines: string[] = [];
   if (locale === "ko-KR") {
-    lines.push("# 날씨");
+    lines.push("# 최근 활동");
     lines.push("");
-    lines.push("> 무엇이 있었는지 날들로 들려드려요. 문장 하나하나가 저장된");
-    lines.push("> 기록을 비추는 것이지, 누가 쓴 요약이 아니에요.");
+    lines.push("> 저장된 활동 기록을 날짜별로 모았어요.");
     lines.push("");
     if (weather.days.length === 0) {
-      lines.push("조용한 두 주였어요. 아무것도 움직이지 않았어요.");
+      lines.push("지난 2주 동안 기록된 활동이 없어요.");
     }
   } else {
     lines.push("# The weather");

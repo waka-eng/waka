@@ -347,7 +347,8 @@ it('keeps the selected principle and its route after editing, so Back returns to
   const editor=world.container.querySelector<HTMLTextAreaElement>('[aria-label="This principle in your own words"]')!;
   await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(editor,'Leave unhurried time for thought.');editor.dispatchEvent(new Event('input',{bubbles:true}));});
   await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principles-list--personal button')].find(button=>button.textContent==='Save')!.click());await settle();
-  expect(location.pathname).toBe('/principles/principle-one');expect(world.container.textContent).toContain('Share');
+  expect(location.pathname).toBe('/principles/principle-one');
+  expect(world.container.querySelector('.jar-values-value')?.textContent).toBe('Leave unhurried time for thought.');
   expect(updatePrinciple).toHaveBeenCalledWith('principle-one','Leave unhurried time for thought.', expect.objectContaining({ profile: VIEWER_ID }));
   await navigate(-1);expect(location.pathname+location.search).toBe('/');
 });
@@ -363,7 +364,9 @@ it('shows principle management only after choosing the words to read',async()=>{
 it('hides a principle’s expanded evidence when Back closes that principle',async()=>{
   principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'minted',rank:0,locked:false,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[{id:'signal-one',statement:'Make space to think.',examples:[{text:'I left an unhurried morning for thinking.',createdAt:'2026-10-03T12:00:00Z'}]}]}];
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();await navigate('/principles/principle-one');
-  const why=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principles-list--personal button')].find(button=>button.textContent==='Why?')!;
+  const buttons = [...world.container.querySelectorAll<HTMLButtonElement>('.jar-principle-actions button')];
+  expect(buttons.map(button => button.textContent)).not.toContain('Share');
+  const why = buttons.find(button => button.textContent === 'Why?')!;
   await act(async()=>why.click());expect(world.container.querySelector('.jar-principle-evidence')).not.toBeNull();
   await navigate(-1);expect(location.pathname+location.search).toBe('/');
   expect(world.container.textContent).not.toContain('Chat about this');

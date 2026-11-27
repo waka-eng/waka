@@ -15,7 +15,7 @@ import { CreatureSlot } from "./CreatureStage";
 import { SayBubble } from "./SayBubble";
 
 /** When the wait stops being "a few seconds" and the way in is offered. */
-export const READING_SLOW_MS = 12_000;
+const READING_SLOW_MS = 12_000;
 
 const ORBS: Array<[number, string, string]> = [
   [12, "#f1e9d6", "onb-drift-a 2.4s"],

@@ -1,5 +1,5 @@
 {
-  "id": "cb7897df-2329-45e3-b658-c06e0b5ee513",
+  "id": "fc44ec80-2890-4dee-8a2a-6071f9578686",
   "prevId": "e8f0a131-ce76-4cbd-9b4e-3ae52dd631e8",
   "version": "7",
   "dialect": "postgresql",
@@ -983,99 +983,6 @@
           ],
           "columnsTo": [
             "profile_id",
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.mcp_reads": {
-      "name": "mcp_reads",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "profile_id": {
-          "name": "profile_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_kind": {
-          "name": "key_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tool": {
-          "name": "tool",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "detail": {
-          "name": "detail",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "read_at": {
-          "name": "read_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "mcp_reads_profile_read_idx": {
-          "name": "mcp_reads_profile_read_idx",
-          "columns": [
-            {
-              "expression": "profile_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "read_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "mcp_reads_profile_id_profiles_id_fk": {
-          "name": "mcp_reads_profile_id_profiles_id_fk",
-          "tableFrom": "mcp_reads",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "profile_id"
-          ],
-          "columnsTo": [
             "id"
           ],
           "onDelete": "cascade",
@@ -8233,6 +8140,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "terminal_notice_sent_for": {
+          "name": "terminal_notice_sent_for",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "started_at": {
           "name": "started_at",
           "type": "timestamp with time zone",
@@ -8292,6 +8205,28 @@
           ],
           "isUnique": false,
           "where": "\"background_jobs\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "background_jobs_unsent_failure_idx": {
+          "name": "background_jobs_unsent_failure_idx",
+          "columns": [
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"background_jobs\".\"status\" = 'failed' AND \"background_jobs\".\"terminal_notice_sent_for\" IS DISTINCT FROM \"background_jobs\".\"updated_at\"",
           "concurrently": false,
           "method": "btree",
           "with": {}

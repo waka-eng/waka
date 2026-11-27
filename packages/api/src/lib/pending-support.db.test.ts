@@ -204,6 +204,9 @@ describe('pending support is not current proof', () => {
 
   it('machine restatement reviews older witnesses, then publishes a reading bound to the new words', async () => {
     const f = await fixture();
+    // A dismissed entry allows the matcher to reword its draft signal.
+    await t.sql`UPDATE top_of_mind_entries SET dismissed_at=now() WHERE top_of_mind_id IN
+      (SELECT id FROM top_of_minds WHERE profile_id=${f.profileId})`;
     const vector = [1, ...new Array<number>(767).fill(0)], model = 'pending-support-test';
     await writeSignalEmbedding(t.db as never, { profileId: f.profileId, signalId: f.signalId,
       statement: 'I seek quiet before deciding', model, embedding: vector });

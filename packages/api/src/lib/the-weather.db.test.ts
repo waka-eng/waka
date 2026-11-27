@@ -116,6 +116,13 @@ describe("the weather is a view of the record", () => {
     }
     const md = renderTheWeather(weather);
     expect(md).toContain("- refused a candidate because it was too close to what you dismissed.");
+
+    const korean = await assembleTheWeather(t.db as never, { profileId, now: NOW, locale: "ko-KR" });
+    const rendered = renderTheWeather(korean, "ko-KR");
+    expect(rendered).toContain("## 이틀 전");
+    expect(rendered).toContain("새 메모를 2개 남겼어요.");
+    expect(rendered).toContain("기존 패턴을 뒷받침하는 메모를 하나 더 찾았어요.");
+    expect(rendered).toContain("‘요즘 드는 생각’은 그대로예요.");
   });
 
   it("deletes the sentence with the record — the narration cannot outlive its row", async () => {

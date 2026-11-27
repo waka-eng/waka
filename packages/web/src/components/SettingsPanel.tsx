@@ -178,7 +178,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           {say("worldHowItWorksTitle")}
           <span className="waka-settings-chevron" aria-hidden="true">›</span>
         </button> : null}
-        <LegalLinks />
+        <LegalLinks locale={props.locale} />
         <button type="button" className="waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
           {say("worldSignOutLower")}
         </button>

@@ -1,0 +1,20 @@
+{
+  "name": "WAKA",
+  "short_name": "WAKA",
+  "lang": "ko-KR",
+  "description": "마음에 남는 것을 메모하고, 요즘 어떤 생각을 자주 하는지 돌아보세요.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#05080f",
+  "theme_color": "#05080f",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}

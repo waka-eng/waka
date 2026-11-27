@@ -64,27 +64,46 @@ const principle = { id: "principle-1", statement: "Make room for experiments.", 
   conflictsWithId: null, createdAt: "2026-09-22", citedSignals: [{ id: "signal-1", statement: "Experiments recur." }] };
 
 describe("principle read", () => {
-  it('shows queued support without asking for inspirations or generating on mount', async () => {
+  it.each([true, undefined])('shows queued support without generating on mount (supportActive: %s)', async supportActive => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
-      ...ready, phase: 'pending', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true,
+      ...ready, phase: 'pending', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true, supportActive,
     } });
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    expect(host.textContent).toContain('Thinking…');
+    expect(host.textContent).toContain('Waiting to check the supporting saves.');
     expect(requestPrincipleRead).not.toHaveBeenCalled();
+  });
+
+  it('describes an active support check without calling it a Principle review', async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
+      ...ready, phase: 'processing', supportPending: true, supportActive: true,
+    } });
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    expect(host.querySelector('[role="status"]')?.textContent).toBe('Checking the supporting saves…');
+    expect(requestPrincipleRead).not.toHaveBeenCalled();
+  });
+
+  it('uses neutral copy when an older response cannot establish a running job', async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
+      ...ready, phase: 'processing', supportPending: true,
+    } });
+    await act(async () => root.render(<PrincipleRead active locale="ko-KR" />));
+    expect(host.querySelector('[role="status"]')?.textContent).toBe('검토 결과를 기다리고 있어요.');
   });
 
   it('explicitly retries a failed support check even when current eligibility is below the bar', async () => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
       ...ready, phase: 'failed', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true,
     } });
-    vi.mocked(requestPrincipleRead).mockResolvedValue();
+    vi.mocked(requestPrincipleRead).mockResolvedValue({
+      ...ready, phase: 'pending', eligible: false, supportPending: true, supportActive: true,
+    });
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     expect(host.textContent).toContain("Couldn’t check where this came from. Your words are still here.");
     await act(async () => host.querySelector('button')!.click());
     /* THE RETRY FLAG IS THE WHOLE ARGUMENT, and it used to be the SECOND
        argument because the first was the room id. One parameter now. */
     expect(requestPrincipleRead).toHaveBeenCalledWith(true);
-    expect(host.textContent).toContain('Thinking…');
+    expect(host.textContent).toContain('Waiting to check the supporting saves.');
   });
 
   it("hands the rows it read to its owner rather than listing them itself", async () => {
@@ -109,8 +128,14 @@ describe("principle read", () => {
     expect(host.textContent).toBe("No principle is clear yet.");
   });
 
+  it("shows the completed first reading when two patterns qualify before Top of Mind", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, signalCount: 2, topOfMindCount: 0 } });
+    await act(async () => root.render(<PrincipleRead active locale="en-US" />));
+    expect(host.textContent).toBe("No principle is clear yet.");
+  });
+
   it("says nothing while too few patterns exist to read", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, signalCount: 2 } });
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "waiting", eligible: false, signalCount: 2 } });
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
     expect(host.textContent).toBe("");
   });
@@ -151,22 +176,32 @@ describe("principle read", () => {
   });
 
   it("observes pending work without requesting generation and displays completion", async () => {
-    vi.mocked(requestPrincipleRead).mockResolvedValue();
     vi.mocked(fetchPrincipleRead).mockResolvedValueOnce({ principles: [], status: { ...ready, phase: "pending" } })
       .mockResolvedValue({ principles: [principle], status: ready });
     const read = vi.fn();
     await act(async () => root.render(<PrincipleRead active locale="en-US" onRead={read} />));
     expect(requestPrincipleRead).not.toHaveBeenCalled();
-    expect(host.textContent).toContain("Thinking…");
+    expect(host.textContent).toContain("Waiting for the next automatic review.");
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(read).toHaveBeenCalledWith([principle]);
     expect(requestPrincipleRead).not.toHaveBeenCalled();
   });
 
-  it("shows an ongoing read without queueing the same work again", async () => {
-    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "processing" } });
+  it('uses the retry response instead of assuming the review is running', async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [principle], status: { ...ready, phase: 'failed' } });
+    vi.mocked(requestPrincipleRead).mockResolvedValue({ ...ready, phase: 'pending' });
     await act(async () => root.render(<PrincipleRead active locale="en-US" />));
-    expect(host.textContent).toContain("Thinking…");
+    await act(async () => host.querySelector('button')!.click());
+    expect(requestPrincipleRead).toHaveBeenCalledExactlyOnceWith(true);
+    expect(host.querySelector('[role="status"]')?.textContent).toBe('Waiting for the next automatic review.');
+  });
+
+  it("shows an ongoing read without queueing the same work again", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
+      ...ready, phase: "processing", supportPending: true, supportActive: false,
+    } });
+    await act(async () => root.render(<PrincipleRead active locale="ko-KR" profileId="another-profile" name="Bot" />));
+    expect(host.textContent).toContain("메모를 살펴보며 원칙을 찾고 있어요…");
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(fetchPrincipleRead).toHaveBeenCalledTimes(2);
     expect(requestPrincipleRead).not.toHaveBeenCalled();
