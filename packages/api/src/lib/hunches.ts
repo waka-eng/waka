@@ -87,9 +87,12 @@ export async function readCurrentHunch(db: Pick<Db, 'select'>, profileId: string
 /** Signals resting on the cited saves, for Yes to affirm. */
 export async function signalsBehind(db: Pick<Db, 'selectDistinct'>, profileId: string, inspirationIds: string[]): Promise<string[]> {
   if (!inspirationIds.length) return [];
+  /* Never through a save excluded from memory (code review, 2026-11-26). */
   const rows = await db.selectDistinct({ id: signals.id }).from(signalEvidence)
     .innerJoin(signals, eq(signals.id, signalEvidence.signalId))
-    .where(and(eq(signalEvidence.profileId, profileId), inArray(signalEvidence.inspirationId, inspirationIds), eq(signals.profileId, profileId)))
+    .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
+    .where(and(eq(signalEvidence.profileId, profileId), inArray(signalEvidence.inspirationId, inspirationIds), eq(signals.profileId, profileId),
+      eq(inspirations.profileId, profileId), isNull(inspirations.memoryExcludedAt)))
     .limit(3);
   return rows.map(row => row.id);
 }

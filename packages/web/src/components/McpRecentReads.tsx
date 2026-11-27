@@ -32,6 +32,7 @@ export function McpRecentReads({ locale, profileId }: { locale: SupportedLocale;
       case "signals": return say("mcpReadPatterns");
       case "top_of_mind": return say("mcpReadOnYourMind");
       case "profiles": return say("mcpReadProfile");
+      case "other": return say("mcpReadOther");
     }
   };
   const keyName = (read: ApiMcpRead) => read.key.label || read.key.prefix || say("mcpReadKeyUnnamed");

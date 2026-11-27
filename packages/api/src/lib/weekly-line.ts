@@ -14,9 +14,10 @@
  * The saves come back by id only. Their words never travel with the card
  * unless the person chooses to share them.
  */
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 
-import { inspirations, signalEvidence, topOfMinds } from "../db/index.js";
+import { inspirations, signalEvidence, signals, topOfMinds } from "../db/index.js";
+import { evidenceSupportCurrent } from "./signal-support-state.js";
 import type { getDb } from "./db.js";
 
 type WakaDb = ReturnType<typeof getDb>;
@@ -57,7 +58,11 @@ export async function loadWeeklyLine(db: WakaDb, profileId: string, reading: Rea
   const rows = await db.selectDistinct({ id: inspirations.id, at: inspirations.createdAt })
     .from(signalEvidence)
     .innerJoin(inspirations, and(eq(inspirations.id, signalEvidence.inspirationId), eq(inspirations.profileId, profileId)))
-    .where(and(eq(signalEvidence.profileId, profileId), inArray(signalEvidence.signalId, signalIds), gte(inspirations.createdAt, from)))
+    .innerJoin(signals, eq(signals.id, signalEvidence.signalId))
+    /* Only support that still stands, from saves still in memory (code
+       review, 2026-11-26). */
+    .where(and(eq(signalEvidence.profileId, profileId), inArray(signalEvidence.signalId, signalIds), gte(inspirations.createdAt, from),
+      isNull(inspirations.memoryExcludedAt), evidenceSupportCurrent()))
     .orderBy(desc(inspirations.createdAt));
   if (rows.length < WEEK_MIN_SAVES) return null;
 

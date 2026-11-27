@@ -18,7 +18,8 @@ import { profiles } from "./schema-profiles";
 
 export const MCP_READ_KEEP_DAYS = 90;
 
-export const mcpReadToolValues = ["principles", "recall", "inspirations", "inspiration", "signals", "top_of_mind", "profiles"] as const;
+/* "other": any other read a key made, so nothing it read goes unlogged. */
+export const mcpReadToolValues = ["principles", "recall", "inspirations", "inspiration", "signals", "top_of_mind", "profiles", "other"] as const;
 export type McpReadTool = (typeof mcpReadToolValues)[number];
 
 export const mcpReads = pgTable(

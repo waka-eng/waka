@@ -320,3 +320,25 @@ describe("POST /api/inspirations", () => {
     expect(writtenRows).toHaveLength(0);
   });
 });
+
+/* SECURITY REVIEW, 2026-11-26: the question WAKA asked (onboarding's) is set
+   only by the person's own app session. A model reads it as WAKA's own words,
+   so a standing key must not be able to plant one. */
+describe("the question a save answers", () => {
+  const post = async (session: AuthenticatedSession) => {
+    const { db, writtenRows } = fakeDatabase([{ id: humanProfileId, accountId }]);
+    const app = appFor(session, db);
+    const response = await app.request("/api/inspirations", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "My friend asked why I stay.", prompt: "Tell me about a conversation you keep thinking about" }) });
+    return { response, writtenRows };
+  };
+  it("keeps it from the person's own session", async () => {
+    const { writtenRows } = await post(sessionFor(humanProfileId, "human"));
+    expect(writtenRows[0]?.prompt).toBe("Tell me about a conversation you keep thinking about");
+  });
+  it("drops it from a standing key", async () => {
+    const { writtenRows } = await post({ ...sessionFor(humanProfileId, "human"), sessionId: "keeper-key:00000000-0000-4000-8000-0000000000aa", keyScoped: true });
+    expect(writtenRows[0], "the key's save was not written").toBeTruthy();
+    expect(writtenRows[0]!.prompt, "a key set the question WAKA asked").toBeUndefined();
+  });
+});

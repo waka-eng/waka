@@ -19,8 +19,9 @@ ALTER TABLE "hunches" ADD CONSTRAINT "hunches_body_length_check" CHECK (char_len
 ALTER TABLE "hunches" ADD CONSTRAINT "hunches_correction_length_check" CHECK ("correction" IS NULL OR char_length("correction") BETWEEN 1 AND 600);--> statement-breakpoint
 ALTER TABLE "hunches" ADD CONSTRAINT "hunches_cites_check" CHECK (cardinality("inspiration_ids") BETWEEN 1 AND 3);--> statement-breakpoint
 ALTER TABLE "inspirations" ADD CONSTRAINT "inspirations_prompt_length_check" CHECK ("prompt" IS NULL OR char_length("prompt") BETWEEN 1 AND 300);--> statement-breakpoint
--- A hunch quotes what it cites: when a cited save is deleted, or its words or
--- its question change, the hunch goes with it rather than outliving its source.
+-- A hunch quotes what it cites: when a cited save is deleted, its words or
+-- its question change, or it is excluded from memory, the hunch goes with it
+-- rather than outliving its source.
 CREATE OR REPLACE FUNCTION "forget_hunches_citing_inspiration"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   DELETE FROM "hunches" WHERE "profile_id" = OLD."profile_id" AND OLD."id" = ANY("inspiration_ids");
@@ -29,6 +30,7 @@ END;
 $$;--> statement-breakpoint
 CREATE TRIGGER "inspirations_forget_hunches_on_delete" AFTER DELETE ON "inspirations"
   FOR EACH ROW EXECUTE FUNCTION "forget_hunches_citing_inspiration"();--> statement-breakpoint
-CREATE TRIGGER "inspirations_forget_hunches_on_edit" AFTER UPDATE OF "text", "prompt" ON "inspirations"
-  FOR EACH ROW WHEN (OLD."text" IS DISTINCT FROM NEW."text" OR OLD."prompt" IS DISTINCT FROM NEW."prompt")
+CREATE TRIGGER "inspirations_forget_hunches_on_edit" AFTER UPDATE OF "text", "prompt", "memory_excluded_at" ON "inspirations"
+  FOR EACH ROW WHEN (OLD."text" IS DISTINCT FROM NEW."text" OR OLD."prompt" IS DISTINCT FROM NEW."prompt"
+    OR (OLD."memory_excluded_at" IS NULL AND NEW."memory_excluded_at" IS NOT NULL))
   EXECUTE FUNCTION "forget_hunches_citing_inspiration"();

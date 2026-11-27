@@ -31,6 +31,7 @@ import {
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
+import { standingKey } from "../lib/mcp-reads.js";
 import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { enqueueEnrichAttachment, enqueueHunchAfterSave, wakeCommittedBackgroundJobs } from "../lib/queue.js";
@@ -200,7 +201,10 @@ export function registerCaptureRoutes(
           profileId: target.profileId,
           text: parsed.data.text,
           kind: parsed.data.kind ?? null,
-          ...(parsed.data.prompt ? { prompt: parsed.data.prompt } : {}),
+          /* The question WAKA asked is set only by the person's own app
+             session (onboarding), never by a standing key: a model reads it
+             as WAKA's own words (security review, 2026-11-26). */
+          ...(parsed.data.prompt && !standingKey(session) ? { prompt: parsed.data.prompt } : {}),
           source,
           /* absent means private, and that is the column's own default rather
              than a value written here — one place decides what unset means */

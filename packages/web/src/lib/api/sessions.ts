@@ -21,7 +21,7 @@ export function revokeSession(id: string): Promise<void> {
 }
 
 /** What a standing key read of this memory, newest first (`GET /api/mcp-reads`). */
-export type ApiMcpReadTool = "principles" | "recall" | "inspirations" | "inspiration" | "signals" | "top_of_mind" | "profiles";
+export type ApiMcpReadTool = "principles" | "recall" | "inspirations" | "inspiration" | "signals" | "top_of_mind" | "profiles" | "other";
 export interface ApiMcpRead {
   id: string;
   tool: ApiMcpReadTool;

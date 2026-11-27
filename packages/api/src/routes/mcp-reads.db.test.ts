@@ -49,6 +49,10 @@ function app() {
   recall.get("/", c => c.req.query("q") === "refuse" ? c.json({ error: "no" }, 403) : c.json({ matches: [] }));
   routes.route("/api/recall", recall);
   routes.route("/api/mcp-reads", createMcpReadRoutes({ getDatabase: () => t.db as never, authMiddleware: inject }));
+  /* Two reads that ignore `?profile=`, as `/api/profiles` and `/api/graph` do. */
+  for (const path of ["/api/profiles", "/api/graph"]) {
+    const route = new Hono<AuthEnv>(); route.use("*", inject); route.get("/", c => c.json({ ok: true })); routes.route(path, route);
+  }
   return routes;
 }
 
@@ -94,5 +98,21 @@ describe("the read log", () => {
       VALUES (${owner.profileId}, 'keeper', ${keyId}, 'signals', now() - interval '91 days')`;
     expect(await sweepMcpReads(t.db as never, new Date())).toBe(1);
     expect((await t.sql`SELECT count(*)::int AS n FROM mcp_reads`)[0]!.n).toBe(2);
+  });
+
+  /* SECURITY REVIEW, 2026-11-26. A route that ignores `?profile=` still
+     answers 2xx, so the parameter alone let a key write into a stranger's
+     log; and reads outside the named tools left no trace. */
+  it("never writes into another account's log, and logs every other read as other", async () => {
+    const [stranger] = await t.sql`INSERT INTO accounts (email) VALUES ('stranger@example.test') RETURNING id`;
+    const [theirs] = await t.sql`INSERT INTO profiles (account_id, type, name) VALUES (${stranger.id}, 'human', 'Bo') RETURNING id`;
+    const routes = app();
+    current = session(`keeper-key:${keyId}`);
+    expect((await routes.request(`/api/profiles?profile=${theirs.id}`)).status).toBe(200);
+    expect((await t.sql`SELECT count(*)::int AS n FROM mcp_reads WHERE profile_id = ${theirs.id}`)[0]!.n, "a key wrote into a stranger's log").toBe(0);
+    expect((await routes.request("/api/graph")).status).toBe(200);
+    const [other] = await t.sql`SELECT tool, profile_id FROM mcp_reads WHERE tool = 'other'`;
+    expect(other, "a read outside the named tools left no trace").toBeTruthy();
+    expect(other!.profile_id).toBe(owner.profileId);
   });
 });

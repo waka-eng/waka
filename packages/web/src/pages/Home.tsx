@@ -2066,9 +2066,15 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   useEffect(() => () => { hunchPolls.current += 1; }, []);
   /* On arrival, and after each save while there is no reading yet. */
   const savedCount = inspirations ? inspirations.length + fieldBeyond : null;
+  /* One ask on arrival; after a NEW save, keep asking while the job writes
+     (code review, 2026-11-26: a first save asked once, found nothing yet,
+     and the hunch never showed until the next save or a reload). */
+  const countSeen = useRef<number | null>(null);
   useEffect(() => {
     if (!hunchProfile || lead || savedCount === null || savedCount === 0) return;
-    pollHunch(hunchRef.current?.id ?? null, hunchRef.current ? 12 : 1);
+    const grew = countSeen.current !== null && savedCount > countSeen.current;
+    countSeen.current = savedCount;
+    pollHunch(hunchRef.current?.id ?? null, grew || hunchRef.current ? 12 : 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hunchProfile, savedCount, Boolean(lead)]);
   const hunchRef = useRef(hunch); hunchRef.current = hunch;

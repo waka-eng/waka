@@ -475,8 +475,10 @@ export function createTopOfMindRoutes(
      this week wrote or confirmed it and two of this week's saves stand under
      it; null otherwise. A read of the reading, so it reads as one. */
   routes.get("/week", async (c) => {
+    const query = scopeQuerySchema.safeParse(c.req.query());
+    if (!query.success) return c.json({ error: "Invalid query", details: validationDetails(query.error) }, 400);
     const db = getDatabase();
-    const scope = await resolveProfileScope(db, c.get("session"), c.req.query("profile"), "read", loadProfile);
+    const scope = await resolveProfileScope(db, c.get("session"), query.data.profile, "read", loadProfile);
     if (!scope.ok) return c.json(scope.body, scope.status);
     const reading = await getTopOfMind(db, { profileId: scope.profileId });
     c.header("Cache-Control", "private, no-store");

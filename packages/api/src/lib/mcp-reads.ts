@@ -27,7 +27,8 @@ export function standingKey(session: AuthenticatedSession | undefined): { kind: 
   return match && UUID.test(match[2]!) ? { kind: match[1] as "keeper" | "agent", id: match[2]! } : null;
 }
 
-/** Which tool a GET path is, or null for a read this log does not keep. */
+/** Which tool a GET path is; every other API read is "other", so a key
+    leaves a trace whatever it read (security review, 2026-11-26). */
 export function readToolOf(path: string): McpReadTool | null {
   const route = path.replace(/\/+$/, "");
   if (route === "/api/principles.md" || route === "/api/principles") return "principles";
@@ -37,6 +38,7 @@ export function readToolOf(path: string): McpReadTool | null {
   if (route === "/api/signals" || /^\/api\/signals\/[0-9a-f-]{36}$/i.test(route)) return "signals";
   if (route === "/api/top-of-mind") return "top_of_mind";
   if (route === "/api/profiles" || /^\/api\/profiles\/[0-9a-f-]{36}$/i.test(route)) return "profiles";
+  if (route.startsWith("/api/") && route !== "/api/health") return "other";
   return null;
 }
 
@@ -69,6 +71,12 @@ export function recordMcpReads(getDatabase: typeof getDb = getDb): MiddlewareHan
        key may read; without one it read its own. */
     const profileId = query.profile && UUID.test(query.profile) ? query.profile : session.profile.id;
     try {
+      /* ONLY MEMORY THIS KEY'S OWN ACCOUNT OWNS (security review,
+         2026-11-26): a route that ignores `?profile=` still answers 2xx, so
+         the parameter alone would let a key write into a stranger's log. */
+      const [owned] = await getDatabase().select({ id: profiles.id }).from(profiles)
+        .where(and(eq(profiles.id, profileId), eq(profiles.accountId, session.profile.accountId))).limit(1);
+      if (!owned) return;
       await getDatabase().insert(mcpReads).values({
         profileId, keyKind: key.kind, keyId: key.id, tool, detail: await detailOf(tool, query, c.res),
       });
@@ -80,7 +88,9 @@ export function recordMcpReads(getDatabase: typeof getDb = getDb): MiddlewareHan
 
 export type RecentMcpRead = { id: string; tool: McpReadTool; detail: string | null; readAt: string; key: { kind: "keeper" | "agent"; label: string | null; prefix: string | null; revoked: boolean } };
 
-/** The newest reads of the given profiles' memory, with each key's own name. */
+/** The newest reads of the given profiles' memory, with each key's own name:
+    only keys on those profiles are named, so a stranger's key label can never
+    appear in this log (security review, 2026-11-26). */
 export async function loadRecentMcpReads(db: ReturnType<typeof getDb>, profileIds: string[], limit = 30): Promise<RecentMcpRead[]> {
   if (!profileIds.length) return [];
   const rows = await db.select().from(mcpReads).where(inArray(mcpReads.profileId, profileIds))
@@ -89,9 +99,9 @@ export async function loadRecentMcpReads(db: ReturnType<typeof getDb>, profileId
   const keeperIds = ids("keeper"), agentIds = ids("agent");
   const [keepers, agents] = await Promise.all([
     keeperIds.length ? db.select({ id: keeperKeys.id, label: keeperKeys.label, prefix: keeperKeys.prefix, revokedAt: keeperKeys.revokedAt })
-      .from(keeperKeys).where(inArray(keeperKeys.id, keeperIds)) : [],
+      .from(keeperKeys).where(and(inArray(keeperKeys.id, keeperIds), inArray(keeperKeys.profileId, profileIds))) : [],
     agentIds.length ? db.select({ id: agentKeys.id, label: agentKeys.label, prefix: agentKeys.prefix, revokedAt: agentKeys.revokedAt })
-      .from(agentKeys).where(inArray(agentKeys.id, agentIds)) : [],
+      .from(agentKeys).where(and(inArray(agentKeys.id, agentIds), inArray(agentKeys.profileId, profileIds))) : [],
   ]);
   const named = new Map([...keepers, ...agents].map(row => [row.id, row]));
   return rows.map(row => {

@@ -17,17 +17,20 @@
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, VIEWER_ID, type MountedWorld } from './helpers/render-home';
-import { answerHunch } from '../src/lib/api';
+import { mountWorld, dataMockFrom, apiMockFrom, pressHomeBar, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { answerHunch, fetchHunch } from '../src/lib/api';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [
   { id: 'river', text: 'Walked home the long way to hear the river.', daysAgo: 1 },
   { id: 'quit', text: 'I want to quit my job and build something of my own.', daysAgo: 2 },
 ] }));
-const HUNCH = vi.hoisted(() => ({ now: { id: 'h1', body: 'Two of your saves are about leaving somewhere. Am I close?', inspirationIds: ['river', 'quit'], status: 'pending' as const } }));
+const HUNCH = vi.hoisted(() => ({ now: { id: 'h1', body: 'Two of your saves are about leaving somewhere. Am I close?', inspirationIds: ['river', 'quit'], status: 'pending' as const } as { id: string; body: string; inspirationIds: string[]; status: 'pending' } | null }));
 vi.mock('../src/lib/data', async (original) => ({ ...await original<typeof import('../src/lib/data')>(), ...dataMockFrom(FACTS) }));
 vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),
   fetchHunch: vi.fn(async () => HUNCH.now),
+  fetchInspirationSaveRequest: vi.fn(async () => { const { ApiError: E } = await import('../src/lib/api/http'); throw new E({ status: 404, code: 'save_not_found', message: 'Not saved yet' }); }),
+  createInspiration: vi.fn(async (input: { text: string }) => ({ id: 'new-save', profileId: 'profile-viewer', text: input.text, kind: 'note', source: 'app',
+    visibility: 'private', attachments: [], reflections: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })),
   answerHunch: vi.fn(async () => undefined) }));
 vi.mock('../src/lib/auth-context', async (original) => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
@@ -75,4 +78,27 @@ it('Yes thanks the person and answers the hunch', async () => {
   await act(async () => act_('Yes')!.click()); await settle();
   expect(vi.mocked(answerHunch)).toHaveBeenCalledWith('h1', { answer: 'yes' }, { profile: VIEWER_ID });
   expect(bubble()).toContain('Thanks. That helps.');
+});
+
+/* CODE REVIEW, 2026-11-26: the first save asked once, before the job had
+   written anything, and the hunch never showed until another save or a
+   reload. A save keeps asking while the job writes. */
+it('shows the hunch that lands a few seconds after a save', async () => {
+  HUNCH.now = null;
+  world = await mountWorld(FACTS); await settle();
+  expect(bubble()).not.toContain('Am I close?');
+  await pressHomeBar(world.container, 'Save an inspiration'); await settle();
+  const field = world.container.querySelector<HTMLTextAreaElement>('textarea.jar-composer-text')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'Glued the chair myself.');
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await settle();
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-dock-save')!.click());
+  await settle(200);
+  HUNCH.now = { id: 'h3', body: 'You keep fixing things by hand. Am I close?', inspirationIds: ['new-save'], status: 'pending' };
+  await settle(3000); // the job writes while "Saved" stands (its 20 seconds)
+  expect(vi.mocked(fetchHunch).mock.calls.length, 'nothing asked again after the save').toBeGreaterThan(2);
+  await settle(3000);
+  expect(bubble(), 'the hunch written after the save never showed').toContain('You keep fixing things by hand. Am I close?');
 });

@@ -114,6 +114,7 @@
   "mcpReadPatterns": "패턴을 읽었어요",
   "mcpReadOnYourMind": "요즘 마음에 있는 걸 읽었어요",
   "mcpReadProfile": "프로필을 읽었어요",
+  "mcpReadOther": "저장한 기록을 읽었어요",
   "mcpReadKeyUnnamed": "이름 없는 키",
   "mcpReadKeyRevoked": "취소됨",
   "settingsGroupAbout": "정보",

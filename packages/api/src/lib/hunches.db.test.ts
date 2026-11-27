@@ -73,6 +73,13 @@ describe('writing a hunch', () => {
     await writeHunchForProfile(t.db as never, writer('About other words. Am I close?'), { profileId: p.profileId });
     await t.sql`DELETE FROM inspirations WHERE id=${id}`;
     expect(await t.sql`SELECT id FROM hunches`).toHaveLength(0);
+    /* And when a save it cites is excluded from memory (code review,
+       2026-11-26): its words were the hunch's source. */
+    const kept = await save(p.profileId, 'Another thing.');
+    await writeHunchForProfile(t.db as never, writer('About another thing. Am I close?'), { profileId: p.profileId });
+    expect(await t.sql`SELECT id FROM hunches WHERE status='pending'`).toHaveLength(1);
+    await t.sql`UPDATE inspirations SET memory_excluded_at=now() WHERE id=${kept}`;
+    expect(await t.sql`SELECT id FROM hunches`, 'a hunch outlived a save excluded from memory').toHaveLength(0);
   });
 });
 
