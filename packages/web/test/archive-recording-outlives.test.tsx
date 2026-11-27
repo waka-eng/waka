@@ -497,7 +497,9 @@ it("says a clip's note was deleted here, and keeps the clip for its restore", as
    and Try again then lands. */
 
 
-it("does not send a clip to a note whose delete is pending, and lets Undo bring it back", async () => {
+/* No Undo since 2026-11-26 (founder: "lets not have deleted undo"): a
+   deleted note goes to Trash, so its clip is held, not sent. */
+it("does not send a clip to a note whose delete is pending", async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
   await openArchive();
   await recordOn("own-1");
@@ -515,16 +517,7 @@ it("does not send a clip to a note whose delete is pending, and lets Undo bring 
   await settle(2);
   expect(S.presigned.length, "Try again sent the clip to a note whose delete is pending").toBe(presignedBefore);
   expect(line()?.textContent).toContain("The inspiration was deleted. Restore it to attach the recording.");
-  /* Undo: the note is back, and so is the plain line */
-  const undo = [...document.querySelectorAll<HTMLButtonElement>(".waka-dock-undo")].find((button) => button.textContent === "Undo");
-  expect(undo, "no Undo").toBeTruthy();
-  await act(async () => undo!.click());
-  await settle(2);
-  expect(line()?.textContent).toContain("Couldn’t attach your recording to “something I kept, 1”.");
-  await act(async () => retry()!.click());
-  await settle(4);
-  expect(S.finalized, "after Undo, Try again did not attach the clip").toEqual(["own-1"]);
-  expect(S.deleted, "the undone delete was sent").toEqual([]);
+  expect(document.querySelector(".waka-dock-undo"), "an Undo came back").toBeNull();
 });
 
 /* Deleting a note cancels a recording made ON IT. It used to cancel the one

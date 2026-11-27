@@ -108,7 +108,13 @@ export function CrossingCompanion({ from, to, dir, going, stay, onDone }: {
     /* Decided once, at the glide's first frame, when the page is laid out. */
     let staying: boolean | undefined;
     const move = nextFlourish(null, Math.random);
-    const moveEnd = glideStart + FLOURISH_MS[move];
+    /* ONE MOVE ON ARRIVAL, BOTH WAYS (founder, 2026-11-26: "when character
+       goes from principles back to main page, also make it do a motion").
+       Into Principles it plays where it stays; home, once the walk is done.
+       What it says comes after (the page's bubble and home's wait on the
+       walk's end). */
+    const arriveAt = going === "in" ? glideStart : CROSS_MS;
+    const moveEnd = arriveAt + FLOURISH_MS[move];
 
     const place = (spot: CreatureSpot) => {
       node.style.transform = `translate(${spot.x - box / 2}px, ${spot.y - box / 2}px) scale(${spot.size / size})`;
@@ -153,15 +159,15 @@ export function CrossingCompanion({ from, to, dir, going, stay, onDone }: {
       g.scale(dpr, dpr);
       /* a little squash at each footfall: the body lands, then lifts — and
          the crouch before a rise and the stretch during it, all from its feet */
-      /* Staying, the glide's time is one of the moves a tap plays on home. */
-      const pose = staying ? flourishPose(move, clamp01((t - glideStart) / FLOURISH_MS[move]), size) : null;
+      const arriving = going === "out" || Boolean(staying);
+      const pose = arriving && t >= arriveAt ? flourishPose(move, clamp01((t - arriveAt) / FLOURISH_MS[move]), size) : null;
       if (pose) {
-        node.style.transform = `translate(${from.x - box / 2 + pose.dx}px, ${from.y - box / 2 + pose.lift}px) rotate(${pose.rot}rad) scale(${pose.sx}, ${pose.sy})`;
+        node.style.transform = `translate(${at.x - box / 2 + pose.dx}px, ${at.y - box / 2 + pose.lift}px) rotate(${pose.rot}rad) scale(${(at.size / size) * pose.sx}, ${(at.size / size) * pose.sy})`;
       }
       placeStep(g, size, box, { bob, lean }, land + crouch - stretch + (pose?.sq ?? 0));
       turnedPose(g, size, ramp, OWNER_BEING, 1, dpr, yaw, stride, look, grain);
 
-      if (t < (staying ? Math.max(CROSS_MS, moveEnd) : CROSS_MS)) frame = requestAnimationFrame(step);
+      if (t < (going === "out" || staying ? Math.max(CROSS_MS, moveEnd) : CROSS_MS)) frame = requestAnimationFrame(step);
       else finish();
     };
     place(from);

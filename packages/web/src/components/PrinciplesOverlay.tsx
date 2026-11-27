@@ -44,7 +44,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DialogSurface } from "./DialogSurface";
-import { useNativeBack } from "./SurfaceHeader";
+import { SurfaceHeader, useNativeBack } from "./SurfaceHeader";
 import { ReadingPausedNotice } from "./ReadingPausedNotice";
 import { useReadingPaused } from "../lib/use-reading-paused";
 import { PrinciplesGround } from "./PrinciplesGround";
@@ -296,11 +296,12 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           with it. Gone while the creature walks either way, when the page
           is not yet (or no longer) there; Escape and the pull left work
           throughout. */}
-      {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
-        aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
-        onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
-        <PrinciplesSpark />
-      </button>}
+      {/* "<" HOME, WHERE EVERY PAGE KEEPS IT (founder, 2026-11-26: "to go
+          back use a < icon instead of star"): the one header's back, top
+          left, on its own strip because this page draws no header row. */}
+      {walking ? null : <div className="waka-surface-strip waka-principles-back">
+        <SurfaceHeader locale={locale} back={{ kind: "back", onBack: onClose }} />
+      </div>}
       <DialogSurface
         className="waka-over"
         aria-label={title}

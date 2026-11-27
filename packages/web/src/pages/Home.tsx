@@ -107,6 +107,7 @@ import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
+import { askSaveQuestion, readSaveQuestion } from '../lib/api';
 import { createInspiration, declineHarvest, keepHarvest, listClaims, listHarvest, updateInspiration, type ApiClaim, type ApiHarvestCandidate, type HarvestReason } from '../lib/api';
 import { wordsCanStand } from '../lib/note-words';
 import { inspirationPreview } from '../lib/inspiration-preview';
@@ -2005,11 +2006,12 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     !viewNavigation.view?.compose && !viewNavigation.view?.sharePrinciple && !viewNavigation.view?.principleId;
   // One deliberate cycle, with no timer advancing the invitation. Keep the
   // cursor synchronous so rapid taps cannot replay the same choice.
-  const creatureSpeaks = useCallback(() => {
+  /** The next line, or the one a dot names. */
+  const creatureSpeaks = useCallback((to?: CompanionPrompt) => {
     if (!atNowView || reviewing) return;
     if (reviewRetry) loadClaims();
     const current = promptChoiceRef.current.scope === promptScope ? promptChoiceRef.current.kind : 'reading';
-    const next = promptLines[(promptLines.indexOf(current) + 1) % promptLines.length]!;
+    const next = to && promptLines.includes(to) ? to : promptLines[(promptLines.indexOf(current) + 1) % promptLines.length]!;
     promptChoiceRef.current = { scope: promptScope, kind: next };
     setPromptChoice(promptChoiceRef.current);
     speechEpoch += 1;
@@ -2429,6 +2431,8 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     settleMs: NAME_SETTLE_MS,
   });
   const settingsCard = auth ? {
+    /* Trash opens the Inspirations page on its deleted view. */
+    onOpenTrash: () => { listViews.inspirations.onShelf = true; openOverHome('saves'); },
     name: settingsWrites.name,
     nameBusy: settingsWrites.nameBusy,
     localeBusy: settingsWrites.localeBusy,
@@ -3193,7 +3197,10 @@ const RETRY_READ_LIMIT_MS = 20_000;
           .filter((sentence) => sentence.text !== "the sky held")
           .filter(
             (sentence) =>
-              sentence.backing !== "signals" && sentence.backing !== "signal_evidence",
+              sentence.backing !== "signals" && sentence.backing !== "signal_evidence" &&
+              /* Nor the reading's own versions (audit, 2026-11-26: "your top
+                 of mind was written for the first time" is plumbing too). */
+              sentence.backing !== "top_of_minds",
           )
           .map((sentence, i) => ({ sentence, i }))
           .sort(
@@ -5968,6 +5975,30 @@ const RETRY_READ_LIMIT_MS = 20_000;
     const id = window.setTimeout(() => { lineSince.current = { said: '', at: 0 }; replyLineRef.current = ''; setCharSay(""); }, stay);
     return () => window.clearTimeout(id);
   }, [charSay, companionPrompt, keptWaiting, keptSaves, replyBeat]);
+  /* ═══ IT ASKS ABOUT WHAT YOU SAVED (founder, 2026-11-26: "this should
+     very clearly react to the content i saved, not generically do this") ═══
+     "Saved" stands at once; the server writes one question naming something
+     in this save, and it takes the bubble's line when it lands. Asked only
+     while that bubble is up, and only for a save with words. */
+  const [saveQuestion, setSaveQuestion] = useState<{ id: string; question: string } | null>(null);
+  const askAbout = charSay === say('worldBubbleKept') && !standingAsAgent && !offline && visibleInspiration?.text.trim() ? visibleInspiration.id : null;
+  useEffect(() => {
+    if (!askAbout) return undefined;
+    let live = true;
+    const profile = memoryScope?.profileId ? { profile: memoryScope.profileId } : {};
+    void (async () => {
+      try {
+        let answer = await askSaveQuestion(askAbout, profile);
+        for (let tries = 0; live && answer.phase === 'processing' && tries < 12; tries += 1) {
+          await new Promise(resolve => window.setTimeout(resolve, 1500));
+          if (live) answer = await readSaveQuestion(askAbout, profile);
+        }
+        if (live && answer.phase === 'ready') setSaveQuestion({ id: askAbout, question: answer.question });
+      } catch { /* the bubble keeps "Saved"; nothing generic stands in */ }
+    })();
+    return () => { live = false; };
+  }, [askAbout, memoryScope?.profileId]);
+  const keptQuestion = saveQuestion && saveQuestion.id === visibleInspiration?.id ? saveQuestion.question : null;
   /** What a chat about the save opens with: the note, and the words read. */
   const keptSubject = (kept: { id: string; text: string }) => {
     const read = keptWords?.status === 'ready' && kept.id === visibleInspiration?.id ? keptWords.text?.trim() : '';
@@ -7533,12 +7564,28 @@ const RETRY_READ_LIMIT_MS = 20_000;
      well"): the Save glyph, full ink when there is something to save, dim
      when there is not, named Save for a screen reader. It says why it
      cannot be pressed, as the chat's Send does. */
+  /* ═══ SAVE, AND SAVE AS DRAFT BESIDE IT (founder, 2026-11-26: "add clear
+     save as draft option on this page. perhaps dropdown arrow next to save
+     button and have save as draft as text") ═══ The arrow opens one word
+     above it; the draft keeps the words and goes home. */
+  const [draftMenu, setDraftMenu] = useState(false);
+  useEffect(() => { if (!mouthOpen) setDraftMenu(false); }, [mouthOpen]);
   const noteBarSave = (
-    <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save waka-note-bar-action"
-      aria-label={say('worldKeep')}
-      title={whyNotKeeping ? say(whyNotKeeping) : say('worldKeep')}
-      disabled={!composerCanKeep}
-      onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep" /></button>
+    <span className="waka-save-split">
+      <button type="button" className="waka-dock-tool waka-dock-tool--keep waka-dock-save waka-note-bar-action"
+        aria-label={say('worldKeep')}
+        title={whyNotKeeping ? say(whyNotKeeping) : say('worldKeep')}
+        disabled={!composerCanKeep}
+        onClick={() => { void keepIt(); }}><HomeActionIcon kind="keep" /></button>
+      <button type="button" className="waka-save-more" aria-label={say('worldLeaveKeepDraft')} aria-haspopup="menu" aria-expanded={draftMenu}
+        disabled={!composerHasWords} onClick={() => setDraftMenu(open => !open)}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {draftMenu ? <span className="waka-save-menu" role="menu"
+        onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setDraftMenu(false); } }}>
+        <button type="button" role="menuitem" autoFocus onClick={() => { setDraftMenu(false); saveAsDraft(); }}>{say('worldLeaveKeepDraft')}</button>
+      </span> : null}
+    </span>
   );
   const noteBarState = (<>
                 {/* (Dictation has no line here: while it listens the bar is
@@ -9392,8 +9439,13 @@ const RETRY_READ_LIMIT_MS = 20_000;
               tap reads as the next line before it is pressed. Light only. */}
           {!backgroundHidden && !mouthOpen && !reviewing && atNowView && homeChromeShown ? (() => {
             return (
-              <span className="jar-char-lines" aria-hidden="true" data-jar-chrome="1">
-                {promptLines.map(kind => <span key={kind} className={kind === companionPrompt ? 'jar-char-line jar-char-line--on' : 'jar-char-line'} />)}
+              <span className="jar-char-lines" data-jar-chrome="1" data-jar-interactive="1">
+                {promptLines.map((kind, index) => <button key={kind} type="button" className="jar-char-line-go"
+                  aria-label={formatMessage(locale, 'worldCreatureLine', { n: index + 1, count: promptLines.length })}
+                  aria-current={kind === companionPrompt ? 'true' : undefined}
+                  onClick={() => creatureSpeaks(kind)}>
+                  <span className={kind === companionPrompt ? 'jar-char-line jar-char-line--on' : 'jar-char-line'} />
+                </button>)}
               </span>
             );
           })() : null}
@@ -9796,8 +9848,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
                      prompt the user to chat more about it, not save it, end."
                      So a save with words is answered with a question, and
                      the act under it is the chat about it. */
-                  charSay === say('worldBubbleKept') && !standingAsAgent && visibleInspiration && keptSubject(visibleInspiration).text
-                    ? say('worldBubbleKeptAsk') : companionLine}</span>}
+                  charSay === say('worldBubbleKept') && keptQuestion ? `${say('worldBubbleKept')}. ${keptQuestion}` : companionLine}</span>}
                 {/* ═══ CHAT WHEN THERE IS SOMETHING, SAVE WHEN THERE IS NOT ══
                     Founder, of "Quiet lately — Let's talk about it":
                     "determine when it's appropriate to say 'lets chat about
@@ -9825,8 +9876,8 @@ const RETRY_READ_LIMIT_MS = 20_000;
                       onClick={() => { const kept = keptSubject(visibleInspiration); chatOn({ quote: kept.text, inspirationId: kept.id || undefined,selection:{locale,text:kept.text,source:{kind:'inspiration',id:kept.id,...(keptWords?.status==='ready'&&keptWords.text?.trim()&&keptImageId?{imageId:keptImageId}:{})}} }); }}>
                       {say(talking ? 'worldTalkOpening' : 'worldTalkAboutThis')}
                     </button> : null}
-                    <button type="button" className="jar-char-bubble-act"
-                      onClick={() => { setCharSay(''); openSheet(); }}>{say('worldBubbleSeeAll')}</button>
+                    {/* NO SEE ALL (founder, 2026-11-26: "see all also doesnt
+                        seem necessary to have as CTA"): the handle is there. */}
                   </span>
                 ) : charSay !== '' && charSay === replyLineRef.current ? (
                   /* A REPLY TO YOUR ANSWER ENDS THERE: a chat opening on "I'll

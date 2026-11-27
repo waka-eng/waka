@@ -37,6 +37,9 @@ export interface SettingsPanelProps {
   activeProfileId?: string;
   /** Called after any press that should put the panel away. */
   onClose: () => void;
+  /** Opens Trash, where deleted inspirations wait 30 days (founder,
+      2026-11-26: "put trash in profile or sth"). */
+  onOpenTrash?: () => void;
 }
 
 /** The current Settings subpage; null is the overview. */
@@ -158,6 +161,10 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
         <h3 id="waka-settings-data" className="waka-settings-heading">{say("settingsGroupData")}</h3>
         <div className="waka-settings-list">
           <ProfileExportControl locale={props.locale} />
+          {props.onOpenTrash ? <button type="button" className="waka-settings-row" onClick={() => { props.onClose(); props.onOpenTrash?.(); }}>
+            {say("worldDeletedShelf")}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="m9 6 6 6-6 6" /></svg>
+          </button> : null}
           {groups}
         </div>
       </section>

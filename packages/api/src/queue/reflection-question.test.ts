@@ -56,3 +56,17 @@ describe("answer-aware reflection questions", () => {
     expect(request.systemInstruction.parts[0]!.text).toContain('never guess');
   });
 });
+
+/* RIGHT AFTER A SAVE (founder, 2026-11-26: the creature should "very clearly
+   react to the content i saved, not generically"): with no answers yet the
+   request asks the first question about the save itself, never a generic one. */
+describe("the question asked right after a save", () => {
+  it("asks about the save itself when there are no answers yet", () => {
+    const request = buildReflectionQuestionRequest({ ...input, reflections: [] });
+    const prompt = request.contents[0]!.parts[0]!.text;
+    expect(prompt).toContain("this is the first question, right after saving");
+    expect(prompt).not.toContain("The final answer below is the one to follow up on");
+    expect(request.systemInstruction!.parts[0]!.text).toMatch(/names something particular in the inspiration itself/);
+    expect(request.systemInstruction!.parts[0]!.text).toMatch(/Never a generic question/);
+  });
+});

@@ -201,13 +201,15 @@ it("holds only the top three, and the creature, not a title, says these are your
      experience"). */
   expect(host.querySelector(".waka-held-hero .waka-held-says"), "the explaining bubble came back").toBeNull();
   expect(host.querySelector(".waka-held-hero [data-crossing-target]")).not.toBeNull();
-  /* NO TITLE AND NO "<" ROW (founder: "remove your principles text at the
-     top", and 2026-11-19, of the header: "remove"). The name stays for a
-     screen reader; the star at the left edge walks home. */
+  /* NO TITLE (founder: "remove your principles text at the top"). The way
+     home is the shared "<" alone, on its own strip, with no title beside it
+     (2026-11-26: "to go back use a < icon instead of star"). */
   expect(host.querySelector(".waka-over-title"), "the large title came back").toBeNull();
-  expect(host.querySelector(".waka-surface-head"), "the header row came back").toBeNull();
+  expect(host.querySelector(".waka-over .waka-surface-head"), "a header row came back inside the page").toBeNull();
+  expect(host.querySelector(".waka-principles-back .waka-surface-title")?.textContent ?? "", "a title came back beside the \"<\"").toBe("");
   expect(host.querySelector(".waka-over")?.getAttribute("aria-label")).toBe("Principles");
-  expect(document.querySelector(".waka-principles-spark--home")?.getAttribute("aria-label")).toBe("Home");
+  expect(document.querySelector(".waka-principles-spark--home"), "the left star came back").toBeNull();
+  expect(document.querySelector(".waka-principles-back .waka-surface-back")?.getAttribute("aria-label")).toBe("Back");
   expect(host.querySelector(".waka-over-what"), "the one-visit line is gone").toBeNull();
 });
 

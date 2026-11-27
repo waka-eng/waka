@@ -2870,7 +2870,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   font-weight: 500;
   letter-spacing: normal;
   text-transform: none;
-  color: var(--ink);
+  /* A landmark, a step quieter than the words under it (2026-11-26). */
+  color: var(--muted);
 }
 
 /* HAIRLINES, AND NO SHAPE AROUND THEM.
@@ -2902,7 +2903,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   gap: var(--sp-4);
   width: 100%;
   min-width: 0;
-  padding: var(--sp-16) 0;
+  padding: var(--sp-14) 0;
   border: 0;
   background: none;
   font-family: var(--waka-face);
@@ -2919,7 +2920,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   /* The words are what the row is (audit, 2026-11-26: 13px read smaller
      than the 16px everything else is written in). */
   font-size: var(--t-body);
-  font-weight: 500;
+  /* Regular, not bold (founder, 2026-11-26: "this sheet can look
+     prettier"): a list of your own words, not a list of headlines. */
+  font-weight: 400;
   line-height: 1.4;
   color: var(--ink);
   text-overflow: ellipsis;
@@ -4731,14 +4734,20 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* The lines a tap steps through, as dots under the creature. */
 .jar-char-lines {
   position: absolute; left: 50%; transform: translateX(-50%);
-  top: calc(var(--jar-char-mid, 50%) + var(--jar-char, 120px) / 2 + var(--sp-12));
-  display: flex; gap: var(--sp-6); pointer-events: none;
+  top: calc(var(--jar-char-mid, 50%) + var(--jar-char, 120px) / 2 + var(--sp-2));
+  display: flex; gap: 0; pointer-events: auto;
+}
+/* EACH DOT IS A DOOR TO ITS LINE (founder, 2026-11-26: "let user click on
+   the dots to move to other speech as well"): a 6px dot in a 20 by 28 box. */
+.jar-char-line-go {
+  display: grid; place-items: center; width: 20px; height: 28px; padding: 0; border: 0; background: none; cursor: pointer;
 }
 .jar-char-line {
   width: 6px; height: 6px; border-radius: 50%;
   background: color-mix(in srgb, var(--jar-live) 28%, transparent);
   transition: background-color 0.3s ease-out, box-shadow 0.3s ease-out;
 }
+.jar-char-line-go:hover .jar-char-line, .jar-char-line-go:focus-visible .jar-char-line { background: color-mix(in srgb, var(--jar-live) 60%, transparent); }
 .jar-char-line--on {
   background: var(--jar-live);
   box-shadow: 0 0 6px color-mix(in srgb, var(--jar-live) 60%, transparent);
@@ -5636,6 +5645,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-settings-section > .waka-bookmarklet { justify-self: start; align-self: flex-start; }
 /* The how-to line is quieter than the rows it sits among. */
 .waka-save-anywhere > .waka-settings-note { font-size: var(--t-ui); }
+/* A bookmarks bar is a desktop thing: on a phone this group is a dead end. */
+@media (pointer: coarse) { .waka-save-anywhere { display: none; } }
 /* Rows sit on hairlines, one between each, none above the first. Two
    classes, so `.waka-account button`'s `border: 0` cannot take the line. */
 .waka-settings-list { display: flex; flex-direction: column; }
@@ -6714,6 +6725,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 /* The page's own creature waits, unseen, while the walking one is out:
    two of the same body on one screen would be two creatures. */
+/* WHAT IT SAYS COMES AFTER THE MOVE (founder, 2026-11-26: "make character
+   do motion first, and then text bubble appears when motion is done"). */
+.waka-ground-bubble, .waka-held-first { transition: opacity 260ms ease-out; }
+.waka-page--crossing .waka-ground-bubble, .waka-page--crossing .waka-held-first { opacity: 0; transition: none; }
 .waka-page--crossing [data-crossing-target] {
   visibility: hidden;
 }
@@ -7248,6 +7263,13 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   flex: 1 1 auto; min-height: calc(var(--sp-44) * 3); max-height: none; height: auto !important;
   margin: var(--sp-8) 0 0; padding: 0; border: 0; border-radius: 0; background: none; resize: none;
   font-size: var(--t-writing); line-height: 1.6; color: var(--ink); overflow-y: auto;
+  /* THE SCROLLBAR RUNS IN THE MARGIN, NOT ON THE WORDS (founder,
+     2026-11-26: "scroll bar covers text"). The field reaches 12px past the
+     words' edge into the body's padding and pads it back, so an overlay
+     scrollbar sits in that strip. */
+  box-sizing: border-box; width: calc(100% + var(--sp-12)); max-width: none;
+  margin-inline-end: calc(-1 * var(--sp-12)); padding-inline-end: var(--sp-12);
+  scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 25%, transparent) transparent;
 }
 .jar-seek.jar-inspiration-composer .jar-composer-body[data-hero] > .jar-composer-text {
   /* With a picture the note is a line that grows with what is typed, not a
@@ -7648,6 +7670,48 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
 }
 .waka-surface-right { grid-column: 3; justify-self: end; display: inline-flex; align-items: center; min-width: 0; }
 .waka-surface-right:empty { display: none; }
+/* Principles' "<" stands where every page's does, across the top, not in
+   the page's centred column. */
+.waka-page--timeless > .waka-surface-strip.waka-principles-back { position: fixed; top: 0; left: 0; right: 0; width: auto; z-index: 60; }
+/* ═══ AN ACTION SHEET (iOS's way to offer an item's other actions) ═══════
+   From the foot of the screen over a dim; grouped acts, Cancel apart below.
+   Never filled: the acts are words on the raised ground. */
+.waka-action-sheet { position: fixed; inset: 0; z-index: 200; display: flex; align-items: flex-end; justify-content: center; }
+.waka-action-sheet-scrim { position: absolute; inset: 0; border: 0; padding: 0; background: color-mix(in srgb, var(--bg) 55%, transparent); cursor: default; }
+.waka-action-sheet-card {
+  position: relative; width: min(100% - 2 * var(--sp-8), 420px); display: flex; flex-direction: column; gap: var(--sp-8);
+  margin-bottom: calc(var(--sp-8) + env(safe-area-inset-bottom)); animation: waka-sheet-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.waka-action-sheet-group { display: flex; flex-direction: column; border-radius: var(--sp-14); overflow: hidden; background: var(--waka-raised); }
+.waka-action-sheet-group > button + button { border-top: 1px solid var(--line); }
+.waka-action-sheet button:not(.waka-action-sheet-scrim) {
+  min-height: 56px; border: 0; background: var(--waka-raised); color: var(--ink);
+  font-family: var(--waka-face); font-size: var(--t-input); cursor: pointer;
+}
+.waka-action-sheet-cancel { border-radius: var(--sp-14); font-weight: 500; }
+.waka-action-sheet .waka-action-sheet-group > button + button { border-top: 1px solid var(--line); }
+@media (prefers-reduced-motion: reduce) { .waka-action-sheet-card { animation: none; } }
+/* Save, with Save as draft one arrow away (founder, 2026-11-26). */
+.waka-save-split { position: relative; display: inline-flex; align-items: center; }
+.waka-save-more {
+  display: grid; place-items: center; width: 28px; min-height: var(--sp-44); padding: 0; border: 0; background: none;
+  color: var(--muted); cursor: pointer;
+}
+.waka-note-bar .waka-save-split > .waka-save-more { border: 0; border-radius: 0; background: none; box-shadow: none; }
+.waka-save-more:hover:not(:disabled), .waka-save-more:focus-visible { color: var(--ink); }
+.waka-save-more:disabled { opacity: 0.4; cursor: default; }
+.waka-save-menu {
+  position: absolute; right: 0; bottom: calc(100% + var(--sp-8)); z-index: 30;
+  display: flex; flex-direction: column; min-width: 160px; padding: var(--sp-4) 0;
+  border-radius: var(--sp-14); background: var(--waka-raised);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--bg) 70%, transparent), 0 0 0 1px var(--line);
+}
+.waka-save-menu > button {
+  min-height: var(--sp-44); padding: 0 var(--sp-16); border: 0; background: none; text-align: left;
+  color: var(--ink); font-family: var(--waka-face); font-size: var(--t-ui); white-space: nowrap; cursor: pointer;
+}
+/* The notepad's moment, in the corner the ⋯ would take (founder, 2026-11-26). */
+.waka-surface-when { color: var(--muted); font-family: var(--waka-face); font-size: var(--t-ui); white-space: nowrap; }
 /* THE RIGHT-HAND WORD: plain, dim until pointed at, never filled or boxed. */
 .waka-surface-right > button:is(button, #waka-surface-head), .waka-surface-act:is(.waka-surface-act, #waka-surface-head) {
   display: inline-flex; align-items: center; justify-content: center;
@@ -7733,6 +7797,8 @@ main.waka-page > .waka-surface-head,
   pointer-events: none;
 }
 .waka-surface-strip > * { pointer-events: auto; }
+/* Principles' "<" home stands over the timeless page's own layers. */
+.waka-surface-strip.waka-principles-back { z-index: 70; }
 /* The row itself lets the world take presses beside its controls. */
 .waka-surface-strip > .waka-surface-head { pointer-events: none; }
 .waka-surface-strip > .waka-surface-head > * { pointer-events: auto; }
@@ -7928,6 +7994,11 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 .waka-page.waka-page--sheet[data-leaving] { animation: waka-sheet-down 220ms ease-in both; pointer-events: none; }
 .waka-page.waka-page--sheet[data-dragging] { animation: none; }
+/* The dim above the sheet: a tap there puts it down. Behind the sheet. */
+.waka-sheet-scrim {
+  position: fixed; inset: 0; z-index: 55; padding: 0; border: 0; cursor: default;
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+}
 /* The grabber: the handle that pulled it up, now at its top. */
 .waka-sheet-grab {
   flex: none; display: flex; justify-content: center; align-items: center;

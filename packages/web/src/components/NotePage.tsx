@@ -75,7 +75,13 @@ export function NotePage({ locale, whenMs, owner, back, gesture = null, trailing
   const when = noteStamp(whenMs, Date.now(), locale);
   return (
     <>
-      <SurfaceHeader locale={locale} back={back} gesture={gesture} title={owner ? `${owner} · ${when}` : when} right={trailing} />
+      {/* THE MOMENT TAKES THE FREE CORNER (founder, 2026-11-26: "put date
+          on top right corner so we're using all corners"): on the notepad,
+          whose right corner holds nothing, the date stands there; a saved
+          inspiration keeps its ⋯ there and the date in the middle. */}
+      {trailing ? <SurfaceHeader locale={locale} back={back} gesture={gesture} title={owner ? `${owner} · ${when}` : when} right={trailing} />
+        : <SurfaceHeader locale={locale} back={back} gesture={gesture} srTitle={owner ? `${owner} · ${when}` : when}
+          right={<span className="waka-surface-when" aria-hidden="true">{owner ? `${owner} · ${when}` : when}</span>} />}
       {children}
     </>
   );

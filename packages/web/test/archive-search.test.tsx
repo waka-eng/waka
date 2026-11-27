@@ -100,7 +100,7 @@ it('ignores stale queries and late results after switching profiles', async () =
   expect(leads()).toEqual(['Capture anotherone']);
 });
 
-it('refreshes a search after an edit and keeps deleted results hidden through Undo', async () => {
+it('refreshes a search after an edit and keeps a deleted result out of it', async () => {
   await show(); await search('needle'); await click('Capture older');
   await act(async () => {
     const input = host.querySelector('textarea')!;
@@ -114,7 +114,8 @@ it('refreshes a search after an edit and keeps deleted results hidden through Un
   vi.mocked(fetchInspirationPage).mockResolvedValue({ inspirations: [summary('older')], total: 1 });
   await search('changed'); await click('Capture older'); await openNoteActions(); await click('Delete');
   expect(leads()).toEqual([]);
-  await click('Undo'); await settle(); expect(leads()).toEqual(['Capture older']);
+  /* No Undo (founder, 2026-11-26): it went to Trash, and stays out. */
+  await settle(); expect(leads()).toEqual([]);
 });
 
 

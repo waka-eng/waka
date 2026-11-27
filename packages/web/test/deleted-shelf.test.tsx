@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 /**
- * DELETE AT ONCE, UNDO FOR A MOMENT, THE SHELF FOR A MONTH.
+ * DELETE AT ONCE, TRASH FOR THIRTY DAYS.
  *
- * Founder, 2026-10-15: "just delete when user clicks on this, but give option
- * to undo it. also create option to see all deleted inspirations in the
- * inspirations list."
+ * Founder, 2026-10-15: "just delete when user clicks on this". Then,
+ * 2026-11-26: "lets not have deleted undo. instead lets have a trash place
+ * and it is truly gone after 30 days", "i dont like all and deleted as
+ * categories", and "put trash in profile": no Undo line, no Deleted tab;
+ * Settings opens the archive on Trash, whose "<" returns to the list.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): `helpers/note-actions` opens the real header menu.. `lib/data` (the archive reader) and
  * `lib/api` (the four inspiration verbs), because the claim is about what the page does with a
@@ -56,14 +58,15 @@ afterEach(() => {
   root = null; host = null; dock = null;
 });
 
-async function mount(profileId?: string) {
+async function mount(profileId?: string, trash = false) {
   const { Archive } = await import("./helpers/archive");
   dock = document.createElement("span");
   document.body.appendChild(dock);
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
-  await act(async () => { root!.render(createElement(Archive, { profileId, locale: "en-US", title: "Your inspirations", onBack: () => undefined })); });
+  await act(async () => { root!.render(createElement(Archive, { profileId, locale: "en-US", title: "Your inspirations", onBack: () => undefined,
+    viewState: { query: '', category: null, onShelf: trash, scrollTop: 0 } })); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 }
 const leads = () => [...host!.querySelectorAll(".waka-list-lead")].map((node) => node.textContent);
@@ -73,17 +76,15 @@ const press = async (node: Element | null | undefined) => {
 };
 const byText = (selector: string, text: string) => [...document.querySelectorAll(selector)].find((node) => node.textContent?.trim() === text);
 
-it("deletes on one press, offers Undo, and Undo puts it back without telling the server", async () => {
+it("deletes on one press, with no Undo line and no Deleted tab", async () => {
   await mount();
   expect(leads()).toEqual(["Second thing", "First thing"]);
   await press(host!.querySelector(".waka-list-row"));
   await openNoteActions();
   await press(document.querySelector('[aria-label="Delete"]'));
   expect(leads()).toEqual(["First thing"]);
-  expect(host!.querySelector(".waka-over-undo")?.textContent).toContain("Deleted.");
-  await press(byText(".waka-over-undo button", "Undo"));
-  expect(leads()).toEqual(["Second thing", "First thing"]);
-  expect(calls.deleted).toEqual([]);
+  expect(host!.querySelector(".waka-over-undo"), "an Undo line came back").toBeNull();
+  expect(byText(".waka-tab", "Deleted") ?? byText(".waka-tab", "Trash"), "Trash came back as a tab").toBeUndefined();
 });
 
 it("tells the server when the page is left before Undo's moment passes", async () => {
@@ -96,10 +97,11 @@ it("tells the server when the page is left before Undo's moment passes", async (
   expect(calls.deleted).toEqual(["b"]);
 });
 
-it("keeps a Deleted tab while anything is on the shelf, and brings a thing back from it", async () => {
+it("opens on Trash, says how long it keeps things, and brings a thing back from it", async () => {
   shelf.rows = [{ id: "z", text: "Something I threw away", kind: null, hadPhoto: true, keptAt: new Date().toISOString(), deletedAt: new Date().toISOString(), goneAt: new Date().toISOString() }];
-  await mount();
-  await press(byText(".waka-tab", "Deleted"));
+  await mount(undefined, true);
+  expect(host!.querySelector(".waka-surface-title")?.textContent).toBe("Trash");
+  expect(host!.textContent).toContain("Gone for good after 30 days.");
   expect(host!.querySelector(".waka-shelf .waka-list-lead")?.textContent).toBe("Something I threw away");
   expect(host!.textContent).toContain("Attachments can’t be restored");
   await press(byText(".waka-shelf-forget", "Delete for good"));
@@ -111,6 +113,16 @@ it("keeps a Deleted tab while anything is on the shelf, and brings a thing back 
   expect(calls.forgotten, "Cancel deleted for good").toEqual([]);
   await press(byText(".waka-shelf-back", "Restore"));
   expect(calls.restored).toEqual(["z"]);
+});
+
+it("returns from Trash to the list by its \"<\", and shows an empty Trash as empty", async () => {
+  await mount(undefined, true);
+  expect(host!.querySelector(".waka-surface-title")?.textContent, "an empty Trash fell back to the list").toBe("Trash");
+  expect(leads(), "an empty Trash showed the list").toEqual([]);
+  const back = host!.querySelector<HTMLButtonElement>(".waka-surface-back")!;
+  expect(back.getAttribute("aria-label")).toBe("Back");
+  await press(back);
+  expect(leads()).toEqual(["Second thing", "First thing"]);
 });
 
 it("offers to share the open note", async () => {
@@ -133,11 +145,10 @@ it('shows search even for two inspirations and filters without leaving the archi
 });
 it('lists and restores an agent’s media-only inspiration in that same profile',async()=>{
   shelf.rows=[{id:'agent-photo',text:'',kind:'image',hadPhoto:true,attachmentCount:1,attachmentName:'Sunset.jpg',keptAt:new Date().toISOString(),deletedAt:new Date().toISOString(),goneAt:new Date().toISOString()}];
-  await mount('noah');
+  await mount('noah', true);
   expect(calls.scopes).toContainEqual({profile:'noah'});
-  await press(byText('.waka-tab','Deleted'));
   expect(host!.textContent).toContain('Sunset.jpg');
-  expect(host!.querySelector('.jar-saved-count')?.textContent).toBe('(1)');
+  expect(host!.querySelector('.waka-surface-title')?.textContent).toBe('Trash');
   expect(host!.textContent).not.toContain('Attachments can’t be restored');
   await press(byText('.waka-shelf-back','Restore'));
   expect(calls.restored).toEqual(['agent-photo']);
@@ -146,8 +157,7 @@ it('lists and restores an agent’s media-only inspiration in that same profile'
 
 it('confirms restoration and opens that exact old note even outside the loaded archive', async () => {
   shelf.rows = [{ id: 'old-note', text: 'An older restored thought.', kind: null, hadPhoto: false, keptAt: '2026-01-01T00:00:00Z', deletedAt: new Date().toISOString(), goneAt: new Date().toISOString() }];
-  await mount('noah');
-  await press(byText('.waka-tab', 'Deleted'));
+  await mount('noah', true);
   await press(byText('.waka-shelf-back', 'Restore'));
   expect(host!.textContent).toContain('Restored.');
   await press(byText('.waka-restore-notice button', 'Open'));

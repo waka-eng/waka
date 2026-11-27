@@ -85,7 +85,9 @@ describe("the chat list", () => {
 });
 
 
-it('offers a new chat from a populated list and explains deletion before sending it', async () => {
+/* A CHAT'S DELETE DELETES (founder, 2026-11-26: "dont confirm and just
+   delete"): one press sends it; a failure says so on the row and keeps it. */
+it('offers a new chat from a populated list and deletes one on a single press', async () => {
   vi.mocked(listConversations).mockResolvedValue({ conversations: [{
     id: 'chat-1', profileId: 'profile-1', revision: 1,
     updatedAt: '2026-10-23T12:00:00Z', preview: 'A question worth keeping',
@@ -94,20 +96,14 @@ it('offers a new chat from a populated list and explains deletion before sending
   await show(<ConversationsOverlay locale="en-US" profileId="profile-1" title="Chats" onClose={() => undefined} onOpen={open} />);
   await press('New chat');
   expect(open).toHaveBeenCalledWith(null);
-  await press('Delete');
-  expect(host.textContent).toContain('Delete this chat? You won’t be able to reopen it.');
-  expect(deleteConversation).not.toHaveBeenCalled();
-  await press('Cancel');
-  expect(host.textContent).not.toContain('Delete this chat?');
-  expect(host.textContent).toContain('A question worth keeping');
   vi.mocked(deleteConversation).mockRejectedValueOnce(new Error('offline'));
   await press('Delete');
-  await press('Delete chat');
+  expect(host.textContent, 'a question came back before deleting').not.toContain('Delete this chat?');
   expect(deleteConversation).toHaveBeenCalledWith('profile-1', 'chat-1');
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("It’s still here");
   expect(host.textContent).toContain('A question worth keeping');
   vi.mocked(deleteConversation).mockResolvedValueOnce(undefined);
-  await press('Delete chat');
+  await press('Delete');
   expect(host.textContent).not.toContain('A question worth keeping');
   expect(host.querySelectorAll('.waka-over-new')).toHaveLength(1);
 });

@@ -666,6 +666,11 @@ export async function enqueueTopOfMindRefresh(
   return { jobId: job.id, requestVersion: job.requestVersion, created: job.created };
 }
 
+/** The question asked right after a save, before any answer exists: its
+ * `afterReflectionId` (founder, 2026-11-26: the creature should "very
+ * clearly react to the content i saved, not generically"). */
+export const AFTER_SAVE_REFLECTION_ID = "00000000-0000-0000-0000-000000000000";
+
 /** One generated follow-up per saved answer, even across repeated opens. */
 export function reflectionQuestionJobKey(profileId: string, inspirationId: string, afterReflectionId: string): string {
   return `generate_reflection_question:${profileId}:${inspirationId}:${afterReflectionId}`;
@@ -1132,7 +1137,7 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
       if (!payload) return dropPoisonPayload(job);
       const db = getDb();
       const context = await loadReflectionQuestionContext(db, job.profileId, payload.inspirationId);
-      if (!context || context.latestId !== payload.afterReflectionId) return dropPoisonPayload(job);
+      if (!context || (context.latestId ?? AFTER_SAVE_REFLECTION_ID) !== payload.afterReflectionId) return dropPoisonPayload(job);
       await db.transaction(tx=>assertBackgroundJobOwnership(tx,job,true));
       const savedHash=readString(job.payload,'contextHash'),savedQuestion=readString(job.payload,'question');
       if(savedHash===context.hash&&savedQuestion){

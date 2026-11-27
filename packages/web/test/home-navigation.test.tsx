@@ -82,9 +82,9 @@ it.each([0, 60])('keeps the home count current after archive deletion and restor
     expect(deleteMock).toHaveBeenCalledWith('loaded', { profile: VIEWER_ID });
     expect(count()).toBe(unloaded ? `${unloaded + 1} inspirations` : '1 inspiration');
 
-    await openSavesSheet(world.container);
-    await settle();
-    await act(async () => world.container.querySelector<HTMLButtonElement>('.waka-tab--shelf')!.click());
+    /* Trash is in Settings now (founder, 2026-11-26: "put trash in profile"). */
+    await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]')!.click()); await settle();
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.waka-settings-row')].find(row => row.textContent?.trim() === 'Trash')!.click()); await settle();
     await act(async () => [...world.container.querySelectorAll<HTMLButtonElement>('.waka-shelf-back')]
       .find(button => button.textContent?.trim() === 'Restore')!.click());
     expect(restoreMock).toHaveBeenCalledWith('loaded', { profile: VIEWER_ID });
@@ -294,7 +294,7 @@ it('keeps a one-press way out of the sky and of the ground on your own wall',asy
   expect(caret('.waka-surface-back'),'the sky on your own wall must offer the way down').not.toBeNull();
   await act(async()=>caret('.waka-surface-back')!.click());await settle();
   expect(location.search).toContain('open=principles');
-  await act(async()=>document.querySelector<HTMLButtonElement>('.waka-principles-spark--home')!.click());await settle();
+  await act(async()=>document.querySelector<HTMLButtonElement>('.waka-principles-back .waka-surface-back')!.click());await settle();
   expect(location.pathname+location.search).toBe('/');
   await navigate(-1);expect(location.search).toContain('view=sky');
   world.unmount();
@@ -804,12 +804,12 @@ it('leaves Principles by Escape, and by its labelled Back in one visible press',
   await key(world.container.querySelector('.waka-over[data-jar-surface]')!, 'Escape');
   expect(open(), 'Escape no longer closes Principles').toBeNull();
 
-  /* Its visible way out is the star at its left edge, the mirror of home's
-     star at the right (founder, 2026-11-19); no "<" row. */
+  /* Its visible way out is the shared "<", top left (founder, 2026-11-26:
+     "to go back use a < icon instead of star"); the left star is gone. */
   await key(document.body, 'ArrowRight'); expect(open()).toBe('principles');
-  expect(document.querySelector('.waka-over .waka-surface-back'), 'the "<" row came back on Principles').toBeNull();
-  const back = document.querySelector<HTMLButtonElement>('.waka-principles-spark--home');
-  expect(back?.getAttribute('aria-label'), 'Principles has no visible way home').toBe('Home');
+  expect(document.querySelector('.waka-principles-spark--home'), 'the left star came back').toBeNull();
+  const back = document.querySelector<HTMLButtonElement>('.waka-principles-back .waka-surface-back');
+  expect(back?.getAttribute('aria-label'), 'Principles has no visible way home').toBe('Back');
   await act(async () => back!.click()); await settle();
   expect(open(), 'Back on Principles left Principles in place').toBeNull();
   expect(homeBarShape(world.container)).toEqual(['Save an inspiration', 'Save a screenshot', 'Save your voice', 'Chat']);
@@ -1079,7 +1079,7 @@ it('gives a new note a labeled Save and separate Close, without archive navigati
     expect(bar.querySelector('textarea'), 'the words went back into the bar').toBeNull();
     expect(world.container.querySelector('.jar-composer-body > textarea.jar-composer-text'), 'the words are not on the page').toBeTruthy();
     const presses = [...bar.querySelectorAll<HTMLButtonElement>('.waka-note-bar-row button')].map(node => node.getAttribute('aria-label') ?? node.textContent?.trim());
-    expect(presses).toEqual(['Your voice', 'Add photo', 'Add file', 'Save']);
+    expect(presses).toEqual(['Your voice', 'Add photo', 'Add file', 'Save', 'Save as draft']);
     expect(row('Back')).toBeUndefined();
     expect(close()?.getAttribute('aria-label'), 'the notepad has no Close apart from Save').toBe('Close');
     expect(world.container.querySelector('nav.waka-dock'), 'a dock stands under the note bar').toBeNull();
@@ -1095,7 +1095,7 @@ it('gives a new note a labeled Save and separate Close, without archive navigati
     await settle();
     expect(save.disabled).toBe(false);
     expect(bar.querySelector('button.waka-dock-tool [data-home-action-icon="record"]'), 'the mic is not drawn as one').toBeTruthy();
-    expect(bar.querySelector('button[aria-haspopup="menu"]'), 'a ＋ menu is back on the note bar').toBeNull();
+    expect(bar.querySelector('button[aria-haspopup="menu"]:not(.waka-save-more)'), 'a ＋ menu is back on the note bar').toBeNull();
   } finally {
     delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
   }
