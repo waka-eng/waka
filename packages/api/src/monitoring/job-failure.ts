@@ -16,6 +16,7 @@ const jobLabels = {
   derive_review_answer: 'Process a review answer',
   index_embedding: 'Index an embedding',
   generate_hunch: 'Write a hunch from the first saves',
+  match_introductions: 'Look for an introduction between two consenting people',
 } satisfies Record<BackgroundJobType, string>;
 
 const reasons = {

@@ -186,6 +186,7 @@ import {
 import { isSupportedLocale } from "./locales.js";
 import { loadReflectionQuestionContext } from './reflection-question-context.js';
 import { hasLiveReading, writeHunchForProfile } from './hunches.js';
+import { introductionsAvailable, matchIntroductionsForProfile } from './introductions.js';
 import { loadReviewQuestionContext } from './review-dialogue-context.js';
 import { reconcilePrinciplesAfterSignalLoss, refreshPrinciplesForProfile } from "./principle-generation.js";
 import { tendSignalGarden } from "./signal-gardener.js";
@@ -376,7 +377,8 @@ async function enqueueKeyedJob(input: {
     | "generate_review_question"
     | "generate_conversation_reply"
     | "derive_review_answer"
-    | "generate_hunch";
+    | "generate_hunch"
+    | "match_introductions";
   payload:
     | EnrichAttachmentPayload
     | DeriveSignalsPayload
@@ -389,7 +391,8 @@ async function enqueueKeyedJob(input: {
     | GenerateReviewQuestionPayload
     | {conversationId:string;replyRequestId:string}
     | {answerId:string;sessionId:string;signalIds?:string[]}
-    | GenerateHunchPayload;
+    | GenerateHunchPayload
+    | { reason: "consent" };
   idempotencyKey: string;
 }, transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult> {
   const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
@@ -695,6 +698,16 @@ export async function enqueueHunchAfterCorrection(profileId: string, hunchId: st
   transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult> {
   return enqueueKeyedJob({ profileId, type: "generate_hunch", payload: { afterHunchId: hunchId },
     idempotencyKey: `generate_hunch:${profileId}:after:${hunchId}` }, transaction);
+}
+
+/** Look for an introduction for a person who just said Introduce us. Only
+ * where `WAKA_INTRODUCTIONS=1`; otherwise nothing is enqueued. Keyed per
+ * profile, so a burst of switches asks once. */
+export async function enqueueIntroductionMatch(profileId: string,
+  transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult | null> {
+  if (!introductionsAvailable()) return null;
+  return enqueueKeyedJob({ profileId, type: "match_introductions", payload: { reason: "consent" },
+    idempotencyKey: `match_introductions:${profileId}` }, transaction);
 }
 
 /** The question asked right after a save, before any answer exists: its
@@ -1201,6 +1214,13 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
       const provider = await getDefaultModelProvider();
       await writeHunchForProfile(getDb(), provider, { profileId: job.profileId, ...(save ? { newestId: save } : {}),
         beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true) });
+      return;
+    }
+    case "match_introductions": {
+      /* No model call: principle statements compared by word overlap. The
+         flag is read again here, so a job queued before it was turned off
+         does nothing. */
+      await matchIntroductionsForProfile(getDb(), job.profileId);
       return;
     }
     case "generate_reflection_question": {

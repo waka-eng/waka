@@ -66,3 +66,4 @@ export * from './schema-signup-admissions.js';
 
 export * from './schema-account-attachment-upload-limits.js';
 export * from './schema-hunches.js';
+export * from './schema-introductions.js';
