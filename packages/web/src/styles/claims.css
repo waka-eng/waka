@@ -8410,11 +8410,13 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 /* A picture under review is the save itself (founder, 2026-11-27): it fills
    the card whole, never cropped, never a file name. A third of the screen
    at most, so a short phone keeps the answers under it. */
-.waka-saved-photo.waka-review-photo { display: block; width: 100%; height: auto; max-height: 32svh; aspect-ratio: auto; background: none; }
-.waka-saved-photo.waka-review-photo > img { width: 100%; height: auto; max-height: 32svh; object-fit: contain; border-radius: var(--sp-12); }
-.waka-saved-photo.waka-review-photo:empty { height: 24svh; background: var(--waka-raised); }
+/* The tile holds its height from the first frame, so nothing under it moves
+   when the picture lands; the picture keeps its own shape and corners. */
+.waka-saved-photo.waka-review-photo { display: flex; align-items: center; justify-content: center; width: 100%; height: auto; min-height: 24svh; background: none; }
+.waka-saved-photo.waka-review-photo > img { width: auto; max-width: 100%; height: auto; max-height: 32svh; border-radius: var(--sp-12); }
+.waka-saved-photo.waka-review-photo:empty { background: var(--waka-raised); border-radius: var(--sp-12); }
 .waka-saved-photo.waka-review-photo--whole, .waka-saved-photo.waka-review-photo--whole > img { max-height: none; }
-.waka-saved-photo.waka-review-photo--whole:empty { height: 40svh; }
+.waka-saved-photo.waka-review-photo--whole { min-height: 40svh; }
 /* In Inspirations: the words on the left, the picture at the row's end. */
 .waka-list-row:has(> .waka-list-photo) {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-16); align-items: center;

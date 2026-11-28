@@ -7740,12 +7740,12 @@ const RETRY_READ_LIMIT_MS = 20_000;
      Reached any other way (Past inspirations on the notepad) it is a page. */
   const [savesAsSheet, setSavesAsSheet] = useState(false);
   const savesOpen = viewNavigation.view?.open === 'saves';
-  useEffect(() => { if (!savesOpen) setSavesAsSheet(false); }, [savesOpen]);
+  /* A READING'S SAVES ARE A LOOK, NOT A FILTER THAT STAYS (founder,
+     2026-11-27: opened from "9 inspirations" it still said "From 2
+     inspirations"). Closing the sheet ends the look, however it reopens. */
+  useEffect(() => { if (!savesOpen) { setSavesAsSheet(false); setSavesFocus(null); } }, [savesOpen]);
   const openSheet = useCallback(() => { setSavesAsSheet(true); openOverHome('saves'); feel('light'); }, [openOverHome]);
-  /* THE COUNT OPENS ALL OF THEM (founder, 2026-11-27: opened from
-     "9 inspirations" it still said "From 2 inspirations"). A reading's saves
-     are a look, not a filter that stays; Back to that look still finds it. */
-  const openAllSaves = useCallback(() => { setSavesFocus(null); openSheet(); }, [openSheet]);
+
   /* ONCE A WEEK, FROM SUNDAY (local time). The week is named by its Sunday;
      the offer is remembered per profile, so it is made once, and only when
      the server has something true to say (`fetchWeeklyLine` is null else). */
@@ -11841,9 +11841,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
              inspirations caret clickable if at least 1 exists. dont show it
              if 0"), and none while the count is still unknown, so it never
              flashes in and out. */
-          pull={savesOpen ? undefined : standingAsAgent ? { onOpen: openAllSaves }
+          pull={savesOpen ? undefined : standingAsAgent ? { onOpen: openSheet }
             : !inspirations || inspirations.length + fieldBeyond === 0 ? undefined : {
-              onOpen: openAllSaves,
+              onOpen: openSheet,
               /* "{n} KEPT ⌃" (founder: "should be x kept"). The same count
                  the field keeps true through every keep and removal
                  (`fieldBeyond`); unknown until the field's first page. */
