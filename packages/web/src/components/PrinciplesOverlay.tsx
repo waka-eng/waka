@@ -371,8 +371,14 @@ const ASTERISK_VIEW = {
   right: `${INK.left} ${INK.top} ${INK_SHOWN} ${INK_HEIGHT}`,
   left: `${INK.right - INK_SHOWN} ${INK.top} ${INK_SHOWN} ${INK_HEIGHT}`,
 } as const;
-/** How far in from the cut the asterisk's centre (x 12) sits: its glow's centre. */
-const CENTRE_FROM_CUT = `${((INK.left + INK_SHOWN - 12) * MARK_PX).toFixed(2)}px`;
+/** The one place the stylesheet learns the geometry: the ink's size on
+    screen, and how far in from the cut the asterisk's centre (x 12) sits,
+    which is where its glow is centred. */
+const MARK_GEOMETRY = {
+  "--waka-mark-w": `${(INK_SHOWN * MARK_PX).toFixed(2)}px`,
+  "--waka-mark-h": `${(INK_HEIGHT * MARK_PX).toFixed(2)}px`,
+  "--waka-mark-centre": `${((INK.left + INK_SHOWN - 12) * MARK_PX).toFixed(2)}px`,
+} as CSSProperties;
 
 /** The asterisk both Principles doors wear, cut by the screen edge it sits
     on: home's at the right walks to Principles, Principles' at the left
@@ -380,8 +386,8 @@ const CENTRE_FROM_CUT = `${((INK.left + INK_SHOWN - 12) * MARK_PX).toFixed(2)}px
     opacity alone animates. */
 export function PrinciplesAsterisk({ edge }: { edge: "left" | "right" }): JSX.Element {
   return (
-    <span className="waka-principles-mark" style={{ "--waka-mark-centre": CENTRE_FROM_CUT } as CSSProperties}>
-      <svg viewBox={ASTERISK_VIEW[edge]} width={(INK_SHOWN * MARK_PX).toFixed(2)} height="44" aria-hidden="true" focusable="false">
+    <span className="waka-principles-mark" style={MARK_GEOMETRY}>
+      <svg viewBox={ASTERISK_VIEW[edge]} aria-hidden="true" focusable="false">
         <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
           <path d="M12 3.5v17" />
           <path d="M4.64 7.75l14.72 8.5" />

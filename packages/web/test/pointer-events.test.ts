@@ -296,10 +296,10 @@ describe("nothing visible loses its press", () => {
                pull home is the page's, not the creature's. */
             ".waka-ground-being",
             /* THE PRINCIPLES ASTERISK AND ITS FLARE (code review,
-               2026-11-27): `aria-hidden` light inside the press, overhanging
-               it to touch the screen's edge. They take no presses on purpose,
-               so the press stays 16px clear of the edge's system gestures;
-               the button around them is the press. */
+               2026-11-27): `aria-hidden` light inside the press, whose glow
+               box reaches past it so the glow can fade. The box takes no
+               presses so the press stays exactly the 44px button, which
+               holds all of the asterisk's ink. */
             ".waka-principles-mark",
             ".waka-principles-spark-beckon",
           ].includes(selector),
