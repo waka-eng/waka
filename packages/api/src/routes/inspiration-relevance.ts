@@ -26,6 +26,14 @@ const selection = {
   sourceRevision: sql<string>`${inspirationRevisions.personalRevision}::text`,
   attachmentLabel: sql<string | null>`(SELECT coalesce(a.name,a.url,a.type::text) FROM attachments a
     WHERE a.profile_id=${inspirations.profileId} AND a.inspiration_id=${inspirations.id} ORDER BY a.created_at,a.id LIMIT 1)`,
+  /* A picture is shown as the picture, never its file name (founder,
+     2026-11-27, of a review that read only "IMG_1431.png"). */
+  photoId: sql<string | null>`(SELECT a.id::text FROM attachments a
+    WHERE a.profile_id=${inspirations.profileId} AND a.inspiration_id=${inspirations.id} AND a.type='image' ORDER BY a.created_at,a.id LIMIT 1)`,
+  /* The kind of attachment attachmentLabel names, so the card shows a link's
+     title beside a picture and never a file's name. */
+  labelType: sql<string | null>`(SELECT a.type::text FROM attachments a
+    WHERE a.profile_id=${inspirations.profileId} AND a.inspiration_id=${inspirations.id} ORDER BY a.created_at,a.id LIMIT 1)`,
 };
 const revisionJoin = and(eq(inspirationRevisions.profileId,inspirations.profileId),eq(inspirationRevisions.inspirationId,inspirations.id));
 

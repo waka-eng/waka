@@ -23,7 +23,7 @@ vi.mock('../src/lib/api/inspiration-relevance',async original=>({...await origin
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),prepareConversationOpening:vi.fn(),listConversations:vi.fn(async(profile:string)=>({profileId:profile,conversations:[],generationEnabled:true}))}));
 vi.mock('../src/lib/data',async original=>({...await original<typeof import('../src/lib/data')>(),...dataMockFrom({inspirations:[]})}));
 vi.mock('../src/lib/auth-context',async original=>({...await original<typeof import('../src/lib/auth-context')>(),useOptionalAuth:()=>({status:'authenticated',account:{id:'account',email:'owner@example.test'},profile:{id:VIEWER_ID,name:'Owner',type:'human'},profiles:[]})}));
-const original:InspirationRelevance={id:'66666666-6666-4666-8666-666666666666',text:'Build a business I can run alone.',kind:'note',createdAt:'2026-08-01T12:00:00Z',sourceRevision:'3',reviewVersion:0,memoryExcludedAt:null,reviewAfter:null,attachmentLabel:null};
+const original:InspirationRelevance={id:'66666666-6666-4666-8666-666666666666',text:'Build a business I can run alone.',kind:'note',createdAt:'2026-08-01T12:00:00Z',sourceRevision:'3',reviewVersion:0,memoryExcludedAt:null,reviewAfter:null,attachmentLabel:null,photoId:null,labelType:null};
 let world:MountedWorld;
 beforeAll(()=>{installCanvasStub();setViewport(390,844);(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;});
 beforeEach(()=>{
@@ -187,4 +187,23 @@ it('opens a chat on the same question, with the inspiration quoted',async()=>{
   expect(turns[1]?.getAttribute('data-role')).toBe('assistant');
   expect(turns[1]?.textContent).toContain('Does this still matter to you?');
   expect(reviewInspiration,'opening a chat answered the card').not.toHaveBeenCalled();
+});
+it('shows a picture save as its picture, not its file name (founder, 2026-11-27)',async()=>{
+  vi.mocked(listInspirationReviews).mockResolvedValue([{...original,text:'',attachmentLabel:'IMG_1431.png',photoId:'77777777-7777-4777-8777-777777777777',labelType:'image'}]);
+  await open();
+  expect(world.container.querySelector('.waka-review-photo'),'the picture is on the card').not.toBeNull();
+  /* Seen nowhere, but spoken, and still the chat's quote the server binds. */
+  expect(world.container.querySelector('.waka-review-photo + .sr-only')?.textContent).toBe('A photo');
+  const visible=[...world.container.querySelectorAll('.jar-pick-statement, .jar-pick-source')].map(n=>n.textContent).join(' ');
+  expect(visible).not.toContain('IMG_1431.png');
+});
+it('keeps a link title beside a picture even with no words (code review, 2026-11-27)',async()=>{
+  vi.mocked(listInspirationReviews).mockResolvedValue([{...original,text:'',attachmentLabel:'A link',photoId:'77777777-7777-4777-8777-777777777777',labelType:'link'}]);
+  await open();
+  expect([...world.container.querySelectorAll('.jar-pick-source')].map(n=>n.textContent)).toContain('A link');
+});
+it('never shows a file name beside a picture (code review, 2026-11-27)',async()=>{
+  vi.mocked(listInspirationReviews).mockResolvedValue([{...original,text:'',attachmentLabel:'scan_0042.pdf',photoId:'77777777-7777-4777-8777-777777777777',labelType:'file'}]);
+  await open();
+  expect(world.container.textContent).not.toContain('scan_0042.pdf');
 });

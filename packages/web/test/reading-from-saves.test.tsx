@@ -15,7 +15,7 @@ import { act } from 'react';
 import { useLocation } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
-import { mountWorld, dataMockFrom, apiMockFrom, VIEWER_ID, type MountedWorld } from './helpers/render-home';
+import { mountWorld, dataMockFrom, apiMockFrom, closeOverlay, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [
   { id: 'river', text: 'Walked home the long way to hear the river.', daysAgo: 1 },
@@ -53,4 +53,10 @@ it('says how many saves a reading rests on, and opens exactly those', async () =
   const rows = [...world.container.querySelectorAll('.waka-page--sheet .waka-list-lead')].map(row => row.textContent);
   expect(rows, 'the sheet did not show exactly the saves the reading rests on').toEqual([
     'I want to quit my job and build something of my own.', 'Walked home the long way to hear the river.']);
+  /* CLOSED, IT FORGETS (founder, 2026-11-27): opened next from the bar's
+     count, the sheet holds every save, not the reading's two. */
+  await closeOverlay(world.container); await settle();
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-home-bar-pull')!.click()); await settle();
+  expect(new URLSearchParams(location.search).get('open')).toBe('saves');
+  expect(world.container.querySelectorAll('.waka-page--sheet .waka-list-lead'), 'the reading\'s filter outlived the sheet').toHaveLength(3);
 });
