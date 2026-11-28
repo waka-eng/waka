@@ -416,32 +416,19 @@ button[type="submit"] {
   font-family: inherit;
   font-size: var(--t-ui);
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 5px;
-  text-decoration-thickness: 1px;
-  /* THE RULE UNDER THE WORD IS WHERE THIS ANSWERS THE HAND.
-     An action here is a word at full ink, which leaves it nothing to
-     brighten: `e2e:answers-the-hand` put a pointer on `save profile` and
-     measured no change of any kind. There WAS a hover — `.btn-primary:hover`
-     in `global.css` — but `global.css` is the product layer and this rule is
-     the chrome layer, so chrome's flat `color` beat the hover's, and the
-     hover had been painting nothing since the layers landed. Specificity
-     never entered into it, which is exactly why reading the sheets could not
-     have found this and the engine could.
-     So the light moves to the underline: dim at rest, full when the hand
-     arrives. The word keeps its weight either way — what changes is the rule
-     beneath it, which is this product's own way of marking a thing. */
-  text-decoration-color: rgba(242, 236, 225, 0.4);
+  /* A BUTTON IS NOT UNDERLINED (founder, 2026-11-27: "dont underline the
+     buttons"). This rule used to draw a dim line under every submit and
+     light it on hover, because a word at full ink had nothing left to
+     brighten (`e2e:answers-the-hand` measured no change on `save profile`:
+     `global.css`'s hover is in the product layer and this flat `color` in
+     the chrome layer beat it). The line is gone; the answer is still light,
+     a soft glow round the word when the hand or the keyboard arrives (the
+     shared rule in claims.css, "A WORD THAT CAN BE PRESSED"). */
+  text-decoration: none;
   transition:
     color 0.2s ease,
     opacity 0.2s ease,
-    text-decoration-color 0.2s ease;
-}
-.btn-primary:hover:not(:disabled),
-button[type="submit"]:hover:not(:disabled),
-.btn-primary:focus-visible:not(:disabled),
-button[type="submit"]:focus-visible:not(:disabled) {
-  text-decoration-color: var(--w-ink);
+    text-shadow 0.2s ease;
 }
 .btn-primary:disabled,
 button:disabled {
@@ -655,7 +642,9 @@ a:focus-visible {
 
    The world's rules, applied to a screen that is deliberately NOT the world:
    a rule under things instead of a border around them, one uppercase register
-   for eyebrows only, actions as underlined words, and state carried by ink
+   for eyebrows only, actions as full-ink words that glow when pointed at
+   (they were underlined until the founder, 2026-11-27: "dont underline the
+   buttons"), and state carried by ink
    weight rather than by a coloured chip. No red anywhere — colour temperature
    means aliveness here and is not spent on warnings. */
 
@@ -1320,8 +1309,8 @@ body .login-card .btn-doorway {
   background: var(--w-ink);
   color: var(--w-ground);
   font-size: var(--t-body);
-  /* the underline is the world's signal that a WORD can be pressed; a pill
-     already says so by being one, and both at once reads as a mistake */
+  /* a pill says it can be pressed by being one; no line under its word
+     (founder, 2026-11-27: "dont underline the buttons") */
   text-decoration: none;
   transition: opacity 0.18s ease;
 }
@@ -1878,8 +1867,10 @@ button.jar-tile-face,
 .jar-thing-share .jar-share-actions { gap:var(--sp-24); }
 .jar-thing-share .jar-share-icon { display:grid; place-items:center; width:var(--sp-44); min-width:var(--sp-44); height:var(--sp-44); padding:0; border:0; border-radius:50%; background:none; color:var(--w-ink); opacity:.7; }
 .jar-thing-share .jar-share-icon:disabled { opacity:.3; }
-/* A link, not a button: it opens something optional. */
-.jar-thing-share .jar-share-link { border:0; padding-inline:var(--sp-4); color:var(--w-muted); text-decoration:underline; text-underline-offset:.2em; }
+/* It opens something optional, so it is muted; it is a button, so it is not
+   underlined (founder, 2026-11-27: "dont underline the buttons"). Pointed
+   at, it steps to ink. */
+.jar-thing-share .jar-share-link { border:0; padding-inline:var(--sp-4); color:var(--w-muted); text-decoration:none; }
 .jar-share-link:hover,.jar-share-link:focus-visible { color:var(--w-ink); }
 /* THE COMMIT CONTROL IS THE ONE PRIMARY. The claim answers refuse a primary
    because they are peers; this is not a choice among answers, it is the
@@ -2013,7 +2004,8 @@ button.jar-tile-face,
 .jar-reading-actions { flex-direction:column; gap:var(--sp-4); }
 .jar-reading-heading { align-items:center; }
 .jar-reading-heading .jar-reading-changes { margin-left:auto; min-height:var(--sp-44); padding:var(--sp-8) var(--sp-4); border:0; border-radius:var(--sp-8); color:var(--w-muted); background:none; font:inherit; cursor:pointer; pointer-events:auto; }
-.jar-reading-heading .jar-reading-changes:hover,.jar-reading-heading .jar-reading-changes:focus-visible { color:var(--w-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
+/* Muted to ink, no line (founder, 2026-11-27: "dont underline the buttons"). */
+.jar-reading-heading .jar-reading-changes:hover,.jar-reading-heading .jar-reading-changes:focus-visible { color:var(--w-ink); }
 .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(clamp(48px,10.6vh,72px) + env(safe-area-inset-top)); padding-top:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; pointer-events:auto; touch-action:pan-y; }
 .jar-hq-inner--compact:focus-visible { outline:1px solid var(--w-muted); outline-offset:-2px; }
 @media (max-width:560px) { .jar-hq-inner.jar-hq-inner--compact { margin-top:calc(118px + env(safe-area-inset-top)); } }

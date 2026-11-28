@@ -174,12 +174,14 @@ function Connected({ locale, profile, live, reads, onChanged }: {
       {/* ONE QUESTION BEFORE CUTTING IT OFF, saying what stays. */}
       {asking ? <>
         <p className="waka-settings-note" role="status">{formatMessage(locale, 'connectDisconnectAsk', { name: live.label || live.prefix })}</p>
+        {/* Cancel first, the act second, as every other confirm stands
+            (polish pass, founder 2026-11-27). */}
         <span className="waka-session-actions">
+          <button type="button" className="waka-connect-button waka-connect-button--quiet" onClick={() => setAsking(false)}>{say('worldCancel')}</button>
           <button type="button" className="waka-connect-button" disabled={busy}
             onClick={() => { setBusy(true); void revokeProfileKey(profile, live.id).then(onChanged).finally(() => setBusy(false)); }}>
             {say('connectDisconnect')}
           </button>
-          <button type="button" className="waka-connect-button waka-connect-button--quiet" onClick={() => setAsking(false)}>{say('worldCancel')}</button>
         </span>
       </> : <button type="button" className="waka-connect-button waka-connect-button--quiet" onClick={() => setAsking(true)}>
         {say('connectDisconnect')}
