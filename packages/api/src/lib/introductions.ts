@@ -181,6 +181,7 @@ type Row = typeof introductions.$inferSelect;
 function mine(row: Row, profileId: string) {
   const a = row.profileAId === profileId;
   return {
+    handle: a ? row.handleA : row.handleB,
     withdrawn: a ? row.withdrawnAAt : row.withdrawnBAt,
     answer: a ? row.answerA : row.answerB, answeredAt: a ? row.answeredAAt : row.answeredBAt,
     seen: a ? row.seenAAt : row.seenBAt, text: a ? row.principleAText : row.principleBText,
@@ -223,7 +224,8 @@ const passAt = (profileId: string, key: string, from?: Date): FollowUp =>
 // ---------------------------------------------------------------------------
 
 export type IntroductionView =
-  /** A match waiting on this person. Nothing about the other side. */
+  /** A match waiting on this person. Nothing about the other side. `id` is
+      this person's own handle for it, never the row id. */
   | { id: string; stage: "ask" }
   /** Both said yes. This person's own principle words, and nothing about the other. */
   | { id: string; stage: "introduced"; principle: string };
@@ -236,6 +238,11 @@ export interface IntroductionState {
   introduction: IntroductionView | null;
 }
 
+/* A person reaches a row only through their OWN side's handle: the other
+   side's handle, or the row id, finds nothing, exactly like a missing row. */
+const byHandle = (profileId: string, handle: string) => or(
+  and(eq(introductions.handleA, handle), eq(introductions.profileAId, profileId)),
+  and(eq(introductions.handleB, handle), eq(introductions.profileBId, profileId)));
 const involves = (profileId: string) => or(eq(introductions.profileAId, profileId), eq(introductions.profileBId, profileId));
 
 async function dbNow(db: Pick<Db, "execute">): Promise<Date> {
@@ -274,11 +281,11 @@ export async function readIntroductionState(db: Pick<Db, "select" | "execute">, 
     if (sideState(row, profileId, now) !== "introduced") continue;
     const me = mine(row, profileId);
     if (!me.text) continue;
-    state.introduction = { id: row.id, stage: "introduced", principle: me.text };
+    state.introduction = { id: me.handle, stage: "introduced", principle: me.text };
     return state;
   }
   for (const row of rows) {
-    if (sideState(row, profileId, now) === "ask") { state.introduction = { id: row.id, stage: "ask" }; return state; }
+    if (sideState(row, profileId, now) === "ask") { state.introduction = { id: mine(row, profileId).handle, stage: "ask" }; return state; }
   }
   return state;
 }
@@ -333,10 +340,10 @@ export type AnswerOutcome =
   | { ok: true; result: { stage: "waiting" } | { stage: "declined" } | IntroductionView & { stage: "introduced" }; followUps: FollowUp[] }
   | { ok: false; status: 404 | 409 };
 
-export async function answerIntroduction(db: Db, profileId: string, id: string, answer: IntroductionAnswer): Promise<AnswerOutcome> {
+export async function answerIntroduction(db: Db, profileId: string, handle: string, answer: IntroductionAnswer): Promise<AnswerOutcome> {
   const outcome = await db.transaction(async (tx): Promise<AnswerOutcome | "introduced"> => {
     await lockIntroductions(tx);
-    const [row] = await tx.select().from(introductions).where(and(eq(introductions.id, id), involves(profileId))).for("update").limit(1);
+    const [row] = await tx.select().from(introductions).where(byHandle(profileId, handle)).for("update").limit(1);
     /* Somebody else's introduction answers exactly like one that does not exist. */
     if (!row) return { ok: false, status: 404 };
     const now = await dbNow(tx);
@@ -369,7 +376,7 @@ export async function answerIntroduction(db: Db, profileId: string, id: string, 
   });
   if (outcome !== "introduced") return outcome;
   const state = await readIntroductionState(db, profileId, true);
-  return state.introduction?.stage === "introduced" && state.introduction.id === id
+  return state.introduction?.stage === "introduced" && state.introduction.id === handle
     ? { ok: true, result: state.introduction, followUps: [] }
     : { ok: true, result: { stage: "waiting" }, followUps: [] };
 }
@@ -380,13 +387,13 @@ export async function answerIntroduction(db: Db, profileId: string, id: string, 
  * introductions on and has not withdrawn. `changed` is false when it had
  * already been dismissed, so no pass is queued for nothing.
  */
-export async function markIntroductionSeen(db: Db, profileId: string, id: string): Promise<"changed" | "unchanged" | "missing"> {
+export async function markIntroductionSeen(db: Db, profileId: string, handle: string): Promise<"changed" | "unchanged" | "missing"> {
   return db.transaction(async (tx) => {
     await lockIntroductions(tx);
     const [consent] = await tx.select({ enabled: introductionConsents.enabled }).from(introductionConsents)
       .where(eq(introductionConsents.profileId, profileId)).limit(1);
     if (!consent?.enabled) return "missing";
-    const [row] = await tx.select().from(introductions).where(and(eq(introductions.id, id), involves(profileId))).for("update").limit(1);
+    const [row] = await tx.select().from(introductions).where(byHandle(profileId, handle)).for("update").limit(1);
     if (!row || row.status !== "accepted") return "missing";
     const me = mine(row, profileId);
     if (me.withdrawn) return "missing";

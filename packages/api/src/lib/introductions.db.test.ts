@@ -55,10 +55,23 @@ function routed(p: Person, opts: { available?: boolean; type?: string; keyScoped
   };
   routes.route("/", createIntroductionRoutes({ getDatabase: () => t.db as never, available: () => opts.available ?? true, requestMatch,
     ...(opts.auth === null ? {} : { authMiddleware: opts.auth ?? auth }) }));
-  const post = (path: string, body?: unknown) => routes.request(path, { method: "POST", headers: { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body) });
+  /* Tests name a row by its row id; a person only ever holds their own
+     side's handle, so the path is rewritten to it. Someone who is not a side
+     is handed side A's handle: another person's handle, which must 404. */
+  const post = async (path: string, body?: unknown) => {
+    const rowId = /^\/([0-9a-f-]{36})\//.exec(path)?.[1];
+    const routedPath = rowId ? path.replace(rowId, (await handleOf(p, rowId)) ?? rowId) : path;
+    return routes.request(routedPath, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+  };
   const state = async () => (await (await routes.request("/")).json()) as Record<string, unknown> & { introduction: null | Record<string, string> };
   return { routes, requestMatch, post, state, raw: async () => (await routes.request("/")).text() };
+}
+
+/** The handle a person holds for a row: their side's, or side A's if they are not a side. */
+async function handleOf(p: Person, rowId: string): Promise<string | undefined> {
+  const [row] = await t.sql`SELECT CASE WHEN profile_b_id = ${p.profileId} THEN handle_b ELSE handle_a END AS handle FROM introductions WHERE id = ${rowId}`;
+  return row?.handle as string | undefined;
 }
 
 async function pair(names = ["Yunji Chung", "Jun Park"]) {
@@ -326,14 +339,14 @@ describe("answering", () => {
   it("asks each side anonymously, and introduces them only when both say yes, each in their own words", async () => {
     const { a, b, id } = await pair();
     const ra = routed(a), rb = routed(b);
-    expect((await ra.state()).introduction).toEqual({ id, stage: "ask" });
+    expect((await ra.state()).introduction).toEqual({ id: await handleOf(a, id), stage: "ask" });
     for (const leak of ["Jun", "Park", FINISH_TOO]) expect(await ra.raw(), `the ask carries ${leak}`).not.toContain(leak);
     expect(await (await ra.post(`/${id}/answer`, { answer: "yes" })).json()).toEqual({ stage: "waiting" });
     expect(ra.requestMatch, "a yes queues its own lapse pass").toHaveBeenCalledWith(expect.objectContaining({ profileId: a.profileId, key: `asked:${id}` }));
     expect((await ra.state()).introduction, "waiting is invisible").toBeNull();
     expect(await (await rb.post(`/${id}/answer`, { answer: "yes" })).json())
-      .toEqual({ id, stage: "introduced", principle: FINISH_TOO });
-    expect((await ra.state()).introduction).toEqual({ id, stage: "introduced", principle: FINISH });
+      .toEqual({ id: await handleOf(b, id), stage: "introduced", principle: FINISH_TOO });
+    expect((await ra.state()).introduction).toEqual({ id: await handleOf(a, id), stage: "introduced", principle: FINISH });
     const seen = await ra.raw();
     for (const leak of [FINISH_TOO, "Jun", "Park", b.profileId]) expect(seen, `A's introduction carries ${leak}`).not.toContain(leak);
     expect((await ra.post(`/${id}/seen`)).status).toBe(200);
@@ -476,6 +489,21 @@ describe("answering", () => {
     expect(theirs.status).toBe(404);
     expect((await rs.post(`/${id}/seen`)).status).toBe(404);
     expect((await rs.state()).introduction).toBeNull();
+    expect(await t.sql`SELECT answer_a, answer_b FROM introductions`).toEqual([{ answer_a: null, answer_b: null }]);
+  });
+
+  it("gives each side its own handle; the row id and the other side's handle find nothing", async () => {
+    const { a, b, id } = await pair();
+    const ra = routed(a), rb = routed(b);
+    const mine = (await ra.state()).introduction!.id, theirs = (await rb.state()).introduction!.id;
+    expect(mine).not.toBe(theirs);
+    expect([mine, theirs]).not.toContain(id);
+    const missing = await ra.routes.request(`/${randomUUID()}/answer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answer: "yes" }) });
+    for (const other of [theirs, id]) {
+      const tried = await ra.routes.request(`/${other}/answer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answer: "yes" }) });
+      expect([tried.status, await tried.text()], "a handle that is not yours").toEqual([missing.status, await missing.clone().text()]);
+      expect((await ra.routes.request(`/${other}/seen`, { method: "POST" })).status).toBe(404);
+    }
     expect(await t.sql`SELECT answer_a, answer_b FROM introductions`).toEqual([{ answer_a: null, answer_b: null }]);
   });
 

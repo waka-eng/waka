@@ -1,5 +1,5 @@
 {
-  "id": "64a357b4-178d-47d4-ba2a-1b46131588e5",
+  "id": "d0d5fc23-5fa0-4a78-8d51-faffda45cbd3",
   "prevId": "f76e35f5-a403-48d9-a718-52dc4510a0ba",
   "version": "7",
   "dialect": "postgresql",
@@ -10001,6 +10001,20 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "handle_a": {
+          "name": "handle_a",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "handle_b": {
+          "name": "handle_b",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
         "profile_a_id": {
           "name": "profile_a_id",
           "type": "uuid",
@@ -10119,6 +10133,36 @@
             },
             {
               "expression": "profile_b_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "introductions_handle_a_unique_idx": {
+          "name": "introductions_handle_a_unique_idx",
+          "columns": [
+            {
+              "expression": "handle_a",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "introductions_handle_b_unique_idx": {
+          "name": "introductions_handle_b_unique_idx",
+          "columns": [
+            {
+              "expression": "handle_b",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

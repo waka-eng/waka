@@ -55,6 +55,15 @@ export type IntroductionAnswer = (typeof introductionAnswerValues)[number];
 export const introductions = pgTable("introductions", {
   id: uuid("id").primaryKey().defaultRandom(),
   /**
+   * EACH SIDE'S OWN HANDLE. The only id a person is ever given for this row,
+   * in what they read and in the URLs they answer through. Two random
+   * values, so the two people never hold a shared token that would let them
+   * (or anyone who sees both sides' logs or storage) confirm they are each
+   * other's match. The row id never leaves the server.
+   */
+  handleA: uuid("handle_a").notNull().defaultRandom(),
+  handleB: uuid("handle_b").notNull().defaultRandom(),
+  /**
    * Null once that person's account is erased. Erasure is a withdrawal of
    * their side (migration 0097's profile trigger erases their words first),
    * never a delete of the shared row: deleting it would change what the
@@ -84,6 +93,8 @@ export const introductions = pgTable("introductions", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   pairUnique: uniqueIndex("introductions_pair_unique_idx").on(table.profileAId, table.profileBId),
+  handleAUnique: uniqueIndex("introductions_handle_a_unique_idx").on(table.handleA),
+  handleBUnique: uniqueIndex("introductions_handle_b_unique_idx").on(table.handleB),
   profileBIdx: index("introductions_profile_b_idx").on(table.profileBId),
   principleAFk: foreignKey({ columns: [table.profileAId, table.principleAId],
     foreignColumns: [principles.profileId, principles.id], name: "introductions_principle_a_fk" }),

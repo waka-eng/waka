@@ -13,6 +13,8 @@ CREATE TABLE "introduction_followups" (
 --> statement-breakpoint
 CREATE TABLE "introductions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"handle_a" uuid DEFAULT gen_random_uuid() NOT NULL,
+	"handle_b" uuid DEFAULT gen_random_uuid() NOT NULL,
 	"profile_a_id" uuid,
 	"profile_b_id" uuid,
 	"principle_a_id" uuid,
@@ -42,6 +44,8 @@ ALTER TABLE "introductions" ADD CONSTRAINT "introductions_profile_b_id_profiles_
 ALTER TABLE "introductions" ADD CONSTRAINT "introductions_principle_a_fk" FOREIGN KEY ("profile_a_id","principle_a_id") REFERENCES "public"."principles"("profile_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "introductions" ADD CONSTRAINT "introductions_principle_b_fk" FOREIGN KEY ("profile_b_id","principle_b_id") REFERENCES "public"."principles"("profile_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "introductions_pair_unique_idx" ON "introductions" USING btree ("profile_a_id","profile_b_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "introductions_handle_a_unique_idx" ON "introductions" USING btree ("handle_a");--> statement-breakpoint
+CREATE UNIQUE INDEX "introductions_handle_b_unique_idx" ON "introductions" USING btree ("handle_b");--> statement-breakpoint
 CREATE INDEX "introductions_profile_b_idx" ON "introductions" USING btree ("profile_b_id");--> statement-breakpoint
 -- Introductions are between people. An agent or a room's mind can neither
 -- consent nor be introduced, whatever route or job tries to write the row.
