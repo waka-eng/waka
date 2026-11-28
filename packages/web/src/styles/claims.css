@@ -7415,6 +7415,17 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 @media (prefers-reduced-motion: reduce) { .waka-home-bar-saved { animation: none; } }
 
+/* ═══ WHAT DID NOT COME IN (day one import; code review, 2026-11-27) ═══════
+   In the pull's place, like "Saved", but it stays: a hunch or a reading may
+   take the bubble while this is still true. Plain text in the bar's own ink,
+   never filled; a press puts it away. */
+.waka-home-bar-notice {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + var(--sp-12));
+  margin: 0 auto; max-width: var(--bubble-max); padding: var(--sp-8) var(--sp-16); border: 0; background: none;
+  color: var(--ink); font-family: var(--waka-face); font-size: var(--t-ui); line-height: var(--bubble-lh);
+  text-align: center; text-wrap: pretty; cursor: pointer;
+}
+
 /* ═══ THE PHOTO DOOR, LIT WHILE THE CREATURE ASKS (day one import, flow A) ═══
    The board's first frame: the ask is in the bubble and the bar's photo
    button is lit, because after the ask it is the same door. Light only: the

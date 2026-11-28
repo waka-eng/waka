@@ -22,7 +22,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { apiMockFrom, dataMockFrom, mountWorld, VIEWER_ID, type MountedWorld } from './helpers/render-home';
-import { createInspiration, presignAttachment, uploadToPresignedUrl } from '../src/lib/api';
+import { createInspiration, fetchHunch, presignAttachment, uploadToPresignedUrl } from '../src/lib/api';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [] as Array<{ id: string; text: string; daysAgo: number }> }));
 vi.mock('../src/lib/data', async original => ({ ...await original<typeof import('../src/lib/data')>(), ...dataMockFrom(FACTS) }));
@@ -51,10 +51,13 @@ beforeEach(() => {
   localStorage.clear();
   vi.mocked(createInspiration).mockClear(); vi.mocked(presignAttachment).mockClear(); vi.mocked(uploadToPresignedUrl).mockClear();
   vi.mocked(uploadToPresignedUrl).mockImplementation(async () => undefined);
+  vi.mocked(fetchHunch).mockReset().mockImplementation(async () => null);
+  FACTS.inspirations = [];
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 });
 afterEach(() => { world?.unmount(); world = undefined; vi.useRealTimers(); });
 async function settle(ms = 100) { for (let turn = 0; turn < 8; turn += 1) { await world!.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); } }
+const notice = () => world!.container.querySelector('.waka-home-bar-notice')?.textContent ?? '';
 const bubble = () => world!.container.querySelector('.jar-char-bubble')?.textContent ?? '';
 const act_ = (label: string) => [...world!.container.querySelectorAll<HTMLButtonElement>('.jar-char-bubble-act')].find(b => b.textContent === label);
 const photo = (name: string) => new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], name, { type: 'image/png' });
@@ -117,6 +120,62 @@ it('tries a failed upload once more, quietly, then leaves it out and says where 
   expect(tries.get('https://bucket.test/flaky.png')).toBe(2);
   const kept = vi.mocked(createInspiration).mock.calls.map(([input]) => input.attachments![0]!.type === 'image' && input.attachments![0]!.key);
   expect(kept.sort()).toEqual(['uploads/fine.png', 'uploads/flaky.png']);
-  expect(bubble()).toContain('A few didn’t come in. The photo button can add them again.');
+  expect(notice(), 'what did not come in was not said').toBe('A few didn’t come in. The photo button can add them again.');
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-home-bar-notice')!.click()); // the notice stands in the pull's place
   expect(world.container.querySelector('.waka-home-bar-pull')?.textContent).toContain('2 inspirations');
+});
+
+/* CODE REVIEW, 2026-11-27: with nothing landed the bubble said "Reading them
+   now…" over nothing. It goes straight back to its own line, and the bar says
+   plainly that none came in, with the door that works. */
+it('says plainly that none came in, and never that it is reading them', async () => {
+  vi.mocked(uploadToPresignedUrl).mockImplementation(async () => { throw new Error('Network unreachable while uploading attachment'); });
+  world = await mountWorld(FACTS); await settle();
+  await pick('photos', [photo('one.png'), photo('two.png')]);
+  await settle(400);
+  expect(vi.mocked(createInspiration)).not.toHaveBeenCalled();
+  expect(bubble()).not.toContain('Reading them now');
+  expect(notice()).toBe('None of them came in. The photo button can add them again.');
+});
+
+it('does not send files to the photo button', async () => {
+  vi.mocked(uploadToPresignedUrl).mockImplementation(async () => { throw new Error('Network unreachable while uploading attachment'); });
+  world = await mountWorld(FACTS); await settle();
+  await pick('files', [new File([new Uint8Array(8)], 'letter.pdf', { type: 'application/pdf' })]);
+  await settle(400);
+  expect(notice()).toBe('None of them came in.');
+});
+
+it('keeps the notice when a hunch takes the bubble, until it is pressed', async () => {
+  vi.mocked(uploadToPresignedUrl).mockImplementation(async (url: string) => { if (url.endsWith('broken.png')) throw new Error('Network unreachable'); });
+  vi.mocked(fetchHunch).mockImplementation(async () => vi.mocked(createInspiration).mock.calls.length
+    ? { id: 'h1', body: 'You keep saving quiet rooms. Am I close?', inspirationIds: [], status: 'pending' as const } : null);
+  world = await mountWorld(FACTS); await settle();
+  await pick('photos', [photo('fine.png'), photo('broken.png')]);
+  await settle(1000);
+  expect(bubble(), 'the hunch did not come').toContain('Am I close?');
+  expect(notice(), 'the hunch took the notice away').toBe('A few didn’t come in. The photo button can add them again.');
+  await act(async () => world!.container.querySelector<HTMLButtonElement>('.waka-home-bar-notice')!.click());
+  expect(world.container.querySelector('.waka-home-bar-notice')).toBeNull();
+});
+
+/* CODE REVIEW, 2026-11-27: the inputs lived inside the ask, so a pick that
+   came back after the ask had gone was lost. They live with the page now. */
+it('lands a pick that comes back after the ask has gone', async () => {
+  world = await mountWorld(FACTS); await settle();
+  expect(world.container.querySelector('.jar-char-bubble input[type="file"]'), 'a picker still lives in the bubble').toBeNull();
+  await act(async () => act_('Not now')!.click()); await settle();
+  await pick('photos', [photo('late.png')]);
+  await settle(400);
+  expect(vi.mocked(createInspiration)).toHaveBeenCalledTimes(1);
+});
+
+it('waits for the first ask for a hunch before asking for imports', async () => {
+  FACTS.inspirations = [{ id: 'river', text: 'Walked home the long way to hear the river.', daysAgo: 1 }];
+  let answer!: (value: null) => void;
+  vi.mocked(fetchHunch).mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+  world = await mountWorld(FACTS); await settle();
+  expect(bubble(), 'the ask stood before the hunch was asked for').not.toContain('Saved things in other apps?');
+  await act(async () => answer(null)); await settle();
+  expect(bubble()).toContain('Saved things in other apps?');
 });

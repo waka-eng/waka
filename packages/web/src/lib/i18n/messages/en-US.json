@@ -850,5 +850,8 @@
   "worldImportFiles": "Files",
   "worldImportBringing": "Bringing them in…",
   "worldImportReading": "Reading them now…",
-  "worldImportLeftOut": "A few didn’t come in. The photo button can add them again."
+  "worldImportNoneCameIn": "None of them came in.",
+  "worldImportFewLeftOut": "A few didn’t come in.",
+  "worldImportTryPhotoButton": "The photo button can add them again.",
+  "worldImportTryLater": "Try again later."
 }

@@ -17,10 +17,11 @@
  * NEVER A DEAD END. A file the sniffer refuses (a TIFF, an empty file) is
  * left out before anything is uploaded. One that fails on the way is tried
  * once more, quietly, under the SAME save identity, so a save that did land
- * behind a lost response is not made twice; a second failure leaves it out.
- * The account's hourly upload budget ending part way through stops the
- * queue, and the rest are left out too. The person is told only that some
- * did not come in, and where the door is to try them again.
+ * behind a lost response is not made twice; a second failure leaves it out,
+ * and a refusal that would only be refused again leaves it out at once (see
+ * "WHICH FAILURES STOP" below). The account's hourly upload budget ending part
+ * way through stops the queue, and the rest are left out too. The person is
+ * told plainly that some, or none, came in, and what they can do about it.
  */
 import { ApiError, createInspiration, presignAttachment, uploadToPresignedUrl, type ApiInspiration } from './api';
 import { inspectAttachmentFile } from './api/file-accept';
@@ -90,10 +91,37 @@ async function readyForImport(file: File, door: ImportDoor): Promise<Ready | nul
   }
 }
 
-/** The budget ran out, or the session did: nothing after this can land. */
-function stopsTheQueue(reason: unknown): boolean {
-  return reason instanceof ApiError && (reason.code === 'attachment_upload_capacity' || reason.status === 401 || reason.status === 403);
+/* ═══ WHICH FAILURES STOP, WHICH ARE TRIED AGAIN, WHICH ARE LEFT OUT ══════
+   (code review, 2026-11-27.) A failure is read by WHERE it happened, because
+   the same status means different things at the API and at the bucket:
+     - THE API refusing the session (401, 403) or the account's hourly upload
+       budget (429 `attachment_upload_capacity`) stops the whole queue: nothing
+       after it can land either.
+     - THE BUCKET refusing a PUT (a 403 from an expired or mismatched signed
+       URL), a lost response (status 0), a timeout, a 408, another 429 or a
+       5xx is tried once more. The upload is tried again with a fresh ticket,
+       which is what the notepad's own retry does (`uploadInspirationMedia`:
+       "retry gets a fresh ticket; completed earlier files remain").
+     - Anything else the API says no to (400 or 413 validation, 409
+       `save_request_conflict`) would say no again, so the item is left out
+       at once. */
+type Stage = 'api' | 'bucket';
+class QueueStop extends Error { constructor(readonly capacity: boolean) { super('import_stopped'); } }
+function stopsTheQueue(reason: unknown, stage: Stage): QueueStop | null {
+  if (!(reason instanceof ApiError) || stage !== 'api') return null;
+  if (reason.code === 'attachment_upload_capacity') return new QueueStop(true);
+  return reason.status === 401 || reason.status === 403 ? new QueueStop(false) : null;
 }
+function triedAgain(reason: unknown, stage: Stage): boolean {
+  if (!(reason instanceof ApiError)) return true;
+  const { status } = reason;
+  if (stage === 'bucket' && status === 403) return true;
+  return status === 0 || status === 408 || status === 429 || status >= 500;
+}
+
+/** The deadline on one try, presign to save, as `uploadInspirationMedia` sets
+    on each transfer: a stalled PUT fails, and the run always finishes. */
+const TRANSFER_DEADLINE_MS = 120_000;
 
 /**
  * ONE SAVE FOR ONE ITEM, tried twice at most. The upload is not repeated once
@@ -106,36 +134,54 @@ async function bringOne(item: Ready, profileId: string, signal: AbortSignal): Pr
   let uploaded: { key: string; contentType: string; size: number } | null = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (signal.aborted) return null;
+    const transfer = new AbortController();
+    const abort = () => transfer.abort(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    const deadline = setTimeout(() => transfer.abort(new DOMException('Upload timed out', 'TimeoutError')), TRANSFER_DEADLINE_MS);
+    let stage: Stage = 'api';
     try {
       if (!uploaded) {
-        const signed = await presignAttachment({ filename: item.name || 'attachment', contentType: item.contentType, size: item.blob.size }, signal, { profile: profileId });
-        await uploadToPresignedUrl(signed.uploadUrl, item.blob, signed.headers, signal);
+        const signed = await presignAttachment({ filename: item.name || 'attachment', contentType: item.contentType, size: item.blob.size }, transfer.signal, { profile: profileId });
+        stage = 'bucket';
+        await uploadToPresignedUrl(signed.uploadUrl, item.blob, signed.headers, transfer.signal);
+        if (transfer.signal.aborted) throw transfer.signal.reason;
         uploaded = { key: signed.key, contentType: item.contentType, size: item.blob.size };
+        stage = 'api';
       }
       /* A FILE DOES NOT NAME A KIND (as in `keepIt`): a photo alone is an
          'image', a file alone is a 'note'. */
       return await createInspiration({
         text: '', kind: item.type === 'image' ? 'image' : 'note', source: 'app',
         attachments: [{ type: item.type, ...uploaded, ...(item.name ? { name: item.name } : {}) }],
-      }, { profile: profileId, requestId, signal });
+      }, { profile: profileId, requestId, signal: transfer.signal });
     } catch (reason) {
-      if (stopsTheQueue(reason)) throw reason;
+      const stop = stopsTheQueue(reason, stage);
+      if (stop) throw stop;
+      if (signal.aborted || !triedAgain(reason, stage)) return null;
+    } finally {
+      clearTimeout(deadline);
+      signal.removeEventListener('abort', abort);
     }
   }
   return null;
 }
 
+/** How a run ended. `capacity` is the hourly upload budget running out. */
+export interface ImportOutcome { landed: number; leftOut: number; capacity: boolean }
+
 /**
  * THE QUEUE. Checks every pick, keeps what fits the hourly budget, and brings
  * them in a few at a time. `onLanded` is called as each save lands, in the
  * order they land, which is what lets the field light up one by one rather
- * than all at the end. Resolves with how many landed and how many were left
- * out; it never rejects for one item's sake.
+ * than all at the end. It never rejects for one item's sake. The API does not
+ * say how much of the hour's budget earlier uploads used, so a pick that fits
+ * the cap can still meet the 429 part way; the queue stops there and the rest
+ * are counted as left out.
  */
 export async function bringInImports(input: {
   files: File[]; door: ImportDoor; profileId: string; signal: AbortSignal;
   onLanded: (saved: ApiInspiration) => void;
-}): Promise<{ landed: number; leftOut: number }> {
+}): Promise<ImportOutcome> {
   const checked = await Promise.all(input.files.map(file => readyForImport(file, input.door)));
   const queue: Ready[] = [];
   let bytes = 0;
@@ -143,18 +189,19 @@ export async function bringInImports(input: {
     if (!item || queue.length >= IMPORT_MAX_ITEMS || bytes + item.blob.size > IMPORT_MAX_BYTES) continue;
     queue.push(item); bytes += item.blob.size;
   }
-  let landed = 0, next = 0, stopped = false;
+  let landed = 0, next = 0, stopped = false, capacity = false;
   const worker = async () => {
     while (!stopped && !input.signal.aborted && next < queue.length) {
       const item = queue[next++]!;
       try {
         const saved = await bringOne(item, input.profileId, input.signal);
         if (saved && !input.signal.aborted) { landed += 1; input.onLanded(saved); }
-      } catch {
+      } catch (reason) {
         stopped = true;
+        if (reason instanceof QueueStop && reason.capacity) capacity = true;
       }
     }
   };
   await Promise.all(Array.from({ length: Math.min(IMPORT_CONCURRENCY, queue.length) }, worker));
-  return { landed, leftOut: input.files.length - landed };
+  return { landed, leftOut: input.files.length - landed, capacity };
 }

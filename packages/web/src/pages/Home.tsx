@@ -242,7 +242,7 @@ import {
   type ApiInspiration,
 } from "../lib/api";
 import { FEW_SAVES, bringInImports, importAnswered, rememberImportAnswer, type ImportDoor } from "../lib/day-one-import";
-import { ImportAsk } from "../components/ImportAsk";
+import { ImportAsk, ImportPickers } from "../components/ImportAsk";
 import { LoadingHome } from "../components/LoadingHome";
 import { ReadingPausedNotice } from "../components/ReadingPausedNotice";
 import { useReadingPaused } from "../lib/use-reading-paused";
@@ -327,8 +327,8 @@ const IMPORT_FLIGHT_MS = 1100;
 /** How long "Reading them now…" waits for the hunch or the reading before the
     bubble goes back to its own line (the hunch poll asks for 30 seconds). */
 const IMPORT_READING_MS = 45_000;
-/** How long the "a few didn't come in" line stands when nothing came in. */
-const IMPORT_LEFT_OUT_MS = 8_000;
+/** How long the line saying what did not come in stands above the bar. */
+const IMPORT_NOTICE_MS = 10_000;
 
 /* HOW LONG A PAUSE IN TYPING COUNTS AS FINISHING A NAME. Long enough that
    a normal hesitation mid-word does not write, short enough that closing
@@ -2059,13 +2059,16 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   const [hunchStep, setHunchStep] = useState<null | { phase: 'asking' | 'thinking' | 'thanks'; old: string }>(null);
   const hunchProfile = !standingAsAgent && !offline && storageScope ? storageScope.profileId : null;
   const hunchPolls = useRef(0);
+  /** The first ask for a hunch has answered (or failed): until then the day
+      one ask does not stand in a place a hunch may be about to take. */
+  const [hunchAsked, setHunchAsked] = useState(false);
   /** Asks for the hunch now and every 2.5s until one other than `notId` is there (or a reading is). */
   const pollHunch = useCallback((notId: string | null, tries = 12) => {
     if (!hunchProfile) return;
     const run = ++hunchPolls.current;
     const ask = (left: number) => {
       if (run !== hunchPolls.current) return;
-      void fetchHunch({ profile: hunchProfile }).then(next => {
+      void fetchHunch({ profile: hunchProfile }).finally(() => setHunchAsked(true)).then(next => {
         if (run !== hunchPolls.current) return;
         if (next && next.id !== notId) { setHunch(next); setHunchStep(null); return; }
         if (!next && notId === null) setHunch(null);
@@ -5372,16 +5375,29 @@ const RETRY_READ_LIMIT_MS = 20_000;
      STATES RENDER, NUMERALS NEVER: the bubble says "Bringing them in…" and
      then "Reading them now…", never how many. */
   const [importAnsweredHere, setImportAnsweredHere] = useState(() => importAnswered(storageScope));
-  const [importRun, setImportRun] = useState<null | { phase: 'bringing' | 'reading'; leftOut: boolean }>(null);
+  const [importRun, setImportRun] = useState<null | 'bringing' | 'reading'>(null);
+  /* WHAT DID NOT COME IN, said above the bar rather than in the bubble, so a
+     hunch or a reading landing in the bubble does not take it away (code
+     review, 2026-11-27). It stands for `IMPORT_NOTICE_MS`, or until pressed. */
+  const [importNotice, setImportNotice] = useState<MessageKey[] | null>(null);
   const [importLights, setImportLights] = useState<Array<{ id: string; x: number }>>([]);
   const importTimers = useRef<number[]>([]);
   const importAbort = useRef<AbortController | null>(null);
+  /* THE PICKERS LIVE HERE, NOT IN THE BUBBLE (code review, 2026-11-27). The
+     system picker can stay open for a long time, and the bubble's ask may go
+     while it is open (a hunch lands, the connection drops); an input that
+     unmounted with it would drop the pick on the floor. Here, a pick always
+     lands. */
+  const importPhotosRef = useRef<HTMLInputElement>(null);
+  const importFilesRef = useRef<HTMLInputElement>(null);
   useEffect(() => () => { importAbort.current?.abort(); importTimers.current.forEach(id => window.clearTimeout(id)); }, []);
   const askToImport = !importAnsweredHere && !importRun && phase === 'ready' && atWall.kind === 'self' && !standingAsAgent &&
     !offline && Boolean(storageScope) && savedCount !== null && savedCount < FEW_SAVES &&
     /* A READING OR A HUNCH IS ALREADY WHAT THE BUBBLE IS FOR: the ask waits
-       behind them, since the reading is the product and the ask only hurries it. */
-    !lead && !hunch;
+       behind them, since the reading is the product and the ask only hurries
+       it. With saves to guess from, it also waits for the first ask for a
+       hunch to answer, so it never stands for a moment and is then replaced. */
+    !lead && !hunch && (savedCount === 0 || hunchAsked);
   /* THE SAME LANDING A SAVE FROM THE NOTEPAD GETS (`onResolved` above):
      known to the details, born on the field, counted, its processing tracked. */
   const landImported = (made: ApiInspiration) => {
@@ -5394,12 +5410,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
     setInspirations(previous => previous?.some(item => item.id === made.id) ? previous : [...(previous ?? []), detail]);
     if (made.processing) sourceProcessing.track(made.id, made.processing);
   };
+  /* ANSWERED ON NOT NOW, OR WHEN AN IMPORT ACTUALLY STARTS: opening the
+     picker and closing it empty is not an answer, so the ask stays. */
   const answerImport = (answer: ImportDoor | 'not_now') => { rememberImportAnswer(storageScope, answer); setImportAnsweredHere(true); };
   const startImport = (files: File[], door: ImportDoor) => {
     if (!storageScope || importAbort.current) return;
     answerImport(door);
     const controller = new AbortController(); importAbort.current = controller;
-    setImportRun({ phase: 'bringing', leftOut: false });
+    setImportRun('bringing'); setImportNotice(null);
     const flights: Promise<void>[] = [];
     void bringInImports({ files, door, profileId: storageScope.profileId, signal: controller.signal, onLanded: made => {
       /* THE LIGHT EXPLAINS THE SAVE: it rises from the bar, where saving
@@ -5414,18 +5432,27 @@ const RETRY_READ_LIMIT_MS = 20_000;
           landImported(made); setImportLights(lights => lights.filter(item => item.id !== light.id)); done();
         }, IMPORT_FLIGHT_MS));
       }));
-    } }).then(async ({ landed, leftOut }) => {
+    } }).then(async ({ landed, leftOut, capacity }) => {
       await Promise.all(flights);
       if (controller.signal.aborted) return;
       importAbort.current = null;
-      setImportRun({ phase: 'reading', leftOut: leftOut > 0 });
       /* NOTHING LANDED: no reading is coming from this, so the bubble goes
-         back to what it says, keeping the left out line for a moment. */
-      importTimers.current.push(window.setTimeout(() => setImportRun(null), landed ? IMPORT_READING_MS : IMPORT_LEFT_OUT_MS));
+         straight back to what it says and does not claim to be reading. */
+      setImportRun(landed ? 'reading' : null);
+      if (landed) importTimers.current.push(window.setTimeout(() => setImportRun(run => run === 'reading' ? null : run), IMPORT_READING_MS));
+      if (leftOut) {
+        /* SAID PLAINLY, WITH A DOOR THAT WORKS. Photos can go again through
+           the bar's photo button; the bar has no file door, so files are only
+           said not to have come in. An hourly budget that ran out is "try
+           again later", whichever door. */
+        const next: MessageKey | null = capacity ? 'worldImportTryLater' : door === 'photos' ? 'worldImportTryPhotoButton' : null;
+        setImportNotice([landed ? 'worldImportFewLeftOut' : 'worldImportNoneCameIn', ...(next ? [next] : [])]);
+        importTimers.current.push(window.setTimeout(() => setImportNotice(null), IMPORT_NOTICE_MS));
+      }
     });
   };
   /* The reading or the hunch arriving is what the bubble was waiting for. */
-  useEffect(() => { if ((lead || hunch) && importRun?.phase === 'reading') setImportRun(null); }, [lead, hunch, importRun?.phase]);
+  useEffect(() => { if ((lead || hunch) && importRun === 'reading') setImportRun(null); }, [lead, hunch, importRun]);
   const mouthWasOpen = useRef(mouthOpen);
   useEffect(() => {
     if (mouthWasOpen.current && !mouthOpen) freshUnderway.current = false;
@@ -9972,16 +9999,14 @@ const RETRY_READ_LIMIT_MS = 20_000;
                         importRun && !standingAsAgent ? (
                           /* ═══ BRINGING THEM IN, THEN READING THEM (day one
                              import) ═══ A state, never a count. */
-                          <>
-                            <span className="jar-char-bubble-reading" role="status">
-                              {say(importRun.phase === 'bringing' ? 'worldImportBringing' : 'worldImportReading')}</span>
-                            {importRun.leftOut ? <span className="jar-char-bubble-of">{say('worldImportLeftOut')}</span> : null}
-                          </>
+                          <span className="jar-char-bubble-reading" role="status">
+                            {say(importRun === 'bringing' ? 'worldImportBringing' : 'worldImportReading')}</span>
                         ) : askToImport ? (
                           /* ═══ THE ONE TIME ASK (day one import) ═══ Only
                              while there is no hunch (`askToImport`); asked
                              once, and any answer gives the bubble back. */
-                          <ImportAsk locale={locale} onPick={startImport} onNotNow={() => answerImport('not_now')} />
+                          <ImportAsk locale={locale} onOpen={door => (door === 'photos' ? importPhotosRef : importFilesRef).current?.click()}
+                            onNotNow={() => answerImport('not_now')} />
                         ) : hunch && !standingAsAgent ? (
                           /* ═══ A HUNCH (insight goal, phase 3) ═══ See
                              `pollHunch`: asked, then answered in place. */
@@ -11778,6 +11803,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             : hunchStep?.phase === 'asking' ? { placeholder: say('worldReadingCloser'), onSend: sendHunchCorrection, onCancel: () => setHunchStep(null) }
             : undefined}
           saved={barSaved}
+          notice={importNotice ? { text: importNotice.map(key => say(key)).join(' '), onDismiss: () => setImportNotice(null) } : undefined}
           /* ON AN AGENT'S WALL THE PULL OPENS ITS ARCHIVE. The sheet reads
              your own field, so it is yours alone; the agent's saves are its
              archive's, which leads with the same search. With the Actions
@@ -11796,6 +11822,9 @@ const RETRY_READ_LIMIT_MS = 20_000;
             }}
         />
       ) : null}
+      {/* THE DAY ONE ASK'S TWO PICKERS, mounted with the page rather than
+          the bubble (see `importPhotosRef`). */}
+      {storageScope ? <ImportPickers photos={importPhotosRef} files={importFilesRef} onPick={startImport} /> : null}
       {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current} reopenSettings={reopenSettings}
         /* NO ACTIONS MENU (2026-11-08). Founder: "i hate this. better
            position these 4 actions in current experience." Search is the

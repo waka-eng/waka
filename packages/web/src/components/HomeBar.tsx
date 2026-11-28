@@ -62,6 +62,9 @@ export function HomeBar(props: {
   chatDisabled?: boolean;
   /** "Saved", for a moment after a save lands; it takes the pull's place. */
   saved?: boolean;
+  /** A line that must outlast the bubble (day one import: what did not come
+      in). It takes the pull's place, before "Saved"; a press puts it away. */
+  notice?: { text: string; onDismiss: () => void };
   /** "{n} kept ⌃": opens the saves, patterns and principles. `kept` is how
       many you have kept, absent while unknown; at none or unknown it reads "Kept". */
   pull?: { onOpen: () => void; kept?: number };
@@ -80,7 +83,9 @@ export function HomeBar(props: {
   const save = props.save;
   return (
     <div className="waka-home-bar" data-jar-chrome="1" data-jar-interactive="1">
-      {props.saved ? (
+      {props.notice ? (
+        <button type="button" className="waka-home-bar-notice" role="status" onClick={props.notice.onDismiss}>{props.notice.text}</button>
+      ) : props.saved ? (
         <p className="waka-home-bar-saved" role="status">{say('worldBubbleKept')}</p>
       ) : props.pull ? (
         /* A LIT GRABBER, TAPPED OR DRAGGED UP (founder meeting, 2026-11-20:
