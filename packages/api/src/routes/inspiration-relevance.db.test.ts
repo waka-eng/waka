@@ -114,3 +114,12 @@ it('withdraws a cross-source review witness without deleting the authored answer
   const after=await loadReviewAnswerMaterial(t.db as never,f.profileId,answerId);
   expect(after?.sources).toHaveLength(0);expect(after?.questionIncluded).toBe(false);
 });
+it('names a picture save by its picture, never only by its file name',async()=>{
+  const f=await fixture();
+  await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,name) VALUES (${f.profileId},${f.id},'link','https://example.test/a','A link')`;
+  const [photo]=await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,name) VALUES (${f.profileId},${f.id},'image','s3://bucket/IMG_1431.png','IMG_1431.png') RETURNING id`;
+  const item=(await(await f.app.request(`/api/inspiration-relevance/${f.id}`)).json() as {item:{photoId:string|null}}).item;
+  expect(item.photoId).toBe(photo.id);
+  const [plain]=await t.sql`INSERT INTO inspirations(profile_id,text,created_at) VALUES (${f.profileId},'Only words',${new Date(at.getTime()-40*86400000).toISOString()}) RETURNING id`;
+  expect((await(await f.app.request(`/api/inspiration-relevance/${plain.id}`)).json() as {item:{photoId:string|null}}).item.photoId).toBeNull();
+});

@@ -4,6 +4,8 @@ export interface InspirationRelevance {
   id: string; text: string; kind: string | null; createdAt: string;
   sourceRevision: string; reviewVersion: number;
   memoryExcludedAt: string | null; reviewAfter: string | null; attachmentLabel: string | null;
+  /** The save's first picture, read through the owner-checked thumbnail store. */
+  photoId?: string | null;
 }
 export type RelevanceChoice = 'relevant' | 'not_relevant' | 'later';
 export async function listInspirationReviews(profile: string): Promise<InspirationRelevance[]> {

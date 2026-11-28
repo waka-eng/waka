@@ -2554,6 +2554,10 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     listViews.inspirations.onShelf = false;
     setReopenSettings(n => n + 1);
   }, [savesOpenNow]);
+  /* "FROM 2" ENDS WHEN THE SHEET CLOSES (founder, 2026-11-27: opened from
+     "9 inspirations" it still said "From 2 inspirations"). A reading's saves
+     are a look, not a filter that stays. */
+  useEffect(() => { if (!savesOpenNow) setSavesFocus(null); }, [savesOpenNow]);
   const settingsCard = auth ? {
     /* Trash opens the Inspirations page on its deleted view. */
     /* TRASH RISES AS THE SHEET (founder, 2026-11-27: "should open

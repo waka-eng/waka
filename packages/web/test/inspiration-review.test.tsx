@@ -188,3 +188,9 @@ it('opens a chat on the same question, with the inspiration quoted',async()=>{
   expect(turns[1]?.textContent).toContain('Does this still matter to you?');
   expect(reviewInspiration,'opening a chat answered the card').not.toHaveBeenCalled();
 });
+it('shows a picture save as its picture, not its file name (founder, 2026-11-27)',async()=>{
+  vi.mocked(listInspirationReviews).mockResolvedValue([{...original,text:'',attachmentLabel:'IMG_1431.png',photoId:'77777777-7777-4777-8777-777777777777'}]);
+  await open();
+  expect(world.container.querySelector('.waka-review-photo'),'the picture is on the card').not.toBeNull();
+  expect(world.container.textContent).not.toContain('IMG_1431.png');
+});
