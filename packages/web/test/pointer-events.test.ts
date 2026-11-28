@@ -295,6 +295,13 @@ describe("nothing visible loses its press", () => {
                it, so as a hit target it swallowed that card's presses. The
                pull home is the page's, not the creature's. */
             ".waka-ground-being",
+            /* THE PRINCIPLES ASTERISK AND ITS FLARE (code review,
+               2026-11-27): `aria-hidden` light inside the press, overhanging
+               it to touch the screen's edge. They take no presses on purpose,
+               so the press stays 16px clear of the edge's system gestures;
+               the button around them is the press. */
+            ".waka-principles-mark",
+            ".waka-principles-spark-beckon",
           ].includes(selector),
       );
     expect(

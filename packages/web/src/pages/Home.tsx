@@ -9497,22 +9497,16 @@ const RETRY_READ_LIMIT_MS = 20_000;
               </span>
             </div>
           ) : null}
-          {/* ═══ A SPARK AT THE RIGHT EDGE, LEVEL WITH THE CREATURE (founder,
-              2026-11-12, choosing "A spark" of six) ═══ Principles lie to the
-              right, and nothing on home said so. One four-point spark
-              rests dim at the edge and glints every few seconds; a press
-              walks there, the same walk the creature's drag takes. Light
-              only, no arrow and no word. Always there on your own home
-              (founder, 2026-11-19: "yes always shown"); with no principle
-              yet, the walk ends on the page that says how they come. The
-              founder kept this spark over an asterisk with a name under it
-              (2026-11-20: "I like the old star design, I don't want to say
-              principles there"). */}
-          {/* ═══ THE SPARK BECOMES WAKA'S ASTERISK, CUT BY THE EDGE (founder,
-              2026-11-27, choosing "C. An asterisk cut by the edge") ═══ Six
-              rounded strokes, part of them off screen, so the mark says "more
-              this way" with light alone. Still no name under it, still always
-              shown, still the same press and the same walk. */}
+          {/* ═══ WAKA'S ASTERISK AT THE RIGHT EDGE, LEVEL WITH THE CREATURE
+              (founder, 2026-11-27, choosing "C. An asterisk cut by the
+              edge"; it was a four-point spark from 2026-11-12) ═══
+              Principles lie to the right. The asterisk is cut by the screen's
+              edge, so it says "more this way" with light alone: no arrow and
+              no word (2026-11-20: "I don't want to say principles there").
+              A press walks there, the same walk the creature's drag takes.
+              Always there on your own home (founder, 2026-11-19: "yes always
+              shown"); with no principle yet, the walk ends on the page that
+              says how they come. */}
           {homeChromeShown && atWall.kind === 'self' && !offline ? (
             <button type="button" className="waka-principles-spark" aria-label={say('worldPrinciplesShortcut')} title={say('worldPrinciplesShortcut')}
               data-jar-chrome="1" data-jar-interactive="1" onClick={toPrinciples}>

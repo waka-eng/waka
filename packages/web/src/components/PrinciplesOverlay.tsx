@@ -1,5 +1,5 @@
 /* The personal list shows the statement. Opening it reveals the supporting evidence. */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { DialogSurface } from "./DialogSurface";
 import { useNativeBack } from "./SurfaceHeader";
@@ -220,9 +220,9 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
           "remove < and bring back the star"). Home's star at the right walks
           here; this one at the left walks home. */}
       {/* THE ASTERISK, CUT BY THE LEFT EDGE (founder, 2026-11-27, choosing
-          "an asterisk cut by the edge"): home's mark, mirrored, showing the
-          part home kept off screen, so this one says "home is this way" the
-          way home's says "Principles". */}
+          "an asterisk cut by the edge"): home's mark, mirrored, its right
+          three quarters showing, so this one says "home is this way" the way
+          home's says "Principles". */}
       {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
         aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
         onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
@@ -350,31 +350,45 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
    "C. An asterisk cut by the edge" of three) ═══ The four-point spark read as
    another company's AI button, and a star is a word WAKA retired. The mark
    is now *, ASCII 42, the wildcard WAKA is named for: six rounded strokes at
-   the weight of the Jost text, 56px tall. Part of it is off screen, so it
-   says "more this way" with light alone. The 24-unit glyph is cropped by its
-   own viewBox, 40 of its 56px showing, so the cut is the svg's edge laid on
-   the screen's edge and nothing overflows the page. Home's shows its left
-   part at the right edge; Principles' shows the same mark mirrored at the
-   left edge, its right part, the part home kept off screen (founder,
-   2026-11-19: "there should be the same star on the left to go back"). */
-const ASTERISK_SHOWN = (24 * 40) / 56;
+   the weight of the Jost text. A quarter of it is off screen, so it says
+   "more this way" with light alone.
+   The crop is taken from the INK, not the 24-unit box (code review,
+   2026-11-27): the strokes, round caps included, span x 3.79 to 20.21 and
+   y 2.65 to 21.35, so a cut measured on the box fell mostly in empty space
+   and the mark read as whole. The viewBox keeps three quarters of the ink's
+   width, ending mid-way along the two arms that point off screen, and the
+   svg's cut side is laid on the screen's edge, so nothing overflows the
+   page. Home's, at the right edge, shows the left three quarters; Principles'
+   is the same mark mirrored (founder, 2026-11-19: "there should be the same
+   star on the left to go back"): at the left edge it shows the right three
+   quarters, its two left arms cut mid-way past the edge. */
+const INK = { left: 3.79, right: 20.21, top: 2.65, bottom: 21.35 } as const;
+const INK_SHOWN = 0.75 * (INK.right - INK.left);
+const INK_HEIGHT = INK.bottom - INK.top;
+/** The ink is 44px tall, the old spark's peak size within its press. */
+const MARK_PX = 44 / INK_HEIGHT;
 const ASTERISK_VIEW = {
-  right: `0 0 ${ASTERISK_SHOWN} 24`,
-  left: `${24 - ASTERISK_SHOWN} 0 ${ASTERISK_SHOWN} 24`,
+  right: `${INK.left} ${INK.top} ${INK_SHOWN} ${INK_HEIGHT}`,
+  left: `${INK.right - INK_SHOWN} ${INK.top} ${INK_SHOWN} ${INK_HEIGHT}`,
 } as const;
+/** How far in from the cut the asterisk's centre (x 12) sits: its glow's centre. */
+const CENTRE_FROM_CUT = `${((INK.left + INK_SHOWN - 12) * MARK_PX).toFixed(2)}px`;
 
 /** The asterisk both Principles doors wear, cut by the screen edge it sits
     on: home's at the right walks to Principles, Principles' at the left
-    walks home. */
+    walks home. The span around it holds the glow, a pre-blurred light whose
+    opacity alone animates. */
 export function PrinciplesAsterisk({ edge }: { edge: "left" | "right" }): JSX.Element {
   return (
-    <svg viewBox={ASTERISK_VIEW[edge]} aria-hidden="true" focusable="false" data-edge={edge}>
-      <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-        <path d="M12 3.5v17" />
-        <path d="M4.64 7.75l14.72 8.5" />
-        <path d="M4.64 16.25l14.72-8.5" />
-      </g>
-    </svg>
+    <span className="waka-principles-mark" style={{ "--waka-mark-centre": CENTRE_FROM_CUT } as CSSProperties}>
+      <svg viewBox={ASTERISK_VIEW[edge]} width={(INK_SHOWN * MARK_PX).toFixed(2)} height="44" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+          <path d="M12 3.5v17" />
+          <path d="M4.64 7.75l14.72 8.5" />
+          <path d="M4.64 16.25l14.72-8.5" />
+        </g>
+      </svg>
+    </span>
   );
 }
 
