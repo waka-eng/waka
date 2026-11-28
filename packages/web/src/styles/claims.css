@@ -5793,6 +5793,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-session-meta { color: var(--muted); font-size: var(--t-meta); }
 .waka-session-line { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
 .waka-session-list .waka-session-card { padding: var(--sp-8) 0; }
+/* A LINE DIVIDES, IT DOES NOT CLOSE (founder, 2026-11-27, of one device
+   with a line under it: "if its the last item on the list"). The last row
+   of any list here stands without one, as `* + *` lists already do. */
+.waka-session-card:last-child,
+.waka-session-profile-row:last-child { border-bottom: 0; }
 /* What each key read, under the keys (2026-11-26). */
 .waka-mcp-reads { display: grid; gap: var(--sp-8); margin-top: var(--sp-24); }
 .waka-session-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-8) var(--sp-16); }
@@ -6152,6 +6157,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   font-size: var(--t-meta);
   cursor: pointer;
 }
+/* A BUTTON IS NOT UNDERLINED (founder, 2026-11-27, of Change password, a
+   form's submit that chrome.css's `button[type="submit"]`, (0,1,1) in the
+   same layer, underlined inside its own edge). Named at (0,2,0) to win. */
+.waka-settings-erase[type="submit"],
+.waka-home-bar-answer-send[type="submit"] { text-decoration: none; }
 
 /* NO RED. "Colour temperature means aliveness and is not spent on
    warnings" — this file's own rule. What marks the destructive pair is

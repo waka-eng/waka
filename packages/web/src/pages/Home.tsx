@@ -2538,7 +2538,10 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
   }, [savesOpenNow]);
   const settingsCard = auth ? {
     /* Trash opens the Inspirations page on its deleted view. */
-    onOpenTrash: () => { listViews.inspirations.onShelf = true; trashFromSettings.current = true; openOverHome('saves'); },
+    /* TRASH RISES AS THE SHEET (founder, 2026-11-27: "should open
+       inspirations in bottom up sheet style like when opening regular
+       inspirations"): the same sheet the bar's count opens, on its deleted view. */
+    onOpenTrash: () => { listViews.inspirations.onShelf = true; trashFromSettings.current = true; setSavesAsSheet(true); openOverHome('saves'); },
     name: settingsWrites.name,
     nameBusy: settingsWrites.nameBusy,
     localeBusy: settingsWrites.localeBusy,
