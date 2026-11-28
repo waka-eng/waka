@@ -35,6 +35,19 @@ describe("negation and word forms", () => {
       .toBeGreaterThanOrEqual(OVERLAP_FLOOR);
   });
 
+  it("reads Korean negation as a word or an ending, never a piece of another word", () => {
+    expect(negated("잘못을 인정한다")).toBe(false);
+    expect(negated("내 실수를 인정한다")).toBe(false);
+    expect(negated("남의 실수를 탓하지 않는다")).toBe(true);
+    expect(negated("약속을 못 지킨다")).toBe(true);
+    expect(negated("변명 없이 사과한다")).toBe(true);
+  });
+
+  it("does not let Korean endings and function words make two principles alike", () => {
+    expect(principleOverlap("느리게 사는 것이 중요하다", "정직하게 말하는 것이 중요하다")).toBe(0);
+    expect(principleOverlap("큰 계획보다 작은 일을 끝내는 쪽을 고른다", "작은 일을 끝내는 것이 큰 계획보다 낫다")).toBeGreaterThanOrEqual(OVERLAP_FLOOR);
+  });
+
   it("reads an apostrophe as part of the word", () => {
     expect([...principleWords("Don't hide the work.")]).not.toContain("don");
   });
@@ -46,6 +59,11 @@ describe("negation and word forms", () => {
     expect(stem("planning")).toBe(stem("plan"));
     expect(stem("finished")).toBe(stem("finish"));
     expect(stem("wishes")).toBe(stem("wish"));
+    expect(stem("adding")).toBe(stem("add"));
+    expect(stem("speeding")).toBe(stem("speed"));
+    expect(stem("speed")).toBe("speed");
+    expect(stem("running")).toBe(stem("run"));
+    expect(stem("planned")).toBe(stem("plan"));
     expect(principleOverlap("Create value for the people you serve.", "Creating values that serve people matters.")).toBeGreaterThanOrEqual(OVERLAP_FLOOR);
   });
 });

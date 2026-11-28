@@ -68,8 +68,37 @@ const STOP = new Set(("a an and are as at be been but by can do does doing for f
   "they thing things this those to too very was we were what when where which while who why will with would you your " +
   "yourself always even every much many each other ever own same such only also both all any i'd i'm you'd you're it's").split(" "));
 const NEGATIONS = new Set(["not", "no", "never", "nothing", "nobody", "none", "neither", "nor", "without", "cannot"]);
-/* Korean negation: 안 as its own word, and the 않/못/없 forms. */
-const KOREAN_NEGATION = /(^|\s)안\s|않|못|없/u;
+/* Korean negation, read as a whole word or a word's ending, never as a
+   piece inside another word (잘못 "a mistake" is not 못 "cannot"): the
+   adverbs 안 and 못 standing alone, any form of 않다, 못하다 and 없다/없는/
+   없이 at the end of a word. */
+const KOREAN_NEGATION_WORDS = new Set(["안", "못", "아니다", "아닌", "아니라"]);
+const KOREAN_NEGATION_ENDING = /(않|못하|못한|못해|없다|없는|없이|없고|없어|없게|없음)[가-힣]*$/u;
+const koreanNegated = (word: string) => KOREAN_NEGATION_WORDS.has(word)
+  || (!/^잘못/u.test(word) && KOREAN_NEGATION_ENDING.test(word));
+
+/* Korean function pieces: whole words that carry no content, the endings and
+   particles taken off a word's end before it is cut into pieces, and pieces
+   that are endings in disguise. Without them "…하는 것이 중요하다" alone made
+   two unrelated principles look alike. */
+const KOREAN_STOP_WORDS = new Set(["것", "것이", "것은", "것을", "것도", "수", "더", "잘", "그리고", "그러나", "하지만", "또", "또는",
+  "그", "이", "저", "나", "내", "나는", "내가", "우리", "우리는", "늘", "항상", "언제나", "때", "때는", "중요하다", "중요한"]);
+const KOREAN_ENDINGS = ["하는", "하게", "하고", "하며", "하면", "하기", "하다", "한다", "했다", "해야", "이다", "이고", "에서", "으로", "보다",
+  "처럼", "까지", "부터", "에게", "는", "은", "을", "를", "이", "가", "에", "의", "도", "로", "게", "고", "다", "며", "면"];
+const KOREAN_STOP_PIECES = new Set(["것이", "하다", "하는", "한다", "하게", "하고", "하기", "중요", "요하", "있다", "있는", "에서", "으로",
+  "그리", "리고", "이다", "되는", "된다", "없다", "않는", "않다", "는것"]);
+
+function koreanPieces(word: string, out: Set<string>): void {
+  if (KOREAN_STOP_WORDS.has(word)) return;
+  let w = word;
+  for (const end of KOREAN_ENDINGS) {
+    if (w.endsWith(end) && w.length - end.length >= 2) { w = w.slice(0, -end.length); break; }
+  }
+  if (w.length < 2) return;
+  const add = (piece: string) => { if (!KOREAN_STOP_PIECES.has(piece)) out.add(piece); };
+  if (w.length === 2) { add(w); return; }
+  for (let i = 0; i + 1 < w.length; i += 1) add(w.slice(i, i + 2));
+}
 
 /** A light English stemmer: plural, -ing, -ed, a doubled final consonant, a
  * silent e. "values" and "value", "creates" and "create", "planning" and
@@ -79,12 +108,14 @@ export function stem(word: string): string {
   if (w.length > 4 && w.endsWith("ies")) w = `${w.slice(0, -3)}y`;
   else if (w.length > 4 && /(ss|sh|ch|x|z)es$/.test(w)) w = w.slice(0, -2);
   else if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) w = w.slice(0, -1);
-  for (const end of ["ing", "ed"]) {
-    if (w.length - end.length >= 3 && w.endsWith(end)) {
-      w = w.slice(0, -end.length);
-      if (/([b-df-hj-np-tv-z])\1$/.test(w) && !/(ll|ss|zz)$/.test(w)) w = w.slice(0, -1);
-      break;
-    }
+  /* -ed only where a real base of four or more letters is left and the word
+     is not one that merely ends in "eed" (speed, need). A doubled final
+     consonant is undone only on a base longer than three letters, so
+     planning lands on plan and adding stays on add. */
+  const base = w.endsWith("ing") ? w.slice(0, -3) : w.endsWith("ed") && !w.endsWith("eed") && w.length - 2 > 3 ? w.slice(0, -2) : null;
+  if (base !== null && base.length >= 3) {
+    w = base;
+    if (w.length > 3 && /([b-df-hj-np-tv-z])\1$/.test(w) && !/(ll|ss|zz)$/.test(w)) w = w.slice(0, -1);
   }
   if (w.length > 3 && w.endsWith("e")) w = w.slice(0, -1);
   return w;
@@ -98,8 +129,7 @@ function tokens(statement: string): string[] {
 
 /** Whether a statement is negated ("don't", "never", "not", 않다…). */
 export function negated(statement: string): boolean {
-  if (KOREAN_NEGATION.test(statement.normalize("NFKC"))) return true;
-  return tokens(statement).some((t) => NEGATIONS.has(t) || t.endsWith("n't"));
+  return tokens(statement).some((t) => /\p{Script=Hangul}/u.test(t) ? koreanNegated(t) : NEGATIONS.has(t) || t.endsWith("n't"));
 }
 
 /** The meaningful words of a statement. Hangul runs become two-letter pieces,
@@ -107,11 +137,7 @@ export function negated(statement: string): boolean {
 export function principleWords(statement: string): Set<string> {
   const out = new Set<string>();
   for (const raw of tokens(statement)) {
-    if (/\p{Script=Hangul}/u.test(raw)) {
-      if (raw.length < 2) continue;
-      for (let i = 0; i + 1 < raw.length; i += 1) out.add(raw.slice(i, i + 2));
-      continue;
-    }
+    if (/\p{Script=Hangul}/u.test(raw)) { if (!koreanNegated(raw)) koreanPieces(raw, out); continue; }
     if (NEGATIONS.has(raw) || raw.endsWith("n't") || STOP.has(raw)) continue;
     const word = raw.replace(/'s$/u, "");
     if (word.length < 3 || STOP.has(word)) continue;
@@ -155,7 +181,8 @@ export function sideState(row: Row, profileId: string, now: Date): "ask" | "wait
   const me = mine(row, profileId);
   if (row.status === "accepted") return me.seen ? null : "introduced";
   if (me.answer === null) return within(row.createdAt, now) ? "ask" : null;
-  if (me.answer === "yes") return within(me.answeredAt, now) ? "waiting" : null;
+  /* A yes waits only as long as the ask was open: both end at createdAt + window. */
+  if (me.answer === "yes") return within(row.createdAt, now) ? "waiting" : null;
   return null;
 }
 /* The same three conditions in SQL, for the matcher's "busy". Keep in step
@@ -165,12 +192,18 @@ const BUSY = (column: string) => {
   const side = (s: "a" | "b") => `(i.profile_${s}_id = ${column} AND (
       (i.status = 'accepted' AND i.seen_${s}_at IS NULL)
       OR (i.status <> 'accepted' AND i.answer_${s} IS NULL AND i.created_at > now() - ${w})
-      OR (i.status <> 'accepted' AND i.answer_${s} = 'yes' AND i.answered_${s}_at > now() - ${w})))`;
+      OR (i.status <> 'accepted' AND i.answer_${s} = 'yes' AND i.created_at > now() - ${w})))`;
   return sql.raw(`EXISTS (SELECT 1 FROM introductions i WHERE i.closed_at IS NULL AND (${side("a")} OR ${side("b")}))`);
 };
 
 /** A match pass to queue for a person who has just become free, or will at `runAfter`. */
 export interface FollowUp { profileId: string; key: string; runAfter?: Date }
+/* ONE LOCK FOR EVERY WRITE THAT DECIDES WHO MAY MEET WHOM: the matcher,
+   the consent switch and an answer. So a revocation and the other side's
+   yes, or a revocation and a match, can never interleave. Writes here are
+   rare and short (no model call, no saves read). */
+const lockIntroductions = (tx: Pick<Db, "execute">) => tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('waka:introductions'))`);
+
 const passAt = (profileId: string, key: string, from?: Date): FollowUp =>
   from ? { profileId, key, runAfter: new Date(from.getTime() + WINDOW_MS + 60_000) } : { profileId, key };
 
@@ -267,6 +300,7 @@ const touch = (tx: Pick<Db, "execute">, profileId: string) =>
  */
 export async function setIntroductionConsent(db: Db, profileId: string, enabled: boolean): Promise<FollowUp[]> {
   return db.transaction(async (tx) => {
+    await lockIntroductions(tx);
     await tx.insert(introductionConsents).values({ profileId, enabled })
       .onConflictDoUpdate({ target: introductionConsents.profileId, set: { enabled, updatedAt: sql`now()` } });
     if (enabled) return [passAt(profileId, "now")];
@@ -296,6 +330,7 @@ export type AnswerOutcome =
 
 export async function answerIntroduction(db: Db, profileId: string, id: string, answer: IntroductionAnswer): Promise<AnswerOutcome> {
   const outcome = await db.transaction(async (tx): Promise<AnswerOutcome | "introduced"> => {
+    await lockIntroductions(tx);
     const [row] = await tx.select().from(introductions).where(and(eq(introductions.id, id), involves(profileId))).for("update").limit(1);
     /* Somebody else's introduction answers exactly like one that does not exist. */
     if (!row) return { ok: false, status: 404 };
@@ -305,9 +340,14 @@ export async function answerIntroduction(db: Db, profileId: string, id: string, 
       .where(eq(introductionConsents.profileId, profileId)).limit(1);
     if (answer === "yes" && !consent?.enabled) return { ok: false, status: 409 };
     const a = row.profileAId === profileId;
-    const other = { answer: a ? row.answerB : row.answerA, at: a ? row.answeredBAt : row.answeredAAt };
-    /* Only the other side's yes, still within its own wait, completes it. */
-    const completes = answer === "yes" && other.answer === "yes" && within(other.at, now);
+    const otherId = a ? row.profileBId : row.profileAId;
+    const otherAnswer = a ? row.answerB : row.answerA;
+    /* Only the other side's yes completes it, and only while they still have
+       introductions on: a yes from someone who has since turned them off just
+       lapses, as if they had never answered. */
+    const [otherConsent] = await tx.select({ enabled: introductionConsents.enabled }).from(introductionConsents)
+      .where(eq(introductionConsents.profileId, otherId)).limit(1);
+    const completes = answer === "yes" && otherAnswer === "yes" && Boolean(otherConsent?.enabled);
     const status = completes ? "accepted" : answer === "no" && row.status === "offered" ? "declined" : row.status;
     await tx.update(introductions).set({
       ...(a ? { answerA: answer, answeredAAt: sql`now()` } : { answerB: answer, answeredBAt: sql`now()` }),
@@ -316,8 +356,9 @@ export async function answerIntroduction(db: Db, profileId: string, id: string, 
     await touch(tx, profileId);
     if (answer === "no") return { ok: true, result: { stage: "declined" }, followUps: [passAt(profileId, "now")] };
     if (completes) return "introduced";
-    /* The yes waits quietly; when its window lapses this person is free again. */
-    return { ok: true, result: { stage: "waiting" }, followUps: [passAt(profileId, `waited:${row.id}`, now)] };
+    /* The yes waits quietly until the ask's own window ends; the pass queued
+       for that moment when the match was made frees this person then. */
+    return { ok: true, result: { stage: "waiting" }, followUps: [passAt(profileId, `asked:${row.id}`, row.createdAt)] };
   });
   if (outcome !== "introduced") return outcome;
   const state = await readIntroductionState(db, profileId, true);
@@ -369,7 +410,7 @@ export async function matchIntroductionsForProfile(db: Db, profileId: string, op
     /* One matcher at a time across the install, so two passes can never both
        hand the same person a new ask. The pass reads no saves and calls no
        model, so holding it is short. */
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('waka:match_introductions'))`);
+    await lockIntroductions(tx);
     const settle = async (result: MatchResult) => { await options.beforeCommit?.(tx); return result; };
     const [me] = await tx.execute(sql`
       SELECT p.account_id AS "accountId", ${BUSY("p.id")} AS busy
@@ -407,15 +448,23 @@ export async function matchIntroductionsForProfile(db: Db, profileId: string, op
     if (!best) return settle("none");
     const aIsMe = profileId < best.theirs.profileId;
     const [a, b] = aIsMe ? [best.mine, best.theirs] : [best.theirs, best.mine];
-    const inserted = await tx.insert(introductions).values({
-      profileAId: a.profileId, profileBId: b.profileId, principleAId: a.id, principleBId: b.id,
-      principleAText: a.statement, principleBText: b.statement,
-    }).onConflictDoNothing().returning({ id: introductions.id, createdAt: introductions.createdAt });
+    /* Written only if both people still have introductions on and both
+       principles are still held, checked in the same statement, under the
+       lock the consent switch also takes. */
+    const inserted = (await tx.execute(sql`
+      INSERT INTO introductions (profile_a_id, profile_b_id, principle_a_id, principle_b_id, principle_a_text, principle_b_text)
+      SELECT ${a.profileId}::uuid, ${b.profileId}::uuid, ${a.id}::uuid, ${b.id}::uuid, ${a.statement}, ${b.statement}
+       WHERE (SELECT count(*) FROM introduction_consents c WHERE c.enabled AND c.profile_id IN (${a.profileId}::uuid, ${b.profileId}::uuid)) = 2
+         AND (SELECT count(*) FROM principles p WHERE p.state = 'held' AND p.unsupported_at IS NULL
+               AND ((p.profile_id = ${a.profileId}::uuid AND p.id = ${a.id}::uuid AND p.statement = ${a.statement})
+                 OR (p.profile_id = ${b.profileId}::uuid AND p.id = ${b.id}::uuid AND p.statement = ${b.statement}))) = 2
+      ON CONFLICT DO NOTHING
+      RETURNING id, created_at AS "createdAt"`)) as unknown as Array<{ id: string; createdAt: Date | string }>;
     if (!inserted.length) return settle("none");
     /* An unanswered ask lapses for both sides at the same moment; a pass then
        finds them free. */
     const row = inserted[0]!;
-    await options.onMatched?.(tx, [a.profileId, b.profileId].map((id) => passAt(id, `asked:${row.id}`, row.createdAt)));
+    await options.onMatched?.(tx, [a.profileId, b.profileId].map((id) => passAt(id, `asked:${row.id}`, new Date(row.createdAt))));
     return settle("matched");
   });
 }

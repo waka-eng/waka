@@ -54,28 +54,59 @@ CREATE TRIGGER "introduction_consents_humans_only" BEFORE INSERT OR UPDATE OF "p
   FOR EACH ROW EXECUTE FUNCTION "introductions_humans_only"();--> statement-breakpoint
 CREATE TRIGGER "introductions_humans_only" BEFORE INSERT OR UPDATE OF "profile_a_id", "profile_b_id" ON "introductions"
   FOR EACH ROW EXECUTE FUNCTION "introductions_humans_only"();--> statement-breakpoint
--- WITHDRAWING A PRINCIPLE (rewording or deleting it) withdraws it from every
+-- WITHDRAWING A PRINCIPLE (rewording it, deleting it, or it ceasing to be
+-- held: contested, aspirational again, or unsupported) withdraws it from every
 -- introduction that cites it: that side's id and words are nulled, so no copy
 -- of withdrawn words is kept, and the row is closed for both. The row stays,
--- so the pair is never offered again. Runs BEFORE the delete so the
--- composite foreign key (no action) never sees a dangling citation.
+-- so the pair is never offered again. Runs BEFORE a delete so the composite
+-- foreign key (no action) never sees a dangling citation.
+--
+-- Both people are free again, so each gets a match pass, written straight to
+-- the queue in the same transaction. Such a row only exists where matching
+-- ran (WAKA_INTRODUCTIONS=1), and the job reads the flag again before it
+-- does anything. A profile already gone (an account being erased) gets none.
 CREATE OR REPLACE FUNCTION "withdraw_principle_from_introductions"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  freed uuid;
 BEGIN
-  UPDATE "introductions" SET
-    "principle_a_id" = CASE WHEN "profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id" THEN NULL ELSE "principle_a_id" END,
-    "principle_a_text" = CASE WHEN "profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id" THEN NULL ELSE "principle_a_text" END,
-    "principle_b_id" = CASE WHEN "profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id" THEN NULL ELSE "principle_b_id" END,
-    "principle_b_text" = CASE WHEN "profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id" THEN NULL ELSE "principle_b_text" END,
-    "closed_at" = coalesce("closed_at", now()),
-    "updated_at" = now()
-   WHERE ("profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id")
-      OR ("profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id");
+  IF TG_OP = 'UPDATE' AND OLD."statement" IS NOT DISTINCT FROM NEW."statement"
+     AND NOT (OLD."state" = 'held' AND OLD."unsupported_at" IS NULL
+              AND (NEW."state" <> 'held' OR NEW."unsupported_at" IS NOT NULL)) THEN
+    RETURN NULL;
+  END IF;
+  FOR freed IN
+    WITH closed AS (
+      UPDATE "introductions" SET
+        "principle_a_id" = CASE WHEN "profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id" THEN NULL ELSE "principle_a_id" END,
+        "principle_a_text" = CASE WHEN "profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id" THEN NULL ELSE "principle_a_text" END,
+        "principle_b_id" = CASE WHEN "profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id" THEN NULL ELSE "principle_b_id" END,
+        "principle_b_text" = CASE WHEN "profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id" THEN NULL ELSE "principle_b_text" END,
+        "closed_at" = coalesce("closed_at", now()),
+        "updated_at" = now()
+       WHERE ("profile_a_id" = OLD."profile_id" AND "principle_a_id" = OLD."id")
+          OR ("profile_b_id" = OLD."profile_id" AND "principle_b_id" = OLD."id")
+      RETURNING "profile_a_id", "profile_b_id"
+    )
+    SELECT DISTINCT x FROM closed, LATERAL (VALUES ("profile_a_id"), ("profile_b_id")) AS v(x)
+  LOOP
+    INSERT INTO "background_jobs" ("profile_id", "type", "payload", "max_attempts", "idempotency_key")
+    SELECT freed, 'match_introductions', '{"reason":"withdrawn"}'::jsonb, 3, 'match_introductions:' || freed || ':withdrawn'
+     WHERE EXISTS (SELECT 1 FROM "profiles" WHERE "id" = freed)
+    ON CONFLICT ("idempotency_key") WHERE "idempotency_key" IS NOT NULL DO UPDATE SET
+      "status" = CASE WHEN "background_jobs"."status" IN ('succeeded', 'failed') THEN 'pending'::background_job_status ELSE "background_jobs"."status" END,
+      "attempts" = CASE WHEN "background_jobs"."status" IN ('succeeded', 'failed') THEN 0 ELSE "background_jobs"."attempts" END,
+      "run_after" = CASE WHEN "background_jobs"."status" IN ('succeeded', 'failed') THEN now() ELSE "background_jobs"."run_after" END,
+      "locked_at" = CASE WHEN "background_jobs"."status" IN ('succeeded', 'failed') THEN NULL ELSE "background_jobs"."locked_at" END,
+      "last_error" = CASE WHEN "background_jobs"."status" IN ('succeeded', 'failed') THEN NULL ELSE "background_jobs"."last_error" END,
+      "rerun_requested" = ("background_jobs"."status" = 'running'),
+      "request_version" = "background_jobs"."request_version" + 1,
+      "updated_at" = now();
+  END LOOP;
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NULL;
 END;
 $$;--> statement-breakpoint
 CREATE TRIGGER "principles_withdraw_from_introductions_on_delete" BEFORE DELETE ON "principles"
   FOR EACH ROW EXECUTE FUNCTION "withdraw_principle_from_introductions"();--> statement-breakpoint
-CREATE TRIGGER "principles_withdraw_from_introductions_on_reword" AFTER UPDATE OF "statement" ON "principles"
-  FOR EACH ROW WHEN (OLD."statement" IS DISTINCT FROM NEW."statement")
-  EXECUTE FUNCTION "withdraw_principle_from_introductions"();
+CREATE TRIGGER "principles_withdraw_from_introductions_on_change" AFTER UPDATE OF "statement", "state", "unsupported_at" ON "principles"
+  FOR EACH ROW EXECUTE FUNCTION "withdraw_principle_from_introductions"();

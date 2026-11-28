@@ -21,10 +21,11 @@
  * returns always wins over the line answering the last act; the local line
  * is only what fills the bubble while the server has nothing to say.
  *
- * KEPT FRESH: read on arrival, after every act, every few seconds for a
- * minute after introductions are turned on (the first match is made then),
- * whenever the tab comes back, and whenever Settings flips the switch
- * (`INTRODUCTIONS_CHANGED`).
+ * KEPT FRESH: read on arrival, every few seconds for a minute after every
+ * act (a match pass is queued then, and the next ask may follow), whenever
+ * the tab comes back, and whenever Settings flips the switch
+ * (`INTRODUCTIONS_CHANGED`). Keyed on the profile: another person signing in
+ * on this browser starts from nothing.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -59,7 +60,9 @@ export interface Introductions {
 
 type Local = Exclude<IntroductionStage, "ask-consent" | "ask-match" | "introduced">;
 
-export function useIntroductions(active: boolean): Introductions {
+/** `profileId` is the signed-in person's own profile on their own home, or null. */
+export function useIntroductions(profileId: string | null): Introductions {
+  const active = Boolean(profileId);
   const [server, setServer] = useState<ApiIntroductionState | null>(null);
   const [local, setLocal] = useState<Local | null>(null);
   const [busy, setBusy] = useState(false);
@@ -67,10 +70,14 @@ export function useIntroductions(active: boolean): Introductions {
   const poll = useRef<{ timer: number; until: number }>({ timer: 0, until: 0 });
   useEffect(() => { alive.current = true; return () => { alive.current = false; window.clearTimeout(poll.current.timer); }; }, []);
 
+  /* A read that lands after the profile changed is dropped, not shown. */
+  const current = useRef(profileId);
+  current.current = profileId;
   const load = useCallback(() => {
-    if (!active) return;
-    void fetchIntroductions().then((next) => { if (alive.current) setServer(next); }).catch(() => undefined);
-  }, [active]);
+    if (!profileId) return;
+    const asked = profileId;
+    void fetchIntroductions().then((next) => { if (alive.current && current.current === asked) setServer(next); }).catch(() => undefined);
+  }, [profileId]);
   /** Read now and every few seconds for a minute: the first match is made right after turning on. */
   const pollAwhile = useCallback(() => {
     window.clearTimeout(poll.current.timer);
@@ -82,7 +89,8 @@ export function useIntroductions(active: boolean): Introductions {
     tick();
   }, [load]);
   useEffect(() => {
-    if (!active) { setServer(null); setLocal(null); window.clearTimeout(poll.current.timer); return undefined; }
+    setServer(null); setLocal(null); window.clearTimeout(poll.current.timer);
+    if (!active) return undefined;
     load();
     const back = () => { if (document.visibilityState === "visible") load(); };
     const changed = (event: Event) => {
@@ -95,7 +103,7 @@ export function useIntroductions(active: boolean): Introductions {
       document.removeEventListener("visibilitychange", back);
       window.removeEventListener(INTRODUCTIONS_CHANGED, changed);
     };
-  }, [active, load, pollAwhile]);
+  }, [active, profileId, load, pollAwhile]);
 
   const shown = server?.available ? server : null;
   const intro = shown?.introduction ?? null;
@@ -118,9 +126,9 @@ export function useIntroductions(active: boolean): Introductions {
     } else if (stage === "ask-match" && intro) {
       const result = await answerIntroduction(intro.id, "yes");
       if (result.stage === "introduced") setServer((s) => s && { ...s, introduction: result });
-      else { setServer((s) => s && { ...s, introduction: null }); setLocal("waiting"); load(); }
+      else { setServer((s) => s && { ...s, introduction: null }); setLocal("waiting"); pollAwhile(); }
     }
-  }), [run, stage, intro, load, pollAwhile]);
+  }), [run, stage, intro, pollAwhile]);
 
   const notNow = useCallback(() => run(async () => {
     if (stage === "ask-consent") {
@@ -130,18 +138,18 @@ export function useIntroductions(active: boolean): Introductions {
       await answerIntroduction(intro.id, "no");
       setServer((s) => s && { ...s, introduction: null });
       setLocal("declined");
-      load();
+      pollAwhile();
     }
-  }), [run, stage, intro, load]);
+  }), [run, stage, intro, pollAwhile]);
 
   const done = useCallback(() => {
     if (stage === "introduced" && intro) {
-      run(async () => { await markIntroductionSeen(intro.id); setServer((s) => s && { ...s, introduction: null }); load(); });
+      run(async () => { await markIntroductionSeen(intro.id); setServer((s) => s && { ...s, introduction: null }); pollAwhile(); });
       return;
     }
     setLocal(null);
-    load();
-  }, [run, stage, intro, load]);
+    pollAwhile();
+  }, [run, stage, intro, pollAwhile]);
 
   const turnOff = useCallback(() => run(async () => {
     await setIntroductionConsent(false);

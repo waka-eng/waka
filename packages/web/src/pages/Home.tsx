@@ -2122,7 +2122,7 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
      Two consenting people whose principles overlap. Only on your own home,
      never on an agent's wall and never offline; the server decides what may
      be shown (`lib/introductions.ts`), and it says it in the reading's place. */
-  const intro = useIntroductions(Boolean(hunchProfile) && atWall.kind === 'self');
+  const intro = useIntroductions(atWall.kind === 'self' ? hunchProfile : null);
   /** The next line, or the one a dot names. */
   const creatureSpeaks = useCallback((to?: CompanionPrompt) => {
     if (!atNowView || reviewing) return;
