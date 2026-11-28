@@ -219,12 +219,12 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
       {/* THE STAR CAME BACK (founder, 2026-11-26, after trying the "<":
           "remove < and bring back the star"). Home's star at the right walks
           here; this one at the left walks home. */}
-      {/* THE SAME ASTERISK ON THE LEFT walks home, as home's at the right
-          walks here. */}
+      {/* THE SAME STAR ON THE LEFT walks home, as home's at the right walks
+          here; its sparkles sit on its outer side. */}
       {walking ? null : <button type="button" className="waka-principles-spark waka-principles-spark--home"
         aria-label={say("worldBackHome")} title={say("worldBackHome")} data-jar-interactive="1" onClick={onClose}
         onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); onClose(); } }}>
-        <PrinciplesAsterisk />
+        <PrinciplesAsterisk mirrored />
       </button>}
       <DialogSurface
         className="waka-over"
@@ -344,38 +344,35 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
   );
 }
 
-/* ═══ WAKA'S OWN ASTERISK, A STAR OF THE CREATURE'S LIGHT (founder,
-   2026-11-28: "i want astricks to feel more like a star", after the cut
-   one was "so ugly and cut off"; first chosen 2026-11-27 over a four-point
-   spark that read as another company's AI button) ═══ The mark is still *,
-   ASCII 42, the wildcard WAKA is named for: six arms, never the four of a
-   sparkle. Each arm is a ray that tapers to a fine point, joined at a small
-   bright core, in the creature's own ivory, so it twinkles like a star
-   made of the same light. Whole, set in from the edge where the spark sat;
-   Principles wears the same on its left to walk home (founder, 2026-11-19:
-   "there should be the same star on the left to go back"). */
-const ARM_ANGLES = [0, 60, 120, 180, 240, 300] as const;
+/* ═══ THE PRINCIPLES STAR (founder, 2026-11-28, choosing "8. Star with
+   sparkles" of eight, after the cut asterisk was "so ugly and cut off" and
+   the fine rays "ugly") ═══ A plump five-point star with round, soft tips,
+   the same body and ivory light as the creature, with two tiny lights
+   beside it as if it just landed. Lit by one light from above. Whole, set
+   in from the edge where the spark sat; Principles wears the same star on
+   its left to walk home (founder, 2026-11-19: "there should be the same
+   star on the left to go back"), its sparkles mirrored to the outer side. */
+const STAR_POINTS = "12.00,5.30 14.35,9.66 19.23,10.55 15.80,14.14 16.47,19.05 12.00,16.90 7.53,19.05 8.20,14.14 4.77,10.55 9.65,9.66";
 
-/** The asterisk both Principles doors wear. The span around it holds the
+/** The star both Principles doors wear. The span around it holds the
     glow, a pre-blurred light whose opacity alone animates. */
-export function PrinciplesAsterisk(): JSX.Element {
-  const fill = `waka-asterisk-${useId().replace(/:/g, "")}`;
+export function PrinciplesAsterisk({ mirrored = false }: { mirrored?: boolean }): JSX.Element {
+  const fill = `waka-star-${useId().replace(/:/g, "")}`;
   return (
     <span className="waka-principles-mark">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style={mirrored ? { transform: "scaleX(-1)" } : undefined}>
         <defs>
-          <radialGradient id={fill} gradientUnits="userSpaceOnUse" cx="12" cy="12" r="11">
+          <radialGradient id={fill} gradientUnits="userSpaceOnUse" cx="12" cy="10.8" r="10">
             <stop offset="0" stopColor="#fffdf8" />
-            <stop offset="0.45" stopColor="#f6eedf" />
-            <stop offset="1" stopColor="#cdc3b1" />
+            <stop offset="0.6" stopColor="#f2e9d9" />
+            <stop offset="1" stopColor="#c9bfad" />
           </radialGradient>
         </defs>
-        <g fill={`url(#${fill})`}>
-          {ARM_ANGLES.map(angle => (
-            <path key={angle} d="M12 1.2C12.55 5.4 13.35 9.1 12 12C10.65 9.1 11.45 5.4 12 1.2Z" transform={`rotate(${angle} 12 12)`} />
-          ))}
-          <circle cx="12" cy="12" r="1.9" fill="#fffdf8" />
+        <g transform="translate(-1.6 1.4) scale(0.86)" style={{ transformOrigin: "12px 12px" }}>
+          <polygon points={STAR_POINTS} fill={`url(#${fill})`} stroke={`url(#${fill})`} strokeWidth="4.4" strokeLinejoin="round" />
         </g>
+        <circle className="waka-star-sparkle" cx="19.6" cy="4.6" r="1.35" fill="#fffdf8" />
+        <circle className="waka-star-sparkle waka-star-sparkle--far" cx="21.4" cy="8.6" r="0.7" fill="#f6eedf" opacity="0.8" />
       </svg>
     </span>
   );
