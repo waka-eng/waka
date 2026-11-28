@@ -43,14 +43,14 @@ describe('trimBox', () => {
   it('trims the status bar, the header to its hairline and the tab bar from its hairline', () => {
     const p = picture(PAPER);
     statusBar(p);
-    p.fill(8, 22, 16, 28, INK); p.fill(46, 22, 74, 28, INK);   // back, title
-    p.fill(0, 34, W, 35, RULE);                                // header hairline
-    words(p, 42, 226);
+    p.fill(8, 16, 16, 22, INK); p.fill(46, 16, 74, 22, INK);   // back, title
+    p.fill(0, 28, W, 29, RULE);                                // header hairline, 0.11w under the clock
+    words(p, 36, 226);
     p.fill(0, 236, W, 237, RULE);                              // tab bar hairline, 0.2w up
     for (const x of [14, 38, 62, 86]) p.fill(x, 242, x + 12, 250, INK);
     p.fill(44, 255, 76, 257, INK);                             // home indicator
     const trim = trimBox(p.data, W, H);
-    expect(Math.round(trim.top * H)).toBe(35);
+    expect(Math.round(trim.top * H)).toBe(29);
     expect(Math.round(trim.bottom * H)).toBe(H - 236);
   });
 
@@ -71,6 +71,32 @@ describe('trimBox', () => {
     words(p, 30, 236);
     p.fill(0, 240, W, H - 4, [207, 198, 184]);                 // a figure, 0.02w off the foot
     expect(trimBox(p.data, W, H).bottom).toBe(0);
+  });
+
+  it('keeps a reader\'s quote block near the foot: no row of icons, no tab bar', () => {
+    const p = picture(PAPER);
+    statusBar(p);
+    words(p, 30, 200);
+    p.fill(0, 206, W, 240, [236, 232, 224]);                   // a quote block, full width
+    p.fill(8, 206, 10, 240, INK);                              // its rule
+    for (let y = 212; y < 236; y += 6) for (let x = 16; x < 112; x += 7) p.fill(x, y, x + 3, y + 2, INK);
+    p.fill(44, 255, 76, 257, INK);                             // the home indicator alone
+    expect(trimBox(p.data, W, H).bottom).toBe(0);
+  });
+
+  it('keeps a Notes title over a picture: a bold title is not a header', () => {
+    const p = picture(PAPER);
+    statusBar(p);
+    p.fill(8, 16, 100, 27, INK);                               // a bold title, 11 rows of ink
+    p.fill(0, 30, W, 120, [120, 140, 160]);                    // a picture, full bleed, under it
+    words(p, 126, 250);
+    expect(Math.round(trimBox(p.data, W, H).top * H), 'only the status bar goes').toBeLessThanOrEqual(15);
+    const inset = picture(PAPER);
+    statusBar(inset);
+    inset.fill(8, 16, 60, 21, INK);                            // a title
+    inset.fill(8, 26, 112, 110, [120, 140, 160]);              // an inset picture: not an edge
+    words(inset, 116, 250);
+    expect(Math.round(trimBox(inset.data, W, H).top * H)).toBeLessThanOrEqual(15);
   });
 
   it('never trims a photo, whose top is not a status bar', () => {

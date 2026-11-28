@@ -43,7 +43,7 @@ vi.mock('../src/lib/api/attachments', async (importOriginal) => ({
 }));
 vi.mock('../src/lib/picture-download', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/picture-download')>()),
-  downloadOriginal: async (id: string, name: string) => { state.downloads.push([id, name]); },
+  downloadOriginal: async (id: string, name: string) => { state.downloads.push([id, name]); return id !== 'pic-refused'; },
 }));
 vi.mock('../src/lib/data', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/data')>()),
@@ -156,7 +156,7 @@ describe('the picture is the page', () => {
     expect(whole.querySelector('img')?.getAttribute('src')).toBe('https://bucket.test/pic-read');
     const back = whole.querySelector<HTMLButtonElement>('.waka-surface-back')!;
     expect(back.getAttribute('data-back'), 'the page\'s own back control').toBe('back');
-    expect(document.activeElement).toBe(back);
+    expect(document.activeElement, 'the view holds focus').toBe(whole);
     expect(whole.querySelector('.waka-picture-whole-stage')).not.toBeNull();
     await act(async () => { back.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
     expect(document.querySelector('.waka-picture-whole')).toBeNull();
@@ -165,6 +165,45 @@ describe('the picture is the page', () => {
     await act(async () => document.querySelector<HTMLButtonElement>('.waka-picture-whole .waka-surface-back')!.click());
     expect(document.querySelector('.waka-picture-whole')).toBeNull();
     expect(document.activeElement).toBe(press);
+  });
+
+  it('closes only the view on Escape after a press on the picture, and keeps Tab inside it', async () => {
+    await renderList();
+    await open('The smaller step');
+    await landPicture();
+    await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-picture-open')!.click());
+    const whole = document.querySelector<HTMLElement>('.waka-picture-whole')!;
+    const stage = whole.querySelector<HTMLElement>('.waka-picture-whole-stage')!;
+    /* focus is somewhere else first, as after a click elsewhere */
+    (document.body as HTMLElement).focus();
+    const press = new MouseEvent('pointerdown', { bubbles: true, clientX: 100, clientY: 300 });
+    Object.defineProperty(press, 'pointerId', { value: 7 });
+    await act(async () => { stage.dispatchEvent(press); });
+    expect(document.activeElement).toBe(whole);
+    await act(async () => { whole.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })); });
+    expect(whole.contains(document.activeElement), 'Tab stays in the view').toBe(true);
+    await act(async () => { whole.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })); });
+    expect(whole.contains(document.activeElement)).toBe(true);
+    await act(async () => { (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    expect(document.querySelector('.waka-picture-whole')).toBeNull();
+    expect(host.querySelector('.waka-note-picture'), 'the inspiration stays open').not.toBeNull();
+  });
+
+  it('downloads this picture from the whole view, and says so when it cannot', async () => {
+    state.rows = [row('save-two', [{ id: 'pic-refused', type: 'image', label: 'IMG_1.PNG' }, { id: 'pic-two', type: 'image', label: 'IMG_2.PNG' }])];
+    await renderList();
+    await open('#');
+    await openNoteActions();
+    expect(document.querySelector('[aria-label="Download original"][role="menuitem"]'), 'two pictures: one per press, in each whole view').toBeNull();
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    const image = host.querySelector<HTMLImageElement>('.waka-note-picture img')!;
+    await act(async () => { image.dispatchEvent(new Event('load')); });
+    await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-picture-open')!.click());
+    const download = document.querySelector<HTMLButtonElement>('.waka-picture-whole [aria-label="Download original"]')!;
+    await act(async () => download.click());
+    await settle();
+    expect(state.downloads).toEqual([['pic-refused', 'IMG_1.PNG']]);
+    expect(document.querySelector('.waka-picture-whole [role="alert"]')?.textContent).toBe('Couldn’t download the picture.');
   });
 
   it('zooms the whole picture with two fingers, and a double tap goes back to fit', async () => {
@@ -207,21 +246,58 @@ describe('the picture is the page', () => {
 });
 
 describe('downloadOriginal', () => {
-  const realDownload: typeof import('../src/lib/picture-download').downloadOriginal = async (...args) =>
-    (await vi.importActual<typeof import('../src/lib/picture-download')>('../src/lib/picture-download')).downloadOriginal(...args);
-  it('saves the file under its own name from the owned read', async () => {
-    const clicked: Array<{ download: string; href: string }> = [];
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { clicked.push({ download: this.download, href: this.href }); });
+  type Module = typeof import('../src/lib/picture-download');
+  const actual = () => vi.importActual<Module>('../src/lib/picture-download');
+  const anchors: Array<{ download: string; href: string; target: string }> = [];
+  let click: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    anchors.length = 0;
+    click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { anchors.push({ download: this.download, href: this.href, target: this.target }); });
     vi.stubGlobal('URL', class extends URL { static createObjectURL() { return 'blob:original'; } static revokeObjectURL() {} });
-    try {
-      await realDownload('pic', 'IMG_0012.PNG', { read: async () => 'https://bucket.test/pic', fetchFn: (async () => ({ ok: true, status: 200, blob: async () => new Blob(['png']) })) as unknown as typeof fetch });
-      expect(clicked).toEqual([{ download: 'IMG_0012.PNG', href: 'blob:original' }]);
-    } finally { click.mockRestore(); vi.unstubAllGlobals(); }
+  });
+  afterEach(() => { click.mockRestore(); vi.unstubAllGlobals(); });
+  const bytes = (type: string) => (async () => ({ ok: true, status: 200, blob: async () => new Blob(['x'], { type }) })) as unknown as typeof fetch;
+
+  it('saves the bytes of a picture the store reads with CORS, under its own name', async () => {
+    const { downloadOriginal, rememberPicture } = await actual();
+    rememberPicture('cors-pic', 'https://bucket.test/cors-pic', true);
+    expect(await downloadOriginal('cors-pic', 'IMG_0012.PNG', { fetchFn: bytes('image/png'), read: async () => { throw new Error('no second read'); } })).toBe(true);
+    expect(anchors).toEqual([{ download: 'IMG_0012.PNG', href: 'blob:original', target: '' }]);
   });
 
-  it('opens the original in a new tab when its bytes cannot be read here', async () => {
-    const opened: string[] = [];
-    await realDownload('pic', 'x.png', { read: async () => 'https://bucket.test/pic', fetchFn: (async () => { throw new TypeError('cors'); }) as typeof fetch, open: url => opened.push(url) });
-    expect(opened).toEqual(['https://bucket.test/pic']);
+  it('opens the original in a new tab inside the press when the store will not answer CORS', async () => {
+    const { downloadOriginal, rememberPicture } = await actual();
+    rememberPicture('plain-pic', 'https://bucket.test/plain-pic', false);
+    const pending = downloadOriginal('plain-pic', 'x.png', { fetchFn: (async () => { throw new Error('must not fetch'); }) as typeof fetch });
+    /* synchronously, before anything is awaited: no popup blocker */
+    expect(anchors).toEqual([{ download: '', href: 'https://bucket.test/plain-pic', target: '_blank' }]);
+    expect(await pending).toBe(true);
+  });
+
+  it('reads a fresh URL when the one on screen has lapsed, and says false when the bytes still fail', async () => {
+    const { downloadOriginal, rememberPicture } = await actual();
+    rememberPicture('old-pic', 'https://bucket.test/old', false, Date.now() - 10 * 60_000);
+    const reads: string[] = [];
+    expect(await downloadOriginal('old-pic', 'x.png', { read: async (id) => { reads.push(id); return 'https://bucket.test/new'; }, fetchFn: bytes('image/png') })).toBe(true);
+    expect(reads).toEqual(['old-pic']);
+    expect(await downloadOriginal('never-seen', 'x.png', { read: async () => 'https://bucket.test/n', fetchFn: (async () => { throw new TypeError('cors'); }) as typeof fetch })).toBe(false);
+  });
+
+  it('names the file from its stored name, never a cut label', async () => {
+    const { pictureFilename } = await actual();
+    expect(pictureFilename('IMG_0012.PNG', 'image/png')).toBe('IMG_0012.PNG');
+    expect(pictureFilename(`${'a'.repeat(118)}…`, 'image/jpeg')).toBe('waka-picture.jpg');
+    expect(pictureFilename('Photo', 'image/heic')).toBe('waka-picture.heic');
+    expect(pictureFilename('', '')).toBe('waka-picture');
+  });
+});
+
+describe('leadPicture', () => {
+  it('pairs the thumbnail with the line read off that same picture', async () => {
+    const { leadPicture } = await import('../src/components/SavedPhoto');
+    expect(leadPicture([{ id: 'a', type: 'image', label: 'a' }, { id: 'b', type: 'image', label: 'b', readLine: 'From b' }] as never))
+      .toEqual({ id: 'b', line: 'From b' });
+    expect(leadPicture([{ id: 'a', type: 'image', label: 'a' }, { id: 'f', type: 'file', label: 'f' }] as never)).toEqual({ id: 'a', line: null });
+    expect(leadPicture([{ id: 'f', type: 'file', label: 'f' }] as never)).toBeNull();
   });
 });

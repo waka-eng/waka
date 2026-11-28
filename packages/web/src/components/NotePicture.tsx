@@ -13,18 +13,21 @@
  *
  *   A TAP OPENS IT WHOLE: full screen, untrimmed, pinch to zoom (or a
  *   trackpad pinch, or a double tap), and the same "<" every page has goes
- *   back. Escape is that "<", as everywhere (nav system).
+ *   back. Escape is that "<", as everywhere (nav system). The whole view's
+ *   other corner downloads this picture's original.
  *
  *   NOTHING IS SAID ABOUT IT. No link, no caption, no scene description. The
  *   words read from it are `SavedImageWords`, drawn under it by the page;
- *   the original's download lives in the page's ⋯ (`NoteTools`).
+ *   a one-picture inspiration's ⋯ downloads the original too (`NoteTools`).
  */
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 
 import { fetchAttachmentUrl } from '../lib/api';
 import { t, type SupportedLocale } from '../lib/locales';
+import { downloadOriginal, rememberPicture } from '../lib/picture-download';
 import { NO_TRIM, readTrim, type Trim } from '../lib/picture-trim';
+import { HomeActionIcon } from './HomeActionIcon';
 import { SurfaceHeader } from './SurfaceHeader';
 
 export function NotePicture({ id, label, locale }: { id: string; label: string; locale: SupportedLocale }): JSX.Element {
@@ -58,11 +61,12 @@ export function NotePicture({ id, label, locale }: { id: string; label: string; 
         style={shape ? { marginTop: `${-(trim.top * shape.height / shape.width) * 100}%` } : undefined}
         onLoad={event => {
           const image = event.currentTarget;
+          rememberPicture(id, url, cors);
           setShape({ width: image.naturalWidth || 1, height: image.naturalHeight || 1, trim: cors ? readTrim(image) : NO_TRIM });
         }}
         onError={() => { if (cors) setCors(false); else setFailed(true); }} /> : null}
     </button>
-    {whole && url ? <PictureWhole url={url} label={label} locale={locale}
+    {whole && url ? <PictureWhole id={id} url={url} cors={cors} label={label} locale={locale}
       onClose={() => { setWhole(false); opener.current?.focus({ preventScroll: true }); }} /> : null}
   </figure>;
 }
@@ -76,13 +80,27 @@ const clampScale = (scale: number) => Math.min(MAX_ZOOM, Math.max(1, scale));
  * The picture whole, over everything: the page's own "<" at the top, the
  * picture fitted edge to edge under it. Two fingers zoom about their middle
  * and one finger moves a zoomed picture; a double tap goes to 2x and back.
+ *
+ * THE VIEW HOLDS FOCUS (code review, 2026-11-28): its root takes focus when
+ * it opens and on every press on the picture, so Escape always reaches it
+ * (and only it: the page under it stays open) and Tab walks its own two
+ * controls, never the page behind.
  */
-function PictureWhole({ url, label, locale, onClose }: { url: string; label: string; locale: SupportedLocale; onClose: () => void }): JSX.Element {
-  const surface = useRef<HTMLDivElement>(null), stage = useRef<HTMLDivElement>(null);
+function PictureWhole({ id, url: first, cors: firstCors, label, locale, onClose }: {
+  id: string; url: string; cors: boolean; label: string; locale: SupportedLocale; onClose: () => void;
+}): JSX.Element {
+  const say = (key: Parameters<typeof t>[1]) => t(locale, key);
+  const surface = useRef<HTMLDivElement>(null), stage = useRef<HTMLDivElement>(null), image = useRef<HTMLImageElement>(null);
   const [view, setView] = useState<View>(REST);
+  /* THE PAGE'S URL FIRST, AND ONE FRESH ONE IF IT HAS LAPSED (code review,
+     2026-11-28): a presigned read lives five minutes and the page may have
+     been open longer. Read the way the page read it, CORS first. */
+  const [source, setSource] = useState({ url: first, cors: firstCors, renewed: false });
+  const [downloadFailed, setDownloadFailed] = useState(false);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ distance: number; mid: { x: number; y: number }; from: View } | null>(null);
-  useEffect(() => { surface.current?.querySelector<HTMLButtonElement>('.waka-surface-back')?.focus({ preventScroll: true }); }, []);
+  useEffect(() => { surface.current?.focus({ preventScroll: true }); }, []);
+  const fit = (next: View) => bound(next, stage.current, image.current);
   /* A TRACKPAD PINCH ARRIVES AS A CTRL-WHEEL; a page zoom must not take it. */
   useEffect(() => {
     const node = stage.current;
@@ -90,12 +108,13 @@ function PictureWhole({ url, label, locale, onClose }: { url: string; label: str
     const wheel = (event: WheelEvent) => {
       if (!event.ctrlKey) return;
       event.preventDefault();
-      setView(current => about(current, clampScale(current.scale * Math.exp(-event.deltaY / 100)), centre(node, event.clientX, event.clientY)));
+      setView(current => bound(about(current, clampScale(current.scale * Math.exp(-event.deltaY / 100)), centre(node, event.clientX, event.clientY)), node, image.current));
     };
     node.addEventListener('wheel', wheel, { passive: false });
     return () => node.removeEventListener('wheel', wheel);
   }, []);
   const down = (event: ReactPointerEvent<HTMLDivElement>) => {
+    surface.current?.focus({ preventScroll: true });
     event.currentTarget.setPointerCapture?.(event.pointerId);
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const [a, b] = [...pointers.current.values()];
@@ -111,9 +130,9 @@ function PictureWhole({ url, label, locale, onClose }: { url: string; label: str
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       const scale = clampScale(g.from.scale * Math.hypot(a.x - b.x, a.y - b.y) / g.distance);
       const at = about(g.from, scale, centre(stage.current!, g.mid.x, g.mid.y));
-      setView(bound({ scale, x: at.x + mid.x - g.mid.x, y: at.y + mid.y - g.mid.y }, stage.current));
+      setView(fit({ scale, x: at.x + mid.x - g.mid.x, y: at.y + mid.y - g.mid.y }));
     } else if (a && g.from.scale > 1) {
-      setView(bound({ ...g.from, x: g.from.x + a.x - g.mid.x, y: g.from.y + a.y - g.mid.y }, stage.current));
+      setView(fit({ ...g.from, x: g.from.x + a.x - g.mid.x, y: g.from.y + a.y - g.mid.y }));
     }
   };
   const up = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -122,19 +141,37 @@ function PictureWhole({ url, label, locale, onClose }: { url: string; label: str
     /* one finger left after a pinch carries on as a move from where it is */
     gesture.current = a ? { distance: 0, mid: a, from: view } : null;
   };
+  const lapsed = () => {
+    if (source.cors && source.renewed) { setSource(current => ({ ...current, cors: false })); return; }
+    if (source.renewed) return;
+    void fetchAttachmentUrl(id).then(url => setSource({ url, cors: true, renewed: true })).catch(() => {});
+  };
   return createPortal(
-    <div ref={surface} className="waka-picture-whole" role="dialog" aria-modal="true" aria-label={label} data-jar-surface="1"
+    <div ref={surface} className="waka-picture-whole" role="dialog" aria-modal="true" aria-label={label} data-jar-surface="1" tabIndex={-1}
       onKeyDown={event => {
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); }
-        /* one control on this surface: Tab stays on it */
-        else if (event.key === 'Tab') { event.preventDefault(); surface.current?.querySelector<HTMLButtonElement>('.waka-surface-back')?.focus(); }
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); return; }
+        if (event.key !== 'Tab') return;
+        /* its own controls, round and round */
+        event.preventDefault(); event.stopPropagation();
+        const controls = [...(surface.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
+        if (!controls.length) return;
+        const at = controls.indexOf(document.activeElement as HTMLButtonElement);
+        const next = at < 0 ? (event.shiftKey ? controls.length - 1 : 0) : (at + (event.shiftKey ? -1 : 1) + controls.length) % controls.length;
+        controls[next]!.focus();
       }}>
-      <SurfaceHeader locale={locale} back={{ kind: 'back', onBack: onClose }} srTitle={label} />
+      <SurfaceHeader locale={locale} back={{ kind: 'back', onBack: onClose }} srTitle={label}
+        right={<button type="button" className="waka-picture-whole-download" aria-label={say('worldPictureDownload')}
+          onClick={() => { setDownloadFailed(false); void downloadOriginal(id, label).then(ok => setDownloadFailed(!ok)); }}>
+          <HomeActionIcon kind="download" />
+        </button>} />
       <div ref={stage} className="waka-picture-whole-stage" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-        onDoubleClick={event => setView(current => current.scale > 1 ? REST : about(current, 2, centre(event.currentTarget, event.clientX, event.clientY)))}>
-        <img src={url} alt={label} draggable={false}
+        onDoubleClick={event => { const node = event.currentTarget; const at = centre(node, event.clientX, event.clientY); setView(current => current.scale > 1 ? REST : bound(about(current, 2, at), node, image.current)); }}>
+        <img ref={image} key={`${source.url}:${source.cors}`} src={source.url} alt={label} draggable={false}
+          crossOrigin={source.cors ? 'anonymous' : undefined}
+          onLoad={() => rememberPicture(id, source.url, source.cors)} onError={lapsed}
           style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }} />
       </div>
+      {downloadFailed ? <p className="waka-picture-whole-said" role="alert">{say('worldPictureDownloadFailed')}</p> : null}
     </div>,
     document.body,
   );
@@ -151,10 +188,20 @@ function about(view: View, scale: number, at: { x: number; y: number }): View {
   const k = scale / view.scale;
   return { scale, x: at.x - (at.x - view.x) * k, y: at.y - (at.y - view.y) * k };
 }
-/** A zoomed picture cannot be pushed further than its own edge. */
-function bound(view: View, node: HTMLElement | null): View {
-  if (!node || view.scale <= 1) return { ...view, x: 0, y: 0, scale: Math.max(1, view.scale) };
+/**
+ * A zoomed picture cannot be pushed past its own edge. Measured against the
+ * picture as it is drawn, contained in the stage (code review, 2026-11-28):
+ * a tall screenshot is narrower than the stage, so the stage's box let it
+ * slide off sideways into the dark.
+ */
+function bound(view: View, node: HTMLElement | null, picture: HTMLImageElement | null): View {
+  if (!node || view.scale <= 1) return REST;
   const box = node.getBoundingClientRect();
-  const sx = box.width * (view.scale - 1) / 2, sy = box.height * (view.scale - 1) / 2;
+  /* not laid out (yet): nothing to measure against, so nothing to hold */
+  if (!box.width || !box.height) return view;
+  const ratio = picture?.naturalWidth && picture.naturalHeight ? picture.naturalWidth / picture.naturalHeight : box.width / box.height;
+  const drawn = box.width / box.height > ratio
+    ? { width: box.height * ratio, height: box.height } : { width: box.width, height: box.width / ratio };
+  const sx = Math.max(0, (drawn.width * view.scale - box.width) / 2), sy = Math.max(0, (drawn.height * view.scale - box.height) / 2);
   return { scale: view.scale, x: Math.max(-sx, Math.min(sx, view.x)), y: Math.max(-sy, Math.min(sy, view.y)) };
 }

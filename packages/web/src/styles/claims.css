@@ -8732,9 +8732,13 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
    its last line ends at 639px, on screen with the bar below it. At 390x844
    the column is 358px and the picture keeps it (358x609), as the board's
    phone frames do; the switch is the note page's own 700px, where its
-   gutter rule above was measured. */
-@media (min-width: 701px) {
-  .waka-note-picture .waka-note-picture-open { width: min(100%, calc((100dvh - 20rem) * var(--pic-ratio, 1))); }
+   gutter rule above was measured.
+   NOT ON A SHORT WINDOW (code review, 2026-11-28). MEASURED at 844x390, a
+   phone on its side: 100dvh less 20rem is 70px, a sliver. Under 560px tall
+   the clamp is off and the picture takes the column, to scroll like any
+   page; above it the picture is never under 12rem (192px) tall. */
+@media (min-width: 701px) and (min-height: 560px) {
+  .waka-note-picture .waka-note-picture-open { width: min(100%, calc(max(12rem, 100dvh - 20rem) * var(--pic-ratio, 1))); }
 }
 
 /* "THE WORDS I READ" in the words' column, at body size (see `.waka-note-read`). */
@@ -8765,6 +8769,14 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   margin-inline: calc(-1 * max(var(--sp-16), env(safe-area-inset-left))) calc(-1 * max(var(--sp-16), env(safe-area-inset-right)));
   touch-action: none; user-select: none; -webkit-user-select: none;
 }
+/* The whole view's other corner: this picture's original, as an icon in
+   the header's right seat, dim until pressed like every corner control. */
+.waka-picture-whole .waka-picture-whole-download {
+  display: inline-grid; place-items: center; width: var(--waka-corner); height: var(--waka-corner); margin-inline-end: calc(-1 * var(--sp-10));
+  padding: 0; border: 0; border-radius: var(--r-pill); background: none; color: var(--muted); cursor: pointer;
+}
+.waka-picture-whole .waka-picture-whole-download:hover { color: var(--ink); }
+.waka-picture-whole-said { flex: none; margin: var(--sp-8) 0 var(--sp-12); text-align: center; color: var(--muted); font-size: var(--t-ui); }
 .waka-picture-whole-stage > img {
   /* the stage's box, the picture contained in it: a grid cell's auto row
      let a tall screenshot overflow the screen's foot */

@@ -45,7 +45,7 @@ import { Fragment, useCallback, useEffect, useRef, useState, useMemo } from "rea
 import { DialogSurface } from "./DialogSurface";
 import { NotePage } from "./NotePage";
 import { SurfaceHeader, useNativeBack, type BackKind } from "./SurfaceHeader";
-import { firstPhoto, onlyAttachments, readLine, SavedPhoto } from "./SavedPhoto";
+import { leadPicture, onlyAttachments, SavedPhoto } from "./SavedPhoto";
 import { prefersStillness } from "../lib/motion";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { InspirationAttachments } from "./InspirationAttachments";
@@ -860,15 +860,18 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
      failure is said in the bar with every other, and only on its own note. */
   const [downloadFailedFor, setDownloadFailedFor] = useState<string | null>(null);
   const downloadFailed = Boolean(open) && downloadFailedFor === open?.id;
+  /* ONE PICTURE, ONE PRESS (code review, 2026-11-28): a loop of downloads
+     after an await trips popup blockers, so the ⋯ offers it only when the
+     inspiration holds one picture; each picture's whole view has its own. */
   const openPictures = open?.attachments.filter(item => item.type === "image") ?? [];
-  const downloadPictures = useCallback(async (note: Inspiration) => {
+  const downloadPicture = (note: Inspiration) => {
+    const picture = note.attachments.find(each => each.type === "image");
+    if (!picture) return;
     setDownloadFailedFor(null);
-    try {
-      for (const item of note.attachments.filter(each => each.type === "image")) await downloadOriginal(item.id, item.label);
-    } catch {
-      setDownloadFailedFor(note.id);
-    }
-  }, []);
+    /* called inside the press: `downloadOriginal` opens a tab synchronously
+       when it must */
+    void downloadOriginal(picture.id, picture.label).then(ok => { if (!ok) setDownloadFailedFor(note.id); });
+  };
   /* THE FILE INPUT WENT WITH THE CORNER IT LIVED IN. It belongs beside
      the button that opens it, and that button is in the bar now — see
      `NoteTools`, which owns both. */
@@ -1758,8 +1761,8 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
           shareLabel={loaded && draft.trim() ? say("worldShareInspirationTitle") : undefined}
           onShare={() => setShareOf(inspirationShareTarget(locale, { text: draft.trim(), capturedMs: open.capturedMs, attachments: open.attachments }))}
           /* The original of each picture it holds, untrimmed. */
-          downloadLabel={openPictures.length ? say("worldPictureDownload") : undefined}
-          onDownload={() => { void downloadPictures(open); }}
+          downloadLabel={openPictures.length === 1 ? say("worldPictureDownload") : undefined}
+          onDownload={() => downloadPicture(open)}
           onFile={(file, door) => void attach(file, door)}
             />
           </article>
@@ -1899,9 +1902,10 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
                        nothing else: no scene description. Its name stays for
                        a screen reader. No grid: that tile wall was not
                        approved. */
-                    const photo = firstPhoto(row.attachments);
+                    const picture = leadPicture(row.attachments);
+                    const photo = picture?.id ?? null;
                     const wordless = onlyAttachments(row.preview, row.attachments);
-                    const shown = wordless ? readLine(row.attachments) : lead;
+                    const shown = wordless ? picture?.line ?? null : lead;
                     const body = <>
                           {shown ? <span className="waka-list-lead">{shown}</span> : <span className="sr-only">{lead}</span>}
                           <span className="waka-list-meta">
