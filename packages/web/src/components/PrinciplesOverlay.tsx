@@ -344,15 +344,16 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
   );
 }
 
-/* ═══ WAKA'S OWN ASTERISK, WHOLE AND SOFT (founder, 2026-11-28, of the
-   cut one: "astriks so ugly and cut off"; first chosen 2026-11-27 over a
-   four-point spark that read as another company's AI button) ═══ The mark
-   is *, ASCII 42, the wildcard WAKA is named for, drawn as the board's
-   option B: six plump rounded arms in the creature's own ivory, lit from
-   above as the creature is, so it looks made of the same stuff. Whole, set
-   in from the edge where the spark once sat; Principles wears the same mark
-   on its left to walk home (founder, 2026-11-19: "there should be the same
-   star on the left to go back"). */
+/* ═══ WAKA'S OWN ASTERISK, A STAR OF THE CREATURE'S LIGHT (founder,
+   2026-11-28: "i want astricks to feel more like a star", after the cut
+   one was "so ugly and cut off"; first chosen 2026-11-27 over a four-point
+   spark that read as another company's AI button) ═══ The mark is still *,
+   ASCII 42, the wildcard WAKA is named for: six arms, never the four of a
+   sparkle. Each arm is a ray that tapers to a fine point, joined at a small
+   bright core, in the creature's own ivory, so it twinkles like a star
+   made of the same light. Whole, set in from the edge where the spark sat;
+   Principles wears the same on its left to walk home (founder, 2026-11-19:
+   "there should be the same star on the left to go back"). */
 const ARM_ANGLES = [0, 60, 120, 180, 240, 300] as const;
 
 /** The asterisk both Principles doors wear. The span around it holds the
@@ -363,16 +364,17 @@ export function PrinciplesAsterisk(): JSX.Element {
     <span className="waka-principles-mark">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <defs>
-          <radialGradient id={fill} cx="50%" cy="42%" r="60%">
-            <stop offset="0" stopColor="var(--waka-asterisk-light, #fffdf8)" />
-            <stop offset="0.55" stopColor="var(--waka-asterisk-body, #f4ecdd)" />
-            <stop offset="1" stopColor="var(--waka-asterisk-shade, #cdc3b1)" />
+          <radialGradient id={fill} gradientUnits="userSpaceOnUse" cx="12" cy="12" r="11">
+            <stop offset="0" stopColor="#fffdf8" />
+            <stop offset="0.45" stopColor="#f6eedf" />
+            <stop offset="1" stopColor="#cdc3b1" />
           </radialGradient>
         </defs>
         <g fill={`url(#${fill})`}>
           {ARM_ANGLES.map(angle => (
-            <rect key={angle} x="10.1" y="1.6" width="3.8" height="8.4" rx="1.9" transform={`rotate(${angle} 12 12)`} />
+            <path key={angle} d="M12 1.2C12.55 5.4 13.35 9.1 12 12C10.65 9.1 11.45 5.4 12 1.2Z" transform={`rotate(${angle} 12 12)`} />
           ))}
+          <circle cx="12" cy="12" r="1.9" fill="#fffdf8" />
         </g>
       </svg>
     </span>

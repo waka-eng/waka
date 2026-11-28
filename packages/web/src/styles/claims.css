@@ -8426,6 +8426,7 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   pointer-events: none; user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none; }
 .waka-review-reader-page > .waka-review-photo + .sr-only + .waka-review-reader-text { margin-top: var(--sp-16); }
 .waka-saved-photo.waka-review-photo--whole { display: flex; align-items: center; justify-content: center; height: 60svh; border-radius: 0; background: none; }
+.waka-saved-photo.waka-review-photo--whole:empty { background: var(--waka-raised); border-radius: var(--sp-12); }
 .waka-saved-photo.waka-review-photo--whole > img { width: auto; max-width: 100%; height: auto; max-height: 100%; object-fit: contain; border-radius: var(--sp-12); }
 /* ═══ INSPIRATIONS, LED BY PICTURES (founder, 2026-11-27, approving the
    picture-saves board: "No more '#8 Oct 27' with a 48px thumbnail at the far
@@ -8577,7 +8578,7 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   width: var(--waka-corner); height: var(--waka-corner);
 }
 .waka-principles-mark svg {
-  position: relative; display: block; width: 26px; height: 26px;
+  position: relative; display: block; width: 30px; height: 30px;
   animation: waka-spark-glint 3.6s ease-in-out infinite;
 }
 .waka-principles-mark::before {
@@ -8586,20 +8587,25 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   animation: waka-spark-glow 3.6s ease-in-out infinite;
 }
 /* Always shown, brighter at rest (founder, 2026-11-19: "yes always shown"):
-   the mark rests softly and every few seconds lights, swells and turns a
-   little, the spark's old 3.6s beat. Opacity and transform only. */
+   the mark rests softly in its halo and every few seconds twinkles, as a
+   star does: a quick bright flicker, twice, on the spark's old 3.6s beat.
+   Light only: motion explains, never decorates. */
 @keyframes waka-spark-glint {
-  0%, 70%, 100% { opacity: 0.62; transform: scale(0.92) rotate(0deg); }
-  80% { opacity: 1; transform: scale(1.08) rotate(15deg); }
-  90% { opacity: 0.7; transform: scale(0.95) rotate(30deg); }
+  0%, 66%, 100% { opacity: 0.66; }
+  72% { opacity: 1; }
+  77% { opacity: 0.72; }
+  83% { opacity: 1; }
+  90% { opacity: 0.7; }
 }
 @keyframes waka-spark-glow {
-  0%, 70%, 100% { opacity: 0; }
-  80% { opacity: 1; }
-  90% { opacity: 0; }
+  0%, 66%, 100% { opacity: 0.35; }
+  72% { opacity: 1; }
+  77% { opacity: 0.5; }
+  83% { opacity: 0.95; }
+  90% { opacity: 0.35; }
 }
 /* A line about principles: the asterisk flares, twice, then rests. */
-.waka-principles-spark-beckon svg { animation: none; opacity: 1; transform: scale(1.08); }
+.waka-principles-spark-beckon svg { animation: none; opacity: 1; }
 .waka-principles-spark-beckon .waka-principles-mark::before { animation: waka-spark-beckon 1.6s ease-out both; }
 @keyframes waka-spark-beckon {
   0%, 100% { opacity: 0; }
@@ -8619,12 +8625,12 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 /* A soft ring around the whole press frames the mark under the keyboard. */
 .waka-principles-spark:focus-visible { outline: 1px solid color-mix(in srgb, var(--jar-live) 50%, transparent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
-  .waka-principles-mark svg { animation: none; opacity: 0.66; transform: none; }
-  .waka-principles-mark::before { animation: none; }
+  .waka-principles-mark svg { animation: none; opacity: 0.66; }
+  .waka-principles-mark::before { animation: none; opacity: 0.35; }
   /* The beckon still answers, still: full light, no motion. Its selectors
      outrank the rest rules above. */
   .waka-principles-spark-beckon .waka-principles-mark svg,
-  .waka-principles-spark-beckon .waka-principles-mark::before { animation: none; opacity: 1; transform: none; }
+  .waka-principles-spark-beckon .waka-principles-mark::before { animation: none; opacity: 1; }
 }
 }
 
