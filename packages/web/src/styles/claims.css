@@ -650,8 +650,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
    IT INHERITS RATHER THAN DECLARES. No colour, no size, no family: the
    span above sets `--muted` and `--t-meta` and this takes both, so the
-   question and its answer are one line of type with one thing underlined.
-   An underline, not a fill — the founder's ruling on the Save mark one
+   question and its answer are one line of type, the answer at full ink.
+   Not underlined (founder, 2026-11-27: "dont underline the buttons") and
+   not filled — the founder's ruling on the Save mark one
    rule above applies to the whole bar: nothing in it is filled, and light
    is the only meaning channel.
 
@@ -663,9 +664,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   padding: 0;
   border: 0;
   background: none;
-  color: inherit;
   font: inherit;
-  text-decoration: underline;
+  /* Full ink beside the muted state words, never underlined (founder,
+     2026-11-27: "dont underline the buttons"); it glows on hover. */
+  color: var(--ink);
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -774,7 +777,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    item with the 44px floor, in the ink a press is drawn in. */
 .waka-dock-retry {
   color: var(--ink);
-  text-decoration: underline;
+  /* not underlined (founder, 2026-11-27: "dont underline the buttons") */
+  text-decoration: none;
 }
 /* CANCEL RECORDING, beside Stop and outside the state line: never shrunk,
    ellipsized or clipped with it, and never narrower than a fingertip. */
@@ -786,8 +790,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    L12: the archive's recorder is `Home`'s, so its failure can arrive after
    the archive has gone. The line stands just above the dock, in the dock's
    own material and type, at the dock's height in the stack — over a page,
-   and never over the bar that is the way out of it. Try again is underlined
-   the way the bar's Try again is; × is a fingertip wide. */
+   and never over the bar that is the way out of it. Try again is full ink,
+   as the bar's Try again is, and no longer underlined (founder, 2026-11-27:
+   "dont underline the buttons"); × is a fingertip wide. */
 .waka-clip-failed {
   position: fixed;
   z-index: 60;
@@ -824,7 +829,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   font: inherit;
   cursor: pointer;
 }
-.waka-clip-failed-retry { text-decoration: underline; }
+/* Not underlined (founder, 2026-11-27: "dont underline the buttons"). */
+.waka-clip-failed-retry { text-decoration: none; }
 /* × lets the clip go: secondary to Try again, so it speaks in the muted ink */
 .waka-clip-failed .waka-clip-failed-close { color: var(--muted); }
 .waka-clip-failed button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
@@ -2164,7 +2170,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 
 .waka-over-clear {
   min-height: 44px; padding: 0 var(--sp-4); border: 0; background: none;
-  color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+  /* full ink, not underlined (founder, 2026-11-27: "dont underline the buttons") */
+  color: var(--ink); font: inherit; text-decoration: none; cursor: pointer;
 }
 .waka-over-retry:hover,
 .waka-over-retry:focus-visible,
@@ -4437,20 +4444,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   font-family: inherit;
   font-size: var(--t-ui);
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 5px;
-  text-decoration-thickness: 1px;
-  text-decoration-color: color-mix(in srgb, var(--ink) 40%, transparent);
-  transition: text-decoration-color 0.2s ease;
-}
-
-/* The light moves to the rule under the word — the word is already at full
-   ink and has nothing left to brighten. Hover and focus together, because a
-   focus answer written apart from its hover drifts from it the first time
-   either is touched. */
-.waka-public-enter:hover,
-.waka-public-enter:focus-visible {
-  text-decoration-color: var(--ink);
+  /* Not underlined (founder, 2026-11-27: "dont underline the buttons"): the
+     word is at full ink and glows on hover and focus, the shared rule's
+     answer ("A WORD THAT CAN BE PRESSED"). */
+  text-decoration: none;
 }
 
 /* Loading, empty, and the body of the page that is not here — one register
@@ -5680,13 +5677,22 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-connect-step-title { color: var(--ink); font-size: var(--t-ui); line-height: 1.45; }
 .waka-connect-allow { display: flex; align-items: center; gap: var(--sp-8); color: var(--muted); font-size: var(--t-ui); cursor: pointer; }
 .waka-connect-tool .waka-connect-button {
-  min-height: 40px; padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
+  min-height: var(--waka-corner); padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); font: inherit; font-size: var(--t-ui); cursor: pointer;
 }
 .waka-connect-tool .waka-connect-button:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 16%, transparent); }
 .waka-connect-tool .waka-connect-button:disabled { opacity: .5; cursor: default; }
-.waka-connect-tool .waka-connect-button.waka-connect-button--quiet { background: none; padding: 0; min-height: 36px; color: var(--muted); }
+.waka-connect-tool .waka-connect-button.waka-connect-button--quiet { background: none; padding: 0; min-height: var(--waka-corner); color: var(--muted); }
 .waka-connect-tool .waka-connect-button.waka-connect-button--quiet:is(:hover, :focus-visible) { background: none; color: var(--ink); }
+/* THE CANCEL WITH NO PADDING (founder, 2026-11-27: "i just saw a cancel
+   button with like 0 paddings lol"). The pair wore `.waka-session-actions`,
+   whose `> button:last-child` drew the answering act's 1px pill round
+   whichever button came last: Cancel got an outline touching its letters,
+   36 tall. The pair now names its own parts (code review, 2026-11-27):
+   Cancel first, a quiet word on the column, never edged; Disconnect second,
+   the tool card's own filled pill; both 44, 8 apart. */
+.waka-connect-pair { display: flex; align-items: center; gap: var(--sp-8); }
+.waka-connect-tool .waka-connect-button.waka-connect-button--cancel { padding-inline: 0; border: 0; }
 .waka-connect-connected { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-8); padding: 0 var(--sp-14) var(--sp-14) calc(var(--sp-14) + 8px + var(--sp-12)); }
 .waka-connect-reads { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: var(--sp-4); font-size: var(--t-ui); color: var(--ink); }
 .waka-connect-reads > li { display: flex; justify-content: space-between; gap: var(--sp-12); }
@@ -5704,7 +5710,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .waka-connect-tool :is(.waka-connect-steps, .waka-connect-connected) .waka-settings-note { margin: 0; color: var(--muted); font-size: var(--t-meta); line-height: 1.45; }
 .waka-connect-tool .waka-settings-erase {
-  min-height: 40px; margin: 0; padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
+  min-height: var(--waka-corner); margin: 0; padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); font-size: var(--t-ui);
 }
 .waka-connect-tool .waka-settings-erase:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 16%, transparent); }
@@ -5796,6 +5802,10 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-session-meta { color: var(--muted); font-size: var(--t-meta); }
 .waka-session-line { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
 .waka-session-list .waka-session-card { padding: var(--sp-8) 0; }
+/* A LINE DIVIDES, IT DOES NOT CLOSE (founder, 2026-11-27, of one device
+   with a line under it: "if its the last item on the list"). The last row
+   of any list here stands without one, as `* + *` lists already do. */
+.waka-session-card:last-child { border-bottom: 0; }
 /* What each key read, under the keys (2026-11-26). */
 .waka-mcp-reads { display: grid; gap: var(--sp-8); margin-top: var(--sp-24); }
 .waka-session-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-8) var(--sp-16); }
@@ -6154,6 +6164,73 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
   font-family: var(--waka-face);
   font-size: var(--t-meta);
   cursor: pointer;
+}
+
+/* ═══ ONE BUTTON, ONE SHAPE (founder, 2026-11-27: "audit for like spacing
+   and alignment and stuff to make it look 'polished' for all buttons,
+   states, etc. for example i just saw a cancel button with like 0 paddings
+   lol") ═══ The card's house standard, measured off its own majority at 390
+   and 1280:
+     - THE ANSWERING ACT is the edged pill: 44 tall, 16 in, a 1px edge.
+     - A QUIET WORD is 44 tall with no ground, ever; it answers the hand in
+       light (muted to ink). Where it starts a row it stands on the text
+       column, inline padding 0, as Sign out and the foot already do.
+     - A pair is 8 apart, Cancel on the left, the act on the right.
+   Outliers, each measured before:
+     - Change password stood 35 tall (chrome.css's submit `padding: 7px`,
+       `min-height: 32px` at (0,1,1) beat this class's 44); that rule now
+       reaches only `.btn-primary` and classless submits.
+     - Cancel in every confirm pair stood 14px in from the words above it.
+     - `.waka-account button:hover` (0,2,1) laid a square 8% ground on the
+       zero-padding words (Refresh, Sign out everywhere else, each row's
+       Disconnect, Cancel): a box hugging the letters. */
+.waka-session-actions > .waka-settings-erase:first-child:not(:last-child) { padding-inline: 0; border-radius: 0; }
+.waka-account :is(.waka-settings-section, .waka-session-foot, .waka-session-line) > .waka-settings-erase:is(:hover, :focus-visible),
+.waka-account .waka-session-actions > .waka-settings-erase:first-child:not(:last-child):is(:hover, :focus-visible) {
+  background: none;
+}
+/* ═══ A WORD THAT CAN BE PRESSED ANSWERS IN LIGHT, NOT A LINE (founder,
+   2026-11-27: "dont underline the buttons") ═══ Every word button that sat
+   in a sentence wearing an underline (Try again, Undo, Retry, Start again,
+   Edit draft, See what changed, Restore…) now stands at full ink beside the
+   sentence's muted words, and glows when the hand or the keyboard arrives.
+   Dim words keep their own muted-to-ink step. Links in prose (`<a>` in the
+   legal pages) keep their underline: they are text, not buttons.
+   Each name inside `:where()` so this owns only the glow and never
+   outranks a rule that sets anything else. */
+:where(button[type="submit"]:not(.btn-doorway)):hover:not(:disabled),
+:where(button[type="submit"]:not(.btn-doorway)):focus-visible:not(:disabled),
+:where(.btn-primary:not(.btn-doorway)):hover:not(:disabled),
+:where(.btn-primary:not(.btn-doorway)):focus-visible:not(:disabled),
+:where(button.login-link):hover:not(:disabled),
+:where(button.login-link):focus-visible:not(:disabled),
+:where(.waka-dock-undo):hover:not(:disabled),
+:where(.waka-dock-undo):focus-visible:not(:disabled),
+:where(.waka-dock-retry):hover:not(:disabled),
+:where(.waka-dock-retry):focus-visible:not(:disabled),
+:where(.waka-clip-failed-retry):hover:not(:disabled),
+:where(.waka-clip-failed-retry):focus-visible:not(:disabled),
+:where(.waka-public-enter):hover:not(:disabled),
+:where(.waka-public-enter):focus-visible:not(:disabled),
+:where(.waka-profile-error button):hover:not(:disabled),
+:where(.waka-profile-error button):focus-visible:not(:disabled),
+:where(.waka-restore-notice button):hover:not(:disabled),
+:where(.waka-restore-notice button):focus-visible:not(:disabled),
+:where(.waka-inspiration-relevance button):hover:not(:disabled),
+:where(.waka-inspiration-relevance button):focus-visible:not(:disabled),
+:where(.waka-inspiration-review-action):hover:not(:disabled),
+:where(.waka-inspiration-review-action):focus-visible:not(:disabled),
+:where(.waka-note-bar-state button):hover:not(:disabled),
+:where(.waka-note-bar-state button):focus-visible:not(:disabled),
+:where(.jar-source-status button):hover:not(:disabled),
+:where(.jar-source-status button):focus-visible:not(:disabled),
+:where(.jar-panel-retry):hover:not(:disabled),
+:where(.jar-panel-retry):focus-visible:not(:disabled),
+:where(.jar-prov-open):hover:not(:disabled),
+:where(.jar-prov-open):focus-visible:not(:disabled),
+:where(.waka-over-clear):hover:not(:disabled),
+:where(.waka-over-clear):focus-visible:not(:disabled) {
+  text-shadow: 0 0 var(--sp-12) color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
 /* NO RED. "Colour temperature means aliveness and is not spent on
@@ -6786,6 +6863,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
     flex-direction: column;
     align-items: stretch;
   }
+  /* Under the words, Bring back's own 8px stood its word 8px right of the
+     line it restores (MEASURED 2026-11-27 at 390: words x 16, verb x 24).
+     The hit box keeps its 8; the word moves onto the edge. Asking, the
+     question leads the row and already stands there. */
+  .waka-shelf-acts > .waka-shelf-back:first-child { margin-inline-start: calc(-1 * var(--sp-8)); }
 }
 
 /* "Deleted. Undo" — the one line of state the list shows, held at the foot
@@ -7107,7 +7189,9 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .jar-draft-menu p { margin: var(--sp-12); line-height: 1.5; }
 .waka-profile-error { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; font-size: var(--t-ui); max-width: min(25rem, calc(100vw - 6rem)); }
-.waka-profile-error button { min-height: 44px; text-decoration: underline; }
+/* Word buttons in a line of text: full ink, no underline (founder,
+   2026-11-27: "dont underline the buttons"); chrome.css's glow answers. */
+.waka-profile-error button { min-height: 44px; color: var(--ink); text-decoration: none; }
 
 /* Stable destinations sit below the home page's single primary action. */
 .waka-primary-navigation {
@@ -7172,13 +7256,19 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-over--archive .waka-over-new { padding-inline: var(--sp-12); }
 .waka-over--archive .waka-over-what { margin: 0; }
 .waka-restore-notice { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-8); font-size: var(--t-body); }
-.waka-restore-notice button { min-height: var(--sp-44); color: var(--ink); text-decoration: underline; background: none; border: 0; font: inherit; cursor: pointer; }
+.waka-restore-notice button { min-height: var(--sp-44); color: var(--ink); text-decoration: none; background: none; border: 0; font: inherit; cursor: pointer; }
 .waka-dock-making > .jar-source-status { position: absolute; bottom: calc(100% + var(--sp-8)); left: 0; right: 0; width: auto; max-width: none; margin: 0; padding: var(--sp-12) var(--sp-16); background: var(--paper); border: 1px solid var(--line); border-radius: var(--sp-12); font-size: var(--t-body); }
 
 /* Important settings text uses the reading register; fields keep the iOS-safe input size. */
 .waka-settings-note, .waka-mcp-setup, .waka-session-tabs button, .waka-settings-erase,
 .waka-settings-row, .waka-settings-add button, .waka-settings-rows button,
 .waka-session-list-heading h3, .waka-mcp-setup h3 { font-size: var(--t-body); }
+/* …AND IT TAKES (code review, 2026-11-27). `.waka-account button` (0,1,1)
+   set every button on the card to `--t-ui`, so the line above never reached
+   `.waka-settings-erase`: Change password and Delete account stood a step
+   under the 15px sentence above them. Named here at (0,3,0); the Connect
+   cards and the compact setup keep their own smaller step. */
+.waka-account .waka-settings-erase:not(.waka-connect-tool *, .waka-mcp-setup--compact *) { font-size: var(--t-body); }
 .waka-agent-profile-fields input, .waka-settings-add input, .waka-settings .waka-account-field input { font-size: var(--t-input); }
 .waka-mcp-choice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-8); margin: var(--sp-12) 0; font-size: var(--t-body); }
 /* Styled as the card's other fields (craft audit, 2026-11-26: it was the
@@ -7313,10 +7403,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* A bounded preview leaves all choices visible; a tap on the card reads the full original. */
 .waka-inspiration-review-text { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--t-body); line-height: 1.55; margin: var(--sp-12) 0; }
 .waka-inspiration-relevance { font-size: var(--t-meta); line-height: 1.5; opacity: .85; margin-bottom: var(--sp-16); }
-.waka-inspiration-relevance button { font: inherit; text-decoration: underline; text-underline-offset: 3px; min-height: var(--sp-44); }
+.waka-inspiration-relevance button { font: inherit; color: var(--ink); text-decoration: none; min-height: var(--sp-44); }
 
 .waka-inspiration-review-question { margin: 0 0 var(--sp-10); font-size: var(--t-lead); line-height: 1.4; font-weight: 500; }
-.waka-inspiration-review-action { background: none; border: 0; color: inherit; font: inherit; font-size: var(--t-meta); padding: var(--sp-8) var(--sp-10); min-height: var(--sp-44); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+/* Full ink at rest, no underline (founder, 2026-11-27: "dont underline the
+   buttons"): beside the card's faint source lines the light marks it. */
+.waka-inspiration-review-action { background: none; border: 0; color: var(--ink); font: inherit; font-size: var(--t-meta); padding: var(--sp-8) var(--sp-10); min-height: var(--sp-44); cursor: pointer; text-decoration: none; }
 .waka-inspiration-review-action:disabled { opacity: .5; cursor: wait; }
 
 }
@@ -7558,7 +7650,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .waka-note-bar-state:empty { display: none; }
 .waka-note-bar[data-field] > .waka-note-bar-state { max-width: none; padding: var(--sp-4) var(--sp-10) 0; }
-.jar-inspiration-composer .waka-note-bar-state button { min-height: var(--sp-32); padding: 0 var(--sp-4); border: 0; background: none; color: var(--ink); font-size: var(--t-meta); text-decoration: underline; }
+.jar-inspiration-composer .waka-note-bar-state button { min-height: var(--sp-32); padding: 0 var(--sp-4); border: 0; background: none; color: var(--ink); font-size: var(--t-meta); text-decoration: none; }
 .waka-note-bar .waka-dock-tool { border: 0; background: none; color: var(--ink); }
 .waka-note-bar .waka-dock-tool:disabled { opacity: 0.4; }
 /* THE LIVE WORD KEEPS ITS WIDTH (review, 2026-11-09): four classes, so the
@@ -7984,6 +8076,9 @@ body .jar-seek.jar-inspiration-composer, body .jar-seek.jar-inspiration-composer
   }
   .jar-note-actions > .jar-draft-menu > .waka-add-row {
     min-height: 56px; justify-content: center; font-size: var(--t-input);
+    /* The sheet rounds its own corners; a row's 12px radius bent the
+       divider above Delete into a cup at both ends (2026-11-27 polish). */
+    border-radius: 0;
   }
   .jar-note-actions > .jar-draft-menu > .waka-add-row + .waka-add-row { border-top: 1px solid var(--line); }
 }

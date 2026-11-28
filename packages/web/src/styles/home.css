@@ -535,7 +535,8 @@
 .jar-forming.jar-forming--personal { font-size:var(--t-body); font-style:normal; color:var(--w-muted); line-height:1.6; }
 
 
-.jar-reading-actions button:hover,.jar-reading-actions button:focus-visible { color:var(--jar-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
+/* Pointed at is a step to ink, no line (founder, 2026-11-27: "dont underline the buttons"). */
+.jar-reading-actions button:hover,.jar-reading-actions button:focus-visible { color:var(--jar-ink); }
 .jar-poster[role="button"]:hover,
 .jar-poster[role="button"]:focus-visible {
   text-shadow: 0 0 22px rgba(242, 236, 225, 0.32);
@@ -935,8 +936,9 @@
   font: inherit;
   color: var(--jar-ink);
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  /* Full ink, not underlined (founder, 2026-11-27: "dont underline the
+     buttons"); it glows on hover and focus (chrome.css). */
+  text-decoration: none;
 }
 /* ONE CENTRED LINE, NOT THREE THINGS ACROSS 680px. This was a three-column
    grid — mark, copy at `1fr`, action — so the copy took every spare pixel and
@@ -2842,7 +2844,8 @@
   background: none;
   color: var(--jar-ink);
   font: inherit;
-  text-decoration: underline;
+  /* not underlined (founder, 2026-11-27: "dont underline the buttons") */
+  text-decoration: none;
   cursor: pointer;
 }
 /* ---------- marks inside the memory ----------
@@ -3149,10 +3152,13 @@
   padding: 0;
   background: none;
   font-family: inherit;
-  color: var(--jar-faint);
+  /* Its mark is light now, not a line (founder, 2026-11-27: "dont underline
+     the buttons"): full ink at rest against the faint labels round it, so
+     on a phone, where nothing hovers, it still reads as the one word that
+     opens something; it glows when pointed at. */
+  color: var(--jar-ink);
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration: none;
   transition: color 0.2s ease;
 }
 .jar-prov-open:hover,

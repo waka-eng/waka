@@ -689,7 +689,11 @@ body {
   color: var(--ink);
   text-decoration: underline;
   cursor: pointer;
-}.login-link:hover {
+}
+/* A login-link that is a BUTTON (Try again, Retry) is not underlined
+   (founder, 2026-11-27: "dont underline the buttons"); the <a> keeps it. */
+button.login-link { text-decoration: none; }
+.login-link:hover {
   text-decoration: none;
 }
 
