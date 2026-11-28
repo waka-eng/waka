@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Archive } from './helpers/archive';
 import { openNoteActions } from './helpers/note-actions';
 import { inspirationPreview } from '../src/lib/inspiration-preview';
+import { forgetPictureStore } from '../src/lib/picture-download';
 
 const state = vi.hoisted(() => ({
   rows: [] as Array<Record<string, unknown>>,
@@ -60,7 +61,7 @@ const row = (id: string, attachments: Array<Record<string, unknown>>, preview = 
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  state.downloads.length = 0; state.detail.clear();
+  state.downloads.length = 0; state.detail.clear(); forgetPictureStore();
   state.rows = [
     row('save-read', [read], undefined, 26),
     row('save-words', [], 'Changed my desk around and the week felt new', 25),
@@ -227,6 +228,81 @@ describe('the picture is the page', () => {
     expect(image()).toContain('scale(1)');
   });
 
+  it('doubles the picture on two quick taps of a finger, as an iPhone sends them', async () => {
+    await renderList();
+    await open('The smaller step');
+    await landPicture();
+    await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-picture-open')!.click());
+    const stage = document.querySelector<HTMLElement>('.waka-picture-whole-stage')!;
+    const tap = (type: string) => {
+      const event = new MouseEvent(type, { bubbles: true, clientX: 200, clientY: 300 });
+      Object.defineProperty(event, 'pointerId', { value: 3 });
+      Object.defineProperty(event, 'pointerType', { value: 'touch' });
+      stage.dispatchEvent(event);
+    };
+    await act(async () => { tap('pointerdown'); tap('pointerup'); });
+    expect(stage.querySelector('img')!.style.transform).toContain('scale(1)');
+    await act(async () => { tap('pointerdown'); tap('pointerup'); });
+    expect(stage.querySelector('img')!.style.transform).toContain('scale(2)');
+  });
+
+  it('says it could not open, with Try again, inside the view when the picture will not load after a fresh read', async () => {
+    await renderList();
+    await open('The smaller step');
+    await landPicture();
+    await act(async () => host.querySelector<HTMLButtonElement>('.waka-note-picture-open')!.click());
+    const whole = document.querySelector<HTMLElement>('.waka-picture-whole')!;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const image = whole.querySelector('img');
+      if (!image) break;
+      await act(async () => { image.dispatchEvent(new Event('error')); });
+      await settle();
+    }
+    const said = whole.querySelector('[role="alert"]')!;
+    expect(said.textContent).toContain('Couldn’t open this attachment.');
+    await act(async () => said.querySelector('button')!.click());
+    await settle();
+    expect(whole.querySelector('img'), 'Try again reads it afresh').not.toBeNull();
+    expect(whole.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('lets a failed download pass: a few seconds in the bar, behind any failure about the words', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      state.rows = [row('save-refused', [{ id: 'pic-refused', type: 'image', label: 'IMG_1.PNG' }])];
+      await renderList();
+      await open('#');
+      await openNoteActions();
+      await act(async () => document.querySelector<HTMLButtonElement>('[role="menuitem"][aria-label="Download original"]')!.click());
+      await settle();
+      const said = () => document.querySelector('.waka-dock-state[role="alert"]')?.textContent ?? '';
+      expect(said()).toBe('Couldn’t download the picture.');
+      await act(async () => { vi.advanceTimersByTime(5_100); });
+      expect(said()).toBe('');
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('learns once that the store answers no CORS read, and loads every picture after without it', async () => {
+    await renderList();
+    await open('The smaller step');
+    const first = host.querySelector<HTMLImageElement>('.waka-note-picture img')!;
+    expect(first.getAttribute('crossorigin')).toBe('anonymous');
+    await act(async () => { first.dispatchEvent(new Event('error')); });
+    const plain = host.querySelector<HTMLImageElement>('.waka-note-picture img')!;
+    expect(plain.hasAttribute('crossorigin'), 'read again without CORS').toBe(false);
+    await act(async () => { plain.dispatchEvent(new Event('load')); });
+    const { storeAnswersCors } = await import('../src/lib/picture-download');
+    expect(storeAnswersCors()).toBe(false);
+    /* the archive again, fresh: the session still knows */
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await renderList();
+    const wordless = [...host.querySelectorAll<HTMLButtonElement>('.waka-list-row')].find(node => node.querySelector('.waka-list-photo') && !node.querySelector('.waka-list-lead'))!;
+    await act(async () => wordless.click());
+    await settle();
+    expect(host.querySelector('.waka-note-picture img')!.hasAttribute('crossorigin'), 'no second try with CORS').toBe(false);
+  });
+
   it('downloads the original from the ⋯', async () => {
     await renderList();
     await open('The smaller step');
@@ -258,29 +334,66 @@ describe('downloadOriginal', () => {
   afterEach(() => { click.mockRestore(); vi.unstubAllGlobals(); });
   const bytes = (type: string) => (async () => ({ ok: true, status: 200, blob: async () => new Blob(['x'], { type }) })) as unknown as typeof fetch;
 
+  const url = (id: string) => `https://bucket.test/${id}`;
+  const readAs = (reads: string[] = []) => async (id: string) => { reads.push(id); return url(id); };
+  beforeEach(async () => { (await actual()).forgetPictureStore(); });
+
   it('saves the bytes of a picture the store reads with CORS, under its own name', async () => {
-    const { downloadOriginal, rememberPicture } = await actual();
-    rememberPicture('cors-pic', 'https://bucket.test/cors-pic', true);
-    expect(await downloadOriginal('cors-pic', 'IMG_0012.PNG', { fetchFn: bytes('image/png'), read: async () => { throw new Error('no second read'); } })).toBe(true);
+    const { downloadOriginal, freshPictureUrl } = await actual();
+    await freshPictureUrl('cors-pic', undefined, readAs());
+    expect(await downloadOriginal('cors-pic', 'IMG_0012.PNG', { native: false, fetchFn: bytes('image/png'), read: async () => { throw new Error('no second read'); } })).toBe(true);
     expect(anchors).toEqual([{ download: 'IMG_0012.PNG', href: 'blob:original', target: '' }]);
   });
 
-  it('opens the original in a new tab inside the press when the store will not answer CORS', async () => {
-    const { downloadOriginal, rememberPicture } = await actual();
-    rememberPicture('plain-pic', 'https://bucket.test/plain-pic', false);
-    const pending = downloadOriginal('plain-pic', 'x.png', { fetchFn: (async () => { throw new Error('must not fetch'); }) as typeof fetch });
-    /* synchronously, before anything is awaited: no popup blocker */
-    expect(anchors).toEqual([{ download: '', href: 'https://bucket.test/plain-pic', target: '_blank' }]);
-    expect(await pending).toBe(true);
+  it('reads one fresh URL on a 403 before it gives up', async () => {
+    const { downloadOriginal, freshPictureUrl } = await actual();
+    const reads: string[] = [];
+    await freshPictureUrl('old-pic', undefined, readAs(reads));
+    let calls = 0;
+    const fetchFn = (async () => (++calls === 1 ? { ok: false, status: 403 } : { ok: true, status: 200, blob: async () => new Blob(['x'], { type: 'image/png' }) })) as unknown as typeof fetch;
+    expect(await downloadOriginal('old-pic', 'x.png', { native: false, read: readAs(reads), fetchFn })).toBe(true);
+    expect(reads).toEqual(['old-pic', 'old-pic']);
+    expect(await downloadOriginal('never-seen', 'x.png', { native: false, read: readAs(), fetchFn: (async () => ({ ok: false, status: 403 })) as unknown as typeof fetch })).toBe(false);
   });
 
-  it('reads a fresh URL when the one on screen has lapsed, and says false when the bytes still fail', async () => {
-    const { downloadOriginal, rememberPicture } = await actual();
-    rememberPicture('old-pic', 'https://bucket.test/old', false, Date.now() - 10 * 60_000);
+  it('never stamps a lapsed URL as fresh: past four minutes it reads a new one', async () => {
+    const { downloadOriginal, freshPictureUrl } = await actual();
     const reads: string[] = [];
-    expect(await downloadOriginal('old-pic', 'x.png', { read: async (id) => { reads.push(id); return 'https://bucket.test/new'; }, fetchFn: bytes('image/png') })).toBe(true);
-    expect(reads).toEqual(['old-pic']);
-    expect(await downloadOriginal('never-seen', 'x.png', { read: async () => 'https://bucket.test/n', fetchFn: (async () => { throw new TypeError('cors'); }) as typeof fetch })).toBe(false);
+    await freshPictureUrl('aged', undefined, readAs(reads));
+    await downloadOriginal('aged', 'x.png', { native: false, now: Date.now() + 5 * 60_000, read: readAs(reads), fetchFn: bytes('image/png') });
+    expect(reads).toEqual(['aged', 'aged']);
+  });
+
+  it('on a store with no CORS, opens the original inside the press and never fetches its bytes', async () => {
+    const { downloadOriginal, freshPictureUrl, noteStoreCors, storeAnswersCors } = await actual();
+    noteStoreCors(false);
+    expect(storeAnswersCors()).toBe(false);
+    const never = (async () => { throw new Error('must not fetch'); }) as typeof fetch;
+    await freshPictureUrl('plain-pic', undefined, readAs());
+    const pending = downloadOriginal('plain-pic', 'x.png', { native: false, fetchFn: never });
+    /* synchronously, before anything is awaited: no popup blocker */
+    expect(anchors).toEqual([{ download: '', href: url('plain-pic'), target: '_blank' }]);
+    expect(await pending).toBe(true);
+    /* no fresh URL: a tab opened in the press, pointed at it when it comes */
+    const tab = { opener: {}, location: { href: '' }, closed: false, close() { this.closed = true; } };
+    const opened = downloadOriginal('unseen', 'x.png', { native: false, fetchFn: never, read: readAs(), openWindow: () => tab as unknown as Window });
+    expect(tab.opener).toBeNull();
+    expect(await opened).toBe(true);
+    expect(tab.location.href).toBe(url('unseen'));
+    const refused = { opener: {}, location: { href: '' }, closed: false, close() { this.closed = true; } };
+    expect(await downloadOriginal('gone', 'x.png', { native: false, fetchFn: never, read: async () => { throw new Error('gone'); }, openWindow: () => refused as unknown as Window })).toBe(false);
+    expect(refused.closed, 'an empty tab never stays').toBe(true);
+    expect(await downloadOriginal('blocked', 'x.png', { native: false, fetchFn: never, read: readAs(), openWindow: () => null })).toBe(false);
+  });
+
+  it('in the installed app opens the original in the in-app browser, and says false when it cannot', async () => {
+    const { downloadOriginal } = await actual();
+    const opened: string[] = [];
+    expect(await downloadOriginal('app-pic', 'x.png', { native: true, read: readAs(), openFile: async (u) => { opened.push(u); } })).toBe(true);
+    expect(opened).toEqual([url('app-pic')]);
+    expect(await downloadOriginal('app-pic', 'x.png', { native: true, read: readAs(), openFile: async () => { throw new Error('no browser'); } })).toBe(false);
+    /* no native services in this build: nothing happened, so false */
+    expect(await downloadOriginal('app-pic', 'x.png', { native: true, read: readAs() })).toBe(false);
   });
 
   it('names the file from its stored name, never a cut label', async () => {

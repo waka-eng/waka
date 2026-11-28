@@ -274,8 +274,10 @@ export function registerRecallRoutes(
                    leads with it. Clipped in Postgres, enough for a line;
                    the whole of the words never rides on a list. */
                 enrichmentStatus: attachments.enrichmentStatus,
-                wordsSource: sql<string | null>`left(${attachments.enrichmentText}, ${sql.raw(String(READ_LINE_SOURCE_CHARS))})`,
-                correction: sql<string | null>`left(${attachments.transcriptCorrection}, ${sql.raw(String(READ_LINE_SOURCE_CHARS))})`,
+                /* pictures only: a recording's transcript or a link's page
+                   text never leaves the row for a list (review, 2026-11-28) */
+                wordsSource: sql<string | null>`CASE WHEN ${attachments.type} = 'image' THEN left(${attachments.enrichmentText}, ${sql.raw(String(READ_LINE_SOURCE_CHARS))}) END`,
+                correction: sql<string | null>`CASE WHEN ${attachments.type} = 'image' THEN left(${attachments.transcriptCorrection}, ${sql.raw(String(READ_LINE_SOURCE_CHARS))}) END`,
               })
               .from(attachments)
               .where(

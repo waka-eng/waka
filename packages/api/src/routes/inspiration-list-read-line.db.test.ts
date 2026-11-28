@@ -40,11 +40,15 @@ it('leads a read picture with the first line of its words, and a wordless one wi
   const none=await picture(f.profileId,{status:'ready',text:'Words: none\nImage: Rooftops at dusk from a window.'});
   const reading=await picture(f.profileId,{status:'pending',text:null});
   const legacy=await picture(f.profileId,{status:'ready',text:'A photograph of a cat on a sofa.'});
+  /* a recording's transcript and fix are never read for a list */
+  const [voice]=await t.sql`INSERT INTO inspirations(profile_id,text) VALUES (${f.profileId},'') RETURNING id`;
+  await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,name,content_type,enrichment_status,enrichment_text,transcript_correction)
+    VALUES (${f.profileId},${voice.id},'audio','s3://bucket/a.m4a','a.m4a','audio/mp4','ready','Words: spoken','What I said')`;
   const list=await (await f.app.request('/api/inspirations')).json() as List;
   const lineOf=(id:string)=>list.inspirations.find(item=>item.id===id)!.attachmentSummary[0]!;
   expect(lineOf(read).readLine).toBe('The smaller step');
   expect(lineOf(fixed).readLine).toBe('You need a smaller next step.');
-  for(const id of [none,reading,legacy]){
+  for(const id of [none,reading,legacy,voice.id as string]){
     expect(lineOf(id)).not.toHaveProperty('readLine');
     /* The scene is never the row's words. */
     expect(JSON.stringify(lineOf(id))).not.toMatch(/Rooftops|cat on a sofa/);

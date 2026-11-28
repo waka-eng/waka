@@ -94,6 +94,8 @@ const NOTE_READ_LIMIT_MS = 20_000;
    enough to read "Deleted." and reach the word beside it; short enough that
    it is the moment just after the press and not a pending state. */
 const UNDO_MS = 6000;
+/** How long "Couldn't download the picture." stays in the bar. */
+const DOWNLOAD_SAID_MS = 5000;
 
 /** How long a sheet takes to drop back down; `claims.css` `waka-sheet-down` matches. */
 const SHEET_DROP_MS = 220;
@@ -860,6 +862,15 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
      failure is said in the bar with every other, and only on its own note. */
   const [downloadFailedFor, setDownloadFailedFor] = useState<string | null>(null);
   const downloadFailed = Boolean(open) && downloadFailedFor === open?.id;
+  /* A PASSING LINE (code review, 2026-11-28): it goes after a few seconds
+     and with the note, and every save or draft failure outranks it in the
+     bar, because those are about the words. */
+  useEffect(() => {
+    if (!downloadFailedFor) return;
+    const id = window.setTimeout(() => setDownloadFailedFor(null), DOWNLOAD_SAID_MS);
+    return () => window.clearTimeout(id);
+  }, [downloadFailedFor]);
+  useEffect(() => { if (!open) setDownloadFailedFor(null); }, [open]);
   /* ONE PICTURE, ONE PRESS (code review, 2026-11-28): a loop of downloads
      after an await trips popup blockers, so the ⋯ offers it only when the
      inspiration holds one picture; each picture's whole view has its own. */
@@ -1711,7 +1722,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
           /* the notepad's recorder is running under this page: one
              microphone at a time */
           recordDisabled={recorder.blocked}
-          failed={attachFailed ? say("worldComposerUploadFailed") : downloadFailed ? say("worldPictureDownloadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : dictation.error === 'dictation-denied' ? say("worldComposerDictateDenied") : dictation.error === 'dictation-failed' ? say("worldComposerDictateFailed") : editUnavailable ? say("worldNoteDraftUnavailable") : editConflict ? say("worldNoteDraftConflict") : ""}
+          failed={attachFailed ? say("worldComposerUploadFailed") : saveFailed ? say("worldClaimCorrectFailed") : recording.error ? say(recording.error) : dictation.error === 'dictation-denied' ? say("worldComposerDictateDenied") : dictation.error === 'dictation-failed' ? say("worldComposerDictateFailed") : editUnavailable ? say("worldNoteDraftUnavailable") : editConflict ? say("worldNoteDraftConflict") : downloadFailed ? say("worldPictureDownloadFailed") : ""}
           /* STRIPPED: the idle "Saved" status; only a change in progress
              or unsaved speaks. Founder, 2026-11-12: "strip all unnecessary descriptive text across the experience". */
           status={saving ? say("worldSaving") : loaded && draft.trim() !== stored?.text?.trim() ? say("worldDraftWord") : ""}

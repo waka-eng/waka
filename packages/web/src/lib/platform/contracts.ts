@@ -22,5 +22,8 @@ export interface PlatformServices {
   files: LocalFileStore;
   health(): Promise<{ connected: boolean; origin: string }>;
   openBrowser(url: string): Promise<void>;
+  /** Open a file the person asked for (a saved picture's original, through
+      its presigned https read) in the in-app browser, where they save it. */
+  openFile?(url: string): Promise<void>;
   listenForLinks(listener: (url: string) => void): Promise<() => void>;
 }

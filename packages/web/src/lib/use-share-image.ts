@@ -18,6 +18,33 @@
  */
 import { useCallback, useMemo, useState } from "react";
 
+/**
+ * A file saved through a throwaway link: the one copy of this, for the share
+ * cards and for a saved picture's original (`lib/picture-download.ts`).
+ * True when the browser was handed the file.
+ */
+export function saveBlob(blob: Blob, filename: string): boolean {
+  let url: string | undefined;
+  let link: HTMLAnchorElement | undefined;
+  try {
+    url = URL.createObjectURL(blob);
+    link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    link?.remove();
+    if (url) {
+      const release = url;
+      window.setTimeout(() => URL.revokeObjectURL(release), 1000);
+    }
+  }
+}
+
 export type ShareNotice = "download" | "downloadFailed" | "shared" | "copied" | "unavailable";
 
 export function useShareImage(blob: Blob | null, names: { download: string; share: string }, options: { fallback?: "copy" } = {}) {
@@ -38,25 +65,7 @@ export function useShareImage(blob: Blob | null, names: { download: string; shar
 
   const download = useCallback(() => {
     if (!blob || busy) return;
-    let url: string | undefined;
-    let link: HTMLAnchorElement | undefined;
-    try {
-      url = URL.createObjectURL(blob);
-      link = document.createElement("a");
-      link.href = url;
-      link.download = names.download;
-      document.body.append(link);
-      link.click();
-      setNotice("download");
-    } catch {
-      setNotice("downloadFailed");
-    } finally {
-      link?.remove();
-      if (url) {
-        const release = url;
-        window.setTimeout(() => URL.revokeObjectURL(release), 1000);
-      }
-    }
+    setNotice(saveBlob(blob, names.download) ? "download" : "downloadFailed");
   }, [blob, busy, names.download]);
 
   const share = useCallback(async () => {

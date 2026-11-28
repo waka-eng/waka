@@ -23,9 +23,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 
-import { fetchAttachmentUrl } from '../lib/api';
 import { t, type SupportedLocale } from '../lib/locales';
-import { downloadOriginal, rememberPicture } from '../lib/picture-download';
+import { downloadOriginal, freshPictureUrl, noteStoreCors, storeAnswersCors } from '../lib/picture-download';
 import { NO_TRIM, readTrim, type Trim } from '../lib/picture-trim';
 import { HomeActionIcon } from './HomeActionIcon';
 import { SurfaceHeader } from './SurfaceHeader';
@@ -35,13 +34,13 @@ export function NotePicture({ id, label, locale }: { id: string; label: string; 
   const [url, setUrl] = useState(''), [failed, setFailed] = useState(false), [retry, setRetry] = useState(0);
   /* READ WITH CORS FIRST, so the trim may look at the pixels; a store that
      will not answer a CORS read still shows the picture, whole. */
-  const [cors, setCors] = useState(true);
+  const [cors, setCors] = useState(storeAnswersCors);
   const [shape, setShape] = useState<{ width: number; height: number; trim: Trim } | null>(null);
   const [whole, setWhole] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    const controller = new AbortController(); setUrl(''); setFailed(false); setShape(null); setCors(true);
-    void fetchAttachmentUrl(id, controller.signal).then(value => { if (!controller.signal.aborted) setUrl(value); })
+    const controller = new AbortController(); setUrl(''); setFailed(false); setShape(null); setCors(storeAnswersCors());
+    void freshPictureUrl(id, controller.signal).then(value => { if (!controller.signal.aborted) setUrl(value); })
       .catch(() => { if (!controller.signal.aborted) setFailed(true); });
     return () => controller.abort();
   }, [id, retry]);
@@ -61,7 +60,9 @@ export function NotePicture({ id, label, locale }: { id: string; label: string; 
         style={shape ? { marginTop: `${-(trim.top * shape.height / shape.width) * 100}%` } : undefined}
         onLoad={event => {
           const image = event.currentTarget;
-          rememberPicture(id, url, cors);
+          /* with CORS: the store answers it; without, after a CORS read
+             failed: it does not, and the rest of the session knows */
+          noteStoreCors(cors);
           setShape({ width: image.naturalWidth || 1, height: image.naturalHeight || 1, trim: cors ? readTrim(image) : NO_TRIM });
         }}
         onError={() => { if (cors) setCors(false); else setFailed(true); }} /> : null}
@@ -96,6 +97,11 @@ function PictureWhole({ id, url: first, cors: firstCors, label, locale, onClose 
      2026-11-28): a presigned read lives five minutes and the page may have
      been open longer. Read the way the page read it, CORS first. */
   const [source, setSource] = useState({ url: first, cors: firstCors, renewed: false });
+  const [lost, setLost] = useState(false);
+  /* a touch's last tap, for a double tap a phone never sends as dblclick */
+  const lastTap = useRef<{ at: number; x: number; y: number } | null>(null);
+  const travelled = useRef(false);
+  const touchZoomAt = useRef(0);
   const [downloadFailed, setDownloadFailed] = useState(false);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ distance: number; mid: { x: number; y: number }; from: View } | null>(null);
@@ -113,8 +119,15 @@ function PictureWhole({ id, url: first, cors: firstCors, label, locale, onClose 
     node.addEventListener('wheel', wheel, { passive: false });
     return () => node.removeEventListener('wheel', wheel);
   }, []);
+  const toggleAt = (x: number, y: number) => {
+    const node = stage.current;
+    if (!node) return;
+    const at = centre(node, x, y);
+    setView(current => current.scale > 1 ? REST : bound(about(current, 2, at), node, image.current));
+  };
   const down = (event: ReactPointerEvent<HTMLDivElement>) => {
     surface.current?.focus({ preventScroll: true });
+    if (pointers.current.size === 0) travelled.current = false;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const [a, b] = [...pointers.current.values()];
@@ -123,6 +136,8 @@ function PictureWhole({ id, url: first, cors: firstCors, label, locale, onClose 
   };
   const move = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!pointers.current.has(event.pointerId) || !gesture.current) return;
+    const g0 = gesture.current.mid;
+    if (Math.hypot(event.clientX - g0.x, event.clientY - g0.y) > 24 || pointers.current.size > 1) travelled.current = true;
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const [a, b] = [...pointers.current.values()];
     const g = gesture.current;
@@ -136,15 +151,34 @@ function PictureWhole({ id, url: first, cors: firstCors, label, locale, onClose 
     }
   };
   const up = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const alone = pointers.current.size === 1;
     pointers.current.delete(event.pointerId);
+    /* ═══ A DOUBLE TAP, BY POINTER (code review, 2026-11-28): an iPhone
+       never sends dblclick here, so two taps within 300ms and 24px of each
+       other are one. A mouse keeps dblclick below. */
+    if (event.pointerType !== 'mouse' && alone && event.type === 'pointerup') {
+      const tap = { at: Date.now(), x: event.clientX, y: event.clientY };
+      const prev = lastTap.current;
+      if (travelled.current) lastTap.current = null;
+      else if (prev && tap.at - prev.at <= 300 && Math.hypot(tap.x - prev.x, tap.y - prev.y) <= 24) {
+        lastTap.current = null; touchZoomAt.current = Date.now(); toggleAt(tap.x, tap.y);
+      } else lastTap.current = tap;
+    }
     const [a] = [...pointers.current.values()];
     /* one finger left after a pinch carries on as a move from where it is */
     gesture.current = a ? { distance: 0, mid: a, from: view } : null;
   };
+  /* LAPSED, OR REFUSED: one fresh URL, read as the page reads; then, with
+     CORS, once without it; then the page's own "Couldn't open" with Try
+     again, inside the view (code review, 2026-11-28). */
+  const renew = () => {
+    setLost(false);
+    void freshPictureUrl(id).then(url => setSource({ url, cors: storeAnswersCors(), renewed: true }), () => setLost(true));
+  };
   const lapsed = () => {
-    if (source.cors && source.renewed) { setSource(current => ({ ...current, cors: false })); return; }
-    if (source.renewed) return;
-    void fetchAttachmentUrl(id).then(url => setSource({ url, cors: true, renewed: true })).catch(() => {});
+    if (!source.renewed) { renew(); return; }
+    if (source.cors) { setSource(current => ({ ...current, cors: false })); return; }
+    setLost(true);
   };
   return createPortal(
     <div ref={surface} className="waka-picture-whole" role="dialog" aria-modal="true" aria-label={label} data-jar-surface="1" tabIndex={-1}
@@ -165,11 +199,11 @@ function PictureWhole({ id, url: first, cors: firstCors, label, locale, onClose 
           <HomeActionIcon kind="download" />
         </button>} />
       <div ref={stage} className="waka-picture-whole-stage" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-        onDoubleClick={event => { const node = event.currentTarget; const at = centre(node, event.clientX, event.clientY); setView(current => current.scale > 1 ? REST : bound(about(current, 2, at), node, image.current)); }}>
-        <img ref={image} key={`${source.url}:${source.cors}`} src={source.url} alt={label} draggable={false}
-          crossOrigin={source.cors ? 'anonymous' : undefined}
-          onLoad={() => rememberPicture(id, source.url, source.cors)} onError={lapsed}
-          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }} />
+        onDoubleClick={event => { if (Date.now() - touchZoomAt.current > 500) toggleAt(event.clientX, event.clientY); }}>
+        {lost ? null : <img ref={image} key={`${source.url}:${source.cors}`} src={source.url} alt={label} draggable={false}
+          crossOrigin={source.cors ? 'anonymous' : undefined} onError={lapsed}
+          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }} />}
+        {lost ? <p role="alert" className="waka-note-picture-failed waka-picture-whole-lost">{say('worldAttachmentOpenFailed')} <button type="button" onClick={() => { setSource(current => ({ ...current, renewed: false })); renew(); }}>{say('worldRoomHistoryRetry')}</button></p> : null}
       </div>
       {downloadFailed ? <p className="waka-picture-whole-said" role="alert">{say('worldPictureDownloadFailed')}</p> : null}
     </div>,

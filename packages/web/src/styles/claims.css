@@ -8782,6 +8782,8 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
   padding: 0; border: 0; border-radius: var(--r-pill); background: none; color: var(--muted); cursor: pointer;
 }
 .waka-picture-whole .waka-picture-whole-download:is(:hover, :focus-visible) { color: var(--ink); }
+/* Could not open, in the view: the page's own line, in the picture's place. */
+.waka-picture-whole-stage > .waka-picture-whole-lost { position: absolute; left: 0; right: 0; top: 40%; margin: 0; text-align: center; }
 .waka-picture-whole-said { flex: none; margin: var(--sp-8) 0 var(--sp-12); text-align: center; color: var(--muted); font-size: var(--t-ui); }
 .waka-picture-whole-stage > img {
   /* the stage's box, the picture contained in it: a grid cell's auto row

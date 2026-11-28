@@ -53,6 +53,12 @@ export async function nativePlatform(): Promise<PlatformServices> {
       if (parsed.origin !== origin || parsed.username || parsed.password) throw new Error('Unexpected authorization origin.');
       await Browser.open({ url });
     },
+    async openFile(url) {
+      /* Only an https read with no credentials in it: a presigned original. */
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('Unexpected file address.');
+      await Browser.open({ url });
+    },
     async listenForLinks(listener) {
       const emit = (url: string, source: string) => {
         if (import.meta.env.VITE_MOBILE_DIAGNOSTICS === '1') {
