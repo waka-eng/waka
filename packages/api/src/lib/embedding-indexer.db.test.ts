@@ -8,9 +8,9 @@ import postgres from 'postgres';import {drizzle} from 'drizzle-orm/postgres-js';
 import {PgDialect} from 'drizzle-orm/pg-core';
 import * as schema from '../db/index.js';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js';
-import {indexEmbeddingSource,EmbeddingIndexNeedsRetry} from './embedding-indexer.js';
+import {indexEmbeddingSource} from './embedding-indexer.js';
 import {EMBEDDING_2_SPACE,hashEmbedding2Input} from './embedding-2-space.js';
-import {EMBEDDING_2_CANDIDATE_POLICY} from './embedding-policy.js';
+import {EMBEDDING_2_CANDIDATE_POLICY,PROVISIONAL_EMBEDDING_2_POLICY} from './embedding-policy.js';
 import {hashEmbeddingInput,GEMINI_EMBEDDING_MODEL} from './inspiration-embeddings.js';
 import {OpenRouterHttpError} from './openrouter-http.js';
 import {BackgroundJobHeldError} from './background-job-hold.js';
@@ -38,10 +38,96 @@ it('writes bounded shadow vectors without changing active generation/words and g
  const[e]=await t.sql`SELECT model,input_hash,embedding FROM signal_embeddings WHERE signal_id=${s.id}`;expect(e.model).toBe(EMBEDDING_2_SPACE.id);expect(e.input_hash).toBe(hashEmbedding2Input(s.statement,'RETRIEVAL_DOCUMENT'));expect(e.embedding).toEqual(values());
  expect((await t.sql`SELECT revision FROM generation_revisions WHERE profile_id=${f.profileId}`)[0]).toEqual(before);expect((await t.sql`SELECT statement,locked_at FROM signals WHERE id=${s.id}`)[0]).toEqual({statement:s.statement,locked_at:s.locked_at});
 });
-it('never uses completed progress or a paid receipt as proof of a corrupted vector',async()=>{
+it.each(['missing','corrupt'] as const)('holds a committed attempt with a genuinely %s vector',async damage=>{
  const f=await owner(true),s=await signal(f.profileId),c=client();await indexEmbeddingSource(t.db,input(f.profileId,s.id),{client:c});
- await t.sql`UPDATE signal_embeddings SET dimensions=2,embedding='[1,2]'::jsonb WHERE signal_id=${s.id} AND model=${EMBEDDING_2_SPACE.id}`;
- await expect(indexEmbeddingSource(t.db,input(f.profileId,s.id),{client:c})).rejects.toBeInstanceOf(EmbeddingIndexNeedsRetry);expect(c.embed).toHaveBeenCalledOnce();
+ if(damage==='missing')await t.sql`DELETE FROM signal_embeddings WHERE signal_id=${s.id} AND model=${EMBEDDING_2_SPACE.id}`;
+ else await t.sql`UPDATE signal_embeddings SET dimensions=2,embedding='[1,2]'::jsonb WHERE signal_id=${s.id} AND model=${EMBEDDING_2_SPACE.id}`;
+ await expect(indexEmbeddingSource(t.db,input(f.profileId,s.id),{client:c})).rejects.toMatchObject({code:'current_vector_unavailable'});
+ expect(c.embed).toHaveBeenCalledOnce();
+ expect(await t.sql`SELECT status FROM embedding_index_attempts WHERE profile_id=${f.profileId}`).toEqual([{status:'committed'}]);
+});
+type PublicationSeam='prior committed'|'reservation committed'|'prior received'|'reservation received';
+
+async function racePublication(seam:PublicationSeam,afterPublish?:(request:ReturnType<typeof input>)=>Promise<void>){
+ const f=await owner(true),s=await signal(f.profileId),request=input(f.profileId,s.id),c=client(),connection=await peer();
+ const dialect=new PgDialect();
+ const staged=async()=>expect(indexEmbeddingSource(connection.db,request,{client:c,beforeCommit:async()=>{
+  if(c.embed.mock.calls.length)throw Object.assign(Error('Synthetic publication rollback'),{code:'55P03'});
+ }})).rejects.toMatchObject({code:'publication_pending'});
+ const publish=async()=>{
+  expect(await indexEmbeddingSource(connection.db,request,{client:c})).toMatchObject({status:'updated',embedding:values()});
+  await afterPublish?.(request);
+ };
+ const beforeCommit=vi.fn(async()=>{});
+ let crossed=false,heldReservation=false;
+ const loser=new Proxy(t.db,{get(target,key,receiver){
+  if(key==='execute')return async(query:Parameters<typeof target.execute>[0])=>{
+   const rows=await target.execute(query),queryText=dialect.sqlToQuery(query as Parameters<typeof dialect.sqlToQuery>[0]).sql;
+   if(!crossed&&seam==='prior committed'&&queryText.startsWith('SELECT embedding,dimensions,input_hash')){
+    expect(rows).toHaveLength(0);crossed=true;await publish();
+   }else if(!crossed&&queryText.startsWith('SELECT request_key,status,http_status')){
+    if(seam==='prior received'){
+     expect(rows.map(row=>row.status)).toEqual(['received']);crossed=true;await publish();
+    }else if(seam==='reservation committed'){
+     expect(rows).toHaveLength(0);crossed=true;await publish();
+    }else if(seam==='reservation received'&&!heldReservation){
+     expect(rows).toHaveLength(0);heldReservation=true;await staged();
+    }
+   }
+   return rows;
+  };
+  if(key==='transaction'&&seam==='reservation received')return async(...params:Parameters<typeof target.transaction>)=>{
+   const result=await target.transaction(...params) as {reserved?:boolean;status?:string}|undefined;
+   if(!crossed&&result?.reserved===false&&result.status==='received'){
+    crossed=true;await publish();
+   }
+   return result;
+  };
+  return Reflect.get(target,key,receiver);
+ }});
+ return {f,c,request,beforeCommit,connection,crossed:()=>crossed,run:async()=>{
+  if(seam.startsWith('prior'))await staged();
+  return indexEmbeddingSource(loser,request,{client:c,beforeCommit});
+ }};
+}
+
+it.each(['prior committed','reservation committed','prior received','reservation received'] as const)(
+ 'reuses the exact winning vector after a deterministic %s observation without new dispatch',async seam=>{
+  const fixture=await racePublication(seam);
+  try{
+   await expect(fixture.run()).resolves.toEqual({status:'unchanged',generated:false,embedding:values(),
+    inputHash:hashEmbedding2Input('Exact owner-locked words.','RETRIEVAL_DOCUMENT')});
+   expect(fixture.crossed()).toBe(true);
+   expect(fixture.beforeCommit).toHaveBeenCalledOnce();
+   expect(fixture.c.embed).toHaveBeenCalledOnce();
+   expect(await t.sql`SELECT status FROM embedding_index_attempts WHERE profile_id=${fixture.f.profileId}`).toEqual([{status:'committed'}]);
+  }finally{await fixture.connection.client.end();}
+ });
+
+it('does not reuse the winning vector for a claimant whose fence fails',async()=>{
+ const fixture=await racePublication('prior committed'),lostClaim=new Error('Synthetic stale claimant');
+ fixture.beforeCommit.mockRejectedValueOnce(lostClaim);
+ try{
+  await expect(fixture.run()).rejects.toBe(lostClaim);
+  expect(fixture.crossed()).toBe(true);
+  expect(fixture.beforeCommit).toHaveBeenCalledOnce();
+  expect(fixture.c.embed).toHaveBeenCalledOnce();
+ }finally{await fixture.connection.client.end();}
+});
+it.each(['source','threshold policy'] as const)('refuses a raced publication when its %s changed',async changed=>{
+ const fixture=await racePublication('prior committed',async request=>{
+  if(changed==='source'){
+   await t.sql`UPDATE signals SET statement='Edited after the concurrent publication.' WHERE id=${request.sourceId}`;
+  }else{
+   await t.sql`UPDATE profile_embedding_indexes SET active_threshold_policy=${PROVISIONAL_EMBEDDING_2_POLICY} WHERE profile_id=${request.profileId}`;
+  }
+  expect(await t.sql`SELECT id FROM signal_embeddings WHERE signal_id=${request.sourceId} AND model=${EMBEDDING_2_SPACE.id}`).toHaveLength(1);
+ });
+ try{
+  await expect(fixture.run()).rejects.toMatchObject({code:'stale'});
+  expect(fixture.crossed()).toBe(true);
+  expect(fixture.c.embed).toHaveBeenCalledOnce();
+ }finally{await fixture.connection.client.end();}
 });
 it('holds a concurrent fallback/derive rendezvous and makes exactly one fake provider call',async()=>{
  const f=await owner(true),s=await signal(f.profileId),connection=await peer();let entered!:()=>void,release!:()=>void;

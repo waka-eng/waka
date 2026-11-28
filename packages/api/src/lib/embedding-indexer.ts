@@ -7,7 +7,7 @@ import {createEmbeddingClient,readableEmbeddingSpace,embeddingInSpace,embeddingI
 import {parseEmbeddingPolicy,embeddingPolicySql,embeddingPolicyIdentity,type EmbeddingIndexPolicy} from './embedding-policy.js';
 import type {GeminiEmbeddingClient} from './inspiration-embeddings.js';
 import {readEmbeddingIndexSource} from './embedding-index-source.js';
-import {commitEmbeddingIndexResult,reserveEmbeddingIndexAttempt,EmbeddingIndexError,type SettleEmbeddingWork} from './embedding-index-coordination.js';
+import {commitEmbeddingIndexResult,reserveEmbeddingIndexAttempt,settleEmbeddingIndexWork,EmbeddingIndexError,type SettleEmbeddingWork} from './embedding-index-coordination.js';
 import {OpenRouterHttpError} from './openrouter-http.js';
 import {BackgroundJobHeldError} from './background-job-hold.js';
 import {EmbeddingDispatchExpired,assertEmbeddingDispatchDeadline,type EmbeddingDispatchDeadline} from './embedding-dispatch.js';
@@ -77,6 +77,35 @@ export async function indexEmbeddingSource(db:Db,input:IndexSourceInput,deps:Ind
  },{isolationLevel:'repeatable read',accessMode:'read only'});
  const cached=initial.eligible?await vector(db,work,hash):null;
  if(!initial.eligible||cached){await commitEmbeddingIndexResult(db,snapshot,{prove,current:actualCurrent,claim:deps.beforeCommit,write:async tx=>{if(!initial.eligible)await writeVector(tx,work,null,null);else if(!await vector(tx,work,hash,true))throw new EmbeddingIndexError('stale');}}, {reconcile});return{status:initial.eligible?'unchanged' as const:'ineligible' as const,generated:false,embedding:cached,inputHash:hash};}
+ // The first vector read preceded the attempt/checkpoint read. A winner
+ // may have published in between. Only reuse its completed work and re-read
+ // the actual vector under the normal fences. A receipt alone is no proof.
+ const reusePublished = async () => {
+  // Leave genuinely in-flight work on its existing hold path without
+  // taking locks against the publisher.
+  if (!await vector(db,work,hash)) return null;
+  const unavailable = new EmbeddingIndexNeedsRetry('current_vector_unavailable');
+  try {
+   return await db.transaction(async tx => {
+    let embedding: number[] | null = null;
+    await settleEmbeddingIndexWork(tx,snapshot,{
+     prove,claim:deps.beforeCommit,
+     current:async tx=>{
+      const [owner]=await tx.execute<{policy:unknown}>(sql`SELECT ${embeddingPolicySql(work.profile_id)} AS policy FROM profiles
+        WHERE id=${work.profile_id}::uuid AND account_id=${work.account_id}::uuid`);
+      if(!owner||embeddingPolicyIdentity(parseEmbeddingPolicy(work.profile_id,owner.policy))!==embeddingPolicyIdentity(policy))throw new EmbeddingIndexError('stale');
+      embedding=await vector(tx,work,hash,true);
+      return embedding!==null;
+     },
+     write:async()=>{throw unavailable;},
+    });
+    return {status:'unchanged' as const,generated:false,embedding,inputHash:hash};
+   });
+  } catch(error) {
+   if(error===unavailable)return null;
+   throw error;
+  }
+ };
  const dispatchGuard=()=>{if(deps.dispatchDeadline)assertEmbeddingDispatchDeadline(deps.dispatchDeadline);};
  const client=deps.client??createEmbeddingClient({timeoutMs:5000,exchangeTimeoutMs:10000,beforeDispatch:dispatchGuard},policy,migration&&policy.activeSpace!==work.space?'building':'active');
  if(client.model!==work.space||client.dimensions!==undefined&&client.dimensions!==768)throw new EmbeddingIndexError('identity');
@@ -112,17 +141,30 @@ export async function indexEmbeddingSource(db:Db,input:IndexSourceInput,deps:Ind
     await publish(retained,received.id,true,live);
     return {status:'updated' as const,generated:false,embedding:retained,inputHash:hash};
    }
+   const winner=await reusePublished();
+   if(winner)return winner;
   }
  }
  const inflight=prior.find(row=>['reserved','received'].includes(row.status)&&row.fresh);
  if(inflight)throw new BackgroundJobHeldError(new Date(inflight.inflight_until),'Embedding request is still in flight');
- if(prior.some(row=>row.status==='committed'))throw new EmbeddingIndexNeedsRetry('current_vector_unavailable');
+ if(prior.some(row=>row.status==='committed')){
+  const winner=await reusePublished();
+  if(winner)return winner;
+  throw new EmbeddingIndexNeedsRetry('current_vector_unavailable');
+ }
  if(prior.some(row=>row.status==='received'))throw new EmbeddingIndexNeedsRetry('commit_unconfirmed');
  if(prior.some(row=>row.status==='unknown'||row.status==='reserved'))throw new EmbeddingIndexNeedsRetry('outcome_unknown');
  if(prior.some(row=>row.status!=='http_failed'||row.http_status!==429&&(row.http_status===null||row.http_status<500))||migration&&prior.length||prior.length>=3)throw new EmbeddingIndexNeedsRetry('provider_refused');
  const requestKey=base+':'+(prior.length+1);
  const attempt=await reserveEmbeddingIndexAttempt(db,{accountId:work.account_id,profileId:work.profile_id,requestKey,family:'index',space:work.space,activeEpoch:policy.activeEpoch,workId:work.id,workVersion:snapshot.version,kind:work.source_kind,sourceId:work.source_id,scope:work.input_scope,inputHash:hash!,inputBytes:Buffer.byteLength(initial.input)+Buffer.byteLength(EMBEDDING_2_SPACE.documentPrefix),...(migration??{})},{prove,claim:deps.beforeCommit});
- if(!attempt.reserved){if('fresh' in attempt&&attempt.fresh&&['reserved','received'].includes(attempt.status))throw new BackgroundJobHeldError(new Date(attempt.inflightUntil),'Embedding request is still in flight');throw new EmbeddingIndexNeedsRetry(attempt.status==='received'?'commit_unconfirmed':attempt.status==='committed'?'current_vector_unavailable':'outcome_unknown');}
+ if(!attempt.reserved){
+  if(attempt.status==='committed'||attempt.status==='received'){
+   const winner=await reusePublished();
+   if(winner)return winner;
+  }
+  if('fresh' in attempt&&attempt.fresh&&['reserved','received'].includes(attempt.status))throw new BackgroundJobHeldError(new Date(attempt.inflightUntil),'Embedding request is still in flight');
+  throw new EmbeddingIndexNeedsRetry(attempt.status==='received'?'commit_unconfirmed':attempt.status==='committed'?'current_vector_unavailable':'outcome_unknown');
+ }
  let values:number[];
  try{dispatchGuard();values=await client.embed(initial.input,'RETRIEVAL_DOCUMENT');if(!embeddingInSpace(values,768,space))throw new EmbeddingIndexNeedsRetry('provider_refused');}
  catch(error){if(error instanceof EmbeddingDispatchExpired){await db.execute(sql`UPDATE embedding_index_attempts SET status='stale',finished_at=clock_timestamp() WHERE id=${attempt.id}::uuid AND account_id=${work.account_id}::uuid`);throw new EmbeddingIndexError('budget');}const status=error instanceof OpenRouterHttpError?error.status:null,responseFailure=error instanceof Embedding2ResponseError?error.code:undefined;await db.execute(sql`UPDATE embedding_index_work SET failure_code=${responseFailure?'response_'+responseFailure:status!==null?'provider_http_failure':'outcome_unknown'} WHERE id=${work.id}::uuid AND profile_id=${work.profile_id}::uuid AND requested_version=${work.requested_version}::bigint AND completed_version<requested_version`);await db.execute(sql`UPDATE embedding_index_attempts SET status=${status!==null?'http_failed':'unknown'},http_status=${status},finished_at=clock_timestamp() WHERE id=${attempt.id}::uuid AND account_id=${work.account_id}::uuid`);if(error instanceof OpenRouterHttpError && (error.status===429 || error.status>=500)){
