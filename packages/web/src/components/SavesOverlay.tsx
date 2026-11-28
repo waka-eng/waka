@@ -212,6 +212,15 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
   const onBackNow = useRef(onBack); onBackNow.current = onBack;
   const dropTimer = useRef(0);
   const dragFrom = useRef<number | null>(null);
+  /* IT RISES ONCE (founder, 2026-11-27: coming back from an inspiration, the
+     list "animate[d] again bottom to top ... super motion sickness"). After
+     its first rise the sheet comes back in place. */
+  const sheetRisen = useRef(false);
+  useEffect(() => {
+    if (!sheet || sheetRisen.current) return undefined;
+    const id = window.setTimeout(() => { sheetRisen.current = true; }, 400);
+    return () => window.clearTimeout(id);
+  }, [sheet]);
   const dragMoved = useRef(false);
   useEffect(() => () => window.clearTimeout(dropTimer.current), []);
   const backOut = useCallback(() => {
@@ -1266,7 +1275,7 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
     <>
       {/* THE DIM ABOVE A SHEET CLOSES IT (iOS sheets; audit, 2026-11-26). */}
       {sheet && !open ? <button type="button" className="waka-sheet-scrim" tabIndex={-1} aria-hidden="true" onClick={backOut} /> : null}
-    <div ref={sheetPage} className={`waka-page${open ? " waka-page--note" : sheet ? " waka-page--sheet" : ""}`}>
+    <div ref={sheetPage} className={`waka-page${open ? " waka-page--note" : sheet ? ` waka-page--sheet${sheetRisen.current ? " waka-page--sheet-risen" : ""}` : ""}`}>
       {/* THE GRABBER IS THE WAY DOWN (founder, 2026-11-26: "to pull the
           sheet down, let user use the - button. remove the x"). A tap closes
           it; a drag past `SHEET_DRAG_CLOSE_PX` sends it down from where the
@@ -1334,8 +1343,13 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
             is plain. It keeps one while narrowed to a reading's saves or
             showing Deleted, where the title says what you are looking at. */}
         {open || (sheet && !focus && !shelfOn) ? null : <SurfaceHeader locale={locale} gesture={gesture}
-          /* In Trash, "<" goes back to the list it was reached from. */
-          back={shelfOn ? { kind: "back", onBack: () => setOnShelf(false) } : { kind: backKind, onBack: backOut }}
+          /* TRASH CLOSES IN ONE PRESS (founder, 2026-11-27: "from the trash
+             when you go to the back button it goes to inspirations and then
+             only you can close it ... You need to be able to just close it
+             immediately"). It is reached from Settings, not from the list. */
+          /* ...and its "<" goes back to Settings, where it was opened
+             (founder, 2026-11-27: "always have a place to come back to"). */
+          back={shelfOn ? { kind: "back", onBack: backOut } : { kind: backKind, onBack: backOut }}
           /* THE NAME, THEN HOW MANY (nav system R4): "Kept (36)" centred in the
              one header, the count counting what is on screen (`shown`), and
              under a claim's filter the claim's own words. */
@@ -1625,7 +1639,14 @@ export function SavesOverlay({ canReview, onRelevanceChanged, onArchiveChanged, 
                   in the listening view the notepad and a chat use, and Done
                   drops them into the page as text. */}
               {dictation.active ? <ListeningView locale={locale} words={draft}
-                onDone={() => dictation.stop()} dictation={dictation} /> : <textarea
+                onDone={() => dictation.stop()} dictation={dictation} />
+                /* LOADING, NOT A PREVIEW THAT RESHAPES (founder, 2026-11-27:
+                   "it loads only the first four lines with dot dot dot and
+                   then it loads the full thing ... the whole thing changes
+                   ... we should just show loading"). A failed read still
+                   falls back to the preview below. */
+                : !loaded && !stored?.failed ? <p className="waka-note-loading" role="status">{say("worldInspirationsLoad")}</p>
+                : <textarea
                 className="jar-panel-text waka-note-page"
                 /* UNTIL THE FULL TEXT ARRIVES the list's preview stands in,
                    read-only, so the page does not open blank — and nothing

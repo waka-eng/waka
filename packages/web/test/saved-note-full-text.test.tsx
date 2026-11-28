@@ -158,8 +158,10 @@ const longRow = {
 it("keeps all 1,000 characters through open → edit → Save", async () => {
   expect(LONG).toHaveLength(1000);
   await openSave(longRow, LONG);
-  /* Before the text arrives: the preview stands in, read-only, nothing can be saved. */
-  expect(page().readOnly).toBe(true);
+  /* Before the text arrives: "Loading", never a preview that reshapes when
+     the words land (founder, 2026-11-27); nothing can be typed or saved. */
+  expect(page(), "a preview stood in for the words").toBeNull();
+  expect(host.querySelector(".waka-note-loading")?.textContent).toBe("Loading…");
   expect(save()).toBeNull(); // no making tool is offered until there is a note to act on
   expect(bar()).toBe("Loading…");
   await openNoteActions();
@@ -192,7 +194,7 @@ it("keeps all 1,000 characters through the autosave on the way out", async () =>
 
 it("writes nothing while the full text is still on its way, even on the way out", async () => {
   await openSave(longRow, LONG);
-  await type("typed too early");
+  expect(page(), "there was a field to type into before the words came").toBeNull();
   await act(async () => closer!());
   expect(state.written).toEqual([]);
 });

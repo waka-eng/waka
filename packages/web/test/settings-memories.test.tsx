@@ -18,7 +18,10 @@ it.each([0,1,3])('offers no agent management with %i retained stacks',async coun
  expect(host.textContent).not.toMatch(/Agents|Add agent|Agent name|Legacy/);
  expect(host.querySelector('[data-settings-target="agents"]')).toBeNull();
  expect(fetchProfiles).not.toHaveBeenCalled();
- expect(host.querySelector('[data-settings-target="personal"]')).not.toBeNull();
+ /* Your AI tools moved to Connect, a home door of its own (founder,
+    2026-11-27); Settings keeps Account and never reads the profile roster. */
+ expect(host.querySelector('[data-settings-target="personal"]')).toBeNull();
+ expect(host.querySelector('[data-settings-target="account"]')).not.toBeNull();
 });
 it('explains how WAKA works without decorative entries or switching instructions',async()=>{
  await act(async()=>root.render(<HowItWorksPanel locale="en-US" onClose={()=>{}}/>));

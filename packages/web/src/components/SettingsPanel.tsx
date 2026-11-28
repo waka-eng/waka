@@ -1,5 +1,5 @@
 import { ProfileMcpSetup } from './ProfileMcpSetup';
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { bookmarkletHref } from "../lib/bookmarklet";
 import { ProfileApiKeys } from './ProfileApiKeys';
 import { McpRecentReads } from './McpRecentReads';
@@ -13,7 +13,9 @@ import { fetchSessions, revokeSession, type ApiSession } from "../lib/api/sessio
 import { supportedLocales } from "../lib/i18n";
 import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 import { SurfaceHeader } from "./SurfaceHeader";
-import { LegalLinks } from "./LegalLinks";
+const LegalArticle = lazy(() => import("../pages/LegalDocument").then(module => ({ default: module.LegalArticle })));
+import { HowItWorksBody } from "./HowItWorksPanel";
+import { ConnectTools } from "./ConnectTools";
 
 export interface SettingsPanelProps {
   locale: SupportedLocale;
@@ -41,18 +43,16 @@ export interface SettingsPanelProps {
   /** Opens Trash, where deleted inspirations wait 30 days (founder,
       2026-11-26: "put trash in profile or sth"). */
   onOpenTrash?: () => void;
-  /** Opens "How WAKA works", which left home's corner for here. */
-  onOpenInfo?: () => void;
 }
 
 /** The current Settings subpage; null is the overview. */
-type Open = null | "personal" | "sessions" | "password" | "danger";
+type Open = null | "account" | "sessions" | "password" | "danger" | "info" | "terms" | "privacy";
+/* PROGRESSIVE DISCLOSURE (founder, 2026-11-27: "use more progressive
+   disclosure"): everything about you sits behind one Account row, and its
+   own pages step back to it, not to the overview. */
+const PARENT: Record<Exclude<Open, null>, Open> = { account: null, info: null, terms: null, privacy: null, password: "account", sessions: "account", danger: "account" };
 
 export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
-  /* React will not render a `javascript:` href, by design; the bookmarklet's
-     one is set on the element after it mounts. */
-  const bookmarklet = useRef<HTMLAnchorElement>(null);
-  useEffect(() => { bookmarklet.current?.setAttribute('href', bookmarkletHref(window.location.origin)); });
   const say = useCallback((key: Parameters<typeof t>[1]) => t(props.locale, key), [props.locale]);
   const [open, setOpen] = useState<Open>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -65,24 +65,9 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   }, [open]);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const [personalProfile, setPersonalProfile] = useState<ApiOwnedProfile | null>(null);
-  const [profileLoadFailed, setProfileLoadFailed] = useState(false);
-  const [profileAttempt, setProfileAttempt] = useState(0);
-  useEffect(() => {
-    if (open !== 'personal' || personalProfile) return;
-    const controller = new AbortController();
-    setProfileLoadFailed(false);
-    fetchProfiles(controller.signal).then(rows => {
-      if (controller.signal.aborted) return;
-      const human = rows.find(row => row.type === 'human');
-      if (!human) throw new Error('Personal profile missing');
-      setPersonalProfile(human);
-    }).catch(() => { if (!controller.signal.aborted) setProfileLoadFailed(true); });
-    return () => controller.abort();
-  }, [open, personalProfile, profileAttempt]);
   const stepUp = () => {
     if (open === null) props.onClose();
-    else { setConfirmDelete(false); setOpen(null); }
+    else { setConfirmDelete(false); setOpen(PARENT[open]); }
   };
   const stepUpRef = useRef(stepUp); stepUpRef.current = stepUp;
   useEffect(() => {
@@ -92,9 +77,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   /* The same elements are rows in the overview and pages when one is open. */
-  const groups = <SettingsGroups open={open} setOpen={setOpen} say={say} locale={props.locale}
-    personalProfile={personalProfile} profileLoadFailed={profileLoadFailed}
-    retryProfile={() => setProfileAttempt(attempt => attempt + 1)} />;
+  const groups = <SettingsGroups open={open} setOpen={setOpen} say={say} locale={props.locale} />;
   const danger = <DangerGroup open={open} setOpen={setOpen} say={say}
     confirmDelete={confirmDelete} setConfirmDelete={setConfirmDelete} deleting={deleting}
     onDelete={() => {
@@ -107,7 +90,7 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
       <SurfaceHeader locale={props.locale}
         back={{ kind: open === null ? "close" : "back", onBack: stepUp }}
         titleRef={heading}
-        title={say(open === "personal" ? "profilePersonalMcpTitle" : open === "sessions" ? "profileSessionsTitle" : open === "password" ? "profileChangePassword" : open === "danger" ? "profileDelete" : "worldSettingsOpen")} />
+        title={say(open === "account" ? "settingsGroupAccount" : open === "sessions" ? "profileSessionsTitle" : open === "password" ? "profileChangePassword" : open === "danger" ? "profileDelete" : open === "info" ? "worldHowItWorksTitle" : open === "terms" ? "legalTermsLink" : open === "privacy" ? "legalPrivacyLink" : "worldSettingsOpen")} />
       <div className="waka-settings-content" key={open ?? "overview"}>
       {/* ═══ FOUR GROUPS, ONE HEADING STYLE (craft audit, 2026-11-26) ══════
           Founder: "spacing padding can be better ... the workflow
@@ -117,9 +100,56 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           bigger than everything and two bare buttons, each on its own gap.
           Now: Account, Save from anywhere, Data and connections, About; one
           small muted heading each, one left edge, 24px between groups. */}
+      {/* ═══ FOUR BLOCKS, AND EVERYTHING ABOUT YOU BEHIND ONE ROW (founder,
+          2026-11-27: "dividers between sections ... a section for sign out
+          and delete account ... more progressive disclosure") ═══ The
+          overview is Account (one row), Your data, About and Sign out, each
+          its own block. Connecting Claude Code or Codex and Save from
+          anywhere left Settings for Connect, a door of its own on home. */}
       {open === null ? <>
-      <section className="waka-settings-section" aria-labelledby="waka-settings-account">
+      <section className="waka-settings-section waka-settings-block" aria-labelledby="waka-settings-account">
         <h3 id="waka-settings-account" className="waka-settings-heading">{say("settingsGroupAccount")}</h3>
+        <div className="waka-settings-list">
+          <button type="button" className="waka-settings-row waka-settings-me" data-settings-target="account" onClick={() => setOpen("account")}>
+            <span className="waka-settings-me-text">
+              <span>{props.name || say("settingsGroupAccount")}</span>
+              {props.email ? <span className="waka-settings-me-email">{props.email}</span> : null}
+            </span>
+            <span className="waka-settings-chevron" aria-hidden="true">›</span>
+          </button>
+        </div>
+      </section>
+
+      <section className="waka-settings-section waka-settings-block" aria-labelledby="waka-settings-data">
+        <h3 id="waka-settings-data" className="waka-settings-heading">{say("settingsGroupData")}</h3>
+        <div className="waka-settings-list">
+          <ProfileExportControl locale={props.locale} />
+          {props.onOpenTrash ? <button type="button" className="waka-settings-row" onClick={() => { props.onClose(); props.onOpenTrash?.(); }}>
+            {say("worldDeletedShelf")}
+            <span className="waka-settings-chevron" aria-hidden="true">›</span>
+          </button> : null}
+        </div>
+      </section>
+
+      <section className="waka-settings-section waka-settings-block" aria-labelledby="waka-settings-about">
+        <h3 id="waka-settings-about" className="waka-settings-heading">{say("settingsGroupAbout")}</h3>
+        <div className="waka-settings-list">
+          <Group id="info" open={open} setOpen={setOpen} label={say("worldHowItWorksTitle")}><HowItWorksBody locale={props.locale} /></Group>
+          {/* In Settings, as pages with "<" back (no dead end). */}
+          <Group id="terms" open={open} setOpen={setOpen} label={say("legalTermsLink")}><Suspense fallback={null}><LegalArticle kind="terms" /></Suspense></Group>
+          <Group id="privacy" open={open} setOpen={setOpen} label={say("legalPrivacyLink")}><Suspense fallback={null}><LegalArticle kind="privacy" /></Suspense></Group>
+        </div>
+      </section>
+
+      <section className="waka-settings-section waka-settings-block waka-settings-leave" aria-label={say("worldSignOutLower")}>
+        <div className="waka-settings-list">
+          <button type="button" className="waka-settings-row waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
+            {say("worldSignOutLower")}
+          </button>
+        </div>
+      </section>
+      </> : open === "account" ? <>
+      <section className="waka-settings-section" aria-label={say("settingsGroupAccount")}>
         {/* WHO THIS IS. Not editable: the address identifies the account
             and changing it is a different act with its own verification.
             Shown as a read-only value under its own label, like the fields. */}
@@ -150,64 +180,29 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           <span className="waka-account-failed" role="alert">{say("profileSaveError")}</span>
         ) : null}
       </section>
-
-      {/* SAVE FROM ANYWHERE: the bookmarklet opens this app's /share with
-          the page it was pressed on (see lib/bookmarklet.ts). */}
-      <section className="waka-settings-section waka-save-anywhere" aria-labelledby="waka-save-anywhere-title">
-        <h3 id="waka-save-anywhere-title" className="waka-settings-heading">{say("profileSaveAnywhere")}</h3>
-        <p className="waka-settings-note">{say("profileBookmarkletHint")}</p>
-        <a ref={bookmarklet} className="waka-bookmarklet" draggable
-          onClick={(event) => event.preventDefault()}>{say("profileBookmarkletName")}</a>
+      <section className="waka-settings-section waka-settings-block" aria-label={say("profileChangePassword")}>
+        <div className="waka-settings-list">{groups}</div>
       </section>
-
-      <section className="waka-settings-section" aria-labelledby="waka-settings-data">
-        <h3 id="waka-settings-data" className="waka-settings-heading">{say("settingsGroupData")}</h3>
-        <div className="waka-settings-list">
-          <ProfileExportControl locale={props.locale} />
-          {props.onOpenTrash ? <button type="button" className="waka-settings-row" onClick={() => { props.onClose(); props.onOpenTrash?.(); }}>
-            {say("worldDeletedShelf")}
-            <span className="waka-settings-chevron" aria-hidden="true">›</span>
-          </button> : null}
-          {groups}
-        </div>
+      {/* DELETE ACCOUNT AT THE VERY BOTTOM OF ACCOUNT, as iOS keeps it: never
+          on the overview, one page and two presses away. */}
+      <section className="waka-settings-section waka-settings-block waka-settings-leave" aria-label={say("profileDelete")}>
+        <div className="waka-settings-list">{danger}</div>
       </section>
-
-      <section className="waka-settings-section" aria-labelledby="waka-settings-about">
-        <h3 id="waka-settings-about" className="waka-settings-heading">{say("settingsGroupAbout")}</h3>
-        {props.onOpenInfo ? <button type="button" className="waka-settings-row" onClick={props.onOpenInfo}>
-          {say("worldHowItWorksTitle")}
-          <span className="waka-settings-chevron" aria-hidden="true">›</span>
-        </button> : null}
-        <LegalLinks locale={props.locale} />
-        <button type="button" className="waka-account-out" onClick={() => { props.onClose(); props.onSignOut(); }}>
-          {say("worldSignOutLower")}
-        </button>
-        {danger}
-      </section>
-      </> : <>{groups}{danger}</>}
+      </> : <>{groups}{danger}<Group id="info" open={open} setOpen={setOpen} label={say("worldHowItWorksTitle")}><HowItWorksBody locale={props.locale} /></Group>
+        <Group id="terms" open={open} setOpen={setOpen} label={say("legalTermsLink")}><Suspense fallback={null}><LegalArticle kind="terms" /></Suspense></Group>
+        <Group id="privacy" open={open} setOpen={setOpen} label={say("legalPrivacyLink")}><Suspense fallback={null}><LegalArticle kind="privacy" /></Suspense></Group></>}
       </div>
     </div>
   );
 }
 
-function SettingsGroups({ open, setOpen, say, locale, personalProfile, profileLoadFailed, retryProfile }: {
+function SettingsGroups({ open, setOpen, say, locale }: {
   open: Open;
   setOpen: (next: Open) => void;
   say: (key: Parameters<typeof t>[1]) => string;
   locale: SupportedLocale;
-  personalProfile: ApiOwnedProfile | null;
-  profileLoadFailed: boolean;
-  retryProfile: () => void;
 }): JSX.Element {
   return <>
-      <Group id="personal" open={open} setOpen={setOpen} label={say('profilePersonalMcpTitle')}>
-        {personalProfile ? <PersonalConnections key={personalProfile.id} locale={locale} profile={personalProfile} />
-          : profileLoadFailed ? <>
-            <p className="waka-account-failed" role="alert">{say('profilePersonalMcpLoadError')}</p>
-            <button type="button" className="waka-settings-erase" onClick={retryProfile}>{say('worldRetry')}</button>
-          </> : <p className="waka-settings-note" role="status">{say('worldInspirationsLoad')}</p>}
-      </Group>
-
       <Group id="sessions" open={open} setOpen={setOpen} label={say("profileSessionsTitle")}>
         <ProfileConnections locale={locale} />
       </Group>
@@ -302,6 +297,9 @@ function PasswordChangeForm({ locale }: { locale: SupportedLocale }): JSX.Elemen
   </form>;
 }
 
+/** How long Download my data waits before it says it failed. */
+const EXPORT_DEADLINE_MS = 60_000;
+
 function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
   const pending = useRef<AbortController | null>(null);
   const objectUrl = useRef<string | null>(null);
@@ -319,6 +317,10 @@ function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
     pending.current = request;
     setError(undefined);
     setBusy(true);
+    /* NEVER STUCK (founder, 2026-11-27: "it's just like stuck here"): a read
+       that has not answered in a minute is called failed, with its retry. */
+    let timedOut = false;
+    const deadline = window.setTimeout(() => { timedOut = true; request.abort(); }, EXPORT_DEADLINE_MS);
     try {
       if (isMobileBuild) {
         await (await platformServices()).openBrowser(checkedNativeApiOrigin());
@@ -329,15 +331,22 @@ function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
         const blob = new Blob([JSON.stringify(bundle)], { type: "application/json" });
         objectUrl.current = URL.createObjectURL(blob);
         setUrl(objectUrl.current);
+        /* ONE PRESS: the file starts downloading as soon as it is ready; the
+           row then offers it again by its own link. */
+        const link = document.createElement("a");
+        link.href = objectUrl.current; link.download = "waka-profile.json";
+        document.body.append(link); link.click(); link.remove();
       }
     } catch (failure) {
-      if (!request.signal.aborted) {
+      if (timedOut) setError("profileExportFailed");
+      else if (!request.signal.aborted) {
         setError(failure instanceof ApiError && failure.code === "export_too_large"
           ? "profileExportTooLarge" : "profileExportFailed");
       }
     } finally {
+      window.clearTimeout(deadline);
       pending.current = null;
-      if (!request.signal.aborted) setBusy(false);
+      if (!request.signal.aborted || timedOut) setBusy(false);
     }
   }
 
@@ -521,8 +530,10 @@ function Group({ id, open, setOpen, label, children }: {
   label: string;
   children: React.ReactNode;
 }): JSX.Element | null {
-  if (open !== null) return open === id ? <div className="waka-settings-body">{children}</div> : null;
-  if (id === 'danger') return <button type="button" className="waka-settings-erase waka-settings-delete"
+  if (open === id) return <div className="waka-settings-body">{children}</div>;
+  /* Its row stands only on the page above it. */
+  if (open !== PARENT[id]) return null;
+  if (id === 'danger') return <button type="button" className="waka-settings-row waka-settings-delete"
     data-settings-target={id} onClick={() => setOpen(id)}>{label}</button>;
   return (
     <button type="button" className="waka-settings-row" data-settings-target={id}
@@ -530,5 +541,78 @@ function Group({ id, open, setOpen, label, children }: {
       {label}
       <span className="waka-settings-chevron" aria-hidden="true">›</span>
     </button>
+  );
+}
+
+/**
+ * ═══ CONNECT (founder, 2026-11-27: "workflows that we want people to do such
+ * as use WAKA in Claude Code or Codex ... should be a lot more prominent ...
+ * a separate button outside of settings with a connector icon") ═══
+ * The doors in and out of WAKA, together: your AI tools reading what WAKA
+ * knows about you (Claude Code, Codex, their keys and what they read), and
+ * the browser button that brings a page in.
+ */
+export function ConnectPanel({ locale, onClose }: { locale: SupportedLocale; onClose: () => void }): JSX.Element {
+  const say = (key: Parameters<typeof t>[1]) => t(locale, key);
+  /* React will not render a `javascript:` href, by design; the bookmarklet's
+     one is set on the element after it mounts. */
+  const bookmarklet = useRef<HTMLAnchorElement>(null);
+  useEffect(() => { bookmarklet.current?.setAttribute('href', bookmarkletHref(window.location.origin)); });
+  const [dragHint, setDragHint] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const [profile, setProfile] = useState<ApiOwnedProfile | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setFailed(false);
+    fetchProfiles(controller.signal).then(rows => {
+      if (controller.signal.aborted) return;
+      const human = rows.find(row => row.type === 'human');
+      if (!human) throw new Error('Personal profile missing');
+      setProfile(human);
+    }).catch(() => { if (!controller.signal.aborted) setFailed(true); });
+    return () => controller.abort();
+  }, [attempt]);
+  return (
+    <div className="waka-settings waka-connect" role="group" aria-label={say("connectTitle")}>
+      <SurfaceHeader locale={locale} back={{ kind: "close", onBack: onClose }} title={say("connectTitle")} />
+      <div className="waka-settings-content">
+        <section className="waka-settings-section" aria-labelledby="waka-connect-tools">
+          <h3 id="waka-connect-tools" className="waka-settings-heading">{say("connectToolsHeading")}</h3>
+          {profile ? <ConnectTools key={profile.id} locale={locale} profile={profile} />
+            : failed ? <>
+              <p className="waka-account-failed" role="alert">{say('profilePersonalMcpLoadError')}</p>
+              <button type="button" className="waka-settings-erase" onClick={() => setAttempt(n => n + 1)}>{say('worldRetry')}</button>
+            </> : <p className="waka-settings-note" role="status">{say('worldInspirationsLoad')}</p>}
+        </section>
+        <section className="waka-settings-section waka-save-anywhere" aria-labelledby="waka-connect-in">
+          <h3 id="waka-connect-in" className="waka-settings-heading">{say("connectBringIn")}</h3>
+          {/* SAVE FROM ANYWHERE, behind its own row: the bookmarklet opens this
+              app's /share with the page it was pressed on (lib/bookmarklet.ts). */}
+          <section className="waka-connect-tool" aria-label={say("connectBrowserButton")}>
+            <button type="button" className="waka-connect-tool-head" aria-expanded={browserOpen} onClick={() => setBrowserOpen(was => !was)}>
+              <span className="waka-connect-tool-name"><span>{say("connectBrowserButton")}</span>
+                <span className="waka-connect-tool-status">{say("connectBrowserStatus")}</span></span>
+              <span className="waka-connect-tool-act"><span className="waka-settings-chevron" aria-hidden="true">{browserOpen ? '⌄' : '›'}</span></span>
+            </button>
+            {browserOpen ? <div className="waka-connect-connected">
+              <p className="waka-settings-note">{say("profileBookmarkletHint")}</p>
+              {/* A PRESS HERE SAYS WHAT TO DO (founder, 2026-11-27: "Save from
+                  anywhere doesn't work"): it only works from the bookmarks bar. */}
+              <a ref={bookmarklet} className="waka-bookmarklet" draggable
+                onClick={(event) => { event.preventDefault(); setDragHint(true); }}>{say("profileBookmarkletName")}</a>
+              {dragHint ? <p className="waka-settings-note" role="status">{say("profileBookmarkletDragHint")}</p> : null}
+            </div> : null}
+          </section>
+        </section>
+        {/* THE TECHNICAL WORDS, ONLY FOR WHOEVER OPENS THEM: every key,
+            its access, the raw setup for each client, everything read. */}
+        {profile ? <details className="waka-connect-advanced">
+          <summary>{say("connectAdvanced")}</summary>
+          <PersonalConnections locale={locale} profile={profile} />
+        </details> : null}
+      </div>
+    </div>
   );
 }

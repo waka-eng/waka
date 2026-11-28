@@ -114,6 +114,7 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
      creature still rises to its place above them. */
   const staysHome = () => !document.querySelector(".waka-page--timeless .waka-held");
   const [heldAt, setHeldAt] = useState<{ dx: number; dy: number; scale: number } | null>(null);
+  const heldAtRef = useRef(heldAt); heldAtRef.current = heldAt;
   useEffect(() => {
     /* Turned round on the way home: walk back in from where the world's
        creature stands, as a new walk (review, 2026-10-15). */
@@ -125,7 +126,11 @@ export function PrinciplesOverlay({ locale, profileId, name, title, whose = "own
     if (crossing?.going !== "out") return;
     /* Turned back mid-walk: the creature has not reached the page's spot
        yet, so it walks home from where the world left it. */
-    const from = walking && walk?.going === "in" ? crossing.home : pageCreature();
+    /* Held where home had it (the waiting ground), it walks home from that
+       very spot and size: no shrink and grow before the walk (founder,
+       2026-11-27: "why does the character become smaller and bigger and
+       then move? ... don't do that"). */
+    const from = (walking && walk?.going === "in") || heldAtRef.current ? crossing.home : pageCreature();
     if (!crossing.home || !from) { onCrossed?.(); return; }
     setWalk({ ...crossing, from });
     setWalking(true);

@@ -39,6 +39,14 @@ const base: SettingsPanelProps = {
 async function render(props: Partial<SettingsPanelProps>): Promise<void> {
   await act(async () => root.render(<SettingsPanel {...base} {...props} />));
 }
+/* Name, language, password, devices and Delete account sit behind the one
+   Account row now (founder, 2026-11-27: "use more progressive disclosure"). */
+async function renderAccount(props: Partial<SettingsPanelProps>): Promise<void> {
+  await render(props);
+  const row = host.querySelector<HTMLButtonElement>('button[data-settings-target="account"]');
+  if (!row) throw new Error("Settings has no Account row");
+  await act(async () => row.click());
+}
 
 const nameField = () => host.querySelector<HTMLInputElement>("input[autocomplete='name']")!;
 const languageField = () => host.querySelector<HTMLSelectElement>("select")!;
@@ -56,14 +64,14 @@ afterEach(async () => {
 });
 
 it("keeps the name field typeable while its own write is in flight", async () => {
-  await render({ nameBusy: true });
+  await renderAccount({ nameBusy: true });
   expect(nameField().disabled).toBe(false);
   expect(nameField().getAttribute("aria-busy")).toBe("true");
   expect(languageField().disabled, "a name write does not lock the language").toBe(false);
 });
 
 it("locks only the language while the language is being written", async () => {
-  await render({ localeBusy: true });
+  await renderAccount({ localeBusy: true });
   expect(languageField().disabled).toBe(true);
   expect(nameField().disabled).toBe(false);
 });
@@ -71,7 +79,7 @@ it("locks only the language while the language is being written", async () => {
 it("explains permanent deletion and requires a separate confirmation in both languages", async () => {
   for (const locale of ["en-US", "ko-KR"] as const) {
     let deletes = 0;
-    await render({ locale, onDeleteAccount: async () => { deletes += 1; } });
+    await renderAccount({ locale, onDeleteAccount: async () => { deletes += 1; } });
     const danger = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
       /Delete account|계정 삭제/.test(b.textContent ?? ""),
     );
@@ -100,11 +108,16 @@ it("offers an owned JSON export and releases the temporary file URL on close", a
   vi.stubGlobal("fetch", fetchMock);
   try {
     await render({});
-    const prepare = [...host.querySelectorAll("button")].find(button => button.textContent === "Prepare my data export");
+    /* One press downloads (founder, 2026-11-27: "it's just like stuck here
+       ... I don't get the purpose of this"). */
+    const started = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const prepare = [...host.querySelectorAll("button")].find(button => button.textContent === "Download my data");
     expect(prepare).toBeDefined();
     await act(async () => prepare?.click());
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/export");
     expect(download).toHaveBeenCalledOnce();
+    expect(started, "the download did not start on the one press").toHaveBeenCalledOnce();
+    started.mockRestore();
     expect(host.querySelector('a[download="waka-profile.json"]')?.getAttribute("href")).toBe("blob:test-profile-export");
     await act(async () => root.render(null));
     expect(release).toHaveBeenCalledWith("blob:test-profile-export");
@@ -120,7 +133,7 @@ it("clears both fields when a password change is confirmed", async () => {
     new Response(JSON.stringify({ ok: true })));
   vi.stubGlobal("fetch", fetchMock);
   try {
-    await render({});
+    await renderAccount({});
     const open = host.querySelector<HTMLButtonElement>('button[data-settings-target="password"]');
     expect(open?.textContent).toContain("Change password");
     await act(async () => open?.click());
@@ -144,4 +157,22 @@ it("clears both fields when a password change is confirmed", async () => {
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+/* "How WAKA works" is a Settings page (founder, 2026-11-27: "there's no way
+   to go back. We can only close it and then open it again"): Back returns
+   to Settings, never closes the card. */
+it("opens How WAKA works as a Settings page, and Back returns to Settings", async () => {
+  const onClose = vi.fn();
+  await render({ onClose });
+  const row = [...document.querySelectorAll<HTMLButtonElement>(".waka-settings-row")].find(button => button.textContent?.includes("How WAKA works"));
+  expect(row, "Settings has no How WAKA works row").toBeTruthy();
+  await act(async () => row!.click());
+  expect(document.querySelector(".waka-surface-title")?.textContent).toBe("How WAKA works");
+  expect(document.querySelector(".waka-about-steps"), "the steps did not open in Settings").not.toBeNull();
+  const back = document.querySelector<HTMLButtonElement>(".waka-surface-back")!;
+  expect(back.getAttribute("aria-label")).toBe("Back");
+  await act(async () => back.click());
+  expect(document.querySelector(".waka-surface-title")?.textContent).toBe("Settings");
+  expect(onClose, "Back closed Settings instead of going back").not.toHaveBeenCalled();
 });

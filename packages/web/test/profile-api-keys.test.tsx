@@ -7,7 +7,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { SettingsPanel, type SettingsPanelProps } from '../src/components/SettingsPanel';
+import { ConnectPanel, SettingsPanel, type SettingsPanelProps } from '../src/components/SettingsPanel';
 import type { ApiProfileKey } from '../src/lib/api/profile-keys';
 
 const noah = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'noah', type: 'agent' };
@@ -80,8 +80,12 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
     ? Promise.resolve(Response.json({ profiles: [personal] })) : original(...args));
   keys.push(key('Personal laptop', personal.id), { ...key('Old personal key', personal.id), revokedAt: '2026-10-22T00:00:00Z' });
   await openPersonal();
-  expect(host.querySelector('h2')?.textContent).toBe('Use WAKA in Claude or ChatGPT');
-  expect(calls.some(c => c.path.includes('keys'))).toBe(false);
+  /* Connect is its own door now (founder, 2026-11-27): the page is Connect,
+     and its first section is Claude Code and Codex. */
+  expect(host.querySelector('h2')?.textContent).toBe('Connect');
+  expect(host.querySelector('#waka-connect-tools')?.textContent).toBe('Let your AI tools know you');
+  /* The tool cards read keys once, to light the dot of a connected tool. */
+  expect(calls.filter(c => c.path === '/api/keeper-keys')).toHaveLength(1);
   await click('API keys');
   expect(host.textContent).toMatch(/Neither can edit or delete inspirations or manage your account/i);
   expect(host.textContent).toContain('Read and capture also allows new saves');
@@ -90,16 +94,17 @@ it('offers personal MCP without an agent and lists only live personal keys', asy
     'Name', 'Permissions', 'API key', 'Last used', 'Delete key',
   ]);
   for (const hidden of ['Noah laptop', 'Another laptop', 'Old personal key', 'Agent name']) expect(host.textContent).not.toContain(hidden);
-  expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual(['/api/profiles', '/api/keeper-keys', `/api/mcp-reads?profile=${personal.id}`]);
+  /* The cards' read, then the Keys and details tab's own. */
+  expect(vi.mocked(fetch).mock.calls.map(([path]) => path)).toEqual([...CONNECT_READS(), '/api/keeper-keys', `/api/mcp-reads?profile=${personal.id}`]);
   expect(calls.every(c => c.method === 'GET')).toBe(true);
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click());
-  expect(document.activeElement).toBe(host.querySelector('[data-settings-target="personal"]'));
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Close"]')!.click());
+  expect(closed, 'Close on Connect did not close it').toBe(1);
 });
 
 it('keeps personal keys in their tab and copies a profile-bound setup prompt without a secret', async () => {
   await openPersonal();
   expect(button('Create key')).toBeUndefined();
-  expect(calls.map(c=>c.path)).toEqual(['/api/profiles']);
+  expect(calls.map(c=>c.path)).toEqual(CONNECT_READS());
   await click('API keys');
   expect([...host.querySelectorAll('select')].find(node=>node.value==='read_only')).toBeDefined();
   await input('Key name, e.g. Work laptop', 'My Codex'); await click('Create key');
@@ -118,7 +123,7 @@ it('keeps personal keys in their tab and copies a profile-bound setup prompt wit
   const details = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(prompt)![1]!);
   expect(details).toMatchObject({ profileId: personal.id, profileType: 'human', serverName: `waka-${personal.id}`, scope: 'current project only' });
   expect(details.login).toBeUndefined();
-  expect(prompt).toContain('Settings → Use WAKA in Claude or ChatGPT → API keys');
+  expect(prompt).toContain('Settings → Use WAKA in Claude Code or Codex → API keys');
   expect(prompt).toContain('Do not use browser login');
   expect(prompt).toContain('Never ask me to paste the key into chat');
   expect(prompt).not.toContain(noah.id); expect(prompt).not.toContain(secret);
@@ -193,12 +198,13 @@ it('offers personal setup even when keys cannot load or five keys are active', a
   fail = 'GET';
   await openPersonal();
   expect([...host.querySelectorAll('.waka-session-tabs button')].map(b=>b.textContent)).toEqual(['MCP setup', 'API keys']);
-  expect(host.querySelector('[role="alert"]')).toBeNull();
+  /* The cards say keys could not load; the setup below still works. */
+  expect(host.querySelector('.waka-connect-tools, [role="alert"]')?.textContent).toContain('Couldn’t');
   expect(host.querySelector('input')).toBeNull();
   expect(host.textContent).not.toMatch(/Create key|Last used|Revoke|Step 1/);
   await click('Copy setup prompt');
   expect(copied.at(-1)).toContain(personal.id);
-  expect(calls.map(c=>c.path)).toEqual(['/api/profiles']);
+  expect(calls.map(c=>c.path)).toEqual(CONNECT_READS());
   await click('API keys');
   expect(host.textContent).toContain('Couldn’t load API keys');
   fail = null; await click('Refresh');
@@ -217,10 +223,35 @@ it('keeps personal setup manually copyable if clipboard access fails', async () 
   expect(host.textContent).toContain('Select the text and copy it yourself');
   expect(host.textContent).toContain(personal.id);
   expect(host.textContent).toContain('waka_verify_connection');
-  expect(calls.map(c=>c.path)).toEqual(['/api/profiles']);
+  expect(calls.map(c=>c.path)).toEqual(CONNECT_READS());
 });
 
+/* Use WAKA in Claude Code or Codex lives on Connect, a home door of its own
+   (founder, 2026-11-27), not inside Settings. */
+let closed = 0;
+const CONNECT_READS = () => ['/api/profiles', '/api/keeper-keys', `/api/mcp-reads?profile=${personal.id}`];
 async function openPersonal(locale: SettingsPanelProps['locale'] = 'en-US') {
-  await act(async () => root.render(<SettingsPanel {...props} locale={locale} />));
-  await click(locale === 'en-US' ? 'Use WAKA in Claude or ChatGPT' : 'Claude나 ChatGPT에서 WAKA 쓰기');
+  closed = 0;
+  await act(async () => root.render(<ConnectPanel locale={locale} onClose={() => { closed += 1; }} />));
 }
+
+it('connects a tool in plain words: a key named after it lights its card, and Disconnect puts it out', async () => {
+  keys = [];
+  await openPersonal();
+  const card = (name: string) => host.querySelector<HTMLElement>(`section.waka-connect-tool[aria-label="${name}"]`)!;
+  expect(card('Claude Code').textContent).toContain('Not connected');
+  expect(host.querySelector('.waka-connect-tools')?.textContent, 'the cards speak plumbing').not.toMatch(/MCP|API/);
+  await act(async () => card('Claude Code').querySelector<HTMLButtonElement>('.waka-connect-tool-head')!.click());
+  await click('Make the key');
+  expect(calls.find(c => c.method === 'POST')).toEqual({ path: '/api/keeper-keys', method: 'POST', body: { label: 'Claude Code', access: 'read_only' } });
+  expect(host.textContent).toContain(secret);
+  await click('Copy the message');
+  expect(copied.at(-1)).toContain(personal.id);
+  await click('Done');
+  expect(card('Claude Code').classList.contains('waka-connect-tool--on')).toBe(true);
+  expect(card('Claude Code').textContent).toContain('Connected');
+  expect(card('Codex').textContent).toContain('Not connected');
+  await click('Disconnect');
+  expect(calls.some(c => c.method === 'DELETE')).toBe(true);
+  expect(card('Claude Code').textContent).toContain('Not connected');
+});

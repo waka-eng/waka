@@ -5651,6 +5651,112 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-settings-section .waka-settings-row,
 .waka-settings-section > .waka-settings-delete { font-size: var(--t-body); }
 .waka-settings-row .waka-settings-chevron { flex: none; color: var(--muted); }
+/* ═══ CONNECT, IN PLAIN WORDS (founder, 2026-11-27) ═══ One soft card per
+   tool. Light is the meaning: a lit dot is connected, a dim one is not. */
+.waka-connect-tools { display: flex; flex-direction: column; gap: var(--sp-8); }
+.waka-connect-tool { border-radius: var(--sp-14); background: color-mix(in srgb, var(--ink) 5%, transparent); overflow: hidden; }
+.waka-connect-tool-head {
+  display: flex; align-items: center; gap: var(--sp-12); width: 100%; min-height: 60px;
+  padding: var(--sp-12) var(--sp-14); border: 0; background: none; color: var(--ink);
+  font: inherit; text-align: start; cursor: pointer; transition: background-color 160ms ease-out;
+}
+.waka-connect-tool-head:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.waka-connect-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 22%, transparent); }
+.waka-connect-tool--on .waka-connect-dot { background: var(--moon-warm); box-shadow: 0 0 8px color-mix(in srgb, var(--moon-warm) 70%, transparent), 0 0 18px color-mix(in srgb, var(--moon-warm) 35%, transparent); }
+.waka-connect-tool-name { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: var(--t-body); }
+.waka-connect-tool-status { color: var(--muted); font-size: var(--t-meta); }
+.waka-connect-tool-act { display: flex; align-items: center; gap: var(--sp-8); color: var(--muted); font-size: var(--t-ui); }
+.waka-connect-steps { margin: 0; padding: 0 var(--sp-14) var(--sp-14) calc(var(--sp-14) + var(--sp-20)); display: flex; flex-direction: column; gap: var(--sp-14); }
+.waka-connect-steps > li { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-8); color: var(--muted); }
+.waka-connect-steps > li::marker { color: var(--muted); font-size: var(--t-ui); }
+.waka-connect-step-title { color: var(--ink); font-size: var(--t-ui); line-height: 1.45; }
+.waka-connect-allow { display: flex; align-items: center; gap: var(--sp-8); color: var(--muted); font-size: var(--t-ui); cursor: pointer; }
+.waka-connect-tool .waka-connect-button {
+  min-height: 40px; padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); font: inherit; font-size: var(--t-ui); cursor: pointer;
+}
+.waka-connect-tool .waka-connect-button:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 16%, transparent); }
+.waka-connect-tool .waka-connect-button:disabled { opacity: .5; cursor: default; }
+.waka-connect-tool .waka-connect-button.waka-connect-button--quiet { background: none; padding: 0; min-height: 36px; color: var(--muted); }
+.waka-connect-tool .waka-connect-button.waka-connect-button--quiet:is(:hover, :focus-visible) { background: none; color: var(--ink); }
+.waka-connect-connected { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-8); padding: 0 var(--sp-14) var(--sp-14) calc(var(--sp-14) + 8px + var(--sp-12)); }
+.waka-connect-reads { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: var(--sp-4); font-size: var(--t-ui); color: var(--ink); }
+.waka-connect-reads > li { display: flex; justify-content: space-between; gap: var(--sp-12); }
+.waka-connect-advanced { margin-top: var(--sp-8); color: var(--muted); font-size: var(--t-ui); }
+.waka-connect-advanced > summary { cursor: pointer; padding: var(--sp-8) 0; list-style: none; }
+.waka-connect-advanced > summary::-webkit-details-marker { display: none; }
+.waka-connect-advanced[open] > summary { color: var(--ink); }
+/* Inside a tool card every copy button is the same pill, notes are small,
+   and the key reads as one quiet line of type, not a boxed form. */
+.waka-connect-steps { list-style: none; counter-reset: waka-step; }
+.waka-connect-steps > li { position: relative; counter-increment: waka-step; }
+.waka-connect-steps > li::before {
+  content: counter(waka-step); position: absolute; inset-inline-start: calc(-1 * var(--sp-20)); top: 0;
+  color: var(--muted); font-size: var(--t-ui); line-height: 1.45;
+}
+.waka-connect-tool :is(.waka-connect-steps, .waka-connect-connected) .waka-settings-note { margin: 0; color: var(--muted); font-size: var(--t-meta); line-height: 1.45; }
+.waka-connect-tool .waka-settings-erase {
+  min-height: 40px; margin: 0; padding: 0 var(--sp-16); border: 0; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); font-size: var(--t-ui);
+}
+.waka-connect-tool .waka-settings-erase:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 16%, transparent); }
+.waka-connect-tool .waka-session-command { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-8); width: 100%; padding: 0; border: 0; background: none; }
+.waka-connect-tool .waka-session-command .waka-mcp-commands {
+  margin: 0; padding: var(--sp-10) var(--sp-12); width: 100%; box-sizing: border-box; border: 0; border-radius: var(--sp-10);
+  background: color-mix(in srgb, var(--ink) 6%, transparent); font-size: var(--t-meta); word-break: break-all; white-space: pre-wrap;
+}
+/* An inspiration loading: one quiet line where its words will stand. */
+.waka-note-loading { margin: var(--sp-12) 0 0; color: var(--muted); font-size: var(--t-ui); }
+/* Connect: the card the connector corner opens, Settings' own surface. */
+.waka-account--connect { min-height: min(28rem, calc(100dvh - 7rem)); }
+.waka-connect .waka-settings-section + .waka-settings-section { margin-top: var(--sp-8); }
+/* The connector glyph sits on the corner's optical weight, as the gear does. */
+.waka-corner--connect svg { display: block; }
+/* Terms and Privacy as Settings pages: reading type, one column. */
+.waka-legal-inline { display: flex; flex-direction: column; gap: var(--sp-12); color: var(--ink); font-size: var(--t-ui); line-height: 1.6; }
+.waka-legal-inline h2 { margin: var(--sp-12) 0 0; font-size: var(--t-body); font-weight: 500; }
+.waka-legal-inline h3 { margin: var(--sp-8) 0 0; font-size: var(--t-ui); font-weight: 500; }
+.waka-legal-inline p, .waka-legal-inline ul { margin: 0; color: color-mix(in srgb, var(--ink) 82%, transparent); }
+.waka-legal-inline ul { padding-inline-start: var(--sp-20); }
+.waka-legal-inline a { color: var(--ink); }
+.waka-legal-inline .waka-legal-status { color: var(--muted); font-size: var(--t-meta); }
+/* A CARD'S X IS ON THE RIGHT (founder, 2026-11-27: "shouldn't the close
+   button be on the right?"): Settings and Connect drop from the top-right
+   corner, so their X stands where the hand already is, as iOS cards do. A
+   sub-page's "<" stays left; full pages keep their way out on the left. */
+.waka-account .waka-surface-head > .waka-surface-back[data-back="close"]:is(.waka-surface-back, #waka-surface-head) {
+  grid-column: 3; grid-row: 1; justify-self: end; margin-inline: 0 calc(-1 * var(--sp-12));
+}
+.waka-account .waka-surface-head > .waka-surface-title { grid-row: 1; }
+/* ═══ BLOCKS (founder, 2026-11-27: "dividers between sections of account,
+   data and connections, about, and a section for sign out and delete
+   account") ═══ Each group is its own soft panel, the iOS grouped list:
+   a step lighter than the card, rounded, rows inset inside it. */
+.waka-account .waka-settings-block > .waka-settings-list {
+  padding-inline: 0; border-radius: var(--sp-14); overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+/* THE WHOLE ROW ANSWERS A HOVER (founder, 2026-11-27: "only certain parts
+   change color upon hover"): rows span the panel edge to edge, their words
+   inset, so the tint fills the row, not a box inside it. */
+.waka-account .waka-settings-block .waka-settings-list .waka-settings-row:is(a, button) {
+  box-sizing: border-box; width: 100%; padding-inline: var(--sp-14); border-radius: 0;
+}
+.waka-account .waka-settings-block .waka-settings-list .waka-settings-row:is(a, button):is(:hover, :focus-visible):not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.waka-account .waka-settings-block > .waka-settings-heading { padding-inline: var(--sp-4); }
+/* Account: your name over your address. */
+.waka-settings-me-text { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; text-align: left; }
+.waka-settings-me-email { color: var(--muted); font-size: var(--t-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.waka-account .waka-settings-row.waka-settings-me { padding-block: var(--sp-10); }
+/* EVERY ROW ONE COLOUR, ONE EDGE (founder, 2026-11-27: "this bottom part
+   is so ugly"): links, buttons and the way out read as one list. Only
+   Delete account steps back. */
+.waka-account .waka-settings-section .waka-settings-row:is(a, button) {
+  color: var(--ink); text-decoration: none; padding-inline: 0; margin: 0;
+}
+.waka-account .waka-settings-leave .waka-settings-row.waka-settings-delete { color: var(--muted); }
 .waka-settings-export { display: flex; flex-direction: column; gap: var(--sp-4); }
 .waka-settings-export > a.waka-settings-row { color: var(--ink); text-decoration: none; }
 /* THE FOOT'S TWO ACTS AND THE LEGAL LINKS ON THE SAME EDGE. Their own
@@ -8182,6 +8288,41 @@ body:has([aria-modal="true"], .waka-account, [role="menu"]) .waka-surface-strip 
 }
 .waka-page.waka-page--sheet[data-leaving] { animation: waka-sheet-down 220ms ease-in both; pointer-events: none; }
 .waka-page.waka-page--sheet[data-dragging] { animation: none; }
+/* ═══ THE SHEET BELONGS TO THE SKY (founder, 2026-11-27: "this pull-up is
+   ugly and doesn't fit the rest of the aesthetics ... the card is just so
+   ugly") ═══ It was a flat grey slab over the night: an outlined search, hard
+   rules between rows, one cut line each. Now the sky shows through it, its
+   top edge catches a line of light, the search is a soft well, and the rows
+   breathe apart with two lines each, tinting on hover instead of ruled. */
+.waka-page.waka-page--sheet {
+  max-width: 600px;
+  background: color-mix(in srgb, var(--waka-raised) 84%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(120%); backdrop-filter: blur(28px) saturate(120%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ink) 10%, transparent), 0 -18px 60px color-mix(in srgb, var(--bg) 60%, transparent);
+}
+.waka-page--sheet .waka-over-find {
+  min-height: 40px; border: 0; border-radius: var(--sp-12);
+  background: color-mix(in srgb, var(--ink) 6%, transparent); font-size: var(--t-ui);
+}
+.waka-page--sheet .waka-list-rows > li + li { border-top: 0; }
+/* The scroll box leans 12px out and pads it back, so a row's tint can reach
+   past the words' edge without being clipped there. */
+.waka-page--sheet > .waka-over.waka-over--archive {
+  box-sizing: border-box; margin-inline: calc(-1 * var(--sp-12)); padding-inline: var(--sp-12);
+  width: calc(100% + 2 * var(--sp-12)); max-width: none;
+}
+.waka-page--sheet .waka-list-rows { display: flex; flex-direction: column; gap: var(--sp-2); }
+.waka-page--sheet .waka-list-row {
+  margin-inline: calc(-1 * var(--sp-12)); padding: var(--sp-12); width: calc(100% + 2 * var(--sp-12));
+  border-radius: var(--sp-14); transition: background-color 160ms ease-out;
+}
+.waka-page--sheet .waka-list-row:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.waka-page--sheet .waka-list-lead {
+  white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  line-height: 1.45;
+}
+/* Back from an inspiration it is already up: no second rise. */
+.waka-page.waka-page--sheet.waka-page--sheet-risen:not([data-leaving]) { animation: none; }
 /* The dim above the sheet: a tap there puts it down. Behind the sheet. */
 .waka-sheet-scrim {
   position: fixed; inset: 0; z-index: 55; padding: 0; border: 0; cursor: default;

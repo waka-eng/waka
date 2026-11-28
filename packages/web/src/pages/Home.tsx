@@ -2525,9 +2525,20 @@ function HomeScreen({ storageScope }: { storageScope: ProfileStorageScope | null
     updateLocale: next => auth ? auth.updatePreferredLocale(next) : Promise.resolve(),
     settleMs: NAME_SETTLE_MS,
   });
+  /* TRASH COMES BACK TO SETTINGS: it is opened from there, so closing it
+     returns there rather than to bare home. */
+  const trashFromSettings = useRef(false);
+  const [reopenSettings, setReopenSettings] = useState(0);
+  const savesOpenNow = viewNavigation.view?.open === 'saves';
+  useEffect(() => {
+    if (savesOpenNow || !trashFromSettings.current) return;
+    trashFromSettings.current = false;
+    listViews.inspirations.onShelf = false;
+    setReopenSettings(n => n + 1);
+  }, [savesOpenNow]);
   const settingsCard = auth ? {
     /* Trash opens the Inspirations page on its deleted view. */
-    onOpenTrash: () => { listViews.inspirations.onShelf = true; openOverHome('saves'); },
+    onOpenTrash: () => { listViews.inspirations.onShelf = true; trashFromSettings.current = true; openOverHome('saves'); },
     name: settingsWrites.name,
     nameBusy: settingsWrites.nameBusy,
     localeBusy: settingsWrites.localeBusy,
@@ -11682,7 +11693,7 @@ const RETRY_READ_LIMIT_MS = 20_000;
             }}
         />
       ) : null}
-      {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current}
+      {phase==='ready'?<Menu locale={locale} items={[]} current={menu.current} reopenSettings={reopenSettings}
         /* NO ACTIONS MENU (2026-11-08). Founder: "i hate this. better
            position these 4 actions in current experience." Search is the
            field at the top of Inspirations; past chats are the chat page's
