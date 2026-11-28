@@ -404,8 +404,13 @@ select:focus {
    the only thing that could have found it. A missing custom property has no
    error state; it has a fallback. */
 .btn-google { --t-label-size: var(--t-meta); }
+/* ONLY THE PRIMARY AND A SUBMIT THAT NAMES NO CLASS (code review,
+   2026-11-27). A submit with its own class (Change password's edged pill,
+   the bar's Send, onboarding's Save) is drawn by that class; this rule's
+   7px/32px/t-ui reached them through their type alone and beat their own
+   44px and type step at (0,1,1). */
 .btn-primary,
-button[type="submit"] {
+button[type="submit"]:not([class]) {
   appearance: none;
   -webkit-appearance: none;
   border: 0;

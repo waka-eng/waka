@@ -3152,10 +3152,12 @@
   padding: 0;
   background: none;
   font-family: inherit;
-  color: var(--jar-faint);
-  cursor: pointer;
   /* Its mark is light now, not a line (founder, 2026-11-27: "dont underline
-     the buttons"): faint at rest, ink when pointed at. */
+     the buttons"): full ink at rest against the faint labels round it, so
+     on a phone, where nothing hovers, it still reads as the one word that
+     opens something; it glows when pointed at. */
+  color: var(--jar-ink);
+  cursor: pointer;
   text-decoration: none;
   transition: color 0.2s ease;
 }
