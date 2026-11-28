@@ -5429,9 +5429,11 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
    card at y 588 on an 844px phone with 250px of screen unused while its
    content scrolled inside it. It takes the same bound `.waka-account`
    computes, capped so a tall desk does not get a column of air. */
+/* ...and no taller than what it holds (founder, 2026-11-27: "why does this
+   have to be this long if not all the content is filling this"). */
 .waka-account--settings {
   width: min(26rem, calc(100vw - var(--sp-32)));
-  height: min(46rem, calc(
+  max-height: min(46rem, calc(
     100dvh - env(safe-area-inset-top) - var(--sp-12) - var(--waka-corner) - var(--sp-8) - var(--sp-16) - env(safe-area-inset-bottom)
   ));
   box-sizing: border-box;
@@ -5658,9 +5660,12 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 .waka-connect-tool-head {
   display: flex; align-items: center; gap: var(--sp-12); width: 100%; min-height: 60px;
   padding: var(--sp-12) var(--sp-14); border: 0; background: none; color: var(--ink);
-  font: inherit; text-align: start; cursor: pointer; transition: background-color 160ms ease-out;
+  font: inherit; text-align: start; cursor: pointer;
 }
-.waka-connect-tool-head:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+/* No hover tint on a card's head (founder, 2026-11-27); keyboard focus still shows. */
+.waka-account .waka-connect-tool-head:hover { background: none; }
+.waka-connect-steps .waka-bookmarklet { margin-top: var(--sp-4); }
+.waka-connect-tool-head:focus-visible { outline: 2px solid color-mix(in srgb, var(--ink) 40%, transparent); outline-offset: -2px; }
 .waka-connect-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 22%, transparent); }
 .waka-connect-tool--on .waka-connect-dot { background: var(--moon-warm); box-shadow: 0 0 8px color-mix(in srgb, var(--moon-warm) 70%, transparent), 0 0 18px color-mix(in srgb, var(--moon-warm) 35%, transparent); }
 .waka-connect-tool-name { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: var(--t-body); }
@@ -5708,7 +5713,7 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 /* An inspiration loading: one quiet line where its words will stand. */
 .waka-note-loading { margin: var(--sp-12) 0 0; color: var(--muted); font-size: var(--t-ui); }
 /* Connect: the card the connector corner opens, Settings' own surface. */
-.waka-account--connect { min-height: min(28rem, calc(100dvh - 7rem)); }
+.waka-account--connect { overscroll-behavior: contain; }
 .waka-connect .waka-settings-section + .waka-settings-section { margin-top: var(--sp-8); }
 /* The connector glyph sits on the corner's optical weight, as the gear does. */
 .waka-corner--connect svg { display: block; }
@@ -5758,6 +5763,8 @@ body:has(.jar-thing-share, .jar-principle-share) .waka-dock:not(:has(.waka-dock-
 }
 .waka-account .waka-settings-leave .waka-settings-row.waka-settings-delete { color: var(--muted); }
 .waka-settings-export { display: flex; flex-direction: column; gap: var(--sp-4); }
+/* A hint or a failure under the row sits inside the panel's own padding. */
+.waka-account .waka-settings-export > p { margin: 0; padding: 0 var(--sp-14) var(--sp-12); }
 .waka-settings-export > a.waka-settings-row { color: var(--ink); text-decoration: none; }
 /* THE FOOT'S TWO ACTS AND THE LEGAL LINKS ON THE SAME EDGE. Their own
    inline padding put Sign out's words 8px and Delete account's 14px in from

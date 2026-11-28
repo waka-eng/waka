@@ -1,8 +1,5 @@
-import { ProfileMcpSetup } from './ProfileMcpSetup';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { bookmarkletHref } from "../lib/bookmarklet";
-import { ProfileApiKeys } from './ProfileApiKeys';
-import { McpRecentReads } from './McpRecentReads';
 
 import { changePassword } from "../lib/api/auth";
 import { apiPath, ApiError, getJson } from "../lib/api/http";
@@ -126,7 +123,11 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element {
           <ProfileExportControl locale={props.locale} />
           {props.onOpenTrash ? <button type="button" className="waka-settings-row" onClick={() => { props.onClose(); props.onOpenTrash?.(); }}>
             {say("worldDeletedShelf")}
-            <span className="waka-settings-chevron" aria-hidden="true">›</span>
+            {/* IT LEAVES SETTINGS FOR A PAGE OF ITS OWN (founder, 2026-11-27:
+                "make clear it's gonna open a separate page"), so it ends in
+                the arrow that goes out, not the ">" that steps within. */}
+            <svg className="waka-settings-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M8 16 16 8M9 8h7v7" /></svg>
           </button> : null}
         </div>
       </section>
@@ -361,27 +362,15 @@ function ProfileExportControl({ locale }: { locale: SupportedLocale }) {
         <a className="waka-settings-row" href={url} download="waka-profile.json">{t(locale, "profileExportDownload")}{glyph}</a>
       ) : (
         <button type="button" className="waka-settings-row" disabled={busy} onClick={() => void prepare()}>
-          {t(locale, isMobileBuild ? "profileExportInBrowser" : "profileExportPrepare")}{glyph}
+          {/* GETTING READY IS THE ROW'S OWN WORDS (founder, 2026-11-27: a
+              line under it sat outside the panel's padding), not a line below. */}
+          <span role={busy ? "status" : undefined}>{t(locale, busy ? "profileExportPreparing" : isMobileBuild ? "profileExportInBrowser" : "profileExportPrepare")}</span>{glyph}
         </button>
       )}
       {isMobileBuild && <p className="waka-settings-note">{t(locale, "profileExportBrowserHint")}</p>}
-      {busy && <p className="waka-settings-note" role="status">{t(locale, "profileExportPreparing")}</p>}
       {error && <p className="waka-account-failed" role="alert">{t(locale, error)}</p>}
     </div>
   );
-}
-
-/** Both destinations use the same setup prompt; keys load only when their tab opens. */
-function PersonalConnections({ locale, profile }: { locale: SupportedLocale; profile: ApiOwnedProfile }): JSX.Element {
-  const [view, setView] = useState<'setup' | 'keys'>('setup');
-  return <>
-    <div className="waka-session-tabs" role="group" aria-label={t(locale, 'profileConnectionViews')}>
-      <button type="button" aria-pressed={view === 'setup'} onClick={() => setView('setup')}>{t(locale, 'profileMcpSetupTab')}</button>
-      <button type="button" aria-pressed={view === 'keys'} onClick={() => setView('keys')}>{t(locale, 'profileApiKeysTitle')}</button>
-    </div>
-    {view === 'keys' ? <><ProfileApiKeys locale={locale} profile={profile} /><McpRecentReads locale={locale} profileId={profile.id} /></>
-      : <ProfileMcpSetup locale={locale} profile={profile} />}
-  </>;
 }
 
 /** Device access can be revoked without selecting or deleting a memory owner. */
@@ -586,7 +575,7 @@ export function ConnectPanel({ locale, onClose }: { locale: SupportedLocale; onC
               <button type="button" className="waka-settings-erase" onClick={() => setAttempt(n => n + 1)}>{say('worldRetry')}</button>
             </> : <p className="waka-settings-note" role="status">{say('worldInspirationsLoad')}</p>}
         </section>
-        <section className="waka-settings-section waka-save-anywhere" aria-labelledby="waka-connect-in">
+        {isMobileBuild ? null : <section className="waka-settings-section waka-save-anywhere" aria-labelledby="waka-connect-in">
           <h3 id="waka-connect-in" className="waka-settings-heading">{say("connectBringIn")}</h3>
           {/* SAVE FROM ANYWHERE, behind its own row: the bookmarklet opens this
               app's /share with the page it was pressed on (lib/bookmarklet.ts). */}
@@ -596,22 +585,20 @@ export function ConnectPanel({ locale, onClose }: { locale: SupportedLocale; onC
                 <span className="waka-connect-tool-status">{say("connectBrowserStatus")}</span></span>
               <span className="waka-connect-tool-act"><span className="waka-settings-chevron" aria-hidden="true">{browserOpen ? '⌄' : '›'}</span></span>
             </button>
-            {browserOpen ? <div className="waka-connect-connected">
-              <p className="waka-settings-note">{say("profileBookmarkletHint")}</p>
-              {/* A PRESS HERE SAYS WHAT TO DO (founder, 2026-11-27: "Save from
-                  anywhere doesn't work"): it only works from the bookmarks bar. */}
-              <a ref={bookmarklet} className="waka-bookmarklet" draggable
-                onClick={(event) => { event.preventDefault(); setDragHint(true); }}>{say("profileBookmarkletName")}</a>
-              {dragHint ? <p className="waka-settings-note" role="status">{say("profileBookmarkletDragHint")}</p> : null}
-            </div> : null}
+            {/* THREE STEPS, BECAUSE IT DID NOT WORK AS ONE LINE (founder,
+                2026-11-27: "how is this supposed to work? it doesn't work at
+                all"): the bookmarks bar is hidden by default, so a drag had
+                nowhere to land, and a press here can do nothing. */}
+            {browserOpen ? <ol className="waka-connect-steps">
+              <li><span className="waka-connect-step-title">{say("connectBrowserStepBar")}</span></li>
+              <li><span className="waka-connect-step-title">{say("connectBrowserStepDrag")}</span>
+                <a ref={bookmarklet} className="waka-bookmarklet" draggable
+                  onClick={(event) => { event.preventDefault(); setDragHint(true); }}>{say("profileBookmarkletName")}</a>
+                {dragHint ? <p className="waka-settings-note" role="status">{say("profileBookmarkletDragHint")}</p> : null}</li>
+              <li><span className="waka-connect-step-title">{say("connectBrowserStepUse")}</span></li>
+            </ol> : null}
           </section>
-        </section>
-        {/* THE TECHNICAL WORDS, ONLY FOR WHOEVER OPENS THEM: every key,
-            its access, the raw setup for each client, everything read. */}
-        {profile ? <details className="waka-connect-advanced">
-          <summary>{say("connectAdvanced")}</summary>
-          <PersonalConnections locale={locale} profile={profile} />
-        </details> : null}
+        </section>}
       </div>
     </div>
   );
