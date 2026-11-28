@@ -71,6 +71,8 @@ it('asks a new person once, and Not now is remembered for this profile', async (
   world = await mountWorld(FACTS); await settle();
   expect(bubble()).toContain('Saved things in other apps?');
   expect(act_('Photos') && act_('Files') && act_('Not now'), 'the ask has no Photos, Files and Not now').toBeTruthy();
+  /* One line only (founder: strip descriptive text; Photos and Files already say what comes in). */
+  expect(world.container.querySelector('.jar-char-bubble .jar-char-bubble-of'), 'a second line came back under the ask').toBeNull();
   expect(world.container.querySelector('.waka-home-bar-glyph--lit'), 'the bar\'s photo door is not lit beside the ask').not.toBeNull();
   await act(async () => act_('Not now')!.click()); await settle();
   expect(bubble()).not.toContain('Saved things in other apps?');

@@ -2,7 +2,7 @@
  * ═══ THE CREATURE ASKS, ONCE (founder, 2026-11-27, "Day 1 import", flow A) ═══
  *
  * Inside the creature's own bubble, never a new corner or screen (one
- * navigation system): a line asking for what is already saved elsewhere, and
+ * navigation system): one line asking for what is already saved elsewhere, and
  * the bubble's usual foot row with three acts. Photos opens the picker the
  * bar's photo button opens, many at once (on the iOS build the web view hands
  * the same input to the system's photo picker); Files opens the file chooser
@@ -33,7 +33,6 @@ export function ImportAsk(props: {
   return (
     <>
       <span className="jar-char-bubble-reading">{say('worldImportAsk')}</span>
-      <span className="jar-char-bubble-of">{say('worldImportKinds')}</span>
       <span className="jar-char-bubble-acts">
         <button type="button" className="jar-char-bubble-act" onClick={() => photos.current?.click()}>{say('worldImportPhotos')}</button>
         <button type="button" className="jar-char-bubble-act" onClick={() => files.current?.click()}>{say('worldImportFiles')}</button>
