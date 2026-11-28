@@ -13,7 +13,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { createIntroductionRoutes } from "../routes/introductions.js";
-import { INTRODUCTION_WINDOW_DAYS, matchIntroductionsForProfile, readIntroductionState, setIntroductionConsent, type FollowUp } from "./introductions.js";
+import { INTRODUCTION_WINDOW_DAYS, matchIntroductionsForProfile, principleOverlap, readIntroductionState, setIntroductionConsent, type FollowUp } from "./introductions.js";
 import { drainIntroductionFollowUps, enqueueIntroductionMatch } from "./queue.js";
 import type { AuthEnv } from "./middleware.js";
 
@@ -165,6 +165,32 @@ describe("matching", () => {
     await principle(a, "Plan the big launch carefully before you build."); await principle(b, "Don't plan the big launch carefully before you build.");
     await consent(a); await consent(b);
     expect(await match(a)).toBe("none");
+  });
+
+  it("tries the next best pair when the locked re-check refuses the best one", async () => {
+    const a = await person(), one = await person(), two = await person();
+    await principle(a, FINISH); await principle(one, FINISH_TOO); await principle(two, FINISH_THREE);
+    await consent(a); await consent(one); await consent(two);
+    const [best, next] = principleOverlap(FINISH, FINISH_TOO) >= principleOverlap(FINISH, FINISH_THREE) ? [one, two] : [two, one];
+    let first = true;
+    const result = await matchIntroductionsForProfile(t.db as never, a.profileId, { available: true, beforeInsert: async () => {
+      /* Between scoring and the first insert, the best match turns off. */
+      if (first) await t.sql`UPDATE introduction_consents SET enabled = false WHERE profile_id = ${best.profileId}`;
+      first = false;
+    } });
+    expect(result).toBe("matched");
+    const [row] = await t.sql`SELECT profile_a_id, profile_b_id FROM introductions`;
+    expect([row!.profile_a_id, row!.profile_b_id]).toContain(next.profileId);
+  });
+
+  it("a reword between scoring and the insert is seen by the locked re-check, so no ask cites words that are gone", async () => {
+    const a = await person(), b = await person();
+    await principle(a, FINISH); const pb = await principle(b, FINISH_TOO);
+    await consent(a); await consent(b);
+    const result = await matchIntroductionsForProfile(t.db as never, a.profileId, { available: true,
+      beforeInsert: async () => { await t.sql`UPDATE principles SET statement = 'Something else entirely now.' WHERE id = ${pb}`; } });
+    expect(result).toBe("none");
+    expect(await t.sql`SELECT id FROM introductions`).toHaveLength(0);
   });
 
   it("reads the most recently active consents first", async () => {
@@ -321,7 +347,7 @@ describe("answering", () => {
     expect((await routed(b).state()).introduction).toBeNull();
   });
 
-  it("a revocation racing the other side's yes never leaves the revoker's name on show", async () => {
+  it("a revocation racing the other side's yes never completes after the revocation, and always erases the revoker's words", async () => {
     for (let round = 0; round < 6; round += 1) {
       await t.truncateAll();
       const { a, b, id } = await pair();
@@ -330,10 +356,14 @@ describe("answering", () => {
         setIntroductionConsent(t.db as never, a.profileId, false),
         (async () => (await routed(b).post(`/${id}/answer`, { answer: "yes" })).json())(),
       ]);
-      expect((await routed(b).state()).introduction, `round ${round}: the revoker is still introduced`).toBeNull();
-      const [row] = await t.sql`SELECT status, closed_at FROM introductions WHERE id=${id}`;
-      if ((answered as { stage: string }).stage === "introduced") expect(row!.closed_at, "completed before the revocation, then closed by it").not.toBeNull();
-      else expect(row!.status).not.toBe("accepted");
+      const [row] = await t.sql`SELECT * FROM introductions WHERE id=${id}`;
+      const side = row!.profile_a_id === a.profileId ? "a" : "b";
+      /* Under the one lock, either the yes completed first (and the card,
+         which carries nothing about A, stays on B's screen) or the
+         revocation came first and the yes only waits. Never both. */
+      if ((answered as { stage: string }).stage === "introduced") expect(row!.status, `round ${round}`).toBe("accepted");
+      else expect(row!.status, `round ${round}: completed after the revocation`).not.toBe("accepted");
+      expect([row![`principle_${side}_text`], row![`withdrawn_${side}_at`] === null], `round ${round}`).toEqual([null, false]);
     }
   });
 
@@ -361,7 +391,7 @@ describe("answering", () => {
     expect(await match(a), "both sides are free").toBe("matched");
   });
 
-  it("turning introductions off withdraws everything open: the other side sees no change to an ask, and an unseen introduction closes for both", async () => {
+  it("turning introductions off withdraws only the revoker's side: the other side's ask and their complete card stay exactly as they were", async () => {
     const { a, b, id } = await pair();
     const ra = routed(a), rb = routed(b);
     const before = await rb.raw();
@@ -379,9 +409,11 @@ describe("answering", () => {
     await routed(p2.b).post(`/${p2.id}/answer`, { answer: "yes" });
     expect((await routed(p2.b).state()).introduction).toMatchObject({ stage: "introduced" });
     const revoker = routed(p2.a);
+    const card = await routed(p2.b).raw();
     await revoker.post("/consent", { enabled: false });
-    expect((await routed(p2.b).state()).introduction, "the introduction outlived the revocation").toBeNull();
-    expect(revoker.requestMatch, "the other side is free and looked at again").toHaveBeenCalledWith({ profileId: p2.b.profileId, key: "now" });
+    expect(await routed(p2.b).raw(), "the other side's card changed on revocation").toBe(card);
+    expect((await revoker.state()).introduction, "the revoker still sees it").toBeNull();
+    expect(revoker.requestMatch).not.toHaveBeenCalled();
     const [row] = await t.sql`SELECT * FROM introductions WHERE id=${p2.id}`;
     const side = row!.profile_a_id === p2.a.profileId ? "a" : "b";
     expect([row![`principle_${side}_text`], row![`principle_${side}_id`]], "the revoker's words outlived the revocation").toEqual([null, null]);

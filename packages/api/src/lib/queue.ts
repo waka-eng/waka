@@ -151,7 +151,6 @@ import {
   signalEvidence,
   attachments,
   reviewSessions,
-  introductionConsents,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { databaseSqlState, safeErrorDiagnostic } from './error-diagnostics.js';
@@ -187,7 +186,7 @@ import {
 import { isSupportedLocale } from "./locales.js";
 import { loadReflectionQuestionContext } from './reflection-question-context.js';
 import { hasLiveReading, writeHunchForProfile } from './hunches.js';
-import { holdsAPrinciple, introductionsAvailable, matchIntroductionsForProfile, type FollowUp } from './introductions.js';
+import { introductionsAvailable, matchIntroductionsForProfile, type FollowUp } from './introductions.js';
 import { loadReviewQuestionContext } from './review-dialogue-context.js';
 import { reconcilePrinciplesAfterSignalLoss, refreshPrinciplesForProfile } from "./principle-generation.js";
 import { tendSignalGarden } from "./signal-gardener.js";
@@ -720,30 +719,26 @@ export async function enqueueIntroductionMatch(followUp: FollowUp | string,
  * Turn the marks migration 0097's principle triggers leave (a principle
  * withdrawn, or one becoming held for a consenting person) into ordinary
  * match passes, through the one enqueue path. Bounded and skip-locked, so
- * two drains never take the same mark. Called by the worker on every drain,
- * after principle work, and when someone reads their introductions.
+ * two drains never take the same mark. The marks are taken and the jobs
+ * written in ONE transaction, so a failure leaves every mark in place for the
+ * next drain. Called by the worker on every drain and after principle work.
  */
-export async function drainIntroductionFollowUps(
-  transaction?: Pick<ReturnType<typeof getDb>, "execute">,
-): Promise<number> {
+export async function drainIntroductionFollowUps(db: ReturnType<typeof getDb> = getDb()): Promise<number> {
   if (!introductionsAvailable()) return 0;
-  const db = transaction ?? getDb();
-  const rows = (await db.execute(sql`
-    DELETE FROM introduction_followups WHERE profile_id IN (
-      SELECT profile_id FROM introduction_followups ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED)
-    RETURNING profile_id AS "profileId"`)) as unknown as Array<{ profileId: string }>;
-  for (const row of rows) await enqueueIntroductionMatch({ profileId: row.profileId, key: "followup" }, transaction);
-  return rows.length;
+  return db.transaction(async (tx) => {
+    const rows = (await tx.execute(sql`
+      DELETE FROM introduction_followups WHERE profile_id IN (
+        SELECT profile_id FROM introduction_followups ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED)
+      RETURNING profile_id AS "profileId"`)) as unknown as Array<{ profileId: string }>;
+    for (const row of rows) await enqueueIntroductionMatch({ profileId: row.profileId, key: "followup" }, tx);
+    return rows.length;
+  });
 }
-
-/** A principle held again is a reason to look again, for a consenting person. */
-export async function enqueueIntroductionMatchIfConsenting(profileId: string): Promise<void> {
-  if (!introductionsAvailable()) return;
-  const db = getDb();
-  const [consent] = await db.select({ enabled: introductionConsents.enabled }).from(introductionConsents)
-    .where(eq(introductionConsents.profileId, profileId)).limit(1);
-  if (consent?.enabled && await holdsAPrinciple(db, profileId)) await enqueueIntroductionMatch({ profileId, key: "principles" });
-}
+/** The drain as the worker calls it: a failure is logged, and the marks stay. */
+const drainIntroductionFollowUpsLogged = () => drainIntroductionFollowUps().catch((error: unknown) => {
+  console.error("[introductions] follow-up drain failed; marks kept for the next drain", safeErrorDiagnostic(error));
+  return 0;
+});
 
 /** The question asked right after a save, before any answer exists: its
  * `afterReflectionId` (founder, 2026-11-26: the creature should "very
@@ -956,7 +951,7 @@ export async function drainBackgroundJobs(
   /* Introductions' marks become jobs here, so every principle path (routes,
      reconciles, generation) reaches the queue without each remembering to.
      A real drain only; flag off, it reads nothing. */
-  if (!options.store) await drainIntroductionFollowUps().catch(() => 0);
+  if (!options.store) await drainIntroductionFollowUpsLogged();
 
   let deferrals = 0;
   let processed = 0;
@@ -1319,8 +1314,9 @@ export async function processBackgroundJob(job: ClaimedBackgroundJob): Promise<B
       /* Principles may have become held: a consenting person is looked at
          again (introductions, flag-gated, no model call). Never fails the
          principle work it follows. */
-      await enqueueIntroductionMatchIfConsenting(profileId).catch(() => undefined);
-      await drainIntroductionFollowUps().catch(() => 0);
+      /* A principle that became held marked its consenting owner (migration
+         0097); turn the mark into a pass now rather than at the next drain. */
+      await drainIntroductionFollowUpsLogged();
       return;
     }
     case "enrich_attachment": {

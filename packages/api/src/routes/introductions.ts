@@ -28,7 +28,7 @@ import {
   type FollowUp,
 } from "../lib/introductions.js";
 import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
-import { drainIntroductionFollowUps, enqueueIntroductionMatch } from "../lib/queue.js";
+import { enqueueIntroductionMatch } from "../lib/queue.js";
 
 const consentSchema = z.object({ enabled: z.boolean() }).strict();
 const answerSchema = z.object({ answer: z.enum(["yes", "no"]) }).strict();
@@ -61,7 +61,6 @@ export function createIntroductionRoutes(deps: IntroductionRouteDependencies = {
   };
 
   routes.get("/", async (c) => {
-    if (available()) await drainIntroductionFollowUps().catch(() => 0);
     return c.json(await readIntroductionState(getDatabase(), c.get("session").profile.id, available()));
   });
 

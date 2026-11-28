@@ -15,9 +15,9 @@
  *     never read, so nobody is ever told "someone matched you" about a person
  *     who did not agree to be looked at.
  *  4. DOUBLE BLIND. A match is first offered to each side as an anonymous ask
- *     ("Someone else holds one of your principles"). Names, the visiting
- *     creature and the shared principle appear only when BOTH say Introduce
- *     us to that match.
+ *     ("Someone else holds one of your principles"). The visiting creature
+ *     and the shared principle appear only when BOTH say Introduce us to that
+ *     match, and even then nothing identifies the other person.
  *  5. A NO IS NEVER OBSERVABLE. Each side's state is computed from its OWN
  *     answer and its OWN clock, never from the other side's answer: an
  *     unanswered ask stays an ask, and a yes stays "waiting", until
@@ -82,8 +82,11 @@ const NEGATIONS = new Set(["not", "no", "never", "nothing", "nobody", "none", "n
    as "not". 없다 counts only as a word of its own (변명 없이), never inside an
    adverb (끊임없이, 아낌없이). */
 const KOREAN_NEGATION_WORDS = new Set(["못", "아니다", "아닌", "아니라", "아니고"]);
+/* 없다 only in its own predicate forms (없애다 "remove" is not one), and 지않
+   run together except in 못지않게 ("no less than"). */
+const KOREAN_NONE = /^없(다|어|어서|어요|었다|었고|었던|는|던|이|고|음|을|으면|으며|지만|으니|기에)$/u;
 const koreanNegated = (word: string) => KOREAN_NEGATION_WORDS.has(word)
-  || /^(않|못하|못한|못해|못했)/u.test(word) || /지않/u.test(word) || /^없[가-힣]*$/u.test(word);
+  || /^(않|못하|못한|못해|못했)/u.test(word) || (/지않/u.test(word) && !/못지않/u.test(word)) || KOREAN_NONE.test(word);
 
 /* Korean function pieces: whole words that carry no content, the endings and
    particles taken off a word's end before it is cut into pieces, and pieces
@@ -207,7 +210,7 @@ const BUSY = (who: SQL) => {
 
 /** A match pass to queue for a person who has just become free, or will at `runAfter`. */
 export interface FollowUp { profileId: string; key: string; runAfter?: Date }
-/* ONE LOCK FOR EVERY WRITE THAT DECIDES WHO MAY MEET WHOM: the matcher,
+/* ONE LOCK FOR EVERY WRITE THAT DECIDES WHICH TWO PEOPLE ARE PAIRED: the matcher,
    the consent switch and an answer. So a revocation and the other side's
    yes, or a revocation and a match, can never interleave. Writes here are
    rare and short (no model call, no saves read). */
@@ -292,14 +295,15 @@ const touch = (tx: Pick<Db, "execute">, profileId: string) =>
 /**
  * Answer the ask (either way) or flip the switch in Settings.
  *
- * TURNING IT OFF FULLY WITHDRAWS, and still never shows a no:
- *   - every row this person has not answered, or answered yes to without it
- *     completing, takes their no (so turning back on never resurrects a stale
- *     ask). The other side's view is computed from its own answer and clock,
- *     so it does not change;
- *   - an introduction that is complete but not yet seen by both is closed for
- *     both, so this person's name is never shown after they said stop. The
- *     other side, now free, gets a match pass.
+ * TURNING IT OFF WITHDRAWS THIS PERSON'S SIDE OF EVERY ROW, and nothing else:
+ *   - an open row takes their no, so turning back on never resurrects a stale
+ *     ask, and a yes still waiting can no longer complete;
+ *   - every row is marked withdrawn on their side and their principle words
+ *     are erased; the row stays, so the pair is never offered twice;
+ *   - the other side's view does not change at all. Their ask stays, their
+ *     yes waits, and a complete introduction they have not dismissed stays
+ *     on their screen: it carries only their own principle, nothing about
+ *     this person, so leaving it shows nothing that was taken back.
  */
 export async function setIntroductionConsent(db: Db, profileId: string, enabled: boolean): Promise<FollowUp[]> {
   return db.transaction(async (tx) => {
@@ -307,26 +311,20 @@ export async function setIntroductionConsent(db: Db, profileId: string, enabled:
     await tx.insert(introductionConsents).values({ profileId, enabled })
       .onConflictDoUpdate({ target: introductionConsents.profileId, set: { enabled, updatedAt: sql`now()` } });
     if (enabled) return [passAt(profileId, "now")];
-    const closed = (await tx.execute(sql`
-      UPDATE introductions SET closed_at = now(), updated_at = now()
-       WHERE (profile_a_id = ${profileId}::uuid OR profile_b_id = ${profileId}::uuid)
-         AND closed_at IS NULL AND status = 'accepted' AND (seen_a_at IS NULL OR seen_b_at IS NULL)
-      RETURNING CASE WHEN profile_a_id = ${profileId}::uuid THEN profile_b_id ELSE profile_a_id END AS other,
-                CASE WHEN profile_a_id = ${profileId}::uuid THEN seen_b_at ELSE seen_a_at END AS "otherSeen"`)) as unknown as
-      Array<{ other: string; otherSeen: Date | null }>;
     for (const s of ["a", "b"] as const) {
+      const col = (name: string) => sql.raw(`${name}_${s}`);
+      const pcol = (name: string) => sql.raw(name.replace("?", s));
       await tx.execute(sql`
-        UPDATE introductions SET ${sql.raw(`answer_${s}`)} = 'no', ${sql.raw(`answered_${s}_at`)} = now(),
-               status = CASE WHEN status = 'offered' THEN 'declined' ELSE status END, updated_at = now()
-         WHERE ${sql.raw(`profile_${s}_id`)} = ${profileId}::uuid AND closed_at IS NULL AND status <> 'accepted'
-           AND (${sql.raw(`answer_${s}`)} IS NULL OR ${sql.raw(`answer_${s}`)} = 'yes')`);
-      /* No copy of the revoker's principle words outlives the revocation; the
-         rows stay, so a pair is still never offered twice. */
-      await tx.execute(sql`
-        UPDATE introductions SET ${sql.raw(`principle_${s}_id`)} = NULL, ${sql.raw(`principle_${s}_text`)} = NULL, updated_at = now()
-         WHERE ${sql.raw(`profile_${s}_id`)} = ${profileId}::uuid AND ${sql.raw(`principle_${s}_text`)} IS NOT NULL`);
+        UPDATE introductions SET
+          ${col("answer")} = CASE WHEN status = 'offered' AND (${col("answer")} IS NULL OR ${col("answer")} = 'yes') THEN 'no' ELSE ${col("answer")} END,
+          ${pcol("answered_?_at")} = CASE WHEN status = 'offered' AND (${col("answer")} IS NULL OR ${col("answer")} = 'yes') THEN now() ELSE ${pcol("answered_?_at")} END,
+          status = CASE WHEN status = 'offered' THEN 'declined' ELSE status END,
+          ${pcol("principle_?_id")} = NULL, ${pcol("principle_?_text")} = NULL,
+          ${pcol("withdrawn_?_at")} = coalesce(${pcol("withdrawn_?_at")}, now()),
+          updated_at = now()
+         WHERE ${pcol("profile_?_id")} = ${profileId}::uuid`);
     }
-    return closed.filter((row) => !row.otherSeen).map((row) => passAt(row.other, "now"));
+    return [];
   });
 }
 
@@ -409,6 +407,8 @@ export interface MatchOptions {
   candidateLimit?: number;
   /** Runs inside the pass's transaction before it commits (the job's ownership check). */
   beforeCommit?: (tx: Tx) => Promise<void>;
+  /** Tests only: runs after scoring, before each locked insert. */
+  beforeInsert?: () => Promise<void>;
   /** Runs inside the transaction once a match is written: queue each side's lapse pass. */
   onMatched?: (tx: Tx, followUps: FollowUp[]) => Promise<void>;
 }
@@ -444,19 +444,43 @@ export async function matchIntroductionsForProfile(db: Db, profileId: string, op
     .orderBy(asc(principles.rank), asc(principles.id));
   const own = held.filter((row) => row.profileId === profileId);
   if (!own.length) return "none";
-  let best: { score: number; mine: (typeof held)[number]; theirs: (typeof held)[number] } | null = null;
+  /* The best pair per candidate, best first; up to `TRIES` are tried in
+     turn, so one pair refused by the locked re-check (someone turned off,
+     was matched elsewhere, or reworded meanwhile) does not end the pass. */
+  const bestFor = new Map<string, { score: number; mine: (typeof held)[number]; theirs: (typeof held)[number] }>();
   for (const theirs of held) {
     if (theirs.profileId === profileId) continue;
     for (const mineRow of own) {
       const score = principleOverlap(mineRow.statement, theirs.statement);
-      if (score >= OVERLAP_FLOOR && (!best || score > best.score)) best = { score, mine: mineRow, theirs };
+      const kept = bestFor.get(theirs.profileId);
+      if (score >= OVERLAP_FLOOR && (!kept || score > kept.score)) bestFor.set(theirs.profileId, { score, mine: mineRow, theirs });
     }
   }
-  if (!best) return "none";
-  const aIsMe = profileId < best.theirs.profileId;
-  const [a, b] = aIsMe ? [best.mine, best.theirs] : [best.theirs, best.mine];
+  const ranked = [...bestFor.values()].sort((x, y) => y.score - x.score).slice(0, TRIES);
+  if (!ranked.length) return "none";
+  for (const pick of ranked) {
+    await options.beforeInsert?.();
+    const result = await insertPair(db, profileId, pick.mine, pick.theirs, options);
+    if (result === "matched") return result;
+  }
+  return "none";
+}
+
+/** How many best pairs one pass tries before giving up. */
+const TRIES = 5;
+
+type HeldRow = { id: string; profileId: string; statement: string };
+async function insertPair(db: Db, profileId: string, mine: HeldRow, theirs: HeldRow, options: MatchOptions): Promise<"matched" | "none"> {
+  const aIsMe = profileId < theirs.profileId;
+  const [a, b] = aIsMe ? [mine, theirs] : [theirs, mine];
   return db.transaction(async (tx) => {
     await lockIntroductions(tx);
+    /* The two principle rows are read FOR SHARE first: a reword or delete
+       still in flight is waited for, and one already committed is seen, so
+       the words compared below are the words as they stand. A reword that
+       starts after this waits for the insert to commit, and its trigger then
+       withdraws the new row. */
+    await tx.execute(sql`SELECT id FROM principles WHERE (profile_id, id) IN ((${a.profileId}::uuid, ${a.id}::uuid), (${b.profileId}::uuid, ${b.id}::uuid)) FOR SHARE`);
     /* Re-checked under the lock, in the insert itself: both people still have
        introductions on, neither has been handed another open ask meanwhile,
        and both principles are still held in the words that were scored. */

@@ -859,11 +859,11 @@
   "worldImportTryLater": "Try again later.",
   "introAskConsent": "Want an introduction when someone else holds one of your principles?",
   "introAskMatch": "Someone else holds one of your principles. Want an introduction?",
-  "introAskFine": "Only principles are compared, never your saves. Names are shared only if you both say yes.",
+  "introAskFine": "Only principles are compared. Nothing else about you is shared.",
   "introYes": "Introduce us",
   "introNotNow": "Not now",
   "introOn": "Introductions are on. You can turn them off in Settings.",
-  "introWaiting": "Okay. If they say yes too, you’ll meet them here.",
+  "introWaiting": "Okay. If they say yes too, it shows here.",
   "introBothHold": "You both hold",
   "introSomeone": "Someone",
   "introDeclined": "Okay. Nothing was shared, and they won’t know you were asked.",
@@ -871,6 +871,6 @@
   "introTurnOn": "Turn on introductions",
   "introOff": "Introductions are off.",
   "introDone": "Done",
-  "introSettingsFine": "Only principles are compared, never your saves.",
+  "introSettingsFine": "Only principles are compared. Nothing else about you is shared.",
   "introChangeFailed": "Couldn’t change introductions. Try again."
 }

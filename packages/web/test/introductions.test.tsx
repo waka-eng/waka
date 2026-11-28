@@ -64,7 +64,7 @@ it('asks first, says what is compared under the question, and Introduce us turns
   STATE.now = base({ consent: { enabled: false, answered: false }, offerConsent: true });
   world = await mountWorld(FACTS); await settle();
   expect(bubble()).toContain('Want an introduction when someone else holds one of your principles?');
-  expect(bubble()).toContain('Only principles are compared, never your saves.');
+  expect(bubble()).toContain('Only principles are compared. Nothing else about you is shared.');
   expect(world.container.querySelector('.waka-intro-edge'), 'no match yet, so no light waits').toBeNull();
   STATE.now = base({});
   await press('Introduce us');
@@ -86,14 +86,14 @@ it('the ask: a match, anonymous, with their light waiting at the edge', async ()
   STATE.now = base({ introduction: { id: 'i1', stage: 'ask' } });
   world = await mountWorld(FACTS); await settle();
   expect(bubble()).toContain('Someone else holds one of your principles. Want an introduction?');
-  expect(bubble()).toContain('Names are shared only if you both say yes.');
+  expect(bubble()).not.toMatch(/name/i);
   expect(world.container.querySelector('.waka-intro-edge')).not.toBeNull();
   expect(world.container.querySelector('.waka-intro-guest'), 'nobody visits before both say yes').toBeNull();
   vi.mocked(answerIntroduction).mockResolvedValueOnce({ stage: 'waiting' });
   STATE.now = base({});
   await press('Introduce us');
   expect(vi.mocked(answerIntroduction)).toHaveBeenCalledWith('i1', 'yes');
-  expect(bubble()).toContain('If they say yes too');
+  expect(bubble()).toContain('If they say yes too, it shows here.');
 });
 
 it('the introduction: their creature, the real one in cooler light and with no name, beside yours under "You both hold"', async () => {

@@ -191,7 +191,7 @@ it("turns introductions on and off from Your data, and shows the switch while th
   await render({});
   const row = () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => /introductions/.test(b.textContent ?? ""));
   expect(row()?.textContent).toBe("Turn on introductions");
-  expect(host.textContent).toContain("Only principles are compared, never your saves.");
+  expect(host.textContent).toContain("Only principles are compared. Nothing else about you is shared.");
   await act(async () => row()!.click());
   expect(vi.mocked(setIntroductionConsent)).toHaveBeenCalledWith(true);
   expect(row()?.textContent).toBe("Turn off introductions");

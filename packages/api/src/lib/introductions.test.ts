@@ -44,6 +44,11 @@ describe("negation and word forms", () => {
     expect(negated("끊임없이 배운다")).toBe(false);
     expect(negated("아낌없이 칭찬한다")).toBe(false);
     expect(negated("마음 안의 목소리를 듣는다")).toBe(false);
+    expect(negated("나쁜 습관을 없앤다")).toBe(false);
+    expect(negated("군더더기를 없애다")).toBe(false);
+    expect(negated("어제 불안을 없앴다")).toBe(false);
+    expect(negated("결과 못지않게 과정을 아낀다")).toBe(false);
+    expect(negated("두려움이 없다")).toBe(true);
   });
 
   it("does not let Korean endings and function words make two principles alike", () => {
